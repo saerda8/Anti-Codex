@@ -405,6 +405,7 @@ function Test-ReportEncoding {
         "latest-mcp-tool-loop.json",
         "latest-mcp-skills.json",
         "latest-plugin-capabilities.json",
+        "latest-local-connectors.json",
         "latest-refresh-features.json",
         "latest-compaction-resume.json",
         "latest-stability-soak.json"

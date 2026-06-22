@@ -111,6 +111,21 @@ function Get-PluginId {
     return ""
 }
 
+function Get-AppToolKey {
+    param($Tool)
+    if ($null -eq $Tool) { return "" }
+    $connectorId = if (Has-Property $Tool "connector_id") { [string]$Tool.connector_id } else { "" }
+    $serverName = if (Has-Property $Tool "server_name") { [string]$Tool.server_name } else { "" }
+    $namespace = if (Has-Property $Tool "tool_namespace") { [string]$Tool.tool_namespace } else { "" }
+    $toolName = if (Has-Property $Tool "tool_name") { [string]$Tool.tool_name } else { "" }
+    return "$connectorId|$serverName|$namespace|$toolName"
+}
+
+function Get-AppToolKeys {
+    param($Tools)
+    return @($Tools | ForEach-Object { Get-AppToolKey $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+}
+
 $health = $null
 $healthMode = "unknown"
 $healthProtocol = $null
@@ -119,6 +134,7 @@ $installedPlugins = @()
 $pluginList = @()
 $connectors = @()
 $whamTools = @()
+$whamToolsGet = @()
 $connectorCachePath = Join-Path $CodexHome "cache\codex_app_directory"
 $appToolsCachePath = Join-Path $CodexHome "cache\codex_apps_tools"
 $sharedConnectorCachePath = Join-Path $SharedCodexHome "cache\codex_app_directory"
@@ -326,6 +342,13 @@ try {
     Add-Failure "app tools endpoint failed: $($_.Exception.Message)"
 }
 
+try {
+    $whamPayloadGet = Invoke-LocalJson "/backend-api/wham/apps" "GET"
+    $whamToolsGet = Get-ArrayItems $whamPayloadGet "tools"
+} catch {
+    Add-Failure "app tools GET endpoint failed: $($_.Exception.Message)"
+}
+
 $pluginsWithSkills = @($pluginList | Where-Object {
     (Has-Property $_ "summary") -and (Has-Property $_.summary "skills")
 })
@@ -344,6 +367,10 @@ $unattributedAppTools = @($whamTools | Where-Object { -not (Has-Property $_ "con
 $unauthorizedAppTools = @($whamTools | Where-Object {
     (Has-Property $_ "connector_id") -and -not [string]::IsNullOrWhiteSpace([string]$_.connector_id) -and ($accessibleConnectorIds -notcontains [string]$_.connector_id)
 })
+$whamPostToolKeys = @(Get-AppToolKeys $whamTools)
+$whamGetToolKeys = @(Get-AppToolKeys $whamToolsGet)
+$missingFromWhamGet = @($whamPostToolKeys | Where-Object { $whamGetToolKeys -notcontains $_ })
+$extraFromWhamGet = @($whamGetToolKeys | Where-Object { $whamPostToolKeys -notcontains $_ })
 $connectorCacheProbe = Test-ProjectionCache $connectorCachePath "connectors"
 $appToolsCacheProbe = Test-ProjectionCache $appToolsCachePath "tools"
 $connectorParity = New-ProjectionParity -SharedPath $sharedConnectorCachePath -LocalPath $connectorCachePath -ArrayProperty "connectors" -Kind "connector"
@@ -392,6 +419,9 @@ if ($unattributedAppTools.Count -gt 0) {
 if ($unauthorizedAppTools.Count -gt 0) {
     Add-Failure "app tools exposed for connector_id outside accessible connectors; refusing fake callable capability"
 }
+if ($missingFromWhamGet.Count -gt 0 -or $extraFromWhamGet.Count -gt 0) {
+    Add-Failure "GET /backend-api/wham/apps does not match POST tool projection"
+}
 
 $capabilityState = if ($failures.Count -gt 0) {
     "degraded_verification_failed"
@@ -436,6 +466,12 @@ $result = [pscustomobject]@{
         enabledConnectorCount = $enabledConnectors.Count
         accessibleConnectorCount = $accessibleConnectors.Count
         appToolCount = $whamTools.Count
+        appToolGetCount = $whamToolsGet.Count
+        appToolGetPostParity = [pscustomobject]@{
+            checked = $true
+            missingFromGet = $missingFromWhamGet
+            extraFromGet = $extraFromWhamGet
+        }
         appToolParity = $appToolParity
         unattributedAppToolCount = $unattributedAppTools.Count
         unauthorizedAppToolCount = $unauthorizedAppTools.Count

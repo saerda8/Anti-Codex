@@ -1895,6 +1895,9 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(localConnectors, /createHash\("sha256"\)/);
   assert.match(localConnectors, /function writeHashSidecar/);
   assert.match(localConnectors, /\.sha256/);
+  assert.match(localConnectors, /chatgptInstallUrlsScrubbed/);
+  assert.match(localConnectors, /allowlistedDetail\.installUrl,\s*null/);
+  assert.match(localConnectors, /redirect_url/);
   assert.match(thirdPartyProvider, /createHash\("sha256"\)/);
   assert.match(thirdPartyProvider, /function writeHashSidecar/);
   assert.match(thirdPartyProvider, /\.sha256/);
@@ -2970,6 +2973,9 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /connectorParity/);
   assert.match(capabilities, /shared connector '\$connectorId' exists but Anti-Codex local connector cache is missing it/);
   assert.match(capabilities, /appToolCount/);
+  assert.match(capabilities, /appToolGetCount/);
+  assert.match(capabilities, /appToolGetPostParity/);
+  assert.match(capabilities, /GET \/backend-api\/wham\/apps does not match POST tool projection/);
   assert.match(capabilities, /appToolParity/);
   assert.match(capabilities, /shared app tool '\$toolKey' exists but Anti-Codex local app-tools cache is missing it/);
   assert.match(capabilities, /unattributedAppToolCount/);
@@ -3218,6 +3224,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Local connector\/app-tool allowlist verification/);
   assert.match(overall, /\$checks\.localConnectors = if \(\$Fast\)/);
   assert.match(overall, /fast mode skips local connector\/app-tool allowlist verification/);
+  assert.match(overall, /latest-local-connectors\.json/);
   assert.match(overall, /"--runtime-root", \$RuntimeRoot/);
   assert.match(overall, /"--report-root", \$ReportRoot/);
   assert.match(overall, /test-anticodex-codex-responses\.ps1/);
@@ -3391,6 +3398,8 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(websocket, /Sec-WebSocket-Protocol: codex\.responses\.v1/);
   assert.match(websocket, /\/v1\/responses/);
   assert.match(websocket, /\/codex\/responses/);
+  assert.match(websocket, /function Invoke-WebSocketUpgradeProbeWithRetry/);
+  assert.match(websocket, /failed after \$MaxAttempts attempts/);
   assert.match(websocket, /probeResults/);
   assert.match(websocket, /HTTP\/1\\\.1 501/);
   assert.match(websocket, /unsupported_websocket/);

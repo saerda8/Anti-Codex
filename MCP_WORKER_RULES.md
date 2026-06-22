@@ -1453,3 +1453,31 @@ After every failure, before another dispatch:
 - Cause classification: contract drift. The sync script wrote a marker fingerprint over `.codex\skills` plus `.agents\skills`, while adaptive-server recomputed diagnostics freshness from `.codex\skills` only.
 - Rule change: any new startup snapshot source root must be added to both the marker writer and the diagnostics reader, with a focused installed diagnostics check after restart.
 - Result: after aligning both sides, diagnostics reported `snapshotStatus.state:fresh` and `sourceFingerprintMatches:true` for the 126-skill union.
+
+## 2026-06-22 - Empty successful Antigravity review output is not evidence
+
+- Symptom: Antigravity CLI review job `ag-7544e490-ff7f-44c2-945b-ec377829b8f0` completed with exit code 0 but returned empty parsed text and no stdout/stderr summary.
+- Cause classification: worker evidence failure, not a product failure.
+- Rule change: a completed worker with empty output cannot be cited as review evidence. Use other worker results or direct verification, and record the empty output.
+- Result: local connector hardening used ordinary subagent findings plus direct script, regression, source-preflight, and installed checks instead.
+
+## 2026-06-22 - Do not use start_implementation as a DeepSeek status probe
+
+- Symptom: the main agent accidentally launched DeepSeek job `dsw_mqpb3fa4_j17rrv` while trying to check status for earlier review job `dsw_mqpaz0t5_e6r6c6`; the accidental job was immediately cancelled, and the original obsolete review job also returned failed/no usable result when cancelled.
+- Cause classification: operator/tool-selection mistake.
+- Rule change: if a DeepSeek status/get tool is not exposed in the current tool list, do not fake a status probe by starting another implementation job. Either wait for a notification, use available cancellation when obsolete, or continue with direct verification.
+- Result: the accidental no-op job was cancelled and no output from it was used.
+
+## 2026-06-22 - Websocket fallback verifier needs per-path retry
+
+- Symptom: installed overall failed twice because `test-anticodex-websocket-fallback.ps1` received the correct 501 unsupported response for `/v1/responses`, then the local connection for `/codex/responses` was forcibly closed before a response body was read. Running the verifier directly could pass immediately.
+- Cause classification: local socket race in the verifier, not a product websocket support regression.
+- Rule change: websocket fallback verification should retry each upgrade path briefly before failing, while still requiring HTTP 501 and `unsupported_websocket` for every path.
+- Result: the verifier now retries each path up to three times and keeps the same hard assertions.
+
+## 2026-06-22 - Run Node verifier scripts with node, not powershell -File
+
+- Symptom: the main agent attempted to run installed `test-anticodex-local-connectors.mjs` with `powershell -File`, which failed because `.mjs` is not a PowerShell script.
+- Cause classification: command invocation mistake.
+- Rule change: installed Node verifiers must be invoked with `node` or through an overall wrapper that dispatches Node scripts.
+- Result: reran the same installed verifier with `node`; it passed with `chatgptInstallUrlsScrubbed:true`.

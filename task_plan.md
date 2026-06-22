@@ -756,3 +756,11 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `refresh-anticodex-local-features.ps1` and `test-anticodex-mcp-skills.ps1` now report and enforce `agentsCount`, `expectedSharedCount`, and missing combined skill names.
 - Verification: refresh reported `.codex` skills `100`, `.agents` skills `26`, and no missing expected skills; MCP/skills verifier passed with `expectedSharedCount:126`, `missingShared:[]`, real `node_repl` call passed, and DeepSeek/Antigravity worker MCP `tools/list` passed.
 - Verification: after runtime sync/restart, installed diagnostics reports `snapshotStatus.state:fresh`, `sourceFingerprintMatches:true`, and `skills.count:126`; full installed no-traffic overall passed with `ok:true`.
+
+## 2026-06-22 Local Connector Gate Hardening
+- Completed: `test-anticodex-local-connectors.mjs` now seeds blocked connector install URLs in its isolated cache and proves the local HTTP projection scrubs them while preserving ordinary non-ChatGPT install URLs.
+- Completed: the same verifier now explicitly proves allowlisted, hidden, and orphan cached tools do not appear in `/backend-api/wham/apps`, and link/noauth/oauth metadata-only endpoints do not return URL or redirect fields.
+- Completed: `test-anticodex-plugin-capabilities.ps1` now checks both GET and POST `/backend-api/wham/apps` and fails if their exposed tool key sets differ.
+- Completed: installed overall report integrity now includes `latest-local-connectors.json`, so the local connector gate report gets the same SHA256 sidecar check as other release evidence.
+- Completed: websocket fallback verifier now retries each upgrade path briefly, avoiding false installed-overall failures from a local socket close while still requiring 501 `unsupported_websocket`.
+- Verification: direct local connector verifier passed with `chatgptInstallUrlsScrubbed:true`; plugin capability verifier passed with `appToolGetPostParity` empty; launcher contracts passed 89/89; local-access regression passed 51/51; source preflight fast passed; after runtime sync/restart, full installed no-traffic overall passed with `ok:true` and `latest-local-connectors.json` hash-valid in report integrity.

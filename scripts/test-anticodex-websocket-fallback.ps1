@@ -57,6 +57,25 @@ function Invoke-WebSocketUpgradeProbe {
     }
 }
 
+function Invoke-WebSocketUpgradeProbeWithRetry {
+    param([string]$Url, [int]$MaxAttempts = 3)
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            $response = Invoke-WebSocketUpgradeProbe $Url
+            if ($response) { return $response }
+            $lastError = "empty response"
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Milliseconds ([Math]::Min(750, 150 * $attempt))
+        }
+    }
+    throw "websocket upgrade for $Url failed after $MaxAttempts attempts: $lastError"
+}
+
 function Invoke-LocalJson {
     param([string]$Path)
     return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $TimeoutSec
@@ -70,7 +89,7 @@ $diagnostics = $null
 try {
     foreach ($probePath in $probePaths) {
         $probeUrl = "$($BaseUrl.TrimEnd('/'))$probePath"
-        $response = Invoke-WebSocketUpgradeProbe $probeUrl
+        $response = Invoke-WebSocketUpgradeProbeWithRetry $probeUrl
         $statusLine = Get-StatusLine $response
         $containsUnsupportedWebsocket = ($response -match "unsupported_websocket")
 

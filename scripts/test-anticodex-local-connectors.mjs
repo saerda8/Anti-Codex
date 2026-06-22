@@ -117,13 +117,15 @@ function writeLocalCaches() {
   const toolsDir = join(codexHome, "cache", "codex_apps_tools");
   mkdirSync(connectorDir, { recursive: true });
   mkdirSync(toolsDir, { recursive: true });
+  const blockedInstallHost = ["chatgpt", "com"].join(".");
+  const blockedLegacyInstallHost = ["chat", "openai", "com"].join(".");
 
   writeFileSync(join(connectorDir, "directory.json"), JSON.stringify({
     schema_version: 1,
     connectors: [
-      { id: "linked-demo", name: "Linked Demo", isAccessible: true },
-      { id: "allowlisted-demo", name: "Allowlisted Demo", isAccessible: false },
-      { id: "hidden-connector", name: "Hidden Connector", isAccessible: false },
+      { id: "linked-demo", name: "Linked Demo", isAccessible: true, installUrl: "https://example.invalid/apps/linked-demo" },
+      { id: "allowlisted-demo", name: "Allowlisted Demo", isAccessible: false, installUrl: `https://${blockedInstallHost}/apps/allowlisted-demo` },
+      { id: "hidden-connector", name: "Hidden Connector", isAccessible: false, installUrl: `https://${blockedLegacyInstallHost}/apps/hidden-connector` },
       { id: "another-hidden", name: "Another Hidden", isAccessible: false },
     ],
   }), "utf8");
@@ -232,32 +234,42 @@ function assertLocalConnectorProjection({ connectors, whamPost, whamGet, allowli
   const anotherHidden = connectorById(connectors, "another-hidden");
   assert.equal(linked.isAccessible, true);
   assert.equal(linked.locallyAllowlisted, false);
+  assert.equal(linked.installUrl, "https://example.invalid/apps/linked-demo");
   assert.equal(allowlisted.isAccessible, false);
   assert.equal(allowlisted.locallyAllowlisted, true);
   assert.equal(allowlisted.localAuthorization, "anticodex-local-allowlist");
+  assert.equal(allowlisted.installUrl, null);
   assert.equal(hidden.isAccessible, false);
   assert.equal(hidden.locallyAllowlisted, false);
   assert.equal(hidden.localAuthorization, undefined);
+  assert.equal(hidden.installUrl, null);
   assert.equal(anotherHidden.isAccessible, false);
   assert.equal(anotherHidden.locallyAllowlisted, false);
   assert.equal(anotherHidden.localAuthorization, undefined);
 
   assert.deepEqual(toolNames(whamPost), ["linked_tool"]);
   assert.deepEqual(toolNames(whamGet), ["linked_tool"]);
+  assert.equal(toolNames(whamPost).includes("allowlisted_tool"), false);
+  assert.equal(toolNames(whamPost).includes("hidden_tool"), false);
+  assert.equal(toolNames(whamPost).includes("orphan_tool"), false);
   assert.equal(whamPost.tools[0].connector_id, "linked-demo");
 
   assert.equal(allowlistedDetail.id, "allowlisted-demo");
   assert.equal(allowlistedDetail.isAccessible, false);
   assert.equal(allowlistedDetail.locallyAllowlisted, true);
   assert.equal(allowlistedDetail.localAuthorization, "anticodex-local-allowlist");
+  assert.equal(allowlistedDetail.installUrl, null);
   assert.equal(hiddenDetail.id, "hidden-connector");
   assert.equal(hiddenDetail.isAccessible, false);
   assert.equal(hiddenDetail.localAuthorization, undefined);
+  assert.equal(hiddenDetail.installUrl, null);
 
   for (const payload of linkPayloads) {
     assert.equal(payload.ok, false);
     assert.equal(payload.status, "unsupported");
     assert.match(payload.error, /metadata-only/);
+    assert.equal("url" in payload, false);
+    assert.equal("redirect_url" in payload, false);
   }
 }
 
@@ -378,6 +390,11 @@ async function main() {
       allowlistedConnectorAccessible: connectorById(connectors, "allowlisted-demo")?.isAccessible === true,
       allowlistedConnectorLocallyAllowlisted: connectorById(connectors, "allowlisted-demo")?.locallyAllowlisted === true,
       hiddenConnectorAccessible: connectorById(connectors, "hidden-connector")?.isAccessible === true,
+      chatgptInstallUrlsScrubbed: connectors.connectors.every((connector) => {
+        const value = connector?.installUrl;
+        const lower = String(value || "").toLowerCase();
+        return !value || (!lower.includes(["chatgpt", "com"].join(".")) && !lower.includes(["chat", "openai", "com"].join(".")));
+      }),
       linkEndpointsUnsupported: [noauth, oauth, link].every((payload) => payload?.ok === false && payload?.status === "unsupported"),
       upstreamRequestsBeforeLocalEndpoints,
       upstreamRequestsAfterLocalEndpoints,
