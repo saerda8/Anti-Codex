@@ -528,3 +528,5 @@
 - Manager action tokens are process-local. Any verifier that restarts the translator must fetch a fresh Manager bootstrap token before the next protected Manager action.
 - Manager `ui-only` button smoke can leave a fake action bridge on the live Manager page. Any later real-click verifier must restore the saved real bridge before dispatching non-ui-only actions.
 - Some real Manager actions prove completion through visible result text without writing a `lastAction` record. Button verifiers should accept action-specific visible success text when the hit area, busy state, and failure checks all pass.
+- Cross-protocol provider continuity needs protocol-specific request inspection. OpenAI-compatible to Anthropic is only proven when the final `/v1/messages` request contains the earlier OpenAI-compatible user/assistant history and uses the Anthropic key/model.
+- A one-off `spawn EPERM` while saving the temporary upstream profile can be a Windows child-process launch hiccup; rerun before treating it as a continuity regression. The useful invariant is whether the verifier reaches its report with `crossProtocolWithoutHistoryLoss:true`.

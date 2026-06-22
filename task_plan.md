@@ -658,11 +658,12 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Scope note: config sync still preserves Anti-Codex safety flags and Windows command normalization; the product guarantee is capability/name parity from shared Codex into Anti-Codex, not unsafe byte-for-byte overwrite.
 
 ## 2026-06-22 Third-Party Provider Switch Continuity
-- Completed: the third-party provider verifier now runs a seven-turn local provider scenario. Provider A completes six turns across stale Antigravity model names, profile save, and translator restart; then Provider B is saved, the translator restarts into B, and turn 7 continues from Provider A's last `previous_response_id`.
-- Completed: the Provider B turn proves the request reaches the second provider, uses the second provider model/key, and still includes Provider A's earlier user and assistant history.
+- Completed: the third-party provider verifier now runs an eight-turn local provider scenario. Provider A completes six turns across stale Antigravity model names, profile save, and translator restart; Provider B is saved and turn 7 continues from Provider A's last `previous_response_id`; then Provider C switches protocol to Anthropic and turn 8 continues from Provider B's last `previous_response_id`.
+- Completed: the Provider B turn proves the request reaches the second OpenAI-compatible provider, uses the second provider model/key, and still includes Provider A's earlier user and assistant history.
+- Completed: the Provider C turn proves OpenAI-compatible to Anthropic cross-protocol continuation: the Anthropic `/v1/messages` request uses the Anthropic key/model and still contains the earlier Provider A/B user and assistant history.
 - Completed: the verifier now rejects leaks of the second provider key in saved profile responses, public profile output, route audit output, and report files.
-- Verification: `test-anticodex-third-party-provider.mjs` passed with 7 turns and `switchedProviderWithoutHistoryLoss:true`; focused launcher/upstream regression passed 162/162.
-- Still deferred: OpenAI-to-Anthropic and Anthropic-to-OpenAI cross-protocol continuation can be added as a deeper slow verifier if needed.
+- Verification: `test-anticodex-third-party-provider.mjs` passed from both source and installed runtime roots with 8 turns, `switchedProviderWithoutHistoryLoss:true`, and `crossProtocolWithoutHistoryLoss:true`; focused launcher/upstream regression passed 162/162; source preflight fast mode passed; runtime sync passed.
+- Still deferred: Anthropic-to-OpenAI continuation can be added as a deeper slow verifier if needed; OpenAI-compatible to Anthropic is now covered locally without real provider traffic.
 
 ## 2026-06-22 Manager Real Safe Button Coverage
 - Completed: installed overall now clicks real embedded Manager buttons for `updateCheck`, `sourcePreflight`, and `syncReadiness`, instead of relying only on `ui-only` Manager smoke for those safe actions.

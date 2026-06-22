@@ -3962,9 +3962,15 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /providerSwitchContinuationPreviousResponseId/);
   assert.match(verifier, /seventhAfterProviderSwitchPreservesHistory/);
   assert.match(verifier, /fake-gpt-4\.2/);
+  assert.match(verifier, /turn-8 user asks theta after protocol switch/);
+  assert.match(verifier, /protocolSwitchContinuationPreviousResponseId/);
+  assert.match(verifier, /eighthAfterProtocolSwitchPreservesHistory/);
+  assert.match(verifier, /crossProtocolWithoutHistoryLoss/);
+  assert.match(verifier, /fake-claude-4\.1/);
+  assert.match(verifier, /openai-compatible",\s*to: "anthropic"/);
   assert.match(verifier, /providerModelUsedForEveryTurn/);
   assert.match(verifier, /gemini-pro-agent\|gemini-3\\\.5-flash-low\|gemini-3-flash-agent/);
-  assert.match(verifier, /sk-fake-secret\|sk-save-secret\|sk-second-secret/);
+  assert.match(verifier, /sk-fake-secret\|sk-save-secret\|sk-second-secret\|sk-anthropic-secret/);
   assert.match(verifier, /third-party provider report leaked an API key/);
   assert.match(verifier, /responseHistoryBeforeAuthFailure/);
   assert.match(verifier, /assert\.equal\(readFileSync\(responseHistoryPath, "utf8"\), responseHistoryBeforeAuthFailure\)/);
