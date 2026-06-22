@@ -3223,6 +3223,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /test-anticodex-diagnostics\.ps1/);
   assert.match(overall, /Diagnostics verification/);
   assert.match(overall, /\$checks\.diagnostics = if \(\$Fast\)/);
+  assert.match(overall, /sourcePreflightPublicDocumentation/);
+  assert.match(overall, /sourcePreflight\.publicDocumentationOk/);
+  assert.match(overall, /source preflight public documentation status is missing or not green in diagnostics/);
   assert.match(overall, /test-anticodex-tool-bridge-mode\.ps1/);
   assert.match(overall, /Tool bridge mode verification/);
   assert.match(overall, /test-anticodex-runtime-config\.ps1/);

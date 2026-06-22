@@ -970,6 +970,29 @@ $checks.diagnostics = if ($Fast) {
 } else {
     Invoke-JsonScript "Diagnostics verification" (Join-Path $scriptsRoot "test-anticodex-diagnostics.ps1") $diagnosticScriptArgs
 }
+$checks.sourcePreflightPublicDocumentation = try {
+    $diagForSourcePreflight = Invoke-LocalJson "/anticodex/diagnostics" -RequestTimeoutSec $DiagnosticsTimeoutSec
+    $sourcePreflight = $diagForSourcePreflight.sourcePreflight
+    $ok = $diagForSourcePreflight.object -eq "anticodex.diagnostics" `
+        -and (Has-Property $sourcePreflight "publicDocumentationOk") `
+        -and $sourcePreflight.publicDocumentationOk -eq $true
+    if (-not $ok) {
+        Add-Failure "source preflight public documentation status is missing or not green in diagnostics"
+    }
+    [pscustomobject]@{
+        ok = $ok
+        skipped = $false
+        reason = "diagnostics sourcePreflight.publicDocumentationOk must be green"
+        publicDocumentationOk = if (Has-Property $sourcePreflight "publicDocumentationOk") { [bool]$sourcePreflight.publicDocumentationOk } else { $null }
+        reportName = if (Has-Property $sourcePreflight "reportName") { [string]$sourcePreflight.reportName } else { "" }
+    }
+} catch {
+    Add-Failure "source preflight public documentation status check failed: $($_.Exception.Message)"
+    [pscustomobject]@{
+        ok = $false
+        error = $_.Exception.Message
+    }
+}
 $checks.toolBridgeMode = if ($healthMode -eq "third-party") {
     $thirdPartyToolBridgeStarted = [DateTime]::UtcNow
     try {

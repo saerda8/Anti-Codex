@@ -841,3 +841,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 README Upstream Profile Wording
 - Completed: corrected README third-party API wording to match the implementation: the formal entry is Anti-Codex Manager, which tests, saves, and applies an `upstream profile`; lower-level scripts are controlled write/restart helpers, not the user-facing setup route.
 - Verification: adaptive-server syntax check passed; diagnostics PowerShell parser checks passed; launcher contract suite passed `91/91`.
+
+## 2026-06-23 Installed Overall Public Docs Signal
+- Completed: installed overall now directly checks `/anticodex/diagnostics` for `sourcePreflight.publicDocumentationOk`, including fast mode where the standalone diagnostics verifier is skipped.
+- Completed: launcher contract coverage now requires the installed overall public-doc signal so the fast source-preflight docs gate remains visible in combined acceptance reports.
