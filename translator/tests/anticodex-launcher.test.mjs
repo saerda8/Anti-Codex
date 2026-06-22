@@ -4538,3 +4538,14 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.match(legacyMarketing, /archived historical DeepCodex \/ DeepSeek launch material/);
   assert.match(legacyMarketing, /not a current Anti-Codex launch asset/);
 });
+
+test("Anti-Codex source preflight executes upstream profile assertions as part of its contract", () => {
+  const preflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const profileTest = readFileSync(resolve(root, "scripts", "test-anticodex-upstream-profile.ps1"), "utf8");
+
+  assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
+  assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
+
+  assert.match(profileTest, /unreadable existing third-party key must fail closed/);
+  assert.match(profileTest, /corrupt third-party key can still restore Antigravity/);
+});

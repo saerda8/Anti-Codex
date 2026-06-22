@@ -1589,3 +1589,26 @@ After every failure, before another dispatch:
 - Cause classification: worker summary/evidence failure, not implementation failure.
 - Rule change: do not cite the empty worker response. Review the exact diff and rerun syntax plus focused contracts from the main agent.
 - Result after review: only the three authorized files changed; syntax passed and focused launcher contracts passed 3/3.
+
+## 2026-06-23 - DeepSeek RED-test dispatch failed on repeated 502s
+
+- Worker: DeepSeek `dsw_mqpna7wl_sxri13`.
+- Task: add one RED launcher contract for source-preflight upstream profile storage coverage.
+- Result: timed out after about 130 seconds with eight `api_retry` events, all HTTP 502 `server_error`; zero tool calls, zero file changes, zero checks.
+- Cause classification: external DeepSeek model service failure, not task breadth, permissions, or repository failure.
+- Retry change: switch the already one-file/one-behavior RED task to the healthy Antigravity CLI worker. Keep the same no-runtime-write and syntax-only acceptance boundary.
+
+## 2026-06-23 - Verify that Node test-name filters actually match
+
+- Symptom: the first RED command used `--test-name-pattern "upstream profile storage"`, but the new test name used different words; Node reported the test file as passing without executing the intended test.
+- Cause classification: verification selector mismatch, not a product result.
+- Rule change: confirm the output prints the exact intended test name. A file-level pass with no matching named subtest is not RED/GREEN evidence.
+- Result: reran with the exact test-name phrase, observed the expected missing-preflight-call failure, then implemented the source check and observed the named test pass.
+
+## 2026-06-23 - Antigravity RED worker completed with an empty summary
+
+- Worker: Antigravity `ag-94c92c3e-2e17-4028-98be-8f7e1c6ba700`.
+- Task: add one RED launcher contract for upstream profile storage coverage.
+- Result: the authorized test diff and exit code 0 were present, but parsed text/stdout/stderr were empty.
+- Cause classification: worker summary failure, not implementation failure.
+- Rule change: accept no narrative evidence from the worker; inspect the one-file diff, run syntax, and independently demonstrate the RED failure with the exact test selector.

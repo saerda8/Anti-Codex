@@ -174,6 +174,18 @@ function Test-ManagerBridgeSelfTest {
     return $result
 }
 
+function Test-UpstreamProfileStorage {
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\test-anticodex-upstream-profile.ps1"
+    $result = Invoke-SourceProcess `
+        -Name "upstream profile storage" `
+        -FilePath $powershell `
+        -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script) `
+        -TimeoutSec 30
+    if (-not $result.ok) { Add-Failure "Upstream profile storage test failed" }
+    return $result
+}
+
 function Test-TranslatorRegression {
     if ($SkipFullRegression) {
         return [pscustomobject]@{ ok = $true; skipped = $true; reason = "SkipFullRegression" }
@@ -333,6 +345,7 @@ try {
     $checks["powershellSyntax"] = Test-PowerShellSyntax
     $checks["uiStateSelfTest"] = Test-UiStateSelfTest
     $checks["managerBridgeSelfTest"] = Test-ManagerBridgeSelfTest
+    $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
     $checks["diffWhitespace"] = Test-GitDiffCheck

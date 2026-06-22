@@ -37,9 +37,9 @@
 - 证明路由已经回到 Antigravity，并证明此前文本标记和结构化工具历史仍可见。
 - 该检查必须显式允许真实流量，不能成为普通无流量门禁。
 
-## 仍独立存在的其他边界
+## 其他边界状态
 
-- DPAPI key 文件损坏或换用户后不可解密的恢复体验。
+- DPAPI key 文件损坏/不可解密的本地存储边界已由 `test-anticodex-upstream-profile.ps1` 覆盖，并已接入 fast source preflight；完整桌面交互提示体验仍可单独加强。
 - 历史修剪后 `410 response_history_missing` 到桌面客户端的完整容错表现。
 
 这些问题不再与“跨协议工具历史是否保留”混为同一个缺口。
