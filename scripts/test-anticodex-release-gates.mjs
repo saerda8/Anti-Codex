@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const args = new Map();
@@ -16,7 +17,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
   }
 }
 
-const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || ".", "anticodex", "reports"));
+let reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || ".", "anticodex", "reports"));
 const maxAgeHours = Number(args.get("--max-age-hours") || 48);
 const strict = args.has("--strict");
 const startedAt = Date.now();
@@ -213,6 +214,50 @@ function writeJsonReportAtomic(payload) {
   writeTextAtomic(history, text);
   writeTextAtomic(latest, text);
   return { latest, history };
+}
+
+if (args.has("--self-test")) {
+  const originalReportRoot = reportRoot;
+  const tempRoot = mkdtempSync(join(tmpdir(), "anticodex-release-gates-"));
+  try {
+    reportRoot = tempRoot;
+    const fakeMissingHistory = join(tempRoot, "latest-missing-history.json");
+    mkdirSync(tempRoot, { recursive: true });
+    writeFileSync(fakeMissingHistory, JSON.stringify({
+      ok: true,
+      reportName: "missing-history",
+      status: 200,
+      errorType: "ok",
+      retryable: true,
+      previousResponseIdMatched: false,
+      recoveryGuidancePresent: false,
+      noRouteChange: false,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+    }), "utf8");
+    writeHashSidecar(fakeMissingHistory);
+    const gate = summarizeGate(gateDefinitions.find((definition) => definition.id === "missingHistory"));
+    const failures = gate.semanticFailures || [];
+    const requiredFailures = [
+      "missing_history_status_not_410",
+      "missing_history_error_type",
+      "missing_history_retryable_not_false",
+      "missing_history_previous_response_id_not_matched",
+      "missing_history_recovery_guidance_missing",
+      "missing_history_route_changed",
+      "missing_history_used_real_traffic",
+    ];
+    if (gate.satisfied === true) throw new Error("self-test failed: semantically invalid missing-history report satisfied the gate");
+    for (const failure of requiredFailures) {
+      if (!failures.includes(failure)) throw new Error(`self-test failed: missing semantic failure ${failure}`);
+    }
+    console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures: failures }));
+  } finally {
+    reportRoot = originalReportRoot;
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+  process.exit(0);
 }
 
 const gates = gateDefinitions.map(summarizeGate);

@@ -4034,6 +4034,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /--strict/);
   assert.match(releaseGates, /missing_hash_sidecar/);
   assert.match(releaseGates, /hash_mismatch/);
+  assert.match(releaseGates, /--self-test/);
+  assert.match(releaseGates, /semantically invalid missing-history report satisfied the gate/);
   assert.match(server, /latestManagerReportItem\("Release Gate 汇总", "latest-release-gates\.json"\)/);
   assert.match(collector, /latest-release-gates\.json/);
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
