@@ -4275,6 +4275,7 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
   assert.match(verifier, /assertOpenAiToolHistory/);
   assert.match(verifier, /assertAnthropicToolHistory/);
+  assert.match(verifier, /assertAllHistoryMarkers/);
   assert.match(verifier, /toolHistoryTurns: 2/);
   assert.match(verifier, /providerSwitchPreservesOpenAiToolPair/);
   assert.match(verifier, /protocolSwitchPreservesAnthropicToolPair/);
@@ -4291,16 +4292,19 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /switchedProviderWithoutHistoryLoss/);
   assert.match(verifier, /providerSwitchContinuationPreviousResponseId/);
   assert.match(verifier, /seventhAfterProviderSwitchPreservesHistory/);
+  assert.match(verifier, /seventhAfterProviderSwitchPreservesAllHistoryMarkers/);
   assert.match(verifier, /fake-gpt-4\.2/);
   assert.match(verifier, /turn-8 user asks theta after protocol switch/);
   assert.match(verifier, /protocolSwitchContinuationPreviousResponseId/);
   assert.match(verifier, /eighthAfterProtocolSwitchPreservesHistory/);
+  assert.match(verifier, /eighthAfterProtocolSwitchPreservesAllHistoryMarkers/);
   assert.match(verifier, /crossProtocolWithoutHistoryLoss/);
   assert.match(verifier, /fake-claude-4\.1/);
   assert.match(verifier, /openai-compatible",\s*to: "anthropic"/);
   assert.match(verifier, /turn-9 user asks iota after reverse protocol switch/);
   assert.match(verifier, /reverseProtocolSwitchContinuationPreviousResponseId/);
   assert.match(verifier, /ninthAfterReverseProtocolSwitchPreservesHistory/);
+  assert.match(verifier, /ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers/);
   assert.match(verifier, /reverseCrossProtocolWithoutHistoryLoss/);
   assert.match(verifier, /fake-gpt-4\.3/);
   assert.match(verifier, /anthropic",\s*to: "openai-compatible"/);

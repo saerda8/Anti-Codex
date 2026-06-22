@@ -873,6 +873,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: installed overall report-integrity checks now include `latest-third-party-provider.json`.
 - Completed: Manager `fastOverallNoTraffic` now keeps UI-state coverage while using a bounded short-check budget: `-SubcheckTimeoutSec 30` and `-FastMaxElapsedMs 90000`.
 - Completed: installed overall skipped subchecks now carry `behaviorCovered:false` and `coverageKind:"skipped"` so fast reports cannot be mistaken for behavior-complete coverage.
+- Completed: third-party provider verification now requires all prior history markers at provider switch turn 7, OpenAI-compatible to Anthropic turn 8, and Anthropic back to OpenAI-compatible turn 9. The latest local fake-provider proof checked 16, 18, and 20 markers respectively.
 - Verification: JS checks passed for provider and summarizer scripts; PowerShell parser checks passed for diagnostics/installed-overall scripts; launcher contract suite passed `91/91`; local fake-provider verifier passed in about 6s and refreshed the installed latest report; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with provider continuity evidence in `20260623-014948.zip`.
 
 ## 2026-06-23 Passive Release Gate Summary

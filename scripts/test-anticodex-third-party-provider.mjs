@@ -110,6 +110,13 @@ function requestText(body) {
   return JSON.stringify(body?.messages || body?.input || body || "");
 }
 
+function assertAllHistoryMarkers(body, markers, label) {
+  const text = requestText(body);
+  const missing = markers.filter((marker) => !marker.pattern.test(text)).map((marker) => marker.name);
+  assert.deepEqual(missing, [], `${label} is missing history markers: ${missing.join(", ")}`);
+  return { ok: true, checked: markers.length, missing };
+}
+
 function latestUserText(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const latest = messages.filter((message) => message?.role === "user").at(-1);
@@ -699,6 +706,24 @@ async function main() {
   const sixthOpenAiToolEvidence = assertOpenAiToolHistory(sixthChat.body);
   const responseHistoryAfterRestartContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterRestartContinuation, new RegExp(sixthAfterRestart.id));
+  const providerAHistoryThroughSix = [
+    { name: "turn1-user", pattern: /turn-1 user asks alpha/ },
+    { name: "turn1-assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
+    { name: "turn2-user", pattern: /turn-2 user asks beta/ },
+    { name: "turn2-assistant", pattern: /PROVIDER_HISTORY_TURN_2/ },
+    { name: "turn3-user", pattern: /turn-3 user asks gamma/ },
+    { name: "turn3-assistant", pattern: /PROVIDER_HISTORY_TURN_3/ },
+    { name: "turn4-user", pattern: /turn-4 user asks delta/ },
+    { name: "turn4-assistant", pattern: /PROVIDER_HISTORY_TURN_4/ },
+    { name: "tool-call-user", pattern: /turn-tool-call user asks provider tool marker/ },
+    { name: "tool-call-name", pattern: /provider_tool_marker/ },
+    { name: "tool-call-marker", pattern: /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/ },
+    { name: "tool-output-marker", pattern: /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/ },
+    { name: "turn5-user", pattern: /turn-5 user asks epsilon after provider save/ },
+    { name: "turn5-assistant", pattern: /PROVIDER_HISTORY_TURN_5/ },
+    { name: "turn6-user", pattern: /turn-6 user asks zeta after provider restart/ },
+    { name: "turn6-assistant", pattern: /PROVIDER_HISTORY_TURN_6/ },
+  ];
 
   const restartBootstrap = await getJson(`${translatorUrl}/anticodex/manager/bootstrap`, { headers: managerHeaders });
   const restartedAuthedHeaders = {
@@ -771,6 +796,7 @@ async function main() {
   assert.match(requestText(seventhChat.body), /provider_tool_marker/);
   assert.match(requestText(seventhChat.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(seventhChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
+  const seventhAllHistoryMarkers = assertAllHistoryMarkers(seventhChat.body, providerAHistoryThroughSix, "provider switch turn 7");
   const seventhOpenAiToolEvidence = assertOpenAiToolHistory(seventhChat.body);
   const responseHistoryAfterProviderSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterProviderSwitchContinuation, new RegExp(seventhAfterProviderSwitch.id));
@@ -847,6 +873,12 @@ async function main() {
   assert.match(requestText(eighthAnthropic.body), /provider_tool_marker/);
   assert.match(requestText(eighthAnthropic.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(eighthAnthropic.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
+  const providerBHistoryThroughSeven = [
+    ...providerAHistoryThroughSix,
+    { name: "turn7-user", pattern: /turn-7 user asks eta after provider switch/ },
+    { name: "turn7-assistant", pattern: /PROVIDER_B_HISTORY_TURN_7/ },
+  ];
+  const eighthAllHistoryMarkers = assertAllHistoryMarkers(eighthAnthropic.body, providerBHistoryThroughSeven, "protocol switch turn 8");
   const eighthAnthropicToolEvidence = assertAnthropicToolHistory(eighthAnthropic.body);
   const responseHistoryAfterProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterProtocolSwitchContinuation, new RegExp(eighthAfterProtocolSwitch.id));
@@ -921,6 +953,12 @@ async function main() {
   assert.match(requestText(ninthChat.body), /provider_tool_marker/);
   assert.match(requestText(ninthChat.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(ninthChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
+  const providerCHistoryThroughEight = [
+    ...providerBHistoryThroughSeven,
+    { name: "turn8-user", pattern: /turn-8 user asks theta after protocol switch/ },
+    { name: "turn8-assistant", pattern: /PROVIDER_C_HISTORY_TURN_8/ },
+  ];
+  const ninthAllHistoryMarkers = assertAllHistoryMarkers(ninthChat.body, providerCHistoryThroughEight, "reverse protocol switch turn 9");
   const ninthOpenAiToolEvidence = assertOpenAiToolHistory(ninthChat.body);
   const responseHistoryAfterReverseProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterReverseProtocolSwitchContinuation, new RegExp(ninthAfterReverseProtocolSwitch.id));
@@ -1058,14 +1096,20 @@ async function main() {
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(seventhChat.body))
         && /turn-6 user asks zeta after provider restart/.test(requestText(seventhChat.body))
         && /PROVIDER_HISTORY_TURN_6/.test(requestText(seventhChat.body)),
+      seventhAfterProviderSwitchPreservesAllHistoryMarkers: seventhAllHistoryMarkers.ok,
+      seventhAfterProviderSwitchAllHistoryMarkerCount: seventhAllHistoryMarkers.checked,
       eighthAfterProtocolSwitchPreservesHistory: /turn-1 user asks alpha/.test(requestText(eighthAnthropic.body))
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(eighthAnthropic.body))
         && /turn-7 user asks eta after provider switch/.test(requestText(eighthAnthropic.body))
         && /PROVIDER_B_HISTORY_TURN_7/.test(requestText(eighthAnthropic.body)),
+      eighthAfterProtocolSwitchPreservesAllHistoryMarkers: eighthAllHistoryMarkers.ok,
+      eighthAfterProtocolSwitchAllHistoryMarkerCount: eighthAllHistoryMarkers.checked,
       ninthAfterReverseProtocolSwitchPreservesHistory: /turn-1 user asks alpha/.test(requestText(ninthChat.body))
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(ninthChat.body))
         && /turn-8 user asks theta after protocol switch/.test(requestText(ninthChat.body))
         && /PROVIDER_C_HISTORY_TURN_8/.test(requestText(ninthChat.body)),
+      ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers: ninthAllHistoryMarkers.ok,
+      ninthAfterReverseProtocolSwitchAllHistoryMarkerCount: ninthAllHistoryMarkers.checked,
       finalPreviousResponseId: fourth.previous_response_id,
       savedContinuationPreviousResponseId: fifthAfterSave.previous_response_id,
       restartContinuationPreviousResponseId: sixthAfterRestart.previous_response_id,
