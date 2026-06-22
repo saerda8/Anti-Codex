@@ -225,6 +225,13 @@ Branch: main
 - Boundary to preserve: optional real-provider is still a two-turn real-traffic sanity check. The full nine-turn provider switch/protocol switch/restart matrix remains the local fake-provider release gate unless real external traffic is explicitly requested and separately expanded.
 - Fresh evidence: release-gate `--self-test` rejects forged provider reports missing save/restart structure; focused launcher tests passed; default optional skip reports exist for real-provider and provider-to-Antigravity; strict passive gates report `shortReady:true` / `releaseReady:true`, no missing required gates, and no optional semantic failures.
 
+## 2026-06-23 Optional Real Provider Route Follow-Up
+
+- Optional real third-party provider reports now include route evidence from `/anticodex/model-routes` after the real two-turn check.
+- Passive release gates require real-provider optional reports to prove upstream-provider transport, provider protocol, requested/resolved model agreement, and successful route status.
+- Summaries, diagnostics, and Manager latest-report text now surface the optional real-provider route fields when the report is not skipped.
+- Fresh evidence: release-gate `--self-test` rejects forged route evidence; focused summarizer/release-gate/verifier tests passed; strict passive gates remain `shortReady:true` / `releaseReady:true`; default skip report still uses no real traffic.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

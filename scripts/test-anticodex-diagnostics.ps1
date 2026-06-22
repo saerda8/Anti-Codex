@@ -369,6 +369,10 @@ function Test-DiagnosticBundle {
                 if ($optionalEvidence.firstMarkerObserved -ne $true) { Add-Failure "optional real-provider summary missing first marker evidence" }
                 if ($optionalEvidence.secondMarkerObserved -ne $true) { Add-Failure "optional real-provider summary missing second marker evidence" }
                 if ($optionalEvidence.historyContinuationObserved -ne $true) { Add-Failure "optional real-provider summary missing history continuation evidence" }
+                if ([string]$optionalEvidence.routeTransport -ne "upstream-provider") { Add-Failure "optional real-provider summary missing upstream-provider route evidence" }
+                if (-not [string]$optionalEvidence.routeProviderProtocol) { Add-Failure "optional real-provider summary missing provider protocol route evidence" }
+                if (-not [string]$optionalEvidence.routeResolvedModel) { Add-Failure "optional real-provider summary missing resolved model route evidence" }
+                if ([string]$optionalEvidence.routeStatus -ne "success") { Add-Failure "optional real-provider summary missing successful route evidence" }
                 if ($optionalEvidence.secretsRedacted -ne $true) { Add-Failure "optional real-provider summary missing redaction evidence" }
                 if ([int]$optionalEvidence.turns -lt 2) { Add-Failure "optional real-provider summary has fewer than 2 turns" }
             }

@@ -181,11 +181,16 @@ function summarizeGate(definition) {
         if (report.behaviorCovered !== true) semanticFailures.push("optional_real_traffic_behavior_not_covered");
         if (report.coverageKind !== "real-traffic") semanticFailures.push("optional_real_traffic_coverage_kind");
         if (definition.id === "realThirdPartyProviderOptional") {
+          const routeEvidence = report.routeEvidence && typeof report.routeEvidence === "object" ? report.routeEvidence : {};
           if (report.firstMarkerObserved !== true) semanticFailures.push("optional_real_provider_first_marker_missing");
           if (report.secondMarkerObserved !== true) semanticFailures.push("optional_real_provider_second_marker_missing");
           if (report.historyContinuationObserved !== true) semanticFailures.push("optional_real_provider_history_missing");
           if (report.secretsRedacted !== true) semanticFailures.push("optional_real_provider_secrets_not_redacted");
           if (Number(report.turns || 0) < 2) semanticFailures.push("optional_real_provider_turn_count");
+          if (routeEvidence.transport !== "upstream-provider") semanticFailures.push("optional_real_provider_route_transport");
+          if (!routeEvidence.providerProtocol) semanticFailures.push("optional_real_provider_route_protocol");
+          if (!routeEvidence.requestedModel || !routeEvidence.resolvedModel || routeEvidence.requestedModel !== routeEvidence.resolvedModel) semanticFailures.push("optional_real_provider_route_model");
+          if (routeEvidence.status !== "success") semanticFailures.push("optional_real_provider_route_status");
         }
         if (definition.id === "providerAntigravityReturnOptional") {
           const evidence = report.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : {};
@@ -850,6 +855,13 @@ if (args.has("--self-test")) {
       firstMarkerObserved: false,
       secondMarkerObserved: false,
       historyContinuationObserved: false,
+      routeEvidence: {
+        transport: "desktop-cascade",
+        providerProtocol: "",
+        requestedModel: "fake",
+        resolvedModel: "",
+        status: "failed",
+      },
       secretsRedacted: false,
       turns: 1,
     });
@@ -859,6 +871,10 @@ if (args.has("--self-test")) {
       "optional_real_provider_history_missing",
       "optional_real_provider_secrets_not_redacted",
       "optional_real_provider_turn_count",
+      "optional_real_provider_route_transport",
+      "optional_real_provider_route_protocol",
+      "optional_real_provider_route_model",
+      "optional_real_provider_route_status",
     ]);
     writeFakeLatestReport("latest-provider-antigravity-return.json", {
       ok: true,

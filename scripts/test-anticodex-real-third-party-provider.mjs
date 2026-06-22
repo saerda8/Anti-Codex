@@ -150,6 +150,13 @@ async function postResponse(baseUrl, body) {
   return responseJsonFromText(text);
 }
 
+async function getJson(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`route audit request failed with HTTP ${response.status}`);
+  return JSON.parse(text);
+}
+
 async function stopTranslator() {
   if (!translator || translator.exitCode !== null) return;
   translator.kill();
@@ -247,6 +254,14 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
   assert.equal(secondMarkerObserved, true);
   assert.equal(historyContinuationObserved, true);
 
+  const routeAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
+  const routeEvidence = routeAudit?.latest || {};
+  assert.equal(routeEvidence.transport, "upstream-provider");
+  assert.equal(routeEvidence.providerProtocol, protocol);
+  assert.equal(routeEvidence.requestedModel, model);
+  assert.equal(routeEvidence.resolvedModel, model);
+  assert.equal(routeEvidence.status, "success");
+
   return {
     ok: true,
     reportName,
@@ -263,6 +278,13 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
     firstMarkerObserved,
     secondMarkerObserved,
     historyContinuationObserved,
+    routeEvidence: {
+      transport: routeEvidence.transport || "",
+      providerProtocol: routeEvidence.providerProtocol || "",
+      requestedModel: routeEvidence.requestedModel || "",
+      resolvedModel: routeEvidence.resolvedModel || "",
+      status: routeEvidence.status || "",
+    },
     secretsRedacted: true,
     turns: 2,
     elapsedMs: Date.now() - startedAt,

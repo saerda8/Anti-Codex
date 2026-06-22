@@ -2181,6 +2181,11 @@ function latestManagerReportItem(label, fileName) {
             firstMarkerObserved: report.firstMarkerObserved === true,
             secondMarkerObserved: report.secondMarkerObserved === true,
             historyContinuationObserved: report.historyContinuationObserved === true,
+            routeTransport: shortSafeText(report.routeEvidence?.transport || "", ""),
+            routeProviderProtocol: shortSafeText(report.routeEvidence?.providerProtocol || "", ""),
+            routeRequestedModel: shortSafeText(report.routeEvidence?.requestedModel || "", ""),
+            routeResolvedModel: shortSafeText(report.routeEvidence?.resolvedModel || "", ""),
+            routeStatus: shortSafeText(report.routeEvidence?.status || "", ""),
             secretsRedacted: report.secretsRedacted === true,
             turns: Number.isFinite(Number(report.turns)) ? Number(report.turns) : null,
         } : null,
@@ -2851,6 +2856,7 @@ function latestReportsSummary(result){
     if(item.optionalRealProviderEvidence){
       const evidence=item.optionalRealProviderEvidence;
       lines.push("  realProvider: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
+      lines.push("  realProvider route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / "+(evidence.routeResolvedModel||"unknown")+" / "+(evidence.routeStatus||"unknown"));
     }
     if(item.antigravityReturnEvidence){
       const evidence=item.antigravityReturnEvidence;

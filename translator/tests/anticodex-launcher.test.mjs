@@ -2320,6 +2320,13 @@ test("report summarizer surfaces optional real-traffic continuity evidence value
       firstMarkerObserved: true,
       secondMarkerObserved: false,
       historyContinuationObserved: true,
+      routeEvidence: {
+        transport: "upstream-provider",
+        providerProtocol: "openai-compatible",
+        requestedModel: "real-model",
+        resolvedModel: "real-model",
+        status: "success",
+      },
       secretsRedacted: true,
       turns: 2,
     }), "utf8");
@@ -2329,6 +2336,10 @@ test("report summarizer surfaces optional real-traffic continuity evidence value
     assert.equal(summary.optionalRealProviderEvidence.firstMarkerObserved, true);
     assert.equal(summary.optionalRealProviderEvidence.secondMarkerObserved, false);
     assert.equal(summary.optionalRealProviderEvidence.historyContinuationObserved, true);
+    assert.equal(summary.optionalRealProviderEvidence.routeTransport, "upstream-provider");
+    assert.equal(summary.optionalRealProviderEvidence.routeProviderProtocol, "openai-compatible");
+    assert.equal(summary.optionalRealProviderEvidence.routeResolvedModel, "real-model");
+    assert.equal(summary.optionalRealProviderEvidence.routeStatus, "success");
     assert.equal(summary.optionalRealProviderEvidence.secretsRedacted, true);
     assert.equal(summary.optionalRealProviderEvidence.turns, 2);
 
@@ -4586,6 +4597,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
   assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);
   assert.match(releaseGates, /optional_real_provider_history_missing/);
+  assert.match(releaseGates, /optional_real_provider_route_transport/);
+  assert.match(releaseGates, /optional_real_provider_route_protocol/);
+  assert.match(releaseGates, /optional_real_provider_route_model/);
+  assert.match(releaseGates, /optional_real_provider_route_status/);
   assert.match(releaseGates, /optional_antigravity_return_missing_markers/);
   assert.match(releaseGates, /optional_antigravity_return_route_transport/);
   assert.match(releaseGates, /requireThirdPartyProviderSemantics/);
@@ -4984,6 +4999,11 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /firstMarkerObserved/);
   assert.match(verifier, /secondMarkerObserved/);
   assert.match(verifier, /historyContinuationObserved/);
+  assert.match(verifier, /\/anticodex\/model-routes/);
+  assert.match(verifier, /routeEvidence/);
+  assert.match(verifier, /transport,\s*"upstream-provider"/);
+  assert.match(verifier, /providerProtocol,\s*protocol/);
+  assert.match(verifier, /resolvedModel,\s*model/);
   assert.match(verifier, /behaviorCovered:\s*false/);
   assert.match(verifier, /requestedRealTraffic/);
   assert.match(verifier, /failures:\s*ok \? \[\] : \[reason\]/);
