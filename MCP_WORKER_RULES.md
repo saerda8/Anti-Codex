@@ -1523,3 +1523,10 @@ After every failure, before another dispatch:
 - Cause classification: worker evidence failure / stale worker state, not product evidence.
 - Rule change: a completed Antigravity job with empty output, a timed-out empty job, or a long-running empty-tail read-only job cannot be cited as review evidence. Stop waiting after the bounded window, continue with direct inspection or a narrower worker, and record the job IDs.
 - Result: stale Manager/report documentation and Windows launcher branding residue were handled through direct source inspection, focused contract tests, and committed checkpoints instead of relying on empty worker output.
+
+## 2026-06-23 - DeepSeek read-only jobs need a compatible success contract
+
+- Symptom: DeepSeek read-only review job `dsw_mqpg0m2k_38i57p` inspected a documentation-audit question but failed its worker success contract because no file changes were produced.
+- Cause classification: worker dispatch contract mismatch, not product evidence.
+- Rule change: do not use an implementation worker preset for pure read-only evidence unless the tool contract explicitly accepts no changes. If a read-only worker fails this way, use direct local inspection and record that no worker evidence was accepted.
+- Result: `docs\audits\real-usage-test-coverage.md` was refreshed from direct source/test evidence instead of the failed worker.

@@ -774,10 +774,15 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Latest evidence: after refreshing local features, plugin capability verification passed with connector parity `sharedCount:5866`, `localCount:5866`, `missingShared:[]`; app-tool parity `58/58`; callable app tools still `0` because no connector is authorized.
 - Latest evidence: MCP/skills verification passed with MCP `3/3`, skills expected union `126`, missing shared `[]`, real `node_repl` smoke passed, and DeepSeek/Antigravity worker MCP tool lists visible.
 - Latest evidence: standalone real Manager button gate passed for `mcpSkills` and `pluginCapabilities` against port `58318`, with `lastUiOnly:false`, no new page, and "未授权连接器，不伪装可调用" shown as normal.
+- Verification: focused syntax/contract checks passed: `node --check translator/adaptive-server.mjs`, PowerShell parser checks for diagnostics and installed overall, and launcher contracts `90/90`.
+- Deferred: full source preflight and installed overall were not rerun after the final small default-action change to avoid another long command; focused parser/self/contract checks should be used before the next checkpoint, and the full gates can be reserved for final release acceptance.
 
 ## 2026-06-23 Windows Launcher Branding Residue
 - Completed: Windows native launcher error dialogs now use `Anti-Codex` as the message-box title instead of the legacy `DeepCodex` title. Internal compatibility names such as the C# class name and `start-deepcodex.ps1` path remain unchanged.
 - Completed: launcher contract coverage now reads `src/deepcodex-launcher-win.cs`, asserts `MessageBox.Show(..., "Anti-Codex", ...)`, and rejects `MessageBox.Show(..., "DeepCodex", ...)` for user-visible error dialogs.
 - Verification: launcher test syntax check passed; focused launcher contract suite passed 90/90. The first run exposed an unrelated brittle stdout-only assertion in the MCP/skills temporary verifier test; the test now accepts JSON from stdout or stderr and reports a clear no-output failure.
-- Verification: focused syntax/contract checks passed: `node --check translator/adaptive-server.mjs`, PowerShell parser checks for diagnostics and installed overall, and launcher contracts `90/90`.
-- Deferred: full source preflight and installed overall were not rerun after the final small default-action change to avoid another long command; focused parser/self/contract checks should be used before the next checkpoint, and the full gates can be reserved for final release acceptance.
+
+## 2026-06-23 Real Usage Coverage Audit Refresh
+- Completed: rewrote `docs/audits/real-usage-test-coverage.md` from stale/garbled 0% coverage claims into a current audit of Chinese response checks, real-tool coverage, final completion checks, and legacy `DeepCodex` residue rejection.
+- Completed: the audit now distinguishes routine bounded verifier evidence from remaining combined installed desktop and live Antigravity traffic gates.
+- Verification: stale-audit search no longer finds the old "0%" / "no assertions" claims; documentation whitespace check passed.
