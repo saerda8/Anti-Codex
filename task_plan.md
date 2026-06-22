@@ -934,3 +934,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now validate `latest-third-party-provider.json` field-level continuity evidence instead of trusting only signed `ok:true`.
 - Completed: the gate requires nine fake-provider turns, save/restart/provider-switch/protocol-switch/reverse-switch history preservation, stale Antigravity model rejection, structured OpenAI and Anthropic tool-pair evidence, late-turn marker coverage, and secret redaction.
 - Verification: release-gate syntax passed; self-test rejects a forged bad third-party provider report; focused launcher contract passed; strict passive gates remain green with `shortReady:true`, `releaseReady:true`, no missing required gates, and no damaged reports.
+
+## 2026-06-23 Provider Marker Coverage Visibility
+- Completed: `summarize-anticodex-report.mjs` now exposes third-party provider late-turn all-history marker coverage booleans and counts for turns 7, 8, and 9.
+- Completed: diagnostic bundle verification now requires those marker coverage fields to be visible and at least `16/18/20`, matching the release-gate semantic contract.
+- Verification: summarizer syntax passed, latest third-party provider summary shows marker counts `16/18/20`, diagnostics PowerShell parser check passed, and focused diagnostics launcher contracts passed.

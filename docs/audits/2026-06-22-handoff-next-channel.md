@@ -144,6 +144,11 @@ Branch: main
 - `--self-test` for release gates now also forges a bad third-party provider report and verifies it is rejected despite signed `ok:true`.
 - Fresh evidence: release-gate syntax passed, self-test produced the expected third-party provider semantic failures, focused launcher contract passed, and strict passive gates remain `shortReady:true`, `releaseReady:true`, with no missing required or damaged reports.
 
+## 2026-06-23 Provider Marker Visibility Follow-Up
+
+- Report summaries and diagnostic verification now expose late-turn provider marker coverage for turns 7, 8, and 9, including the `16/18/20` marker-count evidence required by release gates.
+- Fresh evidence: summarizer syntax passed, latest third-party provider summary shows marker counts `16/18/20`, diagnostics parser check passed, and focused diagnostics launcher contracts passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

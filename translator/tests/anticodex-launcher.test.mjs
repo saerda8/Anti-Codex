@@ -1883,6 +1883,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
+  assert.match(reportSummarizer, /seventhAfterProviderSwitchAllHistoryMarkerCount/);
+  assert.match(reportSummarizer, /eighthAfterProtocolSwitchAllHistoryMarkerCount/);
+  assert.match(reportSummarizer, /ninthAfterReverseProtocolSwitchAllHistoryMarkerCount/);
   assert.match(reportSummarizer, /localConnectorEvidence/);
   assert.match(reportSummarizer, /chatgptInstallUrlsScrubbed/);
   assert.match(reportSummarizer, /upstreamRequestsDuringLocalEndpoints/);
@@ -3917,6 +3920,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /providerContinuity/);
   assert.match(diagnostics, /crossProtocolWithoutHistoryLoss/);
   assert.match(diagnostics, /structuralEvidenceClean/);
+  assert.match(diagnostics, /seventhAfterProviderSwitchAllHistoryMarkerCount/);
+  assert.match(diagnostics, /eighthAfterProtocolSwitchAllHistoryMarkerCount/);
+  assert.match(diagnostics, /ninthAfterReverseProtocolSwitchAllHistoryMarkerCount/);
   assert.match(diagnostics, /reverseCrossProtocolWithoutHistoryLoss/);
   assert.match(diagnostics, /secretsRedacted/);
   assert.match(diagnostics, /manager-real-buttons summary/);
