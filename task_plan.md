@@ -824,3 +824,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: launcher contract coverage now includes current public docs: `README.md`, `docs/ADAPTIVE_ONE_API_STACK.md`, `docs/chat-to-responses-compat.md`, and the current marketing entry points.
 - Completed: the new test explicitly avoids recursive scans of audits, legacy marketing, prompt samples, and historical specs while requiring current docs to preserve Anti-Codex branding, Antigravity default provider language, explicit third-party provider language, and connector/app-tool authorization boundaries.
 - Verification: `node --check translator/tests/anticodex-launcher.test.mjs` passed; focused launcher contract suite passed `91/91`.
+
+## 2026-06-23 README Provider Boundary Refresh
+- Completed: README now explicitly documents that Antigravity Desktop remains the default route, third-party API profiles must be configured/tested/applied through Anti-Codex Manager, and unreadable profiles must not cause a silent wrong-upstream fallback.
+- Completed: README now states that MCP/skills/plugin/connector metadata sync does not grant connector-backed app-tool authorization.

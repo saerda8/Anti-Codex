@@ -4259,6 +4259,8 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.match(readme, /ChatGPT/);
   assert.match(readme, /DeepSeek API Key/);
   assert.match(readme, /Anti-Codex\.exe/);
+  assert.match(readme, /provider profile/);
+  assert.match(readme, /connector-backed app tools/);
   assert.doesNotMatch(readme, /DeepCodex app|DeepSeek \u7248 Codex|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
 
   assert.match(compatibility, /Scope: Anti-Codex translates Codex Desktop/);

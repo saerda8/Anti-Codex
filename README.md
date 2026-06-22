@@ -77,3 +77,11 @@ install-windows.bat
 ```
 
 本项目是在 `deepcodex` 基础上改造的，因此源码内仍保留部分历史文件名；默认安装入口和运行产品均为 Anti-Codex。
+
+## 第三方 API 配置
+
+默认路线仍是本机已登录的 Antigravity Desktop。需要使用第三方 API 时，只能通过 Anti-Codex Manager 显式配置、测试并应用 provider profile；不会因为旧配置读取失败就静默切回错误上游，也不需要 ChatGPT 登录。
+
+## Connector 授权边界
+
+Anti-Codex 会把本机 MCP、skills、插件元数据和 connector 元数据同步到自己的独立状态里，但元数据不是授权。未授权的 connector-backed app tools 必须继续显示为不可调用，不能因为本地缓存存在就伪装成已授权。
