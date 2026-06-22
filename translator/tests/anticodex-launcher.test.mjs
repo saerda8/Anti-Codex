@@ -1839,6 +1839,15 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/);
   assert.match(collector, /report hash validation failed/);
   assert.match(collector, /damagedReports/);
+  assert.match(collector, /function Resolve-NodeForJsonSummary/);
+  assert.match(collector, /function Invoke-NodeJsonSummary/);
+  assert.match(collector, /node\.exe is required to summarize diagnostic reports/);
+  assert.match(collector, /summarize-anticodex-report\.mjs/);
+  assert.match(collector, /Invoke-NodeJsonSummary -Path \$Path/);
+  const reportSummarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  assert.match(reportSummarizer, /JSON\.parse\(readFileSync\(path, "utf8"\)\)/);
+  assert.match(reportSummarizer, /managerButtonResults/);
+  assert.match(reportSummarizer, /payload\.results/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.match(collector, /function Update-NoTrafficModelRoutingReport/);
   assert.match(collector, /test-anticodex-model-routing\.ps1/);
@@ -1850,7 +1859,10 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /adaptive-translator\.err\.log/);
   assert.match(collector, /Compress-Archive/);
   assert.match(collector, /logs_2\.sqlite/);
-  assert.match(collector, /prompt\|messages\|input_items\|tool output\|Return exactly this/);
+  assert.match(collector, /\(\?<!\[A-Za-z\]\)prompt\(\?!\[A-Za-z\]\)/);
+  assert.match(collector, /\(\?<!\[A-Za-z\]\)messages\(\?!\[A-Za-z\]\)/);
+  assert.match(collector, /input_items\|tool output\|Return exactly this/);
+  assert.doesNotMatch(collector, /"prompt\|messages\|input_items\|tool output\|Return exactly this"/);
   assert.doesNotMatch(collector, /Get-ChildItem.+codex-home-deepseek-app/s);
   assert.doesNotMatch(collector, /\.env|OPENAI_API_KEY|ANTHROPIC_API_KEY|chatgpt\.com|auth\/login/);
 });

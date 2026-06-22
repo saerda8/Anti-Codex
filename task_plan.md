@@ -864,3 +864,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 Manager Real Buttons Diagnostic Summary
 - Completed: diagnostic bundle report summaries now preserve `actions`, `managerButtonOk`, and per-action `managerButtonResults` for `latest-manager-real-buttons.json`.
 - Completed: the diagnostics verifier now requires `latest-manager-real-buttons.json` to be present, named `manager-real-buttons`, green, failure-free, and to include real `mcpSkills` plus `pluginCapabilities` button evidence without `lastUiOnly:true`.
+- Completed: diagnostic bundle summary parsing now uses `scripts/summarize-anticodex-report.mjs` instead of Windows PowerShell 5.1 parsing full large report JSON, avoiding false damaged-report failures on valid connector/app-tool-heavy reports.
+- Verification: PowerShell parser check passed; `node scripts/summarize-anticodex-report.mjs` extracted real Manager button evidence; launcher contract suite passed `91/91`; runtime sync restarted Anti-Codex successfully; installed `test-anticodex-diagnostics.ps1 -VerifyBundle -TimeoutSec 20` passed with bundle `20260623-014140.zip`.
