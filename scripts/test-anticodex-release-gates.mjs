@@ -37,7 +37,7 @@ const gateDefinitions = [
 
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
-  { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true },
+  { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true, requireToolBridgeSemantics: true },
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true },
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true },
   { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true },
@@ -236,6 +236,26 @@ function summarizeGate(definition) {
       if (results.some((item) => item?.skippedRequest !== true)) semanticFailures.push("model_routing_result_not_skipped");
       if (results.some((item) => item?.error)) semanticFailures.push("model_routing_result_error");
     }
+    if (definition.requireToolBridgeSemantics) {
+      const toolBridge = report.toolBridge || {};
+      const compatibilityTools = report.compatibilityTools || {};
+      const nativeToolCapability = report.nativeToolCapability || {};
+      if (toolBridge.mode !== "native-mcp-same-cascade") semanticFailures.push("tool_bridge_mode_not_native_mcp_same_cascade");
+      if (toolBridge.transport !== "desktop-cascade") semanticFailures.push("tool_bridge_transport_not_desktop_cascade");
+      if (toolBridge.localAdapter !== "native-mcp-same-cascade-with-prompt-fallback") semanticFailures.push("tool_bridge_local_adapter");
+      if (toolBridge.nativeAntigravityToolEvents !== true) semanticFailures.push("tool_bridge_native_events");
+      if (toolBridge.nativeMcpDiscoveryVerified !== true) semanticFailures.push("tool_bridge_mcp_discovery");
+      if (toolBridge.nativeBridgeDefaultEnabled !== true) semanticFailures.push("tool_bridge_default_disabled");
+      if (toolBridge.acceptsExternalToolDefinitions !== true) semanticFailures.push("tool_bridge_external_tool_definitions");
+      if (compatibilityTools.bridge !== "native_mcp_same_cascade") semanticFailures.push("tool_bridge_compatibility_bridge");
+      if (nativeToolCapability.nativeMcpApprovalProtocolVerified !== true) semanticFailures.push("tool_bridge_approval_protocol");
+      if (nativeToolCapability.nativeMcpPermissionMode !== "automatic-before-codex-execution") semanticFailures.push("tool_bridge_permission_mode");
+      if (nativeToolCapability.sameCascadeResumeProbeVerified !== true) semanticFailures.push("tool_bridge_same_cascade_resume");
+      if (nativeToolCapability.antigravityOwnedToolsDisabled !== true) semanticFailures.push("tool_bridge_owned_tools_enabled");
+      if (nativeToolCapability.permissionPromptsDisabled !== true) semanticFailures.push("tool_bridge_permission_prompts_enabled");
+      if (Number(nativeToolCapability.disabledToolCount || 0) < 1) semanticFailures.push("tool_bridge_disabled_tool_count");
+      if (nativeToolCapability.codexToolBridge !== "native-mcp-same-cascade-with-prompt-fallback") semanticFailures.push("tool_bridge_codex_bridge");
+    }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
       const toolHistory = history.toolHistory || {};
@@ -432,6 +452,25 @@ if (args.has("--self-test")) {
       usedRealTraffic: true,
       behaviorCovered: false,
       coverageKind: "real-traffic",
+      toolBridge: {
+        mode: "prompt-only",
+        transport: "browser",
+        localAdapter: "none",
+        nativeAntigravityToolEvents: false,
+        nativeMcpDiscoveryVerified: false,
+        nativeBridgeDefaultEnabled: false,
+        acceptsExternalToolDefinitions: false,
+      },
+      compatibilityTools: { bridge: "prompt" },
+      nativeToolCapability: {
+        nativeMcpApprovalProtocolVerified: false,
+        nativeMcpPermissionMode: "manual",
+        sameCascadeResumeProbeVerified: false,
+        antigravityOwnedToolsDisabled: false,
+        permissionPromptsDisabled: false,
+        disabledToolCount: 0,
+        codexToolBridge: "prompt",
+      },
     });
 
     writeFakeLatestReport("latest-model-routing.json", {
@@ -511,6 +550,12 @@ if (args.has("--self-test")) {
       "expected_no_real_traffic",
       "expected_behavior_covered",
       "expected_no_real_traffic_coverage_kind",
+      "tool_bridge_mode_not_native_mcp_same_cascade",
+      "tool_bridge_transport_not_desktop_cascade",
+      "tool_bridge_permission_mode",
+      "tool_bridge_same_cascade_resume",
+      "tool_bridge_owned_tools_enabled",
+      "tool_bridge_codex_bridge",
     ]);
     semanticFailures.modelRouting = assertSemanticFailures("modelRouting", "self-test failed: semantically invalid model-routing report satisfied the gate", [
       "model_routing_skip_requests_not_true",

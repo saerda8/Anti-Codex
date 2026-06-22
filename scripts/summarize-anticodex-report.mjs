@@ -68,6 +68,9 @@ const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ?
 const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
 const realAntigravityEvidence = report && report.realAntigravityEvidence ? report.realAntigravityEvidence : null;
+const toolBridge = report && report.toolBridge ? report.toolBridge : null;
+const compatibilityTools = report && report.compatibilityTools ? report.compatibilityTools : null;
+const nativeToolCapability = report && report.nativeToolCapability ? report.nativeToolCapability : null;
 const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
@@ -125,6 +128,23 @@ const summary = {
     skippedRequestCount: modelRoutingResults.filter((item) => item && item.skippedRequest === true).length,
     failedResultCount: modelRoutingResults.filter((item) => item && item.ok !== true).length,
     resultErrorCount: modelRoutingResults.filter((item) => item && item.error).length,
+  } : null,
+  toolBridgeEvidence: toolBridge || compatibilityTools || nativeToolCapability ? {
+    mode: toolBridge && has(toolBridge, "mode") ? asString(toolBridge.mode) : null,
+    transport: toolBridge && has(toolBridge, "transport") ? asString(toolBridge.transport) : null,
+    localAdapter: toolBridge && has(toolBridge, "localAdapter") ? asString(toolBridge.localAdapter) : null,
+    nativeAntigravityToolEvents: toolBridge ? boolField(toolBridge, "nativeAntigravityToolEvents") : null,
+    nativeMcpDiscoveryVerified: toolBridge ? boolField(toolBridge, "nativeMcpDiscoveryVerified") : null,
+    nativeBridgeDefaultEnabled: toolBridge ? boolField(toolBridge, "nativeBridgeDefaultEnabled") : null,
+    acceptsExternalToolDefinitions: toolBridge ? boolField(toolBridge, "acceptsExternalToolDefinitions") : null,
+    compatibilityBridge: compatibilityTools && has(compatibilityTools, "bridge") ? asString(compatibilityTools.bridge) : null,
+    nativeMcpApprovalProtocolVerified: nativeToolCapability ? boolField(nativeToolCapability, "nativeMcpApprovalProtocolVerified") : null,
+    nativeMcpPermissionMode: nativeToolCapability && has(nativeToolCapability, "nativeMcpPermissionMode") ? asString(nativeToolCapability.nativeMcpPermissionMode) : null,
+    sameCascadeResumeProbeVerified: nativeToolCapability ? boolField(nativeToolCapability, "sameCascadeResumeProbeVerified") : null,
+    antigravityOwnedToolsDisabled: nativeToolCapability ? boolField(nativeToolCapability, "antigravityOwnedToolsDisabled") : null,
+    permissionPromptsDisabled: nativeToolCapability ? boolField(nativeToolCapability, "permissionPromptsDisabled") : null,
+    disabledToolCount: nativeToolCapability && has(nativeToolCapability, "disabledToolCount") ? nativeToolCapability.disabledToolCount : null,
+    codexToolBridge: nativeToolCapability && has(nativeToolCapability, "codexToolBridge") ? asString(nativeToolCapability.codexToolBridge) : null,
   } : null,
   state: has(report, "state") ? asString(report.state) : null,
   skipped: boolField(report, "skipped"),

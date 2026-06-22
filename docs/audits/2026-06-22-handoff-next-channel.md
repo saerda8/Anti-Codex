@@ -185,6 +185,12 @@ Branch: main
 - Passive release gates now reject forged `ok:true` model-routing reports unless they prove `skipRequests:true`, non-empty model catalog, mode present, per-model results present, all results skipped, no failed result, and no result error.
 - Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with model-routing semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, and source diagnostics verification passed.
 
+## 2026-06-23 Tool-Bridge No-Traffic Follow-Up
+
+- Tool-bridge latest-report evidence now surfaces native bridge mode, desktop transport, prompt fallback adapter, native event/discovery/default flags, compatibility bridge, automatic permission mode, same-Cascade resume proof, owned-tool disablement, permission-prompt disablement, disabled-tool count, and Codex bridge adapter.
+- Passive release gates now reject forged `ok:true` tool-bridge reports unless they prove the native MCP same-Cascade contract.
+- Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with tool-bridge semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, and focused launcher/summarizer tests passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

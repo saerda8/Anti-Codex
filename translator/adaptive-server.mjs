@@ -1990,6 +1990,9 @@ function latestManagerReportItem(label, fileName) {
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
     const realAntigravityEvidence = report?.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : null;
+    const toolBridge = report?.toolBridge && typeof report.toolBridge === "object" ? report.toolBridge : null;
+    const compatibilityTools = report?.compatibilityTools && typeof report.compatibilityTools === "object" ? report.compatibilityTools : null;
+    const nativeToolCapability = report?.nativeToolCapability && typeof report.nativeToolCapability === "object" ? report.nativeToolCapability : null;
     const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
@@ -2076,6 +2079,23 @@ function latestManagerReportItem(label, fileName) {
             skippedRequestCount: modelRoutingResults.filter((item) => item?.skippedRequest === true).length,
             failedResultCount: modelRoutingResults.filter((item) => item?.ok !== true).length,
             resultErrorCount: modelRoutingResults.filter((item) => item?.error).length,
+        } : null,
+        toolBridgeEvidence: (toolBridge || compatibilityTools || nativeToolCapability) ? {
+            mode: shortSafeText(toolBridge?.mode || "", ""),
+            transport: shortSafeText(toolBridge?.transport || "", ""),
+            localAdapter: shortSafeText(toolBridge?.localAdapter || "", ""),
+            nativeAntigravityToolEvents: toolBridge?.nativeAntigravityToolEvents === true,
+            nativeMcpDiscoveryVerified: toolBridge?.nativeMcpDiscoveryVerified === true,
+            nativeBridgeDefaultEnabled: toolBridge?.nativeBridgeDefaultEnabled === true,
+            acceptsExternalToolDefinitions: toolBridge?.acceptsExternalToolDefinitions === true,
+            compatibilityBridge: shortSafeText(compatibilityTools?.bridge || "", ""),
+            nativeMcpApprovalProtocolVerified: nativeToolCapability?.nativeMcpApprovalProtocolVerified === true,
+            nativeMcpPermissionMode: shortSafeText(nativeToolCapability?.nativeMcpPermissionMode || "", ""),
+            sameCascadeResumeProbeVerified: nativeToolCapability?.sameCascadeResumeProbeVerified === true,
+            antigravityOwnedToolsDisabled: nativeToolCapability?.antigravityOwnedToolsDisabled === true,
+            permissionPromptsDisabled: nativeToolCapability?.permissionPromptsDisabled === true,
+            disabledToolCount: Number.isFinite(Number(nativeToolCapability?.disabledToolCount)) ? Number(nativeToolCapability.disabledToolCount) : null,
+            codexToolBridge: shortSafeText(nativeToolCapability?.codexToolBridge || "", ""),
         } : null,
         mcpSkillEvidence: (mcp || skills) ? {
             mcpCount: Number.isFinite(Number(mcp?.count)) ? Number(mcp.count) : null,
@@ -2732,6 +2752,11 @@ function latestReportsSummary(result){
       const evidence=item.modelRoutingEvidence;
       lines.push("  modelRouting: mode="+(evidence.mode||"unknown")+" / skipRequests="+(item.skipRequests?"true":"false")+" / results="+(evidence.skippedRequestCount??0)+"/"+(evidence.resultCount??0)+" / failed="+(evidence.failedResultCount??0));
       if(evidence.providerProtocol||evidence.providerModel||evidence.toolBridgeMode) lines.push("  modelRouting route: protocol="+(evidence.providerProtocol||"native")+" / providerModel="+(evidence.providerModel||"none")+" / toolBridge="+(evidence.toolBridgeMode||"unknown"));
+    }
+    if(item.toolBridgeEvidence){
+      const evidence=item.toolBridgeEvidence;
+      lines.push("  toolBridge: mode="+(evidence.mode||"unknown")+" / transport="+(evidence.transport||"unknown")+" / adapter="+(evidence.localAdapter||"unknown"));
+      lines.push("  toolBridge native: events="+(evidence.nativeAntigravityToolEvents?"true":"false")+" / discovery="+(evidence.nativeMcpDiscoveryVerified?"true":"false")+" / approval="+(evidence.nativeMcpApprovalProtocolVerified?"true":"false")+" / resume="+(evidence.sameCascadeResumeProbeVerified?"true":"false"));
     }
     if(item.mcpSkillEvidence){
       const evidence=item.mcpSkillEvidence;

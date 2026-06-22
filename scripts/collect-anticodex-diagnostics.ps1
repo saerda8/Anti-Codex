@@ -178,6 +178,7 @@ function Read-JsonSummary {
             models = @($json.models | ForEach-Object { [string]$_ })
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
+            toolBridgeEvidence = $json.toolBridgeEvidence
             state = $json.state
             skipped = $json.skipped
             reason = $json.reason

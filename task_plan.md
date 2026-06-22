@@ -974,3 +974,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: model-routing report summaries, diagnostic bundles, and Manager latest-report payload/text now surface route mode, provider protocol/model, tool-bridge mode, per-model result count, skipped-request count, failed-result count, and result-error count.
 - Completed: passive release gates now validate model-routing no-traffic semantics directly: `skipRequests:true`, non-empty model catalog, mode present, per-model results present, every result skipped, no failed result, and no result error.
 - Verification: JavaScript syntax checks passed; PowerShell parser checks passed; release-gate `--self-test` rejects forged bad model-routing reports; strict passive gates remain `shortReady:true`, `releaseReady:true` with no model failures; focused launcher/summarizer tests passed; source diagnostics verifier passed.
+
+## 2026-06-23 Tool-Bridge No-Traffic Evidence Surface
+- Completed: tool-bridge report summaries, diagnostic bundles, and Manager latest-report payload/text now surface native bridge mode, transport, local adapter, native event/discovery/default flags, compatibility bridge, automatic permission mode, same-Cascade resume proof, owned-tool disablement, permission-prompt disablement, disabled-tool count, and Codex bridge adapter.
+- Completed: passive release gates now validate tool-bridge semantics directly instead of accepting any signed `ok:true` report.
+- Verification: JavaScript syntax checks passed; PowerShell parser checks passed; release-gate `--self-test` rejects forged bad tool-bridge reports; strict passive gates remain `shortReady:true`, `releaseReady:true` with no tool-bridge failures; focused launcher/summarizer tests passed.

@@ -116,6 +116,7 @@ function Test-DiagnosticBundle {
     }
 
     $modelSummary = $null
+    $toolBridgeSummary = $null
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
@@ -140,6 +141,31 @@ function Test-DiagnosticBundle {
                 if ([int]$modelEvidence.skippedRequestCount -ne [int]$modelEvidence.resultCount) { Add-Failure "diagnostic model-routing summary did not preserve skipped per-model results" }
                 if ([int]$modelEvidence.failedResultCount -ne 0) { Add-Failure "diagnostic model-routing summary reports failed results" }
                 if ([int]$modelEvidence.resultErrorCount -ne 0) { Add-Failure "diagnostic model-routing summary reports result errors" }
+            }
+        }
+        $toolBridgeSummary = @($summary | Where-Object { $_.file -eq "latest-tool-bridge-mode.json" } | Select-Object -First 1)[0]
+        if ($antigravityReportsRequired -and -not $toolBridgeSummary) {
+            Add-Failure "diagnostic reports summary missing latest-tool-bridge-mode.json"
+        } elseif ($antigravityReportsRequired -and $toolBridgeSummary) {
+            $bridgeEvidence = $toolBridgeSummary.toolBridgeEvidence
+            if (-not $bridgeEvidence) {
+                Add-Failure "diagnostic tool-bridge summary missing toolBridgeEvidence"
+            } else {
+                if ($bridgeEvidence.mode -ne "native-mcp-same-cascade") { Add-Failure "diagnostic tool-bridge summary missing native MCP same-Cascade mode" }
+                if ($bridgeEvidence.transport -ne "desktop-cascade") { Add-Failure "diagnostic tool-bridge summary missing desktop-cascade transport" }
+                if ($bridgeEvidence.localAdapter -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing prompt fallback adapter" }
+                if ($bridgeEvidence.nativeAntigravityToolEvents -ne $true) { Add-Failure "diagnostic tool-bridge summary missing native tool events" }
+                if ($bridgeEvidence.nativeMcpDiscoveryVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing MCP discovery proof" }
+                if ($bridgeEvidence.nativeBridgeDefaultEnabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing default native bridge proof" }
+                if ($bridgeEvidence.acceptsExternalToolDefinitions -ne $true) { Add-Failure "diagnostic tool-bridge summary missing external tool definition proof" }
+                if ($bridgeEvidence.compatibilityBridge -ne "native_mcp_same_cascade") { Add-Failure "diagnostic tool-bridge summary missing compatibility bridge proof" }
+                if ($bridgeEvidence.nativeMcpApprovalProtocolVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing approval protocol proof" }
+                if ($bridgeEvidence.nativeMcpPermissionMode -ne "automatic-before-codex-execution") { Add-Failure "diagnostic tool-bridge summary missing automatic permission mode" }
+                if ($bridgeEvidence.sameCascadeResumeProbeVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing same-Cascade resume proof" }
+                if ($bridgeEvidence.antigravityOwnedToolsDisabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing owned tools disabled proof" }
+                if ($bridgeEvidence.permissionPromptsDisabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing permission prompts disabled proof" }
+                if ([int]$bridgeEvidence.disabledToolCount -lt 1) { Add-Failure "diagnostic tool-bridge summary missing disabled tool count" }
+                if ($bridgeEvidence.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing Codex tool bridge proof" }
             }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
@@ -342,6 +368,12 @@ function Test-DiagnosticBundle {
                 skipRequests = $modelSummary.skipRequests
                 models = @($modelSummary.models)
                 evidence = $modelSummary.modelRoutingEvidence
+            }
+        } else { $null }
+        toolBridgeSummary = if ($toolBridgeSummary) {
+            [pscustomobject]@{
+                ok = $toolBridgeSummary.ok
+                evidence = $toolBridgeSummary.toolBridgeEvidence
             }
         } else { $null }
         postVerification = if ($postVerificationSummary) {
