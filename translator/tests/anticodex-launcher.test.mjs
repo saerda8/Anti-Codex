@@ -1718,6 +1718,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /viewLatestReports/);
   assert.match(server, /function latestManagerReportsPayload/);
   assert.match(server, /publicDocumentationOk: fileName === "latest-source-preflight\.json"/);
+  assert.match(server, /sourcePreflightEvidence/);
+  assert.match(server, /upstreamProfileStorageOk/);
+  assert.match(server, /sourcePreflight: js=/);
   assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /localConnectorEvidence/);
   assert.match(server, /mcpSkillEvidence/);
@@ -1908,6 +1911,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /requestedRealTraffic/);
   assert.match(reportSummarizer, /coverageKind/);
   assert.match(reportSummarizer, /behaviorCovered/);
+  assert.match(reportSummarizer, /upstreamProfileStorageOk/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -1999,6 +2003,40 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.deepEqual(summary.mcpSkillEvidence.missingSharedSkills, ["missing-skill"]);
     assert.deepEqual(summary.mcpSkillEvidence.extraLocalSkills, ["extra-skill"]);
     assert.equal(summary.mcpSkillEvidence.skillSmokeReadable, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces source preflight profile storage evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-source-preflight-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-source-preflight.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "source-preflight",
+      skipFullRegression: true,
+      failures: [],
+      checks: {
+        javascriptSyntax: { ok: true },
+        powershellSyntax: { ok: true },
+        uiStateSelfTest: { ok: true },
+        upstreamProfileStorage: { ok: true },
+        publicDocumentation: { ok: true },
+        translatorRegression: { ok: true },
+        diffWhitespace: { ok: true },
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.javascriptSyntaxOk, true);
+    assert.equal(summary.powershellSyntaxOk, true);
+    assert.equal(summary.uiStateSelfTestOk, true);
+    assert.equal(summary.upstreamProfileStorageOk, true);
+    assert.equal(summary.publicDocumentationOk, true);
+    assert.equal(summary.translatorRegressionOk, true);
+    assert.equal(summary.diffWhitespaceOk, true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4153,6 +4191,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /javascriptSyntaxOk/);
   assert.match(diagnostics, /powershellSyntaxOk/);
   assert.match(diagnostics, /uiStateSelfTestOk/);
+  assert.match(diagnostics, /upstreamProfileStorageOk/);
   assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /translatorRegressionOk/);
   assert.match(diagnostics, /diffWhitespaceOk/);
@@ -4230,6 +4269,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.doesNotMatch(releaseGates, /No latest report is produced/);
   assert.match(releaseGates, /requiredForShort/);
   assert.match(releaseGates, /requiredForRelease/);
+  assert.match(releaseGates, /requireSourcePreflightSemantics/);
+  assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
+  assert.match(releaseGates, /source_preflight_public_documentation/);
   assert.match(releaseGates, /requireSkipRequests/);
   assert.match(releaseGates, /expected_skipRequests_true/);
   assert.match(releaseGates, /requireMcpSkillSemantics/);
@@ -4268,6 +4310,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid real provider optional report satisfied the gate/);

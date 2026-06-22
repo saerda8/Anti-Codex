@@ -169,6 +169,7 @@ function Read-JsonSummary {
             javascriptSyntaxOk = $json.javascriptSyntaxOk
             powershellSyntaxOk = $json.powershellSyntaxOk
             uiStateSelfTestOk = $json.uiStateSelfTestOk
+            upstreamProfileStorageOk = $json.upstreamProfileStorageOk
             publicDocumentationOk = $json.publicDocumentationOk
             translatorRegressionOk = $json.translatorRegressionOk
             diffWhitespaceOk = $json.diffWhitespaceOk

@@ -24,7 +24,7 @@ const startedAt = Date.now();
 
 const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true },
-  { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true },
+  { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true, requireSourcePreflightSemantics: true },
   { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true, requireMcpSkillSemantics: true },
   { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true, requirePluginCapabilitySemantics: true },
   { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true, requireLocalConnectorSemantics: true },
@@ -212,6 +212,18 @@ function summarizeGate(definition) {
       if (Number(skills.expectedSharedCount || 0) < Number(skills.sharedCount || 0) + Number(skills.agentsCount || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
       if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
       if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
+    }
+    if (definition.requireSourcePreflightSemantics) {
+      const checks = report.checks || {};
+      if (report.reportName !== "source-preflight") semanticFailures.push("source_preflight_report_name");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("source_preflight_failures");
+      if (!checks.javascriptSyntax || checks.javascriptSyntax.ok !== true) semanticFailures.push("source_preflight_javascript_syntax");
+      if (!checks.powershellSyntax || checks.powershellSyntax.ok !== true) semanticFailures.push("source_preflight_powershell_syntax");
+      if (!checks.uiStateSelfTest || checks.uiStateSelfTest.ok !== true) semanticFailures.push("source_preflight_ui_state_self_test");
+      if (!checks.upstreamProfileStorage || checks.upstreamProfileStorage.ok !== true) semanticFailures.push("source_preflight_upstream_profile_storage");
+      if (!checks.publicDocumentation || checks.publicDocumentation.ok !== true) semanticFailures.push("source_preflight_public_documentation");
+      if (!checks.translatorRegression || checks.translatorRegression.ok !== true) semanticFailures.push("source_preflight_translator_regression");
+      if (!checks.diffWhitespace || checks.diffWhitespace.ok !== true) semanticFailures.push("source_preflight_diff_whitespace");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -411,6 +423,21 @@ if (args.has("--self-test")) {
       coverageKind: "real-traffic",
     });
 
+    writeFakeLatestReport("latest-source-preflight.json", {
+      ok: true,
+      reportName: "wrong-source-preflight",
+      failures: ["hidden failure"],
+      checks: {
+        javascriptSyntax: { ok: false },
+        powershellSyntax: { ok: false },
+        uiStateSelfTest: { ok: false },
+        upstreamProfileStorage: { ok: false },
+        publicDocumentation: { ok: false },
+        translatorRegression: { ok: false },
+        diffWhitespace: { ok: false },
+      },
+    });
+
     writeFakeLatestReport("latest-real-third-party-provider.json", {
       ok: true,
       reportName: "real-third-party-provider",
@@ -522,6 +549,17 @@ if (args.has("--self-test")) {
       "mcp_skills_no_agents_skills",
       "mcp_skills_missing_shared_skills",
       "mcp_skills_skill_smoke_not_readable",
+    ]);
+    semanticFailures.sourcePreflight = assertSemanticFailures("sourcePreflight", "self-test failed: semantically invalid source-preflight report satisfied the gate", [
+      "source_preflight_report_name",
+      "source_preflight_failures",
+      "source_preflight_javascript_syntax",
+      "source_preflight_powershell_syntax",
+      "source_preflight_ui_state_self_test",
+      "source_preflight_upstream_profile_storage",
+      "source_preflight_public_documentation",
+      "source_preflight_translator_regression",
+      "source_preflight_diff_whitespace",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_secrets_not_redacted",

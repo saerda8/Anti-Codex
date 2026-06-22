@@ -1321,6 +1321,7 @@ function sourcePreflightSummary(report) {
             javascriptSyntaxOk: null,
             powershellSyntaxOk: null,
             uiStateSelfTestOk: null,
+            upstreamProfileStorageOk: null,
             publicDocumentationOk: null,
             translatorRegressionOk: null,
             diffWhitespaceOk: null,
@@ -1348,6 +1349,7 @@ function sourcePreflightSummary(report) {
         javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
         powershellSyntaxOk: checks.powershellSyntax?.ok === true,
         uiStateSelfTestOk: checks.uiStateSelfTest?.ok === true,
+        upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
         publicDocumentationOk: checks.publicDocumentation?.ok === true,
         translatorRegressionOk: checks.translatorRegression?.ok === true,
         diffWhitespaceOk: checks.diffWhitespace?.ok === true,
@@ -2044,6 +2046,16 @@ function latestManagerReportItem(label, fileName) {
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
+        sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
+            javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
+            powershellSyntaxOk: checks.powershellSyntax?.ok === true,
+            uiStateSelfTestOk: checks.uiStateSelfTest?.ok === true,
+            upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
+            publicDocumentationOk: checks.publicDocumentation?.ok === true,
+            translatorRegressionOk: checks.translatorRegression?.ok === true,
+            diffWhitespaceOk: checks.diffWhitespace?.ok === true,
+            skipFullRegression: report?.skipFullRegression === true,
+        } : null,
         publicDocumentationFailureCount: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation && Array.isArray(publicDocumentation.failed) ? publicDocumentation.failed.length : null,
         localConnectorEvidence: endpointEvidence ? {
             chatgptInstallUrlsScrubbed: endpointEvidence.chatgptInstallUrlsScrubbed === true,
@@ -2678,6 +2690,11 @@ function latestReportsSummary(result){
     if(item.exists&&age) lines.push("  \\u66f4\\u65b0\\uff1a"+age);
     if(item.firstFailure) lines.push("  \\u9996\\u4e2a\\u5931\\u8d25\\uff1a"+item.firstFailure);
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
+    if(item.sourcePreflightEvidence){
+      const evidence=item.sourcePreflightEvidence;
+      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false"));
+      lines.push("  sourcePreflight: ui="+(evidence.uiStateSelfTestOk?"true":"false")+" / regression="+(evidence.translatorRegressionOk?"true":"false")+" / diff="+(evidence.diffWhitespaceOk?"true":"false")+" / skipFull="+(evidence.skipFullRegression?"true":"false"));
+    }
     if(item.skipped===true){
       lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));
     }

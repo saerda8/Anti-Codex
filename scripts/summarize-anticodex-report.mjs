@@ -107,6 +107,7 @@ const summary = {
   javascriptSyntaxOk: checkOk("javascriptSyntax"),
   powershellSyntaxOk: checkOk("powershellSyntax"),
   uiStateSelfTestOk: checkOk("uiStateSelfTest"),
+  upstreamProfileStorageOk: checkOk("upstreamProfileStorage"),
   publicDocumentationOk: checkOk("publicDocumentation"),
   translatorRegressionOk: checkOk("translatorRegression"),
   diffWhitespaceOk: checkOk("diffWhitespace"),
