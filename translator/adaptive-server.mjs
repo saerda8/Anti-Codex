@@ -1996,6 +1996,12 @@ function latestManagerReportItem(label, fileName) {
     const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
     const thinkingModels = Array.isArray(report?.models) && (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? report.models : [];
     const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
+    const sync = report?.sync && typeof report.sync === "object" ? report.sync : null;
+    const activeHost = report?.activeHost && typeof report.activeHost === "object" ? report.activeHost : null;
+    const shortcutVerification = Array.isArray(sync?.shortcutVerification) ? sync.shortcutVerification : [];
+    const managerBridge = sync?.managerBridge && typeof sync.managerBridge === "object" ? sync.managerBridge : null;
+    const updateStatus = sync?.updateStatus && typeof sync.updateStatus === "object" ? sync.updateStatus : null;
+    const updateGuardrails = updateStatus?.guardrails && typeof updateStatus.guardrails === "object" ? updateStatus.guardrails : null;
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2069,6 +2075,22 @@ function latestManagerReportItem(label, fileName) {
             reconnectTextCount: uiIdleSamples.filter((item) => item?.hasReconnectText === true).length,
             loginTextCount: uiIdleSamples.filter((item) => item?.hasLoginText === true).length,
             missingModelTextCount: uiIdleSamples.filter((item) => !item?.matchedModelText).length,
+        } : null,
+        syncReadinessEvidence: (sync || activeHost) ? {
+            noTrafficReady: report?.reportName === "sync-readiness" && report?.noTraffic === true && report?.usedRealTraffic === false && report?.behaviorCovered === true && report?.coverageKind === "installed-no-traffic",
+            fullMode: report?.fast === false && report?.skipIconPaletteProbe === false,
+            activeHostReady: !!activeHost && activeHost.exists === true && activeHost.markerExists === true && activeHost.manifestValid === true && activeHost.exeExists === true,
+            brandReady: activeHost?.productName === "Anti-Codex" && activeHost?.fileDescription === "Anti-Codex" && activeHost?.originalFilename === "Anti-Codex.exe",
+            iconReady: activeHost?.hostIconExists === true && activeHost?.trayIconExists === true && activeHost?.appRootIconExists === true && activeHost?.hostIconPalette?.ok === true && activeHost?.trayIconPalette?.ok === true && activeHost?.appRootIconPalette?.ok === true && (!sync?.desktopShortcutIconPalette || sync.desktopShortcutIconPalette.ok === true),
+            syncScriptsReady: !!sync && sync.scriptExists === true && sync.launcherExists === true && sync.rollbackScriptExists === true && sync.rollbackLauncherExists === true && sync.updateCheckExists === true && sync.validatorExists === true && sync.failureSafetyVerifierExists === true && sync.installerExists === true && sync.startScriptExists === true,
+            updateReady: updateStatus?.ok === true && updateStatus?.updateNeeded === false && updateStatus?.drift?.state === "synced",
+            guardrailsReady: updateGuardrails?.brandPreserved === true && updateGuardrails?.iconPreserved === true && updateGuardrails?.activeHostValid === true && Array.isArray(updateGuardrails?.failures) && updateGuardrails.failures.length === 0,
+            shortcutCount: shortcutVerification.length,
+            shortcutReadyCount: shortcutVerification.filter((item) => item?.ok === true && item?.exists === true && item?.displayNameMatches === true && item?.targetMatches === true && item?.launcherTargetMatches === true && item?.scriptMatches === true && item?.iconMatches === true && item?.forbiddenCodexBranding !== true).length,
+            desktopShortcutCount: Array.isArray(sync?.desktopAntiCodexShortcuts) ? sync.desktopAntiCodexShortcuts.length : null,
+            forbiddenDesktopHelperCount: Array.isArray(sync?.forbiddenDesktopHelperShortcuts) ? sync.forbiddenDesktopHelperShortcuts.length : null,
+            managerBridgeReady: !!managerBridge && Number(managerBridge.processCount) === 1 && Number(managerBridge.staleProcessCount) === 0 && Array.isArray(managerBridge.processes) && managerBridge.processes.every((item) => item?.hasExpectedBaseUrl === true),
+            cleanSyncState: sync?.hostSyncMarkerExists === false && sync?.staleCandidateExists === false && sync?.rollbackHostExists === true && sync?.rollbackMarkerExists === true,
         } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
@@ -2782,6 +2804,11 @@ function latestReportsSummary(result){
     if(item.uiIdleEvidence){
       const evidence=item.uiIdleEvidence;
       lines.push("  uiIdle: samples="+(evidence.healthySampleCount??0)+"/"+(evidence.sampleCount??0)+" / duration="+(evidence.durationSec??"unknown")+"s / reconnectText="+(evidence.reconnectTextCount??0)+" / loginText="+(evidence.loginTextCount??0));
+    }
+    if(item.syncReadinessEvidence){
+      const evidence=item.syncReadinessEvidence;
+      lines.push("  syncReadiness: noTraffic="+(evidence.noTrafficReady?"true":"check")+" / full="+(evidence.fullMode?"true":"check")+" / host="+(evidence.activeHostReady&&evidence.brandReady?"ok":"check")+" / icons="+(evidence.iconReady?"ok":"check")+" / update="+(evidence.updateReady?"synced":"check")+" / guardrails="+(evidence.guardrailsReady?"ok":"check"));
+      lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / clean="+(evidence.cleanSyncState?"true":"false"));
     }
     if(item.toolBridgeEvidence){
       const evidence=item.toolBridgeEvidence;

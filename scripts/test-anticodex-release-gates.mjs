@@ -39,7 +39,7 @@ const gateDefinitions = [
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
   { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true, requireToolBridgeSemantics: true },
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true, requireUiIdleSemantics: true },
-  { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true },
+  { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true, requireSyncReadinessSemantics: true },
   { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true, requireModelThinkingSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true },
@@ -282,6 +282,40 @@ function summarizeGate(definition) {
       if (samples.some((item) => item?.hasReconnectText === true)) semanticFailures.push("ui_idle_reconnect_text");
       if (samples.some((item) => item?.hasLoginText === true)) semanticFailures.push("ui_idle_login_text");
       if (samples.some((item) => !item?.matchedModelText)) semanticFailures.push("ui_idle_model_text_missing");
+    }
+    if (definition.requireSyncReadinessSemantics) {
+      const activeHost = report.activeHost || {};
+      const sync = report.sync || {};
+      const updateStatus = sync.updateStatus || {};
+      const guardrails = updateStatus.guardrails || {};
+      const shortcuts = Array.isArray(sync.shortcutVerification) ? sync.shortcutVerification : [];
+      const managerBridge = sync.managerBridge || {};
+      const rollbackHost = sync.rollbackHost || {};
+      if (report.reportName !== "sync-readiness") semanticFailures.push("sync_readiness_report_name");
+      if (report.noTraffic !== true || report.usedRealTraffic !== false || report.behaviorCovered !== true || report.coverageKind !== "installed-no-traffic") semanticFailures.push("sync_readiness_no_traffic_attestation");
+      if (report.fast !== false || report.skipIconPaletteProbe !== false) semanticFailures.push("sync_readiness_full_mode_required");
+      if (activeHost.exists !== true || activeHost.markerExists !== true || activeHost.manifestValid !== true || activeHost.exeExists !== true) semanticFailures.push("sync_readiness_active_host");
+      if (activeHost.productName !== "Anti-Codex" || activeHost.fileDescription !== "Anti-Codex" || activeHost.originalFilename !== "Anti-Codex.exe") semanticFailures.push("sync_readiness_brand");
+      if (activeHost.hostIconExists !== true || activeHost.trayIconExists !== true || activeHost.appRootIconExists !== true) semanticFailures.push("sync_readiness_icon_files");
+      if (activeHost.hostIconPalette?.ok !== true || activeHost.trayIconPalette?.ok !== true || activeHost.appRootIconPalette?.ok !== true) semanticFailures.push("sync_readiness_icon_palette");
+      if (sync.desktopShortcutIconPalette && sync.desktopShortcutIconPalette.ok !== true) semanticFailures.push("sync_readiness_desktop_icon_palette");
+      if (sync.scriptExists !== true || sync.launcherExists !== true || sync.rollbackScriptExists !== true || sync.rollbackLauncherExists !== true || sync.updateCheckExists !== true || sync.validatorExists !== true || sync.failureSafetyVerifierExists !== true || sync.installerExists !== true || sync.startScriptExists !== true) semanticFailures.push("sync_readiness_scripts");
+      if (updateStatus.ok !== true || updateStatus.updateNeeded !== false || updateStatus.drift?.state !== "synced") semanticFailures.push("sync_readiness_update_status");
+      if (updateStatus.operation?.state !== "succeeded") semanticFailures.push("sync_readiness_operation_state");
+      if (!updateStatus.source?.hostHash || updateStatus.source.hostHash !== updateStatus.active?.hostHash || !updateStatus.source?.cliHash || updateStatus.source.cliHash !== updateStatus.active?.cliHash) semanticFailures.push("sync_readiness_source_active_hash_mismatch");
+      if (guardrails.brandPreserved !== true || guardrails.iconPreserved !== true || guardrails.activeHostValid !== true || !isEmptyArray(guardrails.failures)) semanticFailures.push("sync_readiness_guardrails");
+      if (shortcuts.length < 5) semanticFailures.push("sync_readiness_shortcut_count");
+      if (shortcuts.some((item) => item?.ok !== true || item?.exists !== true || item?.displayNameMatches !== true || item?.targetMatches !== true || item?.launcherTargetMatches !== true || item?.scriptMatches !== true || item?.iconMatches !== true || item?.forbiddenCodexBranding === true)) semanticFailures.push("sync_readiness_shortcuts");
+      if (sync.startMenuMainShortcutExists !== true || sync.startMenuSyncShortcutExists !== true || sync.startMenuRollbackShortcutExists !== true || sync.startMenuManagerShortcutExists !== true || sync.desktopMainShortcutExists !== true) semanticFailures.push("sync_readiness_shortcut_inventory");
+      if (!Array.isArray(sync.desktopAntiCodexShortcuts) || sync.desktopAntiCodexShortcuts.length !== 1 || sync.desktopAntiCodexShortcuts[0] !== "Anti-Codex.lnk") semanticFailures.push("sync_readiness_desktop_shortcuts");
+      if (!isEmptyArray(sync.forbiddenDesktopHelperShortcuts)) semanticFailures.push("sync_readiness_forbidden_desktop_helpers");
+      if (Number(managerBridge.processCount || 0) !== 1 || Number(managerBridge.staleProcessCount || 0) !== 0 || !Array.isArray(managerBridge.processes) || managerBridge.processes.some((item) => item?.hasExpectedBaseUrl !== true)) semanticFailures.push("sync_readiness_manager_bridge");
+      if (managerBridge.expectedBaseUrl !== "http://127.0.0.1:8484") semanticFailures.push("sync_readiness_manager_bridge_base_url");
+      if (sync.rollbackHostExists !== true || sync.rollbackMarkerExists !== true || rollbackHost.exists !== true || rollbackHost.markerExists !== true || rollbackHost.manifestValid !== true || rollbackHost.exeExists !== true) semanticFailures.push("sync_readiness_rollback_host");
+      if (rollbackHost.productName !== "Anti-Codex" || rollbackHost.fileDescription !== "Anti-Codex" || rollbackHost.originalFilename !== "Anti-Codex.exe") semanticFailures.push("sync_readiness_rollback_brand");
+      if (rollbackHost.hostIconPalette?.ok !== true || rollbackHost.trayIconPalette?.ok !== true || rollbackHost.appRootIconPalette?.ok !== true) semanticFailures.push("sync_readiness_rollback_icon_palette");
+      if (sync.rollbackSwapHostExists === true || sync.rollbackSwapMarkerExists === true) semanticFailures.push("sync_readiness_rollback_swap_stale");
+      if (sync.hostSyncMarkerExists !== false || sync.staleCandidateExists !== false || sync.rollbackHostExists !== true || sync.rollbackMarkerExists !== true) semanticFailures.push("sync_readiness_clean_state");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -539,6 +573,55 @@ if (args.has("--self-test")) {
       ],
     });
 
+    writeFakeLatestReport("latest-sync-readiness.json", {
+      ok: true,
+      activeHost: {
+        exists: false,
+        markerExists: false,
+        manifestValid: false,
+        exeExists: false,
+        productName: "Codex",
+        fileDescription: "Codex",
+        originalFilename: "Codex.exe",
+        hostIconExists: false,
+        trayIconExists: false,
+        appRootIconExists: false,
+        hostIconPalette: { ok: false },
+        trayIconPalette: { ok: false },
+        appRootIconPalette: { ok: false },
+      },
+      sync: {
+        scriptExists: false,
+        launcherExists: false,
+        rollbackScriptExists: false,
+        rollbackLauncherExists: false,
+        updateCheckExists: false,
+        validatorExists: false,
+        failureSafetyVerifierExists: false,
+        installerExists: false,
+        startScriptExists: false,
+        desktopShortcutIconPalette: { ok: false },
+        updateStatus: {
+          ok: false,
+          updateNeeded: true,
+          drift: { state: "changed" },
+          guardrails: { brandPreserved: false, iconPreserved: false, activeHostValid: false, failures: ["bad"] },
+        },
+        shortcutVerification: [
+          { ok: false, exists: false, displayNameMatches: false, targetMatches: false, launcherTargetMatches: false, scriptMatches: false, iconMatches: false, forbiddenCodexBranding: true },
+        ],
+        desktopAntiCodexShortcuts: ["Anti-Codex.lnk", "Helper.lnk"],
+        forbiddenDesktopHelperShortcuts: ["Helper.lnk"],
+        managerBridge: { processCount: 2, staleProcessCount: 1, processes: [{ hasExpectedBaseUrl: false }] },
+        hostSyncMarkerExists: true,
+        staleCandidateExists: true,
+        rollbackHostExists: false,
+        rollbackMarkerExists: false,
+        rollbackSwapHostExists: true,
+        rollbackSwapMarkerExists: true,
+      },
+    });
+
     writeFakeLatestReport("latest-source-preflight.json", {
       ok: true,
       reportName: "wrong-source-preflight",
@@ -639,6 +722,32 @@ if (args.has("--self-test")) {
       "ui_idle_reconnect_text",
       "ui_idle_login_text",
       "ui_idle_model_text_missing",
+    ]);
+    semanticFailures.syncReadiness = assertSemanticFailures("syncReadiness", "self-test failed: semantically invalid sync-readiness report satisfied the gate", [
+      "sync_readiness_report_name",
+      "sync_readiness_no_traffic_attestation",
+      "sync_readiness_full_mode_required",
+      "sync_readiness_active_host",
+      "sync_readiness_brand",
+      "sync_readiness_icon_files",
+      "sync_readiness_icon_palette",
+      "sync_readiness_scripts",
+      "sync_readiness_update_status",
+      "sync_readiness_operation_state",
+      "sync_readiness_source_active_hash_mismatch",
+      "sync_readiness_guardrails",
+      "sync_readiness_shortcut_count",
+      "sync_readiness_shortcuts",
+      "sync_readiness_shortcut_inventory",
+      "sync_readiness_desktop_shortcuts",
+      "sync_readiness_forbidden_desktop_helpers",
+      "sync_readiness_manager_bridge",
+      "sync_readiness_manager_bridge_base_url",
+      "sync_readiness_rollback_host",
+      "sync_readiness_rollback_brand",
+      "sync_readiness_rollback_icon_palette",
+      "sync_readiness_rollback_swap_stale",
+      "sync_readiness_clean_state",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",

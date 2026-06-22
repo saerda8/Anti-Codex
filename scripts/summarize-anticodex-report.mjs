@@ -74,6 +74,12 @@ const nativeToolCapability = report && report.nativeToolCapability ? report.nati
 const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
 const thinkingModels = Array.isArray(report?.models) && (has(report, "expectedModelCount") || has(report, "actualModelCount")) ? report.models : [];
 const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
+const sync = report && report.sync ? report.sync : null;
+const activeHost = report && report.activeHost ? report.activeHost : null;
+const shortcutVerification = sync && Array.isArray(sync.shortcutVerification) ? sync.shortcutVerification : [];
+const managerBridge = sync && sync.managerBridge ? sync.managerBridge : null;
+const updateStatus = sync && sync.updateStatus ? sync.updateStatus : null;
+const updateGuardrails = updateStatus && updateStatus.guardrails ? updateStatus.guardrails : null;
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -166,6 +172,22 @@ const summary = {
     reconnectTextCount: uiIdleSamples.filter((item) => item && item.hasReconnectText === true).length,
     loginTextCount: uiIdleSamples.filter((item) => item && item.hasLoginText === true).length,
     missingModelTextCount: uiIdleSamples.filter((item) => !item || !item.matchedModelText).length,
+  } : null,
+  syncReadinessEvidence: sync || activeHost ? {
+    noTrafficReady: report.reportName === "sync-readiness" && report.noTraffic === true && report.usedRealTraffic === false && report.behaviorCovered === true && report.coverageKind === "installed-no-traffic",
+    fullMode: report.fast === false && report.skipIconPaletteProbe === false,
+    activeHostReady: !!activeHost && activeHost.exists === true && activeHost.markerExists === true && activeHost.manifestValid === true && activeHost.exeExists === true,
+    brandReady: activeHost?.productName === "Anti-Codex" && activeHost?.fileDescription === "Anti-Codex" && activeHost?.originalFilename === "Anti-Codex.exe",
+    iconReady: activeHost?.hostIconExists === true && activeHost?.trayIconExists === true && activeHost?.appRootIconExists === true && activeHost?.hostIconPalette?.ok === true && activeHost?.trayIconPalette?.ok === true && activeHost?.appRootIconPalette?.ok === true && (!sync?.desktopShortcutIconPalette || sync.desktopShortcutIconPalette.ok === true),
+    syncScriptsReady: !!sync && sync.scriptExists === true && sync.launcherExists === true && sync.rollbackScriptExists === true && sync.rollbackLauncherExists === true && sync.updateCheckExists === true && sync.validatorExists === true && sync.failureSafetyVerifierExists === true && sync.installerExists === true && sync.startScriptExists === true,
+    updateReady: updateStatus?.ok === true && updateStatus?.updateNeeded === false && updateStatus?.drift?.state === "synced",
+    guardrailsReady: updateGuardrails?.brandPreserved === true && updateGuardrails?.iconPreserved === true && updateGuardrails?.activeHostValid === true && Array.isArray(updateGuardrails?.failures) && updateGuardrails.failures.length === 0,
+    shortcutCount: shortcutVerification.length,
+    shortcutReadyCount: shortcutVerification.filter((item) => item && item.ok === true && item.exists === true && item.displayNameMatches === true && item.targetMatches === true && item.launcherTargetMatches === true && item.scriptMatches === true && item.iconMatches === true && item.forbiddenCodexBranding !== true).length,
+    desktopShortcutCount: Array.isArray(sync?.desktopAntiCodexShortcuts) ? sync.desktopAntiCodexShortcuts.length : null,
+    forbiddenDesktopHelperCount: Array.isArray(sync?.forbiddenDesktopHelperShortcuts) ? sync.forbiddenDesktopHelperShortcuts.length : null,
+    managerBridgeReady: !!managerBridge && Number(managerBridge.processCount) === 1 && Number(managerBridge.staleProcessCount) === 0 && Array.isArray(managerBridge.processes) && managerBridge.processes.every((item) => item && item.hasExpectedBaseUrl === true),
+    cleanSyncState: sync?.hostSyncMarkerExists === false && sync?.staleCandidateExists === false && sync?.rollbackHostExists === true && sync?.rollbackMarkerExists === true,
   } : null,
   state: has(report, "state") ? asString(report.state) : null,
   skipped: boolField(report, "skipped"),

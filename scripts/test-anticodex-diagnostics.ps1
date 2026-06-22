@@ -119,6 +119,7 @@ function Test-DiagnosticBundle {
     $modelThinkingSummary = $null
     $toolBridgeSummary = $null
     $uiIdleSummary = $null
+    $syncReadinessSummary = $null
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
@@ -202,6 +203,30 @@ function Test-DiagnosticBundle {
                 if ([int]$uiEvidence.reconnectTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary has reconnect text" }
                 if ([int]$uiEvidence.loginTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary has login text" }
                 if ([int]$uiEvidence.missingModelTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary missing model text" }
+            }
+        }
+        $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
+        if (-not $syncReadinessSummary) {
+            Add-Failure "diagnostic reports summary missing latest-sync-readiness.json"
+        } else {
+            $syncEvidence = $syncReadinessSummary.syncReadinessEvidence
+            if (-not $syncEvidence) {
+                Add-Failure "diagnostic sync-readiness summary missing syncReadinessEvidence"
+            } else {
+                if ($syncEvidence.noTrafficReady -ne $true) { Add-Failure "diagnostic sync-readiness summary missing no-traffic attestation" }
+                if ($syncEvidence.fullMode -ne $true) { Add-Failure "diagnostic sync-readiness summary not full mode" }
+                if ($syncEvidence.activeHostReady -ne $true) { Add-Failure "diagnostic sync-readiness summary active host not ready" }
+                if ($syncEvidence.brandReady -ne $true) { Add-Failure "diagnostic sync-readiness summary brand not preserved" }
+                if ($syncEvidence.iconReady -ne $true) { Add-Failure "diagnostic sync-readiness summary icons not ready" }
+                if ($syncEvidence.syncScriptsReady -ne $true) { Add-Failure "diagnostic sync-readiness summary scripts not ready" }
+                if ($syncEvidence.updateReady -ne $true) { Add-Failure "diagnostic sync-readiness summary update status not synced" }
+                if ($syncEvidence.guardrailsReady -ne $true) { Add-Failure "diagnostic sync-readiness summary guardrails not ready" }
+                if ([int]$syncEvidence.shortcutCount -lt 5) { Add-Failure "diagnostic sync-readiness summary shortcut count too low" }
+                if ([int]$syncEvidence.shortcutReadyCount -ne [int]$syncEvidence.shortcutCount) { Add-Failure "diagnostic sync-readiness summary shortcuts not ready" }
+                if ([int]$syncEvidence.desktopShortcutCount -ne 1) { Add-Failure "diagnostic sync-readiness summary desktop shortcut count wrong" }
+                if ([int]$syncEvidence.forbiddenDesktopHelperCount -ne 0) { Add-Failure "diagnostic sync-readiness summary has forbidden desktop helpers" }
+                if ($syncEvidence.managerBridgeReady -ne $true) { Add-Failure "diagnostic sync-readiness summary manager bridge not ready" }
+                if ($syncEvidence.cleanSyncState -ne $true) { Add-Failure "diagnostic sync-readiness summary sync state not clean" }
             }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
@@ -422,6 +447,12 @@ function Test-DiagnosticBundle {
             [pscustomobject]@{
                 ok = $uiIdleSummary.ok
                 evidence = $uiIdleSummary.uiIdleEvidence
+            }
+        } else { $null }
+        syncReadinessSummary = if ($syncReadinessSummary) {
+            [pscustomobject]@{
+                ok = $syncReadinessSummary.ok
+                evidence = $syncReadinessSummary.syncReadinessEvidence
             }
         } else { $null }
         postVerification = if ($postVerificationSummary) {

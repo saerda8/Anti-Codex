@@ -1923,6 +1923,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /nativeMcpApprovalProtocolVerified/);
   assert.match(reportSummarizer, /uiIdleEvidence/);
   assert.match(reportSummarizer, /healthySampleCount/);
+  assert.match(reportSummarizer, /syncReadinessEvidence/);
+  assert.match(reportSummarizer, /shortcutReadyCount/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -2180,6 +2182,84 @@ test("report summarizer surfaces UI idle no-traffic evidence", () => {
     assert.equal(summary.uiIdleEvidence.reconnectTextCount, 0);
     assert.equal(summary.uiIdleEvidence.loginTextCount, 0);
     assert.equal(summary.uiIdleEvidence.missingModelTextCount, 0);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces sync readiness no-traffic evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-sync-readiness-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-sync-readiness.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "sync-readiness",
+      fast: false,
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      skipIconPaletteProbe: false,
+      activeHost: {
+        exists: true,
+        markerExists: true,
+        manifestValid: true,
+        exeExists: true,
+        productName: "Anti-Codex",
+        fileDescription: "Anti-Codex",
+        originalFilename: "Anti-Codex.exe",
+        hostIconExists: true,
+        trayIconExists: true,
+        appRootIconExists: true,
+        hostIconPalette: { ok: true },
+        trayIconPalette: { ok: true },
+        appRootIconPalette: { ok: true },
+      },
+      sync: {
+        scriptExists: true,
+        launcherExists: true,
+        rollbackScriptExists: true,
+        rollbackLauncherExists: true,
+        updateCheckExists: true,
+        validatorExists: true,
+        failureSafetyVerifierExists: true,
+        installerExists: true,
+        startScriptExists: true,
+        desktopShortcutIconPalette: { ok: true },
+        updateStatus: {
+          ok: true,
+          updateNeeded: false,
+          drift: { state: "synced" },
+          guardrails: { brandPreserved: true, iconPreserved: true, activeHostValid: true, failures: [] },
+        },
+        shortcutVerification: [
+          { ok: true, exists: true, displayNameMatches: true, targetMatches: true, launcherTargetMatches: true, scriptMatches: true, iconMatches: true, forbiddenCodexBranding: false },
+          { ok: false, exists: true, displayNameMatches: true, targetMatches: true, launcherTargetMatches: true, scriptMatches: true, iconMatches: true, forbiddenCodexBranding: false },
+        ],
+        desktopAntiCodexShortcuts: ["Anti-Codex.lnk"],
+        forbiddenDesktopHelperShortcuts: [],
+        managerBridge: { processCount: 1, staleProcessCount: 0, processes: [{ hasExpectedBaseUrl: true }] },
+        hostSyncMarkerExists: false,
+        staleCandidateExists: false,
+        rollbackHostExists: true,
+        rollbackMarkerExists: true,
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.syncReadinessEvidence.noTrafficReady, true);
+    assert.equal(summary.syncReadinessEvidence.fullMode, true);
+    assert.equal(summary.syncReadinessEvidence.activeHostReady, true);
+    assert.equal(summary.syncReadinessEvidence.brandReady, true);
+    assert.equal(summary.syncReadinessEvidence.iconReady, true);
+    assert.equal(summary.syncReadinessEvidence.syncScriptsReady, true);
+    assert.equal(summary.syncReadinessEvidence.updateReady, true);
+    assert.equal(summary.syncReadinessEvidence.guardrailsReady, true);
+    assert.equal(summary.syncReadinessEvidence.shortcutCount, 2);
+    assert.equal(summary.syncReadinessEvidence.shortcutReadyCount, 1);
+    assert.equal(summary.syncReadinessEvidence.managerBridgeReady, true);
+    assert.equal(summary.syncReadinessEvidence.cleanSyncState, true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4293,6 +4373,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /uiIdleEvidence/);
   assert.match(diagnostics, /diagnostic ui-idle summary missing uiIdleEvidence/);
   assert.match(diagnostics, /diagnostic ui-idle summary has reconnect text/);
+  assert.match(diagnostics, /syncReadinessEvidence/);
+  assert.match(diagnostics, /diagnostic sync-readiness summary missing syncReadinessEvidence/);
+  assert.match(diagnostics, /diagnostic sync-readiness summary manager bridge not ready/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);
@@ -4441,6 +4524,14 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /ui_idle_reconnect_text/);
   assert.match(releaseGates, /ui_idle_login_text/);
   assert.match(releaseGates, /ui_idle_model_text_missing/);
+  assert.match(releaseGates, /requireSyncReadinessSemantics/);
+  assert.match(releaseGates, /sync_readiness_no_traffic_attestation/);
+  assert.match(releaseGates, /sync_readiness_full_mode_required/);
+  assert.match(releaseGates, /sync_readiness_active_host/);
+  assert.match(releaseGates, /sync_readiness_shortcuts/);
+  assert.match(releaseGates, /sync_readiness_manager_bridge/);
+  assert.match(releaseGates, /sync_readiness_rollback_host/);
+  assert.match(releaseGates, /sync_readiness_source_active_hash_mismatch/);
   assert.match(releaseGates, /requireMcpSkillSemantics/);
   assert.match(releaseGates, /mcp_skills_missing_shared_mcp/);
   assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
@@ -4480,6 +4571,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid model-routing report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid ui-idle report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid sync-readiness report satisfied the gate/);
   assert.match(releaseGates, /tool_bridge_codex_bridge/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);

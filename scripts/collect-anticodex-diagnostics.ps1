@@ -181,6 +181,7 @@ function Read-JsonSummary {
             modelRoutingEvidence = $json.modelRoutingEvidence
             toolBridgeEvidence = $json.toolBridgeEvidence
             uiIdleEvidence = $json.uiIdleEvidence
+            syncReadinessEvidence = $json.syncReadinessEvidence
             state = $json.state
             skipped = $json.skipped
             reason = $json.reason

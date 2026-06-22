@@ -203,6 +203,13 @@ Branch: main
 - Passive release gates now reject forged `ok:true` UI-idle reports unless they prove healthy account/UI samples, model count, visible model text, and no reconnect/login text.
 - Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with UI-idle semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, source diagnostics verification passed, and latest summary shows healthy `1/1` samples with no reconnect/login text.
 
+## 2026-06-23 Sync-Readiness No-Traffic Follow-Up
+
+- Sync-readiness reports now self-attest full no-traffic coverage with `reportName:"sync-readiness"`, `noTraffic:true`, `usedRealTraffic:false`, `behaviorCovered:true`, and `coverageKind:"installed-no-traffic"`.
+- Latest-report evidence now surfaces active host, brand, icons, scripts, update/guardrail state, shortcut counts, Manager bridge state, and clean sync/rollback state.
+- Passive release gates now reject forged `ok:true` sync-readiness reports unless they prove full mode, active/source hash match, operation success, rollback host/brand/icon readiness, shortcut inventory, Manager bridge base URL, and no stale swap/candidate state.
+- Fresh evidence: sync-readiness verifier refreshed the report, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, and source diagnostics verification passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

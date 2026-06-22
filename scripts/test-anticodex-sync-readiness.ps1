@@ -794,9 +794,14 @@ if ($Fast -and $FastMaxElapsedMs -gt 0 -and $elapsedMs -gt $FastMaxElapsedMs) {
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    reportName = "sync-readiness"
     failures = $failures.ToArray()
     elapsedMs = $elapsedMs
     fast = [bool]$Fast
+    noTraffic = $true
+    usedRealTraffic = $false
+    behaviorCovered = $true
+    coverageKind = if ($Fast) { "installed-fast-no-traffic" } else { "installed-no-traffic" }
     skipAccountProxyProbe = [bool]$SkipAccountProxyProbe
     skipIconPaletteProbe = [bool]$SkipIconPaletteProbe
     installRoot = $installRoot
