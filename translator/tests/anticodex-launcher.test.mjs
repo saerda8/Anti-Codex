@@ -2635,6 +2635,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   const mcpSkills = readFileSync(resolve(root, "scripts", "test-anticodex-mcp-skills.ps1"), "utf8");
   const realMcpSmoke = readFileSync(resolve(root, "scripts", "anticodex-real-mcp-smoke.mjs"), "utf8");
   const refreshLocalFeatures = readFileSync(resolve(root, "scripts", "refresh-anticodex-local-features.ps1"), "utf8");
+  const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
+  const adaptiveServer = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   // Must include health check and MCP/skills endpoints
   assert.match(mcpSkills, /Invoke-AntiCodexHealth/);
@@ -2645,12 +2647,16 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /node_repl/);
   assert.match(mcpSkills, /skills/);
   assert.match(mcpSkills, /SharedCodexHome/);
+  assert.match(mcpSkills, /AgentsSkillsPath/);
+  assert.match(mcpSkills, /\.agents\\skills/);
+  assert.match(mcpSkills, /agentsSkillNames/);
+  assert.match(mcpSkills, /expectedSharedSkillNames/);
   assert.match(mcpSkills, /expectedInheritedSkillNames/);
   assert.match(mcpSkills, /headroom/);
   assert.match(mcpSkills, /context-save/);
   assert.match(mcpSkills, /context-restore/);
   assert.match(mcpSkills, /keep-codex-fast/);
-  assert.match(mcpSkills, /shared skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
+  assert.match(mcpSkills, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
   assert.doesNotMatch(mcpSkills, /\$skillEntries\s*=\s*@\([^\r\n]*Select-Object -First 50/);
   assert.match(mcpSkills, /function Get-LinkTargetValue/);
   assert.match(mcpSkills, /function Select-LightFileSystemItem/);
@@ -2693,11 +2699,14 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /\$missingSharedMcpNames = @\(\$sharedMcpNames \| Where-Object \{ \$mcpNames -notcontains \$_ \}\)/);
   assert.match(mcpSkills, /shared MCP server '\$mcpName' exists but Anti-Codex local config is missing it/);
   assert.match(mcpSkills, /\$sharedSkillNames = @\(Get-ChildItem -LiteralPath \$sharedSkillsPath -Directory -Force/);
-  assert.match(mcpSkills, /\$missingSharedSkillNames = @\(\$sharedSkillNames \| Where-Object \{ \$localSkillNames -notcontains \$_ \}\)/);
-  assert.match(mcpSkills, /shared skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
+  assert.match(mcpSkills, /\$agentsSkillNames = @\(Get-ChildItem -LiteralPath \$AgentsSkillsPath -Directory -Force/);
+  assert.match(mcpSkills, /\$missingSharedSkillNames = @\(\$expectedSharedSkillNames \| Where-Object \{ \$localSkillNames -notcontains \$_ \}\)/);
+  assert.match(mcpSkills, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
   assert.match(mcpSkills, /sharedCount = \$sharedMcpNames\.Count/);
   assert.match(mcpSkills, /missingShared = \$missingSharedMcpNames/);
   assert.match(mcpSkills, /sharedCount = \$sharedSkillNames\.Count/);
+  assert.match(mcpSkills, /agentsCount = \$agentsSkillNames\.Count/);
+  assert.match(mcpSkills, /expectedSharedCount = \$expectedSharedSkillNames\.Count/);
   assert.match(mcpSkills, /missingShared = \$missingSharedSkillNames/);
   assert.match(mcpSkills, /\$healthMode = "unknown"/);
   assert.match(mcpSkills, /\$healthMode -eq "third-party"/);
@@ -2713,6 +2722,11 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(realMcpSmoke, /list-only/);
   assert.match(realMcpSmoke, /anticodex-real-mcp-smoke-latest\.json/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-plugin-host\.mjs/);
+  assert.match(refreshLocalFeatures, /AgentsSkillsPath/);
+  assert.match(refreshLocalFeatures, /\.agents\\skills/);
+  assert.match(refreshLocalFeatures, /agentsSkillNames/);
+  assert.match(refreshLocalFeatures, /missingExpectedSkillNames/);
+  assert.match(refreshLocalFeatures, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-config\.mjs/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-sidecars\.mjs/);
   assert.match(refreshLocalFeatures, /shared config refresh failed/);
@@ -2735,6 +2749,14 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /function Get-LinkTargetValue/);
   assert.doesNotMatch(refreshLocalFeatures, /target = if \(\$item\) \{ \$item\.Target \}/);
   assert.match(refreshLocalFeatures, /ConvertTo-Json/);
+  assert.match(pluginHostSync, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
+  assert.match(pluginHostSync, /\.agents', 'skills'/);
+  assert.match(pluginHostSync, /extraSharedPaths/);
+  assert.match(pluginHostSync, /computeCombinedSnapshotManifest/);
+  assert.match(adaptiveServer, /function defaultExtraSkillsRoots/);
+  assert.match(adaptiveServer, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
+  assert.match(adaptiveServer, /\.agents", "skills"/);
+  assert.match(adaptiveServer, /extraSharedPaths: defaultExtraSkillsRoots/);
 
   // Must NOT reference ChatGPT login or kill processes
   assert.doesNotMatch(mcpSkills, /Stop-Process/);
@@ -2840,6 +2862,8 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
       localHome,
       "-SharedCodexHome",
       sharedHome,
+      "-AgentsSkillsPath",
+      resolve(tempRoot, "agents-skills"),
       "-TimeoutSec",
       "3",
     ], { encoding: "utf8", windowsHide: true });
@@ -2850,7 +2874,7 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
     assert.deepEqual(report.skills.missingShared, ["missing-skill"]);
     assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'missing-worker'")));
-    assert.ok(report.failures.some((failure) => failure.includes("shared skill 'missing-skill'")));
+    assert.ok(report.failures.some((failure) => failure.includes("shared or agent skill 'missing-skill'")));
     assert.ok(!report.mcp.sharedNames.includes("commented-out"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.env"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.tools.call"));

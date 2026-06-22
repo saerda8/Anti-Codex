@@ -749,3 +749,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the local report now records `multiTurnHistory.toolHistory`, including restart, provider-switch, protocol-switch, and reverse-protocol-switch preservation booleans.
 - Verification: direct local verifier passed with 9 normal turns plus 2 tool-history turns; `providerSwitchPreservesOpenAiToolPair:true`, `protocolSwitchPreservesAnthropicToolPair:true`, and `reverseProtocolSwitchPreservesOpenAiToolPair:true`. Launcher contracts passed 89/89, and source preflight fast mode passed.
 - Verification: runtime sync restarted the installed translator; installed verifier passed from the runtime copy; installed no-traffic overall passed with `ok:true`, third-party provider green, local connector green, UI state green, diagnostics green, and one translator process.
+
+## 2026-06-22 Agents Skill Root Parity
+- Completed: local feature snapshot sync now overlays `%USERPROFILE%\.agents\skills` into the Anti-Codex-owned local `skills` copy in addition to `%USERPROFILE%\.codex\skills`.
+- Completed: startup snapshot fingerprints and source manifests include the extra skill root, so changed Lark/agent skills trigger refresh and stale removed skills are pruned through the same manifest flow.
+- Completed: `refresh-anticodex-local-features.ps1` and `test-anticodex-mcp-skills.ps1` now report and enforce `agentsCount`, `expectedSharedCount`, and missing combined skill names.
+- Verification: refresh reported `.codex` skills `100`, `.agents` skills `26`, and no missing expected skills; MCP/skills verifier passed with `expectedSharedCount:126`, `missingShared:[]`, real `node_repl` call passed, and DeepSeek/Antigravity worker MCP `tools/list` passed.
+- Verification: after runtime sync/restart, installed diagnostics reports `snapshotStatus.state:fresh`, `sourceFingerprintMatches:true`, and `skills.count:126`; full installed no-traffic overall passed with `ok:true`.

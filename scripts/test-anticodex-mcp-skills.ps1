@@ -6,6 +6,7 @@ param(
     [string]$ReportRoot = $(Join-Path $StateRoot "reports"),
     [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
     [string]$SharedCodexHome = $(if ($env:DEEPCODEX_SHARED_CODEX_HOME) { $env:DEEPCODEX_SHARED_CODEX_HOME } elseif ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
+    [string]$AgentsSkillsPath = $(if ($env:ANTICODEX_AGENTS_SKILLS_PATH) { $env:ANTICODEX_AGENTS_SKILLS_PATH } else { Join-Path $env:USERPROFILE ".agents\skills" }),
     [int]$TimeoutSec = 8
 )
 
@@ -139,6 +140,8 @@ $apps = $null
 $expectedInheritedSkillNames = @("headroom", "context-save", "context-restore", "keep-codex-fast")
 $inheritedSkillChecks = @()
 $sharedSkillNames = @()
+$agentsSkillNames = @()
+$expectedSharedSkillNames = @()
 $missingSharedSkillNames = @()
 $extraLocalSkillNames = @()
 $sharedMcpNames = @()
@@ -309,11 +312,17 @@ if (-not (Test-Path -LiteralPath $skillsPath -PathType Container)) {
 
 if (Test-Path -LiteralPath $sharedSkillsPath -PathType Container) {
     $sharedSkillNames = @(Get-ChildItem -LiteralPath $sharedSkillsPath -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+if (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container) {
+    $agentsSkillNames = @(Get-ChildItem -LiteralPath $AgentsSkillsPath -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+if ((Test-Path -LiteralPath $sharedSkillsPath -PathType Container) -or (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container)) {
+    $expectedSharedSkillNames = @($sharedSkillNames + $agentsSkillNames) | Sort-Object -Unique
     $localSkillNames = @($skillEntries | ForEach-Object { $_.Name } | Sort-Object -Unique)
-    $missingSharedSkillNames = @($sharedSkillNames | Where-Object { $localSkillNames -notcontains $_ })
-    $extraLocalSkillNames = @($localSkillNames | Where-Object { $sharedSkillNames -notcontains $_ })
+    $missingSharedSkillNames = @($expectedSharedSkillNames | Where-Object { $localSkillNames -notcontains $_ })
+    $extraLocalSkillNames = @($localSkillNames | Where-Object { $expectedSharedSkillNames -notcontains $_ })
     foreach ($skillName in $missingSharedSkillNames) {
-        Add-Failure "shared skill '$skillName' exists but Anti-Codex local skills copy is missing it"
+        Add-Failure "shared or agent skill '$skillName' exists but Anti-Codex local skills copy is missing it"
     }
     foreach ($skillName in $expectedInheritedSkillNames) {
         $sharedSkill = Join-Path $sharedSkillsPath $skillName
@@ -551,6 +560,7 @@ $result = [pscustomobject]@{
         stateRoot = $StateRoot
         codexHome = $CodexHome
         sharedCodexHome = $SharedCodexHome
+        agentsSkillsPath = $AgentsSkillsPath
         configToml = $configPath
         sharedConfigToml = $sharedConfigPath
         skills = $skillsPath
@@ -592,6 +602,8 @@ $result = [pscustomobject]@{
         target = Get-LinkTargetValue $skillsItem
         inherited = @($inheritedSkillChecks)
         sharedCount = $sharedSkillNames.Count
+        agentsCount = $agentsSkillNames.Count
+        expectedSharedCount = $expectedSharedSkillNames.Count
         missingShared = $missingSharedSkillNames
         extraLocal = $extraLocalSkillNames
         smoke = $skillSmoke

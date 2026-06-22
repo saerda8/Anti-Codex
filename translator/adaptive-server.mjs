@@ -704,10 +704,19 @@ function computeSnapshotManifest(dirPath) {
     return manifest;
 }
 
+function defaultExtraSkillsRoots() {
+    const home = process.env.USERPROFILE || process.env.HOME || "";
+    const configured = process.env.ANTICODEX_EXTRA_SKILLS_ROOTS || (home ? resolvePath(home, ".agents", "skills") : "");
+    return configured
+        .split(process.platform === "win32" ? ";" : ":")
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
 function computeStartupSnapshotSourceFingerprint(sharedCodexHome) {
     if (!sharedCodexHome || !existsSync(sharedCodexHome)) return null;
     const startupMappings = [
-        { relPath: "skills", sharedPath: resolvePath(sharedCodexHome, "skills") },
+        { relPath: "skills", sharedPath: resolvePath(sharedCodexHome, "skills"), extraSharedPaths: defaultExtraSkillsRoots() },
         { relPath: "AGENTS.md", sharedPath: resolvePath(sharedCodexHome, "AGENTS.md") },
         { relPath: "DEFAULT_SKILL_ALLOWLIST.md", sharedPath: resolvePath(sharedCodexHome, "DEFAULT_SKILL_ALLOWLIST.md") },
         { relPath: "RTK.md", sharedPath: resolvePath(sharedCodexHome, "RTK.md") },
@@ -718,21 +727,25 @@ function computeStartupSnapshotSourceFingerprint(sharedCodexHome) {
     try {
         let maxMtime = 0;
         const fp = createHash("sha256");
-        for (const { relPath, sharedPath } of startupMappings) {
-            if (!existsSync(sharedPath)) continue;
+        for (const { relPath, sharedPath, extraSharedPaths = [] } of startupMappings) {
+            const sourcePaths = [sharedPath, ...extraSharedPaths].filter((item) => existsSync(item));
+            if (sourcePaths.length === 0) continue;
             fp.update(relPath);
-            const sourceStat = statSync(sharedPath);
-            if (sourceStat.isFile()) {
-                fp.update("file");
-                fp.update(createHash("sha256").update(readFileSync(sharedPath)).digest("hex"));
-                if (sourceStat.mtimeMs > maxMtime) maxMtime = sourceStat.mtimeMs;
-            } else if (sourceStat.isDirectory()) {
-                const manifest = computeSnapshotManifest(sharedPath);
-                for (const [entryPath, entry] of Object.entries(manifest).sort()) {
-                    fp.update(entryPath);
-                    fp.update(entry.type);
-                    if (entry.hash) fp.update(entry.hash);
-                    if (entry.mtimeMs > maxMtime) maxMtime = entry.mtimeMs;
+            for (const sourcePath of sourcePaths) {
+                fp.update(sourcePath);
+                const sourceStat = statSync(sourcePath);
+                if (sourceStat.isFile()) {
+                    fp.update("file");
+                    fp.update(createHash("sha256").update(readFileSync(sourcePath)).digest("hex"));
+                    if (sourceStat.mtimeMs > maxMtime) maxMtime = sourceStat.mtimeMs;
+                } else if (sourceStat.isDirectory()) {
+                    const manifest = computeSnapshotManifest(sourcePath);
+                    for (const [entryPath, entry] of Object.entries(manifest).sort()) {
+                        fp.update(entryPath);
+                        fp.update(entry.type);
+                        if (entry.hash) fp.update(entry.hash);
+                        if (entry.mtimeMs > maxMtime) maxMtime = entry.mtimeMs;
+                    }
                 }
             }
         }

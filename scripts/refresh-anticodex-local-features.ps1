@@ -4,6 +4,7 @@ param(
     [string]$StateRoot = $(if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }),
     [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
     [string]$SharedCodexHome = $(if ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
+    [string]$AgentsSkillsPath = $(if ($env:ANTICODEX_AGENTS_SKILLS_PATH) { $env:ANTICODEX_AGENTS_SKILLS_PATH } else { Join-Path $env:USERPROFILE ".agents\skills" }),
     [string]$ReportRoot = $(Join-Path $StateRoot "reports"),
     [string]$NodeBin = $(if ($env:NODE_BIN) { $env:NODE_BIN } else { "" })
 )
@@ -206,6 +207,24 @@ if ($mcpNames.Count -lt 1) { Add-Failure "no MCP servers found in Anti-Codex con
 if ($mcpNames -notcontains "node_repl") { Add-Failure "node_repl MCP server missing in Anti-Codex config" }
 
 $skills = Get-DirectoryInfo (Join-Path $CodexHome "skills")
+$sharedSkillsPath = Join-Path $SharedCodexHome "skills"
+$sharedSkillNames = @()
+$agentsSkillNames = @()
+if (Test-Path -LiteralPath $sharedSkillsPath -PathType Container) {
+    $sharedSkillNames = @(Get-ChildItem -LiteralPath $sharedSkillsPath -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+if (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container) {
+    $agentsSkillNames = @(Get-ChildItem -LiteralPath $AgentsSkillsPath -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+$expectedSkillNames = @($sharedSkillNames + $agentsSkillNames) | Sort-Object -Unique
+$localSkillNames = @()
+if (Test-Path -LiteralPath (Join-Path $CodexHome "skills") -PathType Container) {
+    $localSkillNames = @(Get-ChildItem -LiteralPath (Join-Path $CodexHome "skills") -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+$missingExpectedSkillNames = @($expectedSkillNames | Where-Object { $localSkillNames -notcontains $_ })
+foreach ($skillName in $missingExpectedSkillNames) {
+    Add-Failure "shared or agent skill '$skillName' exists but Anti-Codex local skills copy is missing it"
+}
 $connectors = Get-DirectoryInfo (Join-Path $CodexHome "cache\codex_app_directory")
 $appTools = Get-DirectoryInfo (Join-Path $CodexHome "cache\codex_apps_tools")
 $guidance = [ordered]@{}
@@ -230,6 +249,7 @@ $result = [pscustomobject]@{
     paths = [pscustomobject]@{
         codexHome = $CodexHome
         sharedCodexHome = $SharedCodexHome
+        agentsSkillsPath = $AgentsSkillsPath
         configToml = $configPath
     }
     node = $resolvedNode
@@ -241,7 +261,16 @@ $result = [pscustomobject]@{
         names = $mcpNames
         hasNodeRepl = ($mcpNames -contains "node_repl")
     }
-    skills = $skills
+    skills = [pscustomobject]@{
+        exists = $skills.exists
+        count = $skills.count
+        linkType = $skills.linkType
+        target = $skills.target
+        sharedCount = $sharedSkillNames.Count
+        agentsCount = $agentsSkillNames.Count
+        expectedCount = $expectedSkillNames.Count
+        missingExpected = $missingExpectedSkillNames
+    }
     guidance = $guidance
     connectors = $connectors
     appTools = $appTools

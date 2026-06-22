@@ -1439,3 +1439,17 @@ After every failure, before another dispatch:
 - Cause classification: transient local process/port/fetch failure during a nested verifier, not verified product regression.
 - Rule change: for a single generic `fetch failed` from a nested local-only verifier, first run that verifier directly from the installed runtime and inspect its fresh report. Only treat the overall failure as transient if the direct verifier and the serial overall rerun both pass.
 - Result: the final installed no-traffic overall passed with the third-party provider report showing all tool-history preservation booleans true.
+
+## 2026-06-22 - Avoid ad hoc regex alternation in Select-String probes
+
+- Symptom: a quick `Select-String` search for several launcher-test anchors failed because a pattern ending in `\$` was parsed as an illegal trailing regex escape.
+- Cause classification: command-construction failure during local inspection, not a product failure.
+- Rule change: use `rg` with simple literal patterns for multi-anchor source searches, or quote and test each PowerShell regex separately before combining alternations.
+- Result: reran the lookup with `rg` and continued without touching runtime state.
+
+## 2026-06-22 - Keep snapshot writer and diagnostics fingerprint roots identical
+
+- Symptom: after adding `.agents\skills` to local feature sync, the installed runtime had the new files but diagnostics still reported the startup snapshot as stale.
+- Cause classification: contract drift. The sync script wrote a marker fingerprint over `.codex\skills` plus `.agents\skills`, while adaptive-server recomputed diagnostics freshness from `.codex\skills` only.
+- Rule change: any new startup snapshot source root must be added to both the marker writer and the diagnostics reader, with a focused installed diagnostics check after restart.
+- Result: after aligning both sides, diagnostics reported `snapshotStatus.state:fresh` and `sourceFingerprintMatches:true` for the 126-skill union.

@@ -14,9 +14,13 @@ const syncLockPath = path.join(codexHome, '.sync-shared-codex-plugin-host.lock')
 const syncLockStaleMs = Number(process.env.ANTICODEX_SNAPSHOT_LOCK_STALE_MS || 60 * 1000);
 const staleArtifactMs = Number(process.env.ANTICODEX_SNAPSHOT_ARTIFACT_STALE_MS || 24 * 60 * 60 * 1000);
 const startupSnapshotMarkerPath = path.join(codexHome, '.anticodex-startup-snapshots-ready.json');
+const extraSkillsRoots = (process.env.ANTICODEX_EXTRA_SKILLS_ROOTS || path.join(os.homedir(), '.agents', 'skills'))
+  .split(path.delimiter)
+  .map((item) => item.trim())
+  .filter(Boolean);
 
 const sharedMappings = [
-  { relPath: 'skills', sharedPath: path.join(sharedCodexHome, 'skills'), mode: 'copy' },
+  { relPath: 'skills', sharedPath: path.join(sharedCodexHome, 'skills'), extraSharedPaths: extraSkillsRoots, mode: 'copy' },
   { relPath: 'AGENTS.md', sharedPath: path.join(sharedCodexHome, 'AGENTS.md'), mode: 'copy-file' },
   { relPath: 'DEFAULT_SKILL_ALLOWLIST.md', sharedPath: path.join(sharedCodexHome, 'DEFAULT_SKILL_ALLOWLIST.md'), mode: 'copy-file' },
   { relPath: 'RTK.md', sharedPath: path.join(sharedCodexHome, 'RTK.md'), mode: 'copy-file' },
@@ -150,6 +154,12 @@ function computeSnapshotManifest(dirPath) {
   return manifest;
 }
 
+function computeCombinedSnapshotManifest(dirPaths) {
+  return Object.assign({}, ...dirPaths
+    .filter((dirPath) => fs.existsSync(dirPath))
+    .map((dirPath) => computeSnapshotManifest(dirPath)));
+}
+
 /**
  * Compute a single fingerprint from a manifest, suitable for detecting
  * any content change in the source tree.
@@ -171,21 +181,25 @@ function computeStartupSourceFingerprint() {
   let maxMtime = 0;
   const fp = crypto.createHash('sha256');
 
-  for (const { relPath, sharedPath } of startupSnapshotMappings) {
-    if (!fs.existsSync(sharedPath)) continue;
+  for (const { relPath, sharedPath, extraSharedPaths = [] } of startupSnapshotMappings) {
+    const sourcePaths = [sharedPath, ...extraSharedPaths].filter((item) => fs.existsSync(item));
+    if (sourcePaths.length === 0) continue;
     fp.update(relPath);
-    const sourceStat = fs.statSync(sharedPath);
-    if (sourceStat.isFile()) {
-      fp.update('file');
-      fp.update(crypto.createHash('sha256').update(fs.readFileSync(sharedPath)).digest('hex'));
-      if (sourceStat.mtimeMs > maxMtime) maxMtime = sourceStat.mtimeMs;
-    } else if (sourceStat.isDirectory()) {
-      const manifest = computeSnapshotManifest(sharedPath);
-      for (const [entryPath, entry] of Object.entries(manifest).sort()) {
-        fp.update(entryPath);
-        fp.update(entry.type);
-        if (entry.hash) fp.update(entry.hash);
-        if (entry.mtimeMs > maxMtime) maxMtime = entry.mtimeMs;
+    for (const sourcePath of sourcePaths) {
+      const sourceStat = fs.statSync(sourcePath);
+      fp.update(sourcePath);
+      if (sourceStat.isFile()) {
+        fp.update('file');
+        fp.update(crypto.createHash('sha256').update(fs.readFileSync(sourcePath)).digest('hex'));
+        if (sourceStat.mtimeMs > maxMtime) maxMtime = sourceStat.mtimeMs;
+      } else if (sourceStat.isDirectory()) {
+        const manifest = computeSnapshotManifest(sourcePath);
+        for (const [entryPath, entry] of Object.entries(manifest).sort()) {
+          fp.update(entryPath);
+          fp.update(entry.type);
+          if (entry.hash) fp.update(entry.hash);
+          if (entry.mtimeMs > maxMtime) maxMtime = entry.mtimeMs;
+        }
       }
     }
   }
@@ -286,7 +300,7 @@ function cleanupStaleSwapArtifacts() {
  *    entries that were in the previous source manifest but are no longer
  *    present in the shared source (i.e. deleted from the shared Codex).
  */
-function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = false) {
+function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = false, extraSharedPaths = []) {
   const id = tempId();
   const tmpDir = targetPath + '.tmp-' + id;
   const oldDir = targetPath + '.old-' + id;
@@ -310,8 +324,10 @@ function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = fals
       copyDirectoryContents(targetPath, tmpDir);
     }
 
-    // Overlay shared source (wins for conflicting entries)
-    copyDirectoryContents(sharedPath, tmpDir);
+    // Overlay shared sources (later sources win for conflicting entries).
+    for (const sourcePath of [sharedPath, ...extraSharedPaths].filter((item) => fs.existsSync(item))) {
+      copyDirectoryContents(sourcePath, tmpDir);
+    }
 
     // Move existing target out of the way
     if (existsOrSymlink(targetPath)) {
@@ -348,7 +364,7 @@ function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = fals
 
     // After successful swap: write new manifest and prune stale shared entries
     if (trackManifest) {
-      const newManifest = computeSnapshotManifest(sharedPath);
+      const newManifest = computeCombinedSnapshotManifest([sharedPath, ...extraSharedPaths]);
       try {
         fs.writeFileSync(path.join(targetPath, '.anticodex-source-manifest.json'), JSON.stringify(newManifest));
       } catch {
@@ -442,7 +458,7 @@ process.once('exit', releaseSyncLock);
 
 const summary = [];
 const cleanup = cleanupStaleSwapArtifacts();
-for (const { relPath, sharedPath, mode } of mappings) {
+for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
   const targetPath = path.join(codexHome, relPath);
   if (mode === 'copy-file') {
     if (!fs.existsSync(sharedPath)) {
@@ -468,8 +484,9 @@ for (const { relPath, sharedPath, mode } of mappings) {
     continue;
   }
   if (mode === 'copy') {
-    if (!fs.existsSync(sharedPath)) {
-      summary.push({ relPath, mode: 'missing-shared-target', target: sharedPath });
+    const existingExtraSharedPaths = extraSharedPaths.filter((item) => fs.existsSync(item));
+    if (!fs.existsSync(sharedPath) && existingExtraSharedPaths.length === 0) {
+      summary.push({ relPath, mode: 'missing-shared-target', target: sharedPath, extraTargets: extraSharedPaths });
       continue;
     }
     ensureDir(path.dirname(targetPath));
@@ -478,11 +495,12 @@ for (const { relPath, sharedPath, mode } of mappings) {
       continue;
     }
     try {
-      syncDirectoryTransactional(sharedPath, targetPath, true);
+      syncDirectoryTransactional(sharedPath, targetPath, true, existingExtraSharedPaths);
       summary.push({
         relPath,
         mode: 'copied',
         target: sharedPath,
+        extraTargets: existingExtraSharedPaths,
       });
     } catch (error) {
       summary.push({
