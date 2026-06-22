@@ -580,7 +580,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the action runs `test-anticodex-source-preflight.ps1 -SkipFullRegression`, reports elapsed time, latest/history report evidence, and first failure items, without restarting Anti-Codex, switching accounts, or consuming Antigravity traffic.
 - Completed: manager action verification and static launcher coverage now include `sourcePreflight` in the daily action inventory and assert the backend action uses the source-preflight script.
 - Verification: adaptive server and embedded Manager JavaScript syntax checks passed; manager action PowerShell parser passed; focused launcher regression passed 82/82; full source regression passed 607 total / 573 passed / 34 skipped / 0 failed; source preflight fast mode passed; `git diff --check` reports only CRLF/LF conversion warnings.
-- Still deferred: installed deployment and real Manager button click remain queued for the combined installed UI pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; installed deployment and broader live desktop acceptance still remain queued for the combined pass.
 
 ## 2026-06-21 Source-Preflight Diagnostics Evidence Tightening
 - Completed: diagnostics verification now requires `skipFullRegression` in both the diagnostic bundle `latest-source-preflight.json` summary and the live `/anticodex/diagnostics` source-preflight status.
@@ -594,20 +594,20 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: fast verification remains fast; it records the Manager button click as intentionally deferred because the source preflight gate already runs separately.
 - Completed: skip-UI verification records the source-preflight button check as skipped instead of silently omitting it.
 - Verification: installed-overall PowerShell parser passed; focused launcher regression passed 82/82; full source regression passed 607 total / 573 passed / 34 skipped / 0 failed; source preflight fast mode passed in 18.0s; `git diff --check` reports only CRLF/LF conversion warnings.
-- Still deferred: the real installed Manager button click will run during the combined installed desktop acceptance pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; broader installed desktop acceptance remains queued for the combined pass.
 
 ## 2026-06-21 Third-Party Provider Model Routing Closeout
 - Completed: third-party API mode now records provider model-route evidence for local upstream calls: transport, provider, provider protocol, requested model, resolved model, and status. Prompt text and API keys are not stored in the route audit.
 - Completed: installed overall no longer skips model-routing verification just because the active upstream is third-party. The no-traffic routing verifier now checks provider mode, protocol, model, bridge mode, and `/models` consistency while keeping Antigravity-only thinking/account checks separate.
 - Completed: full traffic model-routing keeps the Antigravity internal-model/cascade checks for Antigravity mode, but uses provider transport/protocol evidence for third-party mode.
 - Verification: model-route audit test passed; third-party upstream integration passed 2/2; launcher contracts passed 82/82; model-routing PowerShell parser check passed. Full source preflight before the final report-field tweak passed 608 total / 574 passed / 34 skipped / 0 failed.
-- Still deferred: installed deployment, live desktop UI, real Manager button click, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; installed deployment, broader live desktop UI, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
 
 ## 2026-06-21 Provider-Neutral Route Audit Identity
 - Completed: model-route audit snapshots now identify as `anticodex.model_route_audit` instead of the older Antigravity-only object name.
 - Completed: the old `antigravity.model_route_audit` value is preserved as `legacyObject`, so existing diagnostics or reports can remain backward-compatible while new UI/reporting treats the audit as Anti-Codex-owned provider routing.
 - Verification: model-route audit test passed; local-access diagnostics regression passed 47/47; launcher contracts passed 82/82; JavaScript syntax check passed for the route audit module.
-- Still deferred: installed deployment, live desktop UI, real Manager button click, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; installed deployment, broader live desktop UI, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
 
 ## 2026-06-21 Provider Route UI and Refresh Behavior
 - Completed: fallback Manager route display now uses a provider-neutral route summary and shows transport, provider, protocol, requested model, resolved model, internal model, and status.
@@ -616,7 +616,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the standalone model-refresh script logs when a provider model is preserved and Antigravity refresh is skipped, instead of forcing a restart fallback or leaving a misleading generic success line.
 - Completed: embedded Manager now has the same provider-neutral "recent route" card as the fallback Manager, so the normal in-app panel shows transport/provider/protocol evidence without opening a separate page.
 - Verification: local-access regression passed 48/48; launcher contracts passed 82/82; UI-state self-test passed; PowerShell parser check passed for the refresh script; fast source preflight passed.
-- Still deferred: installed deployment, live desktop UI, real Manager button click, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; installed deployment, broader live desktop UI, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
 
 ## 2026-06-21 Third-Party API URL Tolerance
 - Completed: OpenAI-compatible providers now accept either a base URL such as `/v1` or a full `/chat/completions` endpoint without double-appending the path.
@@ -624,13 +624,13 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: connection-test model probing uses the same normalized OpenAI-compatible base as real chat calls, so a pasted full endpoint does not fail before the chat probe.
 - Completed: the embedded Manager third-party API form now explicitly tells the user that the API URL can be either a base URL or a full endpoint.
 - Verification: upstream provider regression passed 70/70; upstream integration passed 2/2; full source preflight passed with 611 total / 577 passed / 34 skipped / 0 failed.
-- Still deferred: installed deployment, live desktop UI, real Manager button click, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; installed deployment, broader live desktop UI, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
 
 ## 2026-06-21 Installed Manager Route Evidence Coverage
 - Completed: installed Manager action verification now checks that the fallback `/anticodex/manager` page includes provider-neutral route evidence: `/anticodex/model-routes`, route summary function, transport, Provider, and provider protocol fields.
 - Completed: the Manager action report now exposes `page.hasRouteProviderFields` so diagnostic output can show whether the fallback page still proves third-party routing.
 - Verification: Manager action PowerShell parser passed; launcher contracts passed 82/82; UI-state self-test passed; fast source preflight passed.
-- Still deferred: installed deployment, live desktop UI, real Manager button click, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
+- Superseded on 2026-06-23: standalone real Manager button coverage now exists for the non-disruptive MCP/Skill and plugin/application actions; installed deployment, broader live desktop UI, and live Antigravity traffic checks remain queued for the combined installed desktop acceptance pass.
 
 ## 2026-06-21 Manager Route Empty-State Hardening
 - Completed: fallback Manager route display now keeps the same provider-neutral fields even when no recent route exists, instead of collapsing to a single "no route" line.
@@ -673,7 +673,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the Manager button verifier restores the real action bridge after earlier `ui-only` smoke runs, so later real clicks cannot accidentally reuse the fake bridge.
 - Completed: batch button verification now accepts explicit action result text even when the embedded Manager surface does not write a `lastAction` record.
 - Verification: real three-button batch passed against the installed UI with `lastUiOnly:false`; launcher contract tests, manager-button self-test, source preflight fast mode, runtime sync, and installed no-traffic overall all passed. The installed report recorded `managerButtonSafeActions.ok:true` for `updateCheck`, `sourcePreflight`, and `syncReadiness`, with all three `lastUiOnly:false`; it also recorded `managerButtonReportActions.ok:true` for `viewLatestReports`, with `lastUiOnly:false`.
-- Still deferred: real button clicks for `diagnosticsBundle`, `mcpSkills`, and `pluginCapabilities` remain candidates for a slower pass. `pluginCapabilities` currently leaves stale `ui-only` result text in the embedded Manager and must not be counted as real until that surface refresh is fixed; account/proxy/config/post-verification/sync-host actions stay excluded from ordinary no-traffic checks.
+- Superseded on 2026-06-23: `mcpSkills` and `pluginCapabilities` now have standalone real embedded Manager coverage with stale-text rejection. `diagnosticsBundle` remains an opt-in slower real button action, and account/proxy/config/post-verification/sync-host actions stay excluded from ordinary no-traffic checks.
 
 ## 2026-06-22 Manager Diagnostics Bundle Button Coverage
 - Completed: the real embedded Manager `diagnosticsBundle` button now displays `诊断包：已生成` plus visible `ZIP` and `目录` lines, unwrapping nested script results when needed.
@@ -682,7 +682,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the Manager button verifier rebuilds a real queue bridge after any earlier `ui-only` run, clears stale fake results before real clicks, treats `已生成` as a finished state, and requires ZIP/目录 evidence for diagnostics.
 - Completed: full installed overall now includes `managerButtonDiagnosticsBundle`; fast mode skips this slow real click.
 - Verification: `node --check` passed for the changed Manager scripts; manager-button self-test passed; the installed real diagnostics button passed with `lastUiOnly:false` and ZIP/目录 evidence. Rerun full installed overall after the connector parity work lands.
-- Still deferred: real `mcpSkills` and `pluginCapabilities` button clicks. `pluginCapabilities` still must not be counted as real while it can surface stale `ui-only` text.
+- Superseded on 2026-06-23: real `mcpSkills` and `pluginCapabilities` button clicks now pass through the standalone gate with current-action matching and stale `ui-only` text rejection.
 
 ## 2026-06-22 Connector/App-Tool Parity Guardrail
 - Completed: plugin capability verification now compares shared Codex connector cache IDs against Anti-Codex local connector cache IDs and fails on any `missingShared` entry.
