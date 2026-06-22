@@ -674,3 +674,25 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: batch button verification now accepts explicit action result text even when the embedded Manager surface does not write a `lastAction` record.
 - Verification: real three-button batch passed against the installed UI with `lastUiOnly:false`; launcher contract tests, manager-button self-test, source preflight fast mode, runtime sync, and installed no-traffic overall all passed. The installed report recorded `managerButtonSafeActions.ok:true` for `updateCheck`, `sourcePreflight`, and `syncReadiness`, with all three `lastUiOnly:false`; it also recorded `managerButtonReportActions.ok:true` for `viewLatestReports`, with `lastUiOnly:false`.
 - Still deferred: real button clicks for `diagnosticsBundle`, `mcpSkills`, and `pluginCapabilities` remain candidates for a slower pass. `pluginCapabilities` currently leaves stale `ui-only` result text in the embedded Manager and must not be counted as real until that surface refresh is fixed; account/proxy/config/post-verification/sync-host actions stay excluded from ordinary no-traffic checks.
+
+## 2026-06-22 Manager Diagnostics Bundle Button Coverage
+- Completed: the real embedded Manager `diagnosticsBundle` button now displays `诊断包：已生成` plus visible `ZIP` and `目录` lines, unwrapping nested script results when needed.
+- Completed: the Manager bridge fetches its bootstrap token with trusted local `Origin` and `Referer`, matching the protected action call without weakening source validation.
+- Completed: embedded Manager status refresh suppresses `refreshStatus` as a last-action result, so a status-card refresh no longer overwrites the just-finished diagnostics summary.
+- Completed: the Manager button verifier rebuilds a real queue bridge after any earlier `ui-only` run, clears stale fake results before real clicks, treats `已生成` as a finished state, and requires ZIP/目录 evidence for diagnostics.
+- Completed: full installed overall now includes `managerButtonDiagnosticsBundle`; fast mode skips this slow real click.
+- Verification: `node --check` passed for the changed Manager scripts; manager-button self-test passed; the installed real diagnostics button passed with `lastUiOnly:false` and ZIP/目录 evidence. Rerun full installed overall after the connector parity work lands.
+- Still deferred: real `mcpSkills` and `pluginCapabilities` button clicks. `pluginCapabilities` still must not be counted as real while it can surface stale `ui-only` text.
+
+## 2026-06-22 Connector/App-Tool Parity Guardrail
+- Completed: plugin capability verification now compares shared Codex connector cache IDs against Anti-Codex local connector cache IDs and fails on any `missingShared` entry.
+- Completed: the same verifier reports app-tool cache parity using connector/tool keys, while still refusing to treat local allowlists as real authorization.
+- Completed: the verifier avoids PowerShell 5.1 `ConvertFrom-Json` on huge connector catalog files and extracts parity keys with bounded text scans instead.
+- Current machine evidence after refresh: connector parity is `sharedCount:5781`, `localCount:5781`, `missingShared:[]`; app-tool cache parity is `sharedCount:52`, `localCount:52`, `missingShared:[]`. Runtime callable app tools remain `0` because no connectors are currently accessible/authorized.
+- Completed: `refresh-anticodex-local-features.ps1` refreshed local skills, global MD guidance, connector cache, plugin cache, app-tool cache, and sidecars from `C:\Users\XD\.codex` into Anti-Codex.
+- Verification: plugin-capability parser passed; launcher contract tests passed 89/89; plugin capability verification passed after the refresh.
+
+## 2026-06-22 Installed Overall Stability Boundary
+- Supersedes the earlier Manager real-safe/report/diagnostics full-overall plan: the combined installed overall no longer real-clicks Manager actions that start background update/source/sync/report/bundle work.
+- Those Manager buttons stay covered by standalone button/action verifiers. The combined overall keeps non-disruptive UI, parity, provider, idle, diagnostics, and runtime checks green without leaving the embedded Manager busy or restarting the gateway mid-suite.
+- Latest installed no-traffic overall passed with `ok:true`, 8 models, UI idle stable, MCP/skill parity green, connector/app-tool parity green, and original Codex left running.

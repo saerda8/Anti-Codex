@@ -3,6 +3,7 @@ param(
     [string]$BaseUrl = "",
     [string]$StateRoot = $(if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }),
     [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
+    [string]$SharedCodexHome = $(if ($env:DEEPCODEX_SHARED_CODEX_HOME) { $env:DEEPCODEX_SHARED_CODEX_HOME } elseif ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
     [int]$TimeoutSec = 8
 )
 
@@ -101,6 +102,8 @@ $connectors = @()
 $whamTools = @()
 $connectorCachePath = Join-Path $CodexHome "cache\codex_app_directory"
 $appToolsCachePath = Join-Path $CodexHome "cache\codex_apps_tools"
+$sharedConnectorCachePath = Join-Path $SharedCodexHome "cache\codex_app_directory"
+$sharedAppToolsCachePath = Join-Path $SharedCodexHome "cache\codex_apps_tools"
 $connectorCacheSmoke = [pscustomobject]@{
     checked = $false
     cacheExists = $false
@@ -146,6 +149,103 @@ function Test-ProjectionCache {
         dataFileCount = $dataFiles.Count
         sampleReadable = $sampleReadable
         sampleCount = $sampleCount
+    }
+}
+
+function Get-ProjectionKeys {
+    param(
+        [string]$Path,
+        [string]$ArrayProperty,
+        [ValidateSet("connector", "tool")]
+        [string]$Kind
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return @() }
+$node = Get-Command node -ErrorAction SilentlyContinue
+    if ($node) {
+        $nodeScript = @'
+const fs = require("fs");
+const path = require("path");
+const [dir, arrayProperty, kind] = process.argv.slice(2);
+const keys = new Set();
+for (const name of fs.readdirSync(dir)) {
+  if (!name.endsWith(".json") || name === ".anticodex-source-manifest.json") continue;
+  const full = path.join(dir, name);
+  let payload;
+  try { payload = JSON.parse(fs.readFileSync(full, "utf8")); } catch { continue; }
+  const items = Array.isArray(payload?.[arrayProperty]) ? payload[arrayProperty] : [];
+  for (const item of items) {
+    if (kind === "connector") {
+      if (item?.id) keys.add(String(item.id));
+    } else {
+      const connectorId = item?.connector_id ? String(item.connector_id) : "";
+      const toolName = item?.tool_name ? String(item.tool_name) : "";
+      if (connectorId && toolName) {
+        keys.add(`${connectorId}|${item?.server_name || ""}|${item?.tool_namespace || ""}|${toolName}`);
+      }
+    }
+  }
+}
+process.stdout.write(Array.from(keys).sort().join("\n"));
+'@
+        $tempNodeScript = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-projection-keys-{0}.js" -f ([Guid]::NewGuid().ToString("N")))
+        try {
+            [System.IO.File]::WriteAllText($tempNodeScript, $nodeScript, [System.Text.UTF8Encoding]::new($false))
+            return @(& $node.Source $tempNodeScript $Path $ArrayProperty $Kind | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        } catch {
+        } finally {
+            if (Test-Path -LiteralPath $tempNodeScript -PathType Leaf) {
+                Remove-Item -LiteralPath $tempNodeScript -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    $keys = New-Object System.Collections.Generic.List[string]
+    $files = @(Get-ChildItem -LiteralPath $Path -File -Filter "*.json" -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -ne ".anticodex-source-manifest.json" -and $_.Length -gt 0
+    })
+    foreach ($file in $files) {
+        try {
+            $raw = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop
+            if ($raw -notmatch ('"' + [regex]::Escape($ArrayProperty) + '"\s*:')) { continue }
+            if ($Kind -eq "connector") {
+                foreach ($match in [regex]::Matches($raw, '"id"\s*:\s*"([^"]+)"')) {
+                    $value = [string]$match.Groups[1].Value
+                    if (-not [string]::IsNullOrWhiteSpace($value)) { $keys.Add($value) | Out-Null }
+                }
+            } else {
+                foreach ($match in [regex]::Matches($raw, '\{[^{}]*"tool_name"\s*:\s*"([^"]+)"[^{}]*\}')) {
+                    $objectText = [string]$match.Value
+                    $toolName = [regex]::Match($objectText, '"tool_name"\s*:\s*"([^"]+)"').Groups[1].Value
+                    $connectorId = [regex]::Match($objectText, '"connector_id"\s*:\s*"([^"]+)"').Groups[1].Value
+                    $serverName = [regex]::Match($objectText, '"server_name"\s*:\s*"([^"]*)"').Groups[1].Value
+                    $namespace = [regex]::Match($objectText, '"tool_namespace"\s*:\s*"([^"]*)"').Groups[1].Value
+                    if (-not [string]::IsNullOrWhiteSpace($connectorId) -and -not [string]::IsNullOrWhiteSpace($toolName)) {
+                        $keys.Add("$connectorId|$serverName|$namespace|$toolName") | Out-Null
+                    }
+                }
+            }
+        } catch {}
+    }
+    return @($keys.ToArray() | Sort-Object -Unique)
+}
+
+function New-ProjectionParity {
+    param(
+        [string]$SharedPath,
+        [string]$LocalPath,
+        [string]$ArrayProperty,
+        [ValidateSet("connector", "tool")]
+        [string]$Kind
+    )
+    $sharedKeys = @(Get-ProjectionKeys -Path $SharedPath -ArrayProperty $ArrayProperty -Kind $Kind)
+    $localKeys = @(Get-ProjectionKeys -Path $LocalPath -ArrayProperty $ArrayProperty -Kind $Kind)
+    $missingShared = @($sharedKeys | Where-Object { $localKeys -notcontains $_ })
+    $extraLocal = @($localKeys | Where-Object { $sharedKeys -notcontains $_ })
+    return [pscustomobject]@{
+        sharedCount = $sharedKeys.Count
+        localCount = $localKeys.Count
+        missingShared = $missingShared
+        extraLocal = $extraLocal
+        checked = $true
     }
 }
 
@@ -227,6 +327,8 @@ $unauthorizedAppTools = @($whamTools | Where-Object {
 })
 $connectorCacheProbe = Test-ProjectionCache $connectorCachePath "connectors"
 $appToolsCacheProbe = Test-ProjectionCache $appToolsCachePath "tools"
+$connectorParity = New-ProjectionParity -SharedPath $sharedConnectorCachePath -LocalPath $connectorCachePath -ArrayProperty "connectors" -Kind "connector"
+$appToolParity = New-ProjectionParity -SharedPath $sharedAppToolsCachePath -LocalPath $appToolsCachePath -ArrayProperty "tools" -Kind "tool"
 $connectorCacheSmoke = [pscustomobject]@{
     checked = $connectorCacheProbe.checked
     cacheExists = $connectorCacheProbe.cacheExists
@@ -247,6 +349,12 @@ if ($connectors.Count -gt 0 -and -not $connectorCacheSmoke.sampleReadable) {
 }
 if ($whamTools.Count -gt 0 -and -not $appToolsCacheSmoke.sampleReadable) {
     Add-Failure "app tools endpoint has tools but local app-tools cache sample is not readable"
+}
+foreach ($connectorId in @($connectorParity.missingShared)) {
+    Add-Failure "shared connector '$connectorId' exists but Anti-Codex local connector cache is missing it"
+}
+foreach ($toolKey in @($appToolParity.missingShared)) {
+    Add-Failure "shared app tool '$toolKey' exists but Anti-Codex local app-tools cache is missing it"
 }
 
 # appToolCount=0 is expected when no connectors are marked isAccessible:
@@ -304,9 +412,11 @@ $result = [pscustomobject]@{
         pluginsWithApps = $pluginsWithApps.Count
         pluginsWithMcpServers = $pluginsWithMcpServers.Count
         connectorCount = $connectors.Count
+        connectorParity = $connectorParity
         enabledConnectorCount = $enabledConnectors.Count
         accessibleConnectorCount = $accessibleConnectors.Count
         appToolCount = $whamTools.Count
+        appToolParity = $appToolParity
         unattributedAppToolCount = $unattributedAppTools.Count
         unauthorizedAppToolCount = $unauthorizedAppTools.Count
         appToolsNote = if ($accessibleConnectors.Count -eq 0) { "expected 0: no accessible connectors linked" } else { "" }

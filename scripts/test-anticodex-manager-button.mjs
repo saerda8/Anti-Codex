@@ -72,6 +72,7 @@ const FINISHED_HINTS = [
   "MCP",
   "Skill",
   "\u5df2\u63d0\u4ea4",
+  "\u5df2\u751f\u6210",
   "\u5df2\u662f\u6700\u65b0",
   "\u53d1\u73b0\u65b0\u7248",
   "\u901a\u8fc7",
@@ -155,11 +156,35 @@ function uiOnlyBridgeSource(actionName, enabled = uiOnlyMode) {
   };
   const payload = payloadByAction[actionName] || { ok: true, action: actionName, uiOnly: true, result: { ok: true } };
   return `
-  window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ = window.__ANTICODEX_RUN_MANAGER_ACTION__;
+  if (!window.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__) {
+    window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ = window.__ANTICODEX_RUN_MANAGER_ACTION__;
+  }
   window.__ANTICODEX_RUN_MANAGER_ACTION__ = (requestedAction) => Promise.resolve({
     ...${JSON.stringify(payload)},
     action: requestedAction,
   });
+  window.__ANTICODEX_RUN_MANAGER_ACTION__.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__ = true;
+`;
+}
+
+function realBridgeSource(enabled = !uiOnlyMode) {
+  if (!enabled) return "";
+  return `
+  delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+  window.__ANTICODEX_MANAGER_ACTION_PROMISES__ ||= {};
+  window.__ANTICODEX_MANAGER_ACTION_QUEUE__ ||= [];
+  window.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = (id, payload) => {
+    const entry = window.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[id];
+    if (!entry) return;
+    delete window.__ANTICODEX_MANAGER_ACTION_PROMISES__[id];
+    entry.resolve(payload);
+  };
+  window.__ANTICODEX_RUN_MANAGER_ACTION__ = (requestedAction) => new Promise((resolve) => {
+    const requestId = Date.now() + ":" + Math.random().toString(36).slice(2);
+    window.__ANTICODEX_MANAGER_ACTION_PROMISES__[requestId] = { resolve };
+    window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id: requestId, action: requestedAction });
+  });
+  window.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
 `;
 }
 
@@ -426,6 +451,7 @@ await ws.call(id++, "Runtime.evaluate", runtimeParams(`(() => {
   delete window.__ANTICODEX_OPEN_MANAGER__;
   delete window.__ANTICODEX_REFRESH_MANAGER_PANEL__;
   delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
+  ${realBridgeSource()}
 })()`, {
   awaitPromise: false,
   allowUnsafeEvalBlockedByCSP: true,
@@ -516,9 +542,10 @@ async function runManagerActionBatch(actions) {
   const actionCenterTarget = document.elementFromPoint(actionCenterX, actionCenterY);
   const actionCenterHitsButton = !!actionCenterTarget?.closest?.('button[data-action=' + ${safeActionName} + ']');
   if (!actionCenterHitsButton) return { ok: false, error: "action button center point does not hit the requested button" };
-  if (!${JSON.stringify(uiOnlyMode)} && typeof window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ === "function") {
-    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-    delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+  ${realBridgeSource()}
+  if (!${JSON.stringify(uiOnlyMode)}) {
+    delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
+    if (result) result.textContent = ${JSON.stringify(REFRESHED_TEXT)};
   }
   ${uiOnlyBridgeSource(actionName)}
   actionCenterTarget.dispatchEvent(new MouseEvent("click", {
@@ -749,11 +776,12 @@ const initial = await evaluate(`
       actionCenterTargetText: actionCenterTarget?.textContent || "",
     };
   }
-  if (!${JSON.stringify(uiOnlyMode)} && typeof window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ === "function") {
-    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-    delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-  }
+  ${realBridgeSource()}
   ${simulatePendingReopenBridge}
+  if (!${JSON.stringify(uiOnlyMode)}) {
+    delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
+    if (result) result.textContent = ${JSON.stringify(REFRESHED_TEXT)};
+  }
   ${uiOnlyBridgeSource(action)}
   actionCenterTarget.dispatchEvent(new MouseEvent("click", {
     bubbles: true,
@@ -967,7 +995,7 @@ const uiOnlyFinished = uiOnlyMode
   && isFinishedText(text)
   && hasActionSpecificResult(action, text);
 const actionStarted = Boolean(initial.ok)
-  && (initialUiOnlyFinished
+  && ((uiOnlyMode && initialUiOnlyFinished)
     || uiOnlyFinished
     || initial.busyAttr === "true"
     || initial.runningMarker === action
@@ -980,18 +1008,21 @@ const visibleFinished = !latest.disabled
   && isFinishedText(text)
   && (uiOnlyMode || !isUiOnlySmokeText(text))
   && hasActionSpecificResult(action, text);
+const explicitActionSuccess = visibleFinished
+  && (latest.lastAction === action || latest.lastAction === "");
 const ok = Boolean(initial.ok)
   && actionStarted
   && initial.closeHitAreaOk === true
   && managerOpenedNewPage === false
-  && (initialUiOnlyFinished || uiOnlyFinished
+  && ((uiOnlyMode && initialUiOnlyFinished) || uiOnlyFinished
     ? true
     : isFastMode
     ? !isFailureText(text)
-    : ((latest.lastAction === action || latest.lastAction === "")
-      && Number(latest.pendingCount || 0) === 0
-      && Number(latest.queueLength || 0) === 0
-      && visibleFinished)
+    : (explicitActionSuccess
+      || ((latest.lastAction === action || latest.lastAction === "")
+        && Number(latest.pendingCount || 0) === 0
+        && Number(latest.queueLength || 0) === 0
+        && visibleFinished))
   );
 
 const output = {

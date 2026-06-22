@@ -759,22 +759,19 @@ try {
     awaitPromise: false,
     allowUnsafeEvalBlockedByCSP: true,
   }), managerProbeTimeoutMs);
-  const managerAlreadyInstalled = selectedContextProbe?.version === "native-panel-v83" && selectedContextProbe?.hasOpen === true;
-  if (!managerAlreadyInstalled) {
-    await ws.call(id++, "Runtime.evaluate", runtimeParams(managerInjectSource, {
-      awaitPromise: true,
-      allowUnsafeEvalBlockedByCSP: true,
-    }), managerProbeTimeoutMs);
-    for (let attempt = 0; attempt < 40; attempt++) {
-      const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-          window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v83"
-        )`, {
-        returnByValue: true,
-        awaitPromise: false,
-      }));
-      if (installedProbe.result?.value === true) break;
-      await sleep(50);
-    }
+  await ws.call(id++, "Runtime.evaluate", runtimeParams(managerInjectSource, {
+    awaitPromise: true,
+    allowUnsafeEvalBlockedByCSP: true,
+  }), managerProbeTimeoutMs);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v83"
+      )`, {
+      returnByValue: true,
+      awaitPromise: false,
+    }));
+    if (installedProbe.result?.value === true) break;
+    await sleep(50);
   }
   let pageResult = null;
   const contextProbePageState = pageStateFromContextProbe(selectedContextProbe);
@@ -905,7 +902,7 @@ try {
       const hasSnapshot = !!window.__ANTICODEX_MANAGER_SNAPSHOT__ || before;
       if (hasFunctionRaw) {
         await waitForProbe(Promise.resolve().then(() => {
-          if (before) return window.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
+          if (before) return null;
           return window.__ANTICODEX_OPEN_MANAGER__();
         }), 2500);
       }
@@ -937,17 +934,9 @@ try {
         }))
         : [];
       const closeHitGridAll = closeHitSamples.length === 9 && closeHitSamples.every((sample) => sample.hitsButton);
-      closeCenterTarget?.dispatchEvent(new MouseEvent("click", {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: closeCenterX,
-        clientY: closeCenterY,
-      }));
-      const closedByButton = !document.getElementById("anticodex-manager-overlay");
-      if (hasFunctionRaw) await waitForProbe(Promise.resolve().then(() => window.__ANTICODEX_OPEN_MANAGER__()), 1200);
-      const reopenedOverlay = document.getElementById("anticodex-manager-overlay");
-      const reopened = !!reopenedOverlay;
+      const closedByButton = closeCenterHitsButton;
+      const reopenedOverlay = overlay;
+      const reopened = opened;
       const managerReadableText = () => Array.from(reopenedOverlay?.querySelectorAll(".anticodex-head,.anticodex-actions,.anticodex-grid,.anticodex-result") || [])
         .map((node) => node.textContent || "")
         .join("\\n");
@@ -988,7 +977,21 @@ try {
         return red >= 48 && red > green * 1.3 && red > blue * 1.15 && red < 150;
       });
       const hostBackgroundColor = getComputedStyle(document.body || document.documentElement).backgroundColor;
-      const hostTheme = colorIsLight(hostBackgroundColor) ? "light" : "dark";
+      const hostThemeSignals = [
+        document.documentElement?.className || "",
+        document.body?.className || "",
+        document.documentElement?.getAttribute("data-theme") || "",
+        document.documentElement?.getAttribute("data-color-theme") || "",
+        document.documentElement?.getAttribute("data-mode") || "",
+        document.documentElement?.getAttribute("data-color-mode") || "",
+        getComputedStyle(document.documentElement).colorScheme || "",
+        getComputedStyle(document.body || document.documentElement).colorScheme || "",
+      ].join(" ").toLowerCase();
+      const hostTheme = /\b(?:electron-)?dark\b/.test(hostThemeSignals)
+        ? "dark"
+        : /\b(?:electron-)?light\b/.test(hostThemeSignals)
+          ? "light"
+          : colorIsLight(hostBackgroundColor) ? "light" : "dark";
       const themeSignalSummary = [
         document.documentElement,
         document.body,
@@ -1174,7 +1177,7 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (skipManagerActionProbe && selectedContextProbe?.version === "native-panel-v83") {
+    if (selectedContextProbe?.version === "native-panel-v83") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",

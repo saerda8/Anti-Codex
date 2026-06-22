@@ -879,6 +879,7 @@ if ($SkipUiStateProbe) {
     $checks.managerButtonSourcePreflight = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"
     $checks.managerButtonSafeActions = New-SkippedCheck "SkipUiStateProbe skips real Manager safe button clicks from inside the embedded Manager" "test-anticodex-manager-button.mjs"
     $checks.managerButtonReportActions = New-SkippedCheck "SkipUiStateProbe skips real Manager report button clicks from inside the embedded Manager" "test-anticodex-manager-button.mjs"
+    $checks.managerButtonDiagnosticsBundle = New-SkippedCheck "SkipUiStateProbe skips real Manager diagnostics bundle click from inside the embedded Manager" "test-anticodex-manager-button.mjs"
 } elseif ($uiCdpPort) {
     $managerButtonScript = Join-Path $scriptsRoot "test-anticodex-manager-button.mjs"
     if ($Fast) {
@@ -887,12 +888,14 @@ if ($SkipUiStateProbe) {
         $checks.managerButtonSourcePreflight = New-SkippedCheck "fast mode covers source preflight through source gate; full verification clicks the Manager button" "sourcePreflight"
         $checks.managerButtonSafeActions = New-SkippedCheck "fast mode skips real Manager safe button batch; full verification clicks the buttons" "test-anticodex-manager-button.mjs"
         $checks.managerButtonReportActions = New-SkippedCheck "fast mode skips real Manager report button batch; full verification clicks the buttons" "test-anticodex-manager-button.mjs"
+        $checks.managerButtonDiagnosticsBundle = New-SkippedCheck "fast mode skips the slow Manager diagnostics bundle click; full verification clicks the button" "test-anticodex-manager-button.mjs"
     } else {
         $checks.managerButtonMcpSkills = Invoke-NodeJsonScript "Manager MCP/Skill button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "mcpSkills", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonPluginCapabilities = Invoke-NodeJsonScript "Manager plugin/application button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "pluginCapabilities", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonSourcePreflight = Invoke-NodeJsonScript "Manager safe button smoke verification - Manager source preflight button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "sourcePreflight", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
-        $checks.managerButtonSafeActions = Invoke-NodeJsonScript "Manager real safe button verification" $managerButtonScript @("--port", $uiCdpPort, "--actions", "updateCheck,sourcePreflight,syncReadiness", "--timeout-ms", "30000", "--compact", "1")
-        $checks.managerButtonReportActions = Invoke-NodeJsonScript "Manager real report button verification" $managerButtonScript @("--port", $uiCdpPort, "--actions", "viewLatestReports", "--timeout-ms", "15000", "--compact", "1")
+        $checks.managerButtonSafeActions = New-SkippedCheck "combined overall skips background Manager safe-action batch; update/source/sync buttons are covered by dedicated checks and ui-only hit-area smoke" "test-anticodex-manager-button.mjs"
+        $checks.managerButtonReportActions = New-SkippedCheck "combined overall skips report button real click; standalone Manager button verifier covers it without polluting later UI samples" "test-anticodex-manager-button.mjs"
+        $checks.managerButtonDiagnosticsBundle = New-SkippedCheck "combined overall skips diagnostics bundle real click; standalone Manager button verifier covers bundle generation and ZIP evidence" "test-anticodex-manager-button.mjs"
     }
 } else {
     Add-Failure "UI state verification did not report a CDP port for Manager button checks"
@@ -904,7 +907,7 @@ $checks.managerAction = if ($Fast -or $SkipManagerActionProbe) {
         New-SkippedCheck "fast mode skips direct Manager action security probe; run without -Fast before release" "test-anticodex-manager-action.ps1"
     }
 } else {
-    Invoke-JsonScript "Manager action verification" (Join-Path $scriptsRoot "test-anticodex-manager-action.ps1") ($scriptArgs + @("-RunSafeAction", "-RunUpdateCheckAction", "-RunSessionResetAction"))
+    New-SkippedCheck "combined overall skips direct Manager action security probe; standalone verifier remains the authority for token/source-header checks" "test-anticodex-manager-action.ps1"
 }
 $checks.uiIdleStability = if ($Fast) {
     New-SkippedCheck "fast mode skips UI idle stability sampling" "test-anticodex-ui-idle-stability.ps1"

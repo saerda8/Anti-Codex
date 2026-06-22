@@ -197,7 +197,13 @@ async function runAction(action) {
   if (action === "refreshModels") {
     return { ok: true, action, result: await httpJson(`${baseUrl}/anticodex/models/refresh`, { method: "POST", timeout: 120000 }) };
   }
-  const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, { timeout: 10000 });
+  const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
+    timeout: 10000,
+    headers: {
+      origin: baseUrl,
+      referer: `${baseUrl}/anticodex/manager`,
+    },
+  });
   return httpJson(`${baseUrl}/anticodex/manager/action`, {
     method: "POST",
     timeout: 180000,
@@ -246,6 +252,7 @@ function latestReportsSummary(result) {
 
 function managerSummary(action, payload) {
   const result = payload?.result || payload || {};
+  const unwrappedResult = result?.result && typeof result.result === "object" ? result.result : result;
   if (action === "refreshStatus") return `\u72b6\u6001\u5237\u65b0\uff1a${result.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`;
   if (action === "refreshModels") return `\u6a21\u578b\u5237\u65b0\uff1a${result.ok ? "\u5b8c\u6210" : "\u5931\u8d25"}\n\u6a21\u578b\u6570\uff1a${result.modelCount ?? result.models?.length ?? "\u672a\u77e5"}`;
   if (action === "resetAntigravitySessionLock") return [
@@ -288,10 +295,11 @@ function managerSummary(action, payload) {
   if (action === "refreshFeatures") return `\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a${result.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}\nSkill ${result.skills?.count ?? "\u672a\u77e5"} / \u8fde\u63a5\u5668\u7f13\u5b58 ${result.connectors?.count ?? "\u672a\u77e5"}\n\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u4ecd\u9700\u5355\u72ec smoke \u9a8c\u8bc1`;
   if (action === "syncHost") return payload?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0";
   if (action === "diagnosticsBundle") return [
-    `\u8bca\u65ad\u5305\uff1a${result.ok ? "\u5df2\u751f\u6210" : "\u5931\u8d25"}`,
-    result.zipPath ? `ZIP\uff1a${result.zipPath}` : "",
-    result.bundleRoot ? `\u76ee\u5f55\uff1a${result.bundleRoot}` : "",
-    failureSummaryLine(result),
+    `\u8bca\u65ad\u5305\uff1a${unwrappedResult.ok ?? result.ok ? "\u5df2\u751f\u6210" : "\u5931\u8d25"}`,
+    unwrappedResult.zipPath ? `ZIP\uff1a${unwrappedResult.zipPath}` : "",
+    unwrappedResult.bundleRoot ? `\u76ee\u5f55\uff1a${unwrappedResult.bundleRoot}` : "",
+    failureSummaryLine(unwrappedResult),
+    (!unwrappedResult.zipPath && !unwrappedResult.bundleRoot && !unwrappedResult.failures?.length) ? (payload?.message || result.message || "") : "",
   ].filter(Boolean).join("\n");
   if (action === "viewLatestReports") return latestReportsSummary(result);
   if (action === "fastOverallNoTraffic") return [

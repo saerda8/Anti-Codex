@@ -2231,12 +2231,17 @@ async function runManagerAction(actionName) {
             windowsHide: true,
             maxBuffer: 4 * 1024 * 1024,
         });
+        const parsed = parseJsonFromScriptOutput(stdout);
+        const aliases = actionName === "diagnosticsBundle" && parsed && typeof parsed === "object"
+            ? { zipPath: parsed.zipPath || "", bundleRoot: parsed.bundleRoot || "" }
+            : {};
         return {
             ok: true,
             action: actionName,
             label,
-            result: parseJsonFromScriptOutput(stdout),
+            result: parsed,
             stderr: String(stderr || "").trim(),
+            ...aliases,
         };
     } catch (error) {
         return {
@@ -2548,12 +2553,13 @@ function actionText(payload){
     ].filter(Boolean).join("\\n");
   }
   if(payload?.action==="diagnosticsBundle"){
+    const unwrapped=r?.result&&typeof r.result==="object"?r.result:r;
     return [
-      "\\u8bca\\u65ad\\u5305\\uff1a"+(r.ok?"\\u5df2\\u751f\\u6210":"\\u5931\\u8d25"),
-      r.zipPath?"ZIP\\uff1a"+r.zipPath:"",
-      r.bundleRoot?"\\u76ee\\u5f55\\uff1a"+r.bundleRoot:"",
-      failureSummaryLine(r),
-      (!r.zipPath&&!r.bundleRoot&&!r.failures?.length)?(payload?.message||""):""
+      "\\u8bca\\u65ad\\u5305\\uff1a"+((unwrapped.ok??r.ok)?"\\u5df2\\u751f\\u6210":"\\u5931\\u8d25"),
+      unwrapped.zipPath?"ZIP\\uff1a"+unwrapped.zipPath:"",
+      unwrapped.bundleRoot?"\\u76ee\\u5f55\\uff1a"+unwrapped.bundleRoot:"",
+      failureSummaryLine(unwrapped),
+      (!unwrapped.zipPath&&!unwrapped.bundleRoot&&!unwrapped.failures?.length)?(payload?.message||r.message||""):""
     ].filter(Boolean).join("\\n");
   }
   if(payload?.action==="viewLatestReports") return latestReportsSummary(r);

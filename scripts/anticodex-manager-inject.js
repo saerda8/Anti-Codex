@@ -428,6 +428,8 @@
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
     }
     window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ = true;
+    const previousSuppressRefreshStatus = window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true;
+    window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ = true;
     try {
       const payload = await Promise.race([
         window.__ANTICODEX_RUN_MANAGER_ACTION__("refreshStatus"),
@@ -438,6 +440,7 @@
     } catch {
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
     } finally {
+      window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ = previousSuppressRefreshStatus;
       window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ = false;
     }
   }
@@ -800,6 +803,7 @@
 
   function summaryText(action, payload) {
     const r = payload?.result || payload || {};
+    const unwrapped = r?.result && typeof r.result === "object" ? r.result : r;
     if (action === "refreshStatus") return `\u72b6\u6001\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`;
     if (action === "refreshModels") return `\u6a21\u578b\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u5931\u8d25"}\n\u6a21\u578b\u6570\uff1a${r.modelCount ?? r.models?.length ?? "\u672a\u77e5"}`;
     if (action === "resetAntigravitySessionLock") {
@@ -851,10 +855,11 @@
     if (action === "refreshFeatures") return `\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}\nSkill ${r.skills?.count ?? "\u672a\u77e5"} / \u8fde\u63a5\u5668\u7f13\u5b58 ${r.connectors?.count ?? "\u672a\u77e5"}\n\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u4ecd\u9700\u5355\u72ec smoke \u9a8c\u8bc1`;
     if (action === "syncHost") return payload?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0";
     if (action === "diagnosticsBundle") return [
-      `\u8bca\u65ad\u5305\uff1a${r.ok ? "\u5df2\u751f\u6210" : "\u5931\u8d25"}`,
-      r.zipPath ? `ZIP\uff1a${r.zipPath}` : "",
-      r.bundleRoot ? `\u76ee\u5f55\uff1a${r.bundleRoot}` : "",
-      failureSummaryLine(r),
+      `\u8bca\u65ad\u5305\uff1a${unwrapped.ok ?? r.ok ? "\u5df2\u751f\u6210" : "\u5931\u8d25"}`,
+      unwrapped.zipPath ? `ZIP\uff1a${unwrapped.zipPath}` : "",
+      unwrapped.bundleRoot ? `\u76ee\u5f55\uff1a${unwrapped.bundleRoot}` : "",
+      failureSummaryLine(unwrapped),
+      (!unwrapped.zipPath && !unwrapped.bundleRoot && !unwrapped.failures?.length) ? (payload?.message || r.message || "") : "",
     ].filter(Boolean).join("\n");
     if (action === "viewLatestReports") return latestReportsSummary(r);
     if (action === "fastOverallNoTraffic") return [
@@ -1618,7 +1623,14 @@
                   result.textContent = "\u672a\u68c0\u6d4b\u5230\u53ef\u8bc1\u660e\u7684\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316\u3002\n\u5982\u679c\u4f60\u5df2\u5b8c\u6210\u5207\u6362\uff0c\u8bf7\u624b\u52a8\u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002";
                 }
               } else {
-                result.textContent = summaryText(action, outcome.payload);
+                const managerSummary = summaryText(action, outcome.payload);
+                window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
+                  ...(outcome.payload || {}),
+                  action,
+                  managerSummary,
+                  pending: false,
+                };
+                result.textContent = managerSummary;
               }
               await load({ updateResult: false });
             } else if (outcome.type === "timeout") {

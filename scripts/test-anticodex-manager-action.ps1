@@ -440,7 +440,7 @@ if ($token) {
     } catch { Add-Failure "action-script with valid token callback body parse failed: $($_.Exception.Message)" }
 }
 
-[pscustomobject]@{
+$result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
@@ -486,5 +486,6 @@ if ($token) {
         validContentType = if ($jsonpValid) { $jsonpValid.contentType } else { $null }
         validBodyHasCallback = if ($jsonpValid) { [bool]($jsonpValid.body -match 'globalThis\["test_cb"\]\(') } else { $false }
     }
-} | ConvertTo-Json -Depth 8 -Compress
+}
+Write-Output ($result | ConvertTo-Json -Depth 8 -Compress)
 if ($failures.Count -gt 0) { exit 1 }
