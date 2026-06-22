@@ -891,3 +891,4 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: refreshed Anti-Codex local features so MCP/skills now point at the existing `node_repl.exe`; standalone MCP/Skill, plugin/app-tool, and Manager real-button checks pass without granting connector authorization.
 - Completed: installed no-traffic overall is green again; passive release gates no longer list `installedOverallNoTraffic` as missing.
 - Completed: existing fresh green real-traffic reports were given `.sha256` sidecars without modifying report JSON; passive release gates now report `shortReady:true`, `releaseReady:true`, no missing required gates, and no damaged reports.
+- Completed: added `sign-anticodex-reports.mjs` so legacy green reports can be signed reproducibly; it defaults to dry-run and writes sidecars only with `--write` for parseable `ok:true` reports.
