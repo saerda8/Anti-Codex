@@ -172,8 +172,9 @@ Branch: main
 - MCP/Skill reports now surface concrete parity and smoke evidence in report summaries, diagnostic bundles, and Manager latest-report text instead of only saying the report passed.
 - Optional real-provider reports now surface marker/history/redaction evidence; optional provider-to-Antigravity return reports now surface turn-10 history, previous response ID, marker counts, route transport, and resolved model.
 - Plugin capability summaries and Manager latest reports now show parity drift counts plus sample IDs for connector, app-tool, and GET/POST app-tool mismatches.
+- Diagnostic bundle verification now requires MCP/Skill evidence and plugin parity drift sample fields. Optional real-provider and Antigravity-return details are required whenever their optional reports are present and not skipped.
 - Passive release-gate self-test rejects forged optional real-provider and Antigravity-return reports with bad semantic evidence.
-- Fresh evidence: syntax/parser checks passed, dynamic summarizer fixture tests passed, release-gate self-test passed, and strict passive gates remain `shortReady:true` / `releaseReady:true`.
+- Fresh evidence: syntax/parser checks passed, dynamic summarizer fixture tests passed, release-gate self-test passed, strict passive gates remain `shortReady:true` / `releaseReady:true`, and diagnostic bundle verification passed with `20260623-063025.zip`.
 
 ## 2026-06-23 Installed Missing-History Follow-Up
 

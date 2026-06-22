@@ -210,6 +210,56 @@ function Test-DiagnosticBundle {
                 if ($pluginEvidence.connectorParityClean -ne $true) { Add-Failure "plugin capability summary missing connector parity evidence" }
                 if ($pluginEvidence.appToolParityClean -ne $true) { Add-Failure "plugin capability summary missing app-tool parity evidence" }
                 if ($pluginEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "plugin capability summary missing GET/POST parity evidence" }
+                if (-not (Has-Property $pluginEvidence "connectorParityMissingShared")) { Add-Failure "plugin capability summary missing connector parity drift samples" }
+                if (-not (Has-Property $pluginEvidence "appToolGetPostMissingFromGet")) { Add-Failure "plugin capability summary missing GET/POST drift samples" }
+            }
+        }
+        $mcpSkillsSummary = @($summary | Where-Object { $_.file -eq "latest-mcp-skills.json" } | Select-Object -First 1)[0]
+        if ($mcpSkillsSummary) {
+            if ($mcpSkillsSummary.ok -ne $true) { Add-Failure "MCP/Skill summary ok=false" }
+            $mcpSkillEvidence = $mcpSkillsSummary.mcpSkillEvidence
+            if (-not $mcpSkillEvidence) {
+                Add-Failure "MCP/Skill summary missing mcpSkillEvidence"
+            } else {
+                if ([int]$mcpSkillEvidence.mcpCount -lt 1) { Add-Failure "MCP/Skill summary has no MCP entries" }
+                if ([int]$mcpSkillEvidence.mcpSharedCount -lt 1) { Add-Failure "MCP/Skill summary has no shared MCP entries" }
+                if (@($mcpSkillEvidence.mcpMissingShared).Count -ne 0) { Add-Failure "MCP/Skill summary has missing shared MCP entries" }
+                if ($mcpSkillEvidence.hasNodeRepl -ne $true) { Add-Failure "MCP/Skill summary missing node_repl evidence" }
+                if ($mcpSkillEvidence.mcpSmokePassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP smoke evidence" }
+                if ($mcpSkillEvidence.mcpRealCallPassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP real-call evidence" }
+                if ([int]$mcpSkillEvidence.skillCount -lt 1) { Add-Failure "MCP/Skill summary has no skills" }
+                if ([int]$mcpSkillEvidence.expectedSharedSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing expected shared skill count" }
+                if ([int]$mcpSkillEvidence.agentsSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing .agents skill count" }
+                if (@($mcpSkillEvidence.missingSharedSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has missing shared skills" }
+                if ($mcpSkillEvidence.skillSmokeReadable -ne $true) { Add-Failure "MCP/Skill summary missing skill smoke evidence" }
+            }
+        }
+        $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
+        if ($optionalRealProviderSummary -and $optionalRealProviderSummary.skipped -ne $true) {
+            $optionalEvidence = $optionalRealProviderSummary.optionalRealProviderEvidence
+            if (-not $optionalEvidence) {
+                Add-Failure "optional real-provider summary missing continuity evidence"
+            } else {
+                if ($optionalEvidence.firstMarkerObserved -ne $true) { Add-Failure "optional real-provider summary missing first marker evidence" }
+                if ($optionalEvidence.secondMarkerObserved -ne $true) { Add-Failure "optional real-provider summary missing second marker evidence" }
+                if ($optionalEvidence.historyContinuationObserved -ne $true) { Add-Failure "optional real-provider summary missing history continuation evidence" }
+                if ($optionalEvidence.secretsRedacted -ne $true) { Add-Failure "optional real-provider summary missing redaction evidence" }
+                if ([int]$optionalEvidence.turns -lt 2) { Add-Failure "optional real-provider summary has fewer than 2 turns" }
+            }
+        }
+        $antigravityReturnSummary = @($summary | Where-Object { $_.file -eq "latest-provider-antigravity-return.json" } | Select-Object -First 1)[0]
+        if ($antigravityReturnSummary -and $antigravityReturnSummary.skipped -ne $true) {
+            $returnEvidence = $antigravityReturnSummary.antigravityReturnEvidence
+            if (-not $returnEvidence) {
+                Add-Failure "Antigravity return summary missing continuity evidence"
+            } else {
+                if ($returnEvidence.realAntigravityTurnUsed -ne $true) { Add-Failure "Antigravity return summary missing real-turn evidence" }
+                if ($returnEvidence.returnedToAntigravityWithHistory -ne $true) { Add-Failure "Antigravity return summary missing history return evidence" }
+                if ($returnEvidence.previousResponseIdMatched -ne $true) { Add-Failure "Antigravity return summary missing previous_response_id evidence" }
+                if ([int]$returnEvidence.markerCount -lt 6) { Add-Failure "Antigravity return summary missing marker-count evidence" }
+                if ([int]$returnEvidence.missingMarkerCount -ne 0) { Add-Failure "Antigravity return summary reports missing markers" }
+                if (-not [string]$returnEvidence.routeTransport -or [string]$returnEvidence.routeTransport -eq "upstream-provider") { Add-Failure "Antigravity return summary missing native route evidence" }
+                if (-not [string]$returnEvidence.resolvedModel) { Add-Failure "Antigravity return summary missing resolved model evidence" }
             }
         }
         $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
@@ -309,6 +359,26 @@ function Test-DiagnosticBundle {
                 missingShort = @($releaseGatesSummary.missingShort)
                 damagedReports = @($releaseGatesSummary.damagedReports)
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
+            }
+        } else { $null }
+        mcpSkills = if ($mcpSkillsSummary) {
+            [pscustomobject]@{
+                ok = $mcpSkillsSummary.ok
+                evidence = $mcpSkillsSummary.mcpSkillEvidence
+            }
+        } else { $null }
+        optionalRealProvider = if ($optionalRealProviderSummary) {
+            [pscustomobject]@{
+                ok = $optionalRealProviderSummary.ok
+                skipped = $optionalRealProviderSummary.skipped
+                evidence = $optionalRealProviderSummary.optionalRealProviderEvidence
+            }
+        } else { $null }
+        antigravityReturn = if ($antigravityReturnSummary) {
+            [pscustomobject]@{
+                ok = $antigravityReturnSummary.ok
+                skipped = $antigravityReturnSummary.skipped
+                evidence = $antigravityReturnSummary.antigravityReturnEvidence
             }
         } else { $null }
         thirdPartyProvider = if ($thirdPartyProviderSummary) {

@@ -4135,6 +4135,14 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /pluginCapabilityEvidence/);
   assert.match(diagnostics, /optionalRealProviderEvidence/);
   assert.match(diagnostics, /antigravityReturnEvidence/);
+  assert.match(diagnostics, /connectorParityMissingShared/);
+  assert.match(diagnostics, /appToolGetPostMissingFromGet/);
+  assert.match(diagnostics, /MCP\/Skill summary missing mcpSkillEvidence/);
+  assert.match(diagnostics, /optional real-provider summary missing continuity evidence/);
+  assert.match(diagnostics, /Antigravity return summary missing continuity evidence/);
+  assert.match(diagnostics, /mcpSkills = if \(\$mcpSkillsSummary\)/);
+  assert.match(diagnostics, /optionalRealProvider = if \(\$optionalRealProviderSummary\)/);
+  assert.match(diagnostics, /antigravityReturn = if \(\$antigravityReturnSummary\)/);
   assert.match(diagnostics, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(diagnostics, /unauthorizedAppToolCount/);
   assert.match(diagnostics, /lastUiOnly/);
