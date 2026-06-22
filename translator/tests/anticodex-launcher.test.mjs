@@ -3805,3 +3805,20 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(apply, /WindowStyle\s*=\s*"Hidden"/);
   assert.doesNotMatch(apply, /Stop-Process|Codex\.exe|Anti-Codex\.exe/);
 });
+
+test("third-party provider verifier preserves history across save and restart", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-third-party-provider.mjs"), "utf8");
+
+  assert.match(verifier, /turn-5 user asks epsilon after provider save/);
+  assert.match(verifier, /fifthAfterSavePreservesHistory/);
+  assert.match(verifier, /await stopTranslator\(\)/);
+  assert.match(verifier, /turn-6 user asks zeta after provider restart/);
+  assert.match(verifier, /restartedProviderWithoutHistoryLoss/);
+  assert.match(verifier, /restartContinuationPreviousResponseId/);
+  assert.match(verifier, /providerModelUsedForEveryTurn/);
+  assert.match(verifier, /gemini-pro-agent\|gemini-3\\\.5-flash-low\|gemini-3-flash-agent/);
+  assert.match(verifier, /sk-fake-secret\|sk-save-secret/);
+  assert.match(verifier, /third-party provider report leaked an API key/);
+  assert.match(verifier, /responseHistoryBeforeAuthFailure/);
+  assert.match(verifier, /assert\.equal\(readFileSync\(responseHistoryPath, "utf8"\), responseHistoryBeforeAuthFailure\)/);
+});

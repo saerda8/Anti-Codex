@@ -125,6 +125,18 @@ async function waitForHealth(baseUrl) {
   throw new Error("temporary translator health timeout");
 }
 
+async function stopTranslator() {
+  if (!translator || translator.exitCode !== null) return;
+  await new Promise((resolveStop) => {
+    const timer = setTimeout(() => resolveStop(), 5_000);
+    translator.once("exit", () => {
+      clearTimeout(timer);
+      resolveStop();
+    });
+    translator.kill();
+  });
+}
+
 function writeReport(payload) {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
   const latest = resolve(reportRoot, "latest-third-party-provider.json");
@@ -198,27 +210,33 @@ async function main() {
     toolStrategy: {},
   }), "utf8");
 
-  translator = spawn(process.execPath, [translatorPath], {
-    cwd: sourceRoot,
-    windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      TRANSLATOR_HOST: "127.0.0.1",
-      TRANSLATOR_LISTEN_HOST: "127.0.0.1",
-      TRANSLATOR_PORT: String(translatorPort),
-      TRANSLATOR_UPSTREAM_MODE: "chat",
-      UPSTREAM_PROTOCOL: "openai-compatible",
-      UPSTREAM_URL: upstreamFullUrl,
-      UPSTREAM_MODEL: "fake-gpt-4.1",
-      UPSTREAM_API_KEY: "sk-fake-secret",
-      TRANSLATOR_PROFILE_PATH: profilePath,
-      DEEPCODEX_STATE_ROOT: stateRoot,
-      CODEX_HOME_DIR: join(stateRoot, "codex-home-deepseek-app"),
-      TRANSLATOR_NATIVE_STREAMING: "0",
-      TRANSLATOR_CAP_INTERNAL_WEB_TOOLS: "0",
-    },
-  });
+  const translatorEnv = {
+    ...process.env,
+    TRANSLATOR_HOST: "127.0.0.1",
+    TRANSLATOR_LISTEN_HOST: "127.0.0.1",
+    TRANSLATOR_PORT: String(translatorPort),
+    TRANSLATOR_UPSTREAM_MODE: "chat",
+    UPSTREAM_PROTOCOL: "openai-compatible",
+    UPSTREAM_URL: upstreamFullUrl,
+    UPSTREAM_MODEL: "fake-gpt-4.1",
+    UPSTREAM_API_KEY: "sk-fake-secret",
+    TRANSLATOR_PROFILE_PATH: profilePath,
+    DEEPCODEX_STATE_ROOT: stateRoot,
+    CODEX_HOME_DIR: join(stateRoot, "codex-home-deepseek-app"),
+    TRANSLATOR_NATIVE_STREAMING: "0",
+    TRANSLATOR_CAP_INTERNAL_WEB_TOOLS: "0",
+  };
+
+  const startTranslator = () => {
+    translator = spawn(process.execPath, [translatorPath], {
+      cwd: sourceRoot,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: translatorEnv,
+    });
+  };
+
+  startTranslator();
 
   const health = await waitForHealth(translatorUrl);
   assert.equal(health.upstreamProfile.mode, "third-party");
@@ -367,9 +385,71 @@ async function main() {
   assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryBefore);
   assert.doesNotMatch(readFileSync(join(stateRoot, "upstream-profile.json"), "utf8"), /sk-save-secret/);
 
+  const fifthAfterSaveResult = await postResponse({
+    model: "gemini-3-flash-agent",
+    stream: false,
+    previous_response_id: fourth.id,
+    input: "turn-5 user asks epsilon after provider save",
+  });
+  assert.match(fifthAfterSaveResult.text, /PROVIDER_HISTORY_TURN_5/);
+  const fifthAfterSave = fifthAfterSaveResult.response;
+  assert.equal(fifthAfterSave.previous_response_id, fourth.id);
+  assert.equal(textFromResponse(fifthAfterSave), "PROVIDER_HISTORY_TURN_5");
+
+  const fifthChat = requests.filter((request) => request.path === "/v1/chat/completions").at(-1);
+  assert.equal(fifthChat.body.model, "fake-gpt-4.1");
+  assert.match(requestText(fifthChat.body), /turn-1 user asks alpha/);
+  assert.match(requestText(fifthChat.body), /PROVIDER_HISTORY_TURN_1/);
+  assert.match(requestText(fifthChat.body), /turn-2 user asks beta/);
+  assert.match(requestText(fifthChat.body), /PROVIDER_HISTORY_TURN_2/);
+  assert.match(requestText(fifthChat.body), /turn-3 user asks gamma/);
+  assert.match(requestText(fifthChat.body), /PROVIDER_HISTORY_TURN_3/);
+  assert.match(requestText(fifthChat.body), /turn-4 user asks delta/);
+  assert.match(requestText(fifthChat.body), /PROVIDER_HISTORY_TURN_4/);
+  const responseHistoryAfterSaveContinuation = readFileSync(responseHistoryPath, "utf8");
+  assert.match(responseHistoryAfterSaveContinuation, new RegExp(fifthAfterSave.id));
+
+  const routeAfterSaveContinuation = await getJson(`${translatorUrl}/anticodex/model-routes`);
+  assert.equal(routeAfterSaveContinuation.latest.transport, "upstream-provider");
+  assert.equal(routeAfterSaveContinuation.latest.providerProtocol, "openai-compatible");
+  assert.equal(routeAfterSaveContinuation.latest.requestedModel, "fake-gpt-4.1");
+  assert.equal(routeAfterSaveContinuation.latest.resolvedModel, "fake-gpt-4.1");
+
+  await stopTranslator();
+  startTranslator();
+  const healthAfterRestart = await waitForHealth(translatorUrl);
+  assert.equal(healthAfterRestart.upstreamProfile.mode, "third-party");
+  assert.equal(healthAfterRestart.upstreamProfile.protocol, "openai-compatible");
+  assert.equal(healthAfterRestart.upstreamProfile.model, "fake-gpt-4.1");
+
+  const sixthAfterRestartResult = await postResponse({
+    model: "gemini-pro-agent",
+    stream: false,
+    previous_response_id: fifthAfterSave.id,
+    input: "turn-6 user asks zeta after provider restart",
+  });
+  assert.match(sixthAfterRestartResult.text, /PROVIDER_HISTORY_TURN_6/);
+  const sixthAfterRestart = sixthAfterRestartResult.response;
+  assert.equal(sixthAfterRestart.previous_response_id, fifthAfterSave.id);
+  assert.equal(textFromResponse(sixthAfterRestart), "PROVIDER_HISTORY_TURN_6");
+  const sixthChat = requests.filter((request) => request.path === "/v1/chat/completions").at(-1);
+  assert.equal(sixthChat.body.model, "fake-gpt-4.1");
+  assert.match(requestText(sixthChat.body), /turn-1 user asks alpha/);
+  assert.match(requestText(sixthChat.body), /PROVIDER_HISTORY_TURN_1/);
+  assert.match(requestText(sixthChat.body), /turn-5 user asks epsilon after provider save/);
+  assert.match(requestText(sixthChat.body), /PROVIDER_HISTORY_TURN_5/);
+  const responseHistoryAfterRestartContinuation = readFileSync(responseHistoryPath, "utf8");
+  assert.match(responseHistoryAfterRestartContinuation, new RegExp(sixthAfterRestart.id));
+
+  const restartBootstrap = await getJson(`${translatorUrl}/anticodex/manager/bootstrap`, { headers: managerHeaders });
+  const restartedAuthedHeaders = {
+    ...authedHeaders,
+    "x-anticodex-manager-token": restartBootstrap.token,
+  };
+
   const restoredResponse = await fetch(`${translatorUrl}/anticodex/upstream-profile`, {
     method: "POST",
-    headers: authedHeaders,
+    headers: restartedAuthedHeaders,
     body: JSON.stringify({ mode: "antigravity" }),
   });
   const restoredText = await restoredResponse.text();
@@ -377,14 +457,26 @@ async function main() {
   const restored = responseJsonFromText(restoredText);
   assert.equal(restored.ok, true);
   assert.equal(restored.restartRequired, true);
-  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryBefore);
+  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryAfterRestartContinuation);
 
   const routeAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
   assert.equal(routeAudit.latest.transport, "upstream-provider");
   assert.equal(routeAudit.latest.providerProtocol, "openai-compatible");
   assert.equal(routeAudit.latest.resolvedModel, "fake-gpt-4.1");
+  assert.ok((routeAudit.entries || []).every((entry) => entry.resolvedModel === "fake-gpt-4.1"));
+
+  const publicProfile = await getJson(`${translatorUrl}/anticodex/upstream-profile`, { headers: managerHeaders });
+  const secretPattern = /sk-fake-secret|sk-save-secret/;
+  assert.doesNotMatch(savedText, secretPattern);
+  assert.doesNotMatch(restoredText, secretPattern);
+  assert.doesNotMatch(JSON.stringify(publicProfile), secretPattern);
+  assert.doesNotMatch(JSON.stringify(routeAudit), /gemini-pro-agent|gemini-3\.5-flash-low|gemini-3-flash-agent/);
+
+  const providerChatRequests = requests.filter((request) => request.path === "/v1/chat/completions");
+  assert.ok(providerChatRequests.every((request) => request.body.model === "fake-gpt-4.1"));
 
   forceAuthFailure = true;
+  const responseHistoryBeforeAuthFailure = readFileSync(responseHistoryPath, "utf8");
   const failedResponse = await fetch(`${translatorUrl}/v1/responses`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -393,7 +485,8 @@ async function main() {
   const failedText = await failedResponse.text();
   assert.equal(failedResponse.status, 401);
   assert.match(failedText, /auth_error/);
-  assert.doesNotMatch(failedText, /sk-fake-secret|sk-save-secret/);
+  assert.doesNotMatch(failedText, secretPattern);
+  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryBeforeAuthFailure);
 
   return {
     ok: failures.length === 0,
@@ -406,17 +499,25 @@ async function main() {
     unauthorizedManagerBlocked: true,
     savedWithoutHistoryLoss: true,
     restoredAntigravityWithoutHistoryLoss: true,
+    restartedProviderWithoutHistoryLoss: true,
+    secretsRedacted: true,
     multiTurnHistory: {
-      turns: 4,
-      antigravityModelFallbacks: ["gemini-pro-agent", "gemini-3.5-flash-low"],
-      providerModelUsedForEveryTurn: [firstChat, secondChat, thirdChat, fourthChat].every((request) => request.body.model === "fake-gpt-4.1"),
+      turns: 6,
+      antigravityModelFallbacks: ["gemini-pro-agent", "gemini-3.5-flash-low", "gemini-3-flash-agent"],
+      providerModelUsedForEveryTurn: [firstChat, secondChat, thirdChat, fourthChat, fifthChat, sixthChat].every((request) => request.body.model === "fake-gpt-4.1"),
       fourthTurnContextIncludesPriorTurns: /turn-1 user asks alpha/.test(requestText(fourthChat.body))
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(fourthChat.body))
         && /turn-2 user asks beta/.test(requestText(fourthChat.body))
         && /PROVIDER_HISTORY_TURN_2/.test(requestText(fourthChat.body))
         && /turn-3 user asks gamma/.test(requestText(fourthChat.body))
         && /PROVIDER_HISTORY_TURN_3/.test(requestText(fourthChat.body)),
+      fifthAfterSavePreservesHistory: /turn-1 user asks alpha/.test(requestText(fifthChat.body))
+        && /PROVIDER_HISTORY_TURN_1/.test(requestText(fifthChat.body))
+        && /turn-4 user asks delta/.test(requestText(fifthChat.body))
+        && /PROVIDER_HISTORY_TURN_4/.test(requestText(fifthChat.body)),
       finalPreviousResponseId: fourth.previous_response_id,
+      savedContinuationPreviousResponseId: fifthAfterSave.previous_response_id,
+      restartContinuationPreviousResponseId: sixthAfterRestart.previous_response_id,
     },
     routeEvidence: routeAudit.latest,
     requestCount: requests.length,
@@ -439,6 +540,11 @@ try {
   rmSync(stateRoot, { recursive: true, force: true });
 }
 
-writeReport(result);
+const reportPaths = writeReport(result);
+const reportText = readFileSync(reportPaths.latest, "utf8");
+if (/sk-fake-secret|sk-save-secret/.test(reportText)) {
+  console.error(JSON.stringify({ ok: false, failures: ["third-party provider report leaked an API key"] }));
+  process.exit(1);
+}
 console.log(JSON.stringify(result));
 if (!result.ok) process.exit(1);
