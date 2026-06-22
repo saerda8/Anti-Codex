@@ -801,3 +801,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: rewrote `docs/ADAPTIVE_ONE_API_STACK.md` from the old DeepCodex one-api bootstrap path into the current Anti-Codex provider stack: local translator, default Antigravity Desktop upstream, optional explicit third-party provider profile, and no ChatGPT login route.
 - Completed: the doc now states the provider-switch continuity contract and the local MCP/skill/plugin/connector metadata parity boundary, including that metadata sync does not grant connector authorization.
 - Verification: focused stale-stack search and documentation whitespace checks passed.
+
+## 2026-06-23 Video Script Refresh
+- Completed: moved the old DeepCodex/DeepSeek video script into `docs/marketing/legacy/deepcodex-video-script.md` instead of overwriting the historical material.
+- Completed: added a current `docs/marketing/video-script.md` for Anti-Codex: separate runtime, original Codex untouched, Antigravity Desktop default, explicit third-party API profiles, MCP/skill metadata parity, and no fake connector authorization.
+- Verification: current marketing-doc search finds no `DeepCodex` / `deepcodex` / `DeepSeek-only` residues outside the legacy folder; documentation whitespace check passed.

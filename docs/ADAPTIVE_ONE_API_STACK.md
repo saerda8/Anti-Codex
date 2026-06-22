@@ -68,7 +68,7 @@ one-api bootstrap notes, which are no longer the default setup path.
 
 ## Legacy one-api notes
 
-The old one-api relay path was useful during the early DeepSeek route work, but
+The old one-api relay path was useful during early provider-routing work, but
 it is not the current Anti-Codex default. Scripts or paths with compatibility
 names may still exist for historical or migration reasons; do not present them
 as the user setup path unless a future task deliberately revives that route and
