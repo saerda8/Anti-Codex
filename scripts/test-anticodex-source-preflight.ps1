@@ -193,6 +193,67 @@ function Test-TranslatorRegression {
     }
 }
 
+function Test-PublicDocumentationContracts {
+    $assertions = New-Object System.Collections.Generic.List[object]
+
+    function Add-DocAssertion {
+        param(
+            [string]$File,
+            [string]$Name,
+            [bool]$Ok
+        )
+        $assertions.Add([pscustomobject]@{ file = $File; name = $Name; ok = $Ok }) | Out-Null
+        if (-not $Ok) { Add-Failure "public documentation contract failed: $File $Name" }
+    }
+
+    function Read-PublicDoc {
+        param([string]$Relative)
+        $path = Join-Path $SourceRoot $Relative
+        $text = Read-TextSafe $path
+        Add-DocAssertion -File $Relative -Name "exists-and-readable" -Ok ([bool]$text)
+        return $text
+    }
+
+    $readme = Read-PublicDoc "README.md"
+    $providerStack = Read-PublicDoc "docs\ADAPTIVE_ONE_API_STACK.md"
+    $compatibility = Read-PublicDoc "docs\chat-to-responses-compat.md"
+    $marketingDocs = @(
+        (Read-PublicDoc "docs\marketing\launch-post.md"),
+        (Read-PublicDoc "docs\marketing\video-script.md"),
+        (Read-PublicDoc "docs\marketing\wechat-article.md")
+    ) -join "`n`n"
+
+    Add-DocAssertion -File "README.md" -Name "anti-codex-brand" -Ok ($readme -match '^# Anti-Codex')
+    Add-DocAssertion -File "README.md" -Name "antigravity-default" -Ok ($readme -match 'Antigravity Desktop')
+    Add-DocAssertion -File "README.md" -Name "third-party-profile-boundary" -Ok ($readme -match 'provider profile')
+    Add-DocAssertion -File "README.md" -Name "connector-authorization-boundary" -Ok ($readme -match 'connector-backed app tools')
+    Add-DocAssertion -File "README.md" -Name "no-old-public-launch-claims" -Ok ($readme -notmatch 'DeepCodex app|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk')
+
+    Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "provider-stack-title" -Ok ($providerStack -match '^# Anti-Codex provider stack')
+    Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "antigravity-default" -Ok ($providerStack -match 'Antigravity Desktop provider by default')
+    Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "third-party-provider" -Ok ($providerStack -match 'optional third-party provider profile')
+    Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "connector-boundary" -Ok ($providerStack -match 'Metadata parity does not grant connector authorization')
+    Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "no-old-one-api-default" -Ok ($providerStack -notmatch '# deepcodex adaptive one-api|deepcodex\.app|setup-one-api-minimal|start-adaptive-oneapi|creates or updates a `deepcodex`')
+
+    Add-DocAssertion -File "docs\chat-to-responses-compat.md" -Name "anti-codex-scope" -Ok ($compatibility -match 'Scope: Anti-Codex translates Codex Desktop')
+    Add-DocAssertion -File "docs\chat-to-responses-compat.md" -Name "provider-shapes" -Ok ($compatibility -match 'OpenAI-compatible third-party providers' -and $compatibility -match 'Anthropic-compatible third-party providers')
+    Add-DocAssertion -File "docs\chat-to-responses-compat.md" -Name "connector-boundary" -Ok ($compatibility -match 'Connector/app-tool metadata parity must not be treated as authorization')
+    Add-DocAssertion -File "docs\chat-to-responses-compat.md" -Name "legacy-prefix-is-internal" -Ok ($compatibility -match 'deepcodex\.reasoning\.hex\.v1:<hex>' -and $compatibility -match 'internal compatibility token')
+    Add-DocAssertion -File "docs\chat-to-responses-compat.md" -Name "no-old-deepseek-scope" -Ok ($compatibility -notmatch 'Scope: deepcodex|DeepSeek route|DeepSeek-specific|Current Deepcodex Gaps|Deepcodex should')
+
+    Add-DocAssertion -File "docs\marketing\*.md" -Name "anti-codex-brand" -Ok ($marketingDocs -match 'Anti-Codex')
+    Add-DocAssertion -File "docs\marketing\*.md" -Name "provider-language" -Ok ($marketingDocs -match 'Antigravity Desktop|Antigravity' -and $marketingDocs -match 'third-party|provider')
+    Add-DocAssertion -File "docs\marketing\*.md" -Name "connector-boundary" -Ok ($marketingDocs -match 'connector|app tool' -and $marketingDocs -match 'does not fake authorization')
+    Add-DocAssertion -File "docs\marketing\*.md" -Name "no-current-legacy-marketing" -Ok ($marketingDocs -notmatch 'DeepCodex|deepcodex|DeepSeek-only|DeepSeek route|DeepSeek API key')
+
+    $failed = @($assertions.ToArray() | Where-Object { -not [bool]$_.ok })
+    return [pscustomobject]@{
+        ok = ($failed.Count -eq 0)
+        assertions = @($assertions.ToArray())
+        failed = $failed
+    }
+}
+
 function Test-GitDiffCheck {
     $gitCommand = Get-Command "git" -ErrorAction SilentlyContinue
     if (-not $gitCommand) {
@@ -255,6 +316,7 @@ try {
     $checks["javascriptSyntax"] = Test-JavaScriptSyntax
     $checks["powershellSyntax"] = Test-PowerShellSyntax
     $checks["uiStateSelfTest"] = Test-UiStateSelfTest
+    $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
     $checks["diffWhitespace"] = Test-GitDiffCheck
 } catch {

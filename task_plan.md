@@ -828,3 +828,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 README Provider Boundary Refresh
 - Completed: README now explicitly documents that Antigravity Desktop remains the default route, third-party API profiles must be configured/tested/applied through Anti-Codex Manager, and unreadable profiles must not cause a silent wrong-upstream fallback.
 - Completed: README now states that MCP/skills/plugin/connector metadata sync does not grant connector-backed app-tool authorization.
+
+## 2026-06-23 Fast Source Preflight Public Docs Gate
+- Completed: `test-anticodex-source-preflight.ps1` now runs a lightweight public-documentation contract check even when `-SkipFullRegression` is used.
+- Completed: the fast check uses an explicit current-doc whitelist instead of recursive `docs/**` scans, so historical audits, legacy marketing, and prompt samples can keep old evidence without breaking the gate.
+- Verification: PowerShell parser check passed; launcher contract suite passed `91/91`; fast source preflight passed with `publicDocumentation.ok:true` and translator regression skipped by design.

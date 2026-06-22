@@ -3484,6 +3484,12 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /not a git worktree/);
   assert.match(preflight, /git diff --check/);
   assert.match(preflight, /warningsOnly/);
+  assert.match(preflight, /function Test-PublicDocumentationContracts/);
+  assert.match(preflight, /\$checks\["publicDocumentation"\] = Test-PublicDocumentationContracts/);
+  assert.match(preflight, /docs\\ADAPTIVE_ONE_API_STACK\.md/);
+  assert.match(preflight, /docs\\marketing\\video-script\.md/);
+  assert.match(preflight, /provider profile/);
+  assert.match(preflight, /connector-backed app tools/);
   assert.match(preflight, /UTF8Encoding\]::new\(\$false\)/);
   assert.match(preflight, /Write-AntiCodexJsonReport/);
   assert.match(preflight, /SkipFullRegression/);
