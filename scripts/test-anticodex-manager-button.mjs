@@ -76,6 +76,7 @@ const FINISHED_HINTS = [
   "\u53d1\u73b0\u65b0\u7248",
   "\u901a\u8fc7",
   "\u5b8c\u6210",
+  "\u8fd8\u6ca1\u6709",
   "\u9700\u8981\u5904\u7406",
 ];
 
@@ -85,6 +86,11 @@ function isRunningText(text) {
 
 function isFailureText(text) {
   return text.includes(FAILURE_TEXT) || /timed out|bridge failed|Action bridge failed/i.test(text);
+}
+
+function isUiOnlySmokeText(text) {
+  const value = String(text || "");
+  return value.includes("ui-only manager button smoke") || value.includes("ui-only-manager-button");
 }
 
 function isFinishedText(text) {
@@ -104,7 +110,7 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
   if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
-  if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55") || text.includes("\u5931\u8d25"));
+  if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55"));
   if (actionName === "viewLatestReports") return text.includes("\u62a5\u544a") && (text.includes("\u5df2\u627e\u5230") || text.includes("\u8fd8\u6ca1\u6709"));
   return true;
 }
@@ -168,6 +174,11 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("updateCheck", "Codex \u66f4\u65b0\u68c0\u67e5\uff1a\u53d1\u73b0\u65b0\u7248"), true);
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7"), false);
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u8017\u65f6\uff1a21000 ms"), true);
+  assert.equal(isFinishedText("\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"), true);
+  assert.equal(hasActionSpecificResult("viewLatestReports", "\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"), true);
+  assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1a\u5931\u8d25"), false);
+  assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1aZIP \u5df2\u751f\u6210"), true);
+  assert.equal(isUiOnlySmokeText("\u8bf4\u660e\uff1aui-only manager button smoke"), true);
   assert.ok(uiOnlyBridgeSource("mcpSkills", true).includes("__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__"));
   console.log(JSON.stringify({ ok: true, selfTest: true }));
   process.exit(0);
@@ -567,6 +578,7 @@ async function runManagerActionBatch(actions) {
         && !isRunningText(text)
         && !isFailureText(text)
         && isFinishedText(text)
+        && (uiOnlyMode || !isUiOnlySmokeText(text))
         && hasActionSpecificResult(actionName, text);
       const uiOnlyFinished = uiOnlyMode
         && !latest.disabled
@@ -596,6 +608,7 @@ async function runManagerActionBatch(actions) {
       && !isRunningText(text)
       && !isFailureText(text)
       && isFinishedText(text)
+      && (uiOnlyMode || !isUiOnlySmokeText(text))
       && hasActionSpecificResult(actionName, text);
     const uiOnlyFinished = uiOnlyMode
       && !latest.disabled
@@ -923,6 +936,7 @@ while (initial.ok && Date.now() < deadline) {
     && !isRunningText(latestText)
     && !isFailureText(latestText)
     && isFinishedText(latestText)
+    && (uiOnlyMode || !isUiOnlySmokeText(latestText))
     && hasActionSpecificResult(action, latestText);
   const uiOnlyFinished = uiOnlyMode
     && !latest.disabled
@@ -964,6 +978,7 @@ const visibleFinished = !latest.disabled
   && !isRunningText(text)
   && !isFailureText(text)
   && isFinishedText(text)
+  && (uiOnlyMode || !isUiOnlySmokeText(text))
   && hasActionSpecificResult(action, text);
 const ok = Boolean(initial.ok)
   && actionStarted
