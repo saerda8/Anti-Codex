@@ -172,7 +172,17 @@ if (-not $resolvedNode) {
         Add-Failure "shared config refresh failed: $($_.Exception.Message)"
     }
     try {
-        $pluginSummary = Invoke-NodeJson $pluginHostSync @($CodexHome, $SharedCodexHome, "--local-snapshots")
+        $previousExtraSkillsRoots = $env:ANTICODEX_EXTRA_SKILLS_ROOTS
+        $env:ANTICODEX_EXTRA_SKILLS_ROOTS = $AgentsSkillsPath
+        try {
+            $pluginSummary = Invoke-NodeJson $pluginHostSync @($CodexHome, $SharedCodexHome, "--local-snapshots")
+        } finally {
+            if ($null -eq $previousExtraSkillsRoots) {
+                Remove-Item Env:\ANTICODEX_EXTRA_SKILLS_ROOTS -ErrorAction SilentlyContinue
+            } else {
+                $env:ANTICODEX_EXTRA_SKILLS_ROOTS = $previousExtraSkillsRoots
+            }
+        }
         if ($pluginSummary -and $pluginSummary.ok -ne $true) { Add-Failure "local snapshot refresh reported failure" }
     } catch {
         Add-Failure "local snapshot refresh failed: $($_.Exception.Message)"

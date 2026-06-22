@@ -2819,6 +2819,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(realMcpSmoke, /anticodex-real-mcp-smoke-latest\.json/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-plugin-host\.mjs/);
   assert.match(refreshLocalFeatures, /AgentsSkillsPath/);
+  assert.match(refreshLocalFeatures, /\$env:ANTICODEX_EXTRA_SKILLS_ROOTS = \$AgentsSkillsPath/);
+  assert.match(refreshLocalFeatures, /\$previousExtraSkillsRoots = \$env:ANTICODEX_EXTRA_SKILLS_ROOTS/);
   assert.match(refreshLocalFeatures, /\.agents\\skills/);
   assert.match(refreshLocalFeatures, /agentsSkillNames/);
   assert.match(refreshLocalFeatures, /missingExpectedSkillNames/);

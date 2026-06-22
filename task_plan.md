@@ -924,3 +924,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-release-gates.mjs --self-test` now rejects forged signed `ok:true` reports for no-traffic gates, missing-history recovery, local connector allowlists, and plugin/app-tool capabilities.
 - Completed: no-traffic release gates now reject explicit contradictory evidence: `usedRealTraffic:true`, `behaviorCovered:false`, or `coverageKind:"real-traffic"` while leaving older reports without those fields compatible.
 - Verification: release-gate syntax passed; release-gate self-test reports expected semantic failures for all four forged report classes; focused launcher contract passed; strict passive gates remain green with `shortReady:true`, `releaseReady:true`, no missing required gates, and no damaged reports.
+
+## 2026-06-23 Custom Agents Skill Root Sync
+- Completed: `refresh-anticodex-local-features.ps1` now passes its `-AgentsSkillsPath` value into `sync-shared-codex-plugin-host.mjs` through `ANTICODEX_EXTRA_SKILLS_ROOTS` for the local snapshot copy step, then restores the prior environment value.
+- Completed: this keeps custom `.agents\skills` roots consistent between copy and verification while preserving Anti-Codex-local extra skills instead of forcing strict equality.
+- Verification: PowerShell parser check passed and the focused MCP/skills launcher contract passed.
