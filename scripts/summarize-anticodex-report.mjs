@@ -165,10 +165,16 @@ const summary = {
     unattributedAppToolCount: has(capabilities, "unattributedAppToolCount") ? capabilities.unattributedAppToolCount : null,
     unauthorizedAppToolCount: has(capabilities, "unauthorizedAppToolCount") ? capabilities.unauthorizedAppToolCount : null,
     connectorParityClean: connectorParity ? emptyArrayField(connectorParity, "missingShared") : null,
+    connectorParityMissingShared: connectorParity && has(connectorParity, "missingShared") ? asStringArray(connectorParity.missingShared) : [],
+    connectorParityExtraLocal: connectorParity && has(connectorParity, "extraLocal") ? asStringArray(connectorParity.extraLocal) : [],
     appToolParityClean: appToolParity ? emptyArrayField(appToolParity, "missingShared") : null,
+    appToolParityMissingShared: appToolParity && has(appToolParity, "missingShared") ? asStringArray(appToolParity.missingShared) : [],
+    appToolParityExtraLocal: appToolParity && has(appToolParity, "extraLocal") ? asStringArray(appToolParity.extraLocal) : [],
     appToolGetPostParityClean: appToolGetPostParity
       ? emptyArrayField(appToolGetPostParity, "missingFromGet") === true && emptyArrayField(appToolGetPostParity, "extraFromGet") === true
       : null,
+    appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
+    appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],
   } : null,
   mcpSkillEvidence: (mcp || skills) ? {
     mcpCount: mcp && has(mcp, "count") ? mcp.count : null,

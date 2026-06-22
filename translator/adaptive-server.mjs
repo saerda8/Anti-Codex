@@ -2095,10 +2095,22 @@ function latestManagerReportItem(label, fileName) {
             unattributedAppToolCount: Number.isFinite(Number(capabilities.unattributedAppToolCount)) ? Number(capabilities.unattributedAppToolCount) : null,
             unauthorizedAppToolCount: Number.isFinite(Number(capabilities.unauthorizedAppToolCount)) ? Number(capabilities.unauthorizedAppToolCount) : null,
             connectorParityClean: connectorParity && Array.isArray(connectorParity.missingShared) ? connectorParity.missingShared.length === 0 : null,
+            connectorParityMissingSharedCount: Array.isArray(connectorParity?.missingShared) ? connectorParity.missingShared.length : null,
+            connectorParityMissingSharedSample: Array.isArray(connectorParity?.missingShared) ? connectorParity.missingShared.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            connectorParityExtraLocalCount: Array.isArray(connectorParity?.extraLocal) ? connectorParity.extraLocal.length : null,
+            connectorParityExtraLocalSample: Array.isArray(connectorParity?.extraLocal) ? connectorParity.extraLocal.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             appToolParityClean: appToolParity && Array.isArray(appToolParity.missingShared) ? appToolParity.missingShared.length === 0 : null,
+            appToolParityMissingSharedCount: Array.isArray(appToolParity?.missingShared) ? appToolParity.missingShared.length : null,
+            appToolParityMissingSharedSample: Array.isArray(appToolParity?.missingShared) ? appToolParity.missingShared.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            appToolParityExtraLocalCount: Array.isArray(appToolParity?.extraLocal) ? appToolParity.extraLocal.length : null,
+            appToolParityExtraLocalSample: Array.isArray(appToolParity?.extraLocal) ? appToolParity.extraLocal.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             appToolGetPostParityClean: appToolGetPostParity && Array.isArray(appToolGetPostParity.missingFromGet) && Array.isArray(appToolGetPostParity.extraFromGet)
                 ? appToolGetPostParity.missingFromGet.length === 0 && appToolGetPostParity.extraFromGet.length === 0
                 : null,
+            appToolGetPostMissingFromGetCount: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.length : null,
+            appToolGetPostMissingFromGetSample: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            appToolGetPostExtraFromGetCount: Array.isArray(appToolGetPostParity?.extraFromGet) ? appToolGetPostParity.extraFromGet.length : null,
+            appToolGetPostExtraFromGetSample: Array.isArray(appToolGetPostParity?.extraFromGet) ? appToolGetPostParity.extraFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
         } : null,
         providerContinuity: multiTurnHistory ? {
             turns: Number.isFinite(Number(multiTurnHistory.turns)) ? Number(multiTurnHistory.turns) : null,
@@ -2706,6 +2718,10 @@ function latestReportsSummary(result){
       const evidence=item.pluginCapabilityEvidence;
       const parityClean=evidence.connectorParityClean===true&&evidence.appToolParityClean===true&&evidence.appToolGetPostParityClean===true;
       lines.push("  \\u5e94\\u7528\\u5de5\\u5177\\u8bc1\\u636e\\uff1a\\u672a\\u6388\\u6743\\u5de5\\u5177 "+(evidence.unauthorizedAppToolCount??"\\u672a\\u77e5")+" / \\u65e0 connector_id "+(evidence.unattributedAppToolCount??"\\u672a\\u77e5")+" / parity "+(parityClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406"));
+      if(!parityClean){
+        const samples=[...(evidence.connectorParityMissingSharedSample||[]),...(evidence.appToolParityMissingSharedSample||[]),...(evidence.appToolGetPostMissingFromGetSample||[])].slice(0,5);
+        lines.push("  parity drift: connectorMissing="+(evidence.connectorParityMissingSharedCount??"\\u672a\\u77e5")+" / appToolMissing="+(evidence.appToolParityMissingSharedCount??"\\u672a\\u77e5")+" / getPostMissing="+(evidence.appToolGetPostMissingFromGetCount??"\\u672a\\u77e5")+(samples.length?" / sample "+samples.join(", "):""));
+      }
       lines.push("  \\u539f\\u751f Codex \\u5199\\u56de\\uff1a"+(evidence.nativeCodexWriteback?"\\u9700\\u5904\\u7406":"\\u65e0"));
     }
     if(item.providerContinuity){

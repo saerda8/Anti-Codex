@@ -1729,6 +1729,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /realProvider: first=/);
   assert.match(server, /antigravityReturn: history=/);
   assert.match(server, /pluginCapabilityEvidence/);
+  assert.match(server, /connectorParityMissingSharedSample/);
+  assert.match(server, /appToolGetPostMissingFromGetSample/);
+  assert.match(server, /parity drift: connectorMissing=/);
   assert.match(server, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(server, /unauthorizedAppToolCount/);
   assert.match(server, /appToolGetPostParityClean/);
@@ -1917,6 +1920,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /hiddenConnectorAccessible/);
   assert.match(reportSummarizer, /exposedToolNames/);
   assert.match(reportSummarizer, /pluginCapabilityEvidence/);
+  assert.match(reportSummarizer, /connectorParityMissingShared/);
+  assert.match(reportSummarizer, /appToolGetPostMissingFromGet/);
   assert.match(reportSummarizer, /mcpSkillEvidence/);
   assert.match(reportSummarizer, /mcpRealCallPassed/);
   assert.match(reportSummarizer, /expectedSharedSkillCount/);
@@ -2055,6 +2060,50 @@ test("report summarizer surfaces optional real-traffic continuity evidence value
     assert.equal(summary.antigravityReturnEvidence.missingMarkerCount, 1);
     assert.equal(summary.antigravityReturnEvidence.routeTransport, "antigravity-native");
     assert.equal(summary.antigravityReturnEvidence.resolvedModel, "gemini-pro-agent");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces plugin capability parity drift samples", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-plugin-capabilities.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: false,
+      reportName: "plugin-capabilities",
+      failures: ["drift"],
+      capabilities: {
+        nativeCodexWriteback: false,
+        connectorCount: 3,
+        accessibleConnectorCount: 0,
+        appToolCount: 0,
+        appToolGetCount: 0,
+        unattributedAppToolCount: 0,
+        unauthorizedAppToolCount: 0,
+        connectorParity: {
+          missingShared: ["missing-connector"],
+          extraLocal: ["extra-connector"],
+        },
+        appToolParity: {
+          missingShared: ["missing-tool"],
+          extraLocal: ["extra-tool"],
+        },
+        appToolGetPostParity: {
+          missingFromGet: ["post-only-tool"],
+          extraFromGet: ["get-only-tool"],
+        },
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityMissingShared, ["missing-connector"]);
+    assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityExtraLocal, ["extra-connector"]);
+    assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityMissingShared, ["missing-tool"]);
+    assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityExtraLocal, ["extra-tool"]);
+    assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostMissingFromGet, ["post-only-tool"]);
+    assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostExtraFromGet, ["get-only-tool"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
