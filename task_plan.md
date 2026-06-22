@@ -811,3 +811,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: rewrote `docs/chat-to-responses-compat.md` from a legacy DeepCodex-to-DeepSeek note into the current Anti-Codex provider compatibility contract.
 - Completed: the doc now covers Antigravity default, OpenAI-compatible and Anthropic-compatible provider shapes, structured tool-history preservation across provider switches, and the boundary between metadata parity and connector authorization.
 - Completed: the legacy `deepcodex.reasoning.hex.v1:` replay prefix is documented as an internal compatibility token, not user-facing branding.
+
+## 2026-06-23 DeepSeek Failure Notes Legacy Marker
+- Completed: marked `docs/DEEPSEEK_RUNTIME_FAILURE_NOTES.md` as legacy route notes so it is not mistaken for the current Anti-Codex default provider description.
+- Completed: the marker states the current default: local Antigravity Desktop provider, explicit third-party profiles, and no mutation of the original Codex installation.
