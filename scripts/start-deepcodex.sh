@@ -123,22 +123,22 @@ CODEX_BIN="$(find_codex_bin || true)"
 alert() {
   /usr/bin/osascript - "$1" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
-  display alert "deepcodex" message (item 1 of argv) as critical
+  display alert "Anti-Codex" message (item 1 of argv) as critical
 end run
 APPLESCRIPT
 }
 
 if [ -z "$CODEX_BIN" ] || [ ! -x "$CODEX_BIN" ]; then
-  alert "未找到 Codex Desktop。请先安装 Codex Desktop，或在启动 deepcodex 前设置 CODEX_BIN。
+  alert "未找到 Codex Desktop。请先安装 Codex Desktop，或在启动 Anti-Codex 前设置 CODEX_BIN。
 
-Codex Desktop was not found. Install Codex Desktop first, or set CODEX_BIN before launching deepcodex."
+Codex Desktop was not found. Install Codex Desktop first, or set CODEX_BIN before launching Anti-Codex."
   exit 1
 fi
 
 if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
-  alert "未找到可用的 Node.js。DeepCodex 需要支持 zstd 的 Node.js 运行时。请安装较新的 Node.js，或在启动 deepcodex 前设置 NODE_BIN。
+  alert "未找到可用的 Node.js。Anti-Codex 需要支持 zstd 的 Node.js 运行时。请安装较新的 Node.js，或在启动 Anti-Codex 前设置 NODE_BIN。
 
-No compatible Node.js runtime was found. DeepCodex requires Node.js with zstd support. Install a newer Node.js or set NODE_BIN before launching deepcodex."
+No compatible Node.js runtime was found. Anti-Codex requires Node.js with zstd support. Install a newer Node.js or set NODE_BIN before launching Anti-Codex."
   exit 1
 fi
 
@@ -472,10 +472,10 @@ write_pseudo_login_auth
 
 if [ -z "${UPSTREAM_API_KEY:-}" ]; then
   if [ ! -f "$SETUP_UI_SCRIPT" ]; then
-    alert "DeepCodex setup 页面不存在。请检查：
+    alert "Anti-Codex setup 页面不存在。请检查：
 $SETUP_UI_SCRIPT
 
-DeepCodex setup page is missing. Check:
+Anti-Codex setup page is missing. Check:
 $SETUP_UI_SCRIPT"
     exit 1
   fi
@@ -661,7 +661,7 @@ ensure_global_permission_defaults
 ensure_deepcodex_ui_state_defaults
 sync_global_rules
 
-echo "Launching deepcodex through adaptive translator."
+echo "Launching Anti-Codex through adaptive translator."
 echo "  Codex base: $TRANSLATOR_URL"
 echo "  upstream:   ${UPSTREAM_URL:-https://api.deepseek.com/v1}"
 echo "  CODEX_HOME: $CODEX_HOME_DIR"

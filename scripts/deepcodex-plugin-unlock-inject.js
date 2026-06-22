@@ -72,7 +72,7 @@
       try {
         if (button.dataset.deepcodexPluginLabelled === "true") return;
         button.dataset.deepcodexPluginLabelled = "true";
-        button.title = "DeepCodex plugin UI unlock active";
+        button.title = "Anti-Codex plugin UI unlock active";
       } catch {}
     }
 
@@ -113,6 +113,6 @@
       window.setTimeout(start, 500);
     }
   } catch (err) {
-    console.warn("[DeepCodex] plugin unlock injection failed", err);
+    console.warn("[Anti-Codex] plugin unlock injection failed", err);
   }
 })();

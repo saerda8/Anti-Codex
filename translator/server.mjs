@@ -2,7 +2,7 @@
 /**
  * DEPRECATED: legacy Codex DeepSeek translator.
  *
- * Production DeepCodex starts translator/adaptive-server.mjs via
+ * Production Anti-Codex starts translator/adaptive-server.mjs via
  * scripts/start-adaptive-translator.sh. Keep this file only as historical
  * reference; do not use it for current Codex Desktop builds.
  *
@@ -142,7 +142,7 @@ const DEEPSEEK_CODEX_LIMITATIONS_SYSTEM = [
 ].join(" ");
 
 const DEEPSEEK_LOCAL_SEARCH_SYSTEM = [
-    "DeepCodex local search workflow:",
+    "Anti-Codex local search workflow:",
     "You do not have official hosted WebSearch on this DeepSeek route.",
     "When the user asks to search the web, use the injected web_search/web_fetch tools provided by the translator.",
     "Do not try Wikipedia, Baidu, Bing, Sogou, Google scraping, dokobot, Browser/Browser Use, or ad-hoc Python search snippets before those translator tools.",
@@ -460,7 +460,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-    console.warn("[translator/server.mjs] DEPRECATED: use translator/adaptive-server.mjs for DeepCodex production.");
+    console.warn("[translator/server.mjs] DEPRECATED: use translator/adaptive-server.mjs for Anti-Codex production.");
     console.log(`Translator listening on http://${HOST}:${PORT}`);
     console.log(`Upstream: ${UPSTREAM}`);
 });

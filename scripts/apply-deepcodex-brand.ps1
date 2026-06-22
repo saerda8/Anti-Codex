@@ -17,7 +17,7 @@ function Assert-NoPatchedCodexRunning {
         Where-Object { $_.Name -eq "Codex.exe" -and $_.CommandLine -like "*codex-patched-app*" } |
         Select-Object -First 1
     if ($running) {
-        throw "DeepCodex Codex.exe is still running. Close DeepCodex first, then run this script again."
+        throw "Anti-Codex Codex.exe is still running. Close Anti-Codex first, then run this script again."
     }
 }
 
@@ -49,4 +49,4 @@ if (-not (Test-Path -LiteralPath $PENDING_ASAR)) { throw "Pending branded ASAR n
 Copy-Item -LiteralPath $ASAR -Destination "$ASAR.before-apply-deepcodex-brand.bak" -Force
 Copy-Item -LiteralPath $PENDING_ASAR -Destination $ASAR -Force
 $exeResult = Replace-AsciiHash -Path $EXE -Old $OLD_HASH -New $NEW_HASH
-Write-Host "DeepCodex brand patch applied. exe=$exeResult"
+Write-Host "Anti-Codex brand patch applied. exe=$exeResult"

@@ -4160,9 +4160,13 @@ test("third-party provider verifier preserves history across save and restart", 
 
 test("user-visible legacy DeepCodex setup and launch wording is branded as Anti-Codex", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const macLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.sh"), "utf8");
   const windowsLauncher = readFileSync(resolve(root, "src", "deepcodex-launcher-win.cs"), "utf8");
   const setupUi = readFileSync(resolve(root, "scripts", "deepcodex-setup-ui.mjs"), "utf8");
   const swiftSetup = readFileSync(resolve(root, "scripts", "DeepCodexSetup.swift"), "utf8");
+  const pluginUnlock = readFileSync(resolve(root, "scripts", "deepcodex-plugin-unlock-inject.js"), "utf8");
+  const applyBrand = readFileSync(resolve(root, "scripts", "apply-deepcodex-brand.ps1"), "utf8");
+  const legacyTranslator = readFileSync(resolve(root, "translator", "server.mjs"), "utf8");
 
   assert.match(launcher, /Anti-Codex is already starting or running/);
   assert.match(launcher, /MessageBox\]::Show\(\$Message, "Anti-Codex"/);
@@ -4186,6 +4190,23 @@ test("user-visible legacy DeepCodex setup and launch wording is branded as Anti-
 
   assert.match(windowsLauncher, /MessageBox\.Show\([^;]*"Anti-Codex"[^;]*MessageBoxIcon\.Error\)/s);
   assert.doesNotMatch(windowsLauncher, /MessageBox\.Show\([^;]*"DeepCodex"[^;]*MessageBoxIcon\.Error\)/s);
+
+  assert.match(macLauncher, /display alert "Anti-Codex"/);
+  assert.match(macLauncher, /Launching Anti-Codex through adaptive translator/);
+  assert.match(macLauncher, /Anti-Codex requires Node\.js with zstd support/);
+  assert.doesNotMatch(macLauncher, /display alert "deepcodex"|Launching deepcodex through adaptive translator|DeepCodex requires Node\.js|DeepCodex setup page is missing|launching deepcodex/);
+
+  assert.match(pluginUnlock, /Anti-Codex plugin UI unlock active/);
+  assert.match(pluginUnlock, /\[Anti-Codex\] plugin unlock injection failed/);
+  assert.doesNotMatch(pluginUnlock, /DeepCodex plugin UI unlock active|\[DeepCodex\] plugin unlock injection failed/);
+
+  assert.match(applyBrand, /Anti-Codex brand patch applied/);
+  assert.match(applyBrand, /Close Anti-Codex first/);
+  assert.doesNotMatch(applyBrand, /DeepCodex brand patch applied|Close DeepCodex first/);
+
+  assert.match(legacyTranslator, /Anti-Codex local search workflow/);
+  assert.match(legacyTranslator, /Anti-Codex production/);
+  assert.doesNotMatch(legacyTranslator, /DeepCodex local search workflow|DeepCodex production/);
 
   assert.match(setupUi, /<title>Anti-Codex Setup<\/title>/);
   assert.match(setupUi, /<h1>Anti-Codex<\/h1>/);

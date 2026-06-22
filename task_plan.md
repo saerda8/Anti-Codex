@@ -786,3 +786,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: rewrote `docs/audits/real-usage-test-coverage.md` from stale/garbled 0% coverage claims into a current audit of Chinese response checks, real-tool coverage, final completion checks, and legacy `DeepCodex` residue rejection.
 - Completed: the audit now distinguishes routine bounded verifier evidence from remaining combined installed desktop and live Antigravity traffic gates.
 - Verification: stale-audit search no longer finds the old "0%" / "no assertions" claims; documentation whitespace check passed.
+
+## 2026-06-23 User-Visible Legacy Brand Sweep
+- Completed: replaced remaining user-visible legacy `DeepCodex` wording in `translator/server.mjs`, `scripts/start-deepcodex.sh`, `scripts/apply-deepcodex-brand.ps1`, and `scripts/deepcodex-plugin-unlock-inject.js` with Anti-Codex wording while leaving internal compatibility names intact.
+- Completed: launcher contract coverage now asserts those macOS launcher, debug plugin unlock, legacy translator, and brand-patch surfaces are Anti-Codex-branded and rejects the old user-visible phrases.
+- Verification: JS syntax checks passed for the changed JS files; `apply-deepcodex-brand.ps1` parsed through a no-`$` scriptblock check; focused launcher contract suite passed 90/90; source-only legacy phrase search returned no matches.

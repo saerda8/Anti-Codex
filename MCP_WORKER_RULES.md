@@ -1530,3 +1530,10 @@ After every failure, before another dispatch:
 - Cause classification: worker dispatch contract mismatch, not product evidence.
 - Rule change: do not use an implementation worker preset for pure read-only evidence unless the tool contract explicitly accepts no changes. If a read-only worker fails this way, use direct local inspection and record that no worker evidence was accepted.
 - Result: `docs\audits\real-usage-test-coverage.md` was refreshed from direct source/test evidence instead of the failed worker.
+
+## 2026-06-23 - PowerShell parser probes should avoid ref args through rtk
+
+- Symptom: quick parser probes using `[ref]$null` or escaped quoted paths through `rtk proxy powershell -Command` failed before reaching the target script.
+- Cause classification: command wrapper quoting failure, not script syntax failure.
+- Rule change: for simple PowerShell syntax probes, prefer `[scriptblock]::Create([System.IO.File]::ReadAllText('path')) | Out-Null` because it avoids `$null`, `[ref]`, and nested quote interpolation.
+- Result: `scripts\apply-deepcodex-brand.ps1` parsed successfully with the no-`$` scriptblock method.
