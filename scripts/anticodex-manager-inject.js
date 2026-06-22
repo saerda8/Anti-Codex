@@ -782,6 +782,7 @@
       const age = formatReportAge(item.ageMs);
       if (item.exists && age) lines.push(`  \u66f4\u65b0\uff1a${age}`);
       if (item.firstFailure) lines.push(`  \u9996\u4e2a\u5931\u8d25\uff1a${item.firstFailure}`);
+      if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
       if (item.exists && item.latestPath) lines.push(`  \u6587\u4ef6\uff1a${item.latestPath}`);
     }
     return lines.join("\n");

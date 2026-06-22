@@ -1707,6 +1707,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /function failureSummaryLine/);
   assert.match(server, /viewLatestReports/);
   assert.match(server, /function latestManagerReportsPayload/);
+  assert.match(server, /publicDocumentationOk: fileName === "latest-source-preflight\.json"/);
+  assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /latest-codex-responses\.json/);
   assert.match(server, /latest-real-work\.json/);
   assert.match(server, /latest-native-tool-loop\.json/);
@@ -1718,6 +1720,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-compaction-resume\.json/);
   assert.match(server, /latest-stability-soak\.json/);
   assert.match(server, /latestReportsSummary/);
+  assert.ok(server.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || server.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || server.includes("公开文档"));
+  assert.ok(inject.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || inject.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || inject.includes("公开文档"));
+  assert.ok(managerBridge.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || managerBridge.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || managerBridge.includes("公开文档"));
   assert.match(server, /function readJsonReportIfPresent/);
   assert.match(server, /function reportIntegrityForPath/);
   assert.match(server, /\.sha256/);

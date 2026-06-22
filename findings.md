@@ -587,3 +587,4 @@
 - Fast source preflight must include cheap public-doc contracts because full translator regression can be skipped during routine install/sync checks. Keep that check whitelist-based so archived DeepCodex evidence is not treated as a current product regression.
 - Any new source-preflight check should be surfaced through diagnostics summaries, not only buried in the raw latest report. Otherwise Manager and diagnostic bundles can show a green source-preflight summary while omitting the newly added evidence dimension.
 - Installed overall fast mode skips the standalone diagnostics verifier, so source-preflight evidence that matters for release confidence should also have a direct fast-safe installed-overall check through `/anticodex/diagnostics`.
+- Manager latest-report summaries should expose field-level evidence for newly added source-preflight gates. A report-level green state is weaker than showing that the public-documentation subcheck itself passed.

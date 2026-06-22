@@ -1978,6 +1978,8 @@ function latestManagerReportItem(label, fileName) {
     const integrityInvalid = read.exists && integrity.signed && integrity.valid === false;
     const invalid = (read.exists && read.parseable === false) || integrityInvalid;
     const failures = Array.isArray(report?.failures) ? report.failures.filter(Boolean) : [];
+    const checks = report?.checks && typeof report.checks === "object" ? report.checks : {};
+    const publicDocumentation = checks.publicDocumentation && typeof checks.publicDocumentation === "object" ? checks.publicDocumentation : null;
     let updatedAt = "";
     if (fullPath && existsSync(fullPath)) {
         try { updatedAt = statSync(fullPath).mtime.toISOString(); } catch {}
@@ -2001,6 +2003,8 @@ function latestManagerReportItem(label, fileName) {
         firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
+        publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
+        publicDocumentationFailureCount: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation && Array.isArray(publicDocumentation.failed) ? publicDocumentation.failed.length : null,
         updatedAt,
         ageMs,
         stale,
@@ -2549,6 +2553,7 @@ function latestReportsSummary(result){
     const age=formatReportAge(item.ageMs);
     if(item.exists&&age) lines.push("  \\u66f4\\u65b0\\uff1a"+age);
     if(item.firstFailure) lines.push("  \\u9996\\u4e2a\\u5931\\u8d25\\uff1a"+item.firstFailure);
+    if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);
   }
   return lines.join("\\n");

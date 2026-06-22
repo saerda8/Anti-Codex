@@ -845,3 +845,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 Installed Overall Public Docs Signal
 - Completed: installed overall now directly checks `/anticodex/diagnostics` for `sourcePreflight.publicDocumentationOk`, including fast mode where the standalone diagnostics verifier is skipped.
 - Completed: launcher contract coverage now requires the installed overall public-doc signal so the fast source-preflight docs gate remains visible in combined acceptance reports.
+
+## 2026-06-23 Manager Latest Reports Public Docs Signal
+- Completed: Manager latest report payload now carries `publicDocumentationOk` and `publicDocumentationFailureCount` for `latest-source-preflight.json`.
+- Completed: embedded Manager, external Manager injection, and Manager bridge summaries now show the public-documentation status line for source-preflight reports.
