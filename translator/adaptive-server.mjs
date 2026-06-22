@@ -1985,6 +1985,9 @@ function latestManagerReportItem(label, fileName) {
     const connectorParity = capabilities?.connectorParity && typeof capabilities.connectorParity === "object" ? capabilities.connectorParity : null;
     const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object" ? capabilities.appToolParity : null;
     const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object" ? capabilities.appToolGetPostParity : null;
+    const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
+    const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
+    const realAntigravityEvidence = report?.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : null;
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2050,6 +2053,39 @@ function latestManagerReportItem(label, fileName) {
             upstreamRequestsDuringLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints) : null,
             hiddenConnectorAccessible: endpointEvidence.hiddenConnectorAccessible === true,
             exposedToolNames: Array.isArray(endpointEvidence.exposedToolNames) ? endpointEvidence.exposedToolNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+        } : null,
+        mcpSkillEvidence: (mcp || skills) ? {
+            mcpCount: Number.isFinite(Number(mcp?.count)) ? Number(mcp.count) : null,
+            mcpSharedCount: Number.isFinite(Number(mcp?.sharedCount)) ? Number(mcp.sharedCount) : null,
+            mcpMissingSharedCount: Array.isArray(mcp?.missingShared) ? mcp.missingShared.length : null,
+            mcpExtraLocalCount: Array.isArray(mcp?.extraLocal) ? mcp.extraLocal.length : null,
+            hasNodeRepl: mcp?.hasNodeRepl === true,
+            mcpSmokePassed: mcp?.smoke?.passed === true,
+            mcpRealCallPassed: mcp?.smoke?.realCall?.passed === true,
+            skillCount: Number.isFinite(Number(skills?.count)) ? Number(skills.count) : null,
+            skillSharedCount: Number.isFinite(Number(skills?.sharedCount)) ? Number(skills.sharedCount) : null,
+            agentsSkillCount: Number.isFinite(Number(skills?.agentsCount)) ? Number(skills.agentsCount) : null,
+            expectedSharedSkillCount: Number.isFinite(Number(skills?.expectedSharedCount)) ? Number(skills.expectedSharedCount) : null,
+            missingSharedSkillCount: Array.isArray(skills?.missingShared) ? skills.missingShared.length : null,
+            extraLocalSkillCount: Array.isArray(skills?.extraLocal) ? skills.extraLocal.length : null,
+            skillSmokeReadable: skills?.smoke?.readable === true,
+        } : null,
+        optionalRealProviderEvidence: (typeof report?.firstMarkerObserved === "boolean" || typeof report?.secondMarkerObserved === "boolean" || typeof report?.historyContinuationObserved === "boolean") ? {
+            firstMarkerObserved: report.firstMarkerObserved === true,
+            secondMarkerObserved: report.secondMarkerObserved === true,
+            historyContinuationObserved: report.historyContinuationObserved === true,
+            secretsRedacted: report.secretsRedacted === true,
+            turns: Number.isFinite(Number(report.turns)) ? Number(report.turns) : null,
+        } : null,
+        antigravityReturnEvidence: realAntigravityEvidence ? {
+            requested: realAntigravityEvidence.requested === true,
+            realAntigravityTurnUsed: realAntigravityEvidence.realAntigravityTurnUsed === true,
+            returnedToAntigravityWithHistory: realAntigravityEvidence.returnedToAntigravityWithHistory === true,
+            previousResponseIdMatched: realAntigravityEvidence.previousResponseIdMatched === true,
+            markerCount: Number.isFinite(Number(realAntigravityEvidence.markerCount)) ? Number(realAntigravityEvidence.markerCount) : null,
+            missingMarkerCount: Number.isFinite(Number(realAntigravityEvidence.missingMarkerCount)) ? Number(realAntigravityEvidence.missingMarkerCount) : null,
+            routeTransport: shortSafeText(realAntigravityEvidence.routeTransport || "", ""),
+            resolvedModel: shortSafeText(realAntigravityEvidence.resolvedModel || "", ""),
         } : null,
         pluginCapabilityEvidence: capabilities ? {
             nativeCodexWriteback: capabilities.nativeCodexWriteback === true,
@@ -2649,6 +2685,22 @@ function latestReportsSummary(result){
       const evidence=item.localConnectorEvidence;
       lines.push("  \\u8fde\\u63a5\\u5668\\u8bc1\\u636e\\uff1aChatGPT URL "+(evidence.chatgptInstallUrlsScrubbed?"\\u5df2\\u6e05\\u7406":"\\u9700\\u5904\\u7406")+" / \\u4e0a\\u6e38\\u8bf7\\u6c42 "+(evidence.upstreamRequestsDuringLocalEndpoints??"\\u672a\\u77e5")+" / allowlist "+(evidence.allowlistedConnectorAccessible?"\\u88ab\\u5f53\\u6210\\u6388\\u6743":"\\u4e0d\\u7b49\\u4e8e\\u6388\\u6743"));
       if(Array.isArray(evidence.exposedToolNames)&&evidence.exposedToolNames.length) lines.push("  \\u53ef\\u89c1\\u5de5\\u5177\\uff1a"+evidence.exposedToolNames.join(", "));
+    }
+    if(item.mcpSkillEvidence){
+      const evidence=item.mcpSkillEvidence;
+      const mcpClean=evidence.mcpMissingSharedCount===0&&evidence.mcpExtraLocalCount===0&&evidence.hasNodeRepl===true;
+      const skillClean=evidence.missingSharedSkillCount===0&&evidence.skillSmokeReadable===true;
+      lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5"));
+      lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
+    }
+    if(item.optionalRealProviderEvidence){
+      const evidence=item.optionalRealProviderEvidence;
+      lines.push("  realProvider: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
+    }
+    if(item.antigravityReturnEvidence){
+      const evidence=item.antigravityReturnEvidence;
+      lines.push("  antigravityReturn: history="+(evidence.returnedToAntigravityWithHistory?"true":"false")+" / previousId="+(evidence.previousResponseIdMatched?"true":"false")+" / markers="+(evidence.markerCount??"unknown")+" missing="+(evidence.missingMarkerCount??"unknown"));
+      lines.push("  antigravityRoute: "+(evidence.routeTransport||"unknown")+" / "+(evidence.resolvedModel||"unknown"));
     }
     if(item.pluginCapabilityEvidence){
       const evidence=item.pluginCapabilityEvidence;

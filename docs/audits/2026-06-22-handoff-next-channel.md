@@ -167,6 +167,13 @@ Branch: main
 - `refresh-anticodex-local-features.ps1` refreshed the Anti-Codex local snapshots without granting connector authorization.
 - Fresh evidence: plugin capability verification passed with connector parity `5765/5765`, app-tool parity `58/58`, accessible connectors `0`, unauthorized app tools `0`, callable app tools `0`; MCP/Skill verification passed.
 
+## 2026-06-23 MCP/Skill and Optional Real-Traffic Surface Follow-Up
+
+- MCP/Skill reports now surface concrete parity and smoke evidence in report summaries, diagnostic bundles, and Manager latest-report text instead of only saying the report passed.
+- Optional real-provider reports now surface marker/history/redaction evidence; optional provider-to-Antigravity return reports now surface turn-10 history, previous response ID, marker counts, route transport, and resolved model.
+- Passive release-gate self-test rejects forged optional real-provider and Antigravity-return reports with bad semantic evidence.
+- Fresh evidence: syntax/parser checks passed, dynamic summarizer fixture tests passed, release-gate self-test passed, and strict passive gates remain `shortReady:true` / `releaseReady:true`.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

@@ -956,3 +956,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Observed: plugin capability verification failed because shared connector cache had advanced while the Anti-Codex local connector snapshot was stale.
 - Completed: `refresh-anticodex-local-features.ps1` refreshed skills, guidance, MCP metadata, connector cache, plugin cache, and app-tool cache without granting connector authorization.
 - Verification: plugin capability verification passed after refresh with connector parity `5765/5765`, app-tool parity `58/58`, accessible connectors `0`, unauthorized app tools `0`, and callable app tools `0`; MCP/Skill verification also passed.
+
+## 2026-06-23 MCP/Skill and Optional Real-Traffic Evidence Surface
+- Completed: report summaries, diagnostic bundles, and Manager latest-report payload/text now surface MCP/Skill evidence: MCP shared counts, missing/extra local counts, node_repl presence, MCP smoke/real-call status, shared skill counts, `.agents` skill counts, missing shared skills, and skill smoke readability.
+- Completed: optional real third-party provider summaries now surface first/second marker observation, history continuation, redaction, and turn count.
+- Completed: optional provider-to-Antigravity return summaries now surface real Antigravity turn use, history return, previous response ID match, marker counts, missing marker count, route transport, and resolved model.
+- Completed: passive release-gate self-test now rejects forged optional real-provider and Antigravity-return reports with bad marker/history/route evidence, not only requested-but-skipped reports.
+- Verification: syntax/parser checks passed; release-gate `--self-test` passed with optional real-provider and optional Antigravity-return semantic classes; strict passive gates stayed `shortReady:true`, `releaseReady:true`; focused launcher contracts and dynamic summarizer fixture tests passed.

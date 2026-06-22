@@ -65,6 +65,9 @@ const capabilities = report && report.capabilities ? report.capabilities : null;
 const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : null;
 const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : null;
 const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
+const mcp = report && report.mcp ? report.mcp : null;
+const skills = report && report.skills ? report.skills : null;
+const realAntigravityEvidence = report && report.realAntigravityEvidence ? report.realAntigravityEvidence : null;
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -166,6 +169,39 @@ const summary = {
     appToolGetPostParityClean: appToolGetPostParity
       ? emptyArrayField(appToolGetPostParity, "missingFromGet") === true && emptyArrayField(appToolGetPostParity, "extraFromGet") === true
       : null,
+  } : null,
+  mcpSkillEvidence: (mcp || skills) ? {
+    mcpCount: mcp && has(mcp, "count") ? mcp.count : null,
+    mcpSharedCount: mcp && has(mcp, "sharedCount") ? mcp.sharedCount : null,
+    mcpMissingShared: mcp && has(mcp, "missingShared") ? asStringArray(mcp.missingShared) : [],
+    mcpExtraLocal: mcp && has(mcp, "extraLocal") ? asStringArray(mcp.extraLocal) : [],
+    hasNodeRepl: mcp ? boolField(mcp, "hasNodeRepl") : null,
+    mcpSmokePassed: mcp && mcp.smoke ? boolField(mcp.smoke, "passed") : null,
+    mcpRealCallPassed: mcp && mcp.smoke && mcp.smoke.realCall ? boolField(mcp.smoke.realCall, "passed") : null,
+    skillCount: skills && has(skills, "count") ? skills.count : null,
+    skillSharedCount: skills && has(skills, "sharedCount") ? skills.sharedCount : null,
+    agentsSkillCount: skills && has(skills, "agentsCount") ? skills.agentsCount : null,
+    expectedSharedSkillCount: skills && has(skills, "expectedSharedCount") ? skills.expectedSharedCount : null,
+    missingSharedSkills: skills && has(skills, "missingShared") ? asStringArray(skills.missingShared) : [],
+    extraLocalSkills: skills && has(skills, "extraLocal") ? asStringArray(skills.extraLocal) : [],
+    skillSmokeReadable: skills && skills.smoke ? boolField(skills.smoke, "readable") : null,
+  } : null,
+  optionalRealProviderEvidence: has(report, "firstMarkerObserved") || has(report, "secondMarkerObserved") || has(report, "historyContinuationObserved") ? {
+    firstMarkerObserved: boolField(report, "firstMarkerObserved"),
+    secondMarkerObserved: boolField(report, "secondMarkerObserved"),
+    historyContinuationObserved: boolField(report, "historyContinuationObserved"),
+    secretsRedacted: boolField(report, "secretsRedacted"),
+    turns: has(report, "turns") ? report.turns : null,
+  } : null,
+  antigravityReturnEvidence: realAntigravityEvidence ? {
+    requested: boolField(realAntigravityEvidence, "requested"),
+    realAntigravityTurnUsed: boolField(realAntigravityEvidence, "realAntigravityTurnUsed"),
+    returnedToAntigravityWithHistory: boolField(realAntigravityEvidence, "returnedToAntigravityWithHistory"),
+    previousResponseIdMatched: boolField(realAntigravityEvidence, "previousResponseIdMatched"),
+    markerCount: has(realAntigravityEvidence, "markerCount") ? realAntigravityEvidence.markerCount : null,
+    missingMarkerCount: has(realAntigravityEvidence, "missingMarkerCount") ? realAntigravityEvidence.missingMarkerCount : null,
+    routeTransport: asString(realAntigravityEvidence.routeTransport),
+    resolvedModel: asString(realAntigravityEvidence.resolvedModel),
   } : null,
   providerContinuity: multiTurnHistory ? {
     turns: has(multiTurnHistory, "turns") ? multiTurnHistory.turns : null,

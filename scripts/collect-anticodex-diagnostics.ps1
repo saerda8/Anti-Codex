@@ -204,7 +204,10 @@ function Read-JsonSummary {
             reverseCrossProtocolWithoutHistoryLoss = $json.reverseCrossProtocolWithoutHistoryLoss
             secretsRedacted = $json.secretsRedacted
             localConnectorEvidence = $json.localConnectorEvidence
+            mcpSkillEvidence = $json.mcpSkillEvidence
             pluginCapabilityEvidence = $json.pluginCapabilityEvidence
+            optionalRealProviderEvidence = $json.optionalRealProviderEvidence
+            antigravityReturnEvidence = $json.antigravityReturnEvidence
             providerContinuity = $json.providerContinuity
             integrity = $integrity
             error = if ($integrity.signed -and $integrity.valid -eq $false) { "report hash validation failed: $($integrity.error)" } else { "" }

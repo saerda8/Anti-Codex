@@ -1720,6 +1720,14 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /publicDocumentationOk: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /localConnectorEvidence/);
+  assert.match(server, /mcpSkillEvidence/);
+  assert.match(server, /mcpMissingSharedCount/);
+  assert.match(server, /expectedSharedSkillCount/);
+  assert.match(server, /MCP\/Skill parity/);
+  assert.match(server, /optionalRealProviderEvidence/);
+  assert.match(server, /antigravityReturnEvidence/);
+  assert.match(server, /realProvider: first=/);
+  assert.match(server, /antigravityReturn: history=/);
   assert.match(server, /pluginCapabilityEvidence/);
   assert.match(server, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(server, /unauthorizedAppToolCount/);
@@ -1909,6 +1917,13 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /hiddenConnectorAccessible/);
   assert.match(reportSummarizer, /exposedToolNames/);
   assert.match(reportSummarizer, /pluginCapabilityEvidence/);
+  assert.match(reportSummarizer, /mcpSkillEvidence/);
+  assert.match(reportSummarizer, /mcpRealCallPassed/);
+  assert.match(reportSummarizer, /expectedSharedSkillCount/);
+  assert.match(reportSummarizer, /optionalRealProviderEvidence/);
+  assert.match(reportSummarizer, /antigravityReturnEvidence/);
+  assert.match(reportSummarizer, /historyContinuationObserved/);
+  assert.match(reportSummarizer, /returnedToAntigravityWithHistory/);
   assert.match(reportSummarizer, /unauthorizedAppToolCount/);
   assert.match(reportSummarizer, /unattributedAppToolCount/);
   assert.match(reportSummarizer, /appToolGetCount/);
@@ -1930,6 +1945,119 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.doesNotMatch(collector, /"prompt\|messages\|input_items\|tool output\|Return exactly this"/);
   assert.doesNotMatch(collector, /Get-ChildItem.+codex-home-deepseek-app/s);
   assert.doesNotMatch(collector, /\.env|OPENAI_API_KEY|ANTHROPIC_API_KEY|chatgpt\.com|auth\/login/);
+});
+
+test("report summarizer surfaces MCP and shared skill evidence values", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-mcp-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-mcp-skills.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "mcp-skills",
+      failures: [],
+      baseUrl: "http://127.0.0.1:8484",
+      mcp: {
+        count: 3,
+        sharedCount: 3,
+        missingShared: ["missing-mcp"],
+        extraLocal: ["extra-mcp"],
+        hasNodeRepl: true,
+        smoke: {
+          passed: true,
+          realCall: { passed: true },
+        },
+      },
+      skills: {
+        count: 126,
+        sharedCount: 100,
+        agentsCount: 26,
+        expectedSharedCount: 126,
+        missingShared: ["missing-skill"],
+        extraLocal: ["extra-skill"],
+        smoke: { readable: true },
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.mcpSkillEvidence.mcpCount, 3);
+    assert.equal(summary.mcpSkillEvidence.mcpSharedCount, 3);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpMissingShared, ["missing-mcp"]);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpExtraLocal, ["extra-mcp"]);
+    assert.equal(summary.mcpSkillEvidence.hasNodeRepl, true);
+    assert.equal(summary.mcpSkillEvidence.mcpSmokePassed, true);
+    assert.equal(summary.mcpSkillEvidence.mcpRealCallPassed, true);
+    assert.equal(summary.mcpSkillEvidence.skillCount, 126);
+    assert.equal(summary.mcpSkillEvidence.skillSharedCount, 100);
+    assert.equal(summary.mcpSkillEvidence.agentsSkillCount, 26);
+    assert.equal(summary.mcpSkillEvidence.expectedSharedSkillCount, 126);
+    assert.deepEqual(summary.mcpSkillEvidence.missingSharedSkills, ["missing-skill"]);
+    assert.deepEqual(summary.mcpSkillEvidence.extraLocalSkills, ["extra-skill"]);
+    assert.equal(summary.mcpSkillEvidence.skillSmokeReadable, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces optional real-traffic continuity evidence values", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-optional-real-summarizer-"));
+  const providerReport = resolve(tempRoot, "latest-real-third-party-provider.json");
+  const antigravityReport = resolve(tempRoot, "latest-provider-antigravity-return.json");
+  try {
+    writeFileSync(providerReport, JSON.stringify({
+      ok: true,
+      reportName: "real-third-party-provider",
+      skipped: false,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      usedRealTraffic: true,
+      firstMarkerObserved: true,
+      secondMarkerObserved: false,
+      historyContinuationObserved: true,
+      secretsRedacted: true,
+      turns: 2,
+    }), "utf8");
+    let result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), providerReport], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    let summary = JSON.parse(result.stdout);
+    assert.equal(summary.optionalRealProviderEvidence.firstMarkerObserved, true);
+    assert.equal(summary.optionalRealProviderEvidence.secondMarkerObserved, false);
+    assert.equal(summary.optionalRealProviderEvidence.historyContinuationObserved, true);
+    assert.equal(summary.optionalRealProviderEvidence.secretsRedacted, true);
+    assert.equal(summary.optionalRealProviderEvidence.turns, 2);
+
+    writeFileSync(antigravityReport, JSON.stringify({
+      ok: true,
+      reportName: "provider-antigravity-return",
+      skipped: false,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      usedRealTraffic: true,
+      realAntigravityEvidence: {
+        requested: true,
+        realAntigravityTurnUsed: true,
+        returnedToAntigravityWithHistory: false,
+        previousResponseIdMatched: true,
+        markerCount: 6,
+        missingMarkerCount: 1,
+        routeTransport: "antigravity-native",
+        resolvedModel: "gemini-pro-agent",
+      },
+    }), "utf8");
+    result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), antigravityReport], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    summary = JSON.parse(result.stdout);
+    assert.equal(summary.antigravityReturnEvidence.requested, true);
+    assert.equal(summary.antigravityReturnEvidence.realAntigravityTurnUsed, true);
+    assert.equal(summary.antigravityReturnEvidence.returnedToAntigravityWithHistory, false);
+    assert.equal(summary.antigravityReturnEvidence.previousResponseIdMatched, true);
+    assert.equal(summary.antigravityReturnEvidence.markerCount, 6);
+    assert.equal(summary.antigravityReturnEvidence.missingMarkerCount, 1);
+    assert.equal(summary.antigravityReturnEvidence.routeTransport, "antigravity-native");
+    assert.equal(summary.antigravityReturnEvidence.resolvedModel, "gemini-pro-agent");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers", () => {
@@ -3954,7 +4082,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /local connector summary/);
   assert.match(diagnostics, /plugin capability summary/);
   assert.match(diagnostics, /localConnectorEvidence/);
+  assert.match(diagnostics, /mcpSkillEvidence/);
   assert.match(diagnostics, /pluginCapabilityEvidence/);
+  assert.match(diagnostics, /optionalRealProviderEvidence/);
+  assert.match(diagnostics, /antigravityReturnEvidence/);
   assert.match(diagnostics, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(diagnostics, /unauthorizedAppToolCount/);
   assert.match(diagnostics, /lastUiOnly/);
@@ -4049,6 +4180,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /expected_no_real_traffic/);
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
   assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);
+  assert.match(releaseGates, /optional_real_provider_history_missing/);
+  assert.match(releaseGates, /optional_antigravity_return_missing_markers/);
+  assert.match(releaseGates, /optional_antigravity_return_route_transport/);
   assert.match(releaseGates, /requireThirdPartyProviderSemantics/);
   assert.match(releaseGates, /third_party_provider_turn_count/);
   assert.match(releaseGates, /third_party_provider_openai_tool_pair_lost/);
@@ -4073,6 +4207,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid real provider optional report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid Antigravity return optional report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid third-party provider report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid missing-history report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid local-connector report satisfied the gate/);

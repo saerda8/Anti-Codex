@@ -149,6 +149,24 @@ function summarizeGate(definition) {
         if (report.usedRealTraffic !== true) semanticFailures.push("optional_real_traffic_not_used");
         if (report.behaviorCovered !== true) semanticFailures.push("optional_real_traffic_behavior_not_covered");
         if (report.coverageKind !== "real-traffic") semanticFailures.push("optional_real_traffic_coverage_kind");
+        if (definition.id === "realThirdPartyProviderOptional") {
+          if (report.firstMarkerObserved !== true) semanticFailures.push("optional_real_provider_first_marker_missing");
+          if (report.secondMarkerObserved !== true) semanticFailures.push("optional_real_provider_second_marker_missing");
+          if (report.historyContinuationObserved !== true) semanticFailures.push("optional_real_provider_history_missing");
+          if (report.secretsRedacted !== true) semanticFailures.push("optional_real_provider_secrets_not_redacted");
+          if (Number(report.turns || 0) < 2) semanticFailures.push("optional_real_provider_turn_count");
+        }
+        if (definition.id === "providerAntigravityReturnOptional") {
+          const evidence = report.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : {};
+          if (evidence.requested !== true) semanticFailures.push("optional_antigravity_return_not_requested");
+          if (evidence.realAntigravityTurnUsed !== true) semanticFailures.push("optional_antigravity_return_not_used");
+          if (evidence.returnedToAntigravityWithHistory !== true) semanticFailures.push("optional_antigravity_return_history_missing");
+          if (evidence.previousResponseIdMatched !== true) semanticFailures.push("optional_antigravity_return_previous_response_id_mismatch");
+          if (Number(evidence.markerCount || 0) < 6) semanticFailures.push("optional_antigravity_return_marker_count");
+          if (Number(evidence.missingMarkerCount || 0) !== 0) semanticFailures.push("optional_antigravity_return_missing_markers");
+          if (!evidence.routeTransport || evidence.routeTransport === "upstream-provider") semanticFailures.push("optional_antigravity_return_route_transport");
+          if (!evidence.resolvedModel) semanticFailures.push("optional_antigravity_return_resolved_model");
+        }
       }
     }
     if (definition.group === "no-traffic") {
@@ -403,6 +421,54 @@ if (args.has("--self-test")) {
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",
+    ]);
+    writeFakeLatestReport("latest-real-third-party-provider.json", {
+      ok: true,
+      reportName: "real-third-party-provider",
+      skipped: false,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      usedRealTraffic: true,
+      firstMarkerObserved: false,
+      secondMarkerObserved: false,
+      historyContinuationObserved: false,
+      secretsRedacted: false,
+      turns: 1,
+    });
+    semanticFailures.optionalRealProvider = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid real provider optional report satisfied the gate", [
+      "optional_real_provider_first_marker_missing",
+      "optional_real_provider_second_marker_missing",
+      "optional_real_provider_history_missing",
+      "optional_real_provider_secrets_not_redacted",
+      "optional_real_provider_turn_count",
+    ]);
+    writeFakeLatestReport("latest-provider-antigravity-return.json", {
+      ok: true,
+      reportName: "provider-antigravity-return",
+      skipped: false,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      usedRealTraffic: true,
+      realAntigravityEvidence: {
+        requested: false,
+        realAntigravityTurnUsed: false,
+        returnedToAntigravityWithHistory: false,
+        previousResponseIdMatched: false,
+        markerCount: 2,
+        missingMarkerCount: 1,
+        routeTransport: "upstream-provider",
+        resolvedModel: "",
+      },
+    });
+    semanticFailures.optionalAntigravityReturn = assertSemanticFailures("providerAntigravityReturnOptional", "self-test failed: semantically invalid Antigravity return optional report satisfied the gate", [
+      "optional_antigravity_return_not_requested",
+      "optional_antigravity_return_not_used",
+      "optional_antigravity_return_history_missing",
+      "optional_antigravity_return_previous_response_id_mismatch",
+      "optional_antigravity_return_marker_count",
+      "optional_antigravity_return_missing_markers",
+      "optional_antigravity_return_route_transport",
+      "optional_antigravity_return_resolved_model",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_secrets_not_redacted",
