@@ -732,3 +732,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostic bundles include per-report integrity summaries and include hash mismatch reports in `damagedReports`; old unsigned reports remain legacy/unsigned instead of being misclassified as damaged.
 - Completed: installed overall requires fresh reports to have valid SHA256 sidecars, while old unsigned reports are reported as legacy issues. Any signed hash mismatch fails regardless of age.
 - Verification: launcher contracts passed 89/89; source preflight fast passed; PowerShell helper sidecar smoke passed; Node local connector and third-party provider sidecar smokes passed with explicit report roots; runtime sync restarted Anti-Codex; installed no-traffic fast overall passed after cleanup.
+
+## 2026-06-22 Remaining Manager Real Button Coverage
+- Completed: standalone real embedded Manager `mcpSkills` button verification passed with `lastUiOnly:false`, MCP 3, Skill 100, real `node_repl` smoke passed, and Skill file readable.
+- Completed: standalone real embedded Manager `pluginCapabilities` button verification passed with `lastUiOnly:false`, 183 installed plugins, 1494 connectors, cache readable, and callable app tools correctly reported as unavailable because no connector is authorized.
+- Verification: both real button checks ran serially against port 58318 after report hash hardening and runtime sync; no stale `ui-only` summary was accepted.
