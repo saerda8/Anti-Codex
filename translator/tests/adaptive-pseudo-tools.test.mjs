@@ -1871,6 +1871,23 @@ test("restored history task ledger preserves explicit task target and pending ac
   assert.match(joined, /target-hint: new-chat-3/);
 });
 
+test("restored history target hints keep deepcodex paths but drop bare legacy brand tokens", () => {
+  const input = [
+    { type: "context_compaction", summary: "continue existing task" },
+    { type: "message", role: "user", content: [{ type: "text", text: "继续 deepcodex-old，真正路径是 deepcodex\\scripts\\start-deepcodex.ps1，还要看 qwen-cli" }] },
+  ];
+
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input,
+  }, { allowTools: false, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  assert.match(joined, /target-hint: deepcodex\\\\scripts\\\\start-deepcodex\.ps1/);
+  assert.match(joined, /target-hint: qwen-cli/);
+  assert.doesNotMatch(joined, /target-hint: deepcodex-old/);
+});
+
 test("restored history keeps successful non-shell tool calls as durable facts", () => {
   const input = [
     { type: "context_compaction", summary: "压缩摘要：继续处理浏览器标签页。" },
@@ -2991,10 +3008,9 @@ test("no user-visible DeepCodex or Deep Codex brand in source string literals", 
   //   A) .replaceAll("DeepCodex", ...) — safety net inside brandTranslatorText
   //   B) DEEPCODEX_* — environment variable / config identifier
   //   C) "deepcodex.reasoning.hex.v1:" — technical prefix for encrypted blobs
-  //   D) "deepcodex[-_\\w]*" — regex in target-hint extraction (line ~3816)
-  //   E) /(?:Anti-Codex|DeepCodex).../ — backward-compat compaction check regex
-  //   F) __DEEPCODEX_TEST_* — test-only global hook
-  //   G) "DeepCodex" as a single word inside a regex character set or literal
+  //   D) /(?:Anti-Codex|DeepCodex).../ — backward-compat compaction check regex
+  //   E) __DEEPCODEX_TEST_* — test-only global hook
+  //   F) "DeepCodex" as a single word inside a regex character set or literal
   //      in backward-compat context (task ledger / durable environment facts)
 
   for (let i = 0; i < lines.length; i++) {
@@ -3007,9 +3023,8 @@ test("no user-visible DeepCodex or Deep Codex brand in source string literals", 
     if (line.includes('replaceAll("DeepCodex"')) continue;        // A
     if (line.includes("DEEPCODEX_")) continue;                     // B
     if (line.includes("deepcodex.reasoning.hex.v1:")) continue;    // C
-    if (line.includes("deepcodex[-_")) continue;                   // D
-    if (line.includes("__DEEPCODEX_TEST_")) continue;              // F
-    if (/(?:Anti-Codex\||DeepCodex).*?(?:task ledger|durable environment facts)/.test(line)) continue; // E
+    if (line.includes("__DEEPCODEX_TEST_")) continue;              // E
+    if (/(?:Anti-Codex\||DeepCodex).*?(?:task ledger|durable environment facts)/.test(line)) continue; // D
 
     // Any remaining hit is suspicious — likely old brand in user-visible text
     assert.fail(

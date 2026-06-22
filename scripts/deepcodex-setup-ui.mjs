@@ -248,7 +248,7 @@ function page() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DeepCodex Setup</title>
+  <title>Anti-Codex Setup</title>
   <style>
     :root {
       color-scheme: light;
@@ -339,7 +339,7 @@ function page() {
     <header>
       <div class="logo">${iconUrl ? `<img src="${iconUrl}" alt="">` : "D"}</div>
       <div>
-        <h1>DeepCodex</h1>
+        <h1>Anti-Codex</h1>
       <p class="sub" id="subtitle"></p>
       </div>
     </header>
@@ -365,7 +365,7 @@ function page() {
       visionDone: "读图能力测试完成",
       visionUnsupported: "当前上游不支持读图，已按文本模式接入",
       failed: "连接失败，请检查 API key。",
-      success: "连接成功，正在启动 DeepCodex..."
+      success: "连接成功，正在启动 Anti-Codex..."
     } : {
       subtitle: "Enter your DeepSeek API key once. It will be saved after the connection test passes.",
       keyLabel: "DeepSeek API key",
@@ -373,9 +373,9 @@ function page() {
       testingKey: "Testing DeepSeek API key...",
       testingVision: "Testing image input support...",
       visionDone: "Image input test completed",
-      visionUnsupported: "This upstream does not support image input. DeepCodex will use text mode.",
+      visionUnsupported: "This upstream does not support image input. Anti-Codex will use text mode.",
       failed: "Connection failed. Please check your API key.",
-      success: "Connected. Starting DeepCodex..."
+      success: "Connected. Starting Anti-Codex..."
     };
     document.documentElement.lang = isZh ? "zh-CN" : "en";
     document.getElementById("subtitle").textContent = text.subtitle;

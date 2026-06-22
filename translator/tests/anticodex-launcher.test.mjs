@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import os from "node:os";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..", "..");
 
@@ -25,6 +25,25 @@ function extractJsSetBlock(text, marker) {
   assert.notEqual(open, -1, `missing set open: ${marker}`);
   assert.notEqual(close, -1, `missing set close: ${marker}`);
   return [...text.slice(open, close).matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+}
+
+function waitForServerUrl(child) {
+  return new Promise((resolveUrl, reject) => {
+    let output = "";
+    const timer = setTimeout(() => reject(new Error("fake verifier server did not start")), 5000);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString("utf8");
+      const match = output.match(/http:\/\/127\.0\.0\.1:\d+/);
+      if (match) {
+        clearTimeout(timer);
+        resolveUrl(match[0]);
+      }
+    });
+  });
 }
 
 test("Anti-Codex launcher selects isolated Antigravity mode", () => {
@@ -2599,6 +2618,18 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /realList = @\(\$mcpListSmokeChecks\)/);
   assert.match(mcpSkills, /MCP node_repl real stdio tool call failed/);
   assert.match(mcpSkills, /real stdio tools\/list failed/);
+  assert.match(mcpSkills, /\$sharedConfigPath = Join-Path \$SharedCodexHome "config\.toml"/);
+  assert.match(mcpSkills, /function Get-McpServerNamesFromToml/);
+  assert.match(mcpSkills, /\$sharedMcpNames = @\(Get-McpServerNamesFromToml \$sharedConfigText\)/);
+  assert.match(mcpSkills, /\$missingSharedMcpNames = @\(\$sharedMcpNames \| Where-Object \{ \$mcpNames -notcontains \$_ \}\)/);
+  assert.match(mcpSkills, /shared MCP server '\$mcpName' exists but Anti-Codex local config is missing it/);
+  assert.match(mcpSkills, /\$sharedSkillNames = @\(Get-ChildItem -LiteralPath \$sharedSkillsPath -Directory -Force/);
+  assert.match(mcpSkills, /\$missingSharedSkillNames = @\(\$sharedSkillNames \| Where-Object \{ \$localSkillNames -notcontains \$_ \}\)/);
+  assert.match(mcpSkills, /shared skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
+  assert.match(mcpSkills, /sharedCount = \$sharedMcpNames\.Count/);
+  assert.match(mcpSkills, /missingShared = \$missingSharedMcpNames/);
+  assert.match(mcpSkills, /sharedCount = \$sharedSkillNames\.Count/);
+  assert.match(mcpSkills, /missingShared = \$missingSharedSkillNames/);
   assert.match(mcpSkills, /\$healthMode = "unknown"/);
   assert.match(mcpSkills, /\$healthMode -eq "third-party"/);
   assert.match(mcpSkills, /third-party upstream missing protocol/);
@@ -2653,6 +2684,113 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
     "retry backoff must be capped at 1000ms to avoid masking persistent failures");
   assert.match(mcpSkills, /\[\s*int\s*\]\$TimeoutSec\s*=\s*8/,
     "each individual request must have a bounded timeout to limit total retry duration");
+});
+
+test("installed MCP/skills verifier fails on missing shared entries without counting comments or subtables", async () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-mcp-skills-verifier-"));
+  const localHome = resolve(tempRoot, "local");
+  const sharedHome = resolve(tempRoot, "shared");
+  const installRoot = resolve(tempRoot, "install");
+  const stateRoot = resolve(tempRoot, "state");
+  const fakeMcpScript = resolve(localHome, "fake-node-repl.mjs").replace(/\\/g, "/");
+  const fakeServerScript = resolve(tempRoot, "fake-verifier-server.mjs");
+  const skillNames = ["headroom", "context-save", "context-restore", "keep-codex-fast"];
+  let fakeServer;
+
+  try {
+    for (const base of [localHome, sharedHome]) {
+      for (const skillName of skillNames) {
+        const skillDir = resolve(base, "skills", skillName);
+        mkdirSync(skillDir, { recursive: true });
+        writeFileSync(resolve(skillDir, "SKILL.md"), `# ${skillName}\n`);
+      }
+    }
+    mkdirSync(resolve(sharedHome, "skills", "missing-skill"), { recursive: true });
+    writeFileSync(resolve(sharedHome, "skills", "missing-skill", "SKILL.md"), "# missing\n");
+    mkdirSync(localHome, { recursive: true });
+    writeFileSync(resolve(localHome, "fake-node-repl.mjs"), "process.stdin.resume();\n");
+    writeFileSync(resolve(localHome, "config.toml"), `
+[mcp_servers]
+# [mcp_servers.local-commented]
+[mcp_servers.node_repl]
+command = "node"
+args = ["${fakeMcpScript}"]
+[mcp_servers.local-only.tools.nope]
+description = "ignored"
+`);
+    writeFileSync(resolve(sharedHome, "config.toml"), `
+[mcp_servers]
+# [mcp_servers.commented-out]
+[mcp_servers.node_repl]
+command = "node"
+args = ["${fakeMcpScript}"]
+[mcp_servers.missing-worker]
+command = "node"
+args = ["${fakeMcpScript}"]
+[mcp_servers.ignored.env]
+TOKEN = "ignored"
+[mcp_servers.ignored.tools.call]
+description = "ignored"
+`);
+    writeFileSync(fakeServerScript, `
+import http from "node:http";
+const server = http.createServer((req, res) => {
+  req.resume();
+  res.writeHead(200, { "content-type": "application/json" });
+  if (req.url === "/health") {
+    res.end(JSON.stringify({ ok: true, upstream: "antigravity-desktop", accountReady: true, accountState: "ready", modelCount: 1 }));
+  } else if (req.url === "/backend-api/plugins/list") {
+    res.end(JSON.stringify({ plugins: [] }));
+  } else if (req.url === "/backend-api/aip/connectors") {
+    res.end(JSON.stringify({ connectors: [] }));
+  } else if (req.url === "/backend-api/wham/apps") {
+    res.end(JSON.stringify({ apps: [] }));
+  } else {
+    res.end(JSON.stringify([]));
+  }
+});
+server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.address().port));
+`);
+
+    fakeServer = spawn(process.execPath, [fakeServerScript], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const baseUrl = await waitForServerUrl(fakeServer);
+    const powershell = process.platform === "win32" ? "powershell.exe" : "pwsh";
+    const result = spawnSync(powershell, [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-mcp-skills.ps1"),
+      "-BaseUrl",
+      baseUrl,
+      "-InstallRoot",
+      installRoot,
+      "-StateRoot",
+      stateRoot,
+      "-CodexHome",
+      localHome,
+      "-SharedCodexHome",
+      sharedHome,
+      "-TimeoutSec",
+      "3",
+    ], { encoding: "utf8", windowsHide: true });
+    const output = result.stdout.trim().split(/\r?\n/).at(-1);
+    const report = JSON.parse(output);
+
+    assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
+    assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
+    assert.deepEqual(report.skills.missingShared, ["missing-skill"]);
+    assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'missing-worker'")));
+    assert.ok(report.failures.some((failure) => failure.includes("shared skill 'missing-skill'")));
+    assert.ok(!report.mcp.sharedNames.includes("commented-out"));
+    assert.ok(!report.mcp.sharedNames.includes("ignored.env"));
+    assert.ok(!report.mcp.sharedNames.includes("ignored.tools.call"));
+    assert.ok(!report.mcp.names.includes("local-commented"));
+    assert.ok(!report.mcp.names.includes("local-only.tools.nope"));
+  } finally {
+    fakeServer?.kill();
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex ships a read-only independence verifier", () => {
@@ -3821,4 +3959,58 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /third-party provider report leaked an API key/);
   assert.match(verifier, /responseHistoryBeforeAuthFailure/);
   assert.match(verifier, /assert\.equal\(readFileSync\(responseHistoryPath, "utf8"\), responseHistoryBeforeAuthFailure\)/);
+});
+
+test("user-visible legacy DeepCodex setup and launch wording is branded as Anti-Codex", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const setupUi = readFileSync(resolve(root, "scripts", "deepcodex-setup-ui.mjs"), "utf8");
+  const swiftSetup = readFileSync(resolve(root, "scripts", "DeepCodexSetup.swift"), "utf8");
+
+  assert.match(launcher, /Anti-Codex is already starting or running/);
+  assert.match(launcher, /MessageBox\]::Show\(\$Message, "Anti-Codex"/);
+  assert.match(launcher, /before launching Anti-Codex/);
+  assert.match(launcher, /Anti-Codex setup page is missing/);
+  assert.match(launcher, /Launching Anti-Codex/);
+  assert.match(launcher, /Anti-Codex launched successfully/);
+  assert.match(launcher, /Anti-Codex main window closed/);
+  assert.match(launcher, /Anti-Codex main window did not appear/);
+  assert.match(launcher, /Anti-Codex started but no window appeared/);
+  assert.match(launcher, /\*Anti-Codex Setup\*/);
+  assert.doesNotMatch(launcher, /DeepCodex is already starting or running/);
+  assert.doesNotMatch(launcher, /MessageBox\]::Show\(\$Message, "deepcodex"/);
+  assert.doesNotMatch(launcher, /before launching deepcodex/);
+  assert.doesNotMatch(launcher, /DeepCodex setup page is missing/);
+  assert.doesNotMatch(launcher, /Launching deepcodex/);
+  assert.doesNotMatch(launcher, /DeepCodex launched successfully/);
+  assert.doesNotMatch(launcher, /DeepCodex main window closed/);
+  assert.doesNotMatch(launcher, /DeepCodex main window did not appear/);
+  assert.doesNotMatch(launcher, /DeepCodex started but no window appeared/);
+
+  assert.match(setupUi, /<title>Anti-Codex Setup<\/title>/);
+  assert.match(setupUi, /<h1>Anti-Codex<\/h1>/);
+  assert.match(setupUi, /Starting Anti-Codex/);
+  assert.match(setupUi, /Anti-Codex will use text mode/);
+  assert.doesNotMatch(setupUi, /<title>DeepCodex Setup<\/title>|<h1>DeepCodex<\/h1>|Starting DeepCodex|DeepCodex will use text mode/);
+
+  assert.match(swiftSetup, /Quit Anti-Codex/);
+  assert.match(swiftSetup, /window\.title = "Anti-Codex"/);
+  assert.match(swiftSetup, /labelWithString: "Anti-Codex"/);
+  assert.match(swiftSetup, /Starting Anti-Codex/);
+  assert.match(swiftSetup, /Anti-Codex will use text mode/);
+  assert.doesNotMatch(swiftSetup, /Quit DeepCodex|window\.title = "DeepCodex"|labelWithString: "DeepCodex"|Starting DeepCodex|DeepCodex will use text mode/);
+});
+
+test("Windows documentation describes Anti-Codex install paths and treats legacy names as compatibility only", () => {
+  const docs = readFileSync(resolve(root, "docs", "WINDOWS.md"), "utf8");
+
+  assert.match(docs, /^# Anti-Codex Windows/m);
+  assert.match(docs, /%LOCALAPPDATA%\\Anti-Codex\\runtime/);
+  assert.match(docs, /%APPDATA%\\anticodex/);
+  assert.match(docs, /Anti-Codex\.lnk/);
+  assert.match(docs, /legacy compatibility/);
+  assert.match(docs, /start-deepcodex\.ps1/);
+  assert.doesNotMatch(docs, /^# DeepCodex Windows/m);
+  assert.doesNotMatch(docs, /%LOCALAPPDATA%\\deepcodex\\runtime/);
+  assert.doesNotMatch(docs, /DeepCodex\.lnk/);
+  assert.doesNotMatch(docs, /DeepCodex for Windows is/);
 });

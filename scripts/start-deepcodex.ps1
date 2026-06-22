@@ -176,7 +176,7 @@ if (-not $TranslatorOnly) {
         $mutexName = "Local\DeepCodexStart_" + ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ROOT)) -replace "[^A-Za-z0-9]", "")
         $DEEPCODEX_START_MUTEX = New-Object System.Threading.Mutex($true, $mutexName, [ref]$DEEPCODEX_START_MUTEX_HELD)
         if (-not $DEEPCODEX_START_MUTEX_HELD) {
-            Write-Host "DeepCodex is already starting or running."
+            Write-Host "Anti-Codex is already starting or running."
             exit 0
         }
     } catch {}
@@ -186,7 +186,7 @@ function Show-Alert {
     param([string]$Message)
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        [System.Windows.Forms.MessageBox]::Show($Message, "deepcodex", "OK", "Warning") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($Message, "Anti-Codex", "OK", "Warning") | Out-Null
     } catch {
         Write-Warning $Message
     }
@@ -545,7 +545,7 @@ public class DeepCodexWin {
             if ($edgePids -contains [int]$windowPid -and [DeepCodexWin]::IsWindowVisible($h)) {
                 $sb = New-Object System.Text.StringBuilder 256
                 [DeepCodexWin]::GetWindowText($h, $sb, 256) | Out-Null
-                if ($sb.ToString() -like "*DeepCodex Setup*") {
+                if ($sb.ToString() -like "*Anti-Codex Setup*") {
                     [DeepCodexWin]::SetWindowPos($h, [IntPtr]::Zero, 180, 120, 600, 380, 0x0040) | Out-Null
                 }
             }
@@ -1478,7 +1478,7 @@ function Set-DeepCodexRouteIsolation {
 $launchStageTimer = New-LaunchStageTimer
 $NODE_BIN = Find-NodeBin
 if (-not $NODE_BIN) {
-    Show-Alert "Node.js was not found. Install Node.js or set NODE_BIN before launching deepcodex."
+    Show-Alert "Node.js was not found. Install Node.js or set NODE_BIN before launching Anti-Codex."
     exit 1
 }
 $TRANSLATOR_NODE_BIN = Ensure-TranslatorNodeBin $NODE_BIN
@@ -1586,7 +1586,7 @@ $UPSTREAM_API_KEY = if ($USES_ANTIGRAVITY_UPSTREAM) { "" } elseif ($env:UPSTREAM
 
 if (-not $USES_ANTIGRAVITY_UPSTREAM -and -not $UPSTREAM_API_KEY) {
     if (-not (Test-Path -LiteralPath $SETUP_UI_SCRIPT)) {
-        Show-Alert "DeepCodex setup page is missing: $SETUP_UI_SCRIPT"
+        Show-Alert "Anti-Codex setup page is missing: $SETUP_UI_SCRIPT"
         exit 1
     }
 
@@ -1860,7 +1860,7 @@ try {
         $script:managerInjectAttempts = 0
         $script:pluginUnlockInjectAttempts = 0
 
-        Write-Host "Launching deepcodex."
+        Write-Host "Launching Anti-Codex."
         Write-Host "  Codex:     $CODEX_BIN"
         Write-Host "  Translator:$TRANSLATOR_URL"
         Write-Host "  CODEX_HOME:$CODEX_HOME_DIR"
@@ -1907,7 +1907,7 @@ try {
                 Write-Host "================================================"
             } else {
                 Write-Host "================================================"
-                Write-Host "  DeepCodex launched successfully!"
+                Write-Host "  Anti-Codex launched successfully!"
                 Write-Host "================================================"
             }
             Write-Host "  Background watcher PID: $PID"
@@ -1956,7 +1956,7 @@ try {
                     if ($codexProc.HasExited -and $codexProc.ExitCode -ne 0) {
                         Write-LifecycleLog "Window disappeared before a non-zero process exit (ExitCode: $($codexProc.ExitCode))."
                     } else {
-                        Write-Host "DeepCodex main window closed; stopping background processes."
+                        Write-Host "Anti-Codex main window closed; stopping background processes."
                         Write-LifecycleLog "Normal window close detected."
                         if (-not $codexProc.HasExited) {
                             try { Stop-Process -Id $codexProc.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -1968,7 +1968,7 @@ try {
                 if (-not $IS_ANTIGRAVITY_MODE -and -not $clearedKeyAfterLogout -and -not (Test-PseudoLoginAuth)) {
                     Clear-DeepSeekKey
                     $clearedKeyAfterLogout = $true
-                    Write-Host "DeepCodex logout detected; DeepSeek API key cleared."
+                    Write-Host "Anti-Codex logout detected; DeepSeek API key cleared."
                 }
                 if ([DateTime]::UtcNow -ge $translatorWatchNext) {
                     $translatorWatchNext = [DateTime]::UtcNow.AddSeconds(5)
@@ -2027,7 +2027,7 @@ try {
                 }
             }
         } else {
-            Write-Host "DeepCodex main window did not appear."
+            Write-Host "Anti-Codex main window did not appear."
         }
 
         if ($normalClose) {
@@ -2046,7 +2046,7 @@ try {
             if ($mainWindowHandle -eq [IntPtr]::Zero) {
                 if ($TRANSLATOR_PROC -and -not $TRANSLATOR_PROC.HasExited) { try { $TRANSLATOR_PROC.Kill() } catch {} }
                 Stop-DeepCodexOwnedProcesses -KeepProcessIds @($PID)
-                Show-Alert "DeepCodex started but no window appeared. Please launch DeepCodex from the desktop shortcut or Start Menu, not from a remote SSH session."
+                Show-Alert "Anti-Codex started but no window appeared. Please launch Anti-Codex from the desktop shortcut or Start Menu, not from a remote SSH session."
             }
             exit 1
         }

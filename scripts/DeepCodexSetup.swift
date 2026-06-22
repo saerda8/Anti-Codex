@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(NSMenuItem(title: tr("退出 DeepCodex", "Quit DeepCodex"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appMenu.addItem(NSMenuItem(title: tr("退出 Anti-Codex", "Quit Anti-Codex"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appItem.submenu = appMenu
 
         let editItem = NSMenuItem()
@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 250), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "DeepCodex"
+        window.title = "Anti-Codex"
         window.center()
         window.isReleasedWhenClosed = false
         window.backgroundColor = NSColor(calibratedRed: 0.96, green: 0.97, blue: 0.98, alpha: 1)
@@ -73,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         icon.wantsLayer = true
         icon.layer?.cornerRadius = 12
 
-        let title = NSTextField(labelWithString: "DeepCodex")
+        let title = NSTextField(labelWithString: "Anti-Codex")
         title.font = .systemFont(ofSize: 26, weight: .bold)
 
         let subtitle = NSTextField(labelWithString: tr("首次需输入 DeepSeek API key，连通后自动保存", "Enter your DeepSeek API key once. It will be saved after the connection test passes."))
@@ -228,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if type == "unsupported" {
                 self.lastFailureDetail = detail
-                self.summary.stringValue = tr("当前上游不支持读图，已按文本模式接入", "This upstream does not support image input. DeepCodex will use text mode.")
+                self.summary.stringValue = tr("当前上游不支持读图，已按文本模式接入", "This upstream does not support image input. Anti-Codex will use text mode.")
             }
             if type == "fail" {
                 self.lastFailureDetail = detail
@@ -236,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if type == "done" {
                 let ok = json["ok"] as? Bool ?? false
-                self.summary.stringValue = ok ? tr("连接成功，正在启动 DeepCodex...", "Connected. Starting DeepCodex...") : (self.lastFailureDetail.isEmpty ? tr("连接失败，请检查 API key。", "Connection failed. Please check your API key.") : self.lastFailureDetail)
+                self.summary.stringValue = ok ? tr("连接成功，正在启动 Anti-Codex...", "Connected. Starting Anti-Codex...") : (self.lastFailureDetail.isEmpty ? tr("连接失败，请检查 API key。", "Connection failed. Please check your API key.") : self.lastFailureDetail)
                 if ok {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         self.finishWithKey()

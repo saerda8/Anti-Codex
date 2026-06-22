@@ -94,6 +94,7 @@ function Select-LightFileSystemItem {
 }
 
 $configPath = Join-Path $CodexHome "config.toml"
+$sharedConfigPath = Join-Path $SharedCodexHome "config.toml"
 $skillsPath = Join-Path $CodexHome "skills"
 $sharedSkillsPath = Join-Path $SharedCodexHome "skills"
 $guidanceNames = @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md")
@@ -118,6 +119,12 @@ $connectors = $null
 $apps = $null
 $expectedInheritedSkillNames = @("headroom", "context-save", "context-restore", "keep-codex-fast")
 $inheritedSkillChecks = @()
+$sharedSkillNames = @()
+$missingSharedSkillNames = @()
+$extraLocalSkillNames = @()
+$sharedMcpNames = @()
+$missingSharedMcpNames = @()
+$extraLocalMcpNames = @()
 $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
 $mcpRealSmoke = [pscustomobject]@{
@@ -145,6 +152,15 @@ function Resolve-McpCommand {
         return (Test-Path -LiteralPath $Command -PathType Leaf)
     }
     return $null -ne (Get-Command $Command -ErrorAction SilentlyContinue)
+}
+
+function Get-McpServerNamesFromToml {
+    param([string]$Text)
+    if (-not $Text) { return @() }
+    return @([regex]::Matches($Text, "(?m)^\s*\[mcp_servers\.([^\]]+)\]") |
+        ForEach-Object { $_.Groups[1].Value } |
+        Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
+        Sort-Object -Unique)
 }
 
 function Resolve-NodeRuntime {
@@ -273,6 +289,13 @@ if (-not (Test-Path -LiteralPath $skillsPath -PathType Container)) {
 }
 
 if (Test-Path -LiteralPath $sharedSkillsPath -PathType Container) {
+    $sharedSkillNames = @(Get-ChildItem -LiteralPath $sharedSkillsPath -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    $localSkillNames = @($skillEntries | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    $missingSharedSkillNames = @($sharedSkillNames | Where-Object { $localSkillNames -notcontains $_ })
+    $extraLocalSkillNames = @($localSkillNames | Where-Object { $sharedSkillNames -notcontains $_ })
+    foreach ($skillName in $missingSharedSkillNames) {
+        Add-Failure "shared skill '$skillName' exists but Anti-Codex local skills copy is missing it"
+    }
     foreach ($skillName in $expectedInheritedSkillNames) {
         $sharedSkill = Join-Path $sharedSkillsPath $skillName
         $localSkill = Join-Path $skillsPath $skillName
@@ -282,9 +305,6 @@ if (Test-Path -LiteralPath $sharedSkillsPath -PathType Container) {
             name = $skillName
             sharedExists = $sharedExists
             localExists = $localExists
-        }
-        if ($sharedExists -and -not $localExists) {
-            Add-Failure "shared skill '$skillName' exists but Anti-Codex local skills copy is missing it"
         }
     }
 }
@@ -368,9 +388,21 @@ if (-not (Test-Path -LiteralPath $appToolsCachePath -PathType Container)) {
 
 $mcpNames = @()
 if ($configText) {
-    $mcpNames = @([regex]::Matches($configText, "\[mcp_servers\.([^\]]+)\]") |
-        ForEach-Object { $_.Groups[1].Value } |
-        Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." })
+    $mcpNames = @(Get-McpServerNamesFromToml $configText)
+    $sharedConfigText = ""
+    if (Test-Path -LiteralPath $sharedConfigPath -PathType Leaf) {
+        try {
+            $sharedConfigText = Get-Content -LiteralPath $sharedConfigPath -Raw
+            $sharedMcpNames = @(Get-McpServerNamesFromToml $sharedConfigText)
+            $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
+            $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
+            foreach ($mcpName in $missingSharedMcpNames) {
+                Add-Failure "shared MCP server '$mcpName' exists but Anti-Codex local config is missing it"
+            }
+        } catch {
+            Add-Failure "shared config.toml read failed: $($_.Exception.Message)"
+        }
+    }
     foreach ($mcpName in $mcpNames) {
         $sectionMatch = [regex]::Match($configText, "(?ms)^\[mcp_servers\.$([regex]::Escape($mcpName))\]\s*(.*?)(?=^\[|\z)")
         $section = if ($sectionMatch.Success) { $sectionMatch.Groups[1].Value } else { "" }
@@ -500,6 +532,7 @@ $result = [pscustomobject]@{
         codexHome = $CodexHome
         sharedCodexHome = $SharedCodexHome
         configToml = $configPath
+        sharedConfigToml = $sharedConfigPath
         skills = $skillsPath
         sharedSkills = $sharedSkillsPath
         guidance = $guidanceNames
@@ -519,6 +552,10 @@ $result = [pscustomobject]@{
     mcp = [pscustomobject]@{
         count = $mcpNames.Count
         names = $mcpNames
+        sharedCount = $sharedMcpNames.Count
+        sharedNames = $sharedMcpNames
+        missingShared = $missingSharedMcpNames
+        extraLocal = $extraLocalMcpNames
         hasNodeRepl = ($mcpNames -contains "node_repl")
         smoke = [pscustomobject]@{
             checked = ($mcpSmokeChecks.Count -gt 0)
@@ -534,6 +571,9 @@ $result = [pscustomobject]@{
         linkType = if ($skillsItem) { $skillsItem.LinkType } else { $null }
         target = Get-LinkTargetValue $skillsItem
         inherited = @($inheritedSkillChecks)
+        sharedCount = $sharedSkillNames.Count
+        missingShared = $missingSharedSkillNames
+        extraLocal = $extraLocalSkillNames
         smoke = $skillSmoke
         sample = @($skillSampleEntries | Select-Object -First 10)
     }

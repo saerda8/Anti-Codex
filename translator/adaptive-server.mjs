@@ -751,7 +751,7 @@ function mcpServerNamesFromConfig(configPath) {
         const text = readFileSync(configPath, "utf8");
         return [...text.matchAll(/^\s*\[mcp_servers\.([^\]]+)\]/gm)]
             .map((match) => match[1])
-            .filter((name) => name && !name.endsWith(".env"));
+            .filter((name) => name && !name.endsWith(".env") && !name.includes(".tools."));
     } catch {
         return [];
     }
@@ -4205,7 +4205,7 @@ function collectTaskLedgerFacts(input) {
     if (lastAssistant && assistantTextLooksLikeFutureToolPromise(lastAssistant)) {
         push("pending-next-action", lastAssistant);
     }
-    const targetHints = [...userMessages, ...assistantMessages].join("\n").match(/(?:[A-Za-z]:\\[^\s"'，。；;]+|\/Users\/[^\s"'，。；;]+|(?:new-chat-\d+|qwen[-_\w]*|gemini[-_\w]*|remotion[-_\w]*|deepcodex[-_\w]*))/g) || [];
+    const targetHints = [...userMessages, ...assistantMessages].join("\n").match(/(?:[A-Za-z]:\\[^\s"'，。；;]+|\/Users\/[^\s"'，。；;]+|(?:\.{1,2}[\\/])?deepcodex[\\/][^\s"'，。；;]+|(?:new-chat-\d+|qwen[-_\w]*|gemini[-_\w]*|remotion[-_\w]*))/g) || [];
     for (const hint of targetHints.slice(-6)) push("target-hint", hint);
     return facts.slice(0, 10);
 }
