@@ -1367,3 +1367,10 @@ After every failure, before another dispatch:
 - Cause classification: skip-mode assertion bug, not an icon regression.
 - Rule change: when a fast verifier intentionally skips an expensive probe, every assertion that depends on that probe must also be marked skipped or not applicable.
 - Result: fast and full sync-readiness both passed after frame-size checks were gated on actual palette evidence.
+
+## 2026-06-22 - Use `Get-Content -Tail`, not `Select-Object -Tail`, on Windows PowerShell 5.1
+
+- Symptom: `Get-Content ... | Select-Object -Tail 100` failed because Windows PowerShell 5.1 `Select-Object` does not support a `-Tail` parameter.
+- Cause classification: shell compatibility mistake during local inspection, not a product failure.
+- Rule change: use `Get-Content -Tail N <path>` for tail reads, or `Select-Object -Last N` when a pipeline is required.
+- Result: reran the inspection with `Get-Content -Tail 80` and continued without touching runtime state.

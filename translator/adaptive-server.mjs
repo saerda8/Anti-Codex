@@ -1159,6 +1159,27 @@ function readJsonIfPresent(filePath) {
     }
 }
 
+function readJsonReportIfPresent(filePath) {
+    if (!filePath || !existsSync(filePath)) {
+        return { exists: false, parseable: false, value: null, error: "" };
+    }
+    try {
+        return {
+            exists: true,
+            parseable: true,
+            value: JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, "")),
+            error: "",
+        };
+    } catch (error) {
+        return {
+            exists: true,
+            parseable: false,
+            value: null,
+            error: String(error?.message || error || "JSON parse failed").replace(/[\r\n]+/g, " ").slice(0, 240),
+        };
+    }
+}
+
 function shortSafeText(value, fallback = "") {
     if (value == null) return fallback;
     return String(value).replace(/[\r\n]+/g, " ").slice(0, 240) || fallback;
@@ -1907,7 +1928,9 @@ function parseJsonFromScriptOutput(text = "") {
 
 function latestManagerReportItem(label, fileName) {
     const fullPath = ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "reports", fileName) : "";
-    const report = fullPath ? readJsonIfPresent(fullPath) : null;
+    const read = fullPath ? readJsonReportIfPresent(fullPath) : { exists: false, parseable: false, value: null, error: "" };
+    const report = read.value;
+    const invalid = read.exists && read.parseable === false;
     const failures = Array.isArray(report?.failures) ? report.failures.filter(Boolean) : [];
     let updatedAt = "";
     if (fullPath && existsSync(fullPath)) {
@@ -1918,12 +1941,17 @@ function latestManagerReportItem(label, fileName) {
     return {
         label,
         fileName,
-        exists: Boolean(report),
-        ok: report?.ok === true,
-        state: shortSafeText(report?.state || report?.diagnosis || "", ""),
+        exists: read.exists,
+        parseable: read.parseable,
+        invalid,
+        ok: !invalid && report?.ok === true,
+        state: invalid ? "invalid_report" : shortSafeText(report?.state || report?.diagnosis || "", ""),
+        missingReason: read.exists ? "" : "not_generated",
+        parseError: invalid ? shortSafeText(read.error, "JSON parse failed") : "",
+        parseErrorType: invalid ? "json_parse" : "",
         elapsedMs: Number.isFinite(Number(report?.elapsedMs)) ? Number(report.elapsedMs) : null,
-        failureCount: failures.length,
-        firstFailure: shortSafeText(failures[0] || "", ""),
+        failureCount: invalid ? 1 : failures.length,
+        firstFailure: invalid ? shortSafeText(`report parse failed: ${read.error}`, "report parse failed") : shortSafeText(failures[0] || "", ""),
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
         updatedAt,
@@ -1957,6 +1985,8 @@ function latestManagerReportsPayload() {
         reportRoot: ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "reports") : "",
         reports,
         existingCount: reports.filter((item) => item.exists).length,
+        missingCount: reports.filter((item) => !item.exists).length,
+        invalidCount: reports.filter((item) => item.invalid || (item.exists && item.parseable === false)).length,
         staleCount: reports.filter((item) => item.exists && item.stale).length,
         staleAfterMs: MANAGER_REPORT_STALE_MS,
     };
@@ -2455,11 +2485,17 @@ function latestReportsSummary(result){
   if(result.staleCount){
     lines.push("\\u9700\\u91cd\\u8dd1\\uff1a"+result.staleCount+" \\u4efd\\u62a5\\u544a\\u5df2\\u8fc7\\u671f");
   }
+  if(result.missingCount){
+    lines.push("\\u672a\\u751f\\u6210\\uff1a"+result.missingCount+" \\u4efd");
+  }
+  if(result.invalidCount){
+    lines.push("\\u635f\\u574f\\u62a5\\u544a\\uff1a"+result.invalidCount+" \\u4efd\\u65e0\\u6cd5\\u8bfb\\u53d6");
+  }
   if(!(result.existingCount??reports.filter((item)=>item.exists).length)){
     lines.push("\\u63d0\\u793a\\uff1a\\u8bf7\\u5148\\u8fd0\\u884c\\u5feb\\u901f\\u603b\\u68c0\\u3001\\u5b8c\\u6574\\u603b\\u68c0\\u6216\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u3002");
   }
   for(const item of reports){
-    const status=item.exists?(item.stale?"\\u9700\\u91cd\\u8dd1":(item.ok?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406")):"\\u672a\\u751f\\u6210";
+    const status=item.exists?((item.parseable===false||item.invalid)?"\\u62a5\\u544a\\u635f\\u574f":(item.stale?"\\u9700\\u91cd\\u8dd1":(item.ok?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"))):"\\u672a\\u751f\\u6210";
     const elapsed=item.elapsedMs!=null?(" / "+item.elapsedMs+" ms"):"";
     lines.push(item.label+"\\uff1a"+status+elapsed);
     const age=formatReportAge(item.ageMs);

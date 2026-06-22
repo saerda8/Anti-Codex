@@ -225,6 +225,14 @@ $reportSummaries = foreach ($name in $latestReports) {
     $path = Join-Path $reportsRoot $name
     if (Test-Path -LiteralPath $path -PathType Leaf) { Read-JsonSummary $path }
 }
+$damagedReports = @($reportSummaries | Where-Object {
+    ($_.PSObject.Properties.Name -contains "error") -and -not [string]::IsNullOrWhiteSpace([string]$_.error)
+} | ForEach-Object {
+    [pscustomobject]@{
+        file = [string]$_.file
+        error = [string]$_.error
+    }
+})
 Write-JsonFile (Join-Path $bundleRoot "reports-summary.json") @($reportSummaries)
 
 $logs = @(
@@ -262,10 +270,11 @@ if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
 Remove-OldDiagnosticBundles -Root $OutputRoot -Keep $KeepBundles
 
 $result = [pscustomobject]@{
-    ok = $true
+    ok = ($damagedReports.Count -eq 0)
     bundleRoot = $bundleRoot
     zipPath = $zipPath
     retainedBundles = [Math]::Max(1, $KeepBundles)
+    damagedReports = $damagedReports
 }
 if (-not $NoPopup) {
     try {

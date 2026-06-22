@@ -409,12 +409,11 @@ function Test-ReportEncoding {
                 [void]([System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json)
                 $parseable = $true
             } catch {}
+            if (-not $parseable) { $encodingFailures.Add("$name is not parseable JSON") | Out-Null }
             if ($isFresh) {
                 if ($hasBom) { $encodingFailures.Add("$name has UTF-8 BOM") | Out-Null }
-                if (-not $parseable) { $encodingFailures.Add("$name is not parseable JSON") | Out-Null }
             } else {
                 if ($hasBom) { $legacyIssues.Add("$name has UTF-8 BOM") | Out-Null }
-                if (-not $parseable) { $legacyIssues.Add("$name is not parseable JSON") | Out-Null }
             }
             $items.Add([pscustomobject]@{ file = $name; exists = $true; fresh = $isFresh; bom = $hasBom; parseable = $parseable }) | Out-Null
         } catch {

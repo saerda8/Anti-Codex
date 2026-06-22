@@ -1414,6 +1414,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const inject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerAction = readFileSync(resolve(root, "scripts", "test-anticodex-manager-action.ps1"), "utf8");
 
   assert.deepEqual([...managerBytes.slice(0, 3)], [0xef, 0xbb, 0xbf]);
@@ -1713,6 +1714,17 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-compaction-resume\.json/);
   assert.match(server, /latest-stability-soak\.json/);
   assert.match(server, /latestReportsSummary/);
+  assert.match(server, /function readJsonReportIfPresent/);
+  assert.match(server, /invalid_report/);
+  assert.match(server, /missingCount/);
+  assert.match(server, /invalidCount/);
+  assert.match(server, /parseable/);
+  assert.match(server, /parseError/);
+  assert.match(server, /parseErrorType/);
+  assert.match(server, /missingReason/);
+  assert.match(server, /report parse failed/);
+  assert.match(managerBridge, /result\.missingCount/);
+  assert.match(managerBridge, /result\.invalidCount/);
   assert.match(server, /if\(item\.exists&&item\.latestPath\)/);
   assert.match(server, /const reset=r\.result\|\|r/);
   assert.match(server, /ageMs/);

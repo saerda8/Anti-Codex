@@ -222,6 +222,7 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u8017\u65f6\uff1a21000 ms"), true);
   assert.equal(isFinishedText("\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"), true);
+  assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u635f\u574f\u62a5\u544a\uff1a1 \u4efd\u65e0\u6cd5\u8bfb\u53d6\n\u5feb\u901f\u68c0\u67e5\uff1a\u62a5\u544a\u635f\u574f"), true);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1a\u5931\u8d25"), false);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1aZIP \u5df2\u751f\u6210"), true);
   assert.equal(isUiOnlySmokeText("\u8bf4\u660e\uff1aui-only manager button smoke"), true);

@@ -253,11 +253,13 @@ function latestReportsSummary(result) {
     `\u5df2\u627e\u5230\uff1a${result.existingCount ?? reports.filter((item) => item.exists).length} \u4efd`,
   ];
   if (result.staleCount) lines.push(`\u9700\u91cd\u8dd1\uff1a${result.staleCount} \u4efd\u62a5\u544a\u5df2\u8fc7\u671f`);
+  if (result.missingCount) lines.push(`\u672a\u751f\u6210\uff1a${result.missingCount} \u4efd`);
+  if (result.invalidCount) lines.push(`\u635f\u574f\u62a5\u544a\uff1a${result.invalidCount} \u4efd\u65e0\u6cd5\u8bfb\u53d6`);
   if (!(result.existingCount ?? reports.filter((item) => item.exists).length)) {
     lines.push("\u63d0\u793a\uff1a\u8bf7\u5148\u8fd0\u884c\u5feb\u901f\u603b\u68c0\u3001\u5b8c\u6574\u603b\u68c0\u6216\u7a33\u5b9a\u6027\u5de1\u68c0\u3002");
   }
   for (const item of reports) {
-    const status = item.exists ? (item.stale ? "\u9700\u91cd\u8dd1" : (item.ok ? "\u901a\u8fc7" : "\u9700\u5904\u7406")) : "\u672a\u751f\u6210";
+    const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (item.ok ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
     const elapsed = item.elapsedMs != null ? ` / ${item.elapsedMs} ms` : "";
     lines.push(`${item.label}\uff1a${status}${elapsed}`);
     const age = formatReportAge(item.ageMs);
