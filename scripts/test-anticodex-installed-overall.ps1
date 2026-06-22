@@ -422,6 +422,7 @@ function Test-ReportEncoding {
         "latest-mcp-skills.json",
         "latest-plugin-capabilities.json",
         "latest-local-connectors.json",
+        "latest-manager-real-buttons.json",
         "latest-refresh-features.json",
         "latest-compaction-resume.json",
         "latest-stability-soak.json"

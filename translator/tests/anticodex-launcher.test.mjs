@@ -1713,6 +1713,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-mcp-tool-loop\.json/);
   assert.match(server, /latest-mcp-skills\.json/);
   assert.match(server, /latest-plugin-capabilities\.json/);
+  assert.match(server, /latest-manager-real-buttons\.json/);
   assert.match(server, /latest-refresh-features\.json/);
   assert.match(server, /latest-compaction-resume\.json/);
   assert.match(server, /latest-stability-soak\.json/);
@@ -1817,6 +1818,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-post-verification\.json/);
   assert.match(collector, /latest-source-preflight\.json/);
   assert.match(collector, /latest-shortcut-repair\.json/);
+  assert.match(collector, /latest-manager-real-buttons\.json/);
   assert.match(collector, /translator-lifecycle\.json/);
   assert.match(collector, /translator-lifecycle\.jsonl/);
   assert.match(collector, /Remove-OldDiagnosticBundles -Root \$OutputRoot -Keep \$KeepBundles/);
@@ -3301,6 +3303,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /latest-stability-soak\.json/);
   assert.match(overall, /latest-codex-responses\.json/);
   assert.match(overall, /latest-native-tool-loop\.json/);
+  assert.match(overall, /latest-manager-real-buttons\.json/);
   assert.match(overall, /\$checks\.reportEncoding = Test-ReportEncoding/);
   assert.match(overall, /report encoding verification failed/);
   assert.match(overall, /function Test-ReportIntegrity/);

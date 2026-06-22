@@ -1509,3 +1509,10 @@ After every failure, before another dispatch:
 - Cause classification: command construction/wrapper quoting failure.
 - Rule change: for process probes and PowerShell expressions with variables or regexes, prefer a short script file, direct simple commands, `curl.exe`, `rg`, or a single-quoted outer `-Command '& { ... }'`. If the wrapper still changes semantics, report it as wrapper interference and do not infer product state from that failure.
 - Result: health was confirmed with `curl.exe`, while the failed process probes were not used as Anti-Codex evidence.
+
+## 2026-06-23 - Subagent usage limits are not task evidence
+
+- Symptom: two read-only explorer subagents for next-task/report-coverage discovery errored with a Codex usage-limit message before returning findings.
+- Cause classification: worker availability failure, not product evidence.
+- Rule change: if ordinary subagents hit account/usage limits, record the failure, stop waiting on them, and continue with direct local inspection or available MCP workers. Do not cite missing subagent output as review evidence.
+- Result: the Manager real-button report indexing patch proceeded from direct source inspection and focused local tests only.

@@ -266,6 +266,7 @@ $latestReports = @(
     "latest-source-preflight.json",
     "latest-mcp-skills.json",
     "latest-plugin-capabilities.json",
+    "latest-manager-real-buttons.json",
     "latest-refresh-features.json",
     "latest-stability-soak.json",
     "latest-shortcut-repair.json",
