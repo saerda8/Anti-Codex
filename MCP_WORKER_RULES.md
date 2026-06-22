@@ -1395,3 +1395,26 @@ After every failure, before another dispatch:
 - Cause classification: missing runtime smoke for filesystem edge cases.
 - Rule change: every new shared file-write helper must be smoke-tested for first write, overwrite, invalid payload rejection, same-directory cleanup, and relative path behavior from a changed PowerShell location.
 - Result: the helper now uses PowerShell session path resolution, a same-directory backup path for replacement, and JSON validation before publish.
+
+## 2026-06-22 - Treat empty worker completion as no evidence
+
+- Worker: Antigravity `ag-08262927-fe75-40a3-878b-9daf5689bdb4`.
+- Symptom: a read-only report-integrity audit completed with exit code 0 but returned empty stdout/stderr and no parsed text.
+- Cause classification: worker output failure, not product evidence.
+- Rule change: a worker completion without a concrete written artifact or textual findings is not usable review evidence. Continue with direct source/test evidence and record the empty result.
+- Result: the report hash hardening proceeded from direct code inspection, launcher tests, helper smokes, source preflight, runtime sync, and installed overall verification.
+
+## 2026-06-22 - Do not share a dirty main workspace with read-only DeepSeek reviews
+
+- Worker: DeepSeek `dsw_mqp8tmlg_8gxedp`.
+- Symptom: the worker was asked for read-only review, failed its success contract, and reported the main agent's concurrently edited files as changed files in its progress metadata even though its final git summary showed no actual worker diff.
+- Cause classification: orchestration failure in a shared dirty workspace plus failed worker contract.
+- Rule change: do not start read-only DeepSeek review jobs in the same dirty workspace while the main agent is actively editing. Use a clean checkpoint, isolated worktree, or treat the result as unusable if metadata attributes main-agent edits to the worker.
+- Result: no worker diff was accepted; main-agent changes were reviewed through git status/diff and direct validation only.
+
+## 2026-06-22 - Verify port ownership after runtime translator restart
+
+- Symptom: after runtime sync restarted Anti-Codex, installed overall was green but showed two translator processes: the packaged `deepcodex-translator.exe` and an older `node.exe adaptive-server.mjs`.
+- Cause classification: process cleanup residue after switching/restarting translator entry points, not a functional health failure.
+- Rule change: when restart evidence shows duplicate translators, inspect port ownership before stopping anything. Only stop a stale Anti-Codex runtime node translator if the packaged translator owns the active localhost listener and health remains green.
+- Result: stopped only the stale node process, confirmed port 8484 was owned by the packaged translator, and reran installed no-traffic fast overall successfully.

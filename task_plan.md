@@ -724,3 +724,11 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: account/proxy readiness now writes `latest-account-proxy-readiness.json` plus history output, matching the Manager latest-report inventory instead of leaving a listed report unwritten.
 - Completed: Node local connector and third-party provider verifiers now publish reports through temp-file JSON validation and rename instead of direct latest writes.
 - Verification: PowerShell parse check passed for 66 scripts; Node syntax passed for local connector and third-party provider verifiers; launcher contracts passed 89/89; source preflight fast mode passed; direct helper smoke passed for relative paths, overwrite, and bad JSON rejection.
+
+## 2026-06-22 Report Hash Integrity
+- Completed: PowerShell report writes now publish a `.sha256` sidecar for both latest and history reports after JSON validation and atomic replacement.
+- Completed: Node local connector and third-party provider verifiers now publish matching `.sha256` sidecars when an explicit report root is used by installed overall or direct verifier runs.
+- Completed: Manager latest-report payload verifies signed reports and surfaces hash mismatches as `invalid_report_integrity` with `integrity_hash` evidence instead of treating a parseable but tampered report as healthy.
+- Completed: diagnostic bundles include per-report integrity summaries and include hash mismatch reports in `damagedReports`; old unsigned reports remain legacy/unsigned instead of being misclassified as damaged.
+- Completed: installed overall requires fresh reports to have valid SHA256 sidecars, while old unsigned reports are reported as legacy issues. Any signed hash mismatch fails regardless of age.
+- Verification: launcher contracts passed 89/89; source preflight fast passed; PowerShell helper sidecar smoke passed; Node local connector and third-party provider sidecar smokes passed with explicit report roots; runtime sync restarted Anti-Codex; installed no-traffic fast overall passed after cleanup.

@@ -1180,6 +1180,35 @@ function readJsonReportIfPresent(filePath) {
     }
 }
 
+function reportIntegrityForPath(filePath) {
+    const sidecarPath = `${filePath}.sha256`;
+    if (!filePath || !existsSync(filePath)) {
+        return { signed: false, valid: null, hash: "", expected: "", sidecar: sidecarPath, error: "" };
+    }
+    if (!existsSync(sidecarPath)) {
+        return { signed: false, valid: null, hash: "", expected: "", sidecar: sidecarPath, error: "missing_hash_sidecar" };
+    }
+    try {
+        const sidecar = readFileSync(sidecarPath, "ascii").trim();
+        const match = sidecar.match(/^(?:sha256:)?([a-fA-F0-9]{64})$/);
+        if (!match) {
+            return { signed: true, valid: false, hash: "", expected: shortSafeText(sidecar, ""), sidecar: sidecarPath, error: "invalid_hash_sidecar" };
+        }
+        const expected = match[1].toLowerCase();
+        const hash = createHash("sha256").update(readFileSync(filePath)).digest("hex");
+        return {
+            signed: true,
+            valid: hash === expected,
+            hash,
+            expected,
+            sidecar: sidecarPath,
+            error: hash === expected ? "" : "hash_mismatch",
+        };
+    } catch (error) {
+        return { signed: true, valid: false, hash: "", expected: "", sidecar: sidecarPath, error: shortSafeText(error?.message || error, "hash_check_failed") };
+    }
+}
+
 function shortSafeText(value, fallback = "") {
     if (value == null) return fallback;
     return String(value).replace(/[\r\n]+/g, " ").slice(0, 240) || fallback;
@@ -1929,8 +1958,10 @@ function parseJsonFromScriptOutput(text = "") {
 function latestManagerReportItem(label, fileName) {
     const fullPath = ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "reports", fileName) : "";
     const read = fullPath ? readJsonReportIfPresent(fullPath) : { exists: false, parseable: false, value: null, error: "" };
+    const integrity = fullPath ? reportIntegrityForPath(fullPath) : { signed: false, valid: null, hash: "", expected: "", sidecar: "", error: "" };
     const report = read.value;
-    const invalid = read.exists && read.parseable === false;
+    const integrityInvalid = read.exists && integrity.signed && integrity.valid === false;
+    const invalid = (read.exists && read.parseable === false) || integrityInvalid;
     const failures = Array.isArray(report?.failures) ? report.failures.filter(Boolean) : [];
     let updatedAt = "";
     if (fullPath && existsSync(fullPath)) {
@@ -1944,14 +1975,15 @@ function latestManagerReportItem(label, fileName) {
         exists: read.exists,
         parseable: read.parseable,
         invalid,
+        integrity,
         ok: !invalid && report?.ok === true,
-        state: invalid ? "invalid_report" : shortSafeText(report?.state || report?.diagnosis || "", ""),
+        state: invalid ? (integrityInvalid ? "invalid_report_integrity" : "invalid_report") : shortSafeText(report?.state || report?.diagnosis || "", ""),
         missingReason: read.exists ? "" : "not_generated",
-        parseError: invalid ? shortSafeText(read.error, "JSON parse failed") : "",
-        parseErrorType: invalid ? "json_parse" : "",
+        parseError: invalid ? shortSafeText(integrityInvalid ? integrity.error : read.error, "report validation failed") : "",
+        parseErrorType: invalid ? (integrityInvalid ? "integrity_hash" : "json_parse") : "",
         elapsedMs: Number.isFinite(Number(report?.elapsedMs)) ? Number(report.elapsedMs) : null,
         failureCount: invalid ? 1 : failures.length,
-        firstFailure: invalid ? shortSafeText(`report parse failed: ${read.error}`, "report parse failed") : shortSafeText(failures[0] || "", ""),
+        firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
         updatedAt,

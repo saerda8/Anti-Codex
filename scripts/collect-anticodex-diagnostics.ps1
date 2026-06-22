@@ -74,6 +74,53 @@ function Write-JsonFile {
     [System.IO.File]::WriteAllText($Path, $json, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Get-ReportIntegrity {
+    param([string]$Path)
+    $sidecar = "$Path.sha256"
+    if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) {
+        return [pscustomobject]@{
+            signed = $false
+            valid = $null
+            hash = ""
+            expected = ""
+            sidecar = $sidecar
+            error = "missing_hash_sidecar"
+        }
+    }
+    try {
+        $rawExpected = (Get-Content -LiteralPath $sidecar -Raw -Encoding ASCII).Trim()
+        if ($rawExpected -notmatch "^(?:sha256:)?([a-fA-F0-9]{64})$") {
+            return [pscustomobject]@{
+                signed = $true
+                valid = $false
+                hash = ""
+                expected = $rawExpected
+                sidecar = $sidecar
+                error = "invalid_hash_sidecar"
+            }
+        }
+        $expected = $Matches[1].ToLowerInvariant()
+        $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        return [pscustomobject]@{
+            signed = $true
+            valid = ($hash -eq $expected)
+            hash = $hash
+            expected = $expected
+            sidecar = $sidecar
+            error = if ($hash -eq $expected) { "" } else { "hash_mismatch" }
+        }
+    } catch {
+        return [pscustomobject]@{
+            signed = $true
+            valid = $false
+            hash = ""
+            expected = ""
+            sidecar = $sidecar
+            error = $_.Exception.Message
+        }
+    }
+}
+
 function Try-InvokeJson {
     param([string]$Path)
     try {
@@ -88,6 +135,7 @@ function Try-InvokeJson {
 
 function Read-JsonSummary {
     param([string]$Path)
+    $integrity = Get-ReportIntegrity $Path
     try {
         $raw = Get-Content -LiteralPath $Path -Raw
         $json = $raw | ConvertFrom-Json
@@ -130,12 +178,15 @@ function Read-JsonSummary {
             attempts = if (($json.PSObject.Properties.Name -contains "wait") -and $json.wait -and ($json.wait.PSObject.Properties.Name -contains "attempts")) { [int]$json.wait.attempts } else { $null }
             repairedCount = if ($json.PSObject.Properties.Name -contains "repairedCount") { [int]$json.repairedCount } else { $null }
             repairedAt = if ($json.PSObject.Properties.Name -contains "repairedAt") { [string]$json.repairedAt } else { $null }
+            integrity = $integrity
+            error = if ($integrity.signed -and $integrity.valid -eq $false) { "report hash validation failed: $($integrity.error)" } else { "" }
         }
     } catch {
         return [pscustomobject]@{
             file = Split-Path -Leaf $Path
             ok = $false
             error = $_.Exception.Message
+            integrity = $integrity
         }
     }
 }

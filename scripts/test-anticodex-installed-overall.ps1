@@ -368,6 +368,25 @@ function Save-JsonReport {
     Remove-OldReports -HistoryPath $Paths.history
 }
 
+function Test-ReportIntegrity {
+    param([string]$Path)
+    $sidecar = "$Path.sha256"
+    if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) {
+        return [pscustomobject]@{ signed = $false; valid = $null; hash = ""; expected = ""; error = "missing_hash_sidecar" }
+    }
+    try {
+        $rawExpected = (Get-Content -LiteralPath $sidecar -Raw -Encoding ASCII).Trim()
+        if ($rawExpected -notmatch "^(?:sha256:)?([a-fA-F0-9]{64})$") {
+            return [pscustomobject]@{ signed = $true; valid = $false; hash = ""; expected = $rawExpected; error = "invalid_hash_sidecar" }
+        }
+        $expected = $Matches[1].ToLowerInvariant()
+        $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        return [pscustomobject]@{ signed = $true; valid = ($hash -eq $expected); hash = $hash; expected = $expected; error = if ($hash -eq $expected) { "" } else { "hash_mismatch" } }
+    } catch {
+        return [pscustomobject]@{ signed = $true; valid = $false; hash = ""; expected = ""; error = $_.Exception.Message }
+    }
+}
+
 function Test-ReportEncoding {
     param(
         [string]$Root = $ReportRoot,
@@ -404,6 +423,7 @@ function Test-ReportEncoding {
             $isFresh = ($item.LastWriteTimeUtc -ge $Since.ToUniversalTime().AddSeconds(-2))
             $bytes = [System.IO.File]::ReadAllBytes($path)
             $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191)
+            $integrity = Test-ReportIntegrity $path
             $parseable = $false
             try {
                 [void]([System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json)
@@ -412,13 +432,17 @@ function Test-ReportEncoding {
             if (-not $parseable) { $encodingFailures.Add("$name is not parseable JSON") | Out-Null }
             if ($isFresh) {
                 if ($hasBom) { $encodingFailures.Add("$name has UTF-8 BOM") | Out-Null }
+                if (-not $integrity.signed) { $encodingFailures.Add("$name missing SHA256 sidecar") | Out-Null }
+                if ($integrity.signed -and $integrity.valid -eq $false) { $encodingFailures.Add("$name SHA256 sidecar mismatch: $($integrity.error)") | Out-Null }
             } else {
                 if ($hasBom) { $legacyIssues.Add("$name has UTF-8 BOM") | Out-Null }
+                if (-not $integrity.signed) { $legacyIssues.Add("$name missing SHA256 sidecar") | Out-Null }
+                if ($integrity.signed -and $integrity.valid -eq $false) { $encodingFailures.Add("$name SHA256 sidecar mismatch: $($integrity.error)") | Out-Null }
             }
-            $items.Add([pscustomobject]@{ file = $name; exists = $true; fresh = $isFresh; bom = $hasBom; parseable = $parseable }) | Out-Null
+            $items.Add([pscustomobject]@{ file = $name; exists = $true; fresh = $isFresh; bom = $hasBom; parseable = $parseable; integrity = $integrity }) | Out-Null
         } catch {
             $encodingFailures.Add("$name cannot be read: $($_.Exception.Message)") | Out-Null
-            $items.Add([pscustomobject]@{ file = $name; exists = $true; fresh = $true; bom = $null; parseable = $false }) | Out-Null
+            $items.Add([pscustomobject]@{ file = $name; exists = $true; fresh = $true; bom = $null; parseable = $false; integrity = $null }) | Out-Null
         }
     }
     return [pscustomobject]@{

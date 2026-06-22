@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -228,6 +229,20 @@ function writeTextAtomic(filePath, text) {
     writeFileSync(tmp, text, "utf8");
     JSON.parse(readFileSync(tmp, "utf8"));
     renameSync(tmp, filePath);
+    writeHashSidecar(filePath);
+  } catch (error) {
+    try { unlinkSync(tmp); } catch {}
+    throw error;
+  }
+}
+
+function writeHashSidecar(filePath) {
+  const hash = createHash("sha256").update(readFileSync(filePath)).digest("hex");
+  const sidecar = `${filePath}.sha256`;
+  const tmp = `${sidecar}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(tmp, `sha256:${hash}`, "ascii");
+    renameSync(tmp, sidecar);
   } catch (error) {
     try { unlinkSync(tmp); } catch {}
     throw error;

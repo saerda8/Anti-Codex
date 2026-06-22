@@ -3,7 +3,8 @@ function Write-AntiCodexTextAtomic {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Text,
         [System.Text.Encoding]$Encoding = (New-Object System.Text.UTF8Encoding($false)),
-        [switch]$ValidateJson
+        [switch]$ValidateJson,
+        [switch]$SkipHash
     )
 
     $targetPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
@@ -25,6 +26,17 @@ function Write-AntiCodexTextAtomic {
             Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
         } else {
             [System.IO.File]::Move($tempPath, $targetPath)
+        }
+
+        if (-not $SkipHash) {
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $bytes = [System.IO.File]::ReadAllBytes($targetPath)
+                $hash = ($sha256.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") }) -join ""
+            } finally {
+                $sha256.Dispose()
+            }
+            Write-AntiCodexTextAtomic -Path "$targetPath.sha256" -Text "sha256:$hash" -Encoding ([System.Text.ASCIIEncoding]::new()) -SkipHash
         }
     } catch {
         if (Test-Path -LiteralPath $tempPath -PathType Leaf) {

@@ -1715,7 +1715,13 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-stability-soak\.json/);
   assert.match(server, /latestReportsSummary/);
   assert.match(server, /function readJsonReportIfPresent/);
+  assert.match(server, /function reportIntegrityForPath/);
+  assert.match(server, /\.sha256/);
+  assert.match(server, /createHash\("sha256"\)/);
   assert.match(server, /invalid_report/);
+  assert.match(server, /invalid_report_integrity/);
+  assert.match(server, /integrity_hash/);
+  assert.match(server, /hash_mismatch/);
   assert.match(server, /missingCount/);
   assert.match(server, /invalidCount/);
   assert.match(server, /parseable/);
@@ -1818,6 +1824,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /repairedCount/);
   assert.match(collector, /repairedAt/);
   assert.match(collector, /failureCount/);
+  assert.match(collector, /function Get-ReportIntegrity/);
+  assert.match(collector, /\.sha256/);
+  assert.match(collector, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/);
+  assert.match(collector, /report hash validation failed/);
+  assert.match(collector, /damagedReports/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.match(collector, /function Update-NoTrafficModelRoutingReport/);
   assert.match(collector, /test-anticodex-model-routing\.ps1/);
@@ -1865,6 +1876,9 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(reportIo, /UTF8Encoding\(\$false\)/);
   assert.match(reportIo, /ConvertFrom-Json -ErrorAction Stop/);
   assert.match(reportIo, /System\.IO\.File\]::Replace/);
+  assert.match(reportIo, /SHA256\]::Create/);
+  assert.match(reportIo, /\.sha256/);
+  assert.match(reportIo, /ASCIIEncoding/);
 
   for (const scriptName of reportScripts) {
     const script = readFileSync(resolve(root, "scripts", scriptName), "utf8");
@@ -1876,6 +1890,14 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   const accountProxy = readFileSync(resolve(root, "scripts", "test-anticodex-account-proxy-readiness.ps1"), "utf8");
   assert.match(accountProxy, /latest-account-proxy-readiness\.json/);
   assert.match(accountProxy, /Write-AntiCodexJsonReport/);
+  const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
+  const thirdPartyProvider = readFileSync(resolve(root, "scripts", "test-anticodex-third-party-provider.mjs"), "utf8");
+  assert.match(localConnectors, /createHash\("sha256"\)/);
+  assert.match(localConnectors, /function writeHashSidecar/);
+  assert.match(localConnectors, /\.sha256/);
+  assert.match(thirdPartyProvider, /createHash\("sha256"\)/);
+  assert.match(thirdPartyProvider, /function writeHashSidecar/);
+  assert.match(thirdPartyProvider, /\.sha256/);
 });
 
 test("Anti-Codex parsed state and manifest files are written as UTF-8 without BOM", () => {
@@ -3242,6 +3264,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /latest-native-tool-loop\.json/);
   assert.match(overall, /\$checks\.reportEncoding = Test-ReportEncoding/);
   assert.match(overall, /report encoding verification failed/);
+  assert.match(overall, /function Test-ReportIntegrity/);
+  assert.match(overall, /\.sha256/);
+  assert.match(overall, /missing SHA256 sidecar/);
+  assert.match(overall, /SHA256 sidecar mismatch/);
   assert.match(overall, /function Test-InstalledGuardWording/);
   assert.match(overall, /\$checks\.guardWording = Test-InstalledGuardWording/);
   assert.match(overall, /guard wording leaks DeepCodex/);
