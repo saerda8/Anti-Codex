@@ -1,0 +1,368 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param(
+    [string]$InstallRoot = "",
+    [string]$SourceRoot = "",
+    [string]$StateRoot = "",
+    [switch]$Prompt,
+    [switch]$NoPersist
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA "Anti-Codex" }
+if (-not $StateRoot) { $StateRoot = Join-Path $env:APPDATA "anticodex" }
+$InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
+$StateRoot = [IO.Path]::GetFullPath($StateRoot)
+$updateStatusModule = Join-Path $PSScriptRoot "anticodex-update-status.psm1"
+if (-not (Test-Path -LiteralPath $updateStatusModule -PathType Leaf)) {
+    throw "Anti-Codex update status module is missing: $updateStatusModule"
+}
+Import-Module $updateStatusModule -Force
+$expectedInstallRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
+$allowTestRoot = [bool]$SourceRoot
+if (-not $allowTestRoot -and $InstallRoot -ne $expectedInstallRoot) {
+    throw "Anti-Codex update check may only inspect $expectedInstallRoot unless an explicit source root is supplied."
+}
+
+function Resolve-CodexSource {
+    if ($SourceRoot) {
+        return [pscustomobject]@{
+            root = [IO.Path]::GetFullPath($SourceRoot)
+            packageVersion = $null
+            packageName = "explicit"
+        }
+    }
+    foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
+        $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($pkg) {
+            $root = Join-Path $pkg.InstallLocation "app"
+            if (Test-Path -LiteralPath (Join-Path $root "Codex.exe")) {
+                return [pscustomobject]@{
+                    root = [IO.Path]::GetFullPath($root)
+                    packageVersion = [string]$pkg.Version
+                    packageName = [string]$pkg.Name
+                }
+            }
+        }
+    }
+    return $null
+}
+
+function Get-OptionalHash {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
+
+function Get-ObjectPropertyValue {
+    param(
+        [object]$InputObject,
+        [string]$Name
+    )
+    if ($null -eq $InputObject) { return $null }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
+function Read-ActiveHostManifest {
+    param([string]$MarkerPath)
+    if (-not (Test-Path -LiteralPath $MarkerPath -PathType Leaf)) { return $null }
+    try {
+        return Get-Content -LiteralPath $MarkerPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+}
+
+function Test-AntiCodexIconPalette {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+        $bytes = [IO.File]::ReadAllBytes($Path)
+        if ($bytes.Length -lt 22 -or [BitConverter]::ToUInt16($bytes, 0) -ne 0 -or [BitConverter]::ToUInt16($bytes, 2) -ne 1) {
+            return $false
+        }
+        $count = [BitConverter]::ToUInt16($bytes, 4)
+        $best = $null
+        for ($i = 0; $i -lt $count; $i += 1) {
+            $entry = 6 + ($i * 16)
+            $width = [int]$bytes[$entry]
+            if ($width -eq 0) { $width = 256 }
+            $size = [int][BitConverter]::ToUInt32($bytes, $entry + 8)
+            $offset = [int][BitConverter]::ToUInt32($bytes, $entry + 12)
+            if ($null -eq $best -or $width -gt $best.Width) {
+                $best = [pscustomobject]@{ Width = $width; Size = $size; Offset = $offset }
+            }
+        }
+        if ($null -eq $best -or $best.Offset -lt 0 -or ($best.Offset + $best.Size) -gt $bytes.Length) {
+            return $false
+        }
+
+        $frame = New-Object byte[] $best.Size
+        [Array]::Copy($bytes, $best.Offset, $frame, 0, $best.Size)
+        $stream = New-Object IO.MemoryStream(,$frame)
+        $image = [System.Drawing.Image]::FromStream($stream)
+        $bitmap = New-Object System.Drawing.Bitmap $image
+        try {
+            $pinkBlob = 0
+            $whiteCommand = 0
+            $tealBackground = 0
+            $oldBluePurple = 0
+            $transparent = 0
+            for ($y = 0; $y -lt $bitmap.Height; $y += 8) {
+                for ($x = 0; $x -lt $bitmap.Width; $x += 8) {
+                    $pixel = $bitmap.GetPixel($x, $y)
+                    if ($pixel.A -lt 10) {
+                        $transparent += 1
+                        continue
+                    }
+                    if ($pixel.R -gt 205 -and $pixel.B -gt 135 -and $pixel.G -lt 165) { $pinkBlob += 1 }
+                    if ($pixel.R -gt 230 -and $pixel.G -gt 230 -and $pixel.B -gt 230) { $whiteCommand += 1 }
+                    if ($pixel.R -ge 30 -and $pixel.R -le 95 -and $pixel.G -ge 105 -and $pixel.G -le 170 -and $pixel.B -ge 120 -and $pixel.B -le 180) { $tealBackground += 1 }
+                    if ($pixel.B -gt 185 -and $pixel.R -lt 190 -and $pixel.G -lt 185) { $oldBluePurple += 1 }
+                }
+            }
+            return ($pinkBlob -ge 120 -and $whiteCommand -ge 10 -and $transparent -ge 100 -and $tealBackground -le 3 -and $oldBluePurple -le 10)
+        } finally {
+            $bitmap.Dispose()
+            $image.Dispose()
+            $stream.Dispose()
+        }
+    } catch {
+        return $false
+    }
+}
+
+function Test-ActiveHostGuardrails {
+    param(
+        [object]$Manifest,
+        [string]$HostRoot,
+        [string]$SourceHostHash,
+        [string]$SourceCliHash
+    )
+
+    $failures = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Manifest) {
+        $failures.Add("active host marker is missing or unreadable") | Out-Null
+    } elseif ([string]$Manifest.schema -ne "anticodex-host-manifest-v1") {
+        $failures.Add("active host marker schema is invalid") | Out-Null
+    }
+    $manifestFiles = Get-ObjectPropertyValue -InputObject $Manifest -Name "files"
+    $manifestSource = Get-ObjectPropertyValue -InputObject $Manifest -Name "source"
+    if ($null -eq $manifestFiles) {
+        $failures.Add("active host marker is missing file hashes") | Out-Null
+    }
+    if ($null -eq $manifestSource) {
+        $failures.Add("active host marker is missing source fingerprints") | Out-Null
+    }
+
+    $required = [ordered]@{
+        antiCodexExe = (Join-Path $HostRoot "Anti-Codex.exe")
+        appAsar = (Join-Path $HostRoot "resources\app.asar")
+        codexCli = (Join-Path $HostRoot "resources\codex.exe")
+        hostIcon = (Join-Path $HostRoot "resources\icon.ico")
+        trayIcon = (Join-Path $HostRoot "resources\codex-tray.ico")
+        appRootIcon = (Join-Path $HostRoot "icon.ico")
+    }
+    foreach ($name in $required.Keys) {
+        $path = $required[$name]
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            $failures.Add("active host is missing $name") | Out-Null
+            continue
+        }
+        if ($manifestFiles) {
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            $recorded = Get-ObjectPropertyValue -InputObject $manifestFiles -Name $name
+            if (-not $recorded -or [string]$recorded -ne [string]$actual) {
+                $failures.Add("active host marker hash mismatch: $name") | Out-Null
+            }
+        }
+    }
+
+    if ($manifestSource) {
+        $recordedSourceHost = Get-ObjectPropertyValue -InputObject $manifestSource -Name "codexHost"
+        $recordedSourceCli = Get-ObjectPropertyValue -InputObject $manifestSource -Name "codexCli"
+        if ($SourceHostHash) {
+            if (-not $recordedSourceHost) {
+                $failures.Add("active source host fingerprint is missing") | Out-Null
+            } elseif ([string]$recordedSourceHost -ne [string]$SourceHostHash) {
+                $failures.Add("active source host fingerprint differs from installed Codex") | Out-Null
+            }
+        }
+        if ($SourceCliHash) {
+            if (-not $recordedSourceCli) {
+                $failures.Add("active source CLI fingerprint is missing") | Out-Null
+            } elseif ([string]$recordedSourceCli -ne [string]$SourceCliHash) {
+                $failures.Add("active source CLI fingerprint differs from installed Codex") | Out-Null
+            }
+        }
+    }
+
+    if (-not $SourceRoot) {
+        foreach ($iconName in @("hostIcon", "trayIcon", "appRootIcon")) {
+            if ((Test-Path -LiteralPath $required[$iconName] -PathType Leaf) -and (Test-AntiCodexIconPalette -Path $required[$iconName]) -ne $true) {
+                $failures.Add("active host icon content is not the Anti-Codex artwork: $iconName") | Out-Null
+            }
+        }
+    }
+
+    if (-not $SourceRoot -and (Test-Path -LiteralPath $required.antiCodexExe -PathType Leaf)) {
+        $versionInfo = (Get-Item -LiteralPath $required.antiCodexExe).VersionInfo
+        if ([string]$versionInfo.ProductName -ne "Anti-Codex") { $failures.Add("active host ProductName is not Anti-Codex") | Out-Null }
+        if ([string]$versionInfo.FileDescription -ne "Anti-Codex") { $failures.Add("active host FileDescription is not Anti-Codex") | Out-Null }
+        if ([string]$versionInfo.OriginalFilename -ne "Anti-Codex.exe") { $failures.Add("active host OriginalFilename is not Anti-Codex.exe") | Out-Null }
+    }
+
+    [pscustomobject]@{
+        ok = ($failures.Count -eq 0)
+        failures = $failures.ToArray()
+    }
+}
+
+$source = Resolve-CodexSource
+$activeRoot = Join-Path $InstallRoot "codex-patched-app"
+$activeMarker = Join-Path $InstallRoot "codex-patched-app.ok"
+$activeManifest = Read-ActiveHostManifest -MarkerPath $activeMarker
+$activeManifestSource = Get-ObjectPropertyValue -InputObject $activeManifest -Name "source"
+$activePackageVersion = Get-ObjectPropertyValue -InputObject $activeManifestSource -Name "packageVersion"
+$statusPath = Join-Path $StateRoot "update-status.json"
+$existingStatus = Get-AntiCodexUpdateStatus -StateRoot $StateRoot
+$existingOperation = $existingStatus.operation
+$cachedStatus = $null
+if (-not $NoPersist -and $source -and $source.packageVersion -and (Test-Path -LiteralPath $statusPath)) {
+    $cachedStatus = $existingStatus
+}
+$sourceHostHash = if ($source) { Get-OptionalHash (Join-Path $source.root "Codex.exe") } else { $null }
+$sourceCliHash = if ($source) { Get-OptionalHash (Join-Path $source.root "resources\codex.exe") } else { $null }
+$activeHostHash = Get-OptionalHash (Join-Path $activeRoot "Codex.exe")
+$activeCliHash = Get-OptionalHash (Join-Path $activeRoot "resources\codex.exe")
+$activeGuardrails = Test-ActiveHostGuardrails -Manifest $activeManifest -HostRoot $activeRoot -SourceHostHash $sourceHostHash -SourceCliHash $sourceCliHash
+$comparable = [bool]($sourceHostHash -and $sourceCliHash -and $activeHostHash -and $activeCliHash)
+$hostChanged = [bool]($sourceHostHash -and $activeHostHash -and $sourceHostHash -ne $activeHostHash)
+$cliChanged = [bool]($sourceCliHash -and $activeCliHash -and $sourceCliHash -ne $activeCliHash)
+$guardrailDrift = [bool]($source -and $comparable -and $activeGuardrails.ok -ne $true)
+$updateNeeded = [bool]($comparable -and ($hostChanged -or $cliChanged -or $guardrailDrift))
+$driftState = if (-not $source -or -not $comparable) {
+    "unknown"
+} elseif ($updateNeeded) {
+    "drifted"
+} else {
+    "synced"
+}
+$reason = if (-not $source) {
+    "source_codex_not_found"
+} elseif (-not $comparable) {
+    "fingerprint_unavailable"
+} elseif ($hostChanged -or $cliChanged) {
+    "source_codex_changed"
+} elseif ($cachedStatus -and
+    $cachedStatus.ok -eq $true -and
+    $cachedStatus.updateNeeded -eq $false -and
+    [string]$cachedStatus.source.packageVersion -eq [string]$source.packageVersion -and
+    $activeGuardrails.ok -eq $true) {
+    "up_to_date_cached"
+} elseif ($guardrailDrift) {
+    "active_host_guardrail_failed"
+} else {
+    "up_to_date"
+}
+
+$syncLauncher = Join-Path $InstallRoot "runtime\scripts\sync-anticodex-launcher.ps1"
+$launchedSync = $false
+$prompted = $false
+$sourceFingerprint = if ($sourceHostHash -and $sourceCliHash) { "$sourceHostHash`:$sourceCliHash" } else { $null }
+$promptStatePath = Join-Path $StateRoot "update-prompt.json"
+$lastPromptFingerprint = $null
+if (Test-Path -LiteralPath $promptStatePath) {
+    try { $lastPromptFingerprint = [string](Get-Content -LiteralPath $promptStatePath -Raw | ConvertFrom-Json).sourceFingerprint } catch {}
+}
+
+if ($Prompt -and $updateNeeded -and $sourceFingerprint -ne $lastPromptFingerprint) {
+    $prompted = $true
+    $choice = -1
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $choice = $shell.Popup(
+            "Codex Desktop has been updated. Sync Anti-Codex now?`n`nAnti-Codex will build and validate a candidate first. The current version stays available if validation fails.",
+            30,
+            "Anti-Codex Update Available",
+            68
+        )
+    } catch {}
+    if (-not $NoPersist) {
+        New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
+        [pscustomobject]@{
+            sourceFingerprint = $sourceFingerprint
+            promptedAt = [DateTime]::UtcNow.ToString("o")
+            choice = $choice
+        } | ForEach-Object {
+            $json = $_ | ConvertTo-Json -Compress
+            [System.IO.File]::WriteAllText($promptStatePath, $json, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    if ($choice -eq 6 -and (Test-Path -LiteralPath $syncLauncher -PathType Leaf)) {
+        $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+        Start-Process -FilePath $powershell `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $syncLauncher) `
+            -WindowStyle Hidden | Out-Null
+        $launchedSync = $true
+    }
+}
+
+$guardrailMessage = if ($activeGuardrails.ok) {
+    "Anti-Codex brand and icon are preserved; sync builds and validates a candidate before replacing the active host."
+} else {
+    "Anti-Codex active host guardrails need validation; cache was not accepted as proof."
+}
+
+$result = [pscustomobject]@{
+    ok = [bool]($comparable -and $activeGuardrails.ok)
+    checkedAt = [DateTime]::UtcNow.ToString("o")
+    updateNeeded = $updateNeeded
+    reason = $reason
+    source = [pscustomobject]@{
+        packageName = if ($source) { $source.packageName } else { $null }
+        packageVersion = if ($source) { $source.packageVersion } else { $null }
+        root = if ($source) { $source.root } else { $null }
+        hostHash = $sourceHostHash
+        cliHash = $sourceCliHash
+    }
+    active = [pscustomobject]@{
+        root = $activeRoot
+        hostHash = $activeHostHash
+        cliHash = $activeCliHash
+        packageVersion = $activePackageVersion
+    }
+    drift = [pscustomobject]@{
+        state = $driftState
+        hostChanged = $hostChanged
+        cliChanged = $cliChanged
+        activePackageVersion = $activePackageVersion
+        sourcePackageVersion = if ($source) { $source.packageVersion } else { $null }
+    }
+    guardrails = [pscustomobject]@{
+        brandPreserved = [bool]($activeGuardrails.ok)
+        iconPreserved = [bool]($activeGuardrails.ok)
+        activeHostValid = [bool]($activeGuardrails.ok)
+        failures = $activeGuardrails.failures
+        activationRequiresValidation = $true
+        rollbackOnFailure = $true
+        message = $guardrailMessage
+    }
+    sync = [pscustomobject]@{
+        launcher = $syncLauncher
+        available = (Test-Path -LiteralPath $syncLauncher -PathType Leaf)
+        prompted = $prompted
+        launched = $launchedSync
+    }
+    operation = $existingOperation
+}
+
+if (-not $NoPersist) {
+    Save-AntiCodexUpdateStatus -Status $result -StateRoot $StateRoot
+}
+$result | ConvertTo-Json -Depth 8 -Compress

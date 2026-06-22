@@ -1,9 +1,14 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  hasProductNameDrivenSessionTitle,
+  patchProductNameDrivenSessionTitle,
+} from "./brand-patch-compat.mjs";
 
 const asarPath = process.argv[2];
 const exePath = process.argv[3] || "";
+const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
 if (!asarPath) {
   console.error("Usage: node brand-patched-asar.mjs <app.asar> [Codex.exe]");
@@ -66,8 +71,10 @@ function replaceBetweenPadded(text, start, end, replacement) {
 }
 
 function patchPackageJson(text) {
-  if (text.includes('"productName": "DeepCodex"') || text.includes('"productName":"DeepCodex"')) return text;
-  let next = text.replace('"productName": "Codex"', '"productName": "DeepCodex"');
+  if (text.includes('"productName": "Anti-Codex"') || text.includes('"productName":"Anti-Codex"')) return text;
+  let next = text
+    .replace('"productName": "DeepCodex"', '"productName": "Anti-Codex"')
+    .replace('"productName": "Codex"', '"productName": "Anti-Codex"');
   if (next === text) throw new Error("package.json productName pattern not found");
   let extra = next.length - text.length;
   if (extra > 0) {
@@ -83,23 +90,59 @@ function patchPackageJson(text) {
   return next + " ".repeat(text.length - next.length);
 }
 
+function patchWebviewHtmlTitle(text) {
+  if (text.includes("<title>Anti-Codex</title>")) return text;
+  let next = text.replace("<title>Codex</title>", "<title>Anti-Codex</title>");
+  if (next === text) throw new Error("webview HTML title pattern not found");
+  let extra = next.length - text.length;
+  while (extra > 0) {
+    let changed = false;
+    next = next.replace(/ {2,}/, (match) => {
+      if (extra <= 0) return match;
+      const remove = Math.min(extra, match.length - 1);
+      extra -= remove;
+      changed = true;
+      return " ".repeat(match.length - remove);
+    });
+    if (!changed) break;
+  }
+  if (extra > 0 || next.length !== text.length) throw new Error("webview HTML title size changed after branding patch");
+  return next;
+}
+
 function patchBootstrapAppUserModelId(text) {
-  if (text.includes("setAppUserModelId(`DeepCodex`)")) return text;
+  if (text.includes("setAppUserModelId(`AntiCodex`)")) return text;
   // Anchor on the stable structure; minified variable names (n/r) and the arg
   // expression (t.b(x), n.E(S), ...) change between Codex builds, so capture them.
   const re = /process\.platform===`win32`&&([\w$]+)\.app\.setAppUserModelId\((?:[^()]|\([^()]*\))*\)/;
   const m = re.exec(text);
   if (!m) throw new Error("AppUserModelID bootstrap pattern not found");
-  const replacement = `${m[1]}.app.setAppUserModelId(\`DeepCodex\`)`;
+  const replacement = `${m[1]}.app.setAppUserModelId(\`AntiCodex\`)`;
   if (replacement.length > m[0].length) throw new Error("AppUserModelID replacement longer than match");
   return text.slice(0, m.index) + replacement + " ".repeat(m[0].length - replacement.length) + text.slice(m.index + m[0].length);
 }
 
+function patchBootstrapAppName(text) {
+  if (text.includes(".app.name=`Anti-Codex`")) return text;
+  const re = /([\w$]+)\.app\.setName\((?:[^()]|\([^()]*\))*\)/;
+  const m = re.exec(text);
+  if (!m) throw new Error("Electron app.setName bootstrap pattern not found");
+  const replacement = `${m[1]}.app.name=\`Anti-Codex\``;
+  if (replacement.length > m[0].length) throw new Error("Electron app.name replacement longer than match");
+  return text.slice(0, m.index) + replacement + " ".repeat(m[0].length - replacement.length) + text.slice(m.index + m[0].length);
+}
+
 function patchMainSession(text) {
-  if (text.includes("var Kv=`DeepCodex`;function qv(e){return null}function Jv(e){return Kv}")) return text;
-  const search = "var Kv=`Codex`;function qv(e){switch(e){case xm.Dev:return`Dev`;case xm.Agent:return`Agent`;case xm.Nightly:return`Nightly`;case xm.Owl:return`Owl`;case xm.InternalAlpha:return`Alpha`;case xm.PublicBeta:return`Beta`;case xm.Prod:return null}}function Jv(e){let t=qv(e);return t==null?Kv:`${Kv} (${t})`}";
-  const replacement = "var Kv=`DeepCodex`;function qv(e){return null}function Jv(e){return Kv}";
-  return replacePadded(text, search, replacement);
+  if (hasProductNameDrivenSessionTitle(text)) {
+    return patchProductNameDrivenSessionTitle(text);
+  }
+  if (/var\s+[\w$]+=`Anti-Codex`;function\s+[\w$]+\([^)]*\)\{return null\}function\s+[\w$]+\([^)]*\)\{return [\w$]+\}/.test(text)) return text;
+  const re = /var\s+([\w$]+)=`Codex`;function\s+([\w$]+)\(([\w$]+)\)\{switch\(\3\)\{[\s\S]{0,900}?case\s+[\w$.]+\.Prod:return null\}\}function\s+([\w$]+)\(([\w$]+)\)\{let\s+([\w$]+)=\2\(\5\);return \6==null\?\1:`\$\{\1\} \(\$\{\6\}\)`\}/;
+  const match = re.exec(text);
+  if (!match) throw new Error("main session title pattern not found");
+  const replacement = `var ${match[1]}=\`Anti-Codex\`;function ${match[2]}(${match[3]}){return null}function ${match[4]}(${match[5]}){return ${match[1]}}`;
+  if (replacement.length > match[0].length) throw new Error("main session title replacement longer than match");
+  return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
 }
 
 function patchWindowsCloseBehavior(text) {
@@ -150,40 +193,57 @@ function patchI18nLoadingGate(text) {
 
 function patchAuthRequirement(text) {
   let next = text;
+  if (next.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}")) {
+    next = replacePadded(
+      next,
+      "function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}",
+      "function _(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:null}}",
+    );
+  }
+  if (next.includes("requiresAuth:!0 ,email:e.account?.type===`chatgpt`?e.account.email:null")) {
+    next = replacePadded(
+      next,
+      "requiresAuth:!0 ,email:e.account?.type===`chatgpt`?e.account.email:null",
+      "requiresAuth:!1 ,email:e.account?.type===`chatgpt`?e.account.email:null",
+    );
+  }
   if (next.includes("function T(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}")) {
     next = replacePadded(
       next,
       "function T(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}",
-      "function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}",
+      "function T(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:0}}",
     );
   }
   if (next.includes("function T(){return{openAIAuth:1,authMethod:1,requiresAuth:!1,email:null,planAtLogin:null}}")) {
     next = replacePadded(
       next,
       "function T(){return{openAIAuth:1,authMethod:1,requiresAuth:!1,email:null,planAtLogin:null}}",
+      "function T(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:0}}",
+    );
+  }
+  if (next.includes("function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}")) {
+    next = replacePadded(
+      next,
       "function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}",
+      "function T(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:0}}",
     );
   }
   if (next.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!0)")) {
     next = replacePadded(
       next,
       "requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!0)",
-      "requiresAuth:!0",
+      "requiresAuth:!1",
     );
   }
   if (next.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!1)")) {
     next = replacePadded(
       next,
       "requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!1)",
-      "requiresAuth:!0",
+      "requiresAuth:!1",
     );
   }
   if (next.includes("requiresAuth:!1                                       ,email:e.account?.type===`chatgpt`?e.account.email:null")) {
-    next = replacePadded(
-      next,
-      "requiresAuth:!1",
-      "requiresAuth:!0",
-    );
+    return next;
   }
   return next;
 }
@@ -199,7 +259,16 @@ function patchOnboardingGate(text) {
 }
 
 function patchAppRouteGate(text) {
-  return text;
+  const marker = "to:`/login`,replace:!0";
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex < 0) return text;
+  if (text.lastIndexOf("if(!0){", markerIndex) > text.lastIndexOf("if(", markerIndex)) return text;
+  const gateStart = text.lastIndexOf("if(", markerIndex);
+  const gateEnd = text.indexOf("{", gateStart) + 1;
+  if (gateStart < 0 || gateEnd <= gateStart) return text;
+  const search = text.slice(gateStart, gateEnd);
+  if (!/^if\([\w$]+\|\|![\w$]+\)\{$/.test(search)) return text;
+  return replacePadded(text, search, "if(!0){");
 }
 
 function patchAppearanceSettings(text) {
@@ -217,15 +286,100 @@ function patchGeneralAppearanceSettings(text) {
 function patchProfileDropdownSettings(text) {
   const search = ",Mt=xt,Nt=p(Se,`settings`)";
   const replacement = ",Mt=!0,Nt=p(Se,`settings`)";
-  if (!text.includes(search) && text.includes(replacement)) return text;
-  return replacePadded(text, search, replacement);
+  let next = text;
+  if (next.includes(search)) {
+    next = replacePadded(next, search, replacement);
+  } else if (!next.includes(replacement) && !next.includes("codex.profileDropdown.settingsPage")) {
+    throw new Error("Profile dropdown settings gate pattern not found");
+  }
+  const managerEntry = "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})},Wt=(0,Q.jsx)(O,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),Gt=(0,Q.jsx)(et,{LeftIcon:Me,keyboardShortcut:Ie,onClick:Ut,children:Wt}),Kt=(0,Q.jsxs)(V,{browser:!0,electron:!0,children:[Ht,Gt,(0,Q.jsx)(et,{LeftIcon:Me,onClick:()=>{u(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:`Anti-Codex \\u7ba1\\u7406`},`anticodex-manager`)]});";
+  if (next.includes("anticodex-manager") && next.includes("__ANTICODEX_OPEN_MANAGER__")) return next;
+  if (next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(") ||
+      next.includes("let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}")) {
+    const start = next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(")
+      ? "let Ut;t[129]!==d||t[130]!==u||t[131]!==je?("
+      : "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}";
+    return replaceBetweenPadded(next, start, "let qt;", managerEntry);
+  }
+
+  const labelIndex = next.indexOf("codex.profileDropdown.settingsPage");
+  const actionArrowIndex = next.lastIndexOf("=>{", labelIndex);
+  const segmentStart = next.lastIndexOf("let ", actionArrowIndex);
+  const groupIndex = next.indexOf("browser:!0,electron:!0,children:[", labelIndex);
+  const segmentEnd = next.indexOf(";let ", groupIndex);
+  if (labelIndex < 0 || actionArrowIndex < 0 || segmentStart < 0 || groupIndex < 0 || segmentEnd < 0) {
+    throw new Error("Profile dropdown manager injection pattern not found");
+  }
+  const segment = next.slice(segmentStart, segmentEnd + 1);
+  const action = /let ([\w$]+);[\s\S]*?\1=\(\)=>\{([\w$]+)\(!1\),([\w$]+)\(`\/settings\/\$\{([\w$]+)\}`,\{state:([\w$]+)\}\)/.exec(segment);
+  const label = /let ([\w$]+);[^;]*?\(0,([\w$]+)\.jsx\)\(([\w$]+),\{id:`codex\.profileDropdown\.settingsPage`/.exec(segment);
+  if (!action || !label) throw new Error("Profile dropdown settings item structure not found");
+  const item = new RegExp(`let ([\\w$]+);[^;]*?\\(0,${label[2]}\\.jsx\\)\\(([\\w$]+),\\{LeftIcon:([\\w$]+),keyboardShortcut:([\\w$]+),onClick:${action[1]},children:${label[1]}\\}\\)`).exec(segment);
+  const group = item && new RegExp(`let ([\\w$]+);[^;]*?\\(0,${label[2]}\\.jsxs\\)\\(([\\w$]+),\\{browser:!0,electron:!0,children:\\[([\\w$]+),${item[1]}\\]\\}\\)`).exec(segment);
+  if (!item || !group) throw new Error("Profile dropdown browser/electron menu group not found");
+  const injected = `let ${action[1]}=()=>{${action[2]}(!1),${action[3]}(\`/settings/\${${action[4]}}\`,{state:${action[5]}})},${label[1]}=(0,${label[2]}.jsx)(${label[3]},{id:\`codex.profileDropdown.settingsPage\`,defaultMessage:\`Settings\`,description:\`Menu item to open Codex settings page\`}),${item[1]}=(0,${label[2]}.jsx)(${item[2]},{LeftIcon:${item[3]},keyboardShortcut:${item[4]},onClick:${action[1]},children:${label[1]}}),${group[1]}=(0,${label[2]}.jsxs)(${group[2]},{browser:!0,electron:!0,children:[${group[3]},${item[1]},(0,${label[2]}.jsx)(${item[2]},{LeftIcon:${item[3]},onClick:()=>{${action[2]}(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:\`Anti-Codex \\u7ba1\\u7406\`},\`anticodex-manager\`)]});`;
+  if (injected.length > segment.length) throw new Error("Profile dropdown manager injection replacement did not fit");
+  return next.slice(0, segmentStart) + injected + " ".repeat(segment.length - injected.length) + next.slice(segmentEnd + 1);
 }
 
 function patchBrowserWindowIcon(text) {
-  const search = "...process.platform===`win32`?{autoHideMenuBar:!0}:{},";
-  const replacement = "...process.platform===`win32`?{icon:`icon.ico`}:{},";
+  const currentSearch = "...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{},";
+  const currentReplacement = "...process.platform===`win32`?{icon:`icon.ico`,autoHideMenuBar:!0}:{},";
+  if (text.includes(currentSearch)) return replacePadded(text, currentSearch, currentReplacement);
+  const search = '...process.platform===`win32`?{autoHideMenuBar:!0}:{},';
+  const replacement = '...process.platform===`win32`?{icon:`icon.ico`}:{},';
   if (!text.includes(search) && text.includes("icon:`icon.ico`")) return text;
   return replacePadded(text, search, replacement);
+}
+
+function patchLocalModelAvailability(text) {
+  const source = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`;return ([\w$]+)\.forEach/;
+  const match = source.exec(text);
+  if (!match) {
+    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1;return [\w$]+\.forEach/.test(text)) return text;
+    throw new Error("Local model availability filter pattern not found");
+  }
+  const replacement = `let ${match[1]}=[],${match[2]}=null,${match[3]}=!1;return ${match[6]}.forEach`;
+  return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
+}
+
+function patchLocalPluginCatalog(text) {
+  const source = /function ([\w$]+)\(([\w$]+),([\w$]+)\)\{return \2\.sendRequest\(`plugin\/list`,\3\)\}/;
+  const installed = /var ([\w$]+)=[\w$]+=>[\w$]+\.sendRequest\(`plugin\/installed`,\{\}\);/;
+  const match = source.exec(text) || installed.exec(text);
+  if (!match) {
+    if (/var [\w$]+=async\(\)=>\(\{marketplaces:\[\]\}\);/.test(text)) return text;
+    throw new Error("Local plugin catalog pattern not found");
+  }
+  const replacement = `var ${match[1]}=async()=>({marketplaces:[]});`;
+  return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
+}
+
+function patchElectronLocalPluginCatalog(text) {
+  const start = "async listPlugins(";
+  const end = "async addMarketplace(";
+  const startIndex = text.indexOf(start);
+  const endIndex = text.indexOf(end, startIndex + start.length);
+  if (startIndex < 0 || endIndex < 0) throw new Error("Electron plugin catalog method not found");
+  const current = text.slice(startIndex, endIndex);
+  const match = /^async listPlugins\(([\w$]+)\)/.exec(current);
+  if (!match) throw new Error("Electron plugin catalog signature not found");
+  const replacement = `async listPlugins(${match[1]}){return{marketplaces:[],marketplaceLoadErrors:[]}}`;
+  if (replacement.length > current.length) {
+    throw new Error("Electron plugin catalog replacement did not fit");
+  }
+  return text.slice(0, startIndex) + replacement + " ".repeat(current.length - replacement.length) + text.slice(endIndex);
+}
+
+function patchWebviewLocalPluginCatalog(text) {
+  const source = /"list-plugins":([\w$]+)\(\(([\w$]+),([\w$]+)\)=>\2\.sendRequest\(`plugin\/list`,\3\)\)/;
+  const match = source.exec(text);
+  if (!match) {
+    if (/"list-plugins":[\w$]+\(([\w$]+)=>\1\.listPlugins\(\{\}\)\)/.test(text)) return text;
+    throw new Error("Webview plugin catalog route not found");
+  }
+  const replacement = `"list-plugins":${match[1]}(${match[2]}=>${match[2]}.listPlugins({}))`;
+  return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
 }
 
 function findBootstrapAppUserModelIdPatch(fd, header, dataOffset) {
@@ -234,11 +388,34 @@ function findBootstrapAppUserModelIdPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (/process\.platform===`win32`&&[\w$]+\.app\.setAppUserModelId\((?:[^()]|\([^()]*\))*\)/.test(text) ||
-        text.includes("setAppUserModelId(`DeepCodex`)")) {
+        text.includes("setAppUserModelId(`AntiCodex`)")) {
       return [rel, patchBootstrapAppUserModelId];
     }
   }
   throw new Error("Could not find Windows AppUserModelID bootstrap code");
+}
+
+function findBootstrapAppNamePatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (text.includes(".app.setName(") || text.includes(".app.name=`Anti-Codex`")) {
+      return [rel, patchBootstrapAppName];
+    }
+  }
+  throw new Error("Could not find Electron app.setName bootstrap code");
+}
+
+function findWebviewHtmlTitlePatch(fd, header, dataOffset) {
+  const rel = "webview/index.html";
+  const entry = walkToEntry(header, rel);
+  const { buf } = readFileFromAsar(fd, entry, dataOffset);
+  const text = buf.toString("utf8");
+  if (text.includes("<title>Codex</title>") || text.includes("<title>Anti-Codex</title>")) {
+    return [rel, patchWebviewHtmlTitle];
+  }
+  throw new Error("Could not find webview HTML title");
 }
 
 function findMainSessionPatch(fd, header, dataOffset) {
@@ -246,7 +423,8 @@ function findMainSessionPatch(fd, header, dataOffset) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("var Kv=`Codex`;function qv(") || text.includes("var Kv=`DeepCodex`;function qv(")) {
+    if (/var\s+[\w$]+=`(?:Codex|DeepCodex|Anti-Codex)`;function\s+[\w$]+\(/.test(text) ||
+        hasProductNameDrivenSessionTitle(text)) {
       return [rel, patchMainSession];
     }
   }
@@ -335,9 +513,14 @@ function findAuthRequirementPatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("function T(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||
+    if (text.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||
+        text.includes("function _(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:null}}") ||
+        text.includes("requiresAuth:!0 ,email:e.account?.type===`chatgpt`?e.account.email:null") ||
+        text.includes("requiresAuth:!1 ,email:e.account?.type===`chatgpt`?e.account.email:null") ||
+        text.includes("function T(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||
         text.includes("function T(){return{openAIAuth:1,authMethod:1,requiresAuth:!1,email:null,planAtLogin:null}}") ||
         text.includes("function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}") ||
+        text.includes("function T(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:0}}") ||
         text.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!0)")) {
       return [rel, patchAuthRequirement];
     }
@@ -377,8 +560,9 @@ function findAppRouteGatePatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if ((text.includes("function XS(){") || text.includes("function XS(){return(0,$.jsx)(qS,{})}")) &&
-        text.includes("function ZS(")) {
+    if (text.includes("to:`/login`,replace:!0") ||
+        ((text.includes("function XS(){") || text.includes("function XS(){return(0,$.jsx)(qS,{})}")) &&
+        text.includes("function ZS("))) {
       return [rel, patchAppRouteGate];
     }
     if (text.includes("function dE(){") &&
@@ -424,7 +608,9 @@ function findProfileDropdownSettingsPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (text.includes(",Mt=xt,Nt=p(Se,`settings`)") ||
-        text.includes(",Mt=!0,Nt=p(Se,`settings`)")) {
+        text.includes(",Mt=!0,Nt=p(Se,`settings`)") ||
+        text.includes("codex.profileDropdown.settingsPage") ||
+        text.includes("anticodex-manager")) {
       return [rel, patchProfileDropdownSettings];
     }
   }
@@ -437,11 +623,90 @@ function findBrowserWindowIconPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (text.includes("...process.platform===`win32`?{autoHideMenuBar:!0}:{}") ||
+        text.includes("...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{}") ||
         text.includes("icon:`icon.ico`")) {
       return [rel, patchBrowserWindowIcon];
     }
   }
   throw new Error("Could not find BrowserWindow options under .vite/build/main-*.js");
+}
+
+function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/model-list-filter-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`;return [\w$]+\.forEach/.test(text) ||
+        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1;return [\w$]+\.forEach/.test(text)) {
+      return [rel, patchLocalModelAvailability];
+    }
+  }
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/models-and-reasoning-efforts-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`;return [\w$]+\.forEach/.test(text) ||
+        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1;return [\w$]+\.forEach/.test(text)) {
+      return [rel, patchLocalModelAvailability];
+    }
+  }
+  throw new Error("Could not find webview model availability filter");
+}
+
+function findLocalPluginCatalogPatch(fd, header, dataOffset) {
+  let hasAppMainListPluginsRoute = false;
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (rel.startsWith("webview/assets/app-main-") && text.includes("\"list-plugins\"")) {
+      hasAppMainListPluginsRoute = true;
+      continue;
+    }
+    if (!rel.startsWith("webview/assets/app-server-manager-signals-")) continue;
+    if (/function [\w$]+\(([\w$]+),([\w$]+)\)\{return \1\.sendRequest\(`plugin\/list`,\2\)\}/.test(text) ||
+        /var [\w$]+=[\w$]+=>[\w$]+\.sendRequest\(`plugin\/installed`,\{\}\);/.test(text) ||
+        /var [\w$]+=async\(\)=>\(\{marketplaces:\[\]\}\);/.test(text)) {
+      return [rel, patchLocalPluginCatalog];
+    }
+  }
+  if (hasAppMainListPluginsRoute) {
+    return ["package.json", (text) => text];
+  }
+  throw new Error("Could not find webview plugin catalog request");
+}
+
+function findElectronLocalPluginCatalogPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/src-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    const startIndex = text.indexOf("async listPlugins(");
+    const endIndex = text.indexOf("async addMarketplace(", startIndex + 1);
+    if (startIndex >= 0 && endIndex > startIndex) {
+      const current = text.slice(startIndex, endIndex);
+      if (current.includes("method:`plugin/list`") ||
+          current.includes("method:`plugin/installed`") ||
+          current.includes("return{marketplaces:[],marketplaceLoadErrors:[]}")) {
+        return [rel, patchElectronLocalPluginCatalog];
+      }
+    }
+  }
+  throw new Error("Could not find Electron plugin catalog method");
+}
+
+function findWebviewLocalPluginCatalogPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/app-main-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (/"list-plugins":[\w$]+\(\(([\w$]+),([\w$]+)\)=>\1\.sendRequest\(`plugin\/list`,\2\)\)/.test(text) ||
+        /"list-plugins":[\w$]+\(\(([\w$]+),([\w$]+)\)=>\2\.sendRequest\(`plugin\/list`,\3\)\)/.test(text) ||
+        /"list-plugins":[\w$]+\(([\w$]+)=>\1\.listPlugins\(\{\}\)\)/.test(text)) {
+      return [rel, patchWebviewLocalPluginCatalog];
+    }
+  }
+  throw new Error("Could not find webview plugin catalog route");
 }
 
 
@@ -457,6 +722,8 @@ const dataOffset = alignedAsarDataOffset(headerStringSize);
 
 const patchSpecs = [
   ["package-json", () => ["package.json", patchPackageJson]],
+  ["webview-html-title", () => findWebviewHtmlTitlePatch(fd, header, dataOffset)],
+  ["app-name", () => findBootstrapAppNamePatch(fd, header, dataOffset)],
   ["app-user-model-id", () => findBootstrapAppUserModelIdPatch(fd, header, dataOffset)],
   ["session-title", () => findMainSessionPatch(fd, header, dataOffset)],
   ["windows-close", () => findWindowsClosePatch(fd, header, dataOffset)],
@@ -471,20 +738,34 @@ const patchSpecs = [
   ["appearance-settings", () => findAppearanceSettingsPatch(fd, header, dataOffset)],
   ["profile-dropdown-settings", () => findProfileDropdownSettingsPatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
+  ["local-model-availability", () => findLocalModelAvailabilityPatch(fd, header, dataOffset)],
+  ["local-plugin-catalog", () => findLocalPluginCatalogPatch(fd, header, dataOffset)],
+  ["electron-local-plugin-catalog", () => findElectronLocalPluginCatalogPatch(fd, header, dataOffset)],
+  ["webview-local-plugin-catalog", () => findWebviewLocalPluginCatalogPatch(fd, header, dataOffset)],
 ];
 
 const written = [];
 const skipped = [];
 const criticalPatchNames = new Set([
-  "locale-info",
-  "config-write",
-  "default-locale",
-  "enable-i18n",
+  "package-json",
+  "webview-html-title",
+  "app-name",
+  "app-user-model-id",
+  "session-title",
   "auth-requirement",
-  "appearance-settings",
+  "app-route-gate",
+  "profile-dropdown-settings",
+  "browser-window-icon",
+  "local-model-availability",
+  "local-plugin-catalog",
+  "electron-local-plugin-catalog",
+  "webview-local-plugin-catalog",
 ]);
 for (const [name, findPatch] of patchSpecs) {
   try {
+    if (forcedFailurePatch === name) {
+      throw new Error(`Forced critical patch failure for transaction safety test: ${name}`);
+    }
     const [rel, patch] = findPatch();
     const entry = walkToEntry(header, rel);
     const { buf, offset } = readFileFromAsar(fd, entry, dataOffset);

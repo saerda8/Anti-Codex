@@ -1,22 +1,22 @@
 {
   "models": [
     {
-      "slug": "gpt-5.5",
-      "display_name": "DeepSeek V4 Pro",
-      "description": "deepseek-v4-pro",
+      "slug": "gemini-pro-agent",
+      "display_name": "Gemini 3.1 Pro (High)",
+      "description": "antigravity-gemini-pro-agent",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {
           "effort": "low",
-          "description": "Thinking disabled"
+          "description": "Antigravity low reasoning"
         },
         {
           "effort": "high",
-          "description": "DeepSeek thinking high"
+          "description": "Antigravity high reasoning"
         },
         {
           "effort": "xhigh",
-          "description": "DeepSeek thinking max"
+          "description": "Antigravity max reasoning"
         }
       ],
       "shell_type": "shell_command",
@@ -61,28 +61,28 @@
       ]
     },
     {
-      "slug": "gpt-5.4-mini",
-      "display_name": "DeepSeek V4 Flash",
-      "description": "deepseek-v4-flash",
+      "slug": "gemini-3-flash-agent",
+      "display_name": "Gemini 3.5 Flash (High)",
+      "description": "antigravity-gemini-3-flash-agent",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {
           "effort": "low",
-          "description": "Thinking disabled"
+          "description": "Antigravity low reasoning"
         },
         {
           "effort": "high",
-          "description": "DeepSeek thinking high"
+          "description": "Antigravity high reasoning"
         },
         {
           "effort": "xhigh",
-          "description": "DeepSeek thinking max"
+          "description": "Antigravity max reasoning"
         }
       ],
       "shell_type": "shell_command",
       "visibility": "list",
       "supported_in_api": true,
-      "priority": 0,
+      "priority": 1,
       "service_tiers": [],
       "availability_nux": null,
       "upgrade": null,

@@ -11,12 +11,28 @@ const LOCAL_EMAIL = process.env.DEEPCODEX_ACCOUNT_EMAIL || "deepcodex@local";
 
 function codexHomes() {
     const homes = [];
-    const shared = process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || path.join(os.homedir(), ".codex");
     const current = process.env.CODEX_HOME || process.env.CODEX_HOME_DIR || "";
-    for (const home of [shared, current]) {
+    const shared = process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || "";
+    if (current && shared && samePath(current, shared)) return homes;
+    for (const home of [current]) {
         if (home && !homes.includes(home)) homes.push(home);
     }
     return homes;
+}
+
+function samePath(left, right) {
+    try {
+        return path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase();
+    } catch {
+        return String(left || "").toLowerCase() === String(right || "").toLowerCase();
+    }
+}
+
+function firstHomeWithRelativePath(relPath) {
+    for (const home of codexHomes()) {
+        if (listJsonFiles(path.join(home, relPath)).length > 0) return home;
+    }
+    return null;
 }
 
 function safeReadJson(file) {
@@ -39,14 +55,16 @@ function listJsonFiles(dir) {
 }
 
 function readConnectorDirectory() {
-    for (const home of codexHomes()) {
+    const home = firstHomeWithRelativePath(path.join("cache", "codex_app_directory"));
+    const locallyAuthorized = readLocalAuthorizedConnectorIds();
+    if (home) {
         const dir = path.join(home, "cache", "codex_app_directory");
         for (const file of listJsonFiles(dir)) {
             const data = safeReadJson(file);
             if (Array.isArray(data?.connectors)) {
                 return {
                     schema_version: data.schema_version || 1,
-                    connectors: data.connectors.map(normalizeConnector),
+                    connectors: data.connectors.map((connector) => normalizeConnector(connector, { locallyAuthorized })),
                 };
             }
         }
@@ -54,15 +72,55 @@ function readConnectorDirectory() {
     return { schema_version: 1, connectors: [] };
 }
 
-function readAppTools() {
+function readLocalAuthorizedConnectorIds() {
+    const ids = new Set();
+    const envList = String(process.env.ANTICODEX_LOCAL_AUTHORIZED_CONNECTORS || "")
+        .split(/[,\r\n]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    for (const id of envList) ids.add(id);
+
+    for (const home of codexHomes()) {
+        const configPath = path.join(home, "config.toml");
+        let text = "";
+        try { text = fs.readFileSync(configPath, "utf8"); } catch { continue; }
+        let inSection = false;
+        for (const rawLine of text.split(/\r?\n/)) {
+            const line = rawLine.replace(/#.*/, "").trim();
+            if (!line) continue;
+            const section = line.match(/^\[([^\]]+)\]$/);
+            if (section) {
+                inSection = section[1] === "local_authorized_connectors" || section[1] === "anticodex.local_authorized_connectors";
+                continue;
+            }
+            if (!inSection) continue;
+            const array = line.match(/^connectors\s*=\s*\[(.*)\]\s*$/);
+            if (array) {
+                for (const match of array[1].matchAll(/"([^"]+)"/g)) ids.add(match[1]);
+                continue;
+            }
+            const enabled = line.match(/^("?)([^"=]+)\1\s*=\s*true\s*$/i);
+            if (enabled) ids.add(enabled[2].trim());
+        }
+    }
+    return ids;
+}
+
+function readAppTools(options = {}) {
+    const accessibleConnectorIds = options.accessibleConnectorIds instanceof Set ? options.accessibleConnectorIds : null;
     const tools = [];
     const seen = new Set();
-    for (const home of codexHomes()) {
+    const home = firstHomeWithRelativePath(path.join("cache", "codex_apps_tools"));
+    if (home) {
         const dir = path.join(home, "cache", "codex_apps_tools");
         for (const file of listJsonFiles(dir)) {
             const data = safeReadJson(file);
             if (!Array.isArray(data?.tools)) continue;
             for (const tool of data.tools) {
+                if (accessibleConnectorIds) {
+                    const connectorId = String(tool?.connector_id || "");
+                    if (!connectorId || !accessibleConnectorIds.has(connectorId)) continue;
+                }
                 const key = `${tool.server_name || ""}\u0000${tool.tool_namespace || ""}\u0000${tool.tool_name || ""}\u0000${tool.connector_id || ""}`;
                 if (seen.has(key)) continue;
                 seen.add(key);
@@ -73,10 +131,12 @@ function readAppTools() {
     return { schema_version: 2, tools };
 }
 
-function normalizeConnector(connector) {
+function normalizeConnector(connector, options = {}) {
+    const id = connector?.id || connector?.connector_id || "";
+    const locallyAuthorized = options.locallyAuthorized instanceof Set && options.locallyAuthorized.has(id);
     const normalized = {
         ...connector,
-        id: connector?.id || connector?.connector_id || "",
+        id,
         name: connector?.name || connector?.displayName || connector?.id || "App",
         description: connector?.description || "",
         logoUrl: connector?.logoUrl ?? null,
@@ -84,16 +144,31 @@ function normalizeConnector(connector) {
         distributionChannel: connector?.distributionChannel || "LOCAL_CACHE",
         appMetadata: connector?.appMetadata || {},
         labels: connector?.labels || {},
-        installUrl: connector?.installUrl ?? null,
-        isAccessible: connector?.isAccessible === true,
+        installUrl: localInstallUrl(connector?.installUrl),
+        isAccessible: locallyAuthorized || connector?.isAccessible === true,
         isEnabled: connector?.isEnabled !== false,
         pluginDisplayNames: Array.isArray(connector?.pluginDisplayNames) ? connector.pluginDisplayNames : [],
     };
+    if (locallyAuthorized) normalized.localAuthorization = "anticodex-local-allowlist";
     if (!Array.isArray(normalized.supported_auth)) {
         normalized.supported_auth = [{ type: "UNSUPPORTED" }];
     }
     if (!normalized.link_params_schema) normalized.link_params_schema = { type: "object", properties: {} };
     return normalized;
+}
+
+function localInstallUrl(installUrl) {
+    if (!installUrl || typeof installUrl !== "string") return null;
+    try {
+        const url = new URL(installUrl);
+        const host = url.hostname.toLowerCase();
+        if (host === "chatgpt.com" || host.endsWith(".chatgpt.com") || host === "chat.openai.com") {
+            return null;
+        }
+    } catch {
+        return installUrl;
+    }
+    return installUrl;
 }
 
 function findConnector(connectorId) {
@@ -108,8 +183,39 @@ function readPluginRegistrations() {
         collectPluginDirs(path.join(home, ".tmp", "plugins", "plugins"), "local", plugins, seen);
         collectPluginCache(path.join(home, "plugins", "cache"), plugins, seen);
     }
+    const enabledOverrides = readPluginEnabledOverrides();
+    for (const plugin of plugins) {
+        const key = `${plugin?.plugin?.id || ""}@${plugin?.marketplaceName || ""}`;
+        if (enabledOverrides.has(key)) plugin.plugin.enabled = enabledOverrides.get(key);
+    }
     plugins.sort((a, b) => a.plugin.id.localeCompare(b.plugin.id));
     return plugins;
+}
+
+function readPluginEnabledOverrides() {
+    const overrides = new Map();
+    for (const home of codexHomes()) {
+        const configPath = path.join(home, "config.toml");
+        let text = "";
+        try { text = fs.readFileSync(configPath, "utf8"); } catch { continue; }
+        let currentPluginKey = "";
+        for (const rawLine of text.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            const section = line.match(/^\[plugins\."([^"]+)"\]$/);
+            if (section) {
+                currentPluginKey = section[1];
+                continue;
+            }
+            if (/^\[/.test(line)) {
+                currentPluginKey = "";
+                continue;
+            }
+            if (!currentPluginKey) continue;
+            const enabled = line.match(/^enabled\s*=\s*(true|false)\b/i);
+            if (enabled) overrides.set(currentPluginKey, enabled[1].toLowerCase() === "true");
+        }
+    }
+    return overrides;
 }
 
 function collectPluginCache(cacheRoot, plugins, seen) {
@@ -155,9 +261,7 @@ function collectPluginDir(pluginDir, marketplaceName, plugins, seen) {
     const metadata = safeReadJson(path.join(pluginDir, ".codex-plugin", "plugin.json"));
     if (!metadata?.name) return;
     const key = `${metadata.name}@${marketplaceName}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    plugins.push({
+    const record = {
         marketplaceName,
         summary: metadata,
         plugin: {
@@ -171,7 +275,23 @@ function collectPluginDir(pluginDir, marketplaceName, plugins, seen) {
             authPolicy: "NONE",
             apps: pluginApps(pluginDir),
         },
-    });
+    };
+    if (seen.has(key)) {
+        const index = plugins.findIndex((plugin) => `${plugin?.summary?.name || plugin?.plugin?.id || ""}@${plugin?.marketplaceName || ""}` === key);
+        if (index >= 0 && pluginMetadataScore(record) > pluginMetadataScore(plugins[index])) plugins[index] = record;
+        return;
+    }
+    seen.add(key);
+    plugins.push(record);
+}
+
+function pluginMetadataScore(plugin) {
+    const summary = plugin?.summary || {};
+    const appCount = Array.isArray(plugin?.plugin?.apps) ? plugin.plugin.apps.length : 0;
+    return Number(Boolean(summary.skills)) * 10
+        + Number(Boolean(summary.mcpServers)) * 5
+        + appCount
+        + Object.keys(summary.interface || {}).length;
 }
 
 function pluginApps(pluginDir) {
@@ -196,6 +316,17 @@ function pluginsPayload() {
     };
 }
 
+function installedPluginsPayload() {
+    return readPluginRegistrations()
+        .filter((plugin) => plugin.plugin.installed)
+        .map((plugin) => ({
+            ...plugin.plugin,
+            marketplaceName: plugin.marketplaceName,
+            enabled: plugin.plugin.enabled !== false,
+            installed: true,
+        }));
+}
+
 function connectorDirectoryPayload() {
     const directory = readConnectorDirectory();
     return {
@@ -207,7 +338,11 @@ function connectorDirectoryPayload() {
 
 function whamAppsPayload() {
     const directory = readConnectorDirectory();
-    const tools = readAppTools();
+    const accessibleConnectorIds = new Set(directory.connectors
+        .filter((connector) => connector.isAccessible === true)
+        .map((connector) => connector.id)
+        .filter(Boolean));
+    const tools = readAppTools({ accessibleConnectorIds });
     return {
         apps: directory.connectors,
         connectors: directory.connectors,
@@ -240,6 +375,8 @@ function localAccountPayload() {
         role: "owner",
         is_default: true,
         is_deactivated: false,
+        supports_websockets: false,
+        websocket_url: null,
         plan_type: "prolite",
         account_plan: {
             type: "prolite",
@@ -315,13 +452,19 @@ function localBackendApiResponse(method, pathname) {
     if (method === "POST" && pathname === "/backend-api/codex/analytics-events/events") {
         return { ok: true };
     }
-    if (method === "POST" && pathname === "/backend-api/wham/apps") {
+    if ((method === "GET" || method === "POST") && pathname === "/backend-api/wham/apps") {
         return whamAppsPayload();
     }
-    if (method === "GET" && (pathname === "/backend-api/plugins/featured" || pathname === "/backend-api/plugins/list")) {
+    if (method === "GET" && pathname === "/backend-api/plugins/featured") {
+        return [];
+    }
+    if (method === "GET" && pathname === "/backend-api/plugins/list") {
         return pluginsPayload();
     }
-    if (method === "GET" && (pathname === "/backend-api/ps/plugins/installed" || pathname === "/backend-api/ps/plugins/list")) {
+    if (method === "GET" && pathname === "/backend-api/ps/plugins/installed") {
+        return installedPluginsPayload();
+    }
+    if (method === "GET" && pathname === "/backend-api/ps/plugins/list") {
         return pluginsPayload();
     }
     if (method === "GET" && pathname === "/backend-api/connectors/directory/list") {
@@ -334,7 +477,7 @@ function localBackendApiResponse(method, pathname) {
         return connectorLogoPayload();
     }
     if (method === "GET" && pathname.match(/^\/backend-api\/aip\/connectors\/[^/]+\/link$/)) {
-        return { link: null };
+        return { ok: false, object: "connector_link_status", status: "unsupported", error: "Connector link is not available in local metadata-only projection." };
     }
     if (method === "GET" && pathname.match(/^\/backend-api\/aip\/connectors\/[^/]+\/tos$/)) {
         return { blurbs: [], personalization_toggles: [] };
@@ -343,10 +486,10 @@ function localBackendApiResponse(method, pathname) {
         return connectorDetailPayload(connectorIdFromPath(pathname));
     }
     if (method === "POST" && pathname === "/backend-api/aip/connectors/links/noauth") {
-        return { ok: true, link: null };
+        return { ok: false, object: "connector_link_status", status: "unsupported", error: "Connector noauth link is not available in local metadata-only projection." };
     }
     if (method === "POST" && pathname === "/backend-api/aip/connectors/links/oauth") {
-        return { redirect_url: null };
+        return { ok: false, object: "connector_link_status", status: "unsupported", error: "Connector oauth link is not available in local metadata-only projection." };
     }
     return null;
 }
@@ -357,6 +500,7 @@ export {
     connectorDirectoryPayload,
     localAccountPayload,
     localBackendApiResponse,
+    installedPluginsPayload,
     localUserPayload,
     pluginsPayload,
     readAppTools,

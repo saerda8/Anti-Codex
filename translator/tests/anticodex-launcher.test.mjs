@@ -1,0 +1,3793 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
+
+const root = resolve(import.meta.dirname, "..", "..");
+
+function extractQuotedListBlock(text, marker) {
+  const start = text.indexOf(marker);
+  assert.notEqual(start, -1, `missing list marker: ${marker}`);
+  const open = text.indexOf("(", start);
+  const close = text.indexOf(")", open);
+  assert.notEqual(open, -1, `missing list open: ${marker}`);
+  assert.notEqual(close, -1, `missing list close: ${marker}`);
+  return [...text.slice(open, close).matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+}
+
+function extractJsSetBlock(text, marker) {
+  const start = text.indexOf(marker);
+  assert.notEqual(start, -1, `missing set marker: ${marker}`);
+  const open = text.indexOf("[", start);
+  const close = text.indexOf("]", open);
+  assert.notEqual(open, -1, `missing set open: ${marker}`);
+  assert.notEqual(close, -1, `missing set close: ${marker}`);
+  return [...text.slice(open, close).matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+}
+
+test("Anti-Codex launcher selects isolated Antigravity mode", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+
+  assert.match(launcher, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
+  assert.match(launcher, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
+  assert.match(launcher, /anticodex-launcher\.out\.log/);
+  assert.match(launcher, /anticodex-launcher\.err\.log/);
+  assert.match(launcher, /RedirectStandardOutput/);
+  assert.match(launcher, /RedirectStandardError/);
+  assert.match(launcher, /function Find-AntiCodexLocalAddress/);
+  assert.match(launcher, /return "127\.0\.0\.1"/);
+  assert.match(launcher, /TRANSLATOR_LISTEN_HOST\s*=\s*Find-AntiCodexLocalAddress/);
+  assert.doesNotMatch(launcher, /Get-NetIPAddress/);
+  assert.match(launcher, /TRANSLATOR_HOST/);
+  assert.match(launcher, /TRANSLATOR_URL/);
+  assert.match(launcher, /function Get-RunningAntiCodexMain/);
+  assert.match(launcher, /\$runningMain = Get-RunningAntiCodexMain -MainExecutable \$mainExecutable/);
+  assert.match(launcher, /\$translatorLoopbackUrl = "http:\/\/127\.0\.0\.1:\$\(\$env:TRANSLATOR_PORT\)"/);
+  assert.match(launcher, /Test-AntiCodexTranslatorHealth \$translatorLoopbackUrl/);
+  assert.match(launcher, /DEEPCODEX_STATE_ROOT/);
+  assert.match(launcher, /function Resolve-AntiCodexInstallRoot/);
+  assert.doesNotMatch(launcher, /Split-Path -Leaf \$scriptParent\) -ieq "runtime"/);
+  assert.match(launcher, /CODEX_HOME_DIR\s*=\s*Join-Path \$env:DEEPCODEX_STATE_ROOT "codex-home-deepseek-app"/);
+  assert.match(launcher, /CODEX_HOME\s*=\s*\$env:CODEX_HOME_DIR/);
+  assert.match(launcher, /GLOBAL_CODEX_HOME\s*=\s*Join-Path \$env:USERPROFILE ".codex"/);
+  assert.match(launcher, /DEEPCODEX_SHARED_CODEX_HOME\s*=\s*\$env:GLOBAL_CODEX_HOME/);
+  assert.match(launcher, /DEEPCODEX_DISABLE_GPU\s*=\s*["']1["']/);
+  assert.match(launcher, /start-deepcodex\.ps1/i);
+  assert.match(launcher, /AppActivate/);
+  assert.match(launcher, /Test-AntiCodexTranslatorHealth/);
+  assert.doesNotMatch(launcher, /TRANSLATOR_LISTEN_HOST\s*=\s*["']0\.0\.0\.0["']/);
+  assert.ok(
+    launcher.indexOf("$runningMain = Get-RunningAntiCodexMain") < launcher.indexOf("$updateChecker = Join-Path"),
+    "running Anti-Codex fast path should run before update checks",
+  );
+  assert.ok(
+    launcher.indexOf("$runningMain = Get-RunningAntiCodexMain") < launcher.indexOf("$antigravityDesktopHelper = Join-Path"),
+    "running Anti-Codex fast path should not load Antigravity helper first",
+  );
+});
+
+test("Anti-Codex recovers a dead translator without restarting its desktop window", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const runningMainBranch = launcher.match(/if \(\$runningMain\) \{[\s\S]*?\n\}/)?.[0];
+
+  assert.ok(runningMainBranch, "missing running Anti-Codex recovery branch");
+  assert.match(runningMainBranch, /start-deepcodex\.ps1/);
+  assert.match(runningMainBranch, /-TranslatorOnly/);
+  assert.match(runningMainBranch, /Activate-AntiCodexWindow/);
+  assert.doesNotMatch(runningMainBranch, /Stop-Process|StartsWith\(\$installRoot/);
+  assert.match(sharedLauncher, /param\s*\(\s*\[switch\]\$TranslatorOnly\s*\)/);
+});
+
+test("shared launcher watchdog restores translator while the desktop window is open", () => {
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const monitorLoop = sharedLauncher.match(/while \(-not \$codexProc\.HasExited\) \{[\s\S]*?\n    \}/)?.[0];
+
+  assert.match(sharedLauncher, /\$env:CODEX_HOME_DIR\s*=\s*\$CODEX_HOME_DIR/);
+  assert.match(sharedLauncher, /\$env:CODEX_HOME\s*=\s*\$CODEX_HOME_DIR/);
+  assert.match(sharedLauncher, /\$env:GLOBAL_CODEX_HOME\s*=\s*\$GLOBAL_CODEX_HOME/);
+  assert.match(sharedLauncher, /\$env:DEEPCODEX_SHARED_CODEX_HOME\s*=\s*\$GLOBAL_CODEX_HOME/);
+  assert.match(sharedLauncher, /function Ensure-TranslatorRunning/);
+  assert.ok(monitorLoop, "missing desktop lifetime monitor loop");
+  assert.match(monitorLoop, /Ensure-TranslatorRunning/);
+  assert.match(monitorLoop, /\$translatorRecoveryCooldownUntil/);
+  assert.match(monitorLoop, /AddSeconds\(30\)/);
+  assert.match(sharedLauncher, /Translator watchdog restart failed; retrying after 30-second cooldown/);
+  assert.match(sharedLauncher, /Test-TranslatorHealth/);
+  assert.match(sharedLauncher, /Start-TranslatorProcess/);
+  assert.match(sharedLauncher, /translator health lost; restarting/i);
+});
+
+test("translator watchdog tolerates transient health stalls before restarting", () => {
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const ensureFunction = sharedLauncher.match(/function Ensure-TranslatorRunning \{[\s\S]*?\n\}/)?.[0];
+
+  assert.match(sharedLauncher, /TRANSLATOR_HEALTH_TIMEOUT_MS/);
+  assert.match(sharedLauncher, /TRANSLATOR_HEALTH_FAILURE_THRESHOLD/);
+  assert.match(sharedLauncher, /function Test-TranslatorHealthWithGrace/);
+  assert.match(sharedLauncher, /ANTICODEX_TRANSLATOR_BUSY_PATH/);
+  assert.match(sharedLauncher, /function Test-TranslatorBusyMarker/);
+  assert.ok(ensureFunction, "missing translator watchdog function");
+  assert.match(ensureFunction, /Test-TranslatorHealthWithGrace/);
+  assert.ok(
+    ensureFunction.indexOf("Test-TranslatorBusyMarker") < ensureFunction.indexOf("translator health lost; restarting"),
+    "watchdog must skip restart while an Antigravity request is busy",
+  );
+  assert.ok(
+    ensureFunction.indexOf("Test-TranslatorBusyMarker") < ensureFunction.indexOf("Stop-StaleDeepCodexTranslator"),
+    "busy marker check must happen before stopping translator processes",
+  );
+  assert.match(ensureFunction, /restart skipped/i);
+  assert.match(ensureFunction, /translator health lost; restarting/i);
+});
+
+test("translator watchdog does not restart for Antigravity account or proxy readiness failures", () => {
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const healthFunction = sharedLauncher.match(/function Test-TranslatorHealth \{[\s\S]*?\n\}/)?.[0];
+
+  assert.ok(healthFunction, "missing translator health predicate");
+  assert.match(healthFunction, /\$snapshot\s+-and\s+\$snapshot\.ok/);
+  assert.doesNotMatch(healthFunction, /accountReady|accountState|antigravityCircuitState|antigravityCircuitRetryAfterMs/);
+});
+
+test("shared launcher watchdog restores Antigravity Desktop while Anti-Codex is open", () => {
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+  const desktopHelper = readFileSync(resolve(root, "scripts", "antigravity-desktop.ps1"), "utf8");
+
+  assert.match(sharedLauncher, /antigravity-desktop\.ps1/);
+  assert.match(sharedLauncher, /function Ensure-AntigravityDesktopRunning/);
+  assert.match(sharedLauncher, /ANTIGRAVITY_RESTART_COOLDOWN_SECONDS/);
+  assert.match(sharedLauncher, /antigravityRestartNotBefore/);
+  assert.match(sharedLauncher, /Antigravity Desktop restart deferred until/i);
+  assert.match(sharedLauncher, /Antigravity Desktop restart candidate exited before becoming stable/i);
+  assert.match(sharedLauncher, /Antigravity Desktop process disappeared; restarting/i);
+  assert.match(sharedLauncher, /ANTIGRAVITY_DESKTOP_PATH/);
+  assert.match(sharedLauncher, /Ensure-AntigravityDesktopRunning/);
+  assert.match(launcher, /antigravity-desktop\.ps1/);
+  assert.match(launcher, /Resolve-AntigravityDesktopPath/);
+  assert.match(desktopHelper, /function Resolve-AntigravityDesktopPath/);
+  assert.match(desktopHelper, /function Get-AntigravityMainProcess/);
+  assert.match(desktopHelper, /DisplayIcon/);
+  assert.match(desktopHelper, /InstallLocation/);
+  assert.match(desktopHelper, /Antigravity IDE\.exe/);
+  assert.match(desktopHelper, /ExecutablePath/);
+  assert.doesNotMatch(launcher, /Get-Process -Name "antigravity"/);
+});
+
+test("shared launcher skips DeepSeek key setup in Antigravity mode", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  assert.match(launcher, /IS_ANTIGRAVITY_MODE/);
+  assert.match(launcher, /\$expectedAntiCodexRuntime = Join-Path \(Join-Path \$env:LOCALAPPDATA "Anti-Codex"\) "runtime"/);
+  assert.match(launcher, /\[IO\.Path\]::GetFullPath\(\$ROOT\)/);
+  assert.match(launcher, /Refusing to fall back to the original Codex executable/);
+  assert.doesNotMatch(launcher, /Split-Path -Leaf \(Split-Path -Parent \$ROOT\)\) -ieq "Anti-Codex"/);
+  assert.match(launcher, /TRANSLATOR_UPSTREAM_MODE\s*=\s*"antigravity"/);
+  assert.match(launcher, /if\s*\(-not \$USES_ANTIGRAVITY_UPSTREAM -and -not \$UPSTREAM_API_KEY\)/);
+  assert.match(launcher, /OPENAI_API_KEY:\s*localApiKey/);
+  assert.match(launcher, /\$env:OPENAI_API_KEY\s*=\s*\$LOCAL_CODEX_API_KEY/);
+  assert.match(launcher, /\$env:CODEX_API_KEY\s*=\s*\$LOCAL_CODEX_API_KEY/);
+  assert.doesNotMatch(launcher, /\$env:TRANSLATOR_HOST\s*=\s*["']127\.0\.0\.1["']/);
+  assert.match(launcher, /TRANSLATOR_LISTEN_HOST/);
+  assert.match(launcher, /\.Proxy\s*=\s*\$null/);
+  assert.match(launcher, /responses_websockets/);
+  assert.match(launcher, /responses_websockets_v2/);
+});
+
+test("Antigravity mode never writes ChatGPT account auth", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const antigravityAuthBlock = launcher.match(/if \(isAntigravityMode === "True"\) \{[\s\S]*?process\.exit\(0\);\s*\}/)?.[0];
+
+  assert.ok(antigravityAuthBlock, "missing Antigravity auth branch");
+  assert.match(antigravityAuthBlock, /OPENAI_API_KEY:\s*localApiKey/);
+  assert.doesNotMatch(antigravityAuthBlock, /auth_mode|chatgpt|tokens|refresh_token|auth\.openai|oauth/i);
+  assert.match(launcher, /\["cli_auth_credentials_store",\s*tomlString\("file"\)\]/);
+});
+
+test("Anti-Codex shell blocks ChatGPT login UI routes", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+
+  assert.match(brander, /authMethod:`apikey`,requiresAuth:!1/);
+  assert.match(brander, /requiresAuth:!1/);
+  assert.match(brander, /to:`\/login`,replace:!0/);
+  assert.match(brander, /if\(!0\)\{/);
+  assert.match(brander, /"auth-requirement"/);
+  assert.match(brander, /"app-route-gate"/);
+  assert.match(brander, /criticalPatchNames/);
+});
+
+test("plugin UI unlock is guarded as an unsafe debug-only path", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const unlockHelper = readFileSync(resolve(root, "scripts", "enable-deepcodex-plugin-unlock.ps1"), "utf8");
+
+  assert.match(launcher, /ANTICODEX_UNSAFE_PLUGIN_UNLOCK/);
+  assert.match(launcher, /\$DEEPCODEX_PLUGIN_UNLOCK_ENABLED = \(\$DEEPCODEX_PLUGIN_UNLOCK -ne "0"\) -and \$ANTICODEX_UNSAFE_PLUGIN_UNLOCK/);
+  assert.match(launcher, /\$needPluginUnlockInject = \$DEEPCODEX_PLUGIN_UNLOCK_ENABLED/);
+  assert.doesNotMatch(launcher, /\$needPluginUnlockInject = \(\$DEEPCODEX_PLUGIN_UNLOCK -ne "0"\)/);
+  assert.match(unlockHelper, /ANTICODEX_UNSAFE_PLUGIN_UNLOCK -ne "1"/);
+  assert.match(unlockHelper, /unsafe debug-only path/);
+});
+
+test("Anti-Codex shell exposes a visible in-app manager entry", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const cdpInject = readFileSync(resolve(root, "scripts", "deepcodex-cdp-inject.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const managerOpenInject = readFileSync(resolve(root, "scripts", "anticodex-manager-open-inject.js"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const repairShortcuts = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
+
+  assert.match(brander, /anticodex-manager/);
+  assert.match(brander, /Anti-Codex \\\\u7ba1\\\\u7406/);
+  assert.match(brander, /__ANTICODEX_OPEN_MANAGER__/);
+  assert.match(brander, /"profile-dropdown-settings"/);
+  assert.doesNotMatch(brander, /anticodex\/manager\/open/);
+  assert.doesNotMatch(brander, /globalThis\.location\.assign\(`http:\/\/127\.0\.0\.1:8484\/anticodex\/manager`\)/);
+  assert.match(brander, /codex\.profileDropdown\.settingsPage/);
+  assert.match(brander, /if \(next\.includes\("anticodex-manager"\) && next\.includes\("__ANTICODEX_OPEN_MANAGER__"\)\) return next/);
+  assert.match(brander, /next\.includes\("codex\.profileDropdown\.settingsPage"\)/);
+  assert.match(launcher, /anticodex-manager-inject\.js/);
+  assert.match(launcher, /anticodex-manager-bridge\.mjs/);
+  assert.match(launcher, /ANTICODEX_MANAGER_CDP_LOG/);
+  assert.match(launcher, /ANTICODEX_MANAGER_BRIDGE_LOG/);
+  assert.match(launcher, /function Start-AntiCodexManagerBridge/);
+  assert.match(launcher, /function Ensure-AntiCodexManagerBridgeRunning/);
+  assert.match(launcher, /DEEPCODEX_CDP_MANAGER_WATCH = "1"/);
+  assert.match(launcher, /"--watch"/);
+  assert.match(launcher, /function Get-AntiCodexManagerInjectionWatchers/);
+  assert.match(launcher, /function Reuse-AntiCodexManagerInjectionWatcher/);
+  assert.match(launcher, /Reusing manager injection watcher/);
+  assert.match(launcher, /stopping duplicate manager injection watcher/);
+  assert.match(launcher, /Manager injection watcher disappeared; restarting/);
+  assert.match(launcher, /function Wait-AntiCodexChildProcess/);
+  assert.match(launcher, /\$Process\.HasExited/);
+  assert.doesNotMatch(launcher, /WaitForExit\(3000\)/);
+  assert.doesNotMatch(launcher, /WaitForExit\(8000\)/);
+  assert.doesNotMatch(launcher, /WaitForExit\(2000\)/);
+  assert.match(launcher, /managerInjectionOutput/);
+  assert.match(launcher, /managerInjectionOutput -match '"ok"\\s\*:\\s\*true'/);
+  assert.match(launcher, /Manager injection watcher is running/);
+  assert.match(launcher, /Manager injection timed out after 3000ms/);
+  assert.doesNotMatch(launcher, /WaitForExit\(8000\)[\s\S]{0,900}Manager injection/);
+  assert.match(launcher, /function New-LaunchStageTimer/);
+  assert.match(launcher, /function Write-LaunchStage/);
+  assert.match(launcher, /launch stage:/);
+  assert.match(launcher, /Manager bridge watchdog restart failed; retrying after 30-second cooldown/);
+  assert.match(launcher, /--no-sandbox/);
+  assert.match(launcher, /Refusing to fall back to the original Codex executable/);
+  assert.match(launcher, /if \(\$IS_ANTICODEX_INSTALL_ROOT\) \{/);
+  assert.match(launcher, /\$codexWorkingDirectory = Split-Path -Parent \$CODEX_BIN/);
+  assert.match(launcher, /-WorkingDirectory \$codexWorkingDirectory/);
+  assert.match(cdpInject, /DEEPCODEX_CDP_STABLE_PASSES \|\| 1/);
+  assert.match(cdpInject, /managerWatchMode/);
+  assert.match(cdpInject, /process\.env\.DEEPCODEX_CDP_MANAGER_WATCH === "1"/);
+  assert.match(cdpInject, /process\.argv\.includes\("--watch"\)/);
+  assert.match(cdpInject, /DEEPCODEX_CDP_MANAGER_DISCONNECT_MS/);
+  assert.match(cdpInject, /managerDisconnectedSince/);
+  assert.match(cdpInject, /manager watcher disconnected timeout/);
+  assert.doesNotMatch(cdpInject, /DEEPCODEX_CDP_MANAGER_WATCH !== "0"/);
+  assert.match(cdpInject, /waitForClose/);
+  assert.match(cdpInject, /watching: true/);
+  assert.match(cdpInject, /const newDocumentSource/);
+  assert.match(cdpInject, /DOMContentLoaded/);
+  assert.match(cdpInject, /managerHeartbeatMs/);
+  assert.match(cdpInject, /maintainManager/);
+  assert.match(cdpInject, /consecutiveFailures/);
+  assert.match(cdpInject, /findDefaultContextId/);
+  assert.match(cdpInject, /findDefaultContextIds/);
+  assert.match(cdpInject, /pickVisiblePageContextId/);
+  assert.match(cdpInject, /No default page execution context found for CDP injection/);
+  assert.match(cdpInject, /contextId/);
+  assert.match(cdpInject, /const loopbackManagerApi = `http:\/\/127\.0\.0\.1:\$\{managerPort\}`/);
+  assert.match(cdpInject, /const candidates = \[\s*loopbackManagerApi,\s*managerApi,/);
+  assert.doesNotMatch(cdpInject, /document\.getElementById\("anticodex-manager-overlay"\)\?\.remove\(\);/);
+  assert.match(managerInject, /window\.__ANTICODEX_OPEN_MANAGER__/);
+  assert.match(managerInject, /window\.__ANTICODEX_MANAGER_API__/);
+  assert.match(managerInject, /apiCandidates/);
+  assert.match(managerInject, /anticodex-manager-overlay/);
+  assert.match(managerInject, /data-anticodex-close/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*border:1px solid var\(--ac-line\)[^}]*background:var\(--ac-raised\)/);
+  assert.doesNotMatch(managerInject, /\.anticodex-close::before/);
+  assert.match(managerInject, /LEGACY_BUTTON_ID = "anticodex-manager-button"/);
+  assert.match(managerInject, /document\.getElementById\(LEGACY_BUTTON_ID\)\?\.remove\(\)/);
+  assert.doesNotMatch(managerInject, /document\.createElement\("button"\)/);
+  assert.match(managerInject, /installManagerRuntime/);
+  assert.match(managerInject, /refreshManagerStatus/);
+  assert.match(managerInject, /anticodex-panel/);
+  assert.match(managerInject, /\/anticodex\/manager\/bootstrap/);
+  assert.match(managerInject, /\/anticodex\/manager\/action/);
+  assert.match(managerInject, /__ANTICODEX_RUN_MANAGER_ACTION__/);
+  assert.match(managerInject, /runActionViaBridge/);
+  assert.match(managerInject, /runActionViaScript/);
+  assert.match(managerInject, /refreshFeatures/);
+  assert.match(managerInject, /fastOverallNoTraffic/);
+  assert.match(managerInject, /accountSwitch/);
+  assert.match(managerInject, /\\u5207\\u6362 Antigravity \\u8d26\\u53f7/);
+  assert.match(managerInject, /ACCOUNT_SWITCH_POLL_INTERVAL_MS = 3000/);
+  assert.match(managerInject, /ACCOUNT_SWITCH_TIMEOUT_MS = 120000/);
+  assert.match(managerInject, /function modelCatalogFingerprint/);
+  assert.match(managerInject, /async function captureAccountSwitchState/);
+  assert.match(managerInject, /function accountSwitchChanged/);
+  assert.match(managerInject, /async function waitForAccountSwitch/);
+  assert.match(managerInject, /let accountSwitchObservationGeneration = 0/);
+  assert.match(managerInject, /function cancelAccountSwitchObservation/);
+  assert.match(managerInject, /reason:\s*"cancelled"/);
+  assert.match(managerInject, /pending:\s*true/);
+  assert.match(managerInject, /__ANTICODEX_MANAGER_PENDING_ACTIONS__/);
+  assert.match(managerInject, /function pendingActionMaxMs/);
+  assert.match(managerInject, /function actionStillPending/);
+  assert.match(managerInject, /querySelector\(`#\$\{MANAGER_ID\} \[data-anticodex-result="action"\]`\)/);
+  assert.match(managerInject, /result\.isConnected/);
+  assert.match(managerInject, /__ANTICODEX_REFRESH_MANAGER_PANEL__\?\.\(\)/);
+  assert.match(managerInject, /__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__/);
+  assert.match(managerBridge, /suppressRefreshStatusResult/);
+  assert.match(managerInject, /function removeManager\(\)[\s\S]*cancelAccountSwitchObservation\(\)/);
+  assert.match(managerInject, /await runActionViaBridge\("refreshModels"\)/);
+  assert.match(managerInject, /\\u81ea\\u52a8\\u68c0\\u6d4b\\u8d26\\u53f7\\u6216\\u6a21\\u578b\\u53d8\\u5316/);
+  assert.match(managerInject, /\\u672a\\u68c0\\u6d4b\\u5230\\u53ef\\u8bc1\\u660e\\u7684\\u8d26\\u53f7\\u6216\\u6a21\\u578b\\u53d8\\u5316/);
+  assert.match(managerInject, /Skill \\u6307\\u4ee4/);
+  assert.match(managerInject, /MCP \\u914d\\u7f6e/);
+  assert.match(managerInject, /\\u5f53\\u524d\\u53ef\\u8c03\\u7528\\u4ee5\\u672c\\u4f1a\\u8bdd\\u5de5\\u5177\\u5217\\u8868\\u4e3a\\u51c6/);
+  assert.match(managerInject, /\\u5143\\u6570\\u636e\\u53ef\\u89c1 \/ \\u4e0d\\u7b49\\u4e8e\\u53ef\\u8c03\\u7528/);
+  assert.match(managerInject, /\\u5feb\\u7167\\u65b0\\u9c9c\\u5ea6/);
+  assert.match(managerInject, /\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd/);
+  assert.match(managerInject, /\\u8fdc\\u7a0b\\u8fde\\u63a5\\u5668\\u4ec5\\u76ee\\u5f55/);
+  assert.match(managerInject, /Skill \\u662f\\u672c\\u5730\\u6307\\u4ee4\\uff1bMCP \\u5fc5\\u987b\\u7531\\u5f53\\u524d\\u4f1a\\u8bdd\\u771f\\u5b9e\\u66b4\\u9732\\u5de5\\u5177/);
+  assert.doesNotMatch(managerInject, /\\u672c\\u5730\\u63d2\\u4ef6\/MCP \\u53ef\\u76f4\\u63a5\\u4f7f\\u7528/);
+  assert.match(managerInject, /native-panel-v83/);
+  assert.match(syncReadiness, /native-panel-v83/);
+  assert.doesNotMatch(managerInject, /native-panel-v68/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v68/);
+  assert.doesNotMatch(managerInject, /native-panel-v67/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v67/);
+  assert.doesNotMatch(managerInject, /native-panel-v66/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v66/);
+  assert.match(managerInject, /function updateOperationStateText/);
+  assert.match(managerInject, /function updateOperationStageText/);
+  assert.match(managerInject, /function updateStatusText/);
+  assert.match(managerInject, /candidate_build/);
+  assert.match(managerInject, /rollback_acceptance/);
+  assert.match(managerInject, /operation\?\.message/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v65/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v64/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v63/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v62/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v61/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v60/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v59/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v58/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v57/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v56/);
+  assert.match(managerInject, /thinking_budget/);
+  assert.match(managerInject, /min_thinking_budget/);
+  assert.match(managerInject, /\\u539f\\u751f\\u601d\\u8003\\u9884\\u7b97/);
+  assert.match(managerInject, /preserveLastActionResult/);
+  assert.match(managerInject, /lastActionResult\.ok !== false/);
+  assert.match(managerInject, /BRIDGE_TIMEOUT_MS = 5000/);
+  assert.match(managerInject, /EXTENDED_ACTION_UI_TIMEOUT_MS = 28000/);
+  assert.match(managerInject, /if \(action === "updateCheck" \|\|[\s\S]{0,180}return EXTENDED_ACTION_UI_TIMEOUT_MS/);
+  assert.match(managerInject, /actionUiTimeoutMs\(action\) \+ 1000/);
+  assert.match(managerInject, /setActionButtonsDisabled/);
+  assert.match(managerInject, /data-anticodex-busy/);
+  assert.match(managerInject, /data-anticodex-running/);
+  assert.match(managerInject, /const reset = r\.result \|\| r/);
+  assert.match(managerInject, /if \(item\.exists && item\.latestPath\)/);
+  assert.match(managerInject, /function formatReportAge/);
+  assert.match(managerInject, /item\.exists && age/);
+  assert.match(managerInject, /result\.staleCount/);
+  assert.match(managerInject, /item\.stale \? "\\u9700\\u91cd\\u8dd1"/);
+  assert.match(managerInject, /function actionProgressStage/);
+  assert.match(managerInject, /setInterval\(\(\) =>/);
+  assert.match(managerInject, /clearInterval\(progressTimer\)/);
+  assert.match(managerInject, /\\u5df2\\u7528\\u65f6/);
+  assert.match(managerInject, /\\u9636\\u6bb5/);
+  assert.match(managerInject, /function reportSummaryLines/);
+  assert.match(managerInject, /function failureSummaryLine/);
+  assert.match(managerInject, /if \(action === "syncReadiness"\) return \[[\s\S]{0,220}failureSummaryLine\(r\)/);
+  assert.match(managerInject, /\\u6700\\u65b0\\u62a5\\u544a/);
+  assert.match(managerInject, /\\u5386\\u53f2\\u62a5\\u544a/);
+  assert.match(managerInject, /\\u5931\\u8d25\\u9879/);
+  assert.match(managerInject, /\/backend-api\/wham\/apps/);
+  assert.match(managerInject, /safeJson\("\/backend-api\/wham\/apps"\)/);
+  assert.match(managerInject, /connectorAllowlistEditor/);
+  assert.match(managerInject, /\/anticodex\/local-connectors\/allowlist/);
+  assert.match(managerInject, /anticodex-connector-allowlist-input/);
+  assert.match(managerInject, /x-anticodex-manager-token/);
+  assert.match(managerInject, /window\.__ANTICODEX_MANAGER_SNAPSHOT__ = null/);
+  assert.match(managerInject, /authorizedConnectorCount/);
+  assert.match(managerInject, /\\u672a\\u6388\\u6743\\u8fde\\u63a5\\u5668\\u4e0d\\u4f2a\\u88c5\\u6210\\u53ef\\u8c03\\u7528\\u5de5\\u5177/);
+  assert.match(managerInject, /function quotaLimitNotice/);
+  assert.match(managerInject, /function refreshManagerStatus/);
+  assert.match(managerInject, /const healthResult = await safeJson\("\/health"\)/);
+  assert.match(managerInject, /if \(healthResult\.ok\) updateTrafficNotice\(health\)/);
+  assert.match(managerInject, /__ANTICODEX_MANAGER_STATUS_TIMER__/);
+  assert.match(managerInject, /if \(window\.__ANTICODEX_MANAGER_STATUS_TIMER__\)[\s\S]*clearInterval\(window\.__ANTICODEX_MANAGER_STATUS_TIMER__\)/);
+  assert.match(managerInject, /setInterval\(refreshManagerStatus, 5000\)/);
+  assert.match(managerInject, /refreshManagerStatus[\s\S]*__ANTICODEX_REFRESH_MANAGER_PANEL__/);
+  assert.doesNotMatch(managerInject, /data-anticodex-update|BUTTON_TEXT/);
+  assert.match(managerInject, /function installedCheckState/);
+  assert.match(managerInject, /installedChecks/);
+  assert.match(managerInject, /installed-overall-fast/);
+  assert.match(managerInject, /\\u5feb\\u68c0\\u4e0d\\u4f1a\\u8986\\u76d6\\u5b8c\\u6574\\u603b\\u68c0\\u62a5\\u544a/);
+  assert.match(managerInject, /quota_or_limit_reached/);
+  assert.match(managerInject, /antigravity_quota_exceeded/);
+  assert.match(managerInject, /accountTrafficSuggestedAction/);
+  assert.match(managerInject, /anticodex-traffic-notice/);
+  assert.match(managerInject, /function updateTrafficNotice/);
+  assert.match(managerInject, /function trafficNoticeKey/);
+  assert.match(managerInject, /function trafficNoticeSignature/);
+  assert.match(managerInject, /accountTrafficLastFailureAt/);
+  assert.match(managerInject, /__ANTICODEX_DISMISSED_TRAFFIC_NOTICE__/);
+  assert.match(managerInject, /data-anticodex-traffic-state/);
+  assert.match(managerInject, /data-anticodex-traffic-signature/);
+  assert.match(managerInject, /data-anticodex-notice-action/);
+  assert.match(managerInject, /data-anticodex-notice-action": "dismiss"/);
+  assert.match(managerInject, /runActionViaBridge\("accountProxy"\)/);
+  assert.match(managerInject, /\\u6253\\u5f00\\u7ba1\\u7406/);
+  assert.match(managerInject, /\\u91cd\\u65b0\\u68c0\\u67e5/);
+  assert.match(managerInject, /document\.getElementById\(TRAFFIC_NOTICE_ID\)\?\.remove\(\)/);
+  assert.doesNotMatch(managerInject, /catch \{\s*document\.getElementById\(TRAFFIC_NOTICE_ID\)\?\.remove\(\)/);
+  assert.match(managerInject, /ChatGPT \\u767b\\u5f55/);
+  assert.match(managerBridge, /\/backend-api\/wham\/apps/);
+  assert.match(managerInject, /__ANTICODEX_REFRESH_MANAGER_PANEL__/);
+  assert.match(managerInject, /\\u9884\\u8ba1 1 \\u5206\\u949f/);
+  assert.match(managerInject, /width:88px/);
+  assert.match(managerInject, /height:48px/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*margin:0/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*align-items:center/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*justify-content:center/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*border-radius:9px/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*flex:0 0 auto/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*overflow:hidden/);
+  assert.match(managerInject, /\.anticodex-close>span\{[^}]*pointer-events:none/);
+  assert.match(managerInject, /pointer-events:auto/);
+  assert.match(managerInject, /touch-action:manipulation/);
+  const dailyManagerActions = extractJsSetBlock(managerInject, "DAILY_ACTION_IDS");
+  const highImpactManagerActions = extractJsSetBlock(managerInject, "HIGH_IMPACT_ACTION_IDS");
+  assert.deepEqual(dailyManagerActions.sort(), [
+    "accountProxy",
+    "accountSwitch",
+    "diagnosticsBundle",
+    "mcpSkills",
+    "pluginCapabilities",
+    "refreshModels",
+    "refreshStatus",
+    "repairShortcuts",
+    "sourcePreflight",
+    "syncReadiness",
+    "updateCheck",
+    "viewLatestReports",
+  ].sort());
+  assert.deepEqual(highImpactManagerActions.sort(), [
+    "fastOverallNoTraffic",
+    "overallNoTraffic",
+    "postVerificationFull",
+    "refreshFeatures",
+    "resetAntigravitySessionLock",
+    "syncHost",
+    "upstreamConfig",
+  ].sort());
+  assert.match(managerInject, /HIGH_IMPACT_CONFIRMATION_MS/);
+  assert.match(managerInject, /function requireHighImpactConfirmation/);
+  assert.match(managerInject, /pendingHighImpactAction/);
+  assert.match(managerInject, /data-confirming-high-impact/);
+  assert.match(managerInject, /function removeManager\(\)[\s\S]*clearInterval\(window\.__ANTICODEX_MANAGER_STATUS_TIMER__\)[\s\S]*delete window\.__ANTICODEX_MANAGER_STATUS_TIMER__/);
+  assert.match(managerInject, /const existing = document\.getElementById\(MANAGER_ID\)[\s\S]*data-anticodex-open-refresh[\s\S]*__ANTICODEX_REFRESH_MANAGER_PANEL__\?\.\(\)/);
+  assert.match(managerOpenInject, /existingOverlay[\s\S]*data-anticodex-open-refresh[\s\S]*__ANTICODEX_REFRESH_MANAGER_PANEL__\?\.\(\)/);
+  const managerClickHandler = managerInject.slice(managerInject.indexOf('button.addEventListener("click", async () => {'));
+  assert.ok(
+    managerClickHandler.indexOf("requireHighImpactConfirmation(action, label, button)") < managerClickHandler.indexOf('if (action === "upstreamConfig")'),
+    "embedded manager must confirm upstreamConfig before opening the config panel",
+  );
+  assert.ok(
+    managerClickHandler.indexOf("if (actionInFlight)") < managerClickHandler.indexOf("requireHighImpactConfirmation(action, label, button)"),
+    "embedded manager must block already-running actions before asking for high-impact confirmation",
+  );
+  assert.ok(
+    managerClickHandler.indexOf('if (action !== "refreshStatus" && actionStillPending(action))') < managerClickHandler.indexOf("requireHighImpactConfirmation(action, label, button)"),
+    "embedded manager must block pending duplicate actions before asking for high-impact confirmation",
+  );
+  assert.ok(
+    managerClickHandler.indexOf("requireHighImpactConfirmation(action, label, button)") < managerClickHandler.indexOf("runActionViaBridge(action)"),
+    "embedded manager must confirm high-impact actions before calling the bridge",
+  );
+  assert.match(managerInject, /data-action-group/);
+  assert.match(managerInject, /anticodex-action-section/);
+  assert.match(managerInject, /anticodex-action-danger/);
+  assert.match(managerInject, /function detectHostTheme/);
+  assert.match(managerInject, /function syncManagerTheme/);
+  assert.match(managerInject, /electron/);
+  assert.match(managerInject, /classTokens\.includes\("light"\)/);
+  assert.match(managerInject, /classTokens\.includes\("dark"\)/);
+  assert.match(managerInject, /MutationObserver/);
+  assert.match(managerInject, /prefers-color-scheme:\s*dark/);
+  assert.match(managerInject, /data-anticodex-theme/);
+  assert.match(managerInject, /\[data-anticodex-theme="light"\]/);
+  assert.match(managerInject, /\\u65e5\\u5e38\\u64cd\\u4f5c/);
+  assert.match(managerInject, /\\u7ef4\\u62a4\\u4e0e\\u9ad8\\u5f71\\u54cd\\u64cd\\u4f5c/);
+  assert.match(managerInject, /function safeJson/);
+  assert.match(managerInject, /safeValue/);
+  assert.match(managerInject, /function snapshotResponse\(path\)/);
+  assert.match(managerInject, /const snapshotFallback = snapshotResponse\(path\)/);
+  assert.match(managerInject, /const allowSnapshotFallback = options\.allowSnapshotFallback !== false/);
+  assert.match(managerInject, /&& \(!options\.method \|\| String\(options\.method\)\.toUpperCase\(\) === "GET"\)/);
+  assert.match(managerInject, /if \(allowSnapshotFallback && snapshotFallback\) return snapshotFallback/);
+  assert.ok(
+    managerInject.indexOf("for (const baseUrl of candidates)") < managerInject.indexOf("if (allowSnapshotFallback && snapshotFallback) return snapshotFallback"),
+    "manager GET reads must try the live gateway before stale snapshot fallback",
+  );
+  assert.match(managerInject, /function ensureSnapshotForLoad/);
+  assert.match(managerInject, /__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__/);
+  assert.match(managerInject, /__ANTICODEX_RUN_MANAGER_ACTION__\("refreshStatus"\)/);
+  assert.match(managerInject, /LOAD_FETCH_TIMEOUT_MS = 2500/);
+  assert.match(managerInject, /LOAD_SNAPSHOT_TIMEOUT_MS = 30000/);
+  assert.match(managerInject, /AbortController/);
+  assert.match(managerInject, /anticodex-loading/);
+  assert.match(managerInject, /loadErrors/);
+  assert.match(managerInject, /\\u72b6\\u6001\\u5df2\\u90e8\\u5206\\u5237\\u65b0/);
+  assert.match(managerInject, /function actionApiCandidates/);
+  assert.match(managerInject, /\/anticodex\/manager\/action-script/);
+  assert.match(managerInject, /callbackName/);
+  assert.match(managerInject, /data-anticodex-close/);
+  assert.match(managerInject, /data-anticodex-result/);
+  assert.match(managerInject, /\\u771f\\u5b9e\\u5de5\\u5177\\u8c03\\u7528/);
+  assert.match(managerInject, /repairShortcuts/);
+  assert.match(managerInject, /\\u4fee\\u590d\\u5feb\\u6377\\u65b9\\u5f0f/);
+  assert.doesNotMatch(managerInject, /MCP \\u5165\\u53e3/);
+  assert.match(managerInject, /\\u6e05\\u5355\\u53ef\\u89c1/);
+  assert.doesNotMatch(managerInject, /createElement\("iframe"\)|<iframe/i);
+  assert.match(managerOpenInject, /window\.__ANTICODEX_OPEN_MANAGER__\(\)/);
+  assert.match(managerOpenInject, /anticodex-manager-overlay/);
+  assert.match(managerOpenInject, /existingOverlay/);
+  assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v83["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v83"/);
+  assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
+  assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
+  const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
+  const versionCheckIndex = managerOpenInject.indexOf("__ANTICODEX_MANAGER_VERSION__");
+  assert.ok(versionCheckIndex < openCallIndex, "opener must check the inject version before calling the open function");
+  assert.match(cdpInject, /ANTICODEX_MANAGER_API/);
+  assert.match(cdpInject, /ANTICODEX_MANAGER_API_CANDIDATES/);
+  assert.match(cdpInject, /ANTICODEX_MANAGER_SNAPSHOT/);
+  assert.match(cdpInject, /fetchManagerJson/);
+  assert.match(cdpInject, /AbortController/);
+  assert.match(cdpInject, /MANAGER_FETCH_TIMEOUT_MS/);
+  assert.match(cdpInject, /score:\s*0,\s*url:\s*`http:\/\/127\.0\.0\.1/);
+  assert.match(cdpInject, /exceptionDetails/);
+  assert.match(cdpInject, /Manager injection failed/);
+  assert.match(cdpInject, /if \(!response\.ok\)/);
+  assert.match(cdpInject, /\^198\\\.\(1\[89\]\|\[2-9\]\\d\)\\\./);
+  assert.match(managerBridge, /__ANTICODEX_MANAGER_ACTION_QUEUE__/);
+  assert.match(managerBridge, /splice\(0\)/);
+  assert.match(managerBridge, /__ANTICODEX_RUN_MANAGER_ACTION__/);
+  assert.match(managerBridge, /\/anticodex\/manager\/action/);
+  assert.match(managerBridge, /\/backend-api\/ps\/plugins\/installed/);
+  assert.match(managerBridge, /\/backend-api\/aip\/connectors/);
+  assert.match(managerBridge, /__ANTICODEX_MANAGER_SNAPSHOT__/);
+  assert.match(managerBridge, /__ANTICODEX_REFRESH_MANAGER_PANEL__/);
+  assert.match(managerBridge, /function reportSummaryLines/);
+  assert.match(managerBridge, /function failureSummaryLine/);
+  assert.match(managerBridge, /function latestReportsSummary/);
+  assert.match(managerBridge, /viewLatestReports/);
+  assert.match(managerBridge, /if \(action === "syncReadiness"\) return \[[\s\S]{0,220}failureSummaryLine\(result\)/);
+  assert.match(managerBridge, /\\u6700\\u65b0\\u62a5\\u544a/);
+  assert.match(managerBridge, /\\u5386\\u53f2\\u62a5\\u544a/);
+  assert.match(managerBridge, /\\u5931\\u8d25\\u9879/);
+  assert.match(managerBridge, /accountSwitch/);
+  assert.match(managerBridge, /\\u5df2\\u6253\\u5f00 Antigravity/);
+  assert.match(managerInject, /action === "resetAntigravitySessionLock"/);
+  assert.match(managerBridge, /action === "resetAntigravitySessionLock"/);
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  assert.match(server, /access-control-allow-private-network/);
+  assert.match(server, /x-anticodex-manager-token/);
+  assert.match(server, /function isTrustedManagerOriginValue[\s\S]*?if \(!value\) return false/);
+  assert.match(server, /function validateManagerSourceRequest/);
+  assert.match(server, /if \(!hasOrigin && !hasReferer\)/);
+  assert.match(server, /url\.pathname === "\/anticodex\/manager\/bootstrap"[\s\S]*?validateManagerSourceRequest\(req, "manager bootstrap"\)/);
+  assert.match(server, /\/anticodex\/manager\/action-script/);
+  assert.match(server, /url\.pathname === "\/anticodex\/manager\/action-script"[\s\S]*?validateManagerSourceRequest\(req, "manager action"\)/);
+  assert.match(server, /runManagerBridgeAction/);
+  assert.match(server, /isValidJsonpCallbackName/);
+  assert.match(server, /managerActionScriptResponse/);
+  assert.match(server, /function visibleModelPayload/);
+  assert.match(server, /display_name/);
+  assert.match(server, /CLEAN_MANAGER_ACTION_LABELS/);
+  assert.match(server, /function managerActionLabel/);
+  assert.match(server, /accountSwitch/);
+  assert.match(server, /open-antigravity-account-switch\.ps1/);
+  assert.match(server, /managerPanelSnapshotPayload/);
+  assert.match(server, /function isValidJsonpCallbackName/);
+  assert.ok(
+    server.indexOf("isValidJsonpCallbackName") < server.indexOf("managerActionScriptResponse"),
+    "callback name validator must be defined before the response helper",
+  );
+  assert.match(managerInject, /managerToken/);
+  assert.match(managerInject, /runActionViaScript/);
+  assert.match(managerInject, /actionApiCandidates/);
+  assert.match(managerInject, /\/anticodex\/manager\/action-script/);
+  assert.match(managerInject, /callbackName/);
+  const actionScriptBody = managerInject.slice(
+    managerInject.indexOf("async function runActionViaScript"),
+    managerInject.indexOf("function kv"),
+  );
+  assert.doesNotMatch(actionScriptBody, /method: "POST"/);
+  assert.match(managerOpenInject, /native-panel-v83/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v68/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v67/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v66/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v4["']/);
+
+  // 鈹€鈹€ manager page HTML template static checks 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  const htmlMatch = server.match(
+    /function anticodexManagerHtml\(\)\s*\{\s*return\s*`([\s\S]*?)`\s*;/,
+  );
+  assert.ok(htmlMatch, "anticodexManagerHtml template must be extractable");
+  const html = htmlMatch[1];
+
+  assert.match(html, /<title>Anti-Codex /, "fallback manager title must keep the Anti-Codex brand");
+  assert.match(html, /ChatGPT/, "fallback manager must mention ChatGPT login avoidance");
+  assert.match(html, /\p{Script=Han}/u, "fallback manager page HTML must contain readable Chinese text");
+  assert.doesNotMatch(html, /\uFFFD/, "fallback manager HTML must not contain replacement characters");
+
+  // data-action buttons
+  const dataActionMatches = [...html.matchAll(/data-action="([^"]+)"/g)];
+  assert.ok(dataActionMatches.length >= 10, "manager page must have at least 10 data-action buttons");
+  const actionNames = dataActionMatches.map((m) => m[1]);
+  assert.ok(actionNames.includes("accountSwitch"), "data-action list must include accountSwitch");
+  assert.ok(actionNames.includes("updateCheck"), "data-action list must include updateCheck");
+  assert.ok(actionNames.includes("syncHost"), "data-action list must include syncHost");
+  assert.ok(actionNames.includes("upstreamConfig"), "data-action list must include upstreamConfig");
+  assert.ok(actionNames.includes("fastOverallNoTraffic"), "data-action list must include fastOverallNoTraffic");
+  assert.ok(actionNames.includes("overallNoTraffic"), "data-action list must include overallNoTraffic");
+  assert.ok(actionNames.includes("refreshFeatures"), "data-action list must include refreshFeatures");
+  assert.ok(actionNames.includes("repairShortcuts"), "data-action list must include repairShortcuts");
+  assert.ok(actionNames.includes("sourcePreflight"), "data-action list must include sourcePreflight");
+  assert.ok(actionNames.includes("viewLatestReports"), "data-action list must include viewLatestReports");
+  assert.match(html, /data-action="repairShortcuts"/, "fallback manager must expose repair-shortcuts action");
+  assert.match(html, /data-action="upstreamConfig"/, "fallback manager must expose third-party API configuration");
+  assert.match(html, /data-action="fastOverallNoTraffic"/, "fallback manager must expose no-traffic fast check");
+  assert.doesNotMatch(html, /data-action=".*real.*traffic"/i, "default buttons must not suggest real traffic");
+  const managerActionMatches = [...html.matchAll(/data-manager-action="([^"]+)"/g)];
+  assert.deepEqual(managerActionMatches.map((match) => match[1]).sort(), [
+    "accountProxy",
+    "accountSwitch",
+    "diagnosticsBundle",
+    "fastOverallNoTraffic",
+    "mcpSkills",
+    "overallNoTraffic",
+    "pluginCapabilities",
+    "postVerificationFull",
+    "refreshFeatures",
+    "resetAntigravitySessionLock",
+    "refreshModels",
+    "refreshStatus",
+    "repairShortcuts",
+    "sourcePreflight",
+    "syncHost",
+    "syncReadiness",
+    "updateCheck",
+    "upstreamConfig",
+    "viewLatestReports",
+  ].sort());
+  assert.match(html, /data-action-group="daily"/);
+  assert.match(html, /data-action-group="high-impact"/);
+  assert.match(html, /color-scheme:\s*light dark/);
+  assert.match(html, /@media\s*\(prefers-color-scheme:\s*light\)/);
+  const dailySection = html.match(/data-action-group="daily"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
+  const highImpactSection = html.match(/data-action-group="high-impact"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
+  const fallbackDailyActions = [...dailySection.matchAll(/data-manager-action="([^"]+)"/g)].map((match) => match[1]);
+  const fallbackHighImpactActions = [...highImpactSection.matchAll(/data-manager-action="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(fallbackDailyActions.sort(), dailyManagerActions.sort(), "fallback and embedded manager daily action inventory must match");
+  assert.deepEqual(fallbackHighImpactActions.sort(), highImpactManagerActions.sort(), "fallback and embedded manager high-impact action inventory must match");
+  assert.match(highImpactSection, /class="[^"]*danger[^"]*"/);
+  assert.match(highImpactSection, /data-action="upstreamConfig"/);
+  assert.match(highImpactSection, /data-action="resetAntigravitySessionLock"/);
+  assert.equal((highImpactSection.match(/data-manager-action=/g) || []).length, 7);
+  assert.match(html, /HIGH_IMPACT_ACTION_IDS=new Set\(\[[^\]]*"resetAntigravitySessionLock"/);
+  assert.match(html, /payload\?\.action==="resetAntigravitySessionLock"/);
+  assert.match(html, /HIGH_IMPACT_ACTION_IDS/);
+  assert.match(html, /HIGH_IMPACT_CONFIRMATION_MS/);
+  assert.match(html, /function requireHighImpactConfirmation/);
+  assert.match(html, /function setActionButtonsDisabled/);
+  assert.match(html, /setActionButtonsDisabled\(true\)[\s\S]*setActionButtonsDisabled\(false\)/);
+  assert.match(html, /const reset=r\.result\|\|r/);
+  assert.match(html, /if\(item\.exists&&item\.latestPath\)/);
+  assert.match(html, /function formatReportAge/);
+  assert.match(html, /item\.exists&&age/);
+  assert.match(html, /result\.staleCount/);
+  assert.match(html, /item\.stale\?"\\\\u9700\\\\u91cd\\\\u8dd1"/);
+  assert.match(html, /pendingHighImpactAction/);
+  assert.match(html, /data-confirming-high-impact/);
+  assert.ok(
+    html.indexOf("requireHighImpactConfirmation(action,label,btn)") < html.indexOf('getJson("/anticodex/manager/action"'),
+    "fallback manager must confirm high-impact actions before posting to the action endpoint",
+  );
+
+  // actionResult element
+  assert.match(html, /<pre[^>]*\bid="actionResult"[^>]*>/, "manager page must have an actionResult pre element");
+
+  // embedded managerActionToken
+  assert.match(html, /managerActionToken=\$\{JSON\.stringify\(MANAGER_ACTION_TOKEN\)\}/,
+    "manager page must embed managerActionToken from MANAGER_ACTION_TOKEN");
+
+  // client-side action JS sends the token
+  assert.match(server, /"x-anticodex-manager-token":managerActionToken/,
+    "client-side action JS must send x-anticodex-manager-token");
+  assert.match(repairShortcuts, /CreateShortcut/);
+  assert.match(repairShortcuts, /start-anticodex\.ps1/);
+  assert.match(repairShortcuts, /sync-anticodex-launcher\.ps1/);
+  assert.match(repairShortcuts, /rollback-anticodex-launcher\.ps1/);
+  assert.match(repairShortcuts, /manage-anticodex\.ps1/);
+  assert.match(repairShortcuts, /anticodex-desktop\.ico/);
+  assert.match(repairShortcuts, /latest-\$Name\.json/);
+  assert.match(repairShortcuts, /shortcut-repair/);
+  assert.match(repairShortcuts, /UTF8Encoding\]::new\(\$false\)/);
+  assert.doesNotMatch(repairShortcuts, /sync-anticodex\.ps1"\)/);
+  assert.doesNotMatch(repairShortcuts, /Remove-Item\s+-Recurse/);
+});
+
+test("Anti-Codex native shortcut launcher has a bounded child wait", () => {
+  const launcherSource = readFileSync(resolve(root, "scripts", "AntiCodexLauncher.cs"), "utf8");
+
+  assert.match(launcherSource, /AssemblyTitle\("Anti-Codex"\)/);
+  assert.match(launcherSource, /DefaultLauncherTimeoutMs\s*=\s*45000/);
+  assert.match(launcherSource, /ANTICODEX_LAUNCHER_TIMEOUT_MS/);
+  assert.match(launcherSource, /child\.WaitForExit\(timeoutMs\)/);
+  assert.match(launcherSource, /child\.Kill\(\)/);
+  assert.match(launcherSource, /return 124/);
+  assert.doesNotMatch(launcherSource, /child\.WaitForExit\(\);\s*return child\.ExitCode/);
+});
+
+test("Anti-Codex critical host patch lists stay synchronized", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const validator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
+
+  const branderList = extractJsSetBlock(brander, "criticalPatchNames");
+  const installerList = extractQuotedListBlock(installer, "criticalPatches = @(");
+  const validatorList = extractQuotedListBlock(validator, "$expectedCriticalPatches = @(");
+
+  assert.deepEqual([...new Set(branderList)].sort(), [...new Set(installerList)].sort());
+  assert.deepEqual([...new Set(branderList)].sort(), [...new Set(validatorList)].sort());
+});
+
+test("Anti-Codex shell shows visible models returned by its local app-server", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+
+  assert.match(brander, /patchLocalModelAvailability/);
+  assert.match(brander, /models-and-reasoning-efforts-/);
+  assert.match(brander, /model-list-filter-/);
+  assert.match(brander, /amazonBedrock/);
+  assert.match(brander, /replacement = `let \$\{match\[1\]\}=\[\],/);
+  assert.match(brander, /"local-model-availability"/);
+});
+
+test("Anti-Codex shell loads installed local plugins without ChatGPT catalog sync", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+
+  assert.match(brander, /patchLocalPluginCatalog/);
+  assert.match(brander, /app-server-manager-signals-/);
+  assert.match(brander, /plugin\/installed/);
+  assert.match(brander, /"local-plugin-catalog"/);
+  assert.match(brander, /"electron-local-plugin-catalog"/);
+  assert.match(brander, /"webview-local-plugin-catalog"/);
+  assert.match(brander, /async listPlugins\(\$\{match\[1\]\}\)\{return\{marketplaces:\[\],marketplaceLoadErrors:\[\]\}\}/);
+  assert.match(brander, /"list-plugins":[\s\S]*listPlugins\\\(\\\{\\\}\\\)/);
+  assert.match(brander, /"list-plugins":\$\{match\[1\]\}\(\$\{match\[2\]\}=>\$\{match\[2\]\}\.listPlugins\(\{\}\)\)/);
+  assert.ok(brander.includes(String.raw`/"list-plugins":[\w$]+\(([\w$]+)=>\1\.listPlugins\(\{\}\)\)/.test(text)`));
+});
+
+test("Anti-Codex default runtime config is file-auth and Gemini-first", () => {
+  const config = readFileSync(resolve(root, "codex-home-deepseek-app", "config.adaptive-oneapi.toml"), "utf8");
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const catalog = JSON.parse(readFileSync(resolve(root, "codex-home-deepseek-app", "deepseek-model-catalog.json"), "utf8"));
+  const slugs = catalog.models.map((model) => model.slug);
+
+  assert.match(config, /cli_auth_credentials_store\s*=\s*"file"/);
+  assert.match(config, /model_reasoning_effort\s*=\s*"high"/);
+  assert.equal(slugs[0], "gemini-pro-agent");
+  assert.equal(slugs[1], "gemini-3-flash-agent");
+  assert.equal(slugs.some((slug) => /^gpt-/i.test(slug)), false);
+});
+
+test("Anti-Codex installer creates an isolated copied Codex host", () => {
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+  const iconGenerator = readFileSync(resolve(root, "scripts", "generate-anticodex-icon.ps1"), "utf8");
+  const candidateValidator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
+
+  assert.match(installer, /codex-patched-app/);
+  assert.match(installer, /codex-patched-app\.ok/);
+  assert.match(installer, /Anti-Codex\.exe/);
+  assert.match(installer, /Join-Path \$copiedCodex "Anti-Codex\.exe"/);
+  assert.match(installer, /brand-patched-asar\.mjs/);
+  assert.match(installer, /Anti-Codex\.lnk/);
+  assert.match(installer, /Anti-Codex is already installed/);
+  assert.match(installer, /Windows branding verification failed/);
+  assert.match(installer, /Anti-Codex runtime is incomplete/);
+  assert.match(installer, /Join-Path \$toolRoot "rcedit\.exe"/);
+  assert.equal(existsSync(resolve(root, "assets", "anticodex.ico")), true);
+  assert.equal(existsSync(resolve(root, "assets", "anticodex-icon.png")), true);
+  assert.equal(existsSync(resolve(root, "assets", "anticodex-desktop.ico")), true);
+  assert.equal(existsSync(resolve(root, "assets", "anticodex-desktop-icon.png")), true);
+  assert.equal(existsSync(resolve(root, "assets", "codex-icon-source.png")), true);
+  assert.match(iconGenerator, /assets\\codex-icon-source\.png/);
+  assert.match(iconGenerator, /resources\\default_app\\icon\.png/);
+  assert.match(iconGenerator, /AntiCodexIconCleaner/);
+  assert.match(iconGenerator, /IsExternalBackground/);
+  assert.match(iconGenerator, /Format32bppArgb/);
+  assert.match(iconGenerator, /SourceArtworkPadding/);
+  assert.match(iconGenerator, /\$explicitSourcePng/);
+  assert.match(iconGenerator, /\$OutputDesktopPng/);
+  assert.match(iconGenerator, /\$OutputDesktopIco/);
+  assert.match(iconGenerator, /\$DesktopIconSizes\s*=\s*@\(16,\s*24,\s*32,\s*48,\s*64,\s*128,\s*256\)/);
+  assert.match(iconGenerator, /Write-Ico \$pink \$OutputDesktopIco \$DesktopIconSizes/);
+  assert.doesNotMatch(iconGenerator, /codex-deepseek-icon-final\.png/);
+  assert.match(installer, /Install-AntiCodexHostIcon/);
+  assert.match(installer, /assets\\anticodex\.ico/);
+  assert.match(installer, /assets\\anticodex-desktop\.ico/);
+  assert.match(installer, /resources\\icon\.ico/);
+  assert.match(installer, /resources\\codex-tray\.ico/);
+  assert.match(installer, /Join-Path \$HostRoot "icon\.ico"/);
+  assert.match(installer, /patch-exe-icon\.ps1/);
+  assert.match(installer, /hostIcon/);
+  assert.match(installer, /appRootIcon/);
+  assert.match(installer, /trayIcon/);
+  assert.match(candidateValidator, /pink Codex cloud with white command marks/);
+  assert.match(candidateValidator, /pinkBlobSamples/);
+  assert.match(candidateValidator, /whiteCommandSamples/);
+  assert.match(candidateValidator, /tealBackgroundSamples/);
+  assert.match(candidateValidator, /originalBluePurpleSamples/);
+  assert.match(candidateValidator, /"package-json"/);
+  assert.match(candidateValidator, /"webview-html-title"/);
+  assert.match(candidateValidator, /"profile-dropdown-settings"/);
+  assert.match(candidateValidator, /"browser-window-icon"/);
+  assert.match(installer, /Remove-Item -LiteralPath \$temp -Recurse -Force/);
+  assert.match(installer, /Copy failed after 3 attempts and fallback copy failed/);
+  assert.match(installer, /Copy-Item -Path \(Join-Path \$Source "\*"\).*ErrorAction Stop/);
+  assert.match(installer, /\/XJ/);
+  assert.match(installer, /function Find-PhantomDirectories/);
+  assert.match(installer, /\$copyArguments \+= "\/XD"/);
+  assert.match(installer, /while excluding \$\(\$phantomDirectories\.Count\) unreadable packaged directories/);
+  assert.match(installer, /"\/COPY:DT", "\/DCOPY:DT"/);
+  assert.match(installer, /Start-Sleep -Seconds \(15 \* \$attempt\)/);
+  assert.match(installer, /Get-ChildItem -LiteralPath \$Source -Filter "\*\.dll"/);
+  assert.match(installer, /Start-Sleep -Seconds \(3 \* \$fileAttempt\)/);
+  assert.match(installer, /\.anticodex-pending/);
+  assert.match(installer, /codex-host-staging/);
+  assert.match(installer, /Move-Item -LiteralPath \$copiedCodexStaging -Destination \$copiedCodex/);
+  assert.match(installer, /foreach \(\$requiredHostFile in @\("Codex\.exe", "resources\\app\.asar", "resources\\codex\.exe"\)\)/);
+  assert.match(installer, /GetFolderPath\("Programs"\)/);
+  assert.match(installer, /Sync Anti-Codex with Codex\.lnk/);
+  assert.match(installer, /sync-anticodex-launcher\.ps1/);
+  assert.doesNotMatch(installer, /DeepCodex\.lnk/);
+  assert.match(brander, /productName": "Anti-Codex"/);
+  assert.match(brander, /patchBootstrapAppName/);
+  assert.match(brander, /app\.name=`Anti-Codex`/);
+  assert.match(brander, /"package-json"/);
+  assert.match(brander, /"webview-html-title"/);
+  assert.match(brander, /"app-name"/);
+  assert.match(brander, /"browser-window-icon"/);
+  assert.match(brander, /setAppUserModelId\(`AntiCodex`\)/);
+  assert.match(brander, /process\.platform===`win32`\|\|process\.platform===`linux`/);
+  assert.match(brander, /icon:`icon\.ico`,autoHideMenuBar:!0/);
+  assert.doesNotMatch(installer, /deepcodex\.ico/);
+});
+
+test("Windows default installer installs Anti-Codex instead of legacy DeepCodex", () => {
+  const entry = readFileSync(resolve(root, "install-windows.bat"), "utf8");
+  assert.match(entry, /scripts\\install-anticodex\.ps1/);
+  assert.match(entry, /Anti-Codex install finished/);
+  assert.doesNotMatch(entry, /scripts\\install-deepcodex\.ps1/);
+});
+
+test("Anti-Codex ships a Start Menu sync launcher instead of desktop helper shortcuts", () => {
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const launcher = readFileSync(resolve(root, "scripts", "sync-anticodex-launcher.ps1"), "utf8");
+  const rollbackLauncher = readFileSync(resolve(root, "scripts", "rollback-anticodex-launcher.ps1"), "utf8");
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+
+  assert.match(installer, /Start Menu|GetFolderPath\("Programs"\)|\$startMenuDir/);
+  assert.match(installer, /Sync Anti-Codex with Codex\.lnk/);
+  assert.match(installer, /sync-anticodex-launcher\.ps1/);
+  assert.match(installer, /Rollback Anti-Codex\.lnk/);
+  assert.match(installer, /rollback-anticodex-launcher\.ps1/);
+  assert.doesNotMatch(installer, /Check Anti-Code|Switch Anti-Cod|Drill Anti-Cod/);
+  assert.match(launcher, /sync-anticodex\.ps1/);
+  assert.match(launcher, /Anti-Codex was not changed/);
+  assert.match(rollbackLauncher, /rollback-anticodex\.ps1/);
+  assert.match(rollbackLauncher, /Anti-Codex was not changed/);
+  assert.match(readiness, /Sync Anti-Codex with Codex\.lnk/);
+  assert.match(readiness, /Rollback Anti-Codex\.lnk/);
+  assert.match(readiness, /Desktop/);
+  assert.match(readiness, /desktop helper shortcuts should not be present/);
+  assert.match(readiness, /forbiddenDesktopHelperShortcuts/);
+  assert.match(readiness, /startMenuSyncShortcutExists/);
+  assert.match(readiness, /startMenuRollbackShortcutExists/);
+  assert.match(readiness, /sync-anticodex-launcher\.ps1/);
+  assert.match(readiness, /rollback-anticodex-launcher\.ps1/);
+});
+
+test("Anti-Codex shortcut verification records exact targets, names, icons, and scripts", () => {
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const repairShortcuts = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
+
+  assert.match(readiness, /function New-AntiCodexShortcutSpec/);
+  assert.match(readiness, /function Test-AntiCodexShortcutSpec/);
+  assert.match(readiness, /shortcutVerification/);
+  assert.match(readiness, /displayName/);
+  assert.match(readiness, /expectedScript/);
+  assert.match(readiness, /expectedLauncherTarget/);
+  assert.match(readiness, /actualLauncherTarget/);
+  assert.match(readiness, /launcherTargetMatches/);
+  assert.match(readiness, /expectedIconLocation/);
+  assert.match(readiness, /scriptMatches/);
+  assert.match(readiness, /iconMatches/);
+  assert.match(readiness, /displayNameMatches/);
+  assert.match(readiness, /forbiddenCodexBranding/);
+  assert.match(readiness, /shortcut file name is not Anti-Codex branded/);
+  assert.match(readiness, /shortcut still carries Codex-only branding/);
+  assert.match(readiness, /shortcut does not launch the expected Anti-Codex script/);
+  assert.match(readiness, /shortcut icon does not point at the expected Anti-Codex icon/);
+  assert.match(readiness, /Sync Anti-Codex with Codex\.lnk/);
+  assert.match(readiness, /Rollback Anti-Codex\.lnk/);
+  assert.match(readiness, /Manage Anti-Codex\.lnk/);
+
+  assert.match(overall, /shortcutVerification/);
+  assert.match(overall, /shortcut verification did not report exact evidence/);
+  assert.match(overall, /launcherTargetMatches/);
+  assert.match(overall, /shortcut verification did not prove exact Anti-Codex launcher targets/);
+
+  assert.match(repairShortcuts, /function New-AntiCodexShortcutSpec/);
+  assert.match(repairShortcuts, /function Set-AntiCodexShortcut/);
+  assert.match(repairShortcuts, /displayName/);
+  assert.match(repairShortcuts, /expectedScript/);
+  assert.match(repairShortcuts, /expectedLauncherTarget/);
+  assert.match(repairShortcuts, /actualLauncherTarget/);
+  assert.match(repairShortcuts, /launcherTargetMatches/);
+  assert.match(repairShortcuts, /expectedIconLocation/);
+  assert.match(repairShortcuts, /actualTarget/);
+  assert.match(repairShortcuts, /actualArguments/);
+  assert.match(repairShortcuts, /actualIconLocation/);
+  assert.match(repairShortcuts, /scriptMatches/);
+  assert.match(repairShortcuts, /iconMatches/);
+  assert.match(repairShortcuts, /shortcutEvidence/);
+  assert.match(repairShortcuts, /Anti-Codex\.lnk/);
+  assert.match(repairShortcuts, /Sync Anti-Codex with Codex\.lnk/);
+  assert.match(repairShortcuts, /Rollback Anti-Codex\.lnk/);
+  assert.match(repairShortcuts, /Manage Anti-Codex\.lnk/);
+  assert.doesNotMatch(repairShortcuts, /Description = "Codex/);
+});
+
+test("Anti-Codex detects installed Codex version drift and offers safe sync at launch", () => {
+  const updateCheck = readFileSync(resolve(root, "scripts", "check-anticodex-update.ps1"), "utf8");
+  const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const translator = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  assert.match(updateCheck, /Get-AppxPackage/);
+  assert.match(updateCheck, /Get-FileHash/);
+  assert.match(updateCheck, /updateNeeded/);
+  assert.match(updateCheck, /up_to_date_cached/);
+  assert.match(updateCheck, /sync-anticodex-launcher\.ps1/);
+  assert.match(updateCheck, /Codex Desktop has been updated/);
+  assert.match(updateCheck, /Image\]::FromStream/);
+  assert.match(updateCheck, /pinkBlob -ge 120/);
+  assert.doesNotMatch(updateCheck, /New-Object System\.Drawing\.Icon/);
+  assert.match(launcher, /check-anticodex-update\.ps1/);
+  assert.match(readiness, /updateStatus/);
+  assert.match(translator, /updateCheck:\s*\{/);
+  assert.match(translator, /script:\s*"check-anticodex-update\.ps1"/);
+  assert.match(translator, /data-action="updateCheck"/);
+  assert.match(translator, /ANTICODEX_STATE_ROOT/);
+  assert.match(translator, /dirname\(process\.env\.CODEX_HOME_DIR\)/);
+  assert.match(translator, /update-status\.json/);
+});
+
+test("Antigravity mode builds the model catalog from the signed-in desktop account", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const sync = readFileSync(resolve(root, "translator", "sync-antigravity-model-catalog.mjs"), "utf8");
+
+  assert.match(launcher, /sync-antigravity-model-catalog\.mjs/);
+  assert.match(launcher, /ANTIGRAVITY_MODEL_CATALOG_PATH/);
+  assert.match(launcher, /if\s*\(\$IS_ANTIGRAVITY_MODE\)\s*\{/);
+  assert.match(launcher, /Copy-Item -LiteralPath \$MODEL_CATALOG_TEMPLATE_PATH -Destination \(Join-Path \$CODEX_HOME_DIR "deepseek-model-catalog\.json"\) -Force/);
+  assert.match(launcher, /\$LASTEXITCODE -ne 0/);
+  assert.match(launcher, /using the last available catalog/i);
+  assert.match(launcher, /function Use-CachedAntigravityModelCatalog/);
+  assert.match(launcher, /ANTICODEX_FORCE_STARTUP_MODEL_REFRESH/);
+  assert.match(launcher, /\$script:MODEL_CATALOG_TEMPLATE_PATH = \$generatedCatalog/);
+  assert.match(server, /const CODEX_HOME_DIR = process\.env\.CODEX_HOME_DIR \|\| process\.env\.CODEX_HOME \|\| ""/);
+  assert.match(sync, /fetchAvailableAgentModels/);
+  assert.match(sync, /buildAntigravityModelCatalog/);
+  assert.match(sync, /ANTIGRAVITY_MODEL_DISCOVERY_ATTEMPTS/);
+  assert.match(sync, /ANTIGRAVITY_MODEL_DISCOVERY_TIMEOUT_MS/);
+});
+
+test("translator-only recovery keeps lightweight snapshots fresh even when DEEPCODEX_SKIP_PLUGIN_SYNC=1", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const translatorOnlyBlock = launcher.match(/if \(\$TranslatorOnly\) \{[\s\S]*?Write-Host "Anti-Codex translator is ready/)?.[0];
+
+  assert.ok(translatorOnlyBlock, "missing translator-only startup block");
+  assert.match(launcher, /function Find-AntiCodexLocalAddress/);
+  assert.match(launcher, /function Set-AntiCodexTranslatorEndpointDefaults/);
+  assert.match(launcher, /Set-AntiCodexTranslatorEndpointDefaults/);
+  assert.match(launcher, /\$script:TRANSLATOR_PORT = 8484/);
+  assert.match(launcher, /\$env:TRANSLATOR_URL = \$script:TRANSLATOR_URL/);
+  assert.match(translatorOnlyBlock, /Seed-RuntimeDefaults/);
+  assert.match(launcher, /function Test-AntiCodexStartupSnapshotsReady/);
+  assert.match(launcher, /function Sync-AntiCodexStartupSnapshots/);
+  assert.match(launcher, /ANTICODEX_FORCE_STARTUP_SNAPSHOTS/);
+  assert.match(launcher, /ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS/);
+  assert.match(launcher, /\.anticodex-startup-snapshots-ready\.json/);
+  assert.match(launcher, /anticodex-startup-snapshots-ready-v1/);
+  assert.match(launcher, /marker\.sharedCodexHome/);
+  assert.match(launcher, /marker\.codexHome/);
+  assert.match(launcher, /TotalHours -gt \$ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS/);
+  assert.match(launcher, /function Get-AntiCodexStartupSourceFingerprint/);
+  assert.match(launcher, /--print-startup-source-fingerprint/);
+  assert.match(launcher, /marker\.sourceFingerprint -ne \$currentSourceFingerprint/);
+  assert.match(translatorOnlyBlock, /Start-TranslatorProcess/);
+  const syncIndex = translatorOnlyBlock.indexOf("Sync-AntiCodexStartupSnapshots");
+  const startIndex = translatorOnlyBlock.indexOf("Start-TranslatorProcess");
+  assert.ok(
+    syncIndex >= 0 && startIndex >= 0 && syncIndex < startIndex,
+    "translator-only recovery must refresh lightweight local snapshots before Start-TranslatorProcess even when plugin sync is skipped",
+  );
+  assert.doesNotMatch(translatorOnlyBlock, /if\s*\(\s*-not\s+\$DEEPCODEX_SKIP_PLUGIN_SYNC\s*\)[\s\S]{0,120}Sync-AntiCodexStartupSnapshots/);
+  assert.ok(
+    translatorOnlyBlock.indexOf("Use-CachedAntigravityModelCatalog") <
+      translatorOnlyBlock.indexOf("Start-TranslatorProcess"),
+    "translator must load the Antigravity catalog before it starts",
+  );
+});
+
+test("translator-only Anti-Codex launcher keeps the anticodex state root by default", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  assert.match(launcher, /\$IS_ANTICODEX_INSTALL_ROOT/);
+  assert.match(launcher, /Join-Path \$env:APPDATA "anticodex"/);
+  assert.match(launcher, /\$IS_ANTIGRAVITY_MODE = \$env:TRANSLATOR_UPSTREAM_MODE -eq "antigravity" -or \$IS_ANTICODEX_INSTALL_ROOT/);
+});
+
+test("launcher refreshes the isolated model catalog after account readiness recovers", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  assert.match(launcher, /function Get-TranslatorHealthSnapshot/);
+  assert.match(launcher, /function Refresh-AntigravityCatalogAfterRecovery/);
+  assert.match(launcher, /accountReady/);
+  assert.match(
+    launcher,
+    /\$currentAccountReady\s+-eq\s+\$true[\s\S]*?\$previousAccountReady\s+-ne\s+\$true[\s\S]*?Refresh-AntigravityCatalogAfterRecovery/,
+  );
+  assert.match(
+    launcher,
+    /Copy-Item\s+-LiteralPath\s+\$generatedCatalog\s+-Destination\s+\(Join-Path\s+\$CODEX_HOME_DIR\s+"deepseek-model-catalog\.json"\)\s+-Force/,
+  );
+
+  const refreshFunction = launcher.match(/function Refresh-AntigravityCatalogAfterRecovery \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(refreshFunction, "missing recovery refresh function");
+  assert.doesNotMatch(refreshFunction, /Stop-Process|CODEX_BIN|GLOBAL_CODEX_HOME/);
+});
+
+test("Antigravity mode avoids slow plugin marketplace startup by default", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
+
+  assert.match(launcher, /DEEPCODEX_SKIP_PLUGIN_SYNC/);
+  assert.match(launcher, /Strip-PluginMarketplaceConfig/);
+  assert.match(launcher, /setFeatureFlag\(text, "plugins", "false"\)/);
+  assert.match(launcher, /setFeatureFlag\(text, "plugin_sharing", "false"\)/);
+  assert.match(launcher, /setFeatureFlag\(text, "remote_plugin", "false"\)/);
+  assert.match(launcher, /Sync-AntiCodexStartupSnapshots/);
+  assert.match(launcher, /Startup local feature snapshots are already ready; skipped lightweight refresh/);
+  assert.match(launcher, /cache\\codex_app_directory/);
+  assert.match(launcher, /cache\\codex_apps_tools/);
+  assert.match(pluginHostSync, /process\.argv\.includes\('--skills-only'\)/);
+  assert.match(pluginHostSync, /process\.argv\.includes\('--local-snapshots'\)/);
+  assert.match(pluginHostSync, /process\.argv\.includes\('--startup-snapshots'\)/);
+  assert.match(pluginHostSync, /process\.argv\.includes\('--print-startup-source-fingerprint'\)/);
+  assert.match(pluginHostSync, /ANTICODEX_SNAPSHOT_LOCK_STALE_MS/);
+  assert.match(pluginHostSync, /60 \* 1000/);
+  assert.match(pluginHostSync, /kept-existing-startup-snapshot/);
+  assert.match(pluginHostSync, /anticodex-startup-snapshots-ready-v1/);
+  assert.match(pluginHostSync, /marker-write-failed/);
+  assert.match(pluginHostSync, /copy-failed' \|\| item\.mode === 'marker-write-failed'/);
+  assert.match(pluginHostSync, /codex_app_directory/);
+  assert.match(pluginHostSync, /mode:\s*'copy'/);
+  assert.match(pluginHostSync, /mode:\s*'copy-file'/);
+  assert.match(pluginHostSync, /copyDirectoryContents/);
+  assert.match(pluginHostSync, /syncDirectoryTransactional/);
+  assert.match(pluginHostSync, /syncFileTransactional/);
+  assert.match(pluginHostSync, /acquireSyncLock/);
+  assert.match(pluginHostSync, /local snapshot refresh is already running/);
+  assert.match(pluginHostSync, /\.tmp-/);
+  assert.match(pluginHostSync, /\.old-/);
+  assert.match(pluginHostSync, /AGENTS\.md/);
+  assert.match(pluginHostSync, /DEFAULT_SKILL_ALLOWLIST\.md/);
+  assert.match(pluginHostSync, /RTK\.md/);
+  assert.match(pluginHostSync, /MCP_WORKER_USAGE_GUIDE\.md/);
+  assert.match(pluginHostSync, /sourceFingerprint/);
+  assert.match(pluginHostSync, /sourceMtimeMax/);
+  assert.match(pluginHostSync, /computeStartupSourceFingerprint/);
+  assert.match(pluginHostSync, /computeSnapshotManifest/);
+  assert.match(pluginHostSync, /pruneStaleManifestEntries/);
+  assert.match(pluginHostSync, /\.anticodex-source-manifest\.json/);
+  assert.match(pluginHostSync, /trackManifest/);
+  assert.match(launcher, /if\s*\(-not \$DEEPCODEX_SKIP_PLUGIN_SYNC\)/);
+});
+
+test("Anti-Codex imports shared Codex config without writing back to global Codex config", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  assert.match(launcher, /\$registrationArgs\s*=\s*@\(\$configToml,\s*\$previousToml\)/);
+  assert.match(launcher, /if\s*\(-not \$IS_ANTIGRAVITY_MODE\)\s*\{\s*\$registrationArgs\s*\+=\s*\$globalConfig\s*\}/);
+  assert.match(launcher, /& \$NODE_BIN \$DEEPCODEX_REGISTRATION_SYNC @registrationArgs/);
+  assert.match(launcher, /if\s*\(-not \$IS_ANTIGRAVITY_MODE\)\s*\{\s*Ensure-GlobalPermissionDefaults\s*\}/);
+  assert.match(launcher, /& \$NODE_BIN \$SHARED_CONFIG_SYNC \$globalConfig \$configToml/);
+  assert.match(launcher, /Shared Codex config sync failed/);
+  assert.match(launcher, /Plugin registration sync failed/);
+  assert.match(launcher, /Optional local feature sync failed/);
+  assert.match(launcher, /Sync-GlobalRules/);
+
+});
+
+test("Anti-Codex imports skills as a local copy instead of linking shared Codex skills", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-skills-import-"));
+  const currentHome = resolve(tempRoot, "current");
+  const sharedHome = resolve(tempRoot, "shared");
+  const sourceSkill = resolve(sharedHome, "skills", "demo-skill");
+  const targetSkill = resolve(currentHome, "skills", "demo-skill");
+  mkdirSync(sourceSkill, { recursive: true });
+  writeFileSync(resolve(sourceSkill, "SKILL.md"), "# Demo\n");
+
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"),
+      currentHome,
+      sharedHome,
+      "--skills-only",
+    ], {
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(existsSync(targetSkill), true);
+    assert.equal(readFileSync(resolve(targetSkill, "SKILL.md"), "utf8"), "# Demo\n");
+    assert.equal(lstatSync(resolve(currentHome, "skills")).isSymbolicLink(), false);
+
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, true);
+    assert.equal(summary.summary[0].relPath, "skills");
+    assert.equal(summary.summary[0].mode, "copied");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Anti-Codex plugin, connector, and sidecar snapshots are local copies", () => {
+  const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
+  const sidecarSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-sidecars.mjs"), "utf8");
+  const independence = readFileSync(resolve(root, "scripts", "test-anticodex-independence.ps1"), "utf8");
+
+  assert.doesNotMatch(pluginHostSync, /mode:\s*'link'/);
+  assert.doesNotMatch(pluginHostSync, /symlinkSync/);
+  assert.match(pluginHostSync, /relPath: 'plugins'.*mode: 'copy'/s);
+  assert.match(pluginHostSync, /relPath: path\.join\('\.tmp', 'plugins'\).*mode: 'copy'/s);
+  assert.match(pluginHostSync, /relPath: 'computer-use'.*mode: 'copy'/s);
+  assert.match(pluginHostSync, /relPath: 'AGENTS\.md'.*mode: 'copy-file'/s);
+  assert.match(pluginHostSync, /relPath: 'DEFAULT_SKILL_ALLOWLIST\.md'.*mode: 'copy-file'/s);
+  assert.match(pluginHostSync, /relPath: 'RTK\.md'.*mode: 'copy-file'/s);
+  assert.match(pluginHostSync, /relPath: 'MCP_WORKER_USAGE_GUIDE\.md'.*mode: 'copy-file'/s);
+  assert.match(pluginHostSync, /mode: 'copied-file'/);
+
+  assert.doesNotMatch(sidecarSync, /symlinkSync/);
+  assert.match(sidecarSync, /ensureLocalCopy/);
+  assert.match(sidecarSync, /copyDirectoryContents/);
+
+  assert.match(independence, /Get-PathState -RelPath "plugins" -RequiredLocalCopy \$true/);
+  assert.match(independence, /Get-PathState -RelPath "\.tmp\\plugins" -RequiredLocalCopy \$true/);
+  assert.match(independence, /Get-PathState -RelPath "computer-use" -RequiredLocalCopy \$true/);
+  assert.doesNotMatch(independence, /AllowedSharedLink \$true/);
+});
+
+test("Anti-Codex ships a Codex host sync script", () => {
+  const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+  const validator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
+
+  assert.match(sync, /install-anticodex\.ps1/);
+  assert.match(sync, /test-anticodex-source-preflight\.ps1/);
+  assert.match(sync, /\$global:LASTEXITCODE = 0[\s\S]{0,80}& \$sourcePreflight/);
+  assert.match(sync, /\$global:LASTEXITCODE = 0[\s\S]{0,80}& \$installer/);
+  assert.match(sync, /\$global:LASTEXITCODE = 0[\s\S]{0,80}& \$validator/);
+  assert.match(sync, /source preflight failed\. Sync was stopped before building an update candidate/i);
+  assert.match(sync, /-HostOnly/);
+  assert.match(sync, /Split-Path -Parent \(Split-Path -Parent \$PSScriptRoot\)/);
+  assert.match(sync, /test-anticodex-host-candidate\.ps1/);
+  assert.match(sync, /update-candidate/);
+  assert.match(sync, /rollback-host/);
+  assert.match(sync, /AntiCodexHostSync/);
+  assert.match(sync, /ANTICODEX_HOST_SYNC_MARKER/);
+  assert.match(sync, /function Wait-AntiCodexHostRelease/);
+  assert.match(sync, /start-anticodex\.ps1/);
+  assert.match(sync, /Host sync marker/);
+  assert.match(sync, /Start-Process/);
+  assert.match(sync, /rollback-anticodex\.ps1/);
+  assert.match(sync, /function Wait-AntiCodexPostSyncReady/);
+  assert.match(sync, /function Invoke-AntiCodexPostSyncAcceptance/);
+  assert.match(sync, /test-anticodex-installed-overall\.ps1/);
+  assert.match(sync, /antigravity-desktop/);
+  assert.match(sync, /Antigravity gateway ready/);
+  assert.match(sync, /modelCount/);
+  assert.doesNotMatch(sync, /Invoke-RestMethod -Uri "\$baseUrl\/anticodex\/diagnostics"/);
+  assert.doesNotMatch(sync, /nativeBridgeDefaultEnabled/);
+  assert.doesNotMatch(sync, /antigravitySessionLock/);
+  assert.match(sync, /Post-sync acceptance timed out/);
+  assert.match(sync, /function Wait-AntiCodexChildProcess/);
+  assert.match(sync, /\$Process\.HasExited/);
+  assert.doesNotMatch(sync, /WaitForExit\(\$TimeoutSeconds \* 1000\)/);
+  assert.doesNotMatch(sync, /Start-Process[\s\S]{0,260}\$postSyncVerifier/);
+  assert.match(sync, /\$postSyncAcceptance\.ok -ne \$true/);
+  assert.match(sync, /Automatic rollback restored the previous host/);
+  assert.doesNotMatch(sync, /"-SkipUiStateProbe"/);
+  assert.ok(
+    sync.lastIndexOf("$syncMutex.ReleaseMutex()") > sync.indexOf("Invoke-AntiCodexPostSyncAcceptance -TimeoutSeconds 35"),
+    "host sync mutex must remain held through post-sync acceptance and rollback",
+  );
+  assert.match(sync, /function Repair-RollbackHostIconManifest/);
+  assert.match(sync, /assets\\anticodex\.ico/);
+  assert.match(sync, /appRootIcon/);
+  assert.match(sync, /trayIcon/);
+  assert.match(sync, /resources\\codex-tray\.ico/);
+  assert.match(sync, /Move-Item -LiteralPath \$temporaryMarker -Destination \$rollbackMarker -Force/);
+  assert.match(sync, /Automatic rollback/);
+  assert.match(sync, /\$activationStarted\s*=\s*\$false/);
+  assert.match(sync, /\$activeHostChanged\s*=\s*\$false/);
+  assert.match(sync, /\$rollbackAvailable\s*=\s*\$false/);
+  assert.match(sync, /if\s*\(\$activationStarted\)/);
+  assert.match(sync, /function Remove-FixedUpdateDirectory/);
+  assert.match(sync, /\[IO\.Directory\]::Delete/);
+  assert.match(sync, /function Move-FixedUpdateDirectory/);
+  assert.match(sync, /\[IO\.Directory\]::Move/);
+  assert.match(sync, /Candidate validation failed/);
+  assert.match(sync, /catch\s*\{/);
+  assert.match(validator, /codex-patched-app\.ok/);
+  assert.match(validator, /resources\\app\.asar/);
+  assert.match(validator, /resources\\codex\.exe/);
+  assert.match(validator, /resources\\icon\.ico/);
+  assert.match(validator, /resources\\codex-tray\.ico/);
+  assert.match(validator, /hostIcon/);
+  assert.match(validator, /appRootIcon/);
+  assert.match(validator, /trayIcon/);
+  assert.match(validator, /ProductName/);
+  assert.match(validator, /Anti-Codex/);
+  assert.match(validator, /--version/);
+});
+
+test("Anti-Codex ships a runtime-only sync script for source patches", () => {
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+
+  assert.match(runtimeSync, /Anti-Codex\\runtime/);
+  assert.match(runtimeSync, /translator\\antigravity-session-lock\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-real-work\.ps1/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-real-mini-tool\.ps1/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-model-switch-history\.ps1/);
+  assert.match(runtimeSync, /Copy-AntiCodexRuntimeTree/);
+  assert.match(runtimeSync, /robocopy\.exe/);
+  assert.match(runtimeSync, /Remove-AntiCodexLegacyRuntimeFiles/);
+  assert.match(runtimeSync, /Test-AntiCodexJavaScriptSyntax/);
+  assert.match(runtimeSync, /--check/);
+  assert.match(runtimeSync, /source translator\\adaptive-server\.mjs/);
+  assert.match(runtimeSync, /runtime translator\\adaptive-server\.mjs/);
+  assert.match(runtimeSync, /adaptive-server\.mjs/);
+  assert.match(runtimeSync, /Refusing to remove Anti-Codex legacy runtime file outside/);
+  assert.match(runtimeSync, /start-deepcodex\.ps1/);
+  assert.match(runtimeSync, /-TranslatorOnly/);
+  assert.match(runtimeSync, /Stop-AntiCodexTranslator/);
+  assert.match(runtimeSync, /\/anticodex\/diagnostics/);
+  assert.match(runtimeSync, /Wait-AntiCodexSessionLock/);
+  assert.match(runtimeSync, /diagnosticsTimeoutSec/);
+  assert.doesNotMatch(runtimeSync, /Invoke-LocalJson "\/anticodex\/diagnostics" 5/);
+  assert.match(runtimeSync, /Start-Sleep -Milliseconds 500/);
+  assert.match(runtimeSync, /antigravitySessionLockPresent/);
+  assert.doesNotMatch(runtimeSync, /codex-patched-app\\Anti-Codex\.exe/);
+  assert.doesNotMatch(runtimeSync, /\/v1\/responses/);
+});
+
+test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
+  const miniTool = readFileSync(resolve(root, "scripts", "test-anticodex-real-mini-tool.ps1"), "utf8");
+  const realWork = readFileSync(resolve(root, "scripts", "test-anticodex-real-work.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const postVerification = readFileSync(resolve(root, "scripts", "test-anticodex-post-verification.ps1"), "utf8");
+
+  assert.match(miniTool, /\[switch\]\$AllowRealTraffic/);
+  assert.match(miniTool, /if \(-not \$AllowRealTraffic\)/);
+  assert.match(miniTool, /Enter-AntiCodexRealTrafficLock/);
+  assert.match(miniTool, /\[System\.IO\.Path\]::GetTempPath\(\)/);
+  assert.match(miniTool, /name\s*=\s*"create_mini_tool"/);
+  assert.match(miniTool, /tool_choice\s*=\s*"required"/);
+  assert.match(miniTool, /previous_response_id/);
+  assert.match(miniTool, /function_call_output/);
+  assert.match(miniTool, /\$cliSource\s*=\s*@"/);
+  assert.match(miniTool, /\$cliResult\.lines\s+-ne\s+3/);
+  assert.match(miniTool, /\$cliResult\.words\s+-ne\s+9/);
+  assert.match(miniTool, /\$cliResult\.chars\s+-ne\s+53/);
+  assert.match(miniTool, /请调用 create_mini_tool/);
+  assert.match(miniTool, /\\u4e00-\\u9fff/);
+  assert.match(realWork, /请调用 create_probe_file/);
+  assert.match(realWork, /\\u4e00-\\u9fff/);
+  assert.match(realWork, /\$mcpExecution\s*=\s*Invoke-RealNodeReplMcpResult/);
+  assert.match(realWork, /realMcp\s*=\s*\$mcpExecution/);
+  assert.match(realWork, /MCP_OK/);
+  assert.match(miniTool, /\$finalText\s+-match\s+"DeepCodex"/);
+  assert.match(realWork, /\$finalText\s+-match\s+"DeepCodex"/);
+  assert.match(miniTool, /finally\s*\{[\s\S]*Remove-Item[\s\S]*Exit-AntiCodexRealTrafficLock/);
+  assert.doesNotMatch(miniTool, /code\s*=\s*@\{/);
+  assert.match(overall, /test-anticodex-real-mini-tool\.ps1/);
+  assert.match(overall, /Real mini-tool task verification/);
+  assert.match(overall, /\$NoTraffic -or \(-not \$AllowRealTraffic\)/);
+  assert.match(overall, /test-anticodex-real-work\.ps1/);
+  assert.match(overall, /Real work task verification/);
+  assert.match(overall, /\$checks\.realWork/);
+  assert.match(postVerification, /"-AllowRealTraffic"/);
+});
+
+test("Anti-Codex install and host sync refresh full local feature snapshots once", () => {
+  const install = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+
+  assert.match(install, /sync-shared-codex-plugin-host\.mjs/);
+  assert.match(install, /--local-snapshots/);
+  assert.match(install, /optional full local feature snapshot needs a later Manager refresh/);
+  assert.match(install, /codex-home-deepseek-app/);
+  assert.match(sync, /refresh-anticodex-local-features\.ps1/);
+  assert.match(sync, /local feature snapshot refresh needs a later Manager retry/);
+});
+
+test("Anti-Codex ships a safe one-click rollback script", () => {
+  const rollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
+
+  assert.match(rollback, /rollback-host/);
+  assert.match(rollback, /rollback-host\.ok/);
+  assert.match(rollback, /rollback-swap-host/);
+  assert.match(rollback, /AntiCodexHostSync/);
+  assert.match(rollback, /ANTICODEX_HOST_SYNC_MARKER/);
+  assert.match(rollback, /function Test-AntiCodexHost/);
+  assert.match(rollback, /anticodex-host-manifest-v1/);
+  assert.match(rollback, /Get-FileHash/);
+  assert.match(rollback, /resources\\icon\.ico/);
+  assert.match(rollback, /appRootIcon/);
+  assert.match(rollback, /function Wait-AntiCodexHostRelease/);
+  assert.match(rollback, /function Wait-AntiCodexPostRollbackReady/);
+  assert.match(rollback, /RecoveryAttempt/);
+  assert.match(rollback, /start-anticodex\.ps1/);
+  assert.match(rollback, /Automatic recovery/);
+  assert.match(rollback, /Start-Process/);
+});
+
+test("Anti-Codex ships a single Start Menu manager for common maintenance actions", () => {
+  const managerBytes = readFileSync(resolve(root, "scripts", "manage-anticodex.ps1"));
+  const manager = readFileSync(resolve(root, "scripts", "manage-anticodex.ps1"), "utf8");
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const inject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const managerAction = readFileSync(resolve(root, "scripts", "test-anticodex-manager-action.ps1"), "utf8");
+
+  assert.deepEqual([...managerBytes.slice(0, 3)], [0xef, 0xbb, 0xbf]);
+  assert.match(manager, /System\.Windows\.Forms/);
+  assert.match(manager, /ValidateSet\("Ui", "Status", "Window"\)/);
+  assert.match(manager, /\[string\]\$Action = "Ui"/);
+  assert.match(manager, /function Open-AntiCodexManagerPanel/);
+  assert.match(manager, /ANTICODEX_MANAGER_API/);
+  assert.match(manager, /anticodex-manager-inject\.js/);
+  assert.match(manager, /anticodex-manager-open-inject\.js/);
+  assert.match(manager, /latest native-panel-v83 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v68|native-panel-v56/);
+  assert.match(manager, /function Start-EmbeddedManagerBridge/);
+  assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
+  assert.match(manager, /PassThru/);
+  assert.ok(
+    manager.indexOf("anticodex-manager-inject.js") < manager.indexOf("anticodex-manager-open-inject.js"),
+    "inject script must be loaded before the opener in the PS1 manager panel",
+  );
+  assert.match(manager, /installExitCode\s+-eq\s+0/);
+  assert.doesNotMatch(manager, /installExitCode -eq 0 -and \$LASTEXITCODE -eq 0/);
+  assert.match(manager, /--remote-debugging-port=\(\\d\+\)/);
+  assert.doesNotMatch(manager, /function Use-ExistingAntiCodexManagerPage/);
+  assert.doesNotMatch(manager, /\/json\/activate\/\$\(\$managerTarget\.id\)/);
+  assert.doesNotMatch(manager, /Start-Process\s+\$managerUrl/);
+  assert.match(manager, /start-anticodex\.ps1/);
+  assert.match(manager, /function Get-ManagerHealthSnapshot/);
+  assert.match(manager, /function Wait-ManagerHealth/);
+  assert.match(manager, /function Start-AntiCodexGatewayAndWait/);
+  assert.match(manager, /function Start-AntiCodexAndWait/);
+  assert.match(manager, /function Stop-StaleEmbeddedManagerBridge/);
+  assert.match(manager, /Test-EmbeddedManagerBridgeRunning[\s\S]*BaseUrl/);
+  assert.match(manager, /--base-url\\s\+\$/);
+  assert.match(manager, /Start-AntiCodexGatewayAndWait -BaseUrl \$baseUrl -TimeoutSeconds 25/);
+  const statusFunction = manager.match(/function Get-ManagerStatus \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(statusFunction, "missing manager status function");
+  assert.match(statusFunction, /Start-AntiCodexGatewayAndWait/);
+  assert.doesNotMatch(statusFunction, /Start-AntiCodexAndWait|start-anticodex\.ps1/i);
+  const gatewayStart = manager.indexOf("function Start-AntiCodexGatewayAndWait");
+  const gatewayEnd = manager.indexOf("function Start-AntiCodexAndWait");
+  const gatewayFunction = gatewayStart >= 0 && gatewayEnd > gatewayStart
+    ? manager.slice(gatewayStart, gatewayEnd)
+    : "";
+  assert.ok(gatewayFunction, "missing manager gateway-only recovery function");
+  assert.match(gatewayFunction, /start-deepcodex\.ps1/i);
+  assert.match(gatewayFunction, /-TranslatorOnly/);
+  assert.match(gatewayFunction, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
+  assert.match(gatewayFunction, /DEEPCODEX_SKIP_PLUGIN_SYNC/);
+  assert.doesNotMatch(gatewayFunction, /start-anticodex\.ps1/i);
+  assert.match(manager, /antigravity-desktop\.ps1/);
+  assert.match(manager, /refresh-anticodex-models\.ps1/);
+  assert.match(manager, /switch-anticodex-account\.ps1/);
+  assert.match(manager, /sync-anticodex-launcher\.ps1/);
+  assert.match(manager, /rollback-anticodex-launcher\.ps1/);
+  assert.match(manager, /test-anticodex-model-routing\.ps1/);
+  assert.match(manager, /"-SkipRefresh", "-SkipRequests"/);
+  assert.match(manager, /function Invoke-ReadOnlyModelCheck/);
+  assert.match(manager, /AllowFailureJson/);
+  assert.match(manager, /function Wait-AntiCodexManagerChildProcess/);
+  assert.match(manager, /\$Process\.HasExited/);
+  assert.match(manager, /\[void\]\$proc\.Handle/);
+  assert.doesNotMatch(manager, /WaitForExit\(\$TimeoutMs\)/);
+  assert.doesNotMatch(manager, /WaitForExit\(\$launchTimeoutMs\)/);
+  assert.match(manager, /New-Object System\.Windows\.Forms\.TextBox/);
+  assert.match(manager, /\$status\.Multiline = \$true/);
+  assert.match(manager, /\$status\.ReadOnly = \$true/);
+  assert.match(manager, /\$status\.ScrollBars = "Vertical"/);
+  assert.match(manager, /accountTrafficReady/);
+  assert.match(manager, /accountTrafficDiagnosis/);
+  assert.match(manager, /accountTrafficSuggestedAction/);
+  assert.match(manager, /\$trafficDiagnosis/);
+  assert.match(manager, /quota_or_limit_reached/);
+  assert.match(manager, /antigravity_quota_exceeded/);
+  assert.match(manager, /account_verification_required/);
+  assert.match(manager, /account_verification_with_missing_token/);
+  assert.match(manager, /collect-anticodex-diagnostics\.ps1/);
+  assert.match(manager, /function Invoke-DiagnosticBundleCollection/);
+  assert.match(manager, /model-routing-refresh\.json/);
+  assert.match(manager, /TimeoutMs 90000/);
+  assert.match(manager, /function Invoke-AccountProxyCheck/);
+  assert.match(manager, /test-anticodex-account-proxy-readiness\.ps1/);
+  assert.match(manager, /-AllowUnready/);
+  assert.match(manager, /function Format-AccountPhaseSummary/);
+  assert.match(manager, /phaseSummary/);
+  assert.match(manager, /\$result\.models\.selected/);
+  assert.match(manager, /function Invoke-InstallSyncCheck/);
+  assert.match(manager, /test-anticodex-sync-readiness\.ps1/);
+  assert.match(manager, /Invoke-ManagerScriptJson "test-anticodex-sync-readiness\.ps1" -Arguments @\("-Fast", "-SkipAccountProxyProbe"\) -TimeoutMs 30000/);
+  assert.match(manager, /function Invoke-UiStateCheck/);
+  assert.match(manager, /test-anticodex-ui-state\.ps1/);
+  assert.match(manager, /ECONNREFUSED\|connection refused\|refused\|connect/);
+  assert.match(manager, /function Invoke-McpSkillsCheck/);
+  assert.match(manager, /test-anticodex-mcp-skills\.ps1/);
+  assert.match(manager, /function Test-OnlyGatewayFailures/);
+  assert.match(manager, /function Invoke-PluginCapabilityCheck/);
+  assert.match(manager, /test-anticodex-plugin-capabilities\.ps1/);
+  assert.match(manager, /\/anticodex\/diagnostics/);
+  assert.match(manager, /antigravityQueue/);
+  assert.match(manager, /accountTracking/);
+  assert.match(manager, /function Invoke-LocalFeatureRefresh/);
+  assert.match(manager, /refresh-anticodex-local-features\.ps1/);
+  assert.match(manager, /TimeoutMs 300000/);
+  assert.match(manager, /function Invoke-OverallNoTrafficCheck/);
+  assert.match(manager, /test-anticodex-installed-overall\.ps1/);
+  assert.match(manager, /-EnsureRunning/);
+  assert.match(manager, /-NoTraffic/);
+  assert.match(manager, /function Start-PostVerificationFullCheck/);
+  assert.match(manager, /function Get-PostVerificationStatusLine/);
+  assert.match(manager, /function Get-PostVerificationProcesses/);
+  assert.match(manager, /test-anticodex-post-verification\.ps1/);
+  assert.match(manager, /-OpenAntigravityOnVerification/);
+  assert.match(manager, /latest-post-verification\.json/);
+  assert.match(manager, /diagnosisDetail/);
+  assert.match(manager, /\/health/);
+  assert.match(manager, /\/anticodex\/account/);
+  assert.match(manager, /function Get-CachedUpdateNeeded/);
+  assert.match(manager, /update-status\.json/);
+  assert.match(manager, /Diagnostics\.updateStatus/);
+  assert.doesNotMatch(manager, /check-anticodex-update\.ps1[\s\S]*-NoPersist/);
+  assert.doesNotMatch(manager, /chatgpt\.com|auth\/login/);
+  assert.match(server, /function anticodexManagerHtml/);
+  assert.match(server, /function latestPostVerificationStatus/);
+  assert.match(server, /translator-lifecycle\.json/);
+  assert.match(server, /translator-lifecycle\.jsonl/);
+  assert.match(server, /function writeLifecycleEvent/);
+  assert.match(server, /function trimLifecycleLog/);
+  assert.match(server, /ANTICODEX_LIFECYCLE_LOG_MAX_BYTES/);
+  assert.match(server, /ANTICODEX_LIFECYCLE_LOG_MAX_LINES/);
+  assert.match(server, /function latestLifecycleStatus/);
+  assert.match(server, /safeErrorSummary/);
+  assert.match(server, /startup_readiness_degraded/);
+  assert.match(server, /startup_ready/);
+  assert.match(server, /uncaught_exception/);
+  assert.match(server, /unhandled_rejection/);
+  assert.match(server, /server_error/);
+  assert.match(server, /MANAGER_ACTIONS/);
+  assert.match(server, /MANAGER_ACTION_TOKEN/);
+  assert.match(server, /x-anticodex-manager-token/);
+  assert.match(server, /function validateManagerActionRequest/);
+  assert.match(server, /function isTrustedManagerOriginValue/);
+  assert.match(server, /req\.headers\.origin/);
+  assert.match(server, /req\.headers\.referer/);
+  assert.match(server, /function managerScriptPath/);
+  assert.match(server, /relativePath\(MANAGER_SCRIPTS_ROOT, scriptPath\)/);
+  assert.match(server, /updateCheck/);
+  assert.match(server, /check-anticodex-update\.ps1/);
+  assert.match(server, /refreshFeatures/);
+  assert.match(server, /refresh-anticodex-local-features\.ps1/);
+  assert.match(server, /refreshFeatures:\s*\{[\s\S]*?background:\s*true/);
+  assert.match(server, /refreshFeatures:\s*\{[\s\S]*?singletonProcessPattern:\s*"refresh-anticodex-local-features\\\\\.ps1"/);
+  assert.match(server, /syncHost/);
+  assert.match(server, /sync-anticodex-launcher\.ps1/);
+  assert.match(server, /singletonProcessPattern/);
+  assert.match(server, /MANAGER_ACTION_LOCKS/);
+  assert.match(server, /backgroundLockMaxMs/);
+  assert.match(server, /function managerActionRunningProcesses/);
+  assert.match(server, /alreadyRunning/);
+  assert.match(server, /runningPids/);
+  assert.match(server, /runManagerAction/);
+  assert.match(server, /\/anticodex\/manager\/action/);
+  assert.match(managerAction, /\/anticodex\/manager/);
+  assert.match(managerAction, /\/anticodex\/manager\/action/);
+  assert.match(managerAction, /x-anticodex-manager-token/);
+  assert.match(managerAction, /http:\/\/evil\.example/);
+  assert.match(managerAction, /"Origin"\s*=\s*"null"/);
+  assert.match(managerAction, /nullOriginStatus/);
+  assert.match(server, /String\(value\)\.toLowerCase\(\) === "null"\)\s*return false/);
+  assert.match(managerAction, /Access-Control-Allow-Origin/);
+  assert.match(managerAction, /Unknown Anti-Codex manager action/);
+  assert.match(managerAction, /requiredManagerActions/);
+  assert.match(managerAction, /data-manager-action="/);
+  assert.match(managerAction, /accountProxy/);
+  assert.match(managerAction, /syncReadiness/);
+  assert.match(managerAction, /repairShortcuts/);
+  assert.match(managerAction, /mcpSkills/);
+  assert.match(managerAction, /pluginCapabilities/);
+  assert.match(managerAction, /sourcePreflight/);
+  assert.match(managerAction, /resetAntigravitySessionLock/);
+  assert.match(managerAction, /fastOverallNoTraffic/);
+  assert.match(managerAction, /document\\\.querySelectorAll\\\("button\\\[data-action\\\]"\\\)/);
+  assert.match(managerAction, /setActionButtonsDisabled\\\(true\\\)/);
+  assert.match(managerAction, /setActionButtonsDisabled\\\(false\\\)/);
+  assert.match(managerAction, /id="actionResult"/);
+  assert.match(managerAction, /<html lang="zh-CN"/);
+  assert.match(managerAction, /window\\\.open\|target=/);
+  assert.match(managerAction, /<iframe\\b/);
+  assert.match(managerAction, /actionNames/);
+  assert.match(managerAction, /hasButtonClickBinding/);
+  assert.match(managerAction, /hasDisableReenable/);
+  assert.match(managerAction, /hasNoLoginNoTrafficNotice/);
+  assert.match(managerAction, /hasRouteProviderFields/);
+  assert.match(managerAction, /manager page route summary is missing third-party provider\/protocol\/transport fields/);
+  assert.match(managerAction, /\/anticodex\/model-routes/);
+  assert.match(managerAction, /providerProtocol/);
+  assert.match(managerAction, /hasAdaptiveTheme/);
+  assert.match(managerAction, /prefers-color-scheme:light/);
+  assert.match(managerAction, /\[switch\]\$RunSafeAction/);
+  assert.match(managerAction, /\$SafeActionName = "refreshStatus"/);
+  assert.match(managerAction, /\[switch\]\$RunUpdateCheckAction/);
+  assert.match(managerAction, /safeActionName/);
+  assert.match(managerAction, /refreshStatus/);
+  assert.match(managerAction, /updateCheck/);
+  assert.match(managerAction, /updateCheckRan/);
+  assert.match(managerAction, /\[switch\]\$RunSessionResetAction/);
+  assert.match(managerAction, /sessionReset/);
+  assert.match(managerAction, /activeReleased/);
+  assert.match(managerAction, /queuedCancelled/);
+  assert.match(managerAction, /activeAntigravityRequests/);
+  assert.match(managerAction, /\$activeRequestCount\s*=\s*\[int\]\$diagnostics\.activeAntigravityRequests\.active/);
+  assert.match(managerAction, /\$canResetStaleLock\s*=\s*\$true/);
+  assert.match(managerAction, /resetMode\s*=\s*if \(\$isIdle\) \{ "idle" \} else \{ "stale-lock" \}/);
+  assert.match(managerAction, /Session lock is not safe to reset/);
+  assert.match(managerAction, /"Origin"\s*=\s*\$BaseUrl[\s\S]{0,120}"Referer"\s*=\s*"\$BaseUrl\/anticodex\/manager"/);
+  assert.doesNotMatch(managerAction, /\$SafeActionName\s*=\s*"(?:postVerificationFull|syncHost)"/);
+  assert.doesNotMatch(managerAction, /-Body\s+'\{"action":"(?:postVerificationFull|syncHost)"/);
+  assert.match(server, /postVerification/);
+  assert.match(server, /function localFeatureSummary/);
+  assert.match(server, /localFeatures/);
+  assert.match(server, /installedChecks/);
+  assert.match(server, /longTasks/);
+  assert.match(server, /function longTaskSummary/);
+  assert.match(server, /function longTaskRows/);
+  assert.match(server, /id="longTasks"/);
+  assert.match(server, /shortcutRepair/);
+  assert.match(server, /latest-installed-overall-fast\.json/);
+  assert.match(server, /latest-shortcut-repair\.json/);
+  assert.match(server, /id="localChecks"/);
+  assert.match(server, /latest-post-verification\.json/);
+  assert.match(server, /id="postVerification"/);
+  assert.match(server, /const postState=/);
+  assert.match(server, /\/anticodex\/manager/);
+  assert.doesNotMatch(server, /function htmlResponse[\s\S]{0,350}access-control-allow-origin/);
+  assert.match(server, /accountTrafficDiagnosis\|\|health\.accountTrafficState\|\|health\.accountState/);
+  assert.doesNotMatch(server, /\/anticodex\/manager\/open/);
+  assert.doesNotMatch(server, /openAntiCodexManagerTarget/);
+  assert.match(server, /lf=diag\.localFeatures/);
+  assert.match(server, /Skill/);
+  assert.match(server, /MCP/);
+  assert.match(server, /quota_or_limit_reached/);
+  assert.match(server, /accountTrafficSuggestedAction/);
+  assert.match(server, /id="plugins"/);
+  assert.match(server, /function syncVersion/);
+  assert.match(server, /function syncSafetyText/);
+  assert.match(server, /test-anticodex-account-proxy-readiness\.ps1/);
+  assert.match(server, /test-anticodex-sync-readiness\.ps1/);
+  assert.match(server, /repairShortcuts:[\s\S]{0,180}repair-anticodex-shortcuts\.ps1/);
+  assert.match(server, /repairShortcuts:[\s\S]{0,220}timeoutMs:\s*30_000/);
+  assert.match(server, /syncReadiness:[\s\S]{0,180}args:\s*\["-Fast",\s*"-SkipAccountProxyProbe"\]/);
+  assert.match(server, /syncReadiness:[\s\S]{0,220}timeoutMs:\s*30_000/);
+  assert.match(server, /test-anticodex-mcp-skills\.ps1/);
+  assert.match(server, /test-anticodex-plugin-capabilities\.ps1/);
+  assert.match(server, /\/backend-api\/ps\/plugins\/installed/);
+  assert.match(server, /\/backend-api\/plugins\/list/);
+  assert.match(server, /\/backend-api\/aip\/connectors/);
+  assert.match(server, /\/backend-api\/wham\/apps/);
+  assert.match(server, /\/anticodex\/local-connectors\/allowlist/);
+  assert.match(server, /localConnectorAllowlistPayload/);
+  assert.match(server, /validateLocalConnectorIds/);
+  assert.match(server, /writePersistedLocalConnectorAllowlist/);
+  assert.match(server, /local_authorized_connectors/);
+  assert.match(server, /validateManagerSourceRequest\(req,\s*"local connector allowlist"\)/);
+  assert.match(server, /validateManagerActionRequest\(req\)/);
+  assert.match(server, /id="connectorAllowlist"/);
+  assert.match(server, /id="connectorAllowlistInput"/);
+  assert.match(server, /id="saveConnectorAllowlist"/);
+  assert.match(server, /renderConnectorAllowlist/);
+  assert.match(server, /x-anticodex-manager-token/);
+  assert.match(inject, /optionalLoadErrors/);
+  assert.match(inject, /\\u5e94\\u7528\\u5de5\\u5177\\u6682\\u4e0d\\u53ef\\u8bfb/);
+  assert.doesNotMatch(inject, /\[appToolsResult,[\s\S]{0,80}item\.error\?\.message/);
+  assert.match(server, /test-anticodex-installed-overall\.ps1/);
+  assert.match(server, /fastOverallNoTraffic:\s*"[^"]+"/);
+  assert.match(server, /sourcePreflight:\s*"[^"]+"/);
+  assert.match(server, /data-action="sourcePreflight"/);
+  assert.match(server, /test-anticodex-source-preflight\.ps1/);
+  assert.match(server, /"-SkipFullRegression"/);
+  assert.match(server, /data-action="fastOverallNoTraffic"/);
+  assert.match(server, /fastOverallNoTraffic:[\s\S]{0,260}"-SkipUiStateProbe"/);
+  assert.match(server, /overallNoTraffic:[\s\S]{0,260}"-SkipUiStateProbe"/);
+  assert.match(server, /function reportSummaryLines/);
+  assert.match(server, /function failureSummaryLine/);
+  assert.match(server, /viewLatestReports/);
+  assert.match(server, /function latestManagerReportsPayload/);
+  assert.match(server, /latest-codex-responses\.json/);
+  assert.match(server, /latest-real-work\.json/);
+  assert.match(server, /latest-native-tool-loop\.json/);
+  assert.match(server, /latest-mcp-tool-loop\.json/);
+  assert.match(server, /latest-compaction-resume\.json/);
+  assert.match(server, /latest-stability-soak\.json/);
+  assert.match(server, /latestReportsSummary/);
+  assert.match(server, /if\(item\.exists&&item\.latestPath\)/);
+  assert.match(server, /const reset=r\.result\|\|r/);
+  assert.match(server, /ageMs/);
+  assert.match(server, /function formatReportAge/);
+  assert.match(server, /MANAGER_REPORT_STALE_MS/);
+  assert.match(server, /staleCount/);
+  assert.match(server, /\\\\u6700\\\\u65b0\\\\u62a5\\\\u544a/);
+  assert.match(server, /\\\\u5386\\\\u53f2\\\\u62a5\\\\u544a/);
+  assert.match(server, /\\\\u5931\\\\u8d25\\\\u9879/);
+  assert.doesNotMatch(server, /if\(false&&payload\?\.action===/);
+  assert.match(manager, /Invoke-ManagerScriptJson "test-anticodex-installed-overall\.ps1" -Arguments @\("-EnsureRunning", "-NoTraffic", "-SkipAccountProxyProbe", "-SkipManagerActionProbe"\)/);
+  assert.match(server, /collect-anticodex-diagnostics\.ps1/);
+  assert.match(server, /test-anticodex-post-verification\.ps1/);
+  assert.match(server, /background: true/);
+  assert.match(server, /-NoPopup/);
+  assert.match(installer, /Manage Anti-Codex\.lnk/);
+  assert.match(installer, /manage-anticodex\.ps1/);
+  assert.match(readiness, /Manage Anti-Codex\.lnk/);
+  assert.match(readiness, /startMenuManagerShortcutExists/);
+  assert.match(readiness, /Test-ShortcutIconLocation/);
+  assert.match(readiness, /expectedShortcutIconLocation/);
+  assert.match(readiness, /IconLocation/);
+  assert.match(readiness, /verified Anti-Codex icon/);
+  assert.match(readiness, /desktopMainShortcutIconLocation/);
+  assert.match(readiness, /desktopShortcutIconPalette/);
+  assert.match(readiness, /startMenuMainShortcutIconLocation/);
+  assert.match(readiness, /startMenuSyncShortcutIconLocation/);
+  assert.match(readiness, /startMenuRollbackShortcutIconLocation/);
+  assert.match(readiness, /startMenuManagerShortcutIconLocation/);
+});
+
+test("Anti-Codex ships a post-verification real-traffic verifier", () => {
+  const script = readFileSync(resolve(root, "scripts", "test-anticodex-post-verification.ps1"), "utf8");
+
+  assert.match(script, /test-anticodex-account-proxy-readiness\.ps1/);
+  assert.match(script, /test-anticodex-installed-overall\.ps1/);
+  assert.match(script, /Invoke-AntiCodexHealth/);
+  assert.match(script, /Resolve-AntiCodexMode/);
+  assert.match(script, /Test-AntiCodexPostVerificationReady/);
+  assert.match(script, /upstreamProfile\.model/);
+  assert.match(script, /third-party/);
+  assert.match(script, /provider_ready/);
+  assert.match(script, /third-party mode skips Antigravity account\/proxy wait/);
+  assert.match(script, /-AllowUnready/);
+  assert.match(script, /latestDiagnosis/);
+  assert.match(script, /usedRealTraffic = \$true/);
+  assert.match(script, /function Save-Progress/);
+  assert.match(script, /post-verification\.lock/);
+  assert.match(script, /\[IO\.File\]::Open/);
+  assert.match(script, /\[IO\.FileShare\]::None/);
+  assert.match(script, /already_running/);
+  assert.match(script, /function Remove-OldReports/);
+  assert.match(script, /Select-Object -Skip \$Keep/);
+  assert.match(script, /waiting_for_account/);
+  assert.match(script, /waiting_for_provider/);
+  assert.match(script, /running_full_verification/);
+  assert.match(script, /state = if/);
+  assert.match(script, /OpenAntigravityOnVerification/);
+  assert.match(script, /\$upstreamMode -eq "antigravity"/);
+  assert.match(script, /resolve-anticodex-base-url\.ps1/);
+  assert.match(script, /post-verification/);
+  assert.match(script, /if \(\$ready\)/);
+  assert.match(script, /-EnsureRunning/);
+  assert.doesNotMatch(script, /-NoTraffic/);
+});
+
+test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+
+  assert.match(collector, /diagnostic-bundles/);
+  assert.match(collector, /\[int\]\$KeepBundles = 10/);
+  assert.match(collector, /function Remove-OldDiagnosticBundles/);
+  assert.match(collector, /retainedBundles/);
+  assert.match(collector, /\/health/);
+  assert.match(collector, /\/anticodex\/diagnostics/);
+  assert.match(collector, /\/anticodex\/account/);
+  assert.match(collector, /\/models/);
+  assert.match(collector, /latest-installed-overall\.json/);
+  assert.match(collector, /latest-installed-overall-fast\.json/);
+  assert.match(collector, /latest-model-routing\.json/);
+  assert.match(collector, /latest-post-verification\.json/);
+  assert.match(collector, /latest-source-preflight\.json/);
+  assert.match(collector, /latest-shortcut-repair\.json/);
+  assert.match(collector, /translator-lifecycle\.json/);
+  assert.match(collector, /translator-lifecycle\.jsonl/);
+  assert.match(collector, /Remove-OldDiagnosticBundles -Root \$OutputRoot -Keep \$KeepBundles/);
+  assert.match(collector, /\[switch\]\$NoPopup/);
+  assert.match(collector, /usedRealTraffic/);
+  assert.match(collector, /latestDiagnosis/);
+  assert.match(collector, /latestDiagnosisDetail/);
+  assert.match(collector, /repairedCount/);
+  assert.match(collector, /repairedAt/);
+  assert.match(collector, /failureCount/);
+  assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
+  assert.match(collector, /function Update-NoTrafficModelRoutingReport/);
+  assert.match(collector, /test-anticodex-model-routing\.ps1/);
+  assert.match(collector, /-SkipRefresh -SkipRequests/);
+  assert.match(collector, /model-routing-refresh\.json/);
+  assert.match(collector, /modelCount/);
+  assert.match(collector, /failures/);
+  assert.match(collector, /skipRequests/);
+  assert.match(collector, /adaptive-translator\.err\.log/);
+  assert.match(collector, /Compress-Archive/);
+  assert.match(collector, /logs_2\.sqlite/);
+  assert.match(collector, /prompt\|messages\|input_items\|tool output\|Return exactly this/);
+  assert.doesNotMatch(collector, /Get-ChildItem.+codex-home-deepseek-app/s);
+  assert.doesNotMatch(collector, /\.env|OPENAI_API_KEY|ANTHROPIC_API_KEY|chatgpt\.com|auth\/login/);
+});
+
+test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers", () => {
+  const reportScripts = [
+    "collect-anticodex-diagnostics.ps1",
+    "drill-anticodex-proxy.ps1",
+    "switch-anticodex-account.ps1",
+    "test-anticodex-cancellation.ps1",
+    "test-anticodex-cold-relaunch.ps1",
+    "test-anticodex-compaction-resume.ps1",
+    "test-anticodex-custom-tool-loop.ps1",
+    "test-anticodex-installed-overall.ps1",
+    "test-anticodex-mcp-tool-loop.ps1",
+    "test-anticodex-model-routing.ps1",
+    "test-anticodex-native-multi-tool-loop.ps1",
+    "test-anticodex-native-tool-loop.ps1",
+    "test-anticodex-parallel-tool-loop.ps1",
+    "test-anticodex-post-verification.ps1",
+    "test-anticodex-streaming-parallel-tool-loop.ps1",
+    "test-anticodex-sync-readiness.ps1",
+    "test-anticodex-tool-bridge-mode.ps1",
+    "test-anticodex-tool-loop.ps1",
+    "test-anticodex-source-preflight.ps1",
+    "test-anticodex-ui-idle-stability.ps1",
+    "test-anticodex-web-tools.ps1",
+  ];
+
+  for (const scriptName of reportScripts) {
+    const script = readFileSync(resolve(root, "scripts", scriptName), "utf8");
+    assert.match(script, /UTF8Encoding\]::new\(\$false\)/, `${scriptName} should write UTF-8 without BOM`);
+    assert.match(script, /WriteAllText/, `${scriptName} should use an explicit .NET text writer`);
+  }
+});
+
+test("Anti-Codex parsed state and manifest files are written as UTF-8 without BOM", () => {
+  const jsonWriters = [
+    "check-anticodex-update.ps1",
+    "install-anticodex.ps1",
+    "sync-anticodex.ps1",
+  ];
+
+  for (const scriptName of jsonWriters) {
+    const script = readFileSync(resolve(root, "scripts", scriptName), "utf8");
+    assert.match(script, /UTF8Encoding\]::new\(\$false\)/, `${scriptName} should write parsed JSON as UTF-8 without BOM`);
+    assert.match(script, /WriteAllText/, `${scriptName} should use an explicit .NET text writer for parsed JSON`);
+  }
+});
+
+test("diagnostics payload includes localFeatures with skills/mcp/snapshots structure", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const diagnosticsFunc = server.match(/function diagnosticsPayload\(\{[\s\S]*?return \{[\s\S]*?\n    \};/)?.[0];
+  assert.ok(diagnosticsFunc, "missing diagnosticsPayload return");
+  assert.match(diagnosticsFunc, /localFeatures:\s*localFeatureSummary\(\{\s*includeProjection:\s*true\s*\}\)/);
+  assert.match(diagnosticsFunc, /installedChecks/);
+  assert.match(diagnosticsFunc, /sourcePreflight/);
+  assert.match(server, /function latestInstalledCheckStatus/);
+  assert.match(server, /function latestSourcePreflightStatus/);
+  assert.match(server, /function sourcePreflightSummary/);
+  assert.match(server, /function installedCheckSummary/);
+  assert.match(server, /latest-source-preflight\.json/);
+  assert.match(server, /latest-installed-overall-fast\.json/);
+  assert.match(server, /上次源码预检/);
+  assert.match(server, /源码预检证据/);
+
+  const summaryFunc = server.match(/function localFeatureSummary\([\s\S]*?\n\}/)?.[0];
+  assert.ok(summaryFunc, "missing localFeatureSummary function");
+  const returnBlock = summaryFunc.match(/return \{[\s\S]*?\n    \};/)?.[0];
+  assert.ok(returnBlock, "missing localFeatureSummary return");
+
+  assert.match(returnBlock, /skills:\s*\{/);
+  assert.match(returnBlock, /mcp:\s*\{/);
+  assert.match(returnBlock, /snapshots:\s*\{/);
+  assert.match(returnBlock, /requiredPresent/);
+  assert.match(returnBlock, /connectorDirectoryFiles/);
+  assert.match(returnBlock, /appToolsCacheFiles/);
+  assert.match(returnBlock, /capabilityTiers/);
+  assert.match(returnBlock, /readableCount/);
+  assert.match(returnBlock, /current-session-tool-list/);
+  assert.match(returnBlock, /authorizedCount/);
+  assert.match(returnBlock, /callableToolCount/);
+  assert.match(returnBlock, /snapshotStatus/);
+  assert.match(returnBlock, /maxAgeHours/);
+  assert.match(returnBlock, /sourceMtimeMax/);
+  assert.match(returnBlock, /sourceFingerprintPresent/);
+  assert.match(returnBlock, /sourceFingerprintComparable/);
+  assert.match(returnBlock, /sourceFingerprintMatches/);
+  assert.match(returnBlock, /staleReason/);
+  assert.match(returnBlock, /count/);
+  assert.match(returnBlock, /names/);
+});
+
+test("Anti-Codex ships a read-only sync readiness verifier", () => {
+  const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(syncReadiness, /\[CmdletBinding\(\)\]/);
+  assert.match(syncReadiness, /\[switch\]\$Fast/);
+  assert.match(syncReadiness, /\[switch\]\$SkipAccountProxyProbe/);
+  assert.match(syncReadiness, /\[switch\]\$SkipIconPaletteProbe/);
+  assert.match(syncReadiness, /\$FastMaxElapsedMs\s*=\s*30000/);
+  assert.match(syncReadiness, /if \(\$Fast\) \{ \$SkipIconPaletteProbe = \$true \}/);
+  assert.match(syncReadiness, /update-status\.json/);
+  assert.match(syncReadiness, /fast_cached_update_status/);
+  assert.match(syncReadiness, /@{\s*InstallRoot\s*=\s*\$installRoot;\s*NoPersist\s*=\s*\$true\s*}/);
+  assert.match(syncReadiness, /sync-anticodex\.ps1/);
+  assert.match(syncReadiness, /test-anticodex-host-candidate\.ps1/);
+  assert.match(syncReadiness, /install-anticodex\.ps1/);
+  assert.match(syncReadiness, /codex-patched-app\.ok/);
+  assert.match(syncReadiness, /Anti-Codex\.exe/);
+  assert.match(syncReadiness, /host-sync\.lock/);
+  assert.match(syncReadiness, /update-candidate/);
+  assert.match(syncReadiness, /rollback-host/);
+  assert.match(syncReadiness, /rollbackExe/);
+  assert.match(syncReadiness, /rollbackAsar/);
+  assert.match(syncReadiness, /rollbackCodexCli/);
+  assert.match(syncReadiness, /activeHostIcon/);
+  assert.match(syncReadiness, /activeAppRootIcon/);
+  assert.match(syncReadiness, /rollbackHostIcon/);
+  assert.match(syncReadiness, /rollbackAppRootIcon/);
+  assert.match(syncReadiness, /hostIconExists/);
+  assert.match(syncReadiness, /appRootIconExists/);
+  assert.match(syncReadiness, /hostIcon/);
+  assert.match(syncReadiness, /appRootIcon/);
+  assert.match(syncReadiness, /Test-AntiCodexIconPalette/);
+  assert.match(syncReadiness, /pink Codex cloud with white command marks/);
+  assert.match(syncReadiness, /hostIconPalette/);
+  assert.match(syncReadiness, /appRootIconPalette/);
+  assert.match(syncReadiness, /pinkBlobSamples/);
+  assert.match(syncReadiness, /whiteCommandSamples/);
+  assert.match(syncReadiness, /tealBackgroundSamples/);
+  assert.match(syncReadiness, /originalBluePurpleSamples/);
+  assert.match(syncReadiness, /frameSizes/);
+  assert.match(syncReadiness, /desktopIconRequiredFrameSizes\s*=\s*@\(16,\s*24,\s*32,\s*48,\s*64,\s*128,\s*256\)/);
+  assert.match(syncReadiness, /desktop shortcut icon missing required frame size/);
+  assert.match(syncReadiness, /rollback host marker schema is invalid/);
+  assert.match(syncReadiness, /rollback host marker hash mismatch/);
+  assert.match(syncReadiness, /rollback host ProductName/);
+  assert.match(syncReadiness, /rollback host FileDescription/);
+  assert.match(syncReadiness, /rollback host OriginalFilename/);
+  assert.match(syncReadiness, /rollback host is incomplete/);
+  assert.match(syncReadiness, /rollback bundled Codex CLI/);
+  assert.match(syncReadiness, /rollback host inspection failed/);
+  assert.match(syncReadiness, /\$rollbackManifestValid/);
+  assert.match(syncReadiness, /\$rollbackProductName/);
+  assert.match(syncReadiness, /\$rollbackCodexVersion/);
+  assert.match(syncReadiness, /rollbackHost = \[pscustomobject\]/);
+  assert.match(syncReadiness, /expectedManagerBridgeBaseUrl\s*=\s*"http:\/\/127\.0\.0\.1:8484"/);
+  assert.match(syncReadiness, /anticodex-manager-bridge\.mjs/);
+  assert.match(syncReadiness, /staleManagerBridgeProcesses/);
+  assert.match(syncReadiness, /managerBridge\s*=\s*\[pscustomobject\]/);
+  assert.match(syncReadiness, /AntiCodexHostSync/);
+  assert.match(syncReadiness, /ANTICODEX_HOST_SYNC_MARKER/);
+  assert.match(syncReadiness, /Invoke-AntiCodexPostSyncAcceptance/);
+  assert.match(syncReadiness, /test-anticodex-installed-overall\.ps1/);
+  assert.match(syncReadiness, /SkipAccountProxyProbe/);
+  assert.match(syncReadiness, /post-sync acceptance gate/);
+  assert.match(syncReadiness, /start-deepcodex\.ps1/);
+  assert.match(syncReadiness, /Start Menu Anti-Codex shortcut does not launch start-anticodex\.ps1/);
+  assert.match(syncReadiness, /Desktop Anti-Codex shortcut does not launch start-anticodex\.ps1/);
+  assert.match(syncReadiness, /Start Menu Anti-Codex shortcut does not point at the installed runtime start script/);
+  assert.match(syncReadiness, /Desktop Anti-Codex shortcut does not point at the installed runtime start script/);
+  assert.match(syncReadiness, /startMenuMainShortcutTarget/);
+  assert.match(syncReadiness, /desktopMainShortcutTarget/);
+  assert.match(syncReadiness, /ANTICODEX_NATIVE_TOOL_BRIDGE/);
+  assert.match(syncReadiness, /auto-approved Antigravity native bridge by default/);
+  assert.match(syncReadiness, /resources\\codex\.exe/);
+  assert.match(syncReadiness, /--version/);
+  assert.match(syncReadiness, /ProductName/);
+  assert.match(syncReadiness, /anticodex-host-manifest-v1/);
+  assert.match(syncReadiness, /Get-FileHash/);
+  assert.match(syncReadiness, /latest-\$Name\.json/);
+  assert.match(overall, /test-anticodex-sync-readiness\.ps1/);
+  assert.match(overall, /Sync readiness verification/);
+
+  assert.doesNotMatch(syncReadiness, /Stop-Process/);
+  assert.doesNotMatch(syncReadiness, /Start-Process/);
+  assert.doesNotMatch(syncReadiness, /Remove-Item/);
+  assert.doesNotMatch(syncReadiness, /sync-anticodex\.ps1"\)/);
+  assert.doesNotMatch(syncReadiness, /auth\/login|chatgpt\.com/);
+});
+
+test("Anti-Codex Manager summarizes Codex drift and sync lifecycle without changing UI chrome", () => {
+  const manager = readFileSync(resolve(root, "scripts", "manage-anticodex.ps1"), "utf8");
+
+  assert.match(manager, /function Format-CachedUpdateSummary/);
+  assert.match(manager, /function Convert-AntiCodexUpdateOperationText/);
+  assert.match(manager, /Get-CachedUpdateStatus/);
+  assert.match(manager, /Format-CachedUpdateSummary/);
+  assert.match(manager, /Convert-AntiCodexUpdateOperationText/);
+  assert.match(manager, /rollbackAvailable/);
+  assert.match(manager, /rolled_back/);
+  assert.match(manager, /candidate_build/);
+  assert.match(manager, /candidate_validation/);
+  assert.match(manager, /activation/);
+  assert.match(manager, /acceptance/);
+  assert.match(manager, /\p{Script=Han}/u);
+  assert.match(manager, /Anti-Codex/);
+  assert.match(manager, /\$updateSummary/);
+  assert.match(manager, /\$operationSummary/);
+});
+
+test("Anti-Codex host sync uses a hash-bound manifest and proves critical patch failure safety", () => {
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const validator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+  const failureSafety = readFileSync(resolve(root, "scripts", "test-anticodex-sync-failure-safety.ps1"), "utf8");
+
+  assert.match(installer, /Remove-Item\s+-LiteralPath\s+\$hostMarker/);
+  assert.match(installer, /anticodex-host-manifest-v1/);
+  assert.match(installer, /Get-FileHash/);
+  assert.match(installer, /source\s*=\s*\[ordered\]/);
+  assert.match(installer, /packageVersion/);
+  assert.match(installer, /codexHost/);
+  assert.match(installer, /\[IO\.File\]::Move\(\$temporaryMarker,\s*\$marker\)/);
+  assert.match(validator, /anticodex-host-manifest-v1/);
+  assert.match(validator, /criticalPatches/);
+  assert.match(validator, /marker hash mismatch/);
+  assert.match(validator, /source Codex fingerprints/);
+  assert.match(validator, /FileDescription/);
+  assert.match(validator, /OriginalFilename/);
+  assert.match(brander, /ANTICODEX_TEST_FAIL_CRITICAL_PATCH/);
+  assert.match(brander, /const criticalSkipped = skipped\.filter\(\(item\) => criticalPatchNames\.has\(item\.name\)\)/);
+  assert.match(brander, /if \(criticalSkipped\.length > 0\) \{\s*process\.exitCode = 1;\s*\}/);
+  assert.match(failureSafety, /Failed candidate retained a valid host marker/);
+  assert.match(failureSafety, /failureCauseVerified/);
+  assert.match(failureSafety, /Candidate failed before reaching the requested critical patch failure/);
+  assert.match(failureSafety, /active host marker/);
+  assert.match(failureSafety, /active host/);
+});
+
+test("Anti-Codex installer keeps the desktop surface to the launch shortcut only", () => {
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+
+  assert.match(installer, /Anti-Codex\.lnk/);
+  assert.match(installer, /start-anticodex\.ps1/);
+  assert.match(installer, /WindowsPowerShell\\v1\.0\\powershell\.exe/);
+  assert.doesNotMatch(installer, /Check Anti-Codex\.(lnk|cmd)/);
+  assert.doesNotMatch(installer, /Check Anti-Codex Models\.(lnk|cmd)/);
+  assert.doesNotMatch(installer, /Switch Anti-Codex Account\.(lnk|cmd)/);
+  assert.doesNotMatch(installer, /Drill Anti-Codex Proxy\.(lnk|cmd)/);
+  assert.doesNotMatch(installer, /Refresh Anti-Codex Models\.lnk/);
+  assert.doesNotMatch(installer, /Sync Anti-Codex\.lnk/);
+});
+
+test("Anti-Codex ships an account model refresh script", () => {
+  const refresh = readFileSync(resolve(root, "scripts", "refresh-anticodex-models.ps1"), "utf8");
+
+  assert.match(refresh, /ANTICODEX|Anti-Codex/i);
+  assert.match(refresh, /Invoke-AntiCodexHotModelRefresh/);
+  assert.match(refresh, /function Read-JsonResponseBody/);
+  assert.match(refresh, /\/anticodex\/models\/refresh/);
+  assert.match(refresh, /Hot model refresh succeeded/);
+  assert.match(refresh, /Provider model refresh kept/);
+  assert.match(refresh, /Antigravity refresh skipped/);
+  assert.match(refresh, /host-sync\.lock/);
+  assert.match(refresh, /AntiCodexHostSync/);
+  assert.match(refresh, /Get-AntiCodexHostProcesses/);
+  assert.match(refresh, /Stop-AntiCodexLaunchers/);
+  assert.match(refresh, /AddSeconds\(3\)/);
+  assert.match(refresh, /model-refresh\.log/);
+  assert.match(refresh, /start-anticodex\.ps1/);
+  assert.match(refresh, /Start-Process/);
+  assert.match(refresh, /ANTICODEX_FORCE_STARTUP_MODEL_REFRESH\s*=\s*"1"/);
+  assert.match(refresh, /\$previousForceStartupModelRefresh/);
+  assert.match(refresh, /ANTICODEX_TEST_FORCE_REFRESH_FALLBACK/);
+  assert.match(refresh, /WindowStyle Hidden/);
+  assert.match(refresh, /AddSeconds\(90\)/);
+  assert.match(refresh, /gateway is healthy/);
+  assert.doesNotMatch(refresh, /& \$startAntiCodex/);
+  assert.doesNotMatch(refresh, /Antigravity\.exe|Codex\.exe/);
+});
+
+test("Anti-Codex ships a repeatable restart-refresh fallback verifier", () => {
+  const fallback = readFileSync(resolve(root, "scripts", "test-anticodex-refresh-fallback.ps1"), "utf8");
+
+  assert.match(fallback, /refresh-anticodex-models\.ps1/);
+  assert.match(fallback, /ANTICODEX_TEST_FORCE_REFRESH_FALLBACK\s*=\s*"1"/);
+  assert.match(fallback, /antigravity-model-catalog\.json/);
+  assert.match(fallback, /catalogTimestampAfter/);
+  assert.match(fallback, /accountReady/);
+  assert.match(fallback, /Get-OriginalCodexMainPids/);
+});
+
+test("Anti-Codex operational scripts resolve the current local gateway address dynamically", () => {
+  const resolver = readFileSync(resolve(root, "scripts", "resolve-anticodex-base-url.ps1"), "utf8");
+  const scriptsDir = resolve(root, "scripts");
+  const operationalScripts = readdirSync(scriptsDir)
+    .filter((name) => name.endsWith(".ps1"))
+    .map((name) => [name, readFileSync(resolve(scriptsDir, name), "utf8")])
+    .filter(([name, text]) => name !== "anticodex-upstream-profile.ps1" && text.includes("[string]$BaseUrl"));
+
+  assert.match(resolver, /TRANSLATOR_URL/);
+  assert.match(resolver, /ANTICODEX_LOCAL_ADDRESS/);
+  assert.match(resolver, /127\.0\.0\.1:8484/);
+  assert.doesNotMatch(resolver, /Get-NetIPAddress/);
+  assert.ok(operationalScripts.length > 10);
+  for (const [name, text] of operationalScripts) {
+    assert.match(text, /resolve-anticodex-base-url\.ps1/, `${name} must use the shared endpoint resolver`);
+    assert.doesNotMatch(text, /192\.168\.1\.2:8484/, `${name} must not pin this machine's current address`);
+  }
+});
+
+test("Anti-Codex BaseUrl scripts resolve script-relative defaults after parameter binding", () => {
+  const scriptsDir = resolve(root, "scripts");
+  const scripts = readdirSync(scriptsDir)
+    .filter((name) => name.endsWith(".ps1"))
+    .map((name) => [name, readFileSync(resolve(scriptsDir, name), "utf8")])
+    .filter(([, text]) => text.includes("$BaseUrl"));
+
+  for (const [name, text] of scripts) {
+    assert.doesNotMatch(
+      text,
+      /\[string\]\$BaseUrl\s*=\s*\$\(&\s*\(Join-Path\s+\$PSScriptRoot/,
+      `${name} must not use PSScriptRoot inside a parameter default`,
+    );
+    if (text.includes("resolve-anticodex-base-url.ps1")) {
+      assert.match(text, /if \(-not \$BaseUrl\)/, `${name} must resolve an omitted BaseUrl after param binding`);
+    }
+  }
+});
+
+test("Anti-Codex ships a guided account switching script", () => {
+  const switchAccount = readFileSync(resolve(root, "scripts", "switch-anticodex-account.ps1"), "utf8");
+  const openAccountSwitch = readFileSync(resolve(root, "scripts", "open-antigravity-account-switch.ps1"), "utf8");
+
+  assert.match(switchAccount, /antigravity-desktop\.ps1/);
+  assert.match(switchAccount, /Resolve-AntigravityDesktopPath/);
+  assert.match(switchAccount, /Get-AntigravityMainProcess/);
+  assert.match(switchAccount, /Wait-AntigravityDesktopStable/);
+  assert.match(switchAccount, /refresh-anticodex-models\.ps1/);
+  assert.match(switchAccount, /test-anticodex-installed-overall\.ps1/);
+  assert.match(switchAccount, /test-anticodex-model-routing\.ps1/);
+  assert.match(switchAccount, /Get-ModelSnapshot/);
+  assert.match(switchAccount, /SHA256/);
+  assert.match(switchAccount, /model_catalog_changed/);
+  assert.match(switchAccount, /model_catalog_unchanged/);
+  assert.match(switchAccount, /account_identity_changed/);
+  assert.match(switchAccount, /account_identity_unchanged/);
+  assert.match(switchAccount, /cannot prove account identity changed/);
+  assert.match(switchAccount, /verified-all-models/);
+  assert.match(switchAccount, /latest-model-routing\.json/);
+  assert.match(switchAccount, /New-ReportPaths "account-switch"/);
+  assert.match(switchAccount, /Save-JsonReport/);
+  assert.match(switchAccount, /latest-\$Name\.json/);
+  assert.match(switchAccount, /latest-installed-overall\.json/);
+  assert.match(switchAccount, /Read-Host/);
+  assert.match(switchAccount, /NoPrompt/);
+  assert.match(switchAccount, /SkipOpen/);
+  assert.match(switchAccount, /SkipFullModelCheck/);
+  assert.match(switchAccount, /AllowUnchanged/);
+  assert.match(switchAccount, /Antigravity account did not change/);
+  assert.match(switchAccount, /ok = \[bool\]\(\$AllowUnchanged -or \$accountChanged\)/);
+  assert.match(switchAccount, /Proxy\s+\$null/);
+
+  assert.doesNotMatch(switchAccount, /chatgpt\.com/);
+  assert.doesNotMatch(switchAccount, /auth\/login/);
+  assert.doesNotMatch(switchAccount, /Stop-Process/);
+  assert.doesNotMatch(switchAccount, /Codex\.exe/);
+
+  assert.match(openAccountSwitch, /antigravity-desktop\.ps1/);
+  assert.match(openAccountSwitch, /Resolve-AntigravityDesktopPath/);
+  assert.match(openAccountSwitch, /Get-AntigravityMainProcess/);
+  assert.match(openAccountSwitch, /Wait-AntigravityDesktopStable/);
+  assert.match(openAccountSwitch, /Start-Process/);
+  assert.match(openAccountSwitch, /SetForegroundWindow/);
+  assert.match(openAccountSwitch, /ShowWindowAsync/);
+  assert.equal((openAccountSwitch.match(/Start-Process/g) || []).length, 1);
+  assert.match(openAccountSwitch, /nextAction/);
+  assert.match(openAccountSwitch, /refreshModels/);
+  assert.doesNotMatch(openAccountSwitch, /chatgpt\.com|auth\/login|Stop-Process|Codex\.exe/);
+});
+
+test("Anti-Codex hot-refreshes its model catalog when the Antigravity account changes", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const tracker = readFileSync(resolve(root, "translator", "antigravity-account-tracker.mjs"), "utf8");
+
+  assert.match(server, /createAntigravityAccountTracker/);
+  assert.match(server, /fetchAntigravityUserStatus/);
+  assert.match(server, /hot-refreshed/);
+  assert.match(server, /writeJsonAtomic\(ANTIGRAVITY_MODEL_CATALOG_PATH/);
+  assert.match(server, /confirmationObservations:\s*2/);
+  assert.match(server, /accountTracking/);
+  assert.match(server, /changePending/);
+  assert.match(tracker, /previousFingerprint/);
+  assert.match(tracker, /pendingFingerprint/);
+  assert.match(tracker, /pendingObservations/);
+});
+
+test("Anti-Codex bounds the shared Antigravity request queue", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const queue = readFileSync(resolve(root, "translator", "antigravity-request-queue.mjs"), "utf8");
+  const sessionLock = readFileSync(resolve(root, "translator", "antigravity-session-lock.mjs"), "utf8");
+
+  assert.match(server, /ANTIGRAVITY_MAX_QUEUED_REQUESTS/);
+  assert.match(server, /maxQueued:\s*ANTIGRAVITY_MAX_QUEUED_REQUESTS/);
+  assert.match(server, /antigravityQueue:\s*ANTIGRAVITY_REQUEST_QUEUE\.snapshot\(\)/);
+  assert.match(server, /antigravitySessionLock:\s*\{/);
+  assert.match(server, /\.\.\.ANTIGRAVITY_SESSION_LOCK\.snapshot\(\)/);
+  assert.match(server, /resetAction:\s*"resetAntigravitySessionLock"/);
+  assert.match(server, /maxQueuedAntigravityRequests/);
+  assert.match(server, /activeAntigravityRequests:\s*ACTIVE_ANTIGRAVITY_REQUESTS\.snapshot\(\)/);
+  assert.match(server, /ACTIVE_ANTIGRAVITY_REQUESTS\.cancelAll\(\)/);
+  assert.match(server, /ANTIGRAVITY_SESSION_LOCK\.cancelAll\(\)/);
+  assert.match(server, /SIGTERM/);
+  assert.match(server, /DIRECT_ANTIGRAVITY_REQUEST_QUEUE/);
+  assert.match(server, /sharedQueue\.run\(runToolLoop/);
+  assert.match(sessionLock, /AntigravitySessionBusyError/);
+  assert.match(sessionLock, /type\s*=\s*"antigravity_session_busy"/);
+  assert.match(sessionLock, /previousResponseId/);
+  assert.match(queue, /AntigravityQueueFullError/);
+  assert.match(queue, /statusCode\s*=\s*429/);
+  assert.match(queue, /type\s*=\s*"antigravity_queue_full"/);
+  assert.match(queue, /function snapshot\(\)/);
+  assert.match(queue, /function cancelAll\(/);
+});
+
+test("Anti-Codex ships a guided proxy outage drill", () => {
+  const drill = readFileSync(resolve(root, "scripts", "drill-anticodex-proxy.ps1"), "utf8");
+
+  assert.match(drill, /test-anticodex-account-proxy-readiness\.ps1/);
+  assert.match(drill, /AllowUnready/);
+  assert.match(drill, /SkipOutage/);
+  assert.match(drill, /NoPrompt/);
+  assert.match(drill, /RecoveryTimeoutSec/);
+  assert.match(drill, /New-ReportPaths "proxy-drill"/);
+  assert.match(drill, /Save-JsonReport/);
+  assert.match(drill, /latest-\$Name\.json/);
+  assert.match(drill, /Read-Host/);
+  assert.match(drill, /outage/);
+  assert.match(drill, /recovery/);
+  assert.match(drill, /diagnosis/);
+
+  assert.doesNotMatch(drill, /chatgpt\.com/);
+  assert.doesNotMatch(drill, /auth\/login/);
+  assert.doesNotMatch(drill, /Stop-Process/);
+  assert.doesNotMatch(drill, /Codex\.exe/);
+  assert.doesNotMatch(drill, /Antigravity\.exe/);
+});
+
+test("Anti-Codex ships a repeatable installed stability soak script", () => {
+  const soak = readFileSync(resolve(root, "scripts", "test-anticodex-stability-soak.ps1"), "utf8");
+
+  assert.match(soak, /Invoke-AntiCodexHealth/);
+  assert.match(soak, /Resolve-AntiCodexMode/);
+  assert.match(soak, /Resolve-AntiCodexTestModel/);
+  assert.match(soak, /Test-AntiCodexReadyForTraffic/);
+  assert.match(soak, /upstreamProfile\.model/);
+  assert.match(soak, /providerReady/);
+  assert.match(soak, /Get-AntiCodexTranslatorPid/);
+  assert.match(soak, /Invoke-AntiCodexResponse/);
+  assert.match(soak, /Invoke-AntiCodexStream/);
+  assert.match(soak, /System\.Net\.WebRequest/);
+  assert.match(soak, /\$events\.ToArray\(\)/);
+  assert.match(soak, /\$turns\.ToArray\(\)/);
+  assert.match(soak, /\$failures\.ToArray\(\)/);
+  assert.match(soak, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(soak, /\/v1\/responses/);
+  assert.match(soak, /\/cancel/);
+  assert.match(soak, /return ,\[object\[\]\]/);
+  assert.match(soak, /LONGCTX_HEAD/);
+  assert.match(soak, /marker_tool/);
+  assert.match(soak, /marker=`"\$toolMarker`"/);
+  assert.match(soak, /toolPromptAttempts/);
+  assert.match(soak, /<tool_calls><invoke name=`"marker_tool`">/);
+  assert.match(soak, /STREAM_MARKER/);
+  assert.match(soak, /stream completion missing final marker/);
+  assert.match(soak, /pidStable/);
+  assert.match(soak, /healthChecks/);
+  assert.doesNotMatch(soak, /ConvertFrom-Json -Depth/);
+  assert.doesNotMatch(soak, /Stop-Process|Codex\.exe|Antigravity\.exe/);
+});
+
+test("Anti-Codex ships a repeatable installed streaming cancellation verifier", () => {
+  const cancellation = readFileSync(resolve(root, "scripts", "test-anticodex-cancellation.ps1"), "utf8");
+
+  assert.match(cancellation, /Invoke-AntiCodexHealth/);
+  assert.match(cancellation, /Resolve-AntiCodexMode/);
+  assert.match(cancellation, /Resolve-AntiCodexTestModel/);
+  assert.match(cancellation, /upstreamProfile\.model/);
+  assert.match(cancellation, /third-party/);
+  assert.match(cancellation, /providerReady/);
+  assert.match(cancellation, /accountReady/);
+  assert.match(cancellation, /System\.Net\.WebRequest/);
+  assert.match(cancellation, /\/v1\/responses/);
+  assert.match(cancellation, /\/cancel/);
+  assert.match(cancellation, /response\.created/);
+  assert.match(cancellation, /response\.cancelled/);
+  assert.match(cancellation, /response\.completed/);
+  assert.match(cancellation, /stream\s*=\s*\$true/);
+  assert.match(cancellation, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(cancellation, /\$failures\.ToArray\(\)/);
+  assert.match(cancellation, /Proxy\s*=\s*\$null/);
+  assert.match(cancellation, /ConvertTo-Json/);
+  assert.match(cancellation, /exit 1/);
+  assert.match(cancellation, /Add-SseEvent/);
+  assert.match(cancellation, /\$events\.Add/);
+  assert.match(cancellation, /response\.cancelled ID did not match response\.created/);
+  assert.match(cancellation, /response\.failed/);
+  assert.match(cancellation, /latest-\$Name\.json/);
+  assert.match(cancellation, /New-ReportPaths "cancellation"/);
+
+  assert.doesNotMatch(cancellation, /Stop-Process/);
+  assert.doesNotMatch(cancellation, /Codex\.exe/);
+  assert.doesNotMatch(cancellation, /Antigravity\.exe/);
+  assert.doesNotMatch(cancellation, /chatgpt\.com/);
+  assert.doesNotMatch(cancellation, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
+  const toolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-tool-loop.ps1"), "utf8");
+  const nativeToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-native-tool-loop.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(toolLoop, /marker_tool/);
+  assert.match(toolLoop, /tool_choice\s*=\s*"required"/);
+  assert.match(toolLoop, /function_call_output/);
+  assert.match(toolLoop, /previous_response_id/);
+  assert.match(toolLoop, /\/anticodex\/model-routes/);
+  assert.match(toolLoop, /latest-\$Name\.json/);
+  assert.match(toolLoop, /tool-loop/);
+  assert.match(toolLoop, /internalModel/);
+  assert.match(toolLoop, /Second response did not preserve/);
+  assert.match(toolLoop, /Proxy\s+\$null/);
+  assert.match(toolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(overall, /test-anticodex-tool-loop\.ps1/);
+  assert.match(overall, /test-anticodex-native-tool-loop\.ps1/);
+  assert.match(overall, /test-anticodex-native-multi-tool-loop\.ps1/);
+  assert.match(overall, /Tool loop verification/);
+  assert.match(overall, /\$AllowRealTraffic -and \$SubcheckTimeoutSec -lt 120/);
+  assert.match(overall, /\$realTrafficTimeoutSec/);
+  assert.match(overall, /\[Math\]::Max\(\$TimeoutSec, 90\)/);
+  assert.match(overall, /test-anticodex-compaction-resume\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
+  assert.match(overall, /test-anticodex-real-mini-tool\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
+  assert.match(overall, /test-anticodex-real-work\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
+  assert.match(overall, /\$healthMode -eq "antigravity" -and \$nativeBridgeEnabled/);
+  assert.match(nativeToolLoop, /ConvertFrom-JsonEscapedString/);
+  assert.match(nativeToolLoop, /\\u8bf7\\u8c03\\u7528 anticodex_native_marker/);
+  assert.match(nativeToolLoop, /\\u8bf7\\u7528\\u4e2d\\u6587\\u4e00\\u53e5\\u8bdd/);
+  assert.match(nativeToolLoop, /\\u4e00-\\u9fff/);
+  assert.match(nativeToolLoop, /DeepCodex\|Deep Codex/);
+
+  // Assert-Route must accept ResponseId and prefer entries/requestId over latest.
+  assert.match(toolLoop, /\$ResponseId/);
+  assert.match(toolLoop, /\$routePayload\.entries/);
+  assert.match(toolLoop, /requestId/);
+  assert.match(toolLoop, /Where-Object[\s\S]*requestId[\s\S]*-eq/);
+  assert.match(toolLoop, /-ResponseId\s+\$first\.id/);
+  assert.match(toolLoop, /-ResponseId\s+\$second\.id/);
+  assert.match(toolLoop, /\$matchMode\s*=\s*"requestId"/);
+  assert.match(toolLoop, /\$matchMode\s*=\s*"expectedModel"/);
+  assert.match(toolLoop, /\$matchMode\s*=\s*"latest"/);
+  assert.match(toolLoop, /function Test-RouteAtOrAfter/);
+  assert.match(toolLoop, /\[DateTime\]\$RouteFloorAt/);
+  assert.match(toolLoop, /-RouteFloorAt\s+\$startedAt/);
+  assert.match(toolLoop, /matchMode\s*=\s*\$firstRoute\.matchMode/);
+  assert.match(toolLoop, /matchMode\s*=\s*\$secondRoute\.matchMode/);
+  // Entries/requestId matching must appear before latest fallback.
+  assert.ok(
+    toolLoop.indexOf("Where-Object { \$_.requestId") < toolLoop.indexOf("\$routePayload.latest"),
+    "entries/requestId matching must precede blind latest fallback",
+  );
+  assert.ok(
+    toolLoop.indexOf("[string]\$_.resolvedModel -eq \$ExpectedModel") < toolLoop.indexOf("\$routePayload.latest"),
+    "expected-model matching must precede latest fallback",
+  );
+  assert.match(toolLoop, /\$second\s*=\s*Invoke-AntiCodexResponse[\s\S]*\$firstRoute\s*=\s*Assert-Route/);
+
+  assert.doesNotMatch(toolLoop, /Stop-Process/);
+  assert.doesNotMatch(toolLoop, /Antigravity\.exe/);
+  assert.doesNotMatch(toolLoop, /Codex\.exe/);
+  assert.doesNotMatch(toolLoop, /chatgpt\.com/);
+  assert.doesNotMatch(toolLoop, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable installed MCP tool-loop verifier", () => {
+  const mcpToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-mcp-tool-loop.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(mcpToolLoop, /type\s*=\s*"namespace"/);
+  assert.match(mcpToolLoop, /name\s*=\s*"mcp__node_repl__"/);
+  assert.match(mcpToolLoop, /name\s*=\s*"js"/);
+  assert.match(mcpToolLoop, /mcp__node_repl__js/);
+  assert.match(mcpToolLoop, /function_call" -and \$_.name -eq "js"/);
+  assert.match(mcpToolLoop, /function_call_output/);
+  assert.match(mcpToolLoop, /previous_response_id/);
+  assert.match(mcpToolLoop, /Invoke-RealNodeReplMcpResult/);
+  assert.match(mcpToolLoop, /anticodex-real-mcp-smoke\.mjs/);
+  assert.match(mcpToolLoop, /\$actualMcpOutput/);
+  assert.match(mcpToolLoop, /realMcp/);
+  assert.match(mcpToolLoop, /\/anticodex\/model-routes/);
+  assert.match(mcpToolLoop, /latest-\$Name\.json/);
+  assert.match(mcpToolLoop, /mcp-tool-loop/);
+  assert.match(mcpToolLoop, /internalModel/);
+  assert.match(mcpToolLoop, /Second response did not preserve the MCP marker/);
+  assert.match(mcpToolLoop, /Proxy\s+\$null/);
+  assert.match(mcpToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(overall, /test-anticodex-mcp-tool-loop\.ps1/);
+  assert.match(overall, /MCP tool loop verification/);
+
+  assert.doesNotMatch(mcpToolLoop, /Stop-Process/);
+  assert.doesNotMatch(mcpToolLoop, /Antigravity\.exe/);
+  assert.doesNotMatch(mcpToolLoop, /Codex\.exe/);
+  assert.doesNotMatch(mcpToolLoop, /chatgpt\.com/);
+  assert.doesNotMatch(mcpToolLoop, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable installed parallel multi-tool loop verifier", () => {
+  const parallelToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-parallel-tool-loop.ps1"), "utf8");
+
+  assert.match(parallelToolLoop, /marker_tool/);
+  assert.match(parallelToolLoop, /echo_tool/);
+  assert.match(parallelToolLoop, /tool_choice\s*=\s*"required"/);
+  assert.match(parallelToolLoop, /function_call_output/);
+  assert.match(parallelToolLoop, /previous_response_id/);
+  assert.match(parallelToolLoop, /\/anticodex\/model-routes/);
+  assert.match(parallelToolLoop, /latest-\$Name\.json/);
+  assert.match(parallelToolLoop, /parallel-tool-loop/);
+  assert.match(parallelToolLoop, /internalModel/);
+  assert.match(parallelToolLoop, /call_ids_unique/);
+  assert.match(parallelToolLoop, /arguments_preserved/);
+  assert.match(parallelToolLoop, /outputs_returned_in_reverse_order/);
+  assert.match(parallelToolLoop, /exactly two function_calls/);
+  assert.match(parallelToolLoop, /Second response repeated a tool call/);
+  assert.match(parallelToolLoop, /Second response did not preserve marker_tool marker/);
+  assert.match(parallelToolLoop, /Second response did not preserve echo_tool text/);
+  assert.match(parallelToolLoop, /Proxy\s+\$null/);
+  assert.match(parallelToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+
+  assert.doesNotMatch(parallelToolLoop, /Stop-Process/);
+  assert.doesNotMatch(parallelToolLoop, /Antigravity\.exe/);
+  assert.doesNotMatch(parallelToolLoop, /Codex\.exe/);
+  assert.doesNotMatch(parallelToolLoop, /chatgpt\.com/);
+  assert.doesNotMatch(parallelToolLoop, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable installed streaming parallel multi-tool loop verifier", () => {
+  const streamingParallelToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-streaming-parallel-tool-loop.ps1"), "utf8");
+
+  assert.match(streamingParallelToolLoop, /marker_tool/);
+  assert.match(streamingParallelToolLoop, /echo_tool/);
+  assert.match(streamingParallelToolLoop, /tool_choice\s*=\s*"required"/);
+  assert.match(streamingParallelToolLoop, /function_call_output/);
+  assert.match(streamingParallelToolLoop, /previous_response_id/);
+  assert.match(streamingParallelToolLoop, /stream\s*=\s*\$true/);
+  assert.match(streamingParallelToolLoop, /\/anticodex\/model-routes/);
+  assert.match(streamingParallelToolLoop, /latest-\$Name\.json/);
+  assert.match(streamingParallelToolLoop, /streaming-parallel-tool-loop/);
+  assert.match(streamingParallelToolLoop, /internalModel/);
+  assert.match(streamingParallelToolLoop, /call_ids_unique/);
+  assert.match(streamingParallelToolLoop, /arguments_preserved/);
+  assert.match(streamingParallelToolLoop, /outputs_returned_in_reverse_order/);
+  assert.match(streamingParallelToolLoop, /sse_function_call_count/);
+  assert.match(streamingParallelToolLoop, /completed_function_call_count/);
+  assert.match(streamingParallelToolLoop, /sse_completed_calls_match/);
+  assert.match(streamingParallelToolLoop, /no_output_text_leak/);
+  assert.match(streamingParallelToolLoop, /exactly two function_call output_item\.done/);
+  assert.match(streamingParallelToolLoop, /Second streaming response repeated a tool call/);
+  assert.match(streamingParallelToolLoop, /Second streaming response did not preserve marker_tool marker/);
+  assert.match(streamingParallelToolLoop, /Second streaming response did not preserve echo_tool text/);
+  assert.match(streamingParallelToolLoop, /response\.output_item\.done/);
+  assert.match(streamingParallelToolLoop, /response\.completed/);
+  assert.match(streamingParallelToolLoop, /Proxy\s+\$null/);
+  assert.match(streamingParallelToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(streamingParallelToolLoop, /System\.Net\.WebRequest/);
+  assert.match(streamingParallelToolLoop, /second_round_sse_function_call_events/);
+  assert.match(streamingParallelToolLoop, /second_round_no_protocol_leak/);
+  assert.match(streamingParallelToolLoop, /second_round_has_output_text/);
+  assert.match(streamingParallelToolLoop, /ASSISTANT_TOOL_CALL/);
+
+  assert.doesNotMatch(streamingParallelToolLoop, /Stop-Process/);
+  assert.doesNotMatch(streamingParallelToolLoop, /Antigravity\.exe/);
+  assert.doesNotMatch(streamingParallelToolLoop, /Codex\.exe/);
+  assert.doesNotMatch(streamingParallelToolLoop, /chatgpt\.com/);
+  assert.doesNotMatch(streamingParallelToolLoop, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable installed custom tool-loop verifier", () => {
+  const customToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-custom-tool-loop.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(customToolLoop, /type\s*=\s*"custom"/);
+  assert.match(customToolLoop, /name\s*=\s*"apply_patch"/);
+  assert.match(customToolLoop, /format\s*=\s*@\{/);
+  assert.match(customToolLoop, /syntax\s*=\s*"lark"/);
+  assert.match(customToolLoop, /\*\*\* Begin Patch/);
+  assert.match(customToolLoop, /\*\*\* Add File:/);
+  assert.match(customToolLoop, /\*\*\* End Patch/);
+  assert.match(customToolLoop, /custom_tool_call" -and \$_.name -eq "apply_patch"/);
+  assert.match(customToolLoop, /custom_tool_call_output/);
+  assert.match(customToolLoop, /previous_response_id/);
+  assert.match(customToolLoop, /inputPreserved/);
+  assert.match(customToolLoop, /custom-tool-loop/);
+  assert.match(customToolLoop, /\/anticodex\/model-routes/);
+  assert.match(customToolLoop, /Proxy\s+\$null/);
+  assert.match(customToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(overall, /test-anticodex-custom-tool-loop\.ps1/);
+  assert.match(overall, /Custom\/freeform tool loop verification/);
+
+  assert.doesNotMatch(customToolLoop, /Stop-Process/);
+  assert.doesNotMatch(customToolLoop, /Antigravity\.exe/);
+  assert.doesNotMatch(customToolLoop, /Codex\.exe/);
+  assert.doesNotMatch(customToolLoop, /chatgpt\.com/);
+  assert.doesNotMatch(customToolLoop, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable installed compaction and session resume verifier", () => {
+  const compactionResume = readFileSync(resolve(root, "scripts", "test-anticodex-compaction-resume.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(compactionResume, /\/v1\/responses\/compact/);
+  assert.match(compactionResume, /Invoke-AntiCodexCompact/);
+  assert.match(compactionResume, /Invoke-AntiCodexResponse/);
+  assert.match(compactionResume, /context_compaction/);
+  assert.match(compactionResume, /previous_response_id/);
+  assert.match(compactionResume, /COMPACT_SEED_/);
+  assert.match(compactionResume, /forbidden_compact_tool/);
+  assert.match(compactionResume, /Direct compaction resume did not preserve/);
+  assert.match(compactionResume, /Chained compaction resume did not preserve/);
+  assert.match(compactionResume, /Compact response did not contain a context_compaction output item/);
+  assert.match(compactionResume, /Compact response contained .* tool call/);
+  assert.match(compactionResume, /Proxy\s+\$null/);
+  assert.match(compactionResume, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(compactionResume, /latest-.*\.json/);
+  assert.match(compactionResume, /compaction-resume/);
+  assert.match(compactionResume, /ConvertTo-Json/);
+  assert.match(compactionResume, /exit 1/);
+  assert.match(overall, /test-anticodex-compaction-resume\.ps1/);
+  assert.match(overall, /Compaction and session resume verification/);
+  assert.match(overall, /test-anticodex-cancellation\.ps1/);
+  assert.match(overall, /Streaming cancellation verification/);
+
+  assert.doesNotMatch(compactionResume, /Stop-Process/);
+  assert.doesNotMatch(compactionResume, /Start-Process/);
+  assert.doesNotMatch(compactionResume, /Antigravity\.exe/);
+  assert.doesNotMatch(compactionResume, /Codex\.exe/);
+  assert.doesNotMatch(compactionResume, /chatgpt\.com/);
+  assert.doesNotMatch(compactionResume, /auth\/login/);
+});
+
+test("Anti-Codex launcher cooperates with host sync instead of auto-restarting into the old host", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+
+  assert.match(launcher, /ANTICODEX_HOST_SYNC_MARKER/);
+  assert.match(launcher, /Host sync requested; launcher will not auto-restart/i);
+  assert.match(launcher, /Test-Path -LiteralPath \$ANTICODEX_HOST_SYNC_MARKER/);
+  assert.match(sync, /Set-Content -LiteralPath \$hostSyncMarker/);
+  assert.match(sync, /Wait-AntiCodexHostRelease/);
+  assert.match(sync, /Anti-Codex host processes did not exit before the sync timeout/);
+  assert.match(sync, /Remove-Item -LiteralPath \$hostSyncMarker/);
+  assert.match(sync, /Start-Process[\s\S]*\$startAntiCodex/i);
+});
+
+test("Windows shared sidecars are imported as local copies", () => {
+  const sync = readFileSync(resolve(root, "scripts", "sync-shared-codex-sidecars.mjs"), "utf8");
+
+  assert.match(sync, /ensureLocalCopy/);
+  assert.match(sync, /copyDirectoryContents/);
+  assert.doesNotMatch(sync, /junction/);
+});
+
+test("Anti-Codex ships an installed MCP/skills verification script", () => {
+  const mcpSkills = readFileSync(resolve(root, "scripts", "test-anticodex-mcp-skills.ps1"), "utf8");
+  const realMcpSmoke = readFileSync(resolve(root, "scripts", "anticodex-real-mcp-smoke.mjs"), "utf8");
+  const refreshLocalFeatures = readFileSync(resolve(root, "scripts", "refresh-anticodex-local-features.ps1"), "utf8");
+
+  // Must include health check and MCP/skills endpoints
+  assert.match(mcpSkills, /Invoke-AntiCodexHealth/);
+  assert.match(mcpSkills, /\/backend-api\/ps\/plugins\/installed/);
+  assert.match(mcpSkills, /\/backend-api\/plugins\/list/);
+  assert.match(mcpSkills, /\/backend-api\/aip\/connectors/);
+  assert.match(mcpSkills, /mcp_servers/);
+  assert.match(mcpSkills, /node_repl/);
+  assert.match(mcpSkills, /skills/);
+  assert.match(mcpSkills, /SharedCodexHome/);
+  assert.match(mcpSkills, /expectedInheritedSkillNames/);
+  assert.match(mcpSkills, /headroom/);
+  assert.match(mcpSkills, /context-save/);
+  assert.match(mcpSkills, /context-restore/);
+  assert.match(mcpSkills, /keep-codex-fast/);
+  assert.match(mcpSkills, /shared skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
+  assert.doesNotMatch(mcpSkills, /\$skillEntries\s*=\s*@\([^\r\n]*Select-Object -First 50/);
+  assert.match(mcpSkills, /function Get-LinkTargetValue/);
+  assert.match(mcpSkills, /function Select-LightFileSystemItem/);
+  assert.match(mcpSkills, /\$skillSampleEntries\s*=\s*@\(\$skillEntries \| Select-Object -First 50 \| ForEach-Object \{ Select-LightFileSystemItem \$_ \}\)/);
+  assert.match(mcpSkills, /sample = @\(\$skillSampleEntries \| Select-Object -First 10\)/);
+  assert.doesNotMatch(mcpSkills, /target = if \(\$skillsItem\) \{ \$skillsItem\.Target \}/);
+  assert.doesNotMatch(mcpSkills, /cacheTarget = if \(\$connectorDirectoryItem\) \{ \$connectorDirectoryItem\.Target \}/);
+  assert.match(mcpSkills, /AGENTS\.md/);
+  assert.match(mcpSkills, /DEFAULT_SKILL_ALLOWLIST\.md/);
+  assert.match(mcpSkills, /RTK\.md/);
+  assert.match(mcpSkills, /MCP_WORKER_USAGE_GUIDE\.md/);
+  assert.match(mcpSkills, /shared guidance '\$guidanceName' exists but Anti-Codex local copy is missing it/);
+  assert.match(mcpSkills, /Anti-Codex guidance '\$guidanceName' should be a local copy, found link type/);
+  assert.match(mcpSkills, /cache\\codex_app_directory/);
+  assert.match(mcpSkills, /connector endpoint has entries but Anti-Codex local connector cache is missing/);
+  assert.match(mcpSkills, /cacheFileCount/);
+  assert.match(mcpSkills, /cache\\codex_apps_tools/);
+  assert.match(mcpSkills, /app tools endpoint has tools but Anti-Codex local app-tools cache is missing/);
+  assert.match(mcpSkills, /appTools/);
+  assert.match(mcpSkills, /Proxy\s*=\s*\$null/);
+  assert.match(mcpSkills, /ConvertTo-Json/);
+  assert.match(mcpSkills, /snapshotSource = "anticodex-local-copy"/);
+  assert.match(mcpSkills, /nativeCodexWriteback = \$false/);
+  assert.match(mcpSkills, /capabilityState =/);
+  assert.match(mcpSkills, /degraded =/);
+  assert.match(mcpSkills, /Invoke-RealNodeReplMcpSmoke/);
+  assert.match(mcpSkills, /Invoke-RealMcpListSmoke/);
+  assert.match(mcpSkills, /Invoke-LocalJsonWithRetry/);
+  assert.match(mcpSkills, /Start-Sleep -Milliseconds/);
+  assert.match(mcpSkills, /attempt \$attempt of \$MaxAttempts/);
+  assert.match(mcpSkills, /\$MaxAttempts = 2/);
+  assert.match(mcpSkills, /anticodex-real-mcp-smoke\.mjs/);
+  assert.match(mcpSkills, /realCall = \$mcpRealSmoke/);
+  assert.match(mcpSkills, /realList = @\(\$mcpListSmokeChecks\)/);
+  assert.match(mcpSkills, /MCP node_repl real stdio tool call failed/);
+  assert.match(mcpSkills, /real stdio tools\/list failed/);
+  assert.match(mcpSkills, /\$healthMode = "unknown"/);
+  assert.match(mcpSkills, /\$healthMode -eq "third-party"/);
+  assert.match(mcpSkills, /third-party upstream missing protocol/);
+  assert.match(mcpSkills, /third-party upstream missing model/);
+  assert.match(mcpSkills, /unknown upstream mode/);
+  assert.match(mcpSkills, /mode = \$healthMode/);
+  assert.match(realMcpSmoke, /getCodexMcpServerDefinition/);
+  assert.match(realMcpSmoke, /runRealMcpSmoke/);
+  assert.match(realMcpSmoke, /runRealMcpListSmoke/);
+  assert.match(realMcpSmoke, /runMcpStdioCall/);
+  assert.match(realMcpSmoke, /runMcpStdioList/);
+  assert.match(realMcpSmoke, /list-only/);
+  assert.match(realMcpSmoke, /anticodex-real-mcp-smoke-latest\.json/);
+  assert.match(refreshLocalFeatures, /sync-shared-codex-plugin-host\.mjs/);
+  assert.match(refreshLocalFeatures, /sync-shared-codex-config\.mjs/);
+  assert.match(refreshLocalFeatures, /sync-shared-codex-sidecars\.mjs/);
+  assert.match(refreshLocalFeatures, /shared config refresh failed/);
+  assert.match(refreshLocalFeatures, /function Restore-AntiCodexFeatureFlags/);
+  assert.match(refreshLocalFeatures, /responses_websockets/);
+  assert.match(refreshLocalFeatures, /remote_plugin/);
+  assert.match(refreshLocalFeatures, /Anti-Codex feature flag restore failed/);
+  assert.match(refreshLocalFeatures, /--local-snapshots/);
+  assert.match(refreshLocalFeatures, /mcp_servers/);
+  assert.match(refreshLocalFeatures, /node_repl/);
+  assert.match(refreshLocalFeatures, /cache\\codex_app_directory/);
+  assert.match(refreshLocalFeatures, /cache\\codex_apps_tools/);
+  assert.match(refreshLocalFeatures, /skills local copy is empty or missing/);
+  assert.match(refreshLocalFeatures, /function Get-FileInfo/);
+  assert.match(refreshLocalFeatures, /AGENTS\.md/);
+  assert.match(refreshLocalFeatures, /DEFAULT_SKILL_ALLOWLIST\.md/);
+  assert.match(refreshLocalFeatures, /RTK\.md/);
+  assert.match(refreshLocalFeatures, /MCP_WORKER_USAGE_GUIDE\.md/);
+  assert.match(refreshLocalFeatures, /shared guidance '\$name' exists but Anti-Codex local copy is missing/);
+  assert.match(refreshLocalFeatures, /function Get-LinkTargetValue/);
+  assert.doesNotMatch(refreshLocalFeatures, /target = if \(\$item\) \{ \$item\.Target \}/);
+  assert.match(refreshLocalFeatures, /ConvertTo-Json/);
+
+  // Must NOT reference ChatGPT login or kill processes
+  assert.doesNotMatch(mcpSkills, /Stop-Process/);
+  assert.doesNotMatch(mcpSkills, /Codex\.exe/);
+  assert.doesNotMatch(mcpSkills, /Antigravity\.exe/);
+  assert.doesNotMatch(mcpSkills, /chatgpt\.com/);
+  assert.doesNotMatch(mcpSkills, /auth\/login/);
+  assert.doesNotMatch(refreshLocalFeatures, /Stop-Process/);
+  assert.doesNotMatch(refreshLocalFeatures, /Codex\.exe/);
+  assert.doesNotMatch(refreshLocalFeatures, /Antigravity\.exe/);
+  assert.doesNotMatch(refreshLocalFeatures, /chatgpt\.com/);
+  assert.doesNotMatch(refreshLocalFeatures, /auth\/login/);
+
+  // 鈹€鈹€ Retry safety: backoff is tightly bounded for local transient only 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  assert.match(mcpSkills, /Math\]::Min\(1000,\s*250\s*\*\s*\$attempt\)/,
+    "retry backoff must be capped at 1000ms to avoid masking persistent failures");
+  assert.match(mcpSkills, /\[\s*int\s*\]\$TimeoutSec\s*=\s*8/,
+    "each individual request must have a bounded timeout to limit total retry duration");
+});
+
+test("Anti-Codex ships a read-only independence verifier", () => {
+  const independence = readFileSync(resolve(root, "scripts", "test-anticodex-independence.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(independence, /cache\\codex_app_directory/);
+  assert.match(independence, /cache\\codex_apps_tools/);
+  assert.match(independence, /RequiredLocalCopy/);
+  assert.match(independence, /remainingSharedLinks/);
+  assert.match(independence, /runtime snapshots must be local directories/);
+  assert.match(independence, /function Get-LinkTargetValue/);
+  assert.match(independence, /\$target = Get-LinkTargetValue \$item/);
+  assert.doesNotMatch(independence, /\$target = \$item\.Target/);
+  assert.doesNotMatch(independence, /Allowed shared links are staged import\/update dependencies/);
+  assert.match(overall, /test-anticodex-independence\.ps1/);
+  assert.match(overall, /Independence verification/);
+
+  assert.doesNotMatch(independence, /Stop-Process/);
+  assert.doesNotMatch(independence, /Codex\.exe/);
+  assert.doesNotMatch(independence, /chatgpt\.com/);
+});
+
+test("Anti-Codex ships a tool bridge mode verifier", () => {
+  const bridge = readFileSync(resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const start = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  assert.match(bridge, /\/anticodex\/diagnostics/);
+  assert.match(bridge, /native-mcp-same-cascade/);
+  assert.match(bridge, /desktop-cascade/);
+  assert.match(bridge, /automatic-before-codex-execution/);
+  assert.match(bridge, /nativeBridgeDefaultEnabled/);
+  assert.match(bridge, /nativeAntigravityToolEvents/);
+  assert.match(bridge, /acceptsExternalToolDefinitions/);
+  assert.match(bridge, /test-anticodex-native-tool-loop\.ps1/);
+  assert.match(bridge, /test-anticodex-native-tool-loop\.ps1/);
+  assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE/);
+  assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"1"/);
+  assert.match(overall, /ANTICODEX_NATIVE_TOOL_BRIDGE -eq "1"/);
+  assert.match(diagnostics, /toolBridge\.mode/);
+  assert.match(diagnostics, /native Antigravity tool events/i);
+  assert.match(bridge, /\[int\]\$TimeoutSec = 20/);
+  assert.match(diagnostics, /\[int\]\$TimeoutSec = 20/);
+  assert.match(bridge, /Start-Sleep -Milliseconds/);
+  assert.match(diagnostics, /Start-Sleep -Milliseconds/);
+  assert.match(bridge, /attempt \$attempt of \$MaxAttempts/);
+  assert.match(diagnostics, /attempt \$attempt of \$MaxAttempts/);
+  assert.match(overall, /test-anticodex-tool-bridge-mode\.ps1/);
+  assert.match(overall, /Tool bridge mode verification/);
+  assert.match(overall, /\$checks\.toolBridgeMode = if \(\$healthMode -eq "third-party"\)/);
+  assert.match(overall, /\$diagnosticScriptArgs = @\("-BaseUrl", \$BaseUrl, "-TimeoutSec", "\$DiagnosticsTimeoutSec"\)/);
+  assert.match(overall, /elseif \(\$Fast\)/);
+  assert.match(overall, /Fast tool bridge verification/);
+  assert.match(
+    overall,
+    /\[int\]\$DiagnosticsTimeoutSec\s*=\s*20[\s\S]*\/anticodex\/diagnostics[\s\S]*\$DiagnosticsTimeoutSec/,
+  );
+
+  assert.doesNotMatch(bridge, /Stop-Process/);
+  assert.doesNotMatch(bridge, /Codex\.exe/);
+  assert.doesNotMatch(bridge, /Antigravity\.exe/);
+  assert.doesNotMatch(bridge, /chatgpt\.com/);
+  assert.doesNotMatch(bridge, /auth\/login/);
+});
+
+test("Anti-Codex ships a repeatable plugin/connector capability grading script", () => {
+  const capabilities = readFileSync(resolve(root, "scripts", "test-anticodex-plugin-capabilities.ps1"), "utf8");
+
+  // Plugin and connector API endpoints
+  assert.match(capabilities, /\/backend-api\/ps\/plugins\/installed/);
+  assert.match(capabilities, /\/backend-api\/plugins\/list/);
+  assert.match(capabilities, /\/backend-api\/aip\/connectors/);
+  assert.match(capabilities, /\/backend-api\/wham\/apps/);
+
+  // Capability metrics
+  assert.match(capabilities, /installedPluginCount/);
+  assert.match(capabilities, /pluginsWithSkills/);
+  assert.match(capabilities, /pluginsWithApps/);
+  assert.match(capabilities, /pluginsWithMcpServers/);
+  assert.match(capabilities, /connectorCount/);
+  assert.match(capabilities, /appToolCount/);
+  assert.match(capabilities, /unattributedAppToolCount/);
+  assert.match(capabilities, /unauthorizedAppToolCount/);
+  assert.match(capabilities, /app tools exposed without any accessible connector; refusing fake callable capability/);
+  assert.match(capabilities, /app tools exposed without connector_id attribution; refusing fake callable capability/);
+  assert.match(capabilities, /app tools exposed for connector_id outside accessible connectors; refusing fake callable capability/);
+  assert.match(capabilities, /snapshotSource = "anticodex-local-copy"/);
+  assert.match(capabilities, /nativeCodexWriteback = \$false/);
+  assert.match(capabilities, /capabilityState =/);
+  assert.match(capabilities, /degraded =/);
+  assert.match(capabilities, /\.anticodex-source-manifest\.json/);
+  assert.match(capabilities, /dataFileCount/);
+
+  // Health verification must work in both Antigravity and third-party modes.
+  assert.match(capabilities, /\$healthMode = "unknown"/);
+  assert.match(capabilities, /\$healthMode -eq "third-party"/);
+  assert.match(capabilities, /third-party upstream missing protocol/);
+  assert.match(capabilities, /third-party upstream missing model/);
+  assert.match(capabilities, /unknown upstream mode/);
+  assert.match(capabilities, /mode = \$healthMode/);
+
+  // HTTP proxy and JSON serialization
+  assert.match(capabilities, /Proxy\s*=\s*\$null/);
+  assert.match(capabilities, /ConvertTo-Json/);
+  assert.match(capabilities, /Invoke-LocalJsonWithRetry/);
+  assert.match(capabilities, /Start-Sleep -Milliseconds/);
+  assert.match(capabilities, /attempt \$attempt of \$MaxAttempts/);
+  assert.match(capabilities, /\$MaxAttempts = 2/);
+
+  // Must NOT reference process killing, host executables, or auth routes
+  assert.doesNotMatch(capabilities, /Stop-Process/);
+  assert.doesNotMatch(capabilities, /Codex\.exe/);
+  assert.doesNotMatch(capabilities, /Antigravity\.exe/);
+  assert.doesNotMatch(capabilities, /auth\/login/);
+});
+
+test("Anti-Codex ships a translator-only recovery verification script", () => {
+  const recovery = readFileSync(resolve(root, "scripts", "test-anticodex-translator-recovery.ps1"), "utf8");
+
+  assert.match(recovery, /\$BaseUrl/);
+  assert.match(recovery, /\$RuntimeRoot/);
+  assert.match(recovery, /\$TimeoutSec/);
+  assert.match(recovery, /start-deepcodex\.ps1/);
+  assert.match(recovery, /\[void\]\$launcherProc\.Handle/);
+  assert.match(recovery, /-TranslatorOnly/);
+  assert.match(recovery, /LocalApplicationData/);
+  assert.match(recovery, /Get-Command "powershell\.exe"/);
+  assert.match(recovery, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
+  assert.match(recovery, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
+  assert.match(recovery, /CODEX_HOME_DIR\s*=\s*\$codexHome/);
+  assert.match(recovery, /\$health\.modelCount/);
+  assert.match(recovery, /antigravity-desktop/);
+  assert.match(recovery, /\/health/);
+  assert.match(recovery, /\/backend-api\/ps\/plugins\/installed/);
+  assert.match(recovery, /\/backend-api\/wham\/apps/);
+  assert.match(recovery, /appToolCount/);
+  assert.match(recovery, /Get-FileSnapshot/);
+  assert.match(recovery, /originalCodexConfigUnchanged/);
+  assert.match(recovery, /translator-only recovery changed original Codex config\.toml/);
+  assert.match(recovery, /Proxy\s*=\s*\$null/);
+  assert.match(recovery, /ConvertTo-Json/);
+
+  assert.doesNotMatch(
+    recovery,
+    /\[Math\]::Max\(60000/,
+    "translator-only recovery verifier must not use [Math]::Max(60000 as launcher timeout; verifier must finish under 30 seconds",
+  );
+  assert.match(
+    recovery,
+    /\b(?:25000|30000)\b/,
+    "translator-only recovery verifier must have a hard deadline 鈮?25000ms or equivalent 30-second boundary (verifier must finish under 30 seconds)",
+  );
+  assert.match(
+    recovery,
+    /launcherTimeoutMs\s*=\s*\[Math\]::Min\(12000/,
+    "translator-only recovery launcher wait must be capped near 12 seconds so the whole verifier stays under 30 seconds",
+  );
+  assert.doesNotMatch(recovery, /\.WaitForExit\(\$launcherTimeoutMs\)/);
+  assert.match(recovery, /\$launcherProc\.HasExited/);
+  assert.match(recovery, /RedirectStandardOutput/);
+  assert.match(recovery, /RedirectStandardError/);
+  assert.match(recovery, /phaseTimings/);
+  assert.match(recovery, /launcherElapsedMs/);
+  assert.match(recovery, /totalElapsedMs/);
+
+  assert.doesNotMatch(recovery, /Stop-Process/);
+  assert.doesNotMatch(recovery, /Codex\.exe/);
+  assert.doesNotMatch(recovery, /Anti-Codex\.exe/);
+  assert.doesNotMatch(recovery, /chatgpt\.com/);
+  assert.doesNotMatch(recovery, /auth\/login/);
+});
+
+test("Anti-Codex ships a cold relaunch verification script", () => {
+  const relaunch = readFileSync(resolve(root, "scripts", "test-anticodex-cold-relaunch.ps1"), "utf8");
+
+  assert.match(relaunch, /start-anticodex\.ps1/);
+  assert.match(relaunch, /codex-patched-app/);
+  assert.match(relaunch, /Get-AntiCodexHostProcesses/);
+  assert.match(relaunch, /Get-AntiCodexMainProcesses/);
+  assert.match(relaunch, /Anti-Codex\.exe/);
+  assert.match(relaunch, /Get-AntiCodexTranslatorProcesses/);
+  assert.match(relaunch, /Get-AntiCodexLauncherProcesses/);
+  assert.match(relaunch, /Get-OriginalCodexMainProcesses/);
+  assert.match(relaunch, /original Codex main process set changed/);
+  assert.match(relaunch, /\/health/);
+  assert.match(relaunch, /antigravity-desktop/);
+  assert.match(relaunch, /Resolve-AntiCodexMode/);
+  assert.match(relaunch, /Test-AntiCodexRelaunchHealthReady/);
+  assert.match(relaunch, /upstreamProfile\.model/);
+  assert.match(relaunch, /providerReady/);
+  assert.match(relaunch, /modelCount/);
+  assert.match(relaunch, /-Proxy\s+\$null/);
+  assert.match(relaunch, /TimeoutSec 2/);
+  assert.match(relaunch, /WindowStyle Hidden/);
+  assert.match(relaunch, /launcherOutPath/);
+  assert.match(relaunch, /RedirectStandardOutput/);
+  assert.match(relaunch, /RedirectStandardError/);
+  assert.match(relaunch, /TimeoutSec = 18/);
+  assert.match(relaunch, /StopTimeoutSec = 5/);
+  assert.match(relaunch, /HealthPollTimeoutSec/);
+  assert.match(relaunch, /New-Stage/);
+  assert.match(relaunch, /stages = \$stages\.ToArray\(\)/);
+  assert.doesNotMatch(relaunch, /TimeoutSec = 90/);
+  assert.match(relaunch, /stop-existing-processes/);
+  assert.match(relaunch, /wait-health-ready/);
+
+  assert.doesNotMatch(relaunch, /Antigravity\.exe/);
+  assert.doesNotMatch(relaunch, /chatgpt\.com/);
+  assert.doesNotMatch(relaunch, /auth\/login/);
+});
+
+test("Anti-Codex ships a read-only installed overall verification script", () => {
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(overall, /\/health/);
+  assert.match(overall, /\/models/);
+  assert.match(overall, /\$healthMode = "unknown"/);
+  assert.match(overall, /\$healthMode -eq "third-party"/);
+  assert.match(overall, /third-party upstream missing protocol/);
+  assert.match(overall, /third-party upstream missing model/);
+  assert.match(overall, /unknown upstream mode/);
+  assert.match(overall, /mode = \$healthMode/);
+  assert.doesNotMatch(overall, /third-party mode skips Antigravity UI catalog verification/);
+  assert.match(overall, /third-party mode keeps UI\/Manager verification enabled/);
+  assert.match(overall, /third-party mode uses provider-native-or-compat bridge/);
+  assert.match(overall, /provider-native-or-compat/);
+  assert.match(overall, /upstream-provider/);
+  assert.doesNotMatch(overall, /third-party mode skips Antigravity model routing verification/);
+  assert.match(overall, /No-traffic model routing verification/);
+  assert.match(overall, /third-party mode skips Antigravity thinking-budget verification/);
+  assert.doesNotMatch(overall, /third-party mode skips Antigravity cancellation readiness verification/);
+  assert.match(overall, /third-party mode verifies provider streaming cancellation/);
+  assert.match(overall, /"-Model", \$\(if \(\$healthModel\) \{ \$healthModel \} else \{ "" \}\)/);
+  assert.match(overall, /third-party mode skips Antigravity account\/proxy verification/);
+  assert.doesNotMatch(overall, /third-party mode skips Antigravity stability soak/);
+  assert.match(overall, /third-party mode verifies provider stability soak/);
+  assert.doesNotMatch(overall, /third-party mode skips Antigravity cold relaunch verification/);
+  assert.match(overall, /third-party mode verifies provider cold relaunch/);
+  assert.match(overall, /function Remove-OldReports/);
+  assert.match(overall, /Select-Object -Skip \$Keep/);
+  assert.match(overall, /Test-InstalledBranding/);
+  assert.match(overall, /Test-ExternalBranding/);
+  assert.match(overall, /Read-AsarHeader/);
+  assert.match(overall, /setAppUserModelId\(`AntiCodex`\)/);
+  assert.match(overall, /app\.name=`Anti-Codex`/);
+  assert.match(overall, /setToolTip\\\(\[\^\)\]\*\\\.app\\\.getName/);
+  assert.match(overall, /installed branding verification failed/);
+  assert.match(overall, /external Anti-Codex branding verification failed/);
+  assert.match(overall, /FileDescription/);
+  assert.match(overall, /ProductName/);
+  assert.match(overall, /OriginalFilename/);
+  assert.match(overall, /test-anticodex-ui-state\.ps1/);
+  assert.match(overall, /UI state verification/);
+  assert.match(overall, /if \(\$Fast\) \{ \$uiStateArgs \+= @\("-Fast"\) \}/);
+  assert.match(overall, /SubcheckTimeoutSec = 60/);
+  assert.match(overall, /function Wait-AntiCodexSubcheckProcess/);
+  assert.match(overall, /\$Process\.HasExited/);
+  assert.match(overall, /\[void\]\$process\.Handle/);
+  assert.doesNotMatch(overall, /WaitForExit\(\[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
+  assert.match(overall, /timed out after \$SubcheckTimeoutSec seconds/);
+  assert.doesNotMatch(overall, /Start-Process[\s\S]{0,260}-Wait[\s\S]{0,260}-RedirectStandardOutput/);
+  assert.match(overall, /function Invoke-NodeJsonScript/);
+  assert.match(overall, /function Read-AntiCodexTempTextWithRetry/);
+  assert.match(overall, /FileShare\]::ReadWrite/);
+  assert.match(overall, /Read-AntiCodexTempTextWithRetry \$stdoutPath/);
+  assert.match(overall, /Read-AntiCodexTempTextWithRetry \$stderrPath/);
+  const nodeJsonBody = overall.slice(
+    overall.indexOf("function Invoke-NodeJsonScript"),
+    overall.indexOf("function New-ReportPaths"),
+  );
+  assert.match(nodeJsonBody, /Start-Process -FilePath \$node/);
+  assert.match(nodeJsonBody, /Wait-AntiCodexSubcheckProcess/);
+  assert.doesNotMatch(nodeJsonBody, /WaitForExit\(\[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
+  assert.match(nodeJsonBody, /Node script timed out after \$SubcheckTimeoutSec seconds/);
+  assert.doesNotMatch(nodeJsonBody, /\$output = @\(& \$node/);
+  assert.match(overall, /test-anticodex-manager-button\.mjs/);
+  assert.match(overall, /Manager MCP\/Skill button verification/);
+  assert.match(overall, /Manager plugin\/application button verification/);
+  assert.match(overall, /Manager safe button smoke verification/);
+  assert.match(overall, /--action", "mcpSkills"/);
+  assert.match(overall, /--action", "pluginCapabilities"/);
+  assert.match(overall, /--verification-mode", "ui-only"/);
+  assert.doesNotMatch(overall, /--actions", "mcpSkills,pluginCapabilities"/);
+  assert.match(overall, /--compact", "1"/);
+  assert.doesNotMatch(overall, /fast mode skips Manager MCP\/Skill button smoke/);
+  assert.doesNotMatch(overall, /fast mode skips Manager plugin\/application button smoke/);
+  assert.match(overall, /fast mode covers plugin\/application button state through UI verification/);
+  assert.match(overall, /\$checks\.managerButtonMcpSkills\.result\.lastUiOnly -ne \$true/);
+  assert.match(overall, /\$checks\.managerButtonPluginCapabilities\.result\.lastUiOnly -ne \$true/);
+  assert.match(overall, /\$checks\.managerButtonPluginCapabilities\.skipped -ne \$true/);
+  assert.match(overall, /test-anticodex-manager-action\.ps1/);
+  assert.match(overall, /Manager action verification/);
+  assert.match(overall, /\$checks\.managerAction = if \(\$Fast -or \$SkipManagerActionProbe\)/);
+  assert.match(overall, /SkipManagerActionProbe skips direct Manager action security probe/);
+  assert.match(overall, /SkipUiStateProbe avoids reopening the embedded Manager from inside a Manager action/);
+  assert.match(overall, /SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager/);
+  assert.match(overall, /-RunSafeAction/);
+  assert.match(overall, /-RunUpdateCheckAction/);
+  assert.match(overall, /-RunSessionResetAction/);
+  assert.match(overall, /function Remove-OldReportHistories/);
+  assert.match(overall, /Group-Object name/);
+  assert.match(overall, /Select-Object -Skip \$Keep/);
+  assert.match(overall, /test-anticodex-diagnostics\.ps1/);
+  assert.match(overall, /Diagnostics verification/);
+  assert.match(overall, /\$checks\.diagnostics = if \(\$Fast\)/);
+  assert.match(overall, /test-anticodex-tool-bridge-mode\.ps1/);
+  assert.match(overall, /Tool bridge mode verification/);
+  assert.match(overall, /test-anticodex-runtime-config\.ps1/);
+  assert.match(overall, /Runtime config verification/);
+  assert.match(overall, /\$checks\.runtimeConfig = if \(\$Fast\)/);
+  assert.match(overall, /test-anticodex-websocket-fallback\.ps1/);
+  assert.match(overall, /Websocket fallback verification/);
+  assert.match(overall, /\$checks\.websocketFallback = if \(\$Fast\)/);
+  assert.match(overall, /test-anticodex-third-party-provider\.mjs/);
+  assert.match(overall, /Third-party provider local end-to-end verification/);
+  assert.match(overall, /\$checks\.thirdPartyProvider = if \(\$Fast\)/);
+  assert.match(overall, /fast mode skips local third-party provider end-to-end verification/);
+  assert.match(overall, /"--runtime-root", \$RuntimeRoot/);
+  assert.match(overall, /"--report-root", \$ReportRoot/);
+  assert.match(overall, /test-anticodex-codex-responses\.ps1/);
+  assert.match(overall, /Codex internal Responses stream verification/);
+  assert.match(overall, /test-anticodex-model-switch-history\.ps1/);
+  assert.match(overall, /Model switch history verification/);
+  assert.match(overall, /NoTraffic/);
+  assert.match(overall, /EnsureRunning/);
+  assert.match(overall, /function Start-AntiCodexIfNeeded/);
+  assert.match(overall, /start-anticodex\.ps1/);
+  assert.match(overall, /Anti-Codex did not become healthy after launch request/);
+  assert.match(overall, /Anti-Codex is not running; rerun with -EnsureRunning or start Anti-Codex first/);
+  assert.match(overall, /noTraffic/);
+  assert.match(overall, /accountTrafficReady/);
+  assert.match(overall, /accountTrafficState/);
+  assert.match(overall, /accountTrafficDiagnosis/);
+  assert.match(overall, /modelRoutingNoTraffic/);
+  assert.match(overall, /No-traffic model routing verification/);
+  assert.doesNotMatch(overall, /\$checks\.modelRoutingNoTraffic = if \(\$healthMode -eq "third-party"\)/);
+  assert.match(overall, /\$checks\.modelThinking = if \(\$healthMode -eq "third-party"\)/);
+  assert.match(overall, /elseif \(\$Fast\)/);
+  assert.match(overall, /fast mode uses UI model labels and native thinking budgets/);
+  assert.match(overall, /-SkipRequests/);
+  assert.match(overall, /if \(-not \$NoTraffic\)/);
+  assert.match(overall, /Get-AntiCodexHostProcesses/);
+  assert.match(overall, /Get-AntiCodexMainProcesses/);
+  assert.match(overall, /hostProcessCount/);
+  assert.match(overall, /mainNames/);
+  assert.match(overall, /hostProcessNames/);
+  assert.match(overall, /Anti-Codex\.exe/);
+  assert.match(overall, /Get-AntiCodexTranslatorProcesses/);
+  assert.match(overall, /Get-OriginalCodexMainProcesses/);
+  assert.match(overall, /\$checks\.independence = if \(\$Fast\)/);
+  assert.match(overall, /test-anticodex-mcp-skills\.ps1/);
+  assert.match(overall, /test-anticodex-plugin-capabilities\.ps1/);
+  assert.match(overall, /New-SkippedCheck/);
+  assert.match(overall, /covered by Manager MCP\/Skill button smoke/);
+  assert.match(overall, /covered by Manager plugin\/application button smoke/);
+  assert.match(overall, /managerButtonSourcePreflight/);
+  assert.match(overall, /Manager source preflight button verification/);
+  assert.match(overall, /--action", "sourcePreflight"/);
+  assert.match(overall, /test-anticodex-tool-bridge-mode\.ps1/);
+  assert.match(overall, /Tool bridge mode verification/);
+  assert.match(overall, /fast mode skips direct Manager action security probe/);
+  assert.match(overall, /Manager action verification/);
+  assert.match(overall, /test-anticodex-sync-readiness\.ps1/);
+  assert.match(overall, /Sync readiness verification/);
+  assert.match(overall, /test-anticodex-mcp-tool-loop\.ps1/);
+  assert.match(overall, /MCP tool loop verification/);
+  assert.match(overall, /test-anticodex-custom-tool-loop\.ps1/);
+  assert.match(overall, /Custom\/freeform tool loop verification/);
+  assert.match(overall, /test-anticodex-account-proxy-readiness\.ps1/);
+  assert.match(overall, /\$reportName = if \(\$Fast\) \{ "installed-overall-fast" \} else \{ "installed-overall" \}/);
+  assert.match(overall, /New-ReportPaths \$reportName/);
+  assert.match(overall, /reportName/);
+  assert.match(overall, /Save-JsonReport/);
+  assert.match(overall, /latest-\$Name\.json/);
+  assert.match(overall, /SkipAccountProxyProbe/);
+  assert.match(overall, /FastMaxElapsedMs = 90000/);
+  assert.match(overall, /fast installed overall exceeded/);
+  assert.match(overall, /fastMaxElapsedMs/);
+  assert.match(overall, /function Test-ReportEncoding/);
+  assert.match(overall, /latest-mcp-tool-loop\.json/);
+  assert.match(overall, /latest-stability-soak\.json/);
+  assert.match(overall, /latest-codex-responses\.json/);
+  assert.match(overall, /latest-native-tool-loop\.json/);
+  assert.match(overall, /\$checks\.reportEncoding = Test-ReportEncoding/);
+  assert.match(overall, /report encoding verification failed/);
+  assert.match(overall, /function Test-InstalledGuardWording/);
+  assert.match(overall, /\$checks\.guardWording = Test-InstalledGuardWording/);
+  assert.match(overall, /guard wording leaks DeepCodex/);
+  assert.match(overall, /guard wording still contains old continue phrasing/);
+  assert.match(overall, /friendlyFakeExecution = \[string\]::Concat/);
+  assert.match(overall, /0x6CA1,\s*0x6709,\s*0x771F,\s*0x7684,\s*0x8BFB,\s*0x6587,\s*0x4EF6/);
+  assert.match(overall, /test-anticodex-stability-soak\.ps1/);
+  assert.match(overall, /"-ReportRoot", \$ReportRoot/);
+  assert.match(overall, /test-anticodex-cold-relaunch\.ps1/);
+  assert.match(overall, /HealthPollTimeoutSec/);
+  assert.doesNotMatch(overall, /"-TimeoutSec", "90"/);
+  assert.match(overall, /IdleStabilityDurationSec = 10/);
+  assert.match(overall, /\$IdleStabilityDurationSec/);
+  assert.match(overall, /IncludeSoak/);
+  assert.match(overall, /IncludeColdRelaunch/);
+  assert.match(overall, /Proxy\s+\$null/);
+  assert.match(overall, /ConvertTo-Json/);
+  assert.match(overall, /originalCodexMainPids/);
+
+  assert.match(overall, /Stop-Process -Id \$process\.Id -Force/);
+  assert.doesNotMatch(overall, /Stop-Process[^\n\r]*(Anti-Codex|Antigravity|deepcodex-translator)/i);
+  assert.doesNotMatch(overall, /Antigravity\.exe/);
+  assert.doesNotMatch(overall, /chatgpt\.com/);
+  assert.doesNotMatch(overall, /auth\/login/);
+});
+
+test("Anti-Codex Manager button verifier waits for the embedded panel to finish rendering", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
+
+  assert.match(verifier, /args\.get\("--port"\)/);
+  assert.match(verifier, /args\.get\("--actions"\)/);
+  assert.match(verifier, /const actions = /);
+  assert.match(verifier, /for \(const actionName of actions\)/);
+  assert.match(verifier, /runManagerActionBatch/);
+  assert.doesNotMatch(verifier, /spawnSync/);
+  assert.match(verifier, /Runtime\.executionContextCreated/);
+  assert.match(verifier, /Page\.getFrameTree/);
+  assert.match(verifier, /pickVisiblePageContextId/);
+  assert.match(verifier, /contextId: pageContextId/);
+  assert.match(verifier, /Date\.now\(\) \+ 10000/);
+  assert.match(verifier, /writeBigUInt64BE/);
+  assert.match(verifier, /button && typeof window\.__ANTICODEX_RUN_MANAGER_ACTION__ === "function"/);
+  assert.match(verifier, /elementFromPoint/);
+  assert.match(verifier, /actionCenterHitsButton/);
+  assert.match(verifier, /buttonPresent/);
+  assert.match(verifier, /actionStarted/);
+  assert.match(verifier, /function asciiJson/);
+  assert.match(verifier, /acquireManagerButtonLock/);
+  assert.match(verifier, /anticodex-manager-button\.lock/);
+  assert.match(verifier, /releaseManagerButtonLock/);
+  assert.match(verifier, /verificationMode/);
+  assert.match(verifier, /uiOnlyBridgeSource/);
+  assert.match(verifier, /lastUiOnly/);
+  assert.match(verifier, /const initialUiOnlyFinished = uiOnlyMode/);
+  assert.match(verifier, /initialUiOnlyFinished[\s\S]*\|\| uiOnlyFinished[\s\S]*\|\| initial\.busyAttr === "true"/);
+  assert.match(verifier, /__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__/);
+  assert.match(verifier, /lastActionResult\?\.managerSummary \|\| ""/);
+  assert.match(verifier, /latest\.lastAction === action/);
+  assert.match(verifier, /Number\(latest\.pendingCount \|\| 0\) === 0/);
+  assert.match(verifier, /function remainingActionTimeoutMs/);
+  assert.match(verifier, /Math\.min\(2500, remaining\)/);
+  assert.match(verifier, /--verify-pending-reopen/);
+  assert.match(verifier, /simulatePendingReopen/);
+  assert.match(verifier, /pendingReopen/);
+  assert.match(verifier, /closeHitAreaOk/);
+  assert.match(verifier, /closeHitResults/);
+  assert.match(verifier, /managerOpenedNewPage === false/);
+  assert.match(verifier, /pageTargetCountAfterManagerOpen/);
+  assert.match(verifier, /lateText === pendingReopen\.lateRecord\?\.managerSummary/);
+  assert.ok(verifier.includes(String.raw`replace(/[^\x00-\x7F]/gu`));
+});
+
+test("Anti-Codex ships a read-only runtime config verifier", () => {
+  const runtimeConfig = readFileSync(resolve(root, "scripts", "test-anticodex-runtime-config.ps1"), "utf8");
+
+  assert.match(runtimeConfig, /codex-home-deepseek-app/);
+  assert.match(runtimeConfig, /config\.toml/);
+  assert.match(runtimeConfig, /cli_auth_credentials_store/);
+  assert.match(runtimeConfig, /model_catalog_json/);
+  assert.match(runtimeConfig, /openai_base_url/);
+  assert.match(runtimeConfig, /chatgpt_base_url/);
+  assert.match(runtimeConfig, /responses_websockets/);
+  assert.match(runtimeConfig, /responses_websockets_v2/);
+  assert.match(runtimeConfig, /plugin_sharing/);
+  assert.match(runtimeConfig, /remote_plugin/);
+  assert.match(runtimeConfig, /local Anti-Codex gateway/);
+  assert.match(runtimeConfig, /ConvertTo-Json/);
+  assert.doesNotMatch(runtimeConfig, /Stop-Process/);
+  assert.doesNotMatch(runtimeConfig, /Start-Process/);
+});
+
+test("Anti-Codex ships a read-only websocket fallback verifier", () => {
+  const websocket = readFileSync(resolve(root, "scripts", "test-anticodex-websocket-fallback.ps1"), "utf8");
+
+  assert.match(websocket, /Upgrade: websocket/);
+  assert.match(websocket, /Sec-WebSocket-Key/);
+  assert.match(websocket, /Sec-WebSocket-Protocol: codex\.responses\.v1/);
+  assert.match(websocket, /\/v1\/responses/);
+  assert.match(websocket, /\/codex\/responses/);
+  assert.match(websocket, /probeResults/);
+  assert.match(websocket, /HTTP\/1\\\.1 501/);
+  assert.match(websocket, /unsupported_websocket/);
+  assert.match(websocket, /\/anticodex\/diagnostics/);
+  assert.match(websocket, /responsesWebSocket/);
+  assert.match(websocket, /lastUpgrade/);
+  assert.match(websocket, /secWebSocketProtocol/);
+  assert.match(websocket, /TcpClient/);
+  assert.match(websocket, /ConvertTo-Json/);
+  assert.doesNotMatch(websocket, /Stop-Process/);
+  assert.doesNotMatch(websocket, /Start-Process/);
+  assert.doesNotMatch(websocket, /chatgpt\.com/);
+  assert.doesNotMatch(websocket, /auth\/login/);
+});
+
+test("Anti-Codex ships a source-only preflight gate before install or deploy", () => {
+  const preflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const install = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+
+  assert.match(preflight, /latest-\$Name\.json/);
+  assert.match(preflight, /Save-JsonReport "source-preflight"/);
+  assert.match(preflight, /node --check/);
+  assert.match(preflight, /--self-test/);
+  assert.match(preflight, /\$scanRoots = @\("translator", "scripts"\)/);
+  assert.match(preflight, /Get-ChildItem[\s\S]+-Recurse[\s\S]+\.Extension -in @\("\.mjs", "\.js"\)/);
+  assert.match(preflight, /Get-ChildItem[\s\S]+translator\\tests/);
+  assert.match(preflight, /Parser\]::ParseFile/);
+  assert.match(preflight, /rev-parse --is-inside-work-tree/);
+  assert.match(preflight, /not a git worktree/);
+  assert.match(preflight, /git diff --check/);
+  assert.match(preflight, /warningsOnly/);
+  assert.match(preflight, /UTF8Encoding\]::new\(\$false\)/);
+  assert.match(preflight, /WriteAllText/);
+  assert.match(preflight, /SkipFullRegression/);
+  assert.match(install, /test-anticodex-source-preflight\.ps1/);
+  assert.match(install, /Invoke-AntiCodexSourcePreflight/);
+  assert.match(install, /source preflight failed\. Installation was stopped before copying the host/i);
+  assert.match(sync, /test-anticodex-source-preflight\.ps1/);
+  assert.match(sync, /source preflight failed\. Sync was stopped before building an update candidate/i);
+  assert.doesNotMatch(preflight, /Start-Process[^\n]*(Anti-Codex|Antigravity)/i);
+  assert.doesNotMatch(preflight, /Codex\.exe|Antigravity\.exe|ChatGPT|chatgpt\.com|auth\/login/);
+});
+
+test("Anti-Codex ships a Codex internal Responses stream verifier", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-codex-responses.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(server, /\/codex\/responses/);
+  assert.match(verifier, /\/codex\/responses/);
+  assert.match(verifier, /response\.created/);
+  assert.match(verifier, /response\.completed/);
+  assert.match(verifier, /请用中文/);
+  assert.match(verifier, /\\u4e00-\\u9fff/);
+  assert.match(verifier, /\$finalText\s+-match\s+"DeepCodex"/);
+  assert.match(verifier, /\/anticodex\/model-routes/);
+  assert.match(verifier, /tool protocol markup/);
+  assert.match(verifier, /ReportRoot/);
+  assert.match(verifier, /Save-Report/);
+  assert.match(verifier, /latest-codex-responses\.json/);
+  assert.match(verifier, /reportName = "codex-responses"/);
+  assert.match(verifier, /Proxy\s+\$null/);
+  assert.doesNotMatch(verifier, /Stop-Process/);
+  assert.doesNotMatch(verifier, /Start-Process/);
+  assert.doesNotMatch(verifier, /chatgpt\.com/);
+  assert.doesNotMatch(verifier, /auth\/login/);
+});
+
+test("Anti-Codex ships a model-switch history verifier that preserves array input", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-model-switch-history.ps1"), "utf8");
+
+  assert.match(verifier, /previous_response_id/);
+  assert.match(verifier, /MODEL_SWITCH_HISTORY_/);
+  assert.match(verifier, /return ,\$items/);
+  assert.match(verifier, /second response did not preserve previous_response_id history after model switch/);
+  assert.match(verifier, /model route audit did not record the switched model/);
+  assert.doesNotMatch(verifier, /return @\(/);
+});
+
+test("Anti-Codex ships a read-only UI state verifier", () => {
+  const uiScript = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
+  const uiWrapper = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.ps1"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+
+  assert.match(uiScript, /Runtime\.evaluate/);
+  assert.match(uiScript, /Runtime\.terminateExecution/);
+  assert.match(uiScript, /const loadedDeadline = Date\.now\(\) \+ \$\{Math\.max\(1000, managerProbeTimeoutMs\)\}/);
+  assert.match(uiWrapper, /\[switch\]\$Fast/);
+  assert.match(uiWrapper, /\[int\]\$ManagerProbeTimeoutSec = 0/);
+  assert.match(uiWrapper, /\$effectiveManagerProbeTimeoutSec = if \(\$ManagerProbeTimeoutSec -gt 0\)/);
+  assert.match(uiWrapper, /"--manager-probe-timeout-ms"/);
+  assert.match(uiWrapper, /\$effectiveManagerProbeTimeoutSec \* 1000/);
+  assert.match(uiWrapper, /"--fast", "1"/);
+  assert.match(uiScript, /fastUiState/);
+  assert.match(uiScript, /managerProbeTimeoutMs/);
+  assert.match(uiScript, /--manager-probe-timeout-ms/);
+  assert.match(uiScript, /dynamicProbeUnavailable/);
+  assert.match(uiScript, /context-probe-and-manager-page/);
+  assert.match(uiScript, /manager overlay dynamic probe skipped/);
+  assert.doesNotMatch(uiScript, /Math\.max\(timeoutMs, 120000\)/);
+  assert.doesNotMatch(uiScript, /Math\.max\(timeoutMs, 40000\)/);
+  assert.doesNotMatch(uiScript, /Math\.max\(timeoutMs, 20000\)/);
+  assert.match(uiScript, /function getJson\(url, requestTimeoutMs = timeoutMs\)/);
+  assert.match(uiScript, /getJson\(`\$\{baseUrl\}\/health`, Math\.max\(timeoutMs, fastUiState \? 15000 : timeoutMs\)\)/);
+  assert.match(uiScript, /skippedDeepProbe/);
+  assert.match(uiScript, /coveredBy: "fast-ui-state"/);
+  assert.match(uiScript, /findDefaultContextId/);
+  assert.match(uiScript, /contextId/);
+  assert.match(uiScript, /document\.body\.innerText/);
+  assert.match(uiScript, /hasLoginText/);
+  assert.doesNotMatch(uiScript, /auth\\\/login\|ChatGPT 鐧诲綍\|鐧诲綍 ChatGPT/);
+  assert.match(uiScript, /auth\\\/login\|鐧诲綍 ChatGPT\|Sign in to ChatGPT/);
+  assert.match(uiScript, /hasReconnectText/);
+  assert.match(uiScript, /reconnectPattern/);
+  assert.match(uiScript, /reconnectEvidence/);
+  assert.match(uiScript, /pageStateFromContextProbe/);
+  assert.match(uiScript, /fallbackFromContextProbe/);
+  assert.match(uiScript, /innerText\.slice\(0, 1200\)/);
+  assert.match(uiScript, /contextProbePageState/);
+  assert.doesNotMatch(uiScript, /const text = ""/);
+  assert.doesNotMatch(uiScript, /hasReconnectText:\s*false/);
+  assert.match(uiScript, /anticodex-manager-overlay/);
+  assert.match(uiScript, /manager overlay changed CDP target count/);
+  assert.match(uiScript, /in-app manager function is not injected/);
+  assert.match(uiScript, /ariaLabel/);
+  assert.match(uiScript, /closeText/);
+  assert.match(uiScript, /headingText/);
+  assert.match(uiScript, /hasEmbeddedPanel/);
+  assert.match(uiScript, /hasIframe/);
+  assert.match(uiScript, /hasEndpointFetchFailure/);
+  assert.match(uiScript, /in-app manager still shows endpoint fetch failure/);
+  assert.match(uiScript, /mojibakePattern/);
+  assert.match(uiScript, /mojibakeMatch/);
+  assert.match(uiScript, /in-app manager rendered mojibake text/);
+  assert.match(uiScript, /main page rendered mojibake text/);
+  assert.match(uiScript, /manager page source contains mojibake text/);
+  assert.match(uiScript, /managerProbeAttempt/);
+  assert.match(uiScript, /exceptionDetails/);
+  assert.match(uiScript, /manager overlay probe did not return a value/);
+  assert.doesNotMatch(uiScript, /actionProbeSkippedByFallback/);
+  assert.doesNotMatch(uiScript, /closeCenterHitsButton:\s*true/);
+  assert.match(uiScript, /anticodex-manager-button\.lock/);
+  assert.match(uiScript, /acquireManagerButtonLock/);
+  assert.match(uiScript, /releaseManagerButtonLock/);
+  assert.match(uiScript, /isLockOwnerAlive/);
+  assert.match(uiScript, /process\.kill\(pid, 0\)/);
+  assert.match(uiScript, /actionCount/);
+  assert.match(uiScript, /managerPage/);
+  assert.match(uiScript, /getText/);
+  assert.match(uiScript, /hasZhLang/);
+  assert.match(uiScript, /hasNoTrafficNotice/);
+  assert.match(uiScript, /hasRefreshStatusButton/);
+  assert.match(uiScript, /hasRefreshModelsButton/);
+  assert.match(uiScript, /hasAccountProxyButton/);
+  assert.match(uiScript, /hasSyncReadinessButton/);
+  assert.match(uiScript, /hasUpdateCheckButton/);
+  assert.match(uiScript, /hasUpdateCheckAction/);
+  assert.match(uiScript, /hasSourcePreflightButton/);
+  assert.match(uiScript, /hasSourcePreflightAction/);
+  assert.match(uiScript, /hasRepairShortcutsAction/);
+  assert.match(uiScript, /hasSyncHostButton/);
+  assert.match(uiScript, /hasSyncHostAction/);
+  assert.match(uiScript, /hasSyncStatusCard/);
+  assert.match(uiScript, /hasNativeCodexVersionLabel/);
+  assert.match(uiScript, /hasAntiCodexVersionLabel/);
+  assert.match(uiScript, /hasUpdateStatusLabel/);
+  assert.match(uiScript, /hasRollbackPointLabel/);
+  assert.match(uiScript, /hasSyncDescriptionLabel/);
+  assert.match(uiScript, /hasMcpSkillsButton/);
+  assert.match(uiScript, /hasPluginCapabilitiesButton/);
+  assert.match(uiScript, /hasRefreshFeaturesButton/);
+  assert.match(uiScript, /hasRefreshFeaturesAction/);
+  assert.match(uiScript, /hasOverallNoTrafficButton/);
+  assert.match(uiScript, /hasDiagnosticsBundleButton/);
+  assert.match(uiScript, /hasViewLatestReportsButton/);
+  assert.match(uiScript, /hasPostVerificationButton/);
+  assert.match(uiScript, /hasLongTasksStatusCard/);
+  assert.match(uiScript, /hasPluginStatusCard/);
+  assert.doesNotMatch(uiScript, /Date\.now\(\) \+ 35000/);
+  assert.match(uiScript, /Math\.max\(timeoutMs, managerProbeTimeoutMs\)/);
+  assert.match(uiScript, /hasLoadedModels/);
+  assert.match(uiScript, /hasLoadedCapabilities/);
+  assert.match(uiScript, /const hasLoadedCapabilities = \/MCP/);
+  assert.match(uiScript, /&& !\/MCP/);
+  assert.match(uiScript, /if \(before\) return window\.__ANTICODEX_REFRESH_MANAGER_PANEL__\?\.\(\)/);
+  assert.match(uiScript, /return window\.__ANTICODEX_OPEN_MANAGER__\(\)/);
+  assert.match(uiScript, /managerStillLoading[\s\S]*\\u672c\\u5730\\u72b6\\u6001\\u672a\\u5c31\\u7eea/);
+  assert.match(uiScript, /hasMcpSessionToolBoundary/);
+  assert.match(uiScript, /hasPluginMetadataBoundary/);
+  assert.match(uiScript, /hasSnapshotFreshness/);
+  assert.match(uiScript, /hasSnapshotRefreshState/);
+  assert.match(managerInject, /DIAGNOSTICS_FETCH_TIMEOUT_MS/);
+  assert.match(managerInject, /DIAGNOSTICS_FETCH_TIMEOUT_MS = 30000/);
+  assert.match(managerInject, /LOAD_SNAPSHOT_TIMEOUT_MS = 30000/);
+  assert.match(managerInject, /function hasCompleteManagerSnapshot/);
+  assert.match(managerInject, /Number\(localFeatures\.mcp\?\.count\) > 0/);
+  assert.match(managerInject, /safeJson\("\/anticodex\/diagnostics", \{ timeoutMs: DIAGNOSTICS_FETCH_TIMEOUT_MS \}\)/);
+  assert.match(uiScript, /hasSnapshotRefreshState[\s\S]{0,400}\\u539f\\u751f Codex/);
+  assert.match(uiScript, /hasRouteSummaryCard/);
+  assert.match(uiScript, /hasRouteProviderFields/);
+  assert.match(uiScript, /in-app manager route summary is missing third-party provider\/protocol\/transport fields/);
+  assert.match(uiScript, /in-app manager route empty state collapses provider fields/);
+  assert.match(uiScript, /hasSyncVersionFields/);
+  assert.match(uiScript, /hasSyncSafetyText/);
+  assert.match(uiScript, /hasRollbackStatus/);
+  assert.match(uiScript, /button\[data-action="upstreamConfig"\]/);
+  assert.match(uiScript, /upstreamConfigOpened/);
+  assert.match(uiScript, /upstreamConfigEmbeddedInOverlay/);
+  assert.match(uiScript, /upstreamConfigSaveInitiallyDisabled/);
+  assert.match(uiScript, /upstreamConfigHasSafeWarning/);
+  assert.match(uiScript, /upstreamConfigHasExpectedControls/);
+  assert.match(uiScript, /hasManagerActionEndpoint/);
+  assert.match(uiScript, /hasActionResult/);
+  assert.match(uiScript, /hasRouteProviderFields/);
+  assert.match(uiScript, /manager page route summary is missing third-party provider\/protocol\/transport fields/);
+  assert.match(uiScript, /manager page route empty state collapses provider fields/);
+  assert.match(uiScript, /closeHitGridAll/);
+  assert.match(uiScript, /closeHitSamples/);
+  assert.match(uiScript, /full hit grid is incomplete/);
+  assert.match(uiScript, /manager page missing MCP\/Skill check button/);
+  assert.match(uiScript, /manager page missing plugin\/app check button/);
+  assert.match(uiScript, /manager page missing plugin\/app status card/);
+  assert.match(uiScript, /manager page missing long-task status card/);
+  assert.match(uiScript, /manager page missing latest reports button/);
+  assert.match(uiScript, /manager page missing refresh local features button/);
+  assert.match(uiScript, /manager page missing refreshFeatures action binding/);
+  assert.match(uiScript, /manager page missing update check button/);
+  assert.match(uiScript, /manager page missing updateCheck action binding/);
+  assert.match(uiScript, /manager page missing syncHost action binding/);
+  assert.match(uiScript, /manager page missing sync status card/);
+  assert.match(uiScript, /manager page missing native Codex version label/);
+  assert.match(uiScript, /manager page missing Anti-Codex version label/);
+  assert.match(uiScript, /manager page missing update status label/);
+  assert.match(uiScript, /manager page missing rollback point label/);
+  assert.match(uiScript, /manager page missing sync safety description label/);
+  assert.match(uiScript, /manager page missing Codex\/Anti-Codex sync version fields/);
+  assert.match(uiScript, /manager page missing safe sync replacement explanation/);
+  assert.match(uiScript, /manager page missing rollback status/);
+  assert.match(uiScript, /manager page missing Chinese no-login\/no-traffic notice/);
+  assert.match(uiScript, /in-app manager third-party API config panel did not open/);
+  assert.match(uiScript, /in-app manager third-party API config panel is not embedded in the overlay/);
+  assert.match(uiScript, /in-app manager third-party API save button is enabled before a successful connection test/);
+  assert.match(uiScript, /in-app manager third-party API config panel is missing no-fallback\/no-history-loss warning/);
+  assert.match(uiScript, /in-app manager third-party API config panel is missing protocol\/key\/test\/save\/restore controls/);
+  assert.match(uiScript, /in-app manager does not explain that MCP callability follows the current session tool list/);
+  assert.match(uiScript, /in-app manager does not distinguish plugin metadata from callable tools/);
+  assert.match(uiScript, /in-app manager local feature snapshot freshness is missing/);
+  assert.match(uiScript, /in-app manager local feature snapshot refresh guidance is missing/);
+  assert.match(uiScript, /in-app manager embedded panel is missing/);
+  assert.match(uiScript, /in-app manager still uses an iframe/);
+  assert.ok(uiScript.includes(String.raw`Anti-Codex \u7ba1\u7406`) || uiScript.includes("Anti-Codex " + String.fromCharCode(0x7ba1, 0x7406)));
+  assert.ok(uiScript.includes(String.raw`\u5173\u95ed`) || uiScript.includes(String.fromCharCode(0x5173, 0x95ed)));
+  assert.ok(uiScript.includes(String.raw`\u5237\u65b0\u72b6\u6001`) || uiScript.includes(String.fromCharCode(0x5237, 0x65b0, 0x72b6, 0x6001)));
+  assert.ok(uiScript.includes(String.raw`\u5237\u65b0\u6a21\u578b`) || uiScript.includes(String.fromCharCode(0x5237, 0x65b0, 0x6a21, 0x578b)));
+  assert.ok(uiScript.includes(String.raw`\u68c0\u67e5\u66f4\u65b0`) || uiScript.includes(String.fromCharCode(0x68c0, 0x67e5, 0x66f4, 0x65b0)));
+  assert.ok(uiScript.includes(String.raw`\u540c\u6b65 Codex \u66f4\u65b0`));
+  assert.ok(uiScript.includes(String.raw`\u539f\u751f Codex \u7248\u672c`));
+  assert.ok(uiScript.includes(String.raw`Anti-Codex \u7248\u672c`));
+  assert.ok(uiScript.includes(String.raw`\u66f4\u65b0\u72b6\u6001`));
+  assert.ok(uiScript.includes(String.raw`\u56de\u6eda\u70b9`));
+  assert.ok(uiScript.includes(String.raw`\u8bf4\u660e`));
+  assert.ok(uiScript.includes(String.raw`\u9a8c\u8bc1\u901a\u8fc7\u624d\u66ff\u6362`));
+  assert.ok(uiScript.includes(String.raw`\u5931\u8d25\u4e0d\u4f1a\u8986\u76d6\u5f53\u524d Anti-Codex`));
+  assert.match(uiScript, /upstreamConfigHasSafeWarning/);
+  assert.match(uiScript, /upstreamConfigHasExpectedControls/);
+  assert.match(uiScript, /upstreamConfigTextSample/);
+  assert.match(uiScript, /anticodex-manager-button/);
+  assert.match(uiScript, /in-app manager still exposes the removed floating Manager button/);
+  assert.doesNotMatch(uiScript, /hasButton:\s*!!button\s*\|\|\s*before/);
+  assert.match(uiScript, /\/anticodex\/manager/);
+  assert.match(uiScript, /\/anticodex\/manager\/open/);
+  assert.match(uiScript, /matchedModelText/);
+  assert.match(uiScript, /managerOverlay\?\.textSample/);
+  assert.match(uiScript, /modelEvidenceText/);
+  assert.match(uiScript, /validateCatalogModels/);
+  assert.match(uiScript, /catalog missing visible model id/);
+  assert.match(uiScript, /display_name lacks numeric version/);
+  assert.match(uiScript, /wrong reasoning suffix/);
+  assert.match(uiScript, /catalogLabels/);
+  assert.match(uiScript, /modelIds/);
+  assert.match(uiScript, /upstreamMode/);
+  assert.match(uiScript, /third-party upstream UI verification missing protocol/);
+  assert.match(uiScript, /third-party upstream UI verification missing model/);
+  assert.match(uiScript, /third-party mode keeps current provider model evidence/);
+  assert.match(uiScript, /third-party mode skips Antigravity catalog-only validation/);
+  assert.match(uiScript, /third-party mode skips native Antigravity thinking-budget UI assertion/);
+  assert.match(uiScript, /function asciiJson/);
+  assert.ok(uiScript.includes(String.raw`replace(/[^\x00-\x7F]/gu`));
+  assert.match(uiScript, /Anti-Codex/);
+  assert.match(uiWrapper, /CdpPort/);
+  assert.match(uiWrapper, /antigravity-model-catalog\.json/);
+  assert.match(uiWrapper, /cua_node\\bin\\node\.exe/);
+  assert.match(uiWrapper, /ConvertFrom-Json -ErrorAction Stop/);
+  assert.doesNotMatch(uiScript, /click\(/i);
+  assert.doesNotMatch(uiWrapper, /Stop-Process|Start-Process|auth\/login/);
+});
+
+test("Anti-Codex ships a read-only UI idle stability verifier", () => {
+  const idle = readFileSync(resolve(root, "scripts", "test-anticodex-ui-idle-stability.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+
+  assert.match(idle, /test-anticodex-ui-state\.ps1/);
+  assert.match(idle, /hasReconnectText/);
+  assert.match(idle, /hasLoginText/);
+  assert.match(idle, /translator process changed during idle/);
+  assert.match(idle, /Anti-Codex main process changed during idle/);
+  assert.match(idle, /manager injection watcher count changed during idle/);
+  assert.match(idle, /expected one manager injection watcher/);
+  assert.match(idle, /legacy manager injection watcher still running/);
+  assert.match(idle, /expected at most one manager injection watcher/);
+  assert.match(idle, /managerWatcherPids/);
+  assert.match(idle, /legacyManagerWatcherPids/);
+  assert.match(idle, /deepcodex-cdp-inject\\\.mjs/);
+  assert.match(idle, /anticodex-manager-inject\\\.js/);
+  assert.match(idle, /--watch/);
+  assert.match(idle, /ConvertFrom-Json -ErrorAction Stop/);
+  assert.match(idle, /New-ReportPaths "ui-idle-stability"/);
+  assert.match(overall, /test-anticodex-ui-idle-stability\.ps1/);
+  assert.match(overall, /UI idle stability verification/);
+  assert.match(overall, /IdleStabilityIntervalSec = 5/);
+  assert.doesNotMatch(idle, /Stop-Process|Start-Process|auth\/login|click\(/i);
+});
+
+test("Anti-Codex ships a read-only diagnostics verifier", () => {
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+
+  assert.match(diagnostics, /\/anticodex\/diagnostics/);
+  assert.match(diagnostics, /\[switch\]\$VerifyBundle/);
+  assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
+  assert.match(diagnostics, /"-BaseUrl", \$BaseUrl, "-NoPopup"/);
+  assert.match(diagnostics, /model-routing-refresh\.json/);
+  assert.match(diagnostics, /latest-model-routing\.json/);
+  assert.match(diagnostics, /latest-post-verification\.json/);
+  assert.match(diagnostics, /latest-source-preflight\.json/);
+  assert.match(diagnostics, /shortcutRepair/);
+  assert.match(diagnostics, /sourcePreflight/);
+  assert.match(diagnostics, /source preflight status/);
+  assert.match(diagnostics, /source-preflight summary/);
+  assert.match(diagnostics, /javascriptSyntaxOk/);
+  assert.match(diagnostics, /powershellSyntaxOk/);
+  assert.match(diagnostics, /uiStateSelfTestOk/);
+  assert.match(diagnostics, /translatorRegressionOk/);
+  assert.match(diagnostics, /diffWhitespaceOk/);
+  assert.match(diagnostics, /skipFullRegression/);
+  assert.match(diagnostics, /translator-lifecycle\.json/);
+  assert.match(diagnostics, /translator-lifecycle\.jsonl/);
+  assert.match(diagnostics, /postVerification/);
+  assert.match(diagnostics, /lifecycleLogs/);
+  assert.match(diagnostics, /latestDiagnosisDetail/);
+  assert.match(diagnostics, /lifecycle/);
+  assert.match(diagnostics, /translator lifecycle status/);
+  assert.match(diagnostics, /skipRequests/);
+  assert.match(diagnostics, /antigravity-desktop/);
+  assert.match(diagnostics, /\$diagnosticMode = "unknown"/);
+  assert.match(diagnostics, /\$diagnosticMode -eq "third-party"/);
+  assert.match(diagnostics, /third-party diagnostics missing protocol/);
+  assert.match(diagnostics, /third-party diagnostics missing model/);
+  assert.match(diagnostics, /provider-native-or-compat/);
+  assert.match(diagnostics, /upstream-provider/);
+  assert.match(diagnostics, /mode = \$diagnosticMode/);
+  assert.match(diagnostics, /third-party diagnostic bundle treats Antigravity reports as optional/);
+  assert.match(diagnostics, /codexHome/);
+  assert.match(diagnostics, /sharedCodexHome/);
+  assert.match(diagnostics, /should be isolated from sharedCodexHome/);
+  assert.match(diagnostics, /modelRouteAudit/);
+  assert.match(diagnostics, /toolBridge\.mode/);
+  assert.match(diagnostics, /native Antigravity tool events/i);
+  assert.match(diagnostics, /localFeatures/);
+  assert.match(diagnostics, /local Skill\/MCP feature summary/);
+  assert.match(diagnostics, /localFeatures\.skills/);
+  assert.match(diagnostics, /required skill:/);
+  assert.match(diagnostics, /headroom/);
+  assert.match(diagnostics, /context-save/);
+  assert.match(diagnostics, /context-restore/);
+  assert.match(diagnostics, /keep-codex-fast/);
+  assert.match(diagnostics, /sample/);
+  assert.match(diagnostics, /localFeatures\.mcp/);
+  assert.match(diagnostics, /configPath/);
+  assert.match(diagnostics, /node_repl/);
+  assert.match(diagnostics, /connectorDirectoryFiles/);
+  assert.match(diagnostics, /appToolsCacheFiles/);
+  assert.match(diagnostics, /snapshotStatus/);
+  assert.match(diagnostics, /sourceFingerprintComparable/);
+  assert.match(diagnostics, /sourceFingerprintMatches/);
+  assert.match(diagnostics, /staleReason/);
+  assert.match(diagnostics, /tools\.bridge/);
+  assert.match(diagnostics, /native_mcp_same_cascade/);
+  assert.match(diagnostics, /automatic native permission handling/);
+  assert.match(diagnostics, /accountTracking/);
+  assert.match(diagnostics, /exposes an account fingerprint/);
+  assert.match(diagnostics, /antigravityQueue/);
+  assert.match(diagnostics, /antigravitySessionLock/);
+  assert.match(diagnostics, /maxQueued/);
+  assert.match(diagnostics, /exceeds its configured limit/);
+  assert.match(diagnostics, /tool output\|messages\|input_items\|Return exactly this/);
+  assert.doesNotMatch(diagnostics, /Stop-Process|Start-Process|auth\/login/);
+});
+
+test("Anti-Codex ships a read-only tool bridge mode verifier", () => {
+  const toolBridge = readFileSync(resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"), "utf8");
+
+  assert.match(toolBridge, /\/anticodex\/diagnostics/);
+  assert.match(toolBridge, /toolBridge/);
+  assert.match(toolBridge, /desktop-cascade/);
+  assert.match(toolBridge, /native-mcp-same-cascade-with-prompt-fallback/);
+  assert.match(toolBridge, /automatic-before-codex-execution/);
+  assert.match(toolBridge, /nativeBridgeDefaultEnabled/);
+  assert.match(toolBridge, /nativeAntigravityToolEvents/);
+  assert.match(toolBridge, /acceptsExternalToolDefinitions/);
+  assert.match(toolBridge, /nativeToolCapability/);
+  assert.match(toolBridge, /externalToolDefinitionsField/);
+  assert.match(toolBridge, /permissionPromptsDisabled/);
+  assert.match(toolBridge, /tools\.bridge/);
+  assert.match(toolBridge, /native_mcp_same_cascade/);
+  assert.match(toolBridge, /ConvertTo-Json/);
+  assert.doesNotMatch(toolBridge, /Stop-Process|Start-Process|auth\/login/);
+});
+
+test("Anti-Codex ships an account and proxy readiness verifier", () => {
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-account-proxy-readiness.ps1"), "utf8");
+
+  assert.match(readiness, /\/health/);
+  assert.match(readiness, /\/anticodex\/account/);
+  assert.match(readiness, /\/anticodex\/models\/refresh/);
+  assert.match(readiness, /\/models/);
+  assert.match(readiness, /\/v1\/responses/);
+  assert.match(readiness, /\/anticodex\/model-routes/);
+  assert.match(readiness, /modelRouteAudit/);
+  assert.match(readiness, /internalModel/);
+  assert.match(readiness, /model route audit mismatch/);
+  assert.match(readiness, /ACCOUNT_PROXY_READY_/);
+  assert.match(readiness, /antigravity_temporarily_unavailable/);
+  assert.match(readiness, /antigravity_account_unavailable/);
+  assert.match(readiness, /account_verification_required/);
+  assert.match(readiness, /account_verification_with_missing_token/);
+  assert.match(readiness, /antigravity_oauth_network_failure/);
+  assert.match(readiness, /diagnosisDetail/);
+  assert.match(readiness, /detail = \$diagnosisDetail/);
+  assert.match(readiness, /phaseSummary/);
+  assert.match(readiness, /realRequestAttempted/);
+  assert.match(readiness, /realRequestError/);
+  assert.match(readiness, /Get-AntigravityLogSignals/);
+  assert.match(readiness, /sourceFresh/);
+  assert.match(readiness, /tokenRefreshMissingCount/);
+  assert.match(readiness, /oauthNetworkFailureCount/);
+  assert.match(readiness, /Tail 1000/);
+  assert.match(readiness, /Verify your account to continue/);
+  assert.match(readiness, /proxy_or_network/);
+  assert.match(readiness, /account_signed_out_or_no_models/);
+  assert.match(readiness, /local_gateway_offline/);
+  assert.match(readiness, /Open Anti-Codex to start the local gateway/);
+  assert.match(readiness, /AllowUnready/);
+  assert.match(readiness, /localProxyBypassed/);
+  assert.match(readiness, /identityAvailable/);
+  assert.match(readiness, /Proxy\s*=\s*\$null/);
+  assert.match(readiness, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+  assert.match(readiness, /ConvertTo-Json/);
+
+  assert.doesNotMatch(readiness, /Stop-Process/);
+  assert.doesNotMatch(readiness, /Antigravity\.exe/);
+  assert.doesNotMatch(readiness, /Codex\.exe/);
+  assert.doesNotMatch(readiness, /chatgpt\.com/);
+  assert.doesNotMatch(readiness, /auth\/login/);
+  assert.doesNotMatch(readiness, /antigravityLogSignals\s*=\s*\$tail/);
+});
+
+test("Anti-Codex ships a full model routing verifier", () => {
+  const routing = readFileSync(resolve(root, "scripts", "test-anticodex-model-routing.ps1"), "utf8");
+
+  assert.match(routing, /\/anticodex\/models\/refresh/);
+  assert.match(routing, /\/models/);
+  assert.match(routing, /\/v1\/responses/);
+  assert.match(routing, /\/anticodex\/model-routes/);
+  assert.match(routing, /\[switch\]\$SkipRequests/);
+  assert.match(routing, /\/anticodex\/diagnostics/);
+  assert.match(routing, /diagnostics model count mismatch/);
+  assert.match(routing, /\[int\]\$TimeoutSec = 20/);
+  assert.match(routing, /Start-Sleep -Milliseconds/);
+  assert.match(routing, /attempt \$attempt of \$MaxAttempts/);
+  assert.match(routing, /\$modelRecords = if/);
+  assert.match(routing, /display_name/);
+  assert.match(routing, /\$diagnosticDisplayByModel = Get-ModelDisplayMap/);
+  assert.match(routing, /\$models = @\(\$models\)/);
+  assert.match(routing, /models request failed/);
+  assert.match(routing, /display name is missing numeric model\/version detail/);
+  assert.match(routing, /skippedRequest/);
+  assert.match(routing, /MODEL_ROUTE_/);
+  assert.match(routing, /resolved model mismatch/);
+  assert.match(routing, /third-party model routing missing provider protocol/);
+  assert.match(routing, /third-party provider model is present in \/models/);
+  assert.match(routing, /third-party route transport mismatch/);
+  assert.match(routing, /providerProtocol/);
+  assert.match(routing, /providerModel/);
+  assert.match(routing, /toolBridge/);
+  assert.match(routing, /internalModel/);
+  assert.match(routing, /cascadeId/);
+  assert.match(routing, /latest-\$Name\.json/);
+  assert.match(routing, /model-routing/);
+  assert.match(routing, /Proxy\s*=\s*\$null/);
+  assert.match(routing, /\[Text\.Encoding\]::UTF8\.GetBytes/);
+
+  assert.doesNotMatch(routing, /Stop-Process/);
+  assert.doesNotMatch(routing, /Antigravity\.exe/);
+  assert.doesNotMatch(routing, /Codex\.exe/);
+  assert.doesNotMatch(routing, /chatgpt\.com/);
+  assert.doesNotMatch(routing, /auth\/login/);
+});
+
+test("Anti-Codex guards exact native thinking budgets after Codex sync", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-model-thinking.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+
+  assert.match(verifier, /gemini-3\.5-flash-low/);
+  assert.match(verifier, /Gemini 3\.5 Flash \(Low\)/);
+  assert.match(verifier, /thinking_budget/);
+  assert.match(verifier, /min_thinking_budget/);
+  assert.match(verifier, /claude-sonnet-4-6[\s\S]*min_thinking_budget = 32/);
+  assert.match(verifier, /gpt-oss-120b-medium[\s\S]*min_thinking_budget = 32/);
+  assert.match(verifier, /supports_thinking/);
+  assert.match(verifier, /latest-model-thinking\.json/);
+  assert.match(verifier, /Proxy\s*=\s*\$null/);
+  assert.match(verifier, /UTF8Encoding\(\$false\)/);
+  assert.doesNotMatch(verifier, /\/v1\/responses/);
+  assert.doesNotMatch(verifier, /Stop-Process/);
+
+  assert.match(overall, /test-anticodex-model-thinking\.ps1/);
+  assert.match(overall, /Model thinking budget verification/);
+  assert.match(readiness, /test-anticodex-model-thinking\.ps1/);
+});
+
+test("shared launcher handles unexpected exit of main process with bounded auto-restart and logs lifecycle events", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  // Verify lifecycle logging function and log path
+  assert.match(launcher, /function Write-LifecycleLog/);
+  assert.match(launcher, /deepcodex-lifecycle\.log/);
+
+  // Verify log messages for all specified events
+  assert.match(launcher, /"Main process started \(PID: [^"]*\)\."/);
+  assert.match(launcher, /"Auto-restart succeeded \(PID: [^"]*\)\."/);
+  assert.match(launcher, /"Normal window close detected\."/);
+  assert.match(launcher, /"Main process exited unexpectedly \(ExitCode: [^"]*\)\."/);
+  assert.match(launcher, /"Attempting auto-restart \(Attempt [^"]* of [^"]*\) after [^"]* seconds backoff\."/);
+  assert.match(launcher, /"Auto-restart failed: max retry limit \([^"]*\) reached\."/);
+
+  // Verify bounded retry limits and backoff configuration
+  assert.match(launcher, /\$MAX_RESTARTS\s*=\s*\d+/);
+  assert.match(launcher, /\$RESTART_BACKOFF_SECONDS\s*=\s*\d+/);
+  assert.match(launcher, /\$RESTART_RESET_SECONDS\s*=\s*\d+/);
+  assert.match(launcher, /restart counter reset after stable runtime/i);
+
+  const windowReadyBlock = launcher.match(/if \(\$mainWindowHandle -ne \[IntPtr\]::Zero\) \{[\s\S]*?\n\s{8}\} else \{/)?.[0];
+  assert.ok(windowReadyBlock, "missing main-window ready block");
+  assert.match(windowReadyBlock, /Auto-restart succeeded/);
+  assert.match(launcher, /ExitCode\s*-eq\s*0/);
+  assert.match(launcher, /Window disappeared before a non-zero process exit/i);
+
+  // Verify that watchdog runs inside the monitor loop
+  const monitorLoop = launcher.match(/while \(-not \$codexProc\.HasExited\) \{[\s\S]*?\n\s{4,12}\}/)?.[0];
+  assert.ok(monitorLoop, "missing monitor loop");
+  assert.match(monitorLoop, /Ensure-TranslatorRunning/);
+});
+
+test("Anti-Codex selects third-party upstream without changing its persistent state root", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const manager = readFileSync(resolve(root, "scripts", "manage-anticodex.ps1"), "utf8");
+
+  assert.match(launcher, /anticodex-upstream-profile\.ps1/);
+  assert.match(launcher, /-Action GetRuntime/);
+  assert.match(launcher, /TRANSLATOR_UPSTREAM_MODE\s*=\s*"chat"/);
+  assert.match(launcher, /UPSTREAM_PROTOCOL/);
+  assert.match(launcher, /UPSTREAM_MODEL/);
+  assert.match(launcher, /UPSTREAM_API_KEY/);
+  assert.match(launcher, /if \(\$antiCodexUsesAntigravity\)/);
+  assert.match(launcher, /third-party API profile; Antigravity Desktop is not required/);
+  assert.match(launcher, /Test-AntiCodexTranslatorMatchesConfiguredUpstream/);
+  assert.match(launcher, /upstream profile could not be read; refusing to fall back to Antigravity/);
+  assert.doesNotMatch(launcher, /upstream profile could not be read; using Antigravity/);
+  assert.match(launcher, /DEEPCODEX_STATE_ROOT\s*=\s*Join-Path \$env:APPDATA "anticodex"/);
+  assert.doesNotMatch(launcher, /third-party[\s\S]{0,500}DEEPCODEX_STATE_ROOT\s*=/);
+
+  assert.match(sharedLauncher, /\$USES_ANTIGRAVITY_UPSTREAM/);
+  assert.match(sharedLauncher, /function Update-AntiCodexUpstreamEnvironment/);
+  assert.match(sharedLauncher, /refusing silent Antigravity fallback/);
+  assert.doesNotMatch(sharedLauncher, /upstream profile could not be read; using Antigravity/);
+  assert.match(sharedLauncher, /function Start-TranslatorProcess \{[\s\S]*?Update-AntiCodexUpstreamEnvironment/);
+  assert.match(sharedLauncher, /\$translatorWatchNext = \[DateTime\]::UtcNow\.AddSeconds\(5\)[\s\S]*?Update-AntiCodexUpstreamEnvironment/);
+  assert.match(sharedLauncher, /if \(\$USES_ANTIGRAVITY_UPSTREAM\)/);
+  assert.match(sharedLauncher, /elseif \(\$env:UPSTREAM_API_KEY\)/);
+  const antigravityWatchdog = sharedLauncher.match(/function Ensure-AntigravityDesktopRunning \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(antigravityWatchdog, "missing Antigravity watchdog");
+  assert.match(antigravityWatchdog, /if \(-not \$USES_ANTIGRAVITY_UPSTREAM\) \{ return \$true \}/);
+  assert.match(sharedLauncher, /if \(\$USES_ANTIGRAVITY_UPSTREAM -and \[DateTime\]::UtcNow -ge \$antigravityCatalogWatchNext\)/);
+  assert.match(manager, /anticodex-upstream-profile\.ps1/);
+  assert.match(manager, /ANTICODEX_ACTIVE_UPSTREAM/);
+});
+
+test("embedded Manager exposes secure third-party API testing and switching", () => {
+  const inject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const profile = readFileSync(resolve(root, "scripts", "anticodex-upstream-profile.ps1"), "utf8");
+
+  assert.match(inject, /\["upstreamConfig", "\\u914d\\u7f6e\\u7b2c\\u4e09\\u65b9 API"\]/);
+  assert.match(inject, /async function showUpstreamConfig/);
+  assert.doesNotMatch(inject, /\uFFFD/);
+  assert.match(inject, /showUpstreamConfig/);
+  assert.match(inject, /\/anticodex\/upstream-test/);
+  assert.match(inject, /\/anticodex\/upstream-apply/);
+  assert.match(inject, /\/anticodex\/upstream-test/);
+  assert.match(inject, /\/anticodex\/upstream-test[\s\S]*?x-anticodex-manager-token/);
+  assert.match(inject, /\/anticodex\/upstream-profile/);
+  assert.match(inject, /\/anticodex\/upstream-apply/);
+  assert.match(inject, /applyAndWait/);
+  assert.match(inject, /invalidateConnectionTest/);
+  assert.match(inject, /lastStages = \[\]/);
+  assert.match(inject, /field\.addEventListener\("input", invalidateConnectionTest\)/);
+  assert.match(inject, /UPSTREAM_TEST_TIMEOUT_MS\s*=\s*60000/);
+  assert.match(inject, /retryCandidates:\s*false/);
+  assert.match(inject, /allowSnapshotFallback/);
+  assert.match(inject, /if \(allowSnapshotFallback && snapshotFallback\)/);
+  assert.match(inject, /function upstreamConfigFingerprint/);
+  assert.match(inject, /testedFingerprint/);
+  assert.match(inject, /setUpstreamConfigBusy/);
+  assert.match(inject, /upstreamConfigOperationInFlight/);
+  assert.match(inject, /showUpstreamConfig/);
+  assert.match(inject, /safeJson\("\/anticodex\/upstream-profile"\)/);
+  assert.match(inject, /upstreamCapabilitySummary/);
+  assert.match(inject, /\\u80fd\\u529b\\u8bc1\\u636e/);
+  assert.match(inject, /Antigravity/);
+  assert.match(inject, /\p{Script=Han}/u);
+
+  assert.match(server, /UPSTREAM_PROTOCOL/);
+  assert.match(server, /upstreamProfile: currentUpstreamHealthProfile\(\)/);
+  assert.match(server, /capabilitySummary: summarizeConnectionStages/);
+  assert.match(server, /buildUpstreamChatRequest/);
+  assert.match(server, /convertUpstreamChatResponse/);
+  assert.match(server, /testUpstreamConnection/);
+  assert.match(server, /url\.pathname === "\/anticodex\/upstream-test"/);
+  assert.match(server, /url\.pathname === "\/anticodex\/upstream-test"[\s\S]*?validateManagerActionRequest\(req\)/);
+  assert.match(server, /url\.pathname === "\/anticodex\/upstream-profile"/);
+  assert.match(server, /Array\.isArray\(stage\?\.models\)[\s\S]*?models:\s*stage\.models\.map/);
+  assert.match(server, /providerModels:\s*providerModelIdsFromConnectionStages\(stages,\s*body\.model\)/);
+  assert.match(server, /url\.pathname === "\/anticodex\/upstream-apply"/);
+  assert.match(server, /apply-anticodex-upstream\.ps1/);
+  assert.match(server, /ANTICODEX_UPSTREAM_API_KEY_INPUT/);
+
+  assert.match(profile, /ProtectedData\]::Protect/);
+  assert.match(profile, /DataProtectionScope\]::CurrentUser/);
+  assert.match(profile, /WriteAllText\(\$ProfilePath/);
+  assert.doesNotMatch(profile, /apiKey\s*=\s*\$ApiKey/);
+
+  const apply = readFileSync(resolve(root, "scripts", "apply-anticodex-upstream.ps1"), "utf8");
+  assert.match(apply, /start-deepcodex\.ps1/);
+  assert.match(apply, /-TranslatorOnly/);
+  assert.match(apply, /WindowStyle\s*=\s*"Hidden"/);
+  assert.doesNotMatch(apply, /Stop-Process|Codex\.exe|Anti-Codex\.exe/);
+});

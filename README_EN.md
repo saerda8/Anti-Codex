@@ -1,123 +1,40 @@
-<p align="center">
-  <img src="assets/deepcodex-readme-banner.png" alt="deepcodex banner">
-</p>
+# Anti-Codex
 
-<p align="center">
-  <strong>macOS available</strong> · <strong>Windows beta</strong> · <strong>DeepSeek API key</strong> · <strong>Non-commercial use only</strong>
-</p>
+Anti-Codex is an independently runnable copy of Codex Desktop powered by the account currently signed in to Antigravity Desktop. It does not require ChatGPT login or a DeepSeek API key.
 
-<p align="center">
-  <a href="README.md">中文 README</a>
-</p>
+It preserves the Codex UI and core workflow while keeping its executable, taskbar identity, state, and configuration isolated from the original Codex installation. Both applications can run at the same time.
 
----
+## Capabilities
 
-## In One Sentence
+- Exact account-backed Antigravity model names and reasoning levels
+- Streaming, cancellation, long context, and compaction resume
+- Codex function/custom tools, native same-cascade MCP continuation, Skills, and local plugin snapshots
+- Independent state with no writes to the original Codex configuration
+- Guarded synchronization after Codex updates, with candidate validation and rollback
+- Installed checks for models, UI, account/proxy readiness, sync, diagnostics, and stability
 
-**deepcodex is not a new DeepSeek IDE. It is a local patch that gives the official Codex Desktop a separate, dual-runnable DeepSeek model route.**
+## Requirements
 
-It does not rewrite Codex Desktop, and it does not try to build a separate plugin ecosystem. It keeps the Codex Desktop runtime, UI, workflows, project experience, and as much of the plugin / skill ecosystem as possible, while using a local translator to route model traffic to DeepSeek.
+1. Official Codex Desktop for Windows
+2. Antigravity Desktop with a signed-in account
+3. Any proxy Antigravity needs to reach Google services
 
-Highlights:
+Local Anti-Codex-to-Antigravity traffic bypasses the proxy. Antigravity uses its own network settings for external model traffic.
 
-- **Dual app setup**: run official Codex and deepcodex side by side
-- **Independent app entry and icon**: use DeepCodex without overwriting the official Codex app
-- **Simple first setup**: enter a DeepSeek API key once, then launch normally
-- **Compatibility layer**: Responses ↔ Chat translation, tool calls, DSML, compaction, `web_search`, and `web_fetch`
-- **Plugin / skill compatibility where possible**: reuse Codex's shared plugin, skill, MCP, and local tool ecosystem
-- **Codex workflow preserved**: keep the familiar project, tool, and development flow
+## Install And Update
 
-Contact / updates: Douyin or WeChat Channels **@娄老师说的对**
+Run `install-windows.bat` for the first installation. Afterwards, use the Start Menu entry `Anti-Codex > Sync Anti-Codex with Codex` when the official Codex app updates.
 
-## Stability (important)
+The sync flow builds and validates a candidate first, retains a rollback host, and does not replace the active host when compatibility checks fail.
 
-**Core functionality (the model channel) is stable.** DeepSeek connectivity, Responses ↔ Chat translation, tool calls (function / custom / MCP), DSML pseudo-tool calls, context compaction & prompt-cache stabilization, local backend projection, and `web_search` / `web_fetch` all run in a local network-layer translator and do not depend on Codex internals.
+## Account Switching
 
-**The UI layer may break after a Codex update.** The icon, settings entry, UI language, appearance panel, and app / window name are applied by string-patching Codex Desktop's `app.asar`. Every Codex update can change its minified code and make a patch anchor stop matching, breaking that UI feature. **This only affects UI appearance, not the core model channel** (requests still go to DeepSeek via the translator).
+Use `Anti-Codex > Manage Anti-Codex > Switch Antigravity Account`. Switch the account in Antigravity Desktop, then continue the guided check. Anti-Codex refreshes the anonymized account fingerprint and model catalog and verifies the installation.
 
-**If the UI breaks — let an agent fix it via the bundled skill.** When you hit a UI problem (wrong icon, settings won't open, stuck in English, first-setup failure), hand the matching skill to your agent (Codex / Claude); it follows a diagnose → re-anchor → rebuild → verify workflow:
+## Explicit Boundaries
 
-- Windows: `skills/deepcodex-win-repair/SKILL.md`
-- macOS: `skills/deepcodex-mac-repair/SKILL.md`
+- Model Responses WebSocket currently uses an explicit HTTP/SSE fallback.
+- Remote connectors requiring ChatGPT authorization remain disabled.
+- Account changes and external proxy toggles require user interaction in their respective applications.
 
----
-
-## Download
-
-Latest release:
-
-[deepcodex v0.1.0-preview](https://github.com/louchi1984-coder/deepcodex/releases/tag/v0.1.0-preview)
-
-| Platform | Status | Download |
-| --- | --- | --- |
-| macOS | Available | `deepcodex-macos-2026.06.04-macos12-fix.dmg` |
-| Windows | beta / preview | `deepcodex-windows-v0.1.38-taskbar-icon-fix.zip` |
-
-Users on older builds are encouraged to update. The current build includes fixes for restored-context cache misses, context compaction, DSML pseudo tool calls, `web_search` / `web_fetch` tool result handling, fake tool narration guards, macOS translator process cleanup, Windows ASAR patching, Windows appearance settings, Windows translator startup cleanup, permission / sandbox state initialization, and several DeepSeek compatibility issues.
-
----
-
-## Quick Start
-
-Requirement: install the official **Codex Desktop** first.
-
-deepcodex does not bundle official Codex Desktop and does not modify the official Codex app itself.
-
-### macOS
-
-1. Download `deepcodex-macos-2026.06.04-macos12-fix.dmg`
-2. Open the DMG and drag `DeepCodex.app` into `Applications`
-3. Open `DeepCodex`
-4. Enter your DeepSeek API key; once the connection test passes, it is saved automatically
-
-### Windows beta
-
-1. Download `deepcodex-windows-v0.1.38-taskbar-icon-fix.zip`
-2. Unzip it
-3. Double-click `install-windows.bat`
-4. Launch `DeepCodex` from the desktop shortcut or Start Menu
-5. Enter your DeepSeek API key
-
-The first setup is intentionally minimal: no manual terminal setup, and no extra service the user has to start by hand.
-
----
-
-## What Works Today
-
-- Independent app entry and icon: `DeepCodex.app` / `DeepCodex.exe`
-- Side-by-side use with official Codex
-- First-run DeepSeek API key setup
-- Local translator: Responses ↔ Chat protocol adaptation
-- DeepSeek tool-call compatibility for function / custom / namespace tools
-- DSML pseudo tool-call handling so pseudo tool markup is not exposed directly to users
-- Local fallback tools for `web_search` and `web_fetch`
-- Context compaction continuation fixes
-- Shared Codex plugin / skill / MCP configuration where possible
-
-For most text, code, and project-editing workflows, the macOS build is already usable. The Windows build is currently beta / preview, but the main first-run setup, independent launcher, Chinese UI, plugin entry, basic settings pages, translator tool chain, and process cleanup flows have been covered.
-
----
-
-## Current Boundaries
-
-deepcodex is currently **not**:
-
-- A fully independent product separate from the Codex host ecosystem
-- A rewritten plugin platform
-- A complete replacement for every OpenAI-hosted advanced capability
-
-The following capabilities are **not guaranteed** on the DeepSeek route:
-
-- `computer-use`
-- Gmail / Google Drive / Slack connector app tools
-- Plugin features that rely on OpenAI account authorization, hosted tool injection, or advanced OpenAI-side routing
-
-If something works in official Codex with the OpenAI route but not in deepcodex with the DeepSeek route, treat it as a current product boundary first, not a normal user setup error.
-
----
-
-## License / Use Restriction
-
-This project is for personal, research, and non-commercial use only.
-
-Commercial use, resale, hosted services, paid integrations, and commercial redistribution are not allowed.
+This project was adapted from `deepcodex`, so some historical source filenames remain. The default installer and runtime product are Anti-Codex.

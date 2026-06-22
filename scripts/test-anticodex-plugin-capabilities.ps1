@@ -1,0 +1,326 @@
+﻿[CmdletBinding()]
+param(
+    [string]$BaseUrl = "",
+    [string]$StateRoot = $(if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }),
+    [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
+    [int]$TimeoutSec = 8
+)
+
+$ErrorActionPreference = "Stop"
+
+if (-not $BaseUrl) {
+    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+}
+
+$failures = New-Object System.Collections.Generic.List[string]
+
+function Add-Failure {
+    param([string]$Message)
+    $failures.Add($Message) | Out-Null
+}
+
+function Invoke-LocalJsonWithRetry {
+    param(
+        [string]$Path,
+        [ValidateSet("GET", "POST")]
+        [string]$Method = "GET",
+        [object]$Body = $null,
+        [int]$MaxAttempts = 2
+    )
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            $args = @{
+                Uri = "$BaseUrl$Path"
+                Method = $Method
+                Proxy = $null
+                TimeoutSec = $TimeoutSec
+            }
+            if ($null -ne $Body) {
+                $args.ContentType = "application/json"
+                $args.Body = ($Body | ConvertTo-Json -Depth 20 -Compress)
+            }
+            return Invoke-RestMethod @args
+        } catch {
+            $lastError = $_.Exception.Message
+            if ($attempt -ge $MaxAttempts) {
+                throw "$Path request failed on attempt $attempt of $MaxAttempts`: $lastError"
+            }
+            Start-Sleep -Milliseconds ([Math]::Min(1000, 250 * $attempt))
+        }
+    }
+
+    throw "$Path request failed after $MaxAttempts attempts: $lastError"
+}
+
+function Invoke-LocalJson {
+    param(
+        [string]$Path,
+        [string]$Method = "GET",
+        [object]$Body = $null
+    )
+
+    return Invoke-LocalJsonWithRetry -Path $Path -Method $Method -Body $Body -MaxAttempts 2
+}
+
+function Count-Items {
+    param($Value)
+    if ($null -eq $Value) { return 0 }
+    return @($Value).Count
+}
+
+function Get-ArrayItems {
+    param($Value, [string]$PropertyName = "")
+    if ($null -eq $Value) { return @() }
+    if ($PropertyName -and (Has-Property $Value $PropertyName)) { return @($Value.$PropertyName) }
+    if ((Has-Property $Value "value") -and ($Value.value -is [array])) { return @($Value.value) }
+    return @($Value)
+}
+
+function Has-Property {
+    param($Value, [string]$Name)
+    return $null -ne $Value -and $Value.PSObject.Properties.Name -contains $Name
+}
+
+function Get-PluginId {
+    param($PluginRecord)
+    if (Has-Property $PluginRecord "id") { return [string]$PluginRecord.id }
+    if ((Has-Property $PluginRecord "plugin") -and (Has-Property $PluginRecord.plugin "id")) { return [string]$PluginRecord.plugin.id }
+    if ((Has-Property $PluginRecord "summary") -and (Has-Property $PluginRecord.summary "name")) { return [string]$PluginRecord.summary.name }
+    return ""
+}
+
+$health = $null
+$healthMode = "unknown"
+$healthProtocol = $null
+$healthModel = $null
+$installedPlugins = @()
+$pluginList = @()
+$connectors = @()
+$whamTools = @()
+$connectorCachePath = Join-Path $CodexHome "cache\codex_app_directory"
+$appToolsCachePath = Join-Path $CodexHome "cache\codex_apps_tools"
+$connectorCacheSmoke = [pscustomobject]@{
+    checked = $false
+    cacheExists = $false
+    fileCount = 0
+    sampleReadable = $false
+    sampleConnectorCount = 0
+}
+$appToolsCacheSmoke = [pscustomobject]@{
+    checked = $false
+    cacheExists = $false
+    fileCount = 0
+    sampleReadable = $false
+    sampleToolCount = 0
+}
+
+function Test-ProjectionCache {
+    param(
+        [string]$Path,
+        [string]$ArrayProperty
+    )
+    $exists = Test-Path -LiteralPath $Path -PathType Container
+    $files = if ($exists) { @(Get-ChildItem -LiteralPath $Path -File -Filter "*.json" -ErrorAction SilentlyContinue) } else { @() }
+    $dataFiles = @($files | Where-Object {
+        $_.Name -ne ".anticodex-source-manifest.json" -and $_.Length -gt 0
+    })
+    $sampleReadable = $false
+    $sampleCount = 0
+    if ($dataFiles.Count -gt 0) {
+        try {
+            $raw = Get-Content -LiteralPath $dataFiles[0].FullName -Raw -ErrorAction Stop
+            $sampleReadable = $raw -match ('"' + [regex]::Escape($ArrayProperty) + '"\s*:')
+            if ($sampleReadable) {
+                $sampleCount = ([regex]::Matches($raw, '"id"\s*:')).Count
+            }
+        } catch {
+            $sampleReadable = $false
+        }
+    }
+    return [pscustomobject]@{
+        checked = $true
+        cacheExists = $exists
+        fileCount = $files.Count
+        dataFileCount = $dataFiles.Count
+        sampleReadable = $sampleReadable
+        sampleCount = $sampleCount
+    }
+}
+
+try {
+    $health = Invoke-LocalJson "/health"
+    if (-not $health.ok) { Add-Failure "health ok=false" }
+
+    $hasUpstreamProfile = (Has-Property $health "upstreamProfile") -and $null -ne $health.upstreamProfile
+    if ($hasUpstreamProfile) {
+        $healthMode = if (Has-Property $health.upstreamProfile "mode") { [string]$health.upstreamProfile.mode } else { "unknown" }
+        $healthProtocol = if (Has-Property $health.upstreamProfile "protocol") { [string]$health.upstreamProfile.protocol } else { $null }
+        $healthModel = if (Has-Property $health.upstreamProfile "model") { [string]$health.upstreamProfile.model } else { $null }
+    } elseif (Has-Property $health "mode") {
+        $healthMode = [string]$health.mode
+    } elseif ($health.upstream -eq "antigravity-desktop") {
+        $healthMode = "antigravity"
+    }
+
+    if ($healthMode -eq "third-party") {
+        if (-not $healthProtocol) { Add-Failure "third-party upstream missing protocol" }
+        if (-not $healthModel) { Add-Failure "third-party upstream missing model" }
+    } elseif ($healthMode -eq "antigravity") {
+        if ($health.upstream -ne "antigravity-desktop") { Add-Failure "Antigravity mode but upstream is not antigravity-desktop: $($health.upstream)" }
+        if ([int]$health.modelCount -lt 1) { Add-Failure "Antigravity model catalog is not ready: $($health.accountMessage)" }
+    } else {
+        Add-Failure "unknown upstream mode (upstream=$($health.upstream), upstreamProfile.mode=$healthMode)"
+    }
+} catch {
+    Add-Failure "health request failed: $($_.Exception.Message)"
+}
+
+try {
+    $installedPlugins = Get-ArrayItems (Invoke-LocalJson "/backend-api/ps/plugins/installed")
+    if ($installedPlugins.Count -lt 1) { Add-Failure "no installed plugins projected" }
+} catch {
+    Add-Failure "installed plugins endpoint failed: $($_.Exception.Message)"
+}
+
+try {
+    $pluginsPayload = Invoke-LocalJson "/backend-api/plugins/list"
+    $pluginList = Get-ArrayItems $pluginsPayload "plugins"
+    if ($pluginList.Count -lt 1) { Add-Failure "plugin list is empty" }
+} catch {
+    Add-Failure "plugin list endpoint failed: $($_.Exception.Message)"
+}
+
+try {
+    $connectorPayload = Invoke-LocalJson "/backend-api/aip/connectors"
+    $connectors = Get-ArrayItems $connectorPayload "connectors"
+    if ($connectors.Count -lt 1) { Add-Failure "connector directory is empty" }
+} catch {
+    Add-Failure "connectors endpoint failed: $($_.Exception.Message)"
+}
+
+try {
+    $whamPayload = Invoke-LocalJson "/backend-api/wham/apps" "POST" @{}
+    $whamTools = Get-ArrayItems $whamPayload "tools"
+} catch {
+    Add-Failure "app tools endpoint failed: $($_.Exception.Message)"
+}
+
+$pluginsWithSkills = @($pluginList | Where-Object {
+    (Has-Property $_ "summary") -and (Has-Property $_.summary "skills")
+})
+$pluginsWithApps = @($installedPlugins | Where-Object {
+    (Has-Property $_ "apps") -and (Count-Items $_.apps) -gt 0
+})
+$pluginsWithMcpServers = @($pluginList | Where-Object {
+    (Has-Property $_ "summary") -and (Has-Property $_.summary "mcpServers")
+})
+$enabledConnectors = @($connectors | Where-Object { -not (Has-Property $_ "isEnabled") -or $_.isEnabled -ne $false })
+$accessibleConnectors = @($connectors | Where-Object { (Has-Property $_ "isAccessible") -and $_.isAccessible -eq $true })
+$accessibleConnectorIds = @($accessibleConnectors | Where-Object {
+    (Has-Property $_ "id") -and -not [string]::IsNullOrWhiteSpace([string]$_.id)
+} | ForEach-Object { [string]$_.id })
+$unattributedAppTools = @($whamTools | Where-Object { -not (Has-Property $_ "connector_id") -or [string]::IsNullOrWhiteSpace([string]$_.connector_id) })
+$unauthorizedAppTools = @($whamTools | Where-Object {
+    (Has-Property $_ "connector_id") -and -not [string]::IsNullOrWhiteSpace([string]$_.connector_id) -and ($accessibleConnectorIds -notcontains [string]$_.connector_id)
+})
+$connectorCacheProbe = Test-ProjectionCache $connectorCachePath "connectors"
+$appToolsCacheProbe = Test-ProjectionCache $appToolsCachePath "tools"
+$connectorCacheSmoke = [pscustomobject]@{
+    checked = $connectorCacheProbe.checked
+    cacheExists = $connectorCacheProbe.cacheExists
+    fileCount = $connectorCacheProbe.fileCount
+    sampleReadable = $connectorCacheProbe.sampleReadable
+    sampleConnectorCount = $connectorCacheProbe.sampleCount
+}
+$appToolsCacheSmoke = [pscustomobject]@{
+    checked = $appToolsCacheProbe.checked
+    cacheExists = $appToolsCacheProbe.cacheExists
+    fileCount = $appToolsCacheProbe.fileCount
+    sampleReadable = $appToolsCacheProbe.sampleReadable
+    sampleToolCount = $appToolsCacheProbe.sampleCount
+}
+
+if ($connectors.Count -gt 0 -and -not $connectorCacheSmoke.sampleReadable) {
+    Add-Failure "connector endpoint has entries but local connector cache sample is not readable"
+}
+if ($whamTools.Count -gt 0 -and -not $appToolsCacheSmoke.sampleReadable) {
+    Add-Failure "app tools endpoint has tools but local app-tools cache sample is not readable"
+}
+
+# appToolCount=0 is expected when no connectors are marked isAccessible:
+# the /backend-api/wham/apps endpoint filters tools to accessible connector IDs only,
+# because exposing tools for unlinked/unauthorized connectors would create fake capability.
+# See docs/audits/app-tools-gap.md for the full root-cause analysis.
+if ($accessibleConnectors.Count -gt 0 -and $whamTools.Count -eq 0) {
+    Add-Failure "accessible connectors exist ($($accessibleConnectors.Count)) but no app tools exposed; possible tool-cache mismatch"
+}
+if ($accessibleConnectors.Count -eq 0 -and $whamTools.Count -gt 0) {
+    Add-Failure "app tools exposed without any accessible connector; refusing fake callable capability"
+}
+if ($unattributedAppTools.Count -gt 0) {
+    Add-Failure "app tools exposed without connector_id attribution; refusing fake callable capability"
+}
+if ($unauthorizedAppTools.Count -gt 0) {
+    Add-Failure "app tools exposed for connector_id outside accessible connectors; refusing fake callable capability"
+}
+
+$capabilityState = if ($failures.Count -gt 0) {
+    "degraded_verification_failed"
+} elseif ($installedPlugins.Count -eq 0 -or $pluginList.Count -eq 0 -or $connectors.Count -eq 0) {
+    "degraded_missing_local_snapshot"
+} elseif ($accessibleConnectors.Count -eq 0) {
+    "metadata_only_no_accessible_connectors"
+} elseif ($whamTools.Count -eq 0) {
+    "degraded_no_tools_for_accessible_connectors"
+} else {
+    "callable_tools_available"
+}
+$capabilityDegraded = ($capabilityState -ne "callable_tools_available")
+
+$result = [pscustomobject]@{
+    ok = ($failures.Count -eq 0)
+    failures = $failures.ToArray()
+    baseUrl = $BaseUrl
+    health = [pscustomobject]@{
+        ok = if ($health) { $health.ok } else { $false }
+        upstream = if ($health) { $health.upstream } else { $null }
+        accountReady = if ($health) { $health.accountReady } else { $false }
+        accountState = if ($health) { $health.accountState } else { $null }
+        modelCount = if ($health) { $health.modelCount } else { 0 }
+        mode = $healthMode
+        protocol = $healthProtocol
+        model = $healthModel
+    }
+    capabilities = [pscustomobject]@{
+        snapshotSource = "anticodex-local-copy"
+        nativeCodexWriteback = $false
+        capabilityState = $capabilityState
+        degraded = $capabilityDegraded
+        installedPluginCount = $installedPlugins.Count
+        pluginListCount = $pluginList.Count
+        pluginsWithSkills = $pluginsWithSkills.Count
+        pluginsWithApps = $pluginsWithApps.Count
+        pluginsWithMcpServers = $pluginsWithMcpServers.Count
+        connectorCount = $connectors.Count
+        enabledConnectorCount = $enabledConnectors.Count
+        accessibleConnectorCount = $accessibleConnectors.Count
+        appToolCount = $whamTools.Count
+        unattributedAppToolCount = $unattributedAppTools.Count
+        unauthorizedAppToolCount = $unauthorizedAppTools.Count
+        appToolsNote = if ($accessibleConnectors.Count -eq 0) { "expected 0: no accessible connectors linked" } else { "" }
+        smoke = [pscustomobject]@{
+            checked = $true
+            endpointProjectionReadable = ($installedPlugins.Count -gt 0 -and $pluginList.Count -gt 0 -and $connectors.Count -gt 0)
+            connectorCache = $connectorCacheSmoke
+            appToolsCache = $appToolsCacheSmoke
+            callableState = if ($accessibleConnectors.Count -gt 0 -and $whamTools.Count -gt 0) { "callable_tools_available" } elseif ($accessibleConnectors.Count -eq 0) { "skipped_no_accessible_connectors" } else { "no_tools_for_accessible_connectors" }
+        }
+        samplePluginIds = @($installedPlugins | Select-Object -First 10 | ForEach-Object { Get-PluginId $_ })
+        sampleConnectorNames = @($connectors | Select-Object -First 10 | ForEach-Object { [string]$_.name })
+    }
+}
+
+$result | ConvertTo-Json -Depth 8 -Compress
+if ($failures.Count -gt 0) { exit 1 }

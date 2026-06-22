@@ -11,6 +11,11 @@ $INJECTOR = Join-Path $ROOT "scripts\deepcodex-cdp-inject.mjs"
 $UNLOCK_SCRIPT = Join-Path $ROOT "scripts\deepcodex-plugin-unlock-inject.js"
 $START_SCRIPT = Join-Path $ROOT "scripts\start-deepcodex.ps1"
 
+if ($env:ANTICODEX_UNSAFE_PLUGIN_UNLOCK -ne "1") {
+    Write-Error "Plugin UI unlock is an unsafe debug-only path and is disabled. Set ANTICODEX_UNSAFE_PLUGIN_UNLOCK=1 only for manual debugging; normal Anti-Codex plugin support must use local projection instead."
+    exit 2
+}
+
 function Test-PortOpen([int]$Port) {
     try {
         $client = New-Object Net.Sockets.TcpClient

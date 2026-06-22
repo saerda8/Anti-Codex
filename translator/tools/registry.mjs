@@ -160,13 +160,35 @@ export async function executeInternalTool(name, args) {
         .filter(tool => tool.definition.function.name === name)
         .sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
+    let lastFailure = null;
     for (const tool of candidates) {
-        const result = await tool.execute(args);
-        try {
-            const parsed = JSON.parse(result);
-            if (parsed?.ok === false) continue;
-        } catch {}
-        return result;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            let result;
+            try {
+                result = await tool.execute(args);
+            } catch (error) {
+                lastFailure = { ok: false, error: error?.message || String(error) };
+                continue;
+            }
+            try {
+                const parsed = JSON.parse(result);
+                if (parsed?.ok === false) {
+                    lastFailure = parsed;
+                    continue;
+                }
+            } catch {}
+            return result;
+        }
+    }
+
+    if (candidates.length > 0 && lastFailure) {
+        return JSON.stringify({
+            ...lastFailure,
+            ok: false,
+            tool: name,
+            user_visible_guidance: lastFailure.user_visible_guidance
+                || "Search/fetch failed temporarily. Retry once or explain the concrete failure.",
+        }, null, 2);
     }
 
     return JSON.stringify({

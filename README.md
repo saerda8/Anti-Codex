@@ -1,384 +1,79 @@
-<p align="center">
-  <img src="assets/deepcodex-readme-banner.png" alt="deepcodex banner">
-</p>
-<p align="center">
-  <strong>macOS 可用</strong> · <strong>Windows beta</strong> · <strong>DeepSeek API key</strong> · <strong>非商业使用</strong>
-</p>
-<p align="center">
-  <a href="README_EN.md">English README</a>
-</p>
+# Anti-Codex
 
----
+Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作流沿用 Codex，模型请求使用当前已登录的 Antigravity Desktop 账号，不需要 ChatGPT 登录，也不使用 DeepSeek API Key。
 
-## 一句话
+它不会修改原生 Codex。两者有独立的程序、任务栏名称、运行状态和本地数据，可以同时运行。
 
-**deepcodex 不是重写一个 DeepSeek IDE，而是给官方 Codex Desktop 加一条可双开的 DeepSeek 模型通道。**
+## 当前能力
 
-它不是重写一个 IDE，也不是另起一套插件生态。  
-它做的是一个更克制、也更实用的事：在本机保留 Codex Desktop 的 runtime、UI 和工作流，同时用独立入口、独立图标和本地 translator，把模型请求转到 DeepSeek。
+- 独立的 `Anti-Codex.exe`、桌面入口、任务栏名称和窗口名称
+- 自动读取 Antigravity Desktop 当前账号可用的精确模型名称与推理档位
+- 支持模型切换、流式回复、取消任务、长上下文和上下文压缩恢复
+- 支持 Codex function/custom 工具、原生 MCP 同一会话续接、Skills 和本地插件快照
+- 支持中文跟随、网页搜索与网页读取
+- 独立保存 Anti-Codex 状态，不改写原生 Codex 配置
+- 检测原生 Codex 更新，并通过安全候选、兼容检查、回滚点完成同步
+- 提供账号/代理、模型、界面、同步、诊断和整体稳定性检查
 
-核心卖点：
+## 依赖
 
-- **可双开**：原版 Codex 和 deepcodex 可以并存使用
-- **独立入口 / 独立 logo**：像一个单独的 app，而不是改坏原版 Codex
-- **首次直接输入 DeepSeek API key**：连通后自动保存，不需要手动折腾终端
-- **近乎完整的兼容层**：Responses ↔ Chat、tool calls、DSML、compaction、web_search/web_fetch 都做了适配
-- **插件 / skill 尽量兼容**：共享 Codex 的插件、skill、MCP 配置和本地工具生态，不再自己造一套孤岛
-- **复用 Codex 的工作流**：继续用熟悉的项目、工具和开发节奏
+1. Windows 版官方 Codex Desktop
+2. Antigravity Desktop，并已登录可用账号
+3. Antigravity 访问 Google 服务所需的代理
 
-交流反馈：抖音 / 视频号 **@娄老师说的对**
-
-## 稳定性说明（重要）
-
-**核心功能（模型通道）稳定可用。** DeepSeek 接入、Responses ↔ Chat 协议翻译、tool calls（function / custom / MCP）、DSML 伪工具调用、上下文压缩与缓存稳定化、本地 backend 投影、`web_search` / `web_fetch` —— 这些都在本机网络层完成，不依赖 Codex 的内部结构，是稳定的。
-
-**UI 层可能随 Codex 更新出问题。** 图标、设置入口、界面语言、外观面板、应用 / 窗口名等，是通过给 Codex Desktop 的 `app.asar` 打字符串补丁实现的。Codex 每次更新都可能改动其内部（混淆）代码，导致某个补丁锚点失配、对应的 UI 功能失效。**这只影响 UI 表现，不影响核心模型功能**（请求照常通过 translator 走 DeepSeek）。
-
-**UI 出问题怎么办 —— 让 agent 读 skill 自己修。** 仓库内置了修复 skill；遇到 UI 问题（图标错、设置打不开、语言卡英文、首次设置失败等），把对应 skill 交给你的 agent（Codex / Claude），它会按 **诊断 → 重新锚定 → 重建 → 验证** 的步骤修复：
-
-- Windows：`skills/deepcodex-win-repair/SKILL.md`
-- macOS：`skills/deepcodex-mac-repair/SKILL.md`
-
-## 下载
-
-最新版本在 GitHub Release：
-
-[deepcodex v0.1.0-preview](https://github.com/louchi1984-coder/deepcodex/releases/tag/v0.1.0-preview)
-
-| 平台 | 状态 | 下载 |
-| --- | --- | --- |
-| macOS | 可用 | `deepcodex-macos-2026.06.04-macos12-fix.dmg` |
-| Windows | beta / preview | `deepcodex-windows-v0.1.38-taskbar-icon-fix.zip` |
-
-> 已安装旧版的用户建议直接更新。当前版本重点修复了上下文恢复导致的缓存命中异常、上下文压缩、DSML 伪工具调用、`web_search` / `web_fetch` 回灌、假工具叙述拦截误判、macOS 退出后 translator 进程残留、Windows ASAR 补丁、Windows 外观设置页、Windows 启动端口清理、权限 / 沙盒状态初始化，以及多处 DeepSeek 兼容层问题。
-
----
-
-## 快速开始
-
-前置要求：先安装官方 **Codex Desktop**。  
-deepcodex 不打包官方 Codex，也不修改官方 Codex app 本体。
-
-### macOS
-
-1. 下载 `deepcodex-macos-2026.06.04-macos12-fix.dmg`
-2. 打开 DMG，把 `DeepCodex.app` 拖到 `Applications`
-3. 打开 `DeepCodex`
-4. 输入 DeepSeek API key，连通后自动保存
-
-### Windows beta
-
-1. 下载 `deepcodex-windows-v0.1.38-taskbar-icon-fix.zip`
-2. 解压
-3. 双击 `install-windows.bat`
-4. 从桌面快捷方式或开始菜单打开 `DeepCodex`
-5. 输入 DeepSeek API key
-
-首次 setup 会尽量保持极简，不要求手动开终端，也不要求用户自己启动额外服务。
-
----
-
-## 现在能做什么
-
-- 独立入口和独立图标：`DeepCodex.app` / `DeepCodex.exe`
-- 支持和原版 Codex 双开，适合同时保留 OpenAI 路线和 DeepSeek 路线
-- 首次输入 DeepSeek API key，之后直接进入
-- 本地 translator：Responses ↔ Chat 协议翻译
-- DeepSeek 工具调用兼容：function/custom/namespace 工具映射
-- DSML 伪工具调用处理，避免直接吐给用户
-- 本地 `web_search` / `web_fetch` 降级工具
-- 上下文压缩续接修复，减少压缩后“什么都忘了”
-- 共享 Codex 插件 / skill / MCP 配置，常规插件入口和本地 skill 尽量沿用官方宿主生态
-
-对大多数文本、代码、项目修改类任务来说，macOS 版已经能稳定工作；Windows 版目前是 beta / preview，但已经覆盖首次 setup、独立入口、中文界面、插件入口、基础配置页、translator 工具链和退出清理等主流程。
-
----
-
-## 当前边界
-
-deepcodex 现在**不是**：
-
-- 一个完全独立于 Codex 宿主生态的新产品
-- 一套自己重做的插件平台
-- 一个保证支持所有 OpenAI 宿主高级能力的替代品
-
-尤其是下面这些能力，当前**不承诺**在 DeepSeek 路线可用：
-
-- `computer-use`
-- Gmail / Google Drive / Slack 这类 connector / app tools
-- 依赖 OpenAI 宿主授权、工具下发或高级路由的插件能力
-
-如果某项能力在原版 Codex + OpenAI 路线可用，但在 deepcodex + DeepSeek 路线不可用，优先把它视为**当前产品边界**，不是普通使用错误。
-
----
-
-## 使用限制
-
-本项目当前仅允许个人学习、研究和非商业使用。
-
-**禁止商用、转售、托管服务、付费集成或任何形式的商业化再分发。**
-
-Personal, research, and non-commercial use only.  
-Commercial use, resale, hosted services, paid integrations, and commercial redistribution are not allowed.
-
----
-
-## 教程 / 更新 / 反馈
-
-想看安装教程、使用演示、更新说明，或使用中遇到问题，可以到抖音 / 视频号关注并联系：
-
-```text
-@娄老师说的对
-```
-
----
-
-## 架构定位
-
-这版的核心其实只有三件事：
-
-1. **DeepSeek key**
-2. **本地 translator / 路由**
-3. **独立工作区与状态**
-
-插件安装策略也已经收口：
-
-- 插件仍然装在 **Codex 公共宿主** 里
-- deepcodex **直接复用 Codex 已安装插件**
-- 不再自己再造一套插件安装世界
-
-也就是说，日常心智可以很简单：
-
-- 在 Codex 里装插件
-- 在 deepcodex 里继续用
-- deepcodex 负责模型路由，不负责重写整套插件体系
-
----
-
-## 工作方式
-
-```text
-deepcodex app / DeepCodex.exe
-  -> local launcher
-  -> local translator (:8282)
-  -> DeepSeek API
-```
-
-运行时大致分三层：
-
-- **deepcodex app**
-  - 独立图标
-  - 独立首次 setup
-  - 独立启动入口
-
-- **translator**
-  - 把 Codex 的请求转成 DeepSeek 能接的格式
-  - 处理路由、兼容、基础工具规则
-
-- **Codex Desktop 宿主**
-  - 仍然依赖用户本机已有的 Codex Desktop
-  - 插件安装生态优先沿用 Codex
-
----
+Anti-Codex 到本机 Antigravity Desktop 的通信不走代理；Antigravity Desktop 访问外部模型服务时使用它自己的网络设置。
 
 ## 安装
 
-### macOS
-
-推荐使用 GitHub Release 里的 DMG：
-
-1. 下载 `deepcodex-macos-2026.06.04-macos12-fix.dmg`
-2. 打开 DMG
-3. 把 `DeepCodex.app` 拖到 `Applications`
-4. 从“应用程序”里打开 `DeepCodex`
-
-从源码安装时使用：
-
-```bash
-./scripts/install-deepcodex-app.sh
-```
-
-源码安装完成后会得到：
-
-```text
-/Applications/deepcodex.app
-```
-
-然后直接从“应用程序”里双击 `deepcodex` 即可。
-
-### Windows beta / preview
-
-前置依赖：请先安装官方 **Codex Desktop for Windows**。
-
-下载 `deepcodex-windows-v0.1.38-taskbar-icon-fix.zip`，解压后双击：
+首次安装双击：
 
 ```text
 install-windows.bat
 ```
 
-安装位置：
+安装完成后，桌面只保留一个 `Anti-Codex` 快捷方式。维护入口位于开始菜单的 `Anti-Codex` 文件夹。
+
+已安装后不要再次运行完整安装。需要跟随原生 Codex 更新时，使用：
 
 ```text
-%LOCALAPPDATA%\deepcodex
+开始菜单 > Anti-Codex > Sync Anti-Codex with Codex
 ```
 
-运行入口：
+同步会先构建并验证候选版本，保留上一版回滚点，失败时不会替换当前可用版本。
+
+## 账号切换
+
+打开：
 
 ```text
-%LOCALAPPDATA%\deepcodex\DeepCodex.exe
+开始菜单 > Anti-Codex > Manage Anti-Codex > Switch Antigravity Account
 ```
 
-安装后也会创建：
+在 Antigravity Desktop 中切换账号后，回到切换窗口继续。Anti-Codex 会重新读取账号指纹与模型列表，并执行安装状态检查。第一版允许切换账号时关闭并重新打开 Anti-Codex。
 
-- 桌面快捷方式：`DeepCodex.lnk`
-- 开始菜单快捷方式：`DeepCodex\DeepCodex.lnk`
+## 模型
 
-Windows 发布包不包含官方 Codex，也不包含 `codex-patched-app`。  
-安装时会从用户本机已安装的 Codex Desktop 复制并生成 `codex-patched-app`，大小约 `784 MB`。
+模型菜单来自 Antigravity Desktop 当前账号实际返回的可用模型。Anti-Codex 不伪造模型，也不会把推理档位冒充成模型名。当前机器已验证八个模型，包括精确数字版本与推理档位。
 
-Windows zip 的 SHA256 以 GitHub Release 附件信息为准。
+## Skills、MCP 与插件
 
----
-
-## 首次启动
-
-首次启动流程是：
-
-1. 打开 `deepcodex`
-2. 输入 DeepSeek API key
-3. 测试连接
-4. 自动进入主界面
-
-setup 会尽量保持极简，不要求你手动开终端，也不要求你额外起代理层。
-
----
-
-## 使用规则
-
-### 双开 Codex 和 deepcodex
-
-deepcodex 是独立 app，但内部仍复用本机 Codex Desktop 的运行核心。  
-因此在 macOS 上，**推荐先打开原版 Codex，再打开 deepcodex**。
-
-推荐顺序：
-
-1. 打开原版 `Codex`
-2. 打开 `deepcodex`
-
-如果你已经先打开了 `deepcodex`，再想打开原版 `Codex`，请用：
-
-```bash
-open -n -a "Codex"
-```
-
-原因是 macOS 可能会把正在运行的 Codex 核心进程视为“Codex 已打开”，普通双击原版 Codex 时只聚焦已有实例，而不是再开一个原版实例。
-
-不要手动修改 `/Applications/Codex.app`。deepcodex 是补丁入口，不会改写官方 Codex app。
-
-### 退出与进程清理
-
-deepcodex 在本机运行一个本地 translator 服务，默认地址是 `http://127.0.0.1:8282`。这个服务负责把 Codex Desktop 的 Responses 请求翻译成 DeepSeek 可用的 Chat 请求。
-
-macOS 版 watcher 启动后会给 DeepCodex UI 约 **10 秒**的出现时间，避免启动瞬间误判。UI 一旦出现过，后续退出 `deepcodex` 时，本地 translator 会在下一次轮询中立即清理，通常约 1 秒内完成，避免旧进程继续响应请求或继续消耗 DeepSeek token。
-
-如果你发现退出 app 后仍然出现异常消耗、旧逻辑继续生效，或者 `8282` 端口仍在响应，可以手动检查：
-
-```bash
-ps aux | grep 'adaptive-server.mjs'
-```
-
-正常情况下，`deepcodex` 关闭后不应长期保留 `adaptive-server.mjs` 进程。旧版本曾存在退出后 translator 进程残留的问题；如果遇到这种情况，请优先更新到最新 DMG。
-
----
-
-## 关键目录
-
-- `/Applications/deepcodex.app`
-  - macOS 已安装 app
-
-- `%LOCALAPPDATA%\deepcodex\DeepCodex.exe`
-  - Windows beta 运行入口
-
-- `translator/adaptive-server.mjs`
-  - translator 主入口
-
-- `scripts/start-deepcodex.sh`
-  - 启动链主脚本
-
-- `~/Library/Application Support/deepcodex/`
-  - macOS 运行时状态目录
-
-- `%LOCALAPPDATA%\deepcodex`
-  - Windows beta 安装与运行时目录
-
----
-
-## 模型映射
-
-| Codex slug | DeepSeek model |
-|---|---|
-| `gpt-5.5` | `deepseek-v4-pro` |
-| `gpt-5.4` | `deepseek-v4-pro` |
-| `gpt-5.4-mini` | `deepseek-v4-flash` |
-
----
+- Skills、MCP 配置和插件缓存会复制到 Anti-Codex 的独立状态目录。
+- Codex 工具定义通过本地原生 MCP 通道交给 Antigravity，工具结果在同一会话中继续。
+- 远程 ChatGPT 插件市场和需要 ChatGPT 账号授权的连接器保持关闭。
 
 ## 已知边界
 
-### 1. 这是补丁，不是全替身
+- Responses 模型 WebSocket 当前明确回退为 HTTP/SSE；不会伪装成已支持。
+- 需要 ChatGPT 授权的远程连接器不可用。
+- Antigravity Desktop 账号切换和外部代理开关仍需要用户在对应界面操作。
+- 原生 Codex 更新后若内部结构改变，同步会在兼容检查失败时保留当前 Anti-Codex，不会强行激活。
 
-deepcodex 主要解决的是：
+## 本机路径
 
-- 模型入口
-- 请求翻译
-- 独立工作区
+```text
+安装目录：%LOCALAPPDATA%\Anti-Codex
+独立状态：%APPDATA%\anticodex
+维护报告：%APPDATA%\anticodex\reports
+```
 
-不是把 Codex Desktop 全部重新实现一遍。
-
-### 2. 某些高级工具能力依赖 OpenAI 宿主
-
-像下面这类能力，当前仍可能依赖 OpenAI / Codex 宿主授权与工具下发：
-
-- connector 型插件
-- app tools
-- `computer-use`
-- 浏览器 / 桌面自动化相关高级能力
-
-### 3. 插件安装与插件可调用，不是同一回事
-
-插件“已经装好”只说明：
-
-- 插件包存在
-- 宿主能看见它
-
-不等于当前 DeepSeek 会话里一定已经拿到了对应的 callable tools。
-
----
-
-## 适合谁
-
-如果你想要的是：
-
-- 保留 Codex Desktop 的主要体验
-- 用 DeepSeek 跑日常代码与项目任务
-- 不想为了改模型入口就再学一套新工具
-
-那 deepcodex 就是对的。
-
-如果你要的是：
-
-- 100% 复刻 OpenAI 宿主的所有高级工具能力
-- 所有 connector / hosted tools / desktop tools 全量等价可用
-
-那这版还不是那个目标。
-
----
-
-## 当前结论
-
-这版最准确的理解方式是：
-
-> **一个能把 Codex Desktop 稳定接到 DeepSeek 上的实用补丁。**
-
-它已经足够适合真正开始用，  
-也足够诚实，不会把还没彻底打通的能力包装成“全都支持”。
+本项目是在 `deepcodex` 基础上改造的，因此源码内仍保留部分历史文件名；默认安装入口和运行产品均为 Anti-Codex。

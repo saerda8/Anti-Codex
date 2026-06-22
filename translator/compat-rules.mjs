@@ -277,6 +277,7 @@ export function buildChatToolsWithRouting(parsed, options = {}) {
           codexName: sub.name,
           type: "function",
           namespace: cl.name,
+          parameters: sub.metadata.parameters || { type: "object", properties: {} },
         };
         if (!routing[sub.name]) {
           routing[sub.name] = {
@@ -285,6 +286,7 @@ export function buildChatToolsWithRouting(parsed, options = {}) {
             type: "function",
             namespace: cl.name,
             aliasOnly: true,
+            parameters: sub.metadata.parameters || { type: "object", properties: {} },
           };
         }
       }
@@ -324,6 +326,13 @@ export function buildChatToolsWithRouting(parsed, options = {}) {
         namespace: null,
         formatType: fmtType,
         formatSyntax: fmtSyntax,
+        parameters: {
+          type: "object",
+          properties: {
+            content: { type: "string" },
+          },
+          required: ["content"],
+        },
       };
       continue;
     }
@@ -343,6 +352,7 @@ export function buildChatToolsWithRouting(parsed, options = {}) {
       codexName: name,
       type: cl.type,
       namespace: null,
+      parameters: cl.metadata.parameters || { type: "object", properties: {} },
     };
   }
 

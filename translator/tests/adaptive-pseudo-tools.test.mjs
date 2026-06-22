@@ -7,9 +7,13 @@ import path from "node:path";
 process.env.NODE_ENV = "test";
 
 const {
+  antigravityFailureDetails,
   buildSystemBlock,
+  callAntigravityWithInternalTools,
   callUpstreamWithInternalTools,
   canUseNativeStreaming,
+  chatBodyHasInternalTools,
+  chatBodyWithInternalTools,
   ChatToResponsesStreamMapper,
   chatToCompactResponseFormat,
   chatToResponsesFormat,
@@ -19,9 +23,12 @@ const {
   localBackendApiResponse,
   normalizeCompactSummary,
   parsePseudoToolCalls,
+  pipeAntigravityResponseAsSSE,
   prepareCompactChatBody,
   responsesToChatBody,
+  requestNeedsInternalWebTools,
   sanitizeMarkdownUrlFormatting,
+  shouldRecordAntigravityTrafficFailure,
   stripPseudoToolMarkup,
   unknownInputItemText,
   usageDiagnostics,
@@ -57,6 +64,24 @@ test("pseudo DSML web_fetch is parsed as an internal tool call", () => {
   assert.equal(calls[0].function.name, "web_fetch");
   assert.deepEqual(JSON.parse(calls[0].function.arguments), {
     url: "https://m.163.com/news/article/KLMPU1SA0523C0OR.html",
+  });
+});
+
+test("plain XML tool_call is detected, stripped, and parsed", () => {
+  const xml = `<tool_call>
+  <tool_name>web_search</tool_name>
+  <parameters>
+    <query>COMPACT_SEED_88282_20260614</query>
+  </parameters>
+</tool_call>`;
+
+  assert.equal(hasPseudoToolMarkup(xml), true);
+  assert.equal(stripPseudoToolMarkup(xml), "");
+  const calls = parsePseudoToolCalls(xml);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].function.name, "web_search");
+  assert.deepEqual(JSON.parse(calls[0].function.arguments), {
+    query: "COMPACT_SEED_88282_20260614",
   });
 });
 
@@ -272,6 +297,8 @@ test("usage diagnostics classify cache misses and prompt explosion", () => {
 test("upstream failure classifier separates transient, protocol, auth, and quota failures", () => {
   assert.deepEqual(classifyUpstreamFailure(502, "Bad Gateway").type, "transient_upstream_error");
   assert.equal(classifyUpstreamFailure(502, "Bad Gateway").retryable, true);
+  assert.equal(classifyUpstreamFailure(500, "streamGenerateContent: EOF").type, "transient_upstream_error");
+  assert.equal(classifyUpstreamFailure(500, "streamGenerateContent: EOF").retryable, true);
 
   const protocol = classifyUpstreamFailure(400, "", {
     error: {
@@ -287,6 +314,55 @@ test("upstream failure classifier separates transient, protocol, auth, and quota
 
   assert.equal(classifyUpstreamFailure(401, "Invalid API key").type, "auth_error");
   assert.equal(classifyUpstreamFailure(402, "insufficient quota").type, "quota_or_billing_error");
+
+  const genericPermission = classifyUpstreamFailure(403, "PERMISSION_DENIED (code 403): Verify your account to continue.");
+  assert.equal(genericPermission.type, "auth_error");
+  assert.equal(genericPermission.retryable, false);
+  assert.equal(genericPermission.diagnosis, undefined);
+
+  const details = antigravityFailureDetails(Object.assign(
+    new Error("PERMISSION_DENIED (code 403): Verify your account to continue."),
+    { type: "antigravity_account_unavailable" },
+  ));
+  assert.equal(details.status, 403);
+  assert.equal(details.type, "antigravity_account_unavailable");
+  assert.equal(details.retryable, false);
+  assert.equal(details.diagnosis, "account_verification_required");
+
+  const queueFull = Object.assign(new Error("queue full"), {
+    statusCode: 429,
+    type: "antigravity_queue_full",
+    retryable: true,
+  });
+  assert.deepEqual(antigravityFailureDetails(queueFull), {
+    status: 429,
+    type: "antigravity_queue_full",
+    retryable: true,
+    message: "queue full",
+  });
+  assert.equal(shouldRecordAntigravityTrafficFailure(queueFull), false);
+
+  const quota = Object.assign(new Error("daily usage limit reached for Antigravity account"), {
+    statusCode: 429,
+  });
+  assert.deepEqual(antigravityFailureDetails(quota), {
+    status: 429,
+    type: "antigravity_quota_exceeded",
+    retryable: false,
+    diagnosis: "quota_or_limit_reached",
+    message: "daily usage limit reached for Antigravity account",
+    suggestedAction: "切换 Antigravity 账号，或等待额度/限额恢复后重试。",
+  });
+  assert.equal(shouldRecordAntigravityTrafficFailure(quota), true);
+});
+
+test("classifyUpstreamFailure with Antigravity quota text returns non-retryable quota_or_billing_error with Chinese hint", () => {
+  const result = classifyUpstreamFailure(429, "Quota exceeded for daily cloudcode usage.");
+  assert.equal(result.type, "quota_or_billing_error");
+  assert.equal(result.retryable, false);
+  assert.ok(result.hint, "quota_or_billing_error must expose a Chinese actionable hint");
+  assert.match(result.hint, /[一-鿿]/, "hint must contain Chinese characters");
+  assert.match(result.hint, /额度|限额|充值|Antigravity|桌面端/, "hint should mention actionable quota resolution");
 });
 
 test("chat response blocks fake tool execution claims without tool calls", () => {
@@ -299,8 +375,34 @@ test("chat response blocks fake tool execution claims without tool calls", () =>
 
   assert.equal(formatted.output.length, 1);
   assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /Anti-Codex/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /DeepCodex/);
   assert.match(formatted.output[0].content[0].text, /已拦截这轮回复/);
+  assert.match(formatted.output[0].content[0].text, /没有真的读文件/);
   assert.match(formatted.output[0].content[0].text, /没有实际 tool call/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /请继续时/);
+});
+
+test("system prompt does not expose legacy DeepCodex product identity", () => {
+  const block = buildSystemBlock();
+
+  assert.doesNotMatch(block, /DeepCodex/);
+  assert.match(block, /Anti-Codex/);
+});
+
+test("chat response trusts current internal tool evidence", () => {
+  const formatted = chatToResponsesFormat({
+    _internalToolEvidence: true,
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "我已经运行 npm install，启动 Remotion Studio，并生成音频文件。" },
+    }],
+  }, { model: "gpt-5.5", input: "帮我做视频" });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.equal(formatted.output[0].content[0].text, "我已经运行 npm install，启动 Remotion Studio，并生成音频文件。");
+  assert.doesNotMatch(formatted.output[0].content[0].text, /拦截|DeepCodex/);
 });
 
 test("chat response blocks Chinese fake search-result narration without tool calls", () => {
@@ -313,6 +415,253 @@ test("chat response blocks Chinese fake search-result narration without tool cal
 
   assert.equal(formatted.output.length, 1);
   assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /已拦截这轮回复/);
+});
+
+test("chat response allows long-context marker echoes without tool calls", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "已经找到 LONGCTX_HEAD_12345 和 LONGCTX_TAIL_67890，说明长上下文稳定性填充可读。" },
+    }],
+  }, { model: "gpt-5.5", input: [] });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /LONGCTX_HEAD_12345/);
+  assert.match(formatted.output[0].content[0].text, /LONGCTX_TAIL_67890/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /已拦截这轮回复/);
+});
+
+test("chat response allows compacted task-state recall containing installed as an adjective", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "COMPACT_SEED_731 | verify installed compaction resume" },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: "Active task marker: COMPACT_SEED_731. Next action: verify installed compaction resume.",
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Recall the marker and next action." }] },
+    ],
+  });
+
+  assert.equal(formatted.output[0].content[0].text, "COMPACT_SEED_731 | verify installed compaction resume");
+  assert.doesNotMatch(formatted.output[0].content[0].text, /已拦截这轮回复/);
+});
+
+test("chat response allows explicit compacted next-action recall even when phrased as Next Action", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "COMPACT_SEED_842 | Next Action: Verify the installed compaction resume." },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: "Active task marker: COMPACT_SEED_842. Next action: verify installed compaction resume.",
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Recall the exact active task marker and next action." }] },
+    ],
+  });
+
+  assert.match(formatted.output[0].content[0].text, /COMPACT_SEED_842/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /已拦截这轮回复/);
+});
+
+test("chat response replaces partial compacted recall that keeps marker but drops next action", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: "Active Task Marker: `COMPACT_SEED_67444_20260614`\n\nNo active background tasks are currently running.",
+      },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: "Active task marker: COMPACT_SEED_67444_20260614. Next action: verify installed compaction resume.",
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue from the compacted context. Reply with the exact active task marker and exact next action." }] },
+    ],
+  });
+
+  const text = formatted.output[0].content[0].text;
+  assert.match(text, /COMPACT_SEED_67444_20260614/);
+  assert.match(text, /verify installed compaction resume/i);
+  assert.doesNotMatch(text, /No active background tasks/i);
+});
+
+test("chat response replaces compacted recall that invents a scheduled task", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: [
+          "Active Task Marker: `COMPACT_SEED_43630_20260619`",
+          "Next Action: 验证 compaction 状态并确认状态延续性。",
+          "",
+          "我已成功调用了 `schedule` 工具，设定了一个一次性的定时任务（任务 ID: `task-6`）。",
+        ].join("\n"),
+      },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: [
+          "### Context Checkpoint Compaction Summary",
+          "- **Active Task Marker**: `COMPACT_SEED_43630_20260619`",
+          "- **Next Steps**:",
+          "  1. Verify the installed compaction resume.",
+          "",
+          "**Continuation Instruction**:",
+          "Verify the installed compaction resume using the active task marker `COMPACT_SEED_43630_20260619`.",
+        ].join("\n"),
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue from the compacted context. Reply with the exact active task marker and exact next action." }] },
+    ],
+  });
+
+  const text = formatted.output[0].content[0].text;
+  assert.match(text, /COMPACT_SEED_43630_20260619/);
+  assert.match(text, /verify (?:the )?installed compaction resume/i);
+  assert.doesNotMatch(text, /schedule|task-6|定时任务/i);
+});
+
+test("compacted recall accepts continuation instruction written on the next line", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "COMPACT_SEED_43631_20260619 | Verify the installed compaction resume." },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: [
+          "Active task marker: COMPACT_SEED_43631_20260619.",
+          "Continuation Instruction:",
+          "Verify the installed compaction resume.",
+        ].join("\n"),
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Recall the exact active task marker and next action." }] },
+    ],
+  });
+
+  assert.match(formatted.output[0].content[0].text, /COMPACT_SEED_43631_20260619/);
+  assert.match(formatted.output[0].content[0].text, /Verify the installed compaction resume/i);
+});
+
+test("compacted recall rejects missing continuation terms from next-line instruction", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "COMPACT_SEED_43632_20260619 | 验证 compaction 状态。" },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: [
+          "Active task marker: COMPACT_SEED_43632_20260619.",
+          "Continuation Instruction:",
+          "Verify the installed compaction resume.",
+        ].join("\n"),
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Recall the exact active task marker and next action." }] },
+    ],
+  });
+
+  const text = formatted.output[0].content[0].text;
+  assert.match(text, /COMPACT_SEED_43632_20260619/);
+  assert.match(text, /Verify the installed compaction resume/i);
+});
+
+test("chat response replaces pseudo web_search markup during compacted task-state recall", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: `<tool_call>
+  <tool_name>web_search</tool_name>
+  <parameters>
+    <query>COMPACT_SEED_88282_20260614</query>
+  </parameters>
+</tool_call>`,
+      },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: "Active task marker: COMPACT_SEED_88282_20260614. Next action: verify installed compaction resume.",
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue from the compacted context. Reply with the exact active task marker and exact next action." }] },
+    ],
+  });
+
+  const text = formatted.output[0].content[0].text;
+  assert.match(text, /COMPACT_SEED_88282_20260614/);
+  assert.match(text, /verify installed compaction resume/i);
+  assert.doesNotMatch(text, /tool_call|web_search|tool_name/i);
+});
+
+test("chat response replaces missing-tool detours during compacted task-state recall", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: "The required command and file tools are unavailable, so I cannot verify COMPACT_SEED_22831_20260614.",
+      },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      {
+        type: "context_compaction",
+        summary: "Active task marker: COMPACT_SEED_22831_20260614. Next action: verify installed compaction resume.",
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue from the compacted context. Reply with the exact active task marker and exact next action." }] },
+    ],
+  });
+
+  const text = formatted.output[0].content[0].text;
+  assert.match(text, /COMPACT_SEED_22831_20260614/);
+  assert.match(text, /verify installed compaction resume/i);
+  assert.doesNotMatch(text, /unavailable|required command|cannot verify/i);
+});
+
+test("chat response still blocks new future tool promises after compaction", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "Next I will install dependencies and verify the build." },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{
+      type: "context_compaction",
+      summary: "The previous next action was to install dependencies and verify the build.",
+    }],
+  });
+
   assert.match(formatted.output[0].content[0].text, /已拦截这轮回复/);
 });
 
@@ -582,6 +931,7 @@ test("chat response blocks web_search unavailable claim when only exec_command f
   assert.equal(formatted.output[0].type, "message");
   assert.match(formatted.output[0].content[0].text, /web_search\/web_fetch 不可用/);
   assert.match(formatted.output[0].content[0].text, /exec_command 的网络失败/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /请继续时/);
 });
 
 test("chat response allows web_search unavailable claim after matching web_search failure output", () => {
@@ -649,6 +999,32 @@ test("chat custom tool calls become completed Responses custom_tool_call items",
   assert.equal(formatted.output[0].name, "apply_patch");
   assert.equal(formatted.output[0].input, "*** Begin Patch\n*** End Patch\n");
   assert.notEqual(formatted.output[0].id, "call_123");
+});
+
+test("chat response with fake-tool wording and real tool call is not blocked", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "我现在先读一下文件，然后继续处理。",
+        tool_calls: [{
+          id: "call_read_real",
+          type: "function",
+          function: {
+            name: "exec_command",
+            arguments: "{\"cmd\":\"Get-Content package.json -TotalCount 40\"}",
+          },
+        }],
+      },
+    }],
+  }, { model: "gpt-5.5", input: "看看项目是什么" });
+
+  const call = formatted.output.find((item) => item.type === "function_call");
+  assert.ok(call, "real tool call should be forwarded");
+  assert.equal(call.call_id, "call_read_real");
+  assert.equal(call.name, "exec_command");
+  assert.doesNotMatch(JSON.stringify(formatted.output), /DeepCodex|已拦截|没有实际 tool call/);
 });
 
 test("malformed custom apply_patch call is not forwarded to Codex", () => {
@@ -764,6 +1140,121 @@ test("stream mapper blocks web_search unavailable claims without web tool eviden
   });
   const completed = done.find(([event]) => event === "response.completed")?.[1];
   assert.match(completed.response.output[0].content[0].text, /不能等同于 web_search\/web_fetch 不可用/);
+  assert.doesNotMatch(completed.response.output[0].content[0].text, /请继续时/);
+});
+
+test("tool-capable stream mapper buffers fake action text until guarded completion", () => {
+  const rawClaim = "I will run the marker tool now.";
+  const mapper = new ChatToResponsesStreamMapper({
+    model: "gpt-5.5",
+    input: "run marker tool",
+    tools: [{ type: "function", name: "marker_tool" }],
+  }, "gpt-5.5");
+
+  const first = mapper.pushChunk({
+    choices: [{ index: 0, delta: { content: rawClaim }, finish_reason: null }],
+  });
+  assert.ok(!first.some(([event]) => event === "response.output_text.delta"), "raw fake-action text must not stream before guard checks");
+
+  const done = mapper.pushChunk({
+    choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+  });
+  const deltas = done.filter(([event]) => event === "response.output_text.delta").map(([, payload]) => payload.delta);
+  assert.equal(deltas.length, 1);
+  assert.doesNotMatch(deltas[0], /I will run the marker tool now/);
+  const completed = done.find(([event]) => event === "response.completed")?.[1];
+  assert.notEqual(completed.response.output[0].content[0].text, rawClaim);
+});
+
+test("Antigravity SSE pipe retries fake tool claims before emitting buffered tool-capable text", async () => {
+  let streamCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: "run the marker tool",
+    tools: [{ type: "function", name: "marker_tool" }],
+  };
+  const chatBody = {
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "run the marker tool" }],
+    tools: [{ type: "function", function: { name: "marker_tool", parameters: { type: "object", properties: {}, additionalProperties: false } } }],
+    tool_choice: "auto",
+  };
+  const routing = {
+    marker_tool: {
+      type: "function",
+      codexName: "marker_tool",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  };
+  const queue = { run: async (task) => task({}) };
+  async function* streamUpstream(body) {
+    streamCalls += 1;
+    if (streamCalls === 1) {
+      assert.match(body.messages.at(-1).content, /run the marker tool/);
+      yield { type: "text_delta", delta: "I will run the marker tool now." };
+      yield {
+        type: "done",
+        completion: {
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: "I will run the marker tool now." } }],
+        },
+      };
+      return;
+    }
+    assert.match(body.messages.at(-1).content, /This is not the final answer|CODEX_TOOLS/);
+    yield {
+      type: "done",
+      completion: {
+        choices: [{
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [{ id: "call_marker", type: "function", function: { name: "marker_tool", arguments: "{}" } }],
+          },
+        }],
+      },
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue,
+    streamUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(streamCalls, 2);
+  assert.doesNotMatch(wire, /I will run the marker tool now/);
+  assert.match(wire, /"type":"function_call"/);
+  assert.match(wire, /"name":"marker_tool"/);
+  assert.match(wire, /response.completed/);
+});
+
+test("generic provider streaming path aborts upstream fetch when the client disconnects", () => {
+  const server = fs.readFileSync(new URL("../adaptive-server.mjs", import.meta.url), "utf8");
+  const start = server.indexOf("async function pipeStreamingChatAsResponses");
+  const end = server.indexOf("async function readRaw", start);
+  assert.ok(start >= 0 && end > start, "pipeStreamingChatAsResponses must be extractable");
+  const body = server.slice(start, end);
+  assert.match(body, /const controller = new AbortController\(\)/);
+  assert.match(body, /req\.on\?\.\("aborted", abortStreaming\)/);
+  assert.match(body, /res\.on\?\.\("close", abortStreaming\)/);
+  assert.match(body, /signal: controller\.signal/);
+  assert.match(body, /cleanupStreamingListeners\(\)/);
 });
 
 test("native streaming is disabled when translator internal web tools may be needed", () => {
@@ -802,6 +1293,14 @@ test("system block distinguishes hosted tool limits from internal web tools", ()
   assert.match(block, /use the translator-provided internal web_search and web_fetch tools/i);
   assert.match(block, /Do not say web_search or web_fetch is unavailable/i);
   assert.doesNotMatch(block, /This route does NOT support: hosted tools/i);
+});
+
+test("system block includes honest local Skill MCP and connector inventory", () => {
+  const block = buildSystemBlock();
+  assert.match(block, /Anti-Codex local feature inventory:/);
+  assert.match(block, /Local Skills copied into this Anti-Codex home:/);
+  assert.match(block, /Local MCP servers configured in this Anti-Codex home:/);
+  assert.match(block, /Snapshot presence is metadata, not proof that a remote app tool is callable/);
 });
 
 test("system block forbids fake tool execution narration", () => {
@@ -873,7 +1372,7 @@ test("stream mapper converts Chat custom tool calls to custom_tool_call items", 
       finish_reason: null,
     }],
   });
-  assert.ok(first.some(([event, data]) => event === "response.output_item.added" && data.item.type === "custom_tool_call"));
+  assert.ok(!first.some(([event, data]) => event === "response.output_item.added" && data.item.type === "custom_tool_call"));
   assert.ok(!first.some(([event]) => event === "response.function_call_arguments.delta"));
 
   const done = mapper.pushChunk({
@@ -884,6 +1383,9 @@ test("stream mapper converts Chat custom tool calls to custom_tool_call items", 
     }],
   });
   assert.ok(!done.some(([event]) => event === "response.function_call_arguments.done"));
+  const itemAdded = done.find(([event, data]) => event === "response.output_item.added" && data.item.type === "custom_tool_call")?.[1];
+  assert.equal(itemAdded.item.call_id, "call_patch");
+  assert.equal(itemAdded.item.name, "apply_patch");
   const itemDone = done.find(([event, data]) => event === "response.output_item.done" && data.item.type === "custom_tool_call")?.[1];
   assert.equal(itemDone.item.call_id, "call_patch");
   assert.equal(itemDone.item.name, "apply_patch");
@@ -891,6 +1393,44 @@ test("stream mapper converts Chat custom tool calls to custom_tool_call items", 
   const completed = done.find(([event]) => event === "response.completed")?.[1];
   assert.equal(completed.response.output[0].type, "custom_tool_call");
   assert.equal(completed.response.output[0].input, patch);
+});
+
+test("stream mapper keeps invalid Chat custom tool calls as message items", () => {
+  const mapper = new ChatToResponsesStreamMapper({ model: "gpt-5.5", input: "patch" }, "gpt-5.5", {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+  const first = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: {
+        tool_calls: [{
+          index: 0,
+          id: "call_patch",
+          type: "function",
+          function: { name: "apply_patch", arguments: "{\"content\":\"   " },
+        }],
+      },
+      finish_reason: null,
+    }],
+  });
+  assert.ok(!first.some(([event, data]) => event === "response.output_item.added" && data.item.type === "custom_tool_call"));
+
+  const done = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: { tool_calls: [{ index: 0, function: { arguments: "\"}" } }] },
+      finish_reason: "tool_calls",
+    }],
+  });
+  assert.ok(!done.some(([event, data]) => event === "response.output_item.added" && data.item.type === "custom_tool_call"));
+  const itemAdded = done.find(([event]) => event === "response.output_item.added")?.[1];
+  const itemDone = done.find(([event]) => event === "response.output_item.done")?.[1];
+  assert.equal(itemAdded.output_index, itemDone.output_index);
+  assert.equal(itemAdded.item.type, "message");
+  assert.equal(itemDone.item.type, "message");
+  assert.match(itemDone.item.content[0].text, /apply_patch requires a complete freeform patch\/tool body/);
+  const completed = done.find(([event]) => event === "response.completed")?.[1];
+  assert.equal(completed.response.output[0].type, "message");
 });
 
 test("stream mapper converts reasoning_content to replayable reasoning item", () => {
@@ -940,6 +1480,16 @@ test("polluted history is cleaned before forwarding to Chat Completions", () => 
   assert.equal(body.messages[0].content.includes("DSML"), false);
   assert.equal(body.messages[0].content.includes("web_fetch"), false);
   assert.match(body.messages[0].content, /最后抓一下 163/);
+});
+
+test("Responses reasoning effort is preserved for the Antigravity bridge", () => {
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    reasoning: { effort: "xhigh", summary: "auto" },
+    input: [{ type: "message", role: "user", content: "Analyze carefully." }],
+  });
+
+  assert.deepEqual(body.reasoning, { effort: "xhigh", summary: "auto" });
 });
 
 test("pure leaked pseudo DSML assistant history is dropped after cleanup", () => {
@@ -1126,7 +1676,7 @@ test("restored history prunes older tool transcripts while keeping recent tool p
   assert.match(body.messages[0].content, /omitted older restored tool transcripts/);
   assert.ok(!body.messages.some((message) => String(message.content).includes("output-0")), "old tool output is omitted");
   assert.ok(body.messages.some((message) => String(message.content).includes("output-19")), "recent tool output is preserved");
-  assert.ok(body.messages.some((message) => String(message.content).includes("clipped by DeepCodex translator")), "large tool output is clipped");
+  assert.ok(body.messages.some((message) => String(message.content).includes("clipped by Anti-Codex translator")), "large tool output is clipped");
   assert.equal(body.messages.at(-1).role, "user");
 });
 
@@ -1291,7 +1841,7 @@ test("restored history preserves durable tool facts before pruning noisy probes"
   }, { allowTools: false, injectInternalTools: false });
 
   const joined = JSON.stringify(body.messages);
-  assert.match(joined, /DeepCodex durable environment facts/);
+  assert.match(joined, /Anti-Codex durable environment facts/);
   assert.match(joined, /workspace: Listing result from docker exec app ls \/workspace: new-chat-3, qwen-cli, src/);
   assert.match(joined, /tool-state: Read command succeeded: docker exec app cat \/workspace\/qwen-cli\/package\.json/);
   assert.match(joined, /tool-state: Command failed, do not assume success: docker exec app npm run build -> Error: missing script build/);
@@ -1314,7 +1864,7 @@ test("restored history task ledger preserves explicit task target and pending ac
   }, { allowTools: false, injectInternalTools: false });
 
   const joined = JSON.stringify(body.messages);
-  assert.match(joined, /DeepCodex task ledger/);
+  assert.match(joined, /Anti-Codex task ledger/);
   assert.match(joined, /current-user-task: 帮我在 Windows 上找到 qwen-cli 项目/);
   assert.match(joined, /pending-next-action: 看到 new-chat-3/);
   assert.match(joined, /target-hint: qwen-cli/);
@@ -1336,7 +1886,7 @@ test("restored history keeps successful non-shell tool calls as durable facts", 
   }, { allowTools: false, injectInternalTools: false });
 
   const joined = JSON.stringify(body.messages);
-  assert.match(joined, /DeepCodex durable environment facts/);
+  assert.match(joined, /Anti-Codex durable environment facts/);
   assert.match(joined, /tool-state: Tool closeTab succeeded/);
   assert.match(joined, /targetId=tab-123/);
   assert.match(joined, /刚才你已经成功关闭了/);
@@ -1467,7 +2017,7 @@ test("restored long source outputs are folded but important errors are preserved
   }, { allowTools: false, injectInternalTools: false });
 
   const joined = JSON.stringify(body.messages);
-  assert.match(joined, /DeepCodex folded/);
+  assert.match(joined, /Anti-Codex folded/);
   assert.match(joined, /const value0/);
   assert.match(joined, /const value159/);
   assert.doesNotMatch(joined, /const value80/);
@@ -1502,7 +2052,7 @@ test("restored documentation dumps are folded earlier than source dumps", () => 
   }, { allowTools: false, injectInternalTools: false });
 
   const joined = JSON.stringify(body.messages);
-  assert.match(joined, /DeepCodex folded/);
+  assert.match(joined, /Anti-Codex folded/);
   assert.match(joined, /# x-cli/);
   assert.match(joined, /Keep this tail marker/);
   assert.doesNotMatch(joined, /step 60/);
@@ -1812,6 +2362,147 @@ test("final Responses formatting passes unknown pseudo DSML tools to Codex", () 
   assert.deepEqual(JSON.parse(formatted.output[1].arguments), { cmd: "ls" });
 });
 
+test("strict pseudo tool routing rejects unavailable Antigravity tool names", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_unknown_tool",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="made_up_tool"><parameter name="x">1</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "use a tool" }, {
+    exec_command: {
+      codexName: "exec_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /made_up_tool/);
+  assert.match(formatted.output[0].content[0].text, /not available/i);
+});
+
+test("strict pseudo tool routing rejects calls missing required schema parameters", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_missing_required",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="exec_command"><parameter name="cmd">pwd</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "list files" }, {
+    exec_command: {
+      codexName: "exec_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /exec_command/);
+  assert.match(formatted.output[0].content[0].text, /missing required parameter "command"/i);
+});
+
+test("strict pseudo tool routing rejects extra parameters when the schema forbids them", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_extra_parameter",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="exec_command"><parameter name="command">pwd</parameter><parameter name="cmd">ls</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "list files" }, {
+    exec_command: {
+      codexName: "exec_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+        additionalProperties: false,
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /exec_command/);
+  assert.match(formatted.output[0].content[0].text, /unexpected parameter "cmd"/i);
+});
+
+test("strict pseudo tool routing coerces arguments using the routed tool schema", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_schema_coerce",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: [
+          `<tool_calls><invoke name="structured_tool">`,
+          `<parameter name="payload">{"a":1}</parameter>`,
+          `<parameter name="tags">["x","y"]</parameter>`,
+          `<parameter name="count">3</parameter>`,
+          `<parameter name="dryRun">true</parameter>`,
+          `</invoke></tool_calls>`,
+        ].join(""),
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "call structured tool" }, {
+    structured_tool: {
+      codexName: "structured_tool",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: {
+          payload: { type: "object" },
+          tags: { type: "array" },
+          count: { type: "integer" },
+          dryRun: { type: "boolean" },
+        },
+        required: ["payload", "tags", "count", "dryRun"],
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "function_call");
+  assert.deepEqual(JSON.parse(formatted.output[0].arguments), {
+    payload: { a: 1 },
+    tags: ["x", "y"],
+    count: 3,
+    dryRun: true,
+  });
+});
+
 test("responsesToChatBody is deterministic when restored tool calls lack ids", () => {
   const request = {
     model: "gpt-5.5",
@@ -1846,14 +2537,17 @@ test("local backend projection returns stable empty shapes without caches", () =
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-empty-projection-"));
   process.env.DEEPCODEX_SHARED_CODEX_HOME = tmp;
   try {
-    const plugins = localBackendApiResponse("GET", "/backend-api/plugins/featured");
+    const featured = localBackendApiResponse("GET", "/backend-api/plugins/featured");
+    assert.deepEqual(featured, []);
+
+    const plugins = localBackendApiResponse("GET", "/backend-api/plugins/list");
     assert.deepEqual(plugins.featuredPluginIds, []);
     assert.deepEqual(plugins.marketplaceLoadErrors, []);
     assert.deepEqual(plugins.marketplaces, []);
     assert.deepEqual(plugins.plugins, []);
 
     const installed = localBackendApiResponse("GET", "/backend-api/ps/plugins/installed");
-    assert.deepEqual(installed.installed, []);
+    assert.deepEqual(installed, []);
     const psList = localBackendApiResponse("GET", "/backend-api/ps/plugins/list");
     assert.deepEqual(psList.plugins, []);
 
@@ -1881,6 +2575,8 @@ test("local backend projection returns stable empty shapes without caches", () =
     const current = localBackendApiResponse("GET", "/backend-api/accounts/current");
     assert.equal(current.id, "deepcodex-local-account");
     assert.equal(current.type, "chatgpt");
+    assert.equal(current.supports_websockets, false);
+    assert.equal(current.websocket_url, null);
 
     const settings = localBackendApiResponse("GET", "/backend-api/settings/user");
     assert.equal(settings.object, "user_settings");
@@ -1895,26 +2591,51 @@ test("local backend projection returns stable empty shapes without caches", () =
   assert.equal(localBackendApiResponse("GET", "/backend-api/unknown"), null);
 });
 
-test("local backend projection reads Codex connector and plugin caches", () => {
+test("local backend projection reads Anti-Codex local connector and plugin snapshots", () => {
+  const previousHome = process.env.CODEX_HOME;
+  const previousHomeDir = process.env.CODEX_HOME_DIR;
   const previousSharedHome = process.env.DEEPCODEX_SHARED_CODEX_HOME;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-projection-"));
-  process.env.DEEPCODEX_SHARED_CODEX_HOME = tmp;
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-shared-projection-"));
+  process.env.CODEX_HOME = tmp;
+  delete process.env.CODEX_HOME_DIR;
+  process.env.DEEPCODEX_SHARED_CODEX_HOME = shared;
   try {
     const appDirectory = path.join(tmp, "cache", "codex_app_directory");
     const appTools = path.join(tmp, "cache", "codex_apps_tools");
     const pluginDir = path.join(tmp, ".tmp", "plugins", "plugins", "demo", ".codex-plugin");
+    const sharedAppDirectory = path.join(shared, "cache", "codex_app_directory");
     fs.mkdirSync(appDirectory, { recursive: true });
     fs.mkdirSync(appTools, { recursive: true });
     fs.mkdirSync(pluginDir, { recursive: true });
+    fs.mkdirSync(sharedAppDirectory, { recursive: true });
+    fs.writeFileSync(path.join(sharedAppDirectory, "directory.json"), JSON.stringify({
+      schema_version: 1,
+      connectors: [{
+        id: "shared_only",
+        name: "Shared Only",
+        isAccessible: true,
+        isEnabled: true,
+      }],
+    }));
     fs.writeFileSync(path.join(appDirectory, "directory.json"), JSON.stringify({
       schema_version: 1,
       connectors: [{
         id: "connector_demo",
         name: "Demo Connector",
         description: "Local connector",
+        installUrl: "https://chatgpt.com/apps/demo/connector_demo",
         isAccessible: true,
         isEnabled: true,
         pluginDisplayNames: ["Demo"],
+      }, {
+        id: "connector_locked",
+        name: "Locked Connector",
+        description: "Not linked",
+        installUrl: "https://chatgpt.com/apps/locked/connector_locked",
+        isAccessible: false,
+        isEnabled: true,
+        pluginDisplayNames: ["Locked"],
       }],
     }));
     fs.writeFileSync(path.join(appTools, "tools.json"), JSON.stringify({
@@ -1924,6 +2645,11 @@ test("local backend projection reads Codex connector and plugin caches", () => {
         tool_namespace: "mcp__codex_apps__demo",
         tool_name: "demo.read",
         connector_id: "connector_demo",
+      }, {
+        server_name: "codex_apps",
+        tool_namespace: "mcp__codex_apps__locked",
+        tool_name: "locked.read",
+        connector_id: "connector_locked",
       }],
     }));
     fs.writeFileSync(path.join(pluginDir, "plugin.json"), JSON.stringify({
@@ -1934,25 +2660,360 @@ test("local backend projection reads Codex connector and plugin caches", () => {
     }));
 
     const directory = localBackendApiResponse("GET", "/backend-api/connectors/directory/list");
-    assert.equal(directory.connectors.length, 1);
+    assert.equal(directory.connectors.length, 2);
     assert.equal(directory.connectors[0].id, "connector_demo");
+    assert.equal(directory.connectors[0].installUrl, null);
+    assert.equal(directory.connectors[1].id, "connector_locked");
+    assert.equal(directory.connectors[1].installUrl, null);
+    assert.equal(directory.connectors.some((connector) => connector.id === "shared_only"), false);
     assert.deepEqual(directory.items, directory.connectors);
 
     const detail = localBackendApiResponse("GET", "/backend-api/aip/connectors/connector_demo");
     assert.equal(detail.name, "Demo Connector");
+    assert.equal(detail.installUrl, null);
     assert.deepEqual(detail.supported_auth, [{ type: "UNSUPPORTED" }]);
 
     const wham = localBackendApiResponse("POST", "/backend-api/wham/apps");
-    assert.equal(wham.apps.length, 1);
+    assert.equal(wham.apps.length, 2);
     assert.equal(wham.tools.length, 1);
+    assert.equal(wham.tools[0].connector_id, "connector_demo");
+    const whamGet = localBackendApiResponse("GET", "/backend-api/wham/apps");
+    assert.equal(whamGet.apps.length, 2);
+    assert.equal(whamGet.tools.length, 1);
+    assert.equal(whamGet.tools[0].connector_id, "connector_demo");
 
     const plugins = localBackendApiResponse("GET", "/backend-api/plugins/list");
     assert.equal(plugins.plugins.length, 1);
     assert.equal(plugins.plugins[0].plugin.id, "demo");
     assert.equal(plugins.plugins[0].plugin.installed, true);
   } finally {
+    if (previousHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previousHome;
+    if (previousHomeDir === undefined) delete process.env.CODEX_HOME_DIR;
+    else process.env.CODEX_HOME_DIR = previousHomeDir;
     if (previousSharedHome === undefined) delete process.env.DEEPCODEX_SHARED_CODEX_HOME;
     else process.env.DEEPCODEX_SHARED_CODEX_HOME = previousSharedHome;
     fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(shared, { recursive: true, force: true });
+  }
+});
+
+// ─── previous_response_id and tool call_id continuation contracts ─────────
+
+test("chatToResponsesFormat preserves previous_response_id in output", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_prevresp",
+    created: 1,
+    model: "deepseek-chat",
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "ok" },
+    }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  }, {
+    model: "gpt-5.5",
+    previous_response_id: "resp_abc123",
+    input: "continue",
+  });
+
+  assert.equal(formatted.previous_response_id, "resp_abc123");
+});
+
+test("chatToResponsesFormat sets previous_response_id to null when not provided", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_no_prev",
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "ok" },
+    }],
+  }, { model: "gpt-5.5", input: "hello" });
+
+  assert.equal(formatted.previous_response_id, null);
+});
+
+test("responsesToChatBody synthesizes multiple missing tool results when no outputs follow", () => {
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input: [
+      { type: "function_call", call_id: "call_a", name: "exec_command", arguments: '{"cmd":"pwd"}' },
+      { type: "function_call", call_id: "call_b", name: "exec_command", arguments: '{"cmd":"ls"}' },
+      { type: "function_call", call_id: "call_c", name: "exec_command", arguments: '{"cmd":"date"}' },
+      { type: "message", role: "user", content: [{ type: "text", text: "continue" }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const assistantTools = body.messages.filter(m => m.role === "assistant" && Array.isArray(m.tool_calls));
+  assert.ok(assistantTools.length >= 1);
+  const allCalls = assistantTools.flatMap(m => m.tool_calls);
+  assert.equal(allCalls.length, 3);
+
+  const toolMsgs = body.messages.filter(m => m.role === "tool");
+  assert.equal(toolMsgs.length, 3);
+  assert.ok(toolMsgs.every(m => m.content.includes("tool_call_interrupted")));
+  assert.equal(toolMsgs[0].tool_call_id, "call_a");
+  assert.equal(toolMsgs[1].tool_call_id, "call_b");
+  assert.equal(toolMsgs[2].tool_call_id, "call_c");
+});
+
+test("responsesToChatBody fills missing tool results while keeping real results", () => {
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input: [
+      { type: "function_call", call_id: "call_real", name: "exec_command", arguments: '{"cmd":"pwd"}' },
+      { type: "function_call_output", call_id: "call_real", output: "/tmp/project" },
+      { type: "function_call", call_id: "call_missing", name: "exec_command", arguments: '{"cmd":"ls"}' },
+      { type: "message", role: "user", content: [{ type: "text", text: "continue" }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  // call_real should have real result; call_missing should get synthesized result
+  const toolMsgs = body.messages.filter(m => m.role === "tool");
+  const realResult = toolMsgs.find(m => m.tool_call_id === "call_real");
+  assert.ok(realResult);
+  assert.equal(realResult.content, "/tmp/project");
+
+  const synthResult = toolMsgs.find(m => m.tool_call_id === "call_missing");
+  assert.ok(synthResult);
+  assert.match(synthResult.content, /tool_call_interrupted/);
+});
+
+test("responsesToChatBody preserves tool_call call_ids across function_call -> function_call_output pairs", () => {
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input: [
+      { type: "function_call", call_id: "call_first", name: "exec_command", arguments: '{"cmd":"pwd"}' },
+      { type: "function_call_output", call_id: "call_first", output: "/tmp" },
+      { type: "function_call", call_id: "call_second", name: "exec_command", arguments: '{"cmd":"echo 42"}' },
+      { type: "function_call_output", call_id: "call_second", output: "42" },
+      { type: "message", role: "user", content: [{ type: "text", text: "continue" }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const toolMsgs = body.messages.filter(m => m.role === "tool");
+  assert.equal(toolMsgs.length, 2);
+  assert.equal(toolMsgs[0].tool_call_id, "call_first");
+  assert.deepEqual(toolMsgs[0].content, "/tmp");
+  assert.equal(toolMsgs[1].tool_call_id, "call_second");
+  assert.deepEqual(toolMsgs[1].content, "42");
+});
+
+test("responsesToChatBody handles out-of-order tool results by tool_call_id, not position", () => {
+  // Results arrive in reverse call_id order; ensureToolCallResponses must match by id
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input: [
+      { type: "function_call", call_id: "call_a", name: "exec_command", arguments: '{"cmd":"echo a"}' },
+      { type: "function_call", call_id: "call_b", name: "exec_command", arguments: '{"cmd":"echo b"}' },
+      { type: "function_call_output", call_id: "call_b", output: "b-result" },
+      { type: "function_call_output", call_id: "call_a", output: "a-result" },
+      { type: "message", role: "user", content: [{ type: "text", text: "done" }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const toolMsgs = body.messages.filter(m => m.role === "tool");
+  assert.equal(toolMsgs.length, 2);
+  assert.equal(toolMsgs.find(m => m.tool_call_id === "call_a").content, "a-result");
+  assert.equal(toolMsgs.find(m => m.tool_call_id === "call_b").content, "b-result");
+});
+
+test("responsesToChatBody does not drop tool results when non-tool items interleave with results", () => {
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input: [
+      { type: "function_call", call_id: "call_exec", name: "exec_command", arguments: '{"cmd":"pwd"}' },
+      { type: "message", role: "developer", content: [{ type: "text", text: "Approved" }] },
+      { type: "function_call_output", call_id: "call_exec", output: "/tmp" },
+      { type: "message", role: "user", content: [{ type: "text", text: "continue" }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const toolMsgs = body.messages.filter(m => m.role === "tool");
+  assert.equal(toolMsgs.length, 1);
+  assert.equal(toolMsgs[0].tool_call_id, "call_exec");
+  assert.equal(toolMsgs[0].content, "/tmp");
+  // developer message should be present (converted to system) and not lost
+  const sysMsgs = body.messages.filter(m => m.role === "system");
+  assert.ok(sysMsgs.some(m => m.content.includes("Approved")));
+});
+
+test("internal web tools are injected only for requests that explicitly need web access", () => {
+  assert.equal(requestNeedsInternalWebTools({ input: "解释一下这个函数" }), false);
+  assert.equal(requestNeedsInternalWebTools({ input: "联网搜索今天的 Gemini 新闻" }), true);
+  assert.equal(requestNeedsInternalWebTools({ input: "你可以去网上搜索这种情况怎么办" }), true);
+  assert.equal(requestNeedsInternalWebTools({ input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "抓取 https://example.com" }] }] }), true);
+  assert.equal(requestNeedsInternalWebTools({ messages: [{ role: "user", content: "fetch https://example.com" }] }), true);
+  assert.equal(requestNeedsInternalWebTools({ tool_choice: { type: "function", function: { name: "web_search" } } }), true);
+
+  const plain = { model: "gemini-pro-agent", messages: [{ role: "user", content: "hello" }] };
+  assert.equal(chatBodyHasInternalTools(plain), false);
+  assert.equal(chatBodyHasInternalTools(chatBodyWithInternalTools(plain)), true);
+  assert.equal(chatBodyWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "你可以去网上搜索这种情况怎么办" }],
+  }, { preferInternalWebToolChoice: true }).tool_choice.function.name, "web_search");
+  assert.equal(chatBodyWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "打开 https://example.com 看一下" }],
+  }, { preferInternalWebToolChoice: true }).tool_choice.function.name, "web_fetch");
+  assert.equal(responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: "你可以去网上搜索这种情况怎么办",
+  }, {
+    injectInternalTools: true,
+    preferInternalWebToolChoice: true,
+  }).tool_choice.function.name, "web_search");
+  assert.doesNotMatch(buildSystemBlock({ internalWebTools: false }), /internal web_search and web_fetch tools below/);
+  assert.doesNotMatch(buildSystemBlock({ internalWebTools: false }), /No translator-provided web tools are configured/);
+  assert.doesNotMatch(buildSystemBlock({ internalWebTools: false }), /provider-hosted tools/);
+  assert.doesNotMatch(buildSystemBlock({ internalWebTools: false }), /web_search|web_fetch/i);
+});
+
+test("Antigravity internal web loop executes locally and returns evidence to the model", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  const upstreamBodies = [];
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_search");
+    assert.equal(args.query, "Anti-Codex");
+    return JSON.stringify({ ok: true, marker: "LOCAL_WEB_RESULT" });
+  };
+
+  try {
+    const completion = await callAntigravityWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "search the web for Anti-Codex" }],
+      tools: chatBodyWithInternalTools({}).tools,
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }, {
+      callQueued: async (body) => {
+        upstreamBodies.push(structuredClone(body));
+        if (upstreamBodies.length === 1) {
+          assert.equal(body.tool_choice.function.name, "web_search");
+          return {
+            choices: [{
+              message: {
+                role: "assistant",
+                content: '<tool_calls><invoke name="web_search"><parameter name="query">Anti-Codex</parameter></invoke></tool_calls>',
+              },
+              finish_reason: "stop",
+            }],
+          };
+        }
+        assert.equal(body.tool_choice, "auto");
+        assert.match(body.messages.at(-1).content, /LOCAL_WEB_RESULT/);
+        return {
+          choices: [{ message: { role: "assistant", content: "WEB_LOOP_OK" }, finish_reason: "stop" }],
+        };
+      },
+    });
+
+    assert.equal(upstreamBodies.length, 2);
+    assert.equal(completion.choices[0].message.content, "WEB_LOOP_OK");
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity deterministically fetches an explicit URL before asking the model to summarize", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_fetch");
+    assert.equal(args.url, "https://example.com");
+    return JSON.stringify({ ok: true, text: "PREFETCH_EVIDENCE" });
+  };
+
+  try {
+    let upstreamBody;
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "Read https://example.com. and summarize it." }],
+    }), {
+      callQueued: async (body) => {
+        upstreamBody = structuredClone(body);
+        return { choices: [{ message: { role: "assistant", content: "PREFETCH_OK" }, finish_reason: "stop" }] };
+      },
+    });
+
+    assert.equal(completion.choices[0].message.content, "PREFETCH_OK");
+    assert.equal(upstreamBody.messages.at(-2).role, "tool");
+    assert.match(upstreamBody.messages.at(-2).content, /PREFETCH_EVIDENCE/);
+    assert.equal(upstreamBody.messages.at(-1).role, "user");
+    assert.match(upstreamBody.messages.at(-1).content, /web_fetch call is complete/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity returns actual prefetched evidence when the model only promises a future action", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async () => JSON.stringify({
+    ok: true,
+    text: "DETERMINISTIC_WEB_EVIDENCE",
+  });
+
+  try {
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "Fetch https://example.com and summarize it." }],
+    }), {
+      callQueued: async () => ({
+        choices: [{ message: { role: "assistant", content: "I will fetch the page now." }, finish_reason: "stop" }],
+      }),
+    });
+    assert.match(completion.choices[0].message.content, /DETERMINISTIC_WEB_EVIDENCE/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("final Responses formatting trusts translator-owned web evidence", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_web_evidence",
+    _internalWebEvidence: true,
+    choices: [{ message: { role: "assistant", content: "I fetched the page and found Example Domain." }, finish_reason: "stop" }],
+  }, { model: "gemini-pro-agent", input: "Fetch https://example.com" });
+  assert.match(formatted.output[0].content[0].text, /Example Domain/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /DeepCodex .*拦截/);
+});
+
+// ─── static scan: no old-brand leakage in user-visible text strings ──────────
+
+test("no user-visible DeepCodex or Deep Codex brand in source string literals", () => {
+  const source = fs.readFileSync(
+    new URL("../adaptive-server.mjs", import.meta.url),
+    "utf-8",
+  );
+  const lines = source.split("\n");
+
+  // Known-safe exceptions (not user-visible):
+  //   A) .replaceAll("DeepCodex", ...) — safety net inside brandTranslatorText
+  //   B) DEEPCODEX_* — environment variable / config identifier
+  //   C) "deepcodex.reasoning.hex.v1:" — technical prefix for encrypted blobs
+  //   D) "deepcodex[-_\\w]*" — regex in target-hint extraction (line ~3816)
+  //   E) /(?:Anti-Codex|DeepCodex).../ — backward-compat compaction check regex
+  //   F) __DEEPCODEX_TEST_* — test-only global hook
+  //   G) "DeepCodex" as a single word inside a regex character set or literal
+  //      in backward-compat context (task ledger / durable environment facts)
+
+  for (let i = 0; i < lines.length; i++) {
+    const n = i + 1;
+    const line = lines[i];
+    const hasOldBrand = line.includes("DeepCodex") || line.includes("Deep Codex");
+    if (!hasOldBrand) continue;
+
+    // ── skip known-safe patterns ──
+    if (line.includes('replaceAll("DeepCodex"')) continue;        // A
+    if (line.includes("DEEPCODEX_")) continue;                     // B
+    if (line.includes("deepcodex.reasoning.hex.v1:")) continue;    // C
+    if (line.includes("deepcodex[-_")) continue;                   // D
+    if (line.includes("__DEEPCODEX_TEST_")) continue;              // F
+    if (/(?:Anti-Codex\||DeepCodex).*?(?:task ledger|durable environment facts)/.test(line)) continue; // E
+
+    // Any remaining hit is suspicious — likely old brand in user-visible text
+    assert.fail(
+      `Line ${n}: unexpected user-visible "DeepCodex" or "Deep Codex" reference:\n  ${line.trim()}`,
+    );
   }
 });

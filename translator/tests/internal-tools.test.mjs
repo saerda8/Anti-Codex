@@ -61,3 +61,39 @@ test("unknown internal tool errors are explicit", async () => {
   assert.equal(parsed.ok, false);
   assert.equal(parsed.error, "internal tool unavailable: not_a_tool");
 });
+
+test("known internal tools retry a transient failure once", async () => {
+  const originalExecute = INTERNAL_TOOLS.web_fetch_urllib.execute;
+  let attempts = 0;
+  INTERNAL_TOOLS.web_fetch_urllib.execute = async () => {
+    attempts += 1;
+    if (attempts === 1) return JSON.stringify({ ok: false, error: "temporary network timeout" });
+    return JSON.stringify({ ok: true, text: "recovered" });
+  };
+
+  try {
+    const parsed = JSON.parse(await executeInternalTool("web_fetch", { url: "https://example.com" }));
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.text, "recovered");
+    assert.equal(attempts, 2);
+  } finally {
+    INTERNAL_TOOLS.web_fetch_urllib.execute = originalExecute;
+  }
+});
+
+test("known internal tool failures preserve the real error", async () => {
+  const originalExecute = INTERNAL_TOOLS.web_fetch_urllib.execute;
+  INTERNAL_TOOLS.web_fetch_urllib.execute = async () => JSON.stringify({
+    ok: false,
+    error: "connection reset by peer",
+  });
+
+  try {
+    const parsed = JSON.parse(await executeInternalTool("web_fetch", { url: "https://example.com" }));
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error, "connection reset by peer");
+    assert.equal(parsed.tool, "web_fetch");
+  } finally {
+    INTERNAL_TOOLS.web_fetch_urllib.execute = originalExecute;
+  }
+});
