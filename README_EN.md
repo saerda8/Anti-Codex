@@ -31,6 +31,14 @@ The sync flow builds and validates a candidate first, retains a rollback host, a
 
 Use `Anti-Codex > Manage Anti-Codex > Switch Antigravity Account`. Switch the account in Antigravity Desktop, then continue the guided check. Anti-Codex refreshes the anonymized account fingerprint and model catalog and verifies the installation.
 
+## Third-Party API Configuration
+
+The default route remains the local signed-in Antigravity Desktop account. When a third-party API is needed, the supported entry point is Anti-Codex Manager: test the connection, then save and apply the upstream profile. Lower-level scripts are controlled write and restart helpers only. If a saved profile cannot be read, Anti-Codex refuses a silent wrong-upstream fallback.
+
+## Connector Authorization Boundary
+
+Anti-Codex syncs local MCP, Skills, plugin metadata, and connector metadata into its own isolated state, but metadata is not authorization. Connector-backed app tools remain unavailable until the real connector is authorized; Anti-Codex must not fake callable app tools from a cache snapshot.
+
 ## Explicit Boundaries
 
 - Model Responses WebSocket currently uses an explicit HTTP/SSE fallback.

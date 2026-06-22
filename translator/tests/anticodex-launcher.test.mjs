@@ -3495,6 +3495,8 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /warningsOnly/);
   assert.match(preflight, /function Test-PublicDocumentationContracts/);
   assert.match(preflight, /\$checks\["publicDocumentation"\] = Test-PublicDocumentationContracts/);
+  assert.match(preflight, /function Test-ManagerBridgeSelfTest/);
+  assert.match(preflight, /\$checks\["managerBridgeSelfTest"\] = Test-ManagerBridgeSelfTest/);
   assert.match(preflight, /docs\\ADAPTIVE_ONE_API_STACK\.md/);
   assert.match(preflight, /docs\\marketing\\video-script\.md/);
   assert.match(preflight, /provider profile/);
@@ -4255,6 +4257,7 @@ test("Windows documentation describes Anti-Codex install paths and treats legacy
 
 test("current user-facing docs describe the Anti-Codex provider and connector boundaries", () => {
   const readme = readFileSync(resolve(root, "README.md"), "utf8");
+  const readmeEn = readFileSync(resolve(root, "README_EN.md"), "utf8");
   const providerStack = readFileSync(resolve(root, "docs", "ADAPTIVE_ONE_API_STACK.md"), "utf8");
   const compatibility = readFileSync(resolve(root, "docs", "chat-to-responses-compat.md"), "utf8");
   const marketingDocs = [
@@ -4278,6 +4281,15 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.match(readme, /upstream profile/);
   assert.match(readme, /connector-backed app tools/);
   assert.doesNotMatch(readme, /DeepCodex app|DeepSeek \u7248 Codex|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
+
+  assert.match(readmeEn, /^# Anti-Codex/m);
+  assert.match(readmeEn, /Antigravity Desktop/);
+  assert.match(readmeEn, /ChatGPT/);
+  assert.match(readmeEn, /DeepSeek API key/);
+  assert.match(readmeEn, /upstream profile/);
+  assert.match(readmeEn, /Connector-backed app tools/);
+  assert.match(readmeEn, /must not fake callable app tools/);
+  assert.doesNotMatch(readmeEn, /DeepCodex app|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
 
   assert.match(compatibility, /Scope: Anti-Codex translates Codex Desktop/);
   assert.match(compatibility, /Antigravity Desktop is the default upstream/);

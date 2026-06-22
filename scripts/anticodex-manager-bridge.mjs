@@ -2,6 +2,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import net from "node:net";
+import assert from "node:assert/strict";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
@@ -341,6 +342,39 @@ function managerSummary(action, payload) {
   ].filter(Boolean).join("\n");
   if (action === "postVerificationFull") return "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
   return JSON.stringify(result, null, 2);
+}
+
+if (args.has("--self-test")) {
+  const okSummary = latestReportsSummary({
+    reportRoot: "C:\\tmp\\anticodex\\reports",
+    existingCount: 1,
+    reports: [{
+      label: "\u6e90\u7801\u9884\u68c0",
+      exists: true,
+      ok: true,
+      elapsedMs: 18000,
+      publicDocumentationOk: true,
+      latestPath: "latest-source-preflight.json",
+    }],
+  });
+  assert.match(okSummary, /\u516c\u5f00\u6587\u6863\uff1a\u901a\u8fc7/);
+  assert.match(okSummary, /\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7/);
+
+  const failingSummary = latestReportsSummary({
+    reportRoot: "C:\\tmp\\anticodex\\reports",
+    existingCount: 1,
+    reports: [{
+      label: "\u6e90\u7801\u9884\u68c0",
+      exists: true,
+      ok: false,
+      publicDocumentationOk: false,
+      firstFailure: "public docs mismatch",
+    }],
+  });
+  assert.match(failingSummary, /\u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406/);
+  assert.match(failingSummary, /public docs mismatch/);
+  console.log(JSON.stringify({ ok: true, selfTest: true }));
+  process.exit(0);
 }
 
 async function main() {

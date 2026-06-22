@@ -166,6 +166,14 @@ function Test-UiStateSelfTest {
     return $result
 }
 
+function Test-ManagerBridgeSelfTest {
+    $node = (Get-Command "node" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\anticodex-manager-bridge.mjs"
+    $result = Invoke-SourceProcess -Name "Manager bridge self-test" -FilePath $node -Arguments @($script, "--self-test") -TimeoutSec 30
+    if (-not $result.ok) { Add-Failure "Manager bridge self-test failed" }
+    return $result
+}
+
 function Test-TranslatorRegression {
     if ($SkipFullRegression) {
         return [pscustomobject]@{ ok = $true; skipped = $true; reason = "SkipFullRegression" }
@@ -215,6 +223,7 @@ function Test-PublicDocumentationContracts {
     }
 
     $readme = Read-PublicDoc "README.md"
+    $readmeEn = Read-PublicDoc "README_EN.md"
     $providerStack = Read-PublicDoc "docs\ADAPTIVE_ONE_API_STACK.md"
     $compatibility = Read-PublicDoc "docs\chat-to-responses-compat.md"
     $marketingDocs = @(
@@ -225,9 +234,14 @@ function Test-PublicDocumentationContracts {
 
     Add-DocAssertion -File "README.md" -Name "anti-codex-brand" -Ok ($readme -match '^# Anti-Codex')
     Add-DocAssertion -File "README.md" -Name "antigravity-default" -Ok ($readme -match 'Antigravity Desktop')
-    Add-DocAssertion -File "README.md" -Name "third-party-profile-boundary" -Ok ($readme -match 'provider profile')
+    Add-DocAssertion -File "README.md" -Name "third-party-profile-boundary" -Ok ($readme -match 'upstream profile')
     Add-DocAssertion -File "README.md" -Name "connector-authorization-boundary" -Ok ($readme -match 'connector-backed app tools')
     Add-DocAssertion -File "README.md" -Name "no-old-public-launch-claims" -Ok ($readme -notmatch 'DeepCodex app|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk')
+    Add-DocAssertion -File "README_EN.md" -Name "anti-codex-brand" -Ok ($readmeEn -match '^# Anti-Codex')
+    Add-DocAssertion -File "README_EN.md" -Name "antigravity-default" -Ok ($readmeEn -match 'Antigravity Desktop')
+    Add-DocAssertion -File "README_EN.md" -Name "third-party-profile-boundary" -Ok ($readmeEn -match 'upstream profile')
+    Add-DocAssertion -File "README_EN.md" -Name "connector-authorization-boundary" -Ok ($readmeEn -match 'Connector-backed app tools')
+    Add-DocAssertion -File "README_EN.md" -Name "no-old-public-launch-claims" -Ok ($readmeEn -notmatch 'DeepCodex app|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk')
 
     Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "provider-stack-title" -Ok ($providerStack -match '^# Anti-Codex provider stack')
     Add-DocAssertion -File "docs\ADAPTIVE_ONE_API_STACK.md" -Name "antigravity-default" -Ok ($providerStack -match 'Antigravity Desktop provider by default')
@@ -316,6 +330,7 @@ try {
     $checks["javascriptSyntax"] = Test-JavaScriptSyntax
     $checks["powershellSyntax"] = Test-PowerShellSyntax
     $checks["uiStateSelfTest"] = Test-UiStateSelfTest
+    $checks["managerBridgeSelfTest"] = Test-ManagerBridgeSelfTest
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
     $checks["diffWhitespace"] = Test-GitDiffCheck
