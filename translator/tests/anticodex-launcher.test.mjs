@@ -3307,6 +3307,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /test-anticodex-mcp-skills\.ps1/);
   assert.match(overall, /test-anticodex-plugin-capabilities\.ps1/);
   assert.match(overall, /New-SkippedCheck/);
+  assert.match(overall, /behaviorCovered = \$false/);
+  assert.match(overall, /coverageKind = "skipped"/);
   assert.match(overall, /covered by Manager MCP\/Skill button smoke/);
   assert.match(overall, /covered by Manager plugin\/application button smoke/);
   assert.match(overall, /managerButtonSourcePreflight/);

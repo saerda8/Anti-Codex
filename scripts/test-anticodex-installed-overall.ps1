@@ -60,6 +60,8 @@ function New-SkippedCheck {
         skipped = $true
         reason = $Reason
         coveredBy = $CoveredBy
+        behaviorCovered = $false
+        coverageKind = "skipped"
         durationMs = 0
     }
 }
