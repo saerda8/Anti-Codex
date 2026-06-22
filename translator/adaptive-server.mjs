@@ -1980,6 +1980,11 @@ function latestManagerReportItem(label, fileName) {
     const failures = Array.isArray(report?.failures) ? report.failures.filter(Boolean) : [];
     const checks = report?.checks && typeof report.checks === "object" ? report.checks : {};
     const publicDocumentation = checks.publicDocumentation && typeof checks.publicDocumentation === "object" ? checks.publicDocumentation : null;
+    const endpointEvidence = report?.endpointEvidence && typeof report.endpointEvidence === "object" ? report.endpointEvidence : null;
+    const capabilities = report?.capabilities && typeof report.capabilities === "object" ? report.capabilities : null;
+    const connectorParity = capabilities?.connectorParity && typeof capabilities.connectorParity === "object" ? capabilities.connectorParity : null;
+    const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object" ? capabilities.appToolParity : null;
+    const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object" ? capabilities.appToolGetPostParity : null;
     let updatedAt = "";
     if (fullPath && existsSync(fullPath)) {
         try { updatedAt = statSync(fullPath).mtime.toISOString(); } catch {}
@@ -2005,6 +2010,28 @@ function latestManagerReportItem(label, fileName) {
         historyPath: shortSafeText(report?.report?.history || "", ""),
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         publicDocumentationFailureCount: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation && Array.isArray(publicDocumentation.failed) ? publicDocumentation.failed.length : null,
+        localConnectorEvidence: endpointEvidence ? {
+            chatgptInstallUrlsScrubbed: endpointEvidence.chatgptInstallUrlsScrubbed === true,
+            linkEndpointsUnsupported: endpointEvidence.linkEndpointsUnsupported === true,
+            allowlistedConnectorAccessible: endpointEvidence.allowlistedConnectorAccessible === true,
+            allowlistedConnectorLocallyAllowlisted: endpointEvidence.allowlistedConnectorLocallyAllowlisted === true,
+            upstreamRequestsDuringLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints) : null,
+            hiddenConnectorAccessible: endpointEvidence.hiddenConnectorAccessible === true,
+            exposedToolNames: Array.isArray(endpointEvidence.exposedToolNames) ? endpointEvidence.exposedToolNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+        } : null,
+        pluginCapabilityEvidence: capabilities ? {
+            nativeCodexWriteback: capabilities.nativeCodexWriteback === true,
+            accessibleConnectorCount: Number.isFinite(Number(capabilities.accessibleConnectorCount)) ? Number(capabilities.accessibleConnectorCount) : null,
+            appToolCount: Number.isFinite(Number(capabilities.appToolCount)) ? Number(capabilities.appToolCount) : null,
+            appToolGetCount: Number.isFinite(Number(capabilities.appToolGetCount)) ? Number(capabilities.appToolGetCount) : null,
+            unattributedAppToolCount: Number.isFinite(Number(capabilities.unattributedAppToolCount)) ? Number(capabilities.unattributedAppToolCount) : null,
+            unauthorizedAppToolCount: Number.isFinite(Number(capabilities.unauthorizedAppToolCount)) ? Number(capabilities.unauthorizedAppToolCount) : null,
+            connectorParityClean: connectorParity && Array.isArray(connectorParity.missingShared) ? connectorParity.missingShared.length === 0 : null,
+            appToolParityClean: appToolParity && Array.isArray(appToolParity.missingShared) ? appToolParity.missingShared.length === 0 : null,
+            appToolGetPostParityClean: appToolGetPostParity && Array.isArray(appToolGetPostParity.missingFromGet) && Array.isArray(appToolGetPostParity.extraFromGet)
+                ? appToolGetPostParity.missingFromGet.length === 0 && appToolGetPostParity.extraFromGet.length === 0
+                : null,
+        } : null,
         updatedAt,
         ageMs,
         stale,
@@ -2025,6 +2052,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("MCP 工具链", "latest-mcp-tool-loop.json"),
         latestManagerReportItem("MCP/Skill 检查", "latest-mcp-skills.json"),
         latestManagerReportItem("插件/应用检查", "latest-plugin-capabilities.json"),
+        latestManagerReportItem("本地连接器检查", "latest-local-connectors.json"),
         latestManagerReportItem("Release Gate 汇总", "latest-release-gates.json"),
         latestManagerReportItem("冷启动恢复", "latest-cold-relaunch.json"),
         latestManagerReportItem("Manager 真实按钮", "latest-manager-real-buttons.json"),
@@ -2556,6 +2584,17 @@ function latestReportsSummary(result){
     if(item.exists&&age) lines.push("  \\u66f4\\u65b0\\uff1a"+age);
     if(item.firstFailure) lines.push("  \\u9996\\u4e2a\\u5931\\u8d25\\uff1a"+item.firstFailure);
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
+    if(item.localConnectorEvidence){
+      const evidence=item.localConnectorEvidence;
+      lines.push("  \\u8fde\\u63a5\\u5668\\u8bc1\\u636e\\uff1aChatGPT URL "+(evidence.chatgptInstallUrlsScrubbed?"\\u5df2\\u6e05\\u7406":"\\u9700\\u5904\\u7406")+" / \\u4e0a\\u6e38\\u8bf7\\u6c42 "+(evidence.upstreamRequestsDuringLocalEndpoints??"\\u672a\\u77e5")+" / allowlist "+(evidence.allowlistedConnectorAccessible?"\\u88ab\\u5f53\\u6210\\u6388\\u6743":"\\u4e0d\\u7b49\\u4e8e\\u6388\\u6743"));
+      if(Array.isArray(evidence.exposedToolNames)&&evidence.exposedToolNames.length) lines.push("  \\u53ef\\u89c1\\u5de5\\u5177\\uff1a"+evidence.exposedToolNames.join(", "));
+    }
+    if(item.pluginCapabilityEvidence){
+      const evidence=item.pluginCapabilityEvidence;
+      const parityClean=evidence.connectorParityClean===true&&evidence.appToolParityClean===true&&evidence.appToolGetPostParityClean===true;
+      lines.push("  \\u5e94\\u7528\\u5de5\\u5177\\u8bc1\\u636e\\uff1a\\u672a\\u6388\\u6743\\u5de5\\u5177 "+(evidence.unauthorizedAppToolCount??"\\u672a\\u77e5")+" / \\u65e0 connector_id "+(evidence.unattributedAppToolCount??"\\u672a\\u77e5")+" / parity "+(parityClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406"));
+      lines.push("  \\u539f\\u751f Codex \\u5199\\u56de\\uff1a"+(evidence.nativeCodexWriteback?"\\u9700\\u5904\\u7406":"\\u65e0"));
+    }
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);
   }
   return lines.join("\\n");

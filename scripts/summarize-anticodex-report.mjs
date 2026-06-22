@@ -60,12 +60,21 @@ const structuralEvidence = toolHistory && toolHistory.structuralEvidence ? toolH
 const providerSwitch = multiTurnHistory && multiTurnHistory.providerSwitch ? multiTurnHistory.providerSwitch : null;
 const protocolSwitch = multiTurnHistory && multiTurnHistory.protocolSwitch ? multiTurnHistory.protocolSwitch : null;
 const reverseProtocolSwitch = multiTurnHistory && multiTurnHistory.reverseProtocolSwitch ? multiTurnHistory.reverseProtocolSwitch : null;
+const endpointEvidence = report && report.endpointEvidence ? report.endpointEvidence : null;
+const capabilities = report && report.capabilities ? report.capabilities : null;
+const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : null;
+const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : null;
+const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
 
 function structuralEvidenceClean(evidence) {
   return !!evidence
     && evidence.pairedByCallId === true
     && evidence.resultAfterToolCall === true
     && evidence.protocolShapeClean === true;
+}
+
+function emptyArrayField(object, key) {
+  return object && Array.isArray(object[key]) ? object[key].length === 0 : null;
 }
 
 const summary = {
@@ -108,6 +117,35 @@ const summary = {
   crossProtocolWithoutHistoryLoss: boolField(report, "crossProtocolWithoutHistoryLoss"),
   reverseCrossProtocolWithoutHistoryLoss: boolField(report, "reverseCrossProtocolWithoutHistoryLoss"),
   secretsRedacted: boolField(report, "secretsRedacted"),
+  localConnectorEvidence: endpointEvidence ? {
+    connectors: has(endpointEvidence, "connectors") ? endpointEvidence.connectors : null,
+    exposedToolsGet: has(endpointEvidence, "exposedToolsGet") ? endpointEvidence.exposedToolsGet : null,
+    exposedToolsPost: has(endpointEvidence, "exposedToolsPost") ? endpointEvidence.exposedToolsPost : null,
+    linkedConnectorAccessible: boolField(endpointEvidence, "linkedConnectorAccessible"),
+    allowlistedConnectorAccessible: boolField(endpointEvidence, "allowlistedConnectorAccessible"),
+    allowlistedConnectorLocallyAllowlisted: boolField(endpointEvidence, "allowlistedConnectorLocallyAllowlisted"),
+    chatgptInstallUrlsScrubbed: boolField(endpointEvidence, "chatgptInstallUrlsScrubbed"),
+    linkEndpointsUnsupported: boolField(endpointEvidence, "linkEndpointsUnsupported"),
+    upstreamRequestsDuringLocalEndpoints: has(endpointEvidence, "upstreamRequestsDuringLocalEndpoints") ? endpointEvidence.upstreamRequestsDuringLocalEndpoints : null,
+    hiddenConnectorAccessible: boolField(endpointEvidence, "hiddenConnectorAccessible"),
+    exposedToolNames: has(endpointEvidence, "exposedToolNames") ? asStringArray(endpointEvidence.exposedToolNames) : [],
+  } : null,
+  pluginCapabilityEvidence: capabilities ? {
+    snapshotSource: asString(capabilities.snapshotSource),
+    nativeCodexWriteback: boolField(capabilities, "nativeCodexWriteback"),
+    capabilityState: asString(capabilities.capabilityState),
+    connectorCount: has(capabilities, "connectorCount") ? capabilities.connectorCount : null,
+    accessibleConnectorCount: has(capabilities, "accessibleConnectorCount") ? capabilities.accessibleConnectorCount : null,
+    appToolCount: has(capabilities, "appToolCount") ? capabilities.appToolCount : null,
+    appToolGetCount: has(capabilities, "appToolGetCount") ? capabilities.appToolGetCount : null,
+    unattributedAppToolCount: has(capabilities, "unattributedAppToolCount") ? capabilities.unattributedAppToolCount : null,
+    unauthorizedAppToolCount: has(capabilities, "unauthorizedAppToolCount") ? capabilities.unauthorizedAppToolCount : null,
+    connectorParityClean: connectorParity ? emptyArrayField(connectorParity, "missingShared") : null,
+    appToolParityClean: appToolParity ? emptyArrayField(appToolParity, "missingShared") : null,
+    appToolGetPostParityClean: appToolGetPostParity
+      ? emptyArrayField(appToolGetPostParity, "missingFromGet") === true && emptyArrayField(appToolGetPostParity, "extraFromGet") === true
+      : null,
+  } : null,
   providerContinuity: multiTurnHistory ? {
     turns: has(multiTurnHistory, "turns") ? multiTurnHistory.turns : null,
     toolHistoryTurns: has(multiTurnHistory, "toolHistoryTurns") ? multiTurnHistory.toolHistoryTurns : null,

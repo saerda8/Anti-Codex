@@ -120,6 +120,8 @@ function Test-DiagnosticBundle {
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
     $thirdPartyProviderSummary = $null
+    $localConnectorsSummary = $null
+    $pluginCapabilitiesSummary = $null
     $releaseGatesSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         $summary = As-FlatArray (Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json)
@@ -176,6 +178,35 @@ function Test-DiagnosticBundle {
                 if ($continuity.reverseProtocolSwitchPreservesOpenAiToolPair -ne $true) { Add-Failure "third-party provider summary missing OpenAI tool pair after reverse protocol switch" }
                 if ($continuity.structuralEvidenceClean -ne $true) { Add-Failure "third-party provider summary missing clean structured tool-pair evidence" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesHistory -ne $true) { Add-Failure "third-party provider summary missing final reverse-switch history evidence" }
+            }
+        }
+        $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
+        if ($localConnectorsSummary) {
+            if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
+            $localEvidence = $localConnectorsSummary.localConnectorEvidence
+            if (-not $localEvidence) {
+                Add-Failure "local connector summary missing localConnectorEvidence"
+            } else {
+                if ($localEvidence.chatgptInstallUrlsScrubbed -ne $true) { Add-Failure "local connector summary missing ChatGPT URL scrub evidence" }
+                if ($localEvidence.linkEndpointsUnsupported -ne $true) { Add-Failure "local connector summary missing metadata-only link endpoint evidence" }
+                if ([int]$localEvidence.upstreamRequestsDuringLocalEndpoints -ne 0) { Add-Failure "local connector summary recorded upstream requests during local endpoints" }
+                if ($localEvidence.allowlistedConnectorAccessible -ne $false) { Add-Failure "local connector summary treats allowlist as access" }
+                if ($localEvidence.allowlistedConnectorLocallyAllowlisted -ne $true) { Add-Failure "local connector summary missing local allowlist evidence" }
+            }
+        }
+        $pluginCapabilitiesSummary = @($summary | Where-Object { $_.file -eq "latest-plugin-capabilities.json" } | Select-Object -First 1)[0]
+        if ($pluginCapabilitiesSummary) {
+            if ($pluginCapabilitiesSummary.ok -ne $true) { Add-Failure "plugin capability summary ok=false" }
+            $pluginEvidence = $pluginCapabilitiesSummary.pluginCapabilityEvidence
+            if (-not $pluginEvidence) {
+                Add-Failure "plugin capability summary missing pluginCapabilityEvidence"
+            } else {
+                if ($pluginEvidence.nativeCodexWriteback -ne $false) { Add-Failure "plugin capability summary allows native Codex writeback" }
+                if ([int]$pluginEvidence.accessibleConnectorCount -ne 0) { Add-Failure "plugin capability summary reports accessible connectors" }
+                if ([int]$pluginEvidence.unauthorizedAppToolCount -ne 0) { Add-Failure "plugin capability summary reports unauthorized app tools" }
+                if ($pluginEvidence.connectorParityClean -ne $true) { Add-Failure "plugin capability summary missing connector parity evidence" }
+                if ($pluginEvidence.appToolParityClean -ne $true) { Add-Failure "plugin capability summary missing app-tool parity evidence" }
+                if ($pluginEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "plugin capability summary missing GET/POST parity evidence" }
             }
         }
         $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]

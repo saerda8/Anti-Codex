@@ -267,6 +267,17 @@ function latestReportsSummary(result) {
     if (item.exists && age) lines.push(`  \u66f4\u65b0\uff1a${age}`);
     if (item.firstFailure) lines.push(`  \u9996\u4e2a\u5931\u8d25\uff1a${item.firstFailure}`);
     if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
+    if (item.localConnectorEvidence) {
+      const evidence = item.localConnectorEvidence;
+      lines.push(`  \u8fde\u63a5\u5668\u8bc1\u636e\uff1aChatGPT URL ${evidence.chatgptInstallUrlsScrubbed ? "\u5df2\u6e05\u7406" : "\u9700\u5904\u7406"} / \u4e0a\u6e38\u8bf7\u6c42 ${evidence.upstreamRequestsDuringLocalEndpoints ?? "\u672a\u77e5"} / allowlist ${evidence.allowlistedConnectorAccessible ? "\u88ab\u5f53\u6210\u6388\u6743" : "\u4e0d\u7b49\u4e8e\u6388\u6743"}`);
+      if (Array.isArray(evidence.exposedToolNames) && evidence.exposedToolNames.length) lines.push(`  \u53ef\u89c1\u5de5\u5177\uff1a${evidence.exposedToolNames.join(", ")}`);
+    }
+    if (item.pluginCapabilityEvidence) {
+      const evidence = item.pluginCapabilityEvidence;
+      const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
+      lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+      lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
+    }
     if (item.exists && item.latestPath) lines.push(`  \u6587\u4ef6\uff1a${item.latestPath}`);
   }
   return lines.join("\n");
@@ -373,6 +384,38 @@ if (args.has("--self-test")) {
   });
   assert.match(failingSummary, /\u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406/);
   assert.match(failingSummary, /public docs mismatch/);
+
+  const connectorSummary = latestReportsSummary({
+    reportRoot: "C:\\tmp\\anticodex\\reports",
+    existingCount: 2,
+    reports: [{
+      label: "\u672c\u5730\u8fde\u63a5\u5668\u68c0\u67e5",
+      exists: true,
+      ok: true,
+      localConnectorEvidence: {
+        chatgptInstallUrlsScrubbed: true,
+        allowlistedConnectorAccessible: false,
+        upstreamRequestsDuringLocalEndpoints: 0,
+        exposedToolNames: ["linked_tool"],
+      },
+    }, {
+      label: "\u63d2\u4ef6/\u5e94\u7528\u68c0\u67e5",
+      exists: true,
+      ok: true,
+      pluginCapabilityEvidence: {
+        nativeCodexWriteback: false,
+        unauthorizedAppToolCount: 0,
+        unattributedAppToolCount: 0,
+        connectorParityClean: true,
+        appToolParityClean: true,
+        appToolGetPostParityClean: true,
+      },
+    }],
+  });
+  assert.match(connectorSummary, /\u8fde\u63a5\u5668\u8bc1\u636e/);
+  assert.match(connectorSummary, /\u4e0a\u6e38\u8bf7\u6c42 0/);
+  assert.match(connectorSummary, /\u5e94\u7528\u5de5\u5177\u8bc1\u636e/);
+  assert.match(connectorSummary, /\u672a\u6388\u6743\u5de5\u5177 0/);
   console.log(JSON.stringify({ ok: true, selfTest: true }));
   process.exit(0);
 }

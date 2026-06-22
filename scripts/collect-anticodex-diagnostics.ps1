@@ -197,6 +197,8 @@ function Read-JsonSummary {
             crossProtocolWithoutHistoryLoss = $json.crossProtocolWithoutHistoryLoss
             reverseCrossProtocolWithoutHistoryLoss = $json.reverseCrossProtocolWithoutHistoryLoss
             secretsRedacted = $json.secretsRedacted
+            localConnectorEvidence = $json.localConnectorEvidence
+            pluginCapabilityEvidence = $json.pluginCapabilityEvidence
             providerContinuity = $json.providerContinuity
             integrity = $integrity
             error = if ($integrity.signed -and $integrity.valid -eq $false) { "report hash validation failed: $($integrity.error)" } else { "" }
@@ -286,6 +288,7 @@ $latestReports = @(
     "latest-source-preflight.json",
     "latest-mcp-skills.json",
     "latest-plugin-capabilities.json",
+    "latest-local-connectors.json",
     "latest-release-gates.json",
     "latest-cold-relaunch.json",
     "latest-third-party-provider.json",
