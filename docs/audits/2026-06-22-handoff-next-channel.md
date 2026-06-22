@@ -172,6 +172,7 @@ Branch: main
 - MCP/Skill reports now surface concrete parity and smoke evidence in report summaries, diagnostic bundles, and Manager latest-report text instead of only saying the report passed.
 - Passive release gates now validate MCP/Skill semantics directly: no missing shared MCP/skills, `.agents` included in expected skills, node_repl present, MCP smoke and real node_repl call passed, and skill smoke readable.
 - Passive release gates now validate source-preflight semantics directly, including upstream profile storage. The latest source-preflight report was refreshed and now carries `upstreamProfileStorage.ok:true`.
+- Manager latest reports now includes sync-readiness and model-routing latest reports, so required no-traffic release gates are visible from the UI.
 - Optional real-provider reports now surface marker/history/redaction evidence; optional provider-to-Antigravity return reports now surface turn-10 history, previous response ID, marker counts, route transport, and resolved model.
 - Plugin capability summaries and Manager latest reports now show parity drift counts plus sample IDs for connector, app-tool, and GET/POST app-tool mismatches.
 - Diagnostic bundle verification now requires MCP/Skill evidence and plugin parity drift sample fields. Optional real-provider and Antigravity-return details are required whenever their optional reports are present and not skipped.

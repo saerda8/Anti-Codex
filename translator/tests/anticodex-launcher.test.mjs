@@ -1752,6 +1752,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-mcp-skills\.json/);
   assert.match(server, /latest-plugin-capabilities\.json/);
   assert.match(server, /latest-local-connectors\.json/);
+  assert.match(server, /latest-sync-readiness\.json/);
+  assert.match(server, /latest-model-routing\.json/);
   assert.match(server, /latest-third-party-provider\.json/);
   assert.match(server, /latest-release-gates\.json/);
   assert.match(server, /latest-cold-relaunch\.json/);

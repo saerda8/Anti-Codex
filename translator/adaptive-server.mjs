@@ -2155,6 +2155,8 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("MCP/Skill 检查", "latest-mcp-skills.json"),
         latestManagerReportItem("插件/应用检查", "latest-plugin-capabilities.json"),
         latestManagerReportItem("本地连接器检查", "latest-local-connectors.json"),
+        latestManagerReportItem("安装/同步检查", "latest-sync-readiness.json"),
+        latestManagerReportItem("模型路由检查", "latest-model-routing.json"),
         latestManagerReportItem("第三方连续性", "latest-third-party-provider.json"),
         latestManagerReportItem("Release Gate 汇总", "latest-release-gates.json"),
         latestManagerReportItem("冷启动恢复", "latest-cold-relaunch.json"),
