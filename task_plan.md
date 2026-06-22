@@ -860,3 +860,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 Legacy Marketing Boundary Marker
 - Completed: the historical DeepCodex / DeepSeek video script under `docs/marketing/legacy` now has an explicit archive marker saying it is not a current Anti-Codex launch asset.
 - Completed: public-documentation preflight and launcher contracts now require that marker, while current marketing entry points continue to reject legacy DeepCodex / DeepSeek-only claims.
+
+## 2026-06-23 Manager Real Buttons Diagnostic Summary
+- Completed: diagnostic bundle report summaries now preserve `actions`, `managerButtonOk`, and per-action `managerButtonResults` for `latest-manager-real-buttons.json`.
+- Completed: the diagnostics verifier now requires `latest-manager-real-buttons.json` to be present, named `manager-real-buttons`, green, failure-free, and to include real `mcpSkills` plus `pluginCapabilities` button evidence without `lastUiOnly:true`.

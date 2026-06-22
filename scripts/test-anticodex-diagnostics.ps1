@@ -118,6 +118,7 @@ function Test-DiagnosticBundle {
     $modelSummary = $null
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
+    $managerRealButtonsSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         $summary = As-FlatArray (Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json)
         $modelSummary = @($summary | Where-Object { $_.file -eq "latest-model-routing.json" } | Select-Object -First 1)[0]
@@ -149,6 +150,27 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
+        }
+        $managerRealButtonsSummary = @($summary | Where-Object { $_.file -eq "latest-manager-real-buttons.json" } | Select-Object -First 1)[0]
+        if (-not $managerRealButtonsSummary) {
+            Add-Failure "diagnostic reports summary missing latest-manager-real-buttons.json"
+        } else {
+            if ($managerRealButtonsSummary.ok -ne $true) { Add-Failure "manager-real-buttons summary ok=false" }
+            if ($managerRealButtonsSummary.reportName -ne "manager-real-buttons") { Add-Failure "manager-real-buttons summary missing reportName" }
+            if ([int]$managerRealButtonsSummary.failureCount -ne 0) { Add-Failure "manager-real-buttons summary has failures" }
+            if ($managerRealButtonsSummary.managerButtonOk -ne $true) { Add-Failure "manager-real-buttons summary missing managerButton ok=true" }
+            $actions = @($managerRealButtonsSummary.actions | ForEach-Object { [string]$_ })
+            foreach ($requiredAction in @("mcpSkills", "pluginCapabilities")) {
+                if ($actions -notcontains $requiredAction) { Add-Failure "manager-real-buttons summary missing action: $requiredAction" }
+                $actionResult = @($managerRealButtonsSummary.managerButtonResults | Where-Object { $_.action -eq $requiredAction } | Select-Object -First 1)[0]
+                if (-not $actionResult) {
+                    Add-Failure "manager-real-buttons summary missing result: $requiredAction"
+                } else {
+                    if ($actionResult.ok -ne $true) { Add-Failure "manager-real-buttons action not ok: $requiredAction" }
+                    if ($null -eq $actionResult.lastUiOnly) { Add-Failure "manager-real-buttons action missing lastUiOnly evidence: $requiredAction" }
+                    if ($actionResult.lastUiOnly -eq $true) { Add-Failure "manager-real-buttons action used ui-only smoke: $requiredAction" }
+                }
+            }
         }
     }
 
@@ -197,6 +219,14 @@ function Test-DiagnosticBundle {
                 latestDiagnosis = $postVerificationSummary.latestDiagnosis
                 latestDiagnosisDetail = $postVerificationSummary.latestDiagnosisDetail
                 attempts = $postVerificationSummary.attempts
+            }
+        } else { $null }
+        managerRealButtons = if ($managerRealButtonsSummary) {
+            [pscustomobject]@{
+                ok = $managerRealButtonsSummary.ok
+                reportName = $managerRealButtonsSummary.reportName
+                actions = @($managerRealButtonsSummary.actions)
+                managerButtonOk = $managerRealButtonsSummary.managerButtonOk
             }
         } else { $null }
     }

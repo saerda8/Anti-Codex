@@ -149,6 +149,9 @@ function Read-JsonSummary {
         $publicDocumentationOk = $null
         $translatorRegressionOk = $null
         $diffWhitespaceOk = $null
+        $actions = @()
+        $managerButtonOk = $null
+        $managerButtonResults = @()
         if ($checks) {
             if (($checks.PSObject.Properties.Name -contains "javascriptSyntax") -and $checks.javascriptSyntax -and ($checks.javascriptSyntax.PSObject.Properties.Name -contains "ok")) { $javascriptSyntaxOk = [bool]$checks.javascriptSyntax.ok }
             if (($checks.PSObject.Properties.Name -contains "powershellSyntax") -and $checks.powershellSyntax -and ($checks.powershellSyntax.PSObject.Properties.Name -contains "ok")) { $powershellSyntaxOk = [bool]$checks.powershellSyntax.ok }
@@ -157,6 +160,34 @@ function Read-JsonSummary {
             if (($checks.PSObject.Properties.Name -contains "translatorRegression") -and $checks.translatorRegression -and ($checks.translatorRegression.PSObject.Properties.Name -contains "ok")) { $translatorRegressionOk = [bool]$checks.translatorRegression.ok }
             if (($checks.PSObject.Properties.Name -contains "diffWhitespace") -and $checks.diffWhitespace -and ($checks.diffWhitespace.PSObject.Properties.Name -contains "ok")) { $diffWhitespaceOk = [bool]$checks.diffWhitespace.ok }
         }
+        if (($json.PSObject.Properties.Name -contains "actions") -and $json.actions) {
+            $actions = @($json.actions | ForEach-Object { [string]$_ })
+        }
+        if (($json.PSObject.Properties.Name -contains "managerButton") -and $json.managerButton) {
+            if ($json.managerButton.PSObject.Properties.Name -contains "ok") { $managerButtonOk = [bool]$json.managerButton.ok }
+            if (($json.managerButton.PSObject.Properties.Name -contains "results") -and $json.managerButton.results) {
+                $managerButtonResults = @($json.managerButton.results.PSObject.Properties | ForEach-Object {
+                    $entry = $_.Value
+                    $actionName = [string]$_.Name
+                    $result = $null
+                    if (($entry.PSObject.Properties.Name -contains "result") -and $entry.result) {
+                        $result = $entry.result
+                    } elseif (($entry.PSObject.Properties.Name -contains "payload") -and $entry.payload) {
+                        if (($entry.payload.PSObject.Properties.Name -contains "result") -and $entry.payload.result) {
+                            $result = $entry.payload.result
+                        } elseif (($entry.payload.PSObject.Properties.Name -contains "results") -and $entry.payload.results -and ($entry.payload.results.PSObject.Properties.Name -contains $actionName)) {
+                            $batchEntry = $entry.payload.results.$actionName
+                            if (($batchEntry.PSObject.Properties.Name -contains "result") -and $batchEntry.result) { $result = $batchEntry.result }
+                        }
+                    }
+                    [pscustomobject]@{
+                        action = $actionName
+                        ok = if ($entry.PSObject.Properties.Name -contains "ok") { [bool]$entry.ok } else { $null }
+                        lastUiOnly = if ($result -and ($result.PSObject.Properties.Name -contains "lastUiOnly")) { [bool]$result.lastUiOnly } else { $null }
+                    }
+                })
+            }
+        }
         return [pscustomobject]@{
             file = Split-Path -Leaf $Path
             ok = if ($json.PSObject.Properties.Name -contains "ok") { $json.ok } else { $null }
@@ -164,6 +195,9 @@ function Read-JsonSummary {
             skipFullRegression = if ($json.PSObject.Properties.Name -contains "skipFullRegression") { [bool]$json.skipFullRegression } else { $null }
             failureCount = if ($json.PSObject.Properties.Name -contains "failures") { @($json.failures).Count } else { 0 }
             elapsedMs = if ($json.PSObject.Properties.Name -contains "elapsedMs") { $json.elapsedMs } else { $null }
+            actions = $actions
+            managerButtonOk = $managerButtonOk
+            managerButtonResults = $managerButtonResults
             javascriptSyntaxOk = $javascriptSyntaxOk
             powershellSyntaxOk = $powershellSyntaxOk
             uiStateSelfTestOk = $uiStateSelfTestOk

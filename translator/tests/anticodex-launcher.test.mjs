@@ -3803,6 +3803,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /latest-model-routing\.json/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
+  assert.match(diagnostics, /latest-manager-real-buttons\.json/);
+  assert.match(diagnostics, /manager-real-buttons summary/);
+  assert.match(diagnostics, /managerButtonOk/);
+  assert.match(diagnostics, /managerButtonResults/);
+  assert.match(diagnostics, /mcpSkills/);
+  assert.match(diagnostics, /pluginCapabilities/);
+  assert.match(diagnostics, /lastUiOnly/);
   assert.match(diagnostics, /shortcutRepair/);
   assert.match(diagnostics, /sourcePreflight/);
   assert.match(diagnostics, /source preflight status/);
