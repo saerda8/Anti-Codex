@@ -36,7 +36,7 @@ const gateDefinitions = [
   { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
 
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true },
-  { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireSkipRequests: true },
+  { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
   { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true },
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true },
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true },
@@ -224,6 +224,17 @@ function summarizeGate(definition) {
       if (!checks.publicDocumentation || checks.publicDocumentation.ok !== true) semanticFailures.push("source_preflight_public_documentation");
       if (!checks.translatorRegression || checks.translatorRegression.ok !== true) semanticFailures.push("source_preflight_translator_regression");
       if (!checks.diffWhitespace || checks.diffWhitespace.ok !== true) semanticFailures.push("source_preflight_diff_whitespace");
+    }
+    if (definition.requireModelRoutingSemantics) {
+      const results = Array.isArray(report.results) ? report.results : [];
+      if (report.skipRequests !== true) semanticFailures.push("model_routing_skip_requests_not_true");
+      if (Number(report.modelCount || 0) < 1) semanticFailures.push("model_routing_model_count");
+      if (!Array.isArray(report.models) || report.models.length < Number(report.modelCount || 0)) semanticFailures.push("model_routing_models_missing");
+      if (!report.mode) semanticFailures.push("model_routing_mode_missing");
+      if (results.length < Number(report.modelCount || 0)) semanticFailures.push("model_routing_results_missing");
+      if (results.some((item) => item?.ok !== true)) semanticFailures.push("model_routing_result_not_ok");
+      if (results.some((item) => item?.skippedRequest !== true)) semanticFailures.push("model_routing_result_not_skipped");
+      if (results.some((item) => item?.error)) semanticFailures.push("model_routing_result_error");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -423,6 +434,18 @@ if (args.has("--self-test")) {
       coverageKind: "real-traffic",
     });
 
+    writeFakeLatestReport("latest-model-routing.json", {
+      ok: true,
+      reportName: "model-routing",
+      skipRequests: false,
+      modelCount: 2,
+      models: ["fake-one"],
+      mode: "",
+      results: [
+        { model: "fake-one", ok: false, skippedRequest: false, error: "should not happen" },
+      ],
+    });
+
     writeFakeLatestReport("latest-source-preflight.json", {
       ok: true,
       reportName: "wrong-source-preflight",
@@ -488,6 +511,15 @@ if (args.has("--self-test")) {
       "expected_no_real_traffic",
       "expected_behavior_covered",
       "expected_no_real_traffic_coverage_kind",
+    ]);
+    semanticFailures.modelRouting = assertSemanticFailures("modelRouting", "self-test failed: semantically invalid model-routing report satisfied the gate", [
+      "model_routing_skip_requests_not_true",
+      "model_routing_models_missing",
+      "model_routing_mode_missing",
+      "model_routing_results_missing",
+      "model_routing_result_not_ok",
+      "model_routing_result_not_skipped",
+      "model_routing_result_error",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",

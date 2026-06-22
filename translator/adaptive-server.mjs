@@ -1990,6 +1990,7 @@ function latestManagerReportItem(label, fileName) {
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
     const realAntigravityEvidence = report?.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : null;
+    const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2065,6 +2066,16 @@ function latestManagerReportItem(label, fileName) {
             upstreamRequestsDuringLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints) : null,
             hiddenConnectorAccessible: endpointEvidence.hiddenConnectorAccessible === true,
             exposedToolNames: Array.isArray(endpointEvidence.exposedToolNames) ? endpointEvidence.exposedToolNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+        } : null,
+        modelRoutingEvidence: (typeof report?.skipRequests === "boolean" || modelRoutingResults.length) ? {
+            mode: shortSafeText(report?.mode || "", ""),
+            providerProtocol: shortSafeText(report?.providerProtocol || "", ""),
+            providerModel: shortSafeText(report?.providerModel || "", ""),
+            toolBridgeMode: shortSafeText(report?.toolBridge?.mode || "", ""),
+            resultCount: modelRoutingResults.length,
+            skippedRequestCount: modelRoutingResults.filter((item) => item?.skippedRequest === true).length,
+            failedResultCount: modelRoutingResults.filter((item) => item?.ok !== true).length,
+            resultErrorCount: modelRoutingResults.filter((item) => item?.error).length,
         } : null,
         mcpSkillEvidence: (mcp || skills) ? {
             mcpCount: Number.isFinite(Number(mcp?.count)) ? Number(mcp.count) : null,
@@ -2716,6 +2727,11 @@ function latestReportsSummary(result){
       const evidence=item.localConnectorEvidence;
       lines.push("  \\u8fde\\u63a5\\u5668\\u8bc1\\u636e\\uff1aChatGPT URL "+(evidence.chatgptInstallUrlsScrubbed?"\\u5df2\\u6e05\\u7406":"\\u9700\\u5904\\u7406")+" / \\u4e0a\\u6e38\\u8bf7\\u6c42 "+(evidence.upstreamRequestsDuringLocalEndpoints??"\\u672a\\u77e5")+" / allowlist "+(evidence.allowlistedConnectorAccessible?"\\u88ab\\u5f53\\u6210\\u6388\\u6743":"\\u4e0d\\u7b49\\u4e8e\\u6388\\u6743"));
       if(Array.isArray(evidence.exposedToolNames)&&evidence.exposedToolNames.length) lines.push("  \\u53ef\\u89c1\\u5de5\\u5177\\uff1a"+evidence.exposedToolNames.join(", "));
+    }
+    if(item.modelRoutingEvidence){
+      const evidence=item.modelRoutingEvidence;
+      lines.push("  modelRouting: mode="+(evidence.mode||"unknown")+" / skipRequests="+(item.skipRequests?"true":"false")+" / results="+(evidence.skippedRequestCount??0)+"/"+(evidence.resultCount??0)+" / failed="+(evidence.failedResultCount??0));
+      if(evidence.providerProtocol||evidence.providerModel||evidence.toolBridgeMode) lines.push("  modelRouting route: protocol="+(evidence.providerProtocol||"native")+" / providerModel="+(evidence.providerModel||"none")+" / toolBridge="+(evidence.toolBridgeMode||"unknown"));
     }
     if(item.mcpSkillEvidence){
       const evidence=item.mcpSkillEvidence;

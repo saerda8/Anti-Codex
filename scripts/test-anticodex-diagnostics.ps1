@@ -131,6 +131,16 @@ function Test-DiagnosticBundle {
         } elseif ($antigravityReportsRequired -and $modelSummary) {
             if ([int]$modelSummary.modelCount -lt 1) { Add-Failure "diagnostic model-routing summary has no models" }
             if ($modelSummary.skipRequests -ne $true) { Add-Failure "diagnostic model-routing summary did not preserve skipRequests" }
+            $modelEvidence = $modelSummary.modelRoutingEvidence
+            if (-not $modelEvidence) {
+                Add-Failure "diagnostic model-routing summary missing modelRoutingEvidence"
+            } else {
+                if (-not [string]$modelEvidence.mode) { Add-Failure "diagnostic model-routing summary missing mode" }
+                if ([int]$modelEvidence.resultCount -lt [int]$modelSummary.modelCount) { Add-Failure "diagnostic model-routing summary missing per-model results" }
+                if ([int]$modelEvidence.skippedRequestCount -ne [int]$modelEvidence.resultCount) { Add-Failure "diagnostic model-routing summary did not preserve skipped per-model results" }
+                if ([int]$modelEvidence.failedResultCount -ne 0) { Add-Failure "diagnostic model-routing summary reports failed results" }
+                if ([int]$modelEvidence.resultErrorCount -ne 0) { Add-Failure "diagnostic model-routing summary reports result errors" }
+            }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
         if ($antigravityReportsRequired -and -not $postVerificationSummary) {
@@ -331,6 +341,7 @@ function Test-DiagnosticBundle {
                 modelCount = $modelSummary.modelCount
                 skipRequests = $modelSummary.skipRequests
                 models = @($modelSummary.models)
+                evidence = $modelSummary.modelRoutingEvidence
             }
         } else { $null }
         postVerification = if ($postVerificationSummary) {

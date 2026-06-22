@@ -1723,6 +1723,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /sourcePreflight: js=/);
   assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /localConnectorEvidence/);
+  assert.match(server, /modelRoutingEvidence/);
+  assert.match(server, /modelRouting: mode=/);
   assert.match(server, /mcpSkillEvidence/);
   assert.match(server, /mcpMissingSharedCount/);
   assert.match(server, /expectedSharedSkillCount/);
@@ -1914,6 +1916,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /coverageKind/);
   assert.match(reportSummarizer, /behaviorCovered/);
   assert.match(reportSummarizer, /upstreamProfileStorageOk/);
+  assert.match(reportSummarizer, /modelRoutingEvidence/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -2039,6 +2042,39 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     assert.equal(summary.publicDocumentationOk, true);
     assert.equal(summary.translatorRegressionOk, true);
     assert.equal(summary.diffWhitespaceOk, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces model routing no-traffic evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-model-routing-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-model-routing.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "model-routing",
+      mode: "antigravity",
+      providerProtocol: "",
+      providerModel: "",
+      toolBridge: { mode: "native-mcp-same-cascade" },
+      modelCount: 2,
+      models: ["a", "b"],
+      skipRequests: true,
+      results: [
+        { model: "a", ok: true, skippedRequest: true, error: null },
+        { model: "b", ok: false, skippedRequest: false, error: "bad" },
+      ],
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.modelRoutingEvidence.mode, "antigravity");
+    assert.equal(summary.modelRoutingEvidence.toolBridgeMode, "native-mcp-same-cascade");
+    assert.equal(summary.modelRoutingEvidence.resultCount, 2);
+    assert.equal(summary.modelRoutingEvidence.skippedRequestCount, 1);
+    assert.equal(summary.modelRoutingEvidence.failedResultCount, 1);
+    assert.equal(summary.modelRoutingEvidence.resultErrorCount, 1);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4141,6 +4177,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /"-BaseUrl", \$BaseUrl, "-NoPopup"/);
   assert.match(diagnostics, /model-routing-refresh\.json/);
   assert.match(diagnostics, /latest-model-routing\.json/);
+  assert.match(diagnostics, /modelRoutingEvidence/);
+  assert.match(diagnostics, /diagnostic model-routing summary missing modelRoutingEvidence/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);
@@ -4274,8 +4312,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireSourcePreflightSemantics/);
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
   assert.match(releaseGates, /source_preflight_public_documentation/);
-  assert.match(releaseGates, /requireSkipRequests/);
-  assert.match(releaseGates, /expected_skipRequests_true/);
+  assert.match(releaseGates, /requireModelRoutingSemantics/);
+  assert.match(releaseGates, /model_routing_skip_requests_not_true/);
+  assert.match(releaseGates, /model_routing_result_not_skipped/);
   assert.match(releaseGates, /requireMcpSkillSemantics/);
   assert.match(releaseGates, /mcp_skills_missing_shared_mcp/);
   assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
@@ -4312,6 +4351,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid model-routing report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);

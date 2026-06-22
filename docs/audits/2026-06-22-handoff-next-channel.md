@@ -179,6 +179,12 @@ Branch: main
 - Passive release-gate self-test rejects forged optional real-provider and Antigravity-return reports with bad semantic evidence.
 - Fresh evidence: syntax/parser checks passed, dynamic summarizer fixture tests passed, release-gate self-test passed with source-preflight, MCP/Skill, and optional semantic classes, refreshed source-preflight passed, strict passive gates remain `shortReady:true` / `releaseReady:true`, and diagnostic bundle verification passed with `20260623-063025.zip`.
 
+## 2026-06-23 Model-Routing No-Traffic Follow-Up
+
+- Model-routing latest-report evidence now surfaces mode, provider protocol/model, tool-bridge mode, result count, skipped-result count, failed-result count, and result-error count in summaries, diagnostic bundles, and Manager latest-report text.
+- Passive release gates now reject forged `ok:true` model-routing reports unless they prove `skipRequests:true`, non-empty model catalog, mode present, per-model results present, all results skipped, no failed result, and no result error.
+- Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with model-routing semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, and source diagnostics verification passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

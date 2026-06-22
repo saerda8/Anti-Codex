@@ -68,6 +68,7 @@ const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ?
 const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
 const realAntigravityEvidence = report && report.realAntigravityEvidence ? report.realAntigravityEvidence : null;
+const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -115,6 +116,16 @@ const summary = {
   modelCount: has(report, "modelCount") ? report.modelCount : null,
   models: has(report, "models") ? asStringArray(report.models) : [],
   skipRequests: boolField(report, "skipRequests"),
+  modelRoutingEvidence: has(report, "skipRequests") || modelRoutingResults.length ? {
+    mode: asString(report.mode),
+    providerProtocol: asString(report.providerProtocol),
+    providerModel: asString(report.providerModel),
+    toolBridgeMode: report.toolBridge && typeof report.toolBridge === "object" ? asString(report.toolBridge.mode) : null,
+    resultCount: modelRoutingResults.length,
+    skippedRequestCount: modelRoutingResults.filter((item) => item && item.skippedRequest === true).length,
+    failedResultCount: modelRoutingResults.filter((item) => item && item.ok !== true).length,
+    resultErrorCount: modelRoutingResults.filter((item) => item && item.error).length,
+  } : null,
   state: has(report, "state") ? asString(report.state) : null,
   skipped: boolField(report, "skipped"),
   reason: has(report, "reason") ? asString(report.reason) : null,
