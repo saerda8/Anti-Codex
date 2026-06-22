@@ -951,3 +951,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: skipped optional reports carry `behaviorCovered:false`, `coverageKind:"skipped"`, `usedRealTraffic:false`, and stable `failures` arrays so dashboards and scripts cannot treat a requested-but-uncovered run as proof.
 - Completed: passive release gates include optional real-traffic report semantics without making those reports release-required; forged `ok:true` requested-but-skipped reports are rejected by `--self-test`.
 - Verification: JS syntax checks passed; PowerShell scriptblock parser checks passed; release-gate `--self-test` passed; strict passive gate summary stayed `shortReady:true`, `releaseReady:true`; focused launcher contracts passed; default skip and opt-in-missing-argument behavior checks passed.
+
+## 2026-06-23 Connector Cache Drift Refresh
+- Observed: plugin capability verification failed because shared connector cache had advanced while the Anti-Codex local connector snapshot was stale.
+- Completed: `refresh-anticodex-local-features.ps1` refreshed skills, guidance, MCP metadata, connector cache, plugin cache, and app-tool cache without granting connector authorization.
+- Verification: plugin capability verification passed after refresh with connector parity `5765/5765`, app-tool parity `58/58`, accessible connectors `0`, unauthorized app tools `0`, and callable app tools `0`; MCP/Skill verification also passed.

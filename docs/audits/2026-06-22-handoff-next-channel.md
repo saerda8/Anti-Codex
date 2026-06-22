@@ -161,6 +161,12 @@ Branch: main
 - Passive release gates validate optional real-traffic report semantics when those reports exist, but they remain outside release-required readiness.
 - Fresh evidence: syntax/parser checks passed, release-gate self-test rejects forged requested-but-skipped optional reports, strict passive gates remain `shortReady:true` / `releaseReady:true`, and focused launcher plus skip-behavior checks passed.
 
+## 2026-06-23 Connector Cache Refresh Follow-Up
+
+- Shared connector cache drifted ahead of the Anti-Codex local snapshot during the session, causing plugin capability verification to fail with missing shared connector IDs.
+- `refresh-anticodex-local-features.ps1` refreshed the Anti-Codex local snapshots without granting connector authorization.
+- Fresh evidence: plugin capability verification passed with connector parity `5765/5765`, app-tool parity `58/58`, accessible connectors `0`, unauthorized app tools `0`, callable app tools `0`; MCP/Skill verification passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.
