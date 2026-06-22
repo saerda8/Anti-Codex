@@ -737,3 +737,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: standalone real embedded Manager `mcpSkills` button verification passed with `lastUiOnly:false`, MCP 3, Skill 100, real `node_repl` smoke passed, and Skill file readable.
 - Completed: standalone real embedded Manager `pluginCapabilities` button verification passed with `lastUiOnly:false`, 183 installed plugins, 1494 connectors, cache readable, and callable app tools correctly reported as unavailable because no connector is authorized.
 - Verification: both real button checks ran serially against port 58318 after report hash hardening and runtime sync; no stale `ui-only` summary was accepted.
+
+## 2026-06-22 Full Installed Overall Acceptance
+- Completed: full installed no-traffic overall exposed a verifier mismatch where UI-state treated the host as light from background color while the injected Manager correctly followed the explicit `electron-dark` host class.
+- Fixed: `test-anticodex-ui-state.mjs` now uses the same explicit host theme priority as the Manager injection: `electron light/dark` class tokens and data theme attributes win before color-scheme/background fallback.
+- Verification: focused UI-state passed after runtime script sync; full installed no-traffic overall passed with `ok:true`, UI state green, UI idle green, diagnostics green, local connector green, third-party provider green, report encoding/hash green, one translator process, and 8 Antigravity models.

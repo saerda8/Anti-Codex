@@ -977,21 +977,48 @@ try {
         return red >= 48 && red > green * 1.3 && red > blue * 1.15 && red < 150;
       });
       const hostBackgroundColor = getComputedStyle(document.body || document.documentElement).backgroundColor;
-      const hostThemeSignals = [
-        document.documentElement?.className || "",
-        document.body?.className || "",
-        document.documentElement?.getAttribute("data-theme") || "",
-        document.documentElement?.getAttribute("data-color-theme") || "",
-        document.documentElement?.getAttribute("data-mode") || "",
-        document.documentElement?.getAttribute("data-color-mode") || "",
-        getComputedStyle(document.documentElement).colorScheme || "",
-        getComputedStyle(document.body || document.documentElement).colorScheme || "",
-      ].join(" ").toLowerCase();
-      const hostTheme = /\b(?:electron-)?dark\b/.test(hostThemeSignals)
-        ? "dark"
-        : /\b(?:electron-)?light\b/.test(hostThemeSignals)
-          ? "light"
-          : colorIsLight(hostBackgroundColor) ? "light" : "dark";
+      const explicitHostTheme = (node) => {
+        if (!node || node.closest?.("#anticodex-manager-overlay")) return "";
+        const classTokens = (typeof node.className === "string" ? node.className : "")
+          .toLowerCase()
+          .split(/[^a-z]+/)
+          .filter(Boolean);
+        if (classTokens.includes("electron") && classTokens.includes("light")) return "light";
+        if (classTokens.includes("electron") && classTokens.includes("dark")) return "dark";
+        const values = [
+          node.getAttribute?.("data-theme"),
+          node.getAttribute?.("data-color-theme"),
+          node.getAttribute?.("data-mode"),
+          node.getAttribute?.("data-color-mode"),
+          classTokens.join(" "),
+        ];
+        for (const value of values) {
+          const tokens = String(value || "").toLowerCase().split(/[^a-z]+/).filter(Boolean);
+          if (tokens.includes("light")) return "light";
+          if (tokens.includes("dark")) return "dark";
+        }
+        return "";
+      };
+      const detectHostTheme = () => {
+        const nodes = [
+          document.documentElement,
+          document.body,
+          document.querySelector("#root, #__next, [data-reactroot]"),
+          ...document.querySelectorAll('[data-theme],[data-color-theme],[data-mode],[data-color-mode]'),
+        ];
+        for (const node of nodes) {
+          const theme = explicitHostTheme(node);
+          if (theme) return theme;
+        }
+        for (const node of [document.documentElement, document.body, document.querySelector("#root, #__next, [data-reactroot]")]) {
+          if (!node) continue;
+          const scheme = String(getComputedStyle(node).colorScheme || "").toLowerCase();
+          if (scheme === "light" || scheme === "dark") return scheme;
+          if (getComputedStyle(node).backgroundColor) return colorIsLight(getComputedStyle(node).backgroundColor) ? "light" : "dark";
+        }
+        return "light";
+      };
+      const hostTheme = detectHostTheme();
       const themeSignalSummary = [
         document.documentElement,
         document.body,

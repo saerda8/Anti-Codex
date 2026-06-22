@@ -1418,3 +1418,10 @@ After every failure, before another dispatch:
 - Cause classification: process cleanup residue after switching/restarting translator entry points, not a functional health failure.
 - Rule change: when restart evidence shows duplicate translators, inspect port ownership before stopping anything. Only stop a stale Anti-Codex runtime node translator if the packaged translator owns the active localhost listener and health remains green.
 - Result: stopped only the stale node process, confirmed port 8484 was owned by the packaged translator, and reran installed no-traffic fast overall successfully.
+
+## 2026-06-22 - Do not wrap complex PowerShell variable expressions with `rtk`
+
+- Symptom: `rtk powershell -Command ... -Proxy $null ... $_.State ...` stripped or mis-expanded PowerShell variables, producing false errors such as missing `-Proxy` argument and `.State` not recognized.
+- Cause classification: command-wrapper quoting interference, not Anti-Codex runtime failure.
+- Rule change: use `rtk` for simple shell commands, but run native PowerShell directly when the command depends on `$null`, `$_`, script blocks, or nested quoting. If `rtk` changes semantics, rerun natively and record the wrapper interference.
+- Result: reran health and port ownership checks natively; Anti-Codex was healthy and had a single localhost listener.
