@@ -819,3 +819,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 Windows Doc Compatibility Clarification
 - Completed: clarified that the `codex-home-deepseek-app` runtime path segment is legacy compatibility state and does not imply the current default provider.
 - Completed: clarified that Anti-Codex does not fake connector authorization; connector-backed app tools remain unavailable until the real connector is authorized.
+
+## 2026-06-23 Public Documentation Contract Test
+- Completed: launcher contract coverage now includes current public docs: `README.md`, `docs/ADAPTIVE_ONE_API_STACK.md`, `docs/chat-to-responses-compat.md`, and the current marketing entry points.
+- Completed: the new test explicitly avoids recursive scans of audits, legacy marketing, prompt samples, and historical specs while requiring current docs to preserve Anti-Codex branding, Antigravity default provider language, explicit third-party provider language, and connector/app-tool authorization boundaries.
+- Verification: `node --check translator/tests/anticodex-launcher.test.mjs` passed; focused launcher contract suite passed `91/91`.

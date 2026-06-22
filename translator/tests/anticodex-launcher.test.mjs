@@ -4236,3 +4236,44 @@ test("Windows documentation describes Anti-Codex install paths and treats legacy
   assert.doesNotMatch(docs, /DeepCodex\.lnk/);
   assert.doesNotMatch(docs, /DeepCodex for Windows is/);
 });
+
+test("current user-facing docs describe the Anti-Codex provider and connector boundaries", () => {
+  const readme = readFileSync(resolve(root, "README.md"), "utf8");
+  const providerStack = readFileSync(resolve(root, "docs", "ADAPTIVE_ONE_API_STACK.md"), "utf8");
+  const compatibility = readFileSync(resolve(root, "docs", "chat-to-responses-compat.md"), "utf8");
+  const marketingDocs = [
+    readFileSync(resolve(root, "docs", "marketing", "launch-post.md"), "utf8"),
+    readFileSync(resolve(root, "docs", "marketing", "video-script.md"), "utf8"),
+    readFileSync(resolve(root, "docs", "marketing", "wechat-article.md"), "utf8"),
+  ].join("\n\n");
+
+  assert.match(providerStack, /^# Anti-Codex provider stack/m);
+  assert.match(providerStack, /Antigravity Desktop provider by default/);
+  assert.match(providerStack, /optional third-party provider profile/);
+  assert.match(providerStack, /Metadata parity does not grant connector authorization/);
+  assert.match(providerStack, /no ChatGPT login path/);
+  assert.doesNotMatch(providerStack, /# deepcodex adaptive one-api|deepcodex\.app|setup-one-api-minimal|start-adaptive-oneapi|creates or updates a `deepcodex`/);
+
+  assert.match(readme, /^# Anti-Codex/m);
+  assert.match(readme, /Antigravity Desktop/);
+  assert.match(readme, /ChatGPT/);
+  assert.match(readme, /DeepSeek API Key/);
+  assert.match(readme, /Anti-Codex\.exe/);
+  assert.doesNotMatch(readme, /DeepCodex app|DeepSeek \u7248 Codex|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
+
+  assert.match(compatibility, /Scope: Anti-Codex translates Codex Desktop/);
+  assert.match(compatibility, /Antigravity Desktop is the default upstream/);
+  assert.match(compatibility, /OpenAI-compatible third-party providers/);
+  assert.match(compatibility, /Anthropic-compatible third-party providers/);
+  assert.match(compatibility, /Connector\/app-tool metadata parity must not be treated as authorization/);
+  assert.match(compatibility, /deepcodex\.reasoning\.hex\.v1:<hex>/);
+  assert.match(compatibility, /internal compatibility token/);
+  assert.doesNotMatch(compatibility, /Scope: deepcodex|DeepSeek route|DeepSeek-specific|Current Deepcodex Gaps|Deepcodex should/);
+
+  assert.match(marketingDocs, /Anti-Codex/);
+  assert.match(marketingDocs, /Antigravity Desktop|Antigravity/);
+  assert.match(marketingDocs, /third-party|provider/);
+  assert.match(marketingDocs, /connector|app tool/);
+  assert.match(marketingDocs, /does not fake authorization/);
+  assert.doesNotMatch(marketingDocs, /DeepCodex|deepcodex|DeepSeek-only|DeepSeek route|DeepSeek API key/);
+});
