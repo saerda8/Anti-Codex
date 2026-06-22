@@ -138,6 +138,12 @@ Branch: main
 - `refresh-anticodex-local-features.ps1` now passes custom `-AgentsSkillsPath` into the Node snapshot copier via `ANTICODEX_EXTRA_SKILLS_ROOTS`, then restores the old environment value, keeping copy and verification aligned.
 - Fresh evidence: PowerShell parser check passed and the focused MCP/skills launcher contract passed.
 
+## 2026-06-23 Third-Party Provider Release-Gate Follow-Up
+
+- Passive release gates now require field-level third-party provider continuity evidence: nine fake-provider turns, save/restart/provider/protocol/reverse-protocol history preservation, stale-model rejection, structured OpenAI and Anthropic tool-pair evidence, late-turn marker coverage, and secret redaction.
+- `--self-test` for release gates now also forges a bad third-party provider report and verifies it is rejected despite signed `ok:true`.
+- Fresh evidence: release-gate syntax passed, self-test produced the expected third-party provider semantic failures, focused launcher contract passed, and strict passive gates remain `shortReady:true`, `releaseReady:true`, with no missing required or damaged reports.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

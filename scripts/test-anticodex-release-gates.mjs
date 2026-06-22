@@ -28,7 +28,7 @@ const gateDefinitions = [
   { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true },
   { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true, requirePluginCapabilitySemantics: true },
   { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true, requireLocalConnectorSemantics: true },
-  { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true },
+  { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true, requireThirdPartyProviderSemantics: true },
   { id: "missingHistory", group: "short", file: "latest-missing-history.json", requiredForShort: true, requiredForRelease: true, requireMissingHistorySemantics: true },
   { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
   { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false },
@@ -76,6 +76,14 @@ function integrityFor(filePath) {
 
 function isEmptyArray(value) {
   return Array.isArray(value) && value.length === 0;
+}
+
+function validToolEvidence(evidence, protocol) {
+  return !!evidence
+    && evidence.protocol === protocol
+    && evidence.pairedByCallId === true
+    && evidence.resultAfterToolCall === true
+    && evidence.protocolShapeClean === true;
 }
 
 function summarizeGate(definition) {
@@ -153,6 +161,35 @@ function summarizeGate(definition) {
       if (!isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
       if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
       if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
+    }
+    if (definition.requireThirdPartyProviderSemantics) {
+      const history = report.multiTurnHistory || {};
+      const toolHistory = history.toolHistory || {};
+      const structuralEvidence = toolHistory.structuralEvidence || {};
+      const providerSwitch = history.providerSwitch || {};
+      const protocolSwitch = history.protocolSwitch || {};
+      const reverseProtocolSwitch = history.reverseProtocolSwitch || {};
+      if (report.secretsRedacted !== true) semanticFailures.push("third_party_provider_secrets_not_redacted");
+      if (history.turns !== 9) semanticFailures.push("third_party_provider_turn_count");
+      if (report.savedWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_save_history_loss");
+      if (report.restoredAntigravityWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_restore_history_loss");
+      if (report.restartedProviderWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_restart_history_loss");
+      if (report.switchedProviderWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_switch_history_loss");
+      if (report.crossProtocolWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_cross_protocol_history_loss");
+      if (report.reverseCrossProtocolWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_reverse_protocol_history_loss");
+      if (history.providerModelUsedForEveryTurn !== true) semanticFailures.push("third_party_provider_stale_model_used");
+      if (providerSwitch.requestReachedSecondProvider !== true) semanticFailures.push("third_party_provider_switch_not_reached");
+      if (protocolSwitch.requestReachedAnthropicProvider !== true) semanticFailures.push("third_party_provider_protocol_switch_not_reached");
+      if (reverseProtocolSwitch.requestReachedOpenAiCompatibleProvider !== true) semanticFailures.push("third_party_provider_reverse_protocol_switch_not_reached");
+      if (toolHistory.providerSwitchPreservesOpenAiToolPair !== true) semanticFailures.push("third_party_provider_openai_tool_pair_lost");
+      if (toolHistory.protocolSwitchPreservesAnthropicToolPair !== true) semanticFailures.push("third_party_provider_anthropic_tool_pair_lost");
+      if (toolHistory.reverseProtocolSwitchPreservesOpenAiToolPair !== true) semanticFailures.push("third_party_provider_reverse_openai_tool_pair_lost");
+      if (!validToolEvidence(structuralEvidence.seventhOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_openai_structural_tool_evidence");
+      if (!validToolEvidence(structuralEvidence.eighthAnthropicToolEvidence, "anthropic")) semanticFailures.push("third_party_provider_anthropic_structural_tool_evidence");
+      if (!validToolEvidence(structuralEvidence.ninthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_reverse_openai_structural_tool_evidence");
+      if (history.seventhAfterProviderSwitchPreservesAllHistoryMarkers !== true || Number(history.seventhAfterProviderSwitchAllHistoryMarkerCount) < 16) semanticFailures.push("third_party_provider_turn7_marker_coverage");
+      if (history.eighthAfterProtocolSwitchPreservesAllHistoryMarkers !== true || Number(history.eighthAfterProtocolSwitchAllHistoryMarkerCount) < 18) semanticFailures.push("third_party_provider_turn8_marker_coverage");
+      if (history.ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers !== true || Number(history.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) < 20) semanticFailures.push("third_party_provider_turn9_marker_coverage");
     }
     if (definition.requireMissingHistorySemantics) {
       if (report.status !== 410) semanticFailures.push("missing_history_status_not_410");
@@ -299,11 +336,60 @@ if (args.has("--self-test")) {
       coverageKind: "real-traffic",
     });
 
+    writeFakeLatestReport("latest-third-party-provider.json", {
+      ok: true,
+      reportName: "third-party-provider",
+      secretsRedacted: false,
+      savedWithoutHistoryLoss: false,
+      restoredAntigravityWithoutHistoryLoss: false,
+      restartedProviderWithoutHistoryLoss: false,
+      switchedProviderWithoutHistoryLoss: false,
+      crossProtocolWithoutHistoryLoss: false,
+      reverseCrossProtocolWithoutHistoryLoss: false,
+      multiTurnHistory: {
+        turns: 3,
+        providerModelUsedForEveryTurn: false,
+        providerSwitch: { requestReachedSecondProvider: false },
+        protocolSwitch: { requestReachedAnthropicProvider: false },
+        reverseProtocolSwitch: { requestReachedOpenAiCompatibleProvider: false },
+        toolHistory: {
+          providerSwitchPreservesOpenAiToolPair: false,
+          protocolSwitchPreservesAnthropicToolPair: false,
+          reverseProtocolSwitchPreservesOpenAiToolPair: false,
+          structuralEvidence: {
+            seventhOpenAiToolEvidence: { protocol: "openai-compatible", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
+            eighthAnthropicToolEvidence: { protocol: "openai-compatible", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
+            ninthOpenAiToolEvidence: { protocol: "anthropic", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
+          },
+        },
+        seventhAfterProviderSwitchPreservesAllHistoryMarkers: false,
+        seventhAfterProviderSwitchAllHistoryMarkerCount: 1,
+        eighthAfterProtocolSwitchPreservesAllHistoryMarkers: false,
+        eighthAfterProtocolSwitchAllHistoryMarkerCount: 1,
+        ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers: false,
+        ninthAfterReverseProtocolSwitchAllHistoryMarkerCount: 1,
+      },
+    });
+
     const semanticFailures = {};
     semanticFailures.noTraffic = assertSemanticFailures("toolBridgeMode", "self-test failed: semantically invalid no-traffic report satisfied the gate", [
       "expected_no_real_traffic",
       "expected_behavior_covered",
       "expected_no_real_traffic_coverage_kind",
+    ]);
+    semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
+      "third_party_provider_secrets_not_redacted",
+      "third_party_provider_turn_count",
+      "third_party_provider_switch_history_loss",
+      "third_party_provider_cross_protocol_history_loss",
+      "third_party_provider_reverse_protocol_history_loss",
+      "third_party_provider_stale_model_used",
+      "third_party_provider_openai_tool_pair_lost",
+      "third_party_provider_anthropic_tool_pair_lost",
+      "third_party_provider_reverse_openai_tool_pair_lost",
+      "third_party_provider_turn7_marker_coverage",
+      "third_party_provider_turn8_marker_coverage",
+      "third_party_provider_turn9_marker_coverage",
     ]);
     semanticFailures.missingHistory = assertSemanticFailures("missingHistory", "self-test failed: semantically invalid missing-history report satisfied the gate", [
       "missing_history_status_not_410",

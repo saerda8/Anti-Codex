@@ -4022,6 +4022,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /expected_usedRealTraffic_true/);
   assert.match(releaseGates, /expected_no_real_traffic/);
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
+  assert.match(releaseGates, /requireThirdPartyProviderSemantics/);
+  assert.match(releaseGates, /third_party_provider_turn_count/);
+  assert.match(releaseGates, /third_party_provider_openai_tool_pair_lost/);
+  assert.match(releaseGates, /third_party_provider_anthropic_tool_pair_lost/);
+  assert.match(releaseGates, /third_party_provider_turn9_marker_coverage/);
   assert.match(releaseGates, /manager_action_missing_real_click/);
   assert.match(releaseGates, /local_connector_chatgpt_urls_not_scrubbed/);
   assert.match(releaseGates, /local_connector_link_endpoints_not_metadata_only/);
@@ -4040,6 +4045,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid third-party provider report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid missing-history report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid local-connector report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid plugin-capability report satisfied the gate/);

@@ -929,3 +929,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `refresh-anticodex-local-features.ps1` now passes its `-AgentsSkillsPath` value into `sync-shared-codex-plugin-host.mjs` through `ANTICODEX_EXTRA_SKILLS_ROOTS` for the local snapshot copy step, then restores the prior environment value.
 - Completed: this keeps custom `.agents\skills` roots consistent between copy and verification while preserving Anti-Codex-local extra skills instead of forcing strict equality.
 - Verification: PowerShell parser check passed and the focused MCP/skills launcher contract passed.
+
+## 2026-06-23 Third-Party Provider Release Semantics
+- Completed: passive release gates now validate `latest-third-party-provider.json` field-level continuity evidence instead of trusting only signed `ok:true`.
+- Completed: the gate requires nine fake-provider turns, save/restart/provider-switch/protocol-switch/reverse-switch history preservation, stale Antigravity model rejection, structured OpenAI and Anthropic tool-pair evidence, late-turn marker coverage, and secret redaction.
+- Verification: release-gate syntax passed; self-test rejects a forged bad third-party provider report; focused launcher contract passed; strict passive gates remain green with `shortReady:true`, `releaseReady:true`, no missing required gates, and no damaged reports.
