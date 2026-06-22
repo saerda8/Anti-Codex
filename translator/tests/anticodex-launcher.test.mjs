@@ -4032,6 +4032,18 @@ test("third-party provider verifier preserves history across save and restart", 
 
   assert.match(verifier, /turn-5 user asks epsilon after provider save/);
   assert.match(verifier, /fifthAfterSavePreservesHistory/);
+  assert.match(verifier, /turn-tool-call user asks provider tool marker/);
+  assert.match(verifier, /provider_tool_marker/);
+  assert.match(verifier, /call_provider_a_tool_history/);
+  assert.match(verifier, /function_call_output/);
+  assert.match(verifier, /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
+  assert.match(verifier, /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
+  assert.match(verifier, /assertOpenAiToolHistory/);
+  assert.match(verifier, /assertAnthropicToolHistory/);
+  assert.match(verifier, /toolHistoryTurns: 2/);
+  assert.match(verifier, /providerSwitchPreservesOpenAiToolPair/);
+  assert.match(verifier, /protocolSwitchPreservesAnthropicToolPair/);
+  assert.match(verifier, /reverseProtocolSwitchPreservesOpenAiToolPair/);
   assert.match(verifier, /await stopTranslator\(\)/);
   assert.match(verifier, /turn-6 user asks zeta after provider restart/);
   assert.match(verifier, /restartedProviderWithoutHistoryLoss/);

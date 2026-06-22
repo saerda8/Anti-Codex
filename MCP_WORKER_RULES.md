@@ -1425,3 +1425,17 @@ After every failure, before another dispatch:
 - Cause classification: command-wrapper quoting interference, not Anti-Codex runtime failure.
 - Rule change: use `rtk` for simple shell commands, but run native PowerShell directly when the command depends on `$null`, `$_`, script blocks, or nested quoting. If `rtk` changes semantics, rerun natively and record the wrapper interference.
 - Result: reran health and port ownership checks natively; Anti-Codex was healthy and had a single localhost listener.
+
+## 2026-06-22 - Scope fake provider tool-call triggers to the current request
+
+- Symptom: the third-party provider tool-history verifier initially failed because the fake provider matched `turn-tool-call` in hydrated prior history and emitted another tool call during the `function_call_output` turn. After that was fixed, the synthetic answer still scanned the full history and reused an older `turn-4` marker for the tool-output-only request.
+- Cause classification: verifier construction bug, not a translator regression.
+- Rule change: fake provider tests that hydrate prior Responses history must derive behavior from the latest current user request and, for tool-call triggers, also require current `tools` or `tool_choice` evidence. Do not match trigger phrases against the whole serialized history.
+- Result: the verifier now emits one provider tool call, records its paired output, and then proves the structured pair survives restart, provider switch, OpenAI-compatible to Anthropic switch, and Anthropic back to OpenAI-compatible switch.
+
+## 2026-06-22 - Re-run isolated third-party verifier after one-off fetch failures
+
+- Symptom: installed overall failed once with `TypeError: fetch failed` from the third-party provider verifier, but the installed verifier passed immediately when run directly and the next installed overall run also passed.
+- Cause classification: transient local process/port/fetch failure during a nested verifier, not verified product regression.
+- Rule change: for a single generic `fetch failed` from a nested local-only verifier, first run that verifier directly from the installed runtime and inspect its fresh report. Only treat the overall failure as transient if the direct verifier and the serial overall rerun both pass.
+- Result: the final installed no-traffic overall passed with the third-party provider report showing all tool-history preservation booleans true.
