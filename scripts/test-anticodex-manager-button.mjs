@@ -109,7 +109,8 @@ function hasLatestReportFieldEvidence(text) {
   const value = String(text || "");
   if (!value.includes("\u6e90\u7801\u9884\u68c0")) return true;
   return value.includes("\u516c\u5f00\u6587\u6863\uff1a\u901a\u8fc7")
-    || value.includes("\u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406");
+    || value.includes("\u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406")
+    || (value.includes("\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7") && value.includes("latest-missing-history.json"));
 }
 
 function hasActionSpecificResult(actionName, text) {
@@ -233,6 +234,7 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7"), false);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n  \u516c\u5f00\u6587\u6863\uff1a\u901a\u8fc7"), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u9700\u5904\u7406\n  \u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406"), true);
+  assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a2 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7\n  \u6587\u4ef6\uff1aC:\\tmp\\latest-missing-history.json"), true);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1a\u5931\u8d25"), false);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1aZIP \u5df2\u751f\u6210"), true);
   assert.equal(isUiOnlySmokeText("\u8bf4\u660e\uff1aui-only manager button smoke"), true);

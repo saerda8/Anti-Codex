@@ -427,6 +427,7 @@ function Test-ReportEncoding {
         "latest-release-gates.json",
         "latest-cold-relaunch.json",
         "latest-third-party-provider.json",
+        "latest-missing-history.json",
         "latest-manager-real-buttons.json",
         "latest-refresh-features.json",
         "latest-compaction-resume.json",
@@ -1079,6 +1080,11 @@ $checks.websocketProtocolAudit = if ($Fast) {
         "-InstallRoot", $installRoot
     )
 }
+$checks.missingHistory = Invoke-NodeJsonScript "Missing response history verification" (Join-Path $scriptsRoot "test-anticodex-missing-history.mjs") @(
+    "--base-url", $BaseUrl,
+    "--report-root", $ReportRoot,
+    "--timeout-ms", ([string][Math]::Max(3000, $TimeoutSec * 1000))
+) ([Math]::Max(10, $TimeoutSec + 5))
 $checks.thirdPartyProvider = if ($Fast) {
     New-SkippedCheck "fast mode skips local third-party provider end-to-end verification" "test-anticodex-third-party-provider.mjs"
 } else {

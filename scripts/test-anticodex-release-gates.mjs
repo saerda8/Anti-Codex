@@ -28,6 +28,7 @@ const gateDefinitions = [
   { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true, requirePluginCapabilitySemantics: true },
   { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true, requireLocalConnectorSemantics: true },
   { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true },
+  { id: "missingHistory", group: "short", file: "latest-missing-history.json", requiredForShort: true, requiredForRelease: true, requireMissingHistorySemantics: true },
   { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
   { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false },
 
@@ -146,6 +147,17 @@ function summarizeGate(definition) {
       if (!isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
       if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
       if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
+    }
+    if (definition.requireMissingHistorySemantics) {
+      if (report.status !== 410) semanticFailures.push("missing_history_status_not_410");
+      if (report.errorType !== "response_history_missing") semanticFailures.push("missing_history_error_type");
+      if (report.retryable !== false) semanticFailures.push("missing_history_retryable_not_false");
+      if (report.previousResponseIdMatched !== true) semanticFailures.push("missing_history_previous_response_id_not_matched");
+      if (report.recoveryGuidancePresent !== true) semanticFailures.push("missing_history_recovery_guidance_missing");
+      if (report.noRouteChange !== true) semanticFailures.push("missing_history_route_changed");
+      if (report.usedRealTraffic !== false) semanticFailures.push("missing_history_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("missing_history_behavior_not_covered");
+      if (report.coverageKind !== "installed-no-traffic") semanticFailures.push("missing_history_coverage_kind");
     }
     if (definition.requireManagerActions) {
       const actions = Array.isArray(report.actions) ? report.actions.map((item) => String(item)) : [];

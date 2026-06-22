@@ -1238,6 +1238,16 @@ After every failure, before another dispatch:
 - Symptom: a mechanical `v81` to `v82` replacement rewrote `.mjs` and `.ps1` files with the wrong encoding assumptions. Node files briefly gained BOM risk and a corrupted regex; Windows PowerShell 5.1 scripts without BOM decoded Chinese text through the legacy code page and failed parser checks.
 - Cause classification: mixed runtime encoding requirements, not product behavior failure.
 - Rule change: do not use Windows PowerShell `Set-Content -Encoding UTF8` for mixed `.mjs`/`.ps1` rewrites. Use `apply_patch` for logic changes. If a mechanical rewrite is unavoidable, verify `.mjs`/`.js` files are UTF-8 without BOM and `node --check` passes; verify `.ps1` files parse under Windows PowerShell 5.1, adding UTF-8 BOM only to PowerShell scripts when they contain non-ASCII literals.
+
+## 2026-06-23 - Manager summary changes need their own refresh marker
+- Symptom: a real `viewLatestReports` click displayed the new missing-history report, but the verifier kept failing because an already-open Manager panel retained older summary behavior under the same `native-panel-v85` version.
+- Cause classification: same-version UI closure staleness plus over-specific verifier text expectations.
+- Rule change: when changing Manager summary behavior, add a narrow refresh marker such as `__ANTICODEX_MANAGER_SUMMARY_VERSION__` or bump the panel version. Acceptance for a new report should assert that report's own visible/semantic evidence instead of unrelated stale summary text.
+
+## 2026-06-23 - Release gates must validate missing-history semantics
+- Symptom: a signed `ok:true` missing-history report would have been enough for passive release readiness even if it did not prove the 410 recovery contract.
+- Cause classification: release gate checked report liveness more than behavior.
+- Rule change: missing-history release evidence must include HTTP 410, `response_history_missing`, `retryable:false`, original previous response ID match, recovery guidance, unchanged route fingerprint, `usedRealTraffic:false`, and installed no-traffic coverage.
 - Result: Manager `native-panel-v82` source checks, launcher tests, source preflight, and installed non-fast overall verification all passed.
 
 ## 2026-06-22 - Route audits must be tied to the current request window
@@ -1620,3 +1630,38 @@ After every failure, before another dispatch:
 - Result: still running after about 40 seconds with no findings; stopped to avoid delaying the verified checkpoint.
 - Cause classification: bounded review availability failure, not product evidence.
 - Rule change: do not cite the stopped reviewer. Use direct diff inspection plus focused history/integration and launcher regressions as the accepted review evidence.
+
+## 2026-06-23 - Keep PowerShell-heavy checks out of JavaScript orchestration strings
+
+- Symptom: two parallel verification attempts failed with JavaScript `SyntaxError: Unexpected string` before any product command ran.
+- Cause classification: host orchestration quoting failure, not Anti-Codex failure.
+- Rule change: dispatch PowerShell-heavy checks as independent shell calls. Do not embed several quoted PowerShell commands in one JavaScript `Promise.all` body.
+- Result: syntax, parser, diff, and launcher checks were rerun separately and produced usable evidence.
+
+## 2026-06-23 - Use the actual Manager latest-report response shape
+
+- Symptom: direct probes first looked for `payload.result.items`, then `payload.result.result`, and checked `file`; all missed valid entries.
+- Cause classification: inspection schema mistake.
+- Rule change: protected `viewLatestReports` returns entries at `payload.result.reports`, keyed by `fileName`. Inspect the live payload once before writing assertions.
+- Result: the optional and missing-history report entries were confirmed without weakening Manager authorization.
+
+## 2026-06-23 - Empty background sync output is not deployment evidence
+
+- Symptom: a `Start-Process` sync attempt produced empty stdout/stderr files and no durable process to inspect.
+- Cause classification: background-launch evidence failure, not runtime sync success or product failure.
+- Rule change: for required syncs, use the direct script with bounded foreground yields and require its final JSON plus health result. Do not infer success from an empty detached launch.
+- Result: direct runtime sync completed in 38.7 seconds with Antigravity healthy, 8 models, and account ready.
+
+## 2026-06-23 - Bump the Manager panel version when renderer behavior changes
+
+- Symptom: the backend latest-report payload included `publicDocumentationOk:true` and the new missing-history report, while the already-open `native-panel-v84` UI rendered the new report but omitted public-documentation evidence; the real button verifier therefore returned false despite `lastOk:true`.
+- Cause classification: same-version frontend cache/reinjection drift.
+- Rule change: any change to Manager renderer or acceptance-visible summary behavior must bump the native panel version consistently across injector, opener, UI-state checks, sync-readiness checks, and manager launcher comments/contracts.
+- Result: a focused RED test now requires the next panel version before implementation.
+
+## 2026-06-23 - Unusable ordinary explorer output is not evidence
+
+- Worker: ordinary explorer `019ef103-73d5-7720-9b67-6190515f4865`.
+- Task: inspect the Manager protected endpoint and response shape.
+- Result: the worker declined to read the workspace and requested pasted code, producing no usable findings.
+- Rule change: close the worker, record the failure, and use direct bounded source/runtime inspection. Do not cite the response as review coverage.

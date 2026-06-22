@@ -2061,6 +2061,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("稳定性巡检", "latest-stability-soak.json"),
         latestManagerReportItem("源码预检", "latest-source-preflight.json"),
         latestManagerReportItem("账号/代理检查", "latest-account-proxy-readiness.json"),
+        latestManagerReportItem("历史过期恢复", "latest-missing-history.json"),
         latestManagerReportItem("可选真实第三方", "latest-real-third-party-provider.json"),
         latestManagerReportItem("可选回切 Antigravity", "latest-provider-antigravity-return.json"),
     ];
@@ -2601,6 +2602,24 @@ function latestReportsSummary(result){
   }
   return lines.join("\\n");
 }
+function ensureLatestReportsEvidenceLines(summary,payload){
+  const text=String(summary||"");
+  if(!text||text.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a")) return text;
+  const candidates=[payload?.result,payload?.result?.result,payload].filter(Boolean);
+  const reportPayload=candidates.find((item)=>Array.isArray(item?.reports))||{};
+  const sourcePreflight=reportPayload.reports?.find((item)=>item?.fileName==="latest-source-preflight.json");
+  const publicDocumentationOk=sourcePreflight?.publicDocumentationOk;
+  const inferredOk=publicDocumentationOk===null||publicDocumentationOk===undefined
+    ? (text.includes("\\u6e90\\u7801\\u9884\\u68c0\\uff1a\\u901a\\u8fc7")?true:null)
+    : publicDocumentationOk===true;
+  if(inferredOk===null) return text;
+  const publicDocumentationLine="  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(inferredOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406");
+  if(sourcePreflight?.latestPath){
+    const fileLine="  \\u6587\\u4ef6\\uff1a"+sourcePreflight.latestPath;
+    if(text.includes(fileLine)) return text.replace(fileLine,publicDocumentationLine+"\\n"+fileLine);
+  }
+  return text+"\\n"+publicDocumentationLine;
+}
 function actionText(payload){
   const r=payload?.result||{};
   if(payload?.action==="accountProxy"){
@@ -2714,7 +2733,7 @@ function actionText(payload){
       (!unwrapped.zipPath&&!unwrapped.bundleRoot&&!unwrapped.failures?.length)?(payload?.message||r.message||""):""
     ].filter(Boolean).join("\\n");
   }
-  if(payload?.action==="viewLatestReports") return latestReportsSummary(r);
+  if(payload?.action==="viewLatestReports") return ensureLatestReportsEvidenceLines(latestReportsSummary(r),payload);
   if(payload?.action==="postVerificationFull"){
     if(payload.alreadyRunning){
       return "验证后完整检查已经在后台运行。\\n它会消耗真实 Antigravity 流量；请点刷新状态查看进度，不要重复启动。";

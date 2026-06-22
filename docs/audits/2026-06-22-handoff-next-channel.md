@@ -7,7 +7,7 @@ Branch: main
 
 - Anti-Codex is an isolated desktop/runtime fork using Antigravity Desktop as the default model provider.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the last checks: upstream `antigravity-desktop`, account ready, 8 models.
-- Manager is at `native-panel-v84`.
+- Manager is at `native-panel-v85`.
 - Standalone real Manager MCP/Skill and plugin/application button gates pass after local feature refresh. The default standalone real-button script now runs only those two non-disruptive actions; report viewing and diagnostics bundle remain opt-in.
 - `latest-manager-real-buttons.json` is now indexed by Manager latest reports, diagnostic bundle report summaries, and installed overall report-integrity checks.
 - Latest feature parity evidence after refresh: connectors `5866/5866`, app tools `58/58`, missing shared `[]`, callable app tools `0` because no connector is authorized.
@@ -125,3 +125,12 @@ Branch: main
 - `docs/audits/2026-06-22-handoff-next-channel.md`
 - `docs/audits/2026-06-22-ui-timeout-hardening-status.md`
 - `docs/audits/2026-06-22-local-connector-allowlist-status.md`
+
+## 2026-06-23 Installed Missing-History Follow-Up
+
+Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.
+
+- Added a signed installed no-traffic verifier for missing/pruned response history. It proves HTTP 410 `response_history_missing`, non-retryable recovery guidance, original ID preservation, and no model-route change.
+- The report is now collected by installed overall and diagnostics, shown by Manager latest reports, and required by short/release passive gates.
+- Fresh evidence: launcher contracts `96/96`; installed probe green; strict passive gates `shortReady:true`, `releaseReady:true`, no missing required or damaged reports; runtime healthy on Antigravity with 8 models and account ready.
+- A real Manager latest-report click now passes on installed `native-panel-v85` and displays `历史过期恢复：通过`; installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

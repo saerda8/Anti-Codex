@@ -369,8 +369,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /\\u8fdc\\u7a0b\\u8fde\\u63a5\\u5668\\u4ec5\\u76ee\\u5f55/);
   assert.match(managerInject, /Skill \\u662f\\u672c\\u5730\\u6307\\u4ee4\\uff1bMCP \\u5fc5\\u987b\\u7531\\u5f53\\u524d\\u4f1a\\u8bdd\\u771f\\u5b9e\\u66b4\\u9732\\u5de5\\u5177/);
   assert.doesNotMatch(managerInject, /\\u672c\\u5730\\u63d2\\u4ef6\/MCP \\u53ef\\u76f4\\u63a5\\u4f7f\\u7528/);
-  assert.match(managerInject, /native-panel-v84/);
-  assert.match(syncReadiness, /native-panel-v84/);
+  assert.match(managerInject, /native-panel-v85/);
+  assert.match(syncReadiness, /native-panel-v85/);
+  assert.doesNotMatch(managerInject, /native-panel-v84/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v84/);
   assert.doesNotMatch(managerInject, /native-panel-v68/);
   assert.doesNotMatch(syncReadiness, /native-panel-v68/);
   assert.doesNotMatch(managerInject, /native-panel-v67/);
@@ -578,8 +580,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v84["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v84"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v85["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v85"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -655,7 +657,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v84/);
+  assert.match(managerOpenInject, /native-panel-v85/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v84/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v68/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v67/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v66/);
@@ -1433,7 +1436,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v84 manager script/);
+  assert.match(manager, /latest native-panel-v85 manager script/);
   assert.doesNotMatch(manager, /native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -1737,6 +1740,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-real-third-party-provider\.json/);
   assert.match(server, /latest-provider-antigravity-return\.json/);
   assert.match(server, /latestReportsSummary/);
+  assert.match(server, /ensureLatestReportsEvidenceLines/);
+  assert.match(inject, /ensureLatestReportsEvidenceLines/);
+  assert.match(inject, /__ANTICODEX_MANAGER_SUMMARY_VERSION__/);
   assert.ok(server.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || server.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || server.includes("公开文档"));
   assert.ok(inject.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || inject.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || inject.includes("公开文档"));
   assert.ok(managerBridge.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || managerBridge.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || managerBridge.includes("公开文档"));
@@ -4548,4 +4554,34 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
 
   assert.match(profileTest, /unreadable existing third-party key must fail closed/);
   assert.match(profileTest, /corrupt third-party key can still restore Antigravity/);
+});
+
+test("Anti-Codex ships an installed no-traffic missing-history verifier", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-missing-history.mjs"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(verifier, /response_history_missing/);
+  assert.match(verifier, /previous_response_id/);
+  assert.match(verifier, /retryable/);
+  assert.match(verifier, /Start a fresh request or reopen the original conversation context/);
+  assert.match(verifier, /routeBefore/);
+  assert.match(verifier, /routeAfter/);
+  assert.match(verifier, /noRouteChange/);
+  assert.match(verifier, /latest-missing-history\.json/);
+  assert.match(verifier, /createHash\("sha256"\)/);
+  assert.match(verifier, /usedRealTraffic:\s*false/);
+  assert.match(overall, /\$checks\.missingHistory\s*=\s*Invoke-NodeJsonScript/);
+  assert.match(overall, /test-anticodex-missing-history\.mjs/);
+  assert.match(overall, /latest-missing-history\.json/);
+  assert.match(collector, /latest-missing-history\.json/);
+  assert.match(server, /latest-missing-history\.json/);
+  assert.match(releaseGates, /id:\s*"missingHistory"[\s\S]*?file:\s*"latest-missing-history\.json"[\s\S]*?requiredForShort:\s*true/);
+  assert.match(releaseGates, /requireMissingHistorySemantics:\s*true/);
+  assert.match(releaseGates, /missing_history_status_not_410/);
+  assert.match(releaseGates, /response_history_missing/);
+  assert.match(releaseGates, /missing_history_used_real_traffic/);
+  assert.match(releaseGates, /missing_history_route_changed/);
 });

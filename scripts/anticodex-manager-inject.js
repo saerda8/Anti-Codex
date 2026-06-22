@@ -1,10 +1,12 @@
 (() => {
-  const VERSION = "native-panel-v84";
+  const VERSION = "native-panel-v85";
+  const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
   const TRAFFIC_NOTICE_ID = "anticodex-traffic-notice";
   if (
     window.__ANTICODEX_MANAGER_VERSION__ === VERSION &&
+    window.__ANTICODEX_MANAGER_SUMMARY_VERSION__ === SUMMARY_VERSION &&
     typeof window.__ANTICODEX_OPEN_MANAGER__ === "function"
   ) return;
   document.getElementById(MANAGER_ID)?.remove();
@@ -18,6 +20,7 @@
     delete window.__ANTICODEX_MANAGER_STATUS_TIMER__;
   }
   window.__ANTICODEX_MANAGER_VERSION__ = VERSION;
+  window.__ANTICODEX_MANAGER_SUMMARY_VERSION__ = SUMMARY_VERSION;
   window.__ANTICODEX_MANAGER_INSTALLED__ = true;
 
   const DEFAULT_API = "http://127.0.0.1:8484";
@@ -788,6 +791,25 @@
     return lines.join("\n");
   }
 
+  function ensureLatestReportsEvidenceLines(summary, payload) {
+    const text = String(summary || "");
+    if (!text || text.includes("\u516c\u5f00\u6587\u6863\uff1a")) return text;
+    const candidates = [payload?.result, payload?.result?.result, payload].filter(Boolean);
+    const reportPayload = candidates.find((item) => Array.isArray(item?.reports)) || {};
+    const sourcePreflight = reportPayload.reports?.find((item) => item?.fileName === "latest-source-preflight.json");
+    const publicDocumentationOk = sourcePreflight?.publicDocumentationOk;
+    const inferredOk = publicDocumentationOk === null || publicDocumentationOk === undefined
+      ? (text.includes("\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7") ? true : null)
+      : publicDocumentationOk === true;
+    if (inferredOk === null) return text;
+    const publicDocumentationLine = `  \u516c\u5f00\u6587\u6863\uff1a${inferredOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`;
+    if (sourcePreflight?.latestPath) {
+      const fileLine = `  \u6587\u4ef6\uff1a${sourcePreflight.latestPath}`;
+      if (text.includes(fileLine)) return text.replace(fileLine, `${publicDocumentationLine}\n${fileLine}`);
+    }
+    return `${text}\n${publicDocumentationLine}`;
+  }
+
   function upstreamCapabilitySummary(upstreamProfile, health) {
     const savedStages = upstreamProfile?.saved?.capabilities?.connectionStages;
     const healthStages = health?.upstreamProfile?.capabilitySummary?.stages;
@@ -868,7 +890,7 @@
       failureSummaryLine(unwrapped),
       (!unwrapped.zipPath && !unwrapped.bundleRoot && !unwrapped.failures?.length) ? (payload?.message || r.message || "") : "",
     ].filter(Boolean).join("\n");
-    if (action === "viewLatestReports") return latestReportsSummary(r);
+    if (action === "viewLatestReports") return ensureLatestReportsEvidenceLines(latestReportsSummary(r), payload);
     if (action === "fastOverallNoTraffic") return [
       `\u5feb\u901f\u68c0\u67e5\uff1a${r.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
       `\u8017\u65f6\uff1a${r.elapsedMs ?? "\u672a\u77e5"} ms`,
