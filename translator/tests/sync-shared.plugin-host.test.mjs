@@ -260,6 +260,7 @@ test("--startup-snapshots keeps existing required directories and skips plugin s
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--startup-snapshots"], {
       encoding: "utf8",
+      env: { ...process.env, ANTICODEX_EXTRA_SKILLS_ROOTS: resolve(tmp, "missing-agents-skills") },
     });
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
     assert.strictEqual(readFileSync(resolve(codexHome, "skills", "existing", "value.txt"), "utf8"), "local");
@@ -659,6 +660,7 @@ test("missing shared startup sources do not create empty snapshot parent directo
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--startup-snapshots"], {
       encoding: "utf8",
+      env: { ...process.env, ANTICODEX_EXTRA_SKILLS_ROOTS: resolve(tmp, "missing-agents-skills") },
     });
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
     assert.ok(existsSync(resolve(codexHome, ".anticodex-startup-snapshots-ready.json")));

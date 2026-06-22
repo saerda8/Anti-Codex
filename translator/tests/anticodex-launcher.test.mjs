@@ -1325,6 +1325,9 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   assert.match(runtimeSync, /Refusing to remove Anti-Codex legacy runtime file outside/);
   assert.match(runtimeSync, /start-deepcodex\.ps1/);
   assert.match(runtimeSync, /-TranslatorOnly/);
+  assert.match(runtimeSync, /\$restartHealthy = \$false/);
+  assert.match(runtimeSync, /Wait-AntiCodexHealth -Seconds 1/);
+  assert.match(runtimeSync, /\$launchExitCode = if \(\$restartHealthy\) \{ 0 \}/);
   assert.match(runtimeSync, /Stop-AntiCodexTranslator/);
   assert.match(runtimeSync, /\/anticodex\/diagnostics/);
   assert.match(runtimeSync, /Wait-AntiCodexSessionLock/);
@@ -3170,7 +3173,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(nodeJsonBody, /Start-Process -FilePath \$node/);
   assert.match(nodeJsonBody, /Wait-AntiCodexSubcheckProcess/);
   assert.doesNotMatch(nodeJsonBody, /WaitForExit\(\[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
-  assert.match(nodeJsonBody, /Node script timed out after \$SubcheckTimeoutSec seconds/);
+  assert.match(nodeJsonBody, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.doesNotMatch(nodeJsonBody, /\$output = @\(& \$node/);
   assert.match(overall, /test-anticodex-manager-button\.mjs/);
   assert.match(overall, /Manager MCP\/Skill button verification/);
@@ -3179,8 +3182,13 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /combined overall skips background Manager safe-action batch/);
   assert.match(overall, /combined overall skips report button real click/);
   assert.match(overall, /combined overall skips diagnostics bundle real click/);
+  assert.match(overall, /function Clear-ManagerButtonVerifierLock/);
+  assert.match(overall, /anticodex-manager-button\.lock/);
+  assert.match(overall, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.match(overall, /--action", "mcpSkills"/);
   assert.match(overall, /--action", "pluginCapabilities"/);
+  assert.match(overall, /"--action", "mcpSkills", "--timeout-ms", "90000", "--compact", "1"\) 120/);
+  assert.match(overall, /"--action", "pluginCapabilities", "--timeout-ms", "90000", "--compact", "1"\) 120/);
   assert.match(overall, /--verification-mode", "ui-only"/);
   assert.doesNotMatch(overall, /--actions", "mcpSkills,pluginCapabilities"/);
   assert.match(overall, /managerButtonSafeActions/);
@@ -3325,6 +3333,41 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.doesNotMatch(overall, /auth\/login/);
 });
 
+test("Anti-Codex ships a standalone real Manager button gate", () => {
+  const managerButtons = readFileSync(resolve(root, "scripts", "test-anticodex-manager-real-buttons.ps1"), "utf8");
+
+  assert.match(managerButtons, /test-anticodex-manager-button\.mjs/);
+  assert.match(managerButtons, /viewLatestReports/);
+  assert.match(managerButtons, /diagnosticsBundle/);
+  assert.match(managerButtons, /mcpSkills/);
+  assert.match(managerButtons, /pluginCapabilities/);
+  assert.match(managerButtons, /\[ValidateSet\("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle"\)\]/);
+  assert.match(managerButtons, /\$Actions = @\("mcpSkills", "pluginCapabilities"\)/);
+  assert.match(managerButtons, /lastUiOnly -eq \$true/);
+  assert.match(managerButtons, /ui-only manager button smoke\|ui-only-manager-button/);
+  assert.match(managerButtons, /function Get-ManagerButtonActionResult/);
+  assert.match(managerButtons, /\$_ -split ","/);
+  assert.match(managerButtons, /latest-\$Name\.json/);
+  assert.match(managerButtons, /New-ReportPaths "manager-real-buttons"/);
+  assert.match(managerButtons, /Write-AntiCodexJsonReport/);
+  assert.match(managerButtons, /UTF8Encoding\]::new\(\$false\)/);
+  assert.match(managerButtons, /Resolve-CdpPort/);
+  assert.match(managerButtons, /Start-Process -FilePath \$node/);
+  assert.match(managerButtons, /\$process\.Kill\(\)/);
+  assert.match(managerButtons, /Clear-ManagerButtonVerifierLock/);
+  assert.match(managerButtons, /anticodex-manager-button\.lock/);
+  assert.match(managerButtons, /function Invoke-ManagerButtonAction/);
+  assert.match(managerButtons, /MaxAttempts/);
+  assert.match(managerButtons, /Test-TransientManagerButtonFailure/);
+  assert.match(managerButtons, /ECONNRESET\|manager bridge timed out/);
+  assert.match(managerButtons, /--action/);
+  assert.doesNotMatch(managerButtons, /--actions/);
+  assert.match(managerButtons, /--compact/);
+  assert.doesNotMatch(managerButtons, /Stop-Process/);
+  assert.doesNotMatch(managerButtons, /chatgpt\.com/);
+  assert.doesNotMatch(managerButtons, /auth\/login/);
+});
+
 test("Anti-Codex Manager button verifier waits for the embedded panel to finish rendering", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
 
@@ -3357,6 +3400,8 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.match(verifier, /__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__/);
   assert.match(verifier, /lastActionResult\?\.managerSummary \|\| ""/);
   assert.match(verifier, /latest\.lastAction === action/);
+  assert.doesNotMatch(verifier, /if \(visibleFinished\) break/);
+  assert.match(verifier, /const explicitActionSuccess = visibleFinished[\s\S]*&& latest\.lastAction === action/);
   assert.match(verifier, /Number\(latest\.pendingCount \|\| 0\) === 0/);
   assert.match(verifier, /function remainingActionTimeoutMs/);
   assert.match(verifier, /Math\.min\(2500, remaining\)/);

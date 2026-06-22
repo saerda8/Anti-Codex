@@ -1481,3 +1481,31 @@ After every failure, before another dispatch:
 - Cause classification: command invocation mistake.
 - Rule change: installed Node verifiers must be invoked with `node` or through an overall wrapper that dispatches Node scripts.
 - Result: reran the same installed verifier with `node`; it passed with `chatgptInstallUrlsScrubbed:true`.
+
+## 2026-06-23 - Split slow verification and prefer current-action evidence
+
+- Symptom: the main agent started long full-source/installed checks during an interactive progress loop, making the session look stuck. The immediately useful evidence was already available from focused Manager, MCP/Skill, and plugin-capability checks.
+- Cause classification: verification scheduling mistake, not a product hang.
+- Rule change: when the user is waiting for progress, split verification into short parser/self-test/contract checks and focused installed gates. Run full source preflight or installed overall only before a checkpoint/release, and say explicitly when a command is expected to take minutes.
+- Result: stopped treating long gates as the default progress loop and narrowed the standalone real Manager button default to MCP/Skill plus plugin/application only.
+
+## 2026-06-23 - Do not accept stale Manager visible text for real button success
+
+- Symptom: installed overall real-clicked `mcpSkills` / `pluginCapabilities`, but the embedded panel sometimes still showed an older `refreshStatus` or degraded plugin result while the requested action was queued or just completed.
+- Cause classification: verifier false-positive/false-negative risk from stale UI state.
+- Rule change: real Manager button success must require `lastAction` to equal the requested action, no pending action promises, no queued actions, non-ui-only result text, and no `lastOk:false`. Only ui-only smoke may use the ui-only shortcut path.
+- Result: `test-anticodex-manager-button.mjs` now rejects stale visible text and the standalone real Manager gate passed after local feature refresh.
+
+## 2026-06-23 - Refresh local feature snapshots on connector parity drift
+
+- Symptom: plugin capability verification failed because shared Codex connector cache had 5866 connector IDs while Anti-Codex local cache still had 5841.
+- Cause classification: shared metadata snapshot drift, not fake authorization and not a runtime bridge failure.
+- Rule change: when plugin capability parity reports `missingShared`, run the installed `refresh-anticodex-local-features.ps1` before rerunning plugin/Manager checks. This copies metadata snapshots only, does not grant OAuth/connector access, and must keep callable app tools at 0 unless real accessible connectors exist.
+- Result: refresh repaired connector parity to 5866/5866, app-tool parity stayed 58/58, and `pluginCapabilities` showed "未授权连接器，不伪装可调用" as the expected healthy state.
+
+## 2026-06-23 - Avoid nested PowerShell through rtk for process probes
+
+- Symptom: several quick process/health probes failed because nested `rtk proxy powershell -Command` stripped quotes or variables around `$null`, `$_`, array arguments, and regex strings.
+- Cause classification: command construction/wrapper quoting failure.
+- Rule change: for process probes and PowerShell expressions with variables or regexes, prefer a short script file, direct simple commands, `curl.exe`, `rg`, or a single-quoted outer `-Command '& { ... }'`. If the wrapper still changes semantics, report it as wrapper interference and do not infer product state from that failure.
+- Result: health was confirmed with `curl.exe`, while the failed process probes were not used as Anti-Codex evidence.

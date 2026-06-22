@@ -728,7 +728,6 @@ async function runManagerActionBatch(actions) {
         if (started || settledAndOk) break;
       } else {
         if (settled && visibleFinished) break;
-        if (visibleFinished) break;
       }
     }
     const text = latest.text || latest.lastSummary || "";
@@ -751,7 +750,7 @@ async function runManagerActionBatch(actions) {
       && hasActionSpecificResult(actionName, text);
     const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
     const ok = initial.ok === true
-      && (uiOnlyFinished || isFastMode || settled || visibleFinished)
+      && (uiOnlyFinished || isFastMode || settled)
       && initial.closeCenterHitsButton === true
       && initial.closeUpperCenterHitsButton === true
       && initial.closeLowerCenterHitsButton === true
@@ -1094,7 +1093,6 @@ while (initial.ok && Date.now() < deadline) {
     if (started || settledAndOk) break;
   } else {
     if (actionSettled && visibleFinished) break;
-    if (visibleFinished) break;
   }
 }
 ws.close();
@@ -1126,7 +1124,7 @@ const visibleFinished = !latest.disabled
   && (uiOnlyMode || !isUiOnlySmokeText(text))
   && hasActionSpecificResult(action, text);
 const explicitActionSuccess = visibleFinished
-  && (latest.lastAction === action || latest.lastAction === "")
+  && latest.lastAction === action
   && latest.lastOk !== false;
 const ok = Boolean(initial.ok)
   && actionStarted
@@ -1137,7 +1135,7 @@ const ok = Boolean(initial.ok)
     : isFastMode
     ? !isFailureText(text)
     : (explicitActionSuccess
-      || ((latest.lastAction === action || latest.lastAction === "")
+      || (latest.lastAction === action
         && Number(latest.pendingCount || 0) === 0
         && Number(latest.queueLength || 0) === 0
         && latest.lastOk !== false

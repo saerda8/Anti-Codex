@@ -146,6 +146,18 @@ function Read-AntiCodexTempTextWithRetry {
     }
 }
 
+function Clear-ManagerButtonVerifierLock {
+    param([int]$ProcessId)
+    $lockPath = Join-Path ([IO.Path]::GetTempPath()) "anticodex-manager-button.lock"
+    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) { return }
+    try {
+        $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+        if ([int]$lock.pid -eq $ProcessId) {
+            Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
+
 function Invoke-JsonScript {
     param(
         [string]$Name,
@@ -263,7 +275,8 @@ function Invoke-NodeJsonScript {
     param(
         [string]$Name,
         [string]$ScriptPath,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [int]$ProcessTimeoutSec = $SubcheckTimeoutSec
     )
 
     if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -294,11 +307,14 @@ function Invoke-NodeJsonScript {
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath
         [void]$process.Handle
-        $completed = Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds $SubcheckTimeoutSec
+        $completed = Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds $ProcessTimeoutSec
         if (-not $completed) {
             try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
             Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null
-            Add-Failure "$Name Node script timed out after $SubcheckTimeoutSec seconds"
+            if ((Split-Path -Leaf $ScriptPath) -eq "test-anticodex-manager-button.mjs") {
+                Clear-ManagerButtonVerifierLock -ProcessId ([int]$process.Id)
+            }
+            Add-Failure "$Name Node script timed out after $ProcessTimeoutSec seconds"
             $exitCode = -1
         } else {
             $exitCode = [int]$process.ExitCode
@@ -917,8 +933,8 @@ if ($SkipUiStateProbe) {
         $checks.managerButtonReportActions = New-SkippedCheck "fast mode skips real Manager report button batch; full verification clicks the buttons" "test-anticodex-manager-button.mjs"
         $checks.managerButtonDiagnosticsBundle = New-SkippedCheck "fast mode skips the slow Manager diagnostics bundle click; full verification clicks the button" "test-anticodex-manager-button.mjs"
     } else {
-        $checks.managerButtonMcpSkills = Invoke-NodeJsonScript "Manager MCP/Skill button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "mcpSkills", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
-        $checks.managerButtonPluginCapabilities = Invoke-NodeJsonScript "Manager plugin/application button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "pluginCapabilities", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
+        $checks.managerButtonMcpSkills = Invoke-NodeJsonScript "Manager MCP/Skill button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "mcpSkills", "--timeout-ms", "90000", "--compact", "1") 120
+        $checks.managerButtonPluginCapabilities = Invoke-NodeJsonScript "Manager plugin/application button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "pluginCapabilities", "--timeout-ms", "90000", "--compact", "1") 120
         $checks.managerButtonSourcePreflight = Invoke-NodeJsonScript "Manager safe button smoke verification - Manager source preflight button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "sourcePreflight", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonSafeActions = New-SkippedCheck "combined overall skips background Manager safe-action batch; update/source/sync buttons are covered by dedicated checks and ui-only hit-area smoke" "test-anticodex-manager-button.mjs"
         $checks.managerButtonReportActions = New-SkippedCheck "combined overall skips report button real click; standalone Manager button verifier covers it without polluting later UI samples" "test-anticodex-manager-button.mjs"

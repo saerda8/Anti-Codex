@@ -202,17 +202,23 @@ if (-not $NoRestart) {
             -WindowStyle Hidden `
             -PassThru
         [void]$proc.Handle
-        $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Min(30, [Math]::Max(5, $TimeoutSec)))
-        while (-not $proc.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+        $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(5, $TimeoutSec))
+        $restartHealthy = $false
+        while ([DateTime]::UtcNow -lt $deadline) {
+            if (Wait-AntiCodexHealth -Seconds 1) {
+                $restartHealthy = $true
+                break
+            }
+            if ($proc.HasExited) { break }
             Start-Sleep -Milliseconds 200
             try { $proc.Refresh() } catch {}
         }
-        if (-not $proc.HasExited) {
+        if (-not $restartHealthy -and -not $proc.HasExited) {
             try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
             throw "Anti-Codex translator-only restart timed out."
         }
-        $launchExitCode = [int]$proc.ExitCode
-        if ($launchExitCode -ne 0) {
+        $launchExitCode = if ($restartHealthy) { 0 } else { [int]$proc.ExitCode }
+        if (-not $restartHealthy -and $launchExitCode -ne 0) {
             throw "Anti-Codex translator-only restart failed with exit code $launchExitCode."
         }
     } else {
