@@ -631,6 +631,9 @@ try {
       managerHtml.includes('id="connectorAllowlistInput"') &&
       managerHtml.includes('id="saveConnectorAllowlist"') &&
       managerHtml.includes("/anticodex/local-connectors/allowlist"),
+    hasConnectorAllowlistBoundaryText: managerHtml.includes("\u672c\u5730\u7f13\u5b58\u9884\u89c8") &&
+      managerHtml.includes("\u4e0d\u6388\u6743") &&
+      managerHtml.includes("\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528"),
     hasPostVerificationStatusCard: managerHtml.includes("<h2>\u5b8c\u6574\u68c0\u67e5</h2>") && managerHtml.includes('id="postVerification"'),
     hasLongTasksStatusCard: managerHtml.includes("<h2>\u540e\u53f0\u4efb\u52a1</h2>") && managerHtml.includes('id="longTasks"'),
     hasSyncVersionFields: managerHtml.includes("\u539f\u751f Codex \u7248\u672c") && managerHtml.includes("Anti-Codex \u7248\u672c"),
@@ -678,6 +681,7 @@ try {
   if (!managerPage.hasSyncSafetyText) failures.push("manager page missing safe sync replacement explanation");
   if (!managerPage.hasPluginStatusCard) failures.push("manager page missing plugin/app status card");
   if (!managerPage.hasConnectorAllowlistCard) failures.push("manager page missing local connector allowlist editor");
+  if (!managerPage.hasConnectorAllowlistBoundaryText) failures.push("manager page missing local connector non-authorization warning");
   if (!managerPage.hasPostVerificationStatusCard) failures.push("manager page missing post-verification status card");
   if (!managerPage.hasLongTasksStatusCard) failures.push("manager page missing long-task status card");
   if (!managerPage.hasSyncVersionFields) failures.push("manager page missing Codex/Anti-Codex sync version fields");

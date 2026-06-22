@@ -1318,3 +1318,10 @@ After every failure, before another dispatch:
 - Cause classification: wrapper timeout budget mismatch. `-TimeoutSec 8` is suitable for short UI smoke probes, but model-routing in no-traffic mode still depends on diagnostics payload collection.
 - Rule change: wrapper scripts must pass the diagnostics timeout budget to diagnostics-heavy subchecks such as model routing, even when the top-level UI timeout is intentionally short. Add static regression coverage for the exact forwarded parameter.
 - Result: installed overall now forwards `-DiagnosticsTimeoutSec` into no-traffic model routing, the launcher regression covers the call site, and installed overall no-traffic passes again.
+
+## 2026-06-22 - Put safety wording in static Manager HTML, not only dynamic render code
+
+- Symptom: after adding local connector non-authorization wording to the dynamic Manager renderer, installed UI-state still failed because the static `/anticodex/manager` HTML placeholder lacked `本地缓存预览，不授权，不代表可调用`.
+- Cause classification: UI contract split between static fallback HTML and dynamic injected panel. The runtime behavior was safe, but the verifier reads static Manager HTML as durable evidence.
+- Rule change: safety-critical wording must exist in both the initial static HTML and the dynamic render/update path. Update UI-state static checks whenever changing connector/app-tool authorization wording.
+- Result: the static placeholder, dynamic injected Manager, and fallback Manager now carry the non-authorization warning; installed overall no-traffic passes.

@@ -856,7 +856,8 @@ function localConnectorAllowlistPayload() {
             id,
             name: String(connector?.name || connector?.displayName || id || "App"),
             isAccessible: connector?.isAccessible === true,
-            locallyAuthorized: connector?.localAuthorization === "anticodex-local-allowlist" || effective.has(id),
+            locallyAuthorized: connector?.locallyAllowlisted === true || connector?.localAuthorization === "anticodex-local-allowlist" || effective.has(id),
+            locallyAllowlisted: connector?.locallyAllowlisted === true || connector?.localAuthorization === "anticodex-local-allowlist" || effective.has(id),
             localAuthorization: connector?.localAuthorization || (effective.has(id) ? "anticodex-local-allowlist" : ""),
             toolCount: toolsByConnector.get(id) || 0,
         };
@@ -873,10 +874,11 @@ function localConnectorAllowlistPayload() {
             persisted: persisted.length,
             env: env.length,
             locallyAuthorized: rows.filter((connector) => connector.locallyAuthorized).length,
+            localAllowlisted: rows.filter((connector) => connector.locallyAllowlisted).length,
             accessible: rows.filter((connector) => connector.isAccessible).length,
             appTools: tools.length,
         },
-        note: "Only locally allowlisted connector IDs expose cached app tools. Unlisted connectors remain metadata-only.",
+        note: "Local allowlists are metadata previews only. They do not authorize connectors or make app tools callable.",
     };
 }
 
@@ -962,6 +964,8 @@ function localFeatureSummary({ includeProjection = false } = {}) {
         ? projectionItems(localBackendApiResponse("POST", "/backend-api/wham/apps"), "tools")
         : [];
     const authorizedConnectors = connectors.filter((connector) => connector?.isAccessible === true);
+    const localAllowlistedConnectors = connectors.filter((connector) =>
+        connector?.locallyAllowlisted === true || connector?.localAuthorization === "anticodex-local-allowlist");
     return {
         codexHome: codexHome || null,
         sharedCodexHome: sharedCodexHome || null,
@@ -1014,8 +1018,10 @@ function localFeatureSummary({ includeProjection = false } = {}) {
             connectors: {
                 inventoryCount: includeProjection ? connectors.length : null,
                 authorizedCount: includeProjection ? authorizedConnectors.length : null,
+                remoteAuthorizedCount: includeProjection ? authorizedConnectors.length : null,
+                localAllowlistedCount: includeProjection ? localAllowlistedConnectors.length : null,
                 callableToolCount: includeProjection ? appTools.length : null,
-                mode: "authorization-required",
+                mode: includeProjection && authorizedConnectors.length > 0 ? "real-authorized" : "metadata-only",
             },
         },
     };
@@ -2311,7 +2317,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
     <div class="card"><h2>后台任务</h2><div id="longTasks" class="kv"></div></div>
     <div class="card"><h2>本地检查</h2><div id="localChecks" class="kv"></div></div>
     <div class="card"><h2>完整检查</h2><div id="postVerification" class="kv"></div></div>
-    <div class="card wide"><h2>\u672c\u5730\u8fde\u63a5\u5668\u5de5\u5177</h2><div id="connectorAllowlist" class="kv"></div><div class="allowlist-box"><textarea id="connectorAllowlistInput" class="allowlist-input" spellcheck="false" aria-label="\u672c\u5730\u5141\u8bb8\u7684 connector id"></textarea><button id="saveConnectorAllowlist">\u4fdd\u5b58\u672c\u5730\u5141\u8bb8\u5217\u8868</button><pre id="connectorAllowlistResult" class="allowlist-hint">\u6bcf\u884c\u4e00\u4e2a connector id\uff1b\u4ec5\u672c\u5730 Anti-Codex \u751f\u6548\u3002</pre></div></div>
+    <div class="card wide"><h2>\u672c\u5730\u8fde\u63a5\u5668\u5de5\u5177</h2><div id="connectorAllowlist" class="kv"></div><div class="allowlist-box"><textarea id="connectorAllowlistInput" class="allowlist-input" spellcheck="false" aria-label="\u672c\u5730\u5141\u8bb8\u7684 connector id"></textarea><button id="saveConnectorAllowlist">\u4fdd\u5b58\u672c\u5730\u5141\u8bb8\u5217\u8868</button><pre id="connectorAllowlistResult" class="allowlist-hint">\u672c\u5730\u7f13\u5b58\u9884\u89c8\uff0c\u4e0d\u6388\u6743\uff0c\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\u3002\u6bcf\u884c\u4e00\u4e2a connector id\uff1b\u4ec5\u672c\u5730 Anti-Codex \u751f\u6548\u3002</pre></div></div>
     <div class="card wide"><h2>模型列表</h2><div id="models" class="list"></div></div>
     <div class="card wide"><h2>检查结果</h2><pre id="actionResult">还没有运行检查。</pre></div>
     <div class="card wide"><h2>最近路由</h2><pre id="route">加载中...</pre></div>
@@ -2577,13 +2583,13 @@ function renderConnectorAllowlist(payload){
   const counts=payload?.counts||{};
   kv("connectorAllowlist",[
     ["\\u76ee\\u5f55",counts.total??0],
-    ["\\u672c\\u5730\\u5141\\u8bb8",counts.locallyAuthorized??0],
-    ["\\u5df2\\u66b4\\u9732\\u5de5\\u5177",counts.appTools??0],
+    ["\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8",counts.localAllowlisted??counts.locallyAuthorized??0],
+    ["\\u771f\\u5b9e\\u53ef\\u8c03\\u7528\\u5de5\\u5177",counts.appTools??0],
     ["\\u914d\\u7f6e\\u6587\\u4ef6",payload?.configPath||"\\u672a\\u77e5"],
     ["\\u73af\\u5883\\u53d8\\u91cf",env.length?env.join(", "):"\\u672a\\u914d\\u7f6e"],
   ]);
   $("connectorAllowlistInput").value=persisted.join("\\n");
-  $("connectorAllowlistResult").textContent="\\u6bcf\\u884c\\u4e00\\u4e2a connector id\\uff1b\\u672a\\u5217\\u5165\\u7684\\u8fde\\u63a5\\u5668\\u53ea\\u4fdd\\u7559\\u5143\\u6570\\u636e\\uff0c\\u4e0d\\u66b4\\u9732\\u5de5\\u5177\\u3002";
+  $("connectorAllowlistResult").textContent="\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8\\uff0c\\u4e0d\\u6388\\u6743\\uff0c\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528\\u3002\\n\\u6bcf\\u884c\\u4e00\\u4e2a connector id\\uff1b\\u672a\\u5217\\u5165\\u7684\\u8fde\\u63a5\\u5668\\u53ea\\u4fdd\\u7559\\u5143\\u6570\\u636e\\u3002";
 }
 async function load(){
   $("error").style.display="none";
@@ -2615,7 +2621,7 @@ async function load(){
     ["应用绑定",installedRows.filter(x=>hasItems(x?.apps)).length],
     ["连接器",connectorRows.length],
     ["已授权连接器",accessibleConnectors],
-    ["\\u672c\\u5730\\u5141\\u8bb8",allowlist?.counts?.locallyAuthorized??0],
+    ["\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8",allowlist?.counts?.localAllowlisted??allowlist?.counts?.locallyAuthorized??0],
     ["应用工具",count(appTools,"tools")],
     ["说明",accessibleConnectors>0?"只显示真实授权后可调用的应用工具":"未授权连接器不会伪装成可调用工具"],
   ]);
@@ -2654,7 +2660,7 @@ async function load(){
 }
 $("refresh").onclick=load;
 $("refreshModels").onclick=async()=>{ $("refreshModels").disabled=true; try{const r=await getJson("/anticodex/models/refresh",{method:"POST"}); if(!r.ok) throw new Error(r.message||r.error?.message||"刷新失败"); await load();}catch(e){$("error").style.display="block";$("error").textContent="刷新模型失败："+e.message} finally{$("refreshModels").disabled=false;} };
-$("saveConnectorAllowlist").onclick=async()=>{const button=$("saveConnectorAllowlist");const ids=$("connectorAllowlistInput").value.split(/[\\r\\n,]+/).map(x=>x.trim()).filter(Boolean);button.disabled=true;$("connectorAllowlistResult").textContent="\\u6b63\\u5728\\u4fdd\\u5b58...";try{const r=await getJson("/anticodex/local-connectors/allowlist",{method:"POST",headers:{"content-type":"application/json","x-anticodex-manager-token":managerActionToken},body:JSON.stringify({connectorIds:ids})});if(r.ok===false)throw new Error(r.message||r.error||"save failed");renderConnectorAllowlist(r);$("connectorAllowlistResult").textContent="\\u5df2\\u4fdd\\u5b58\\u672c\\u5730\\u8fde\\u63a5\\u5668 allowlist\\u3002\\n\\u5df2\\u66b4\\u9732\\u5de5\\u5177\\uff1a"+(r.counts?.appTools??0);await load();}catch(e){$("connectorAllowlistResult").textContent="\\u4fdd\\u5b58\\u5931\\u8d25\\uff1a"+e.message}finally{button.disabled=false;}};
+$("saveConnectorAllowlist").onclick=async()=>{const button=$("saveConnectorAllowlist");const ids=$("connectorAllowlistInput").value.split(/[\\r\\n,]+/).map(x=>x.trim()).filter(Boolean);button.disabled=true;$("connectorAllowlistResult").textContent="\\u6b63\\u5728\\u4fdd\\u5b58...";try{const r=await getJson("/anticodex/local-connectors/allowlist",{method:"POST",headers:{"content-type":"application/json","x-anticodex-manager-token":managerActionToken},body:JSON.stringify({connectorIds:ids})});if(r.ok===false)throw new Error(r.message||r.error||"save failed");renderConnectorAllowlist(r);$("connectorAllowlistResult").textContent="\\u5df2\\u4fdd\\u5b58\\u672c\\u5730\\u8fde\\u63a5\\u5668 allowlist\\u3002\\n\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8\\uff1a"+(r.counts?.localAllowlisted??r.counts?.locallyAuthorized??0)+"\\n\\u771f\\u5b9e\\u53ef\\u8c03\\u7528\\u5de5\\u5177\\uff1a"+(r.counts?.appTools??0)+"\\n\\u6ce8\\u610f\\uff1a\\u4e0d\\u6388\\u6743\\uff0c\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528\\u3002";await load();}catch(e){$("connectorAllowlistResult").textContent="\\u4fdd\\u5b58\\u5931\\u8d25\\uff1a"+e.message}finally{button.disabled=false;}};
 function setActionButtonsDisabled(disabled){document.querySelectorAll("button[data-action]").forEach(button=>{button.disabled=!!disabled;});}
 document.querySelectorAll("button[data-action]").forEach(btn=>{btn.onclick=async()=>{const action=btn.getAttribute("data-action");const label=btn.getAttribute("data-original-label")||btn.textContent;if(requireHighImpactConfirmation(action,label,btn))return;setActionButtonsDisabled(true);$("actionResult").textContent="正在运行："+label+" ...";try{const r=await getJson("/anticodex/manager/action",{method:"POST",headers:{"content-type":"application/json","x-anticodex-manager-token":managerActionToken},body:JSON.stringify({action})});$("actionResult").textContent=actionText(r);await load();}catch(e){$("actionResult").textContent="运行失败："+e.message}finally{setActionButtonsDisabled(false);}}});
 load().catch(e=>{$("error").style.display="block";$("error").textContent="加载失败："+e.message});

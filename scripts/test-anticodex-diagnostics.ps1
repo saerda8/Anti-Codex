@@ -303,6 +303,20 @@ if ($diagnostics) {
             if (-not (Has-Property $localFeatures.snapshotStatus "sourceFingerprintMatches")) { Add-Failure "diagnostics snapshotStatus missing sourceFingerprintMatches" }
             if (-not (Has-Property $localFeatures.snapshotStatus "staleReason")) { Add-Failure "diagnostics snapshotStatus missing staleReason" }
         }
+        if (-not (Has-Property $localFeatures "capabilityTiers") -or -not (Has-Property $localFeatures.capabilityTiers "connectors")) {
+            Add-Failure "diagnostics localFeatures missing connector capability tier"
+        } else {
+            $connectorTier = $localFeatures.capabilityTiers.connectors
+            if (-not (Has-Property $connectorTier "authorizedCount")) { Add-Failure "diagnostics connector tier missing authorizedCount" }
+            if (-not (Has-Property $connectorTier "remoteAuthorizedCount")) { Add-Failure "diagnostics connector tier missing remoteAuthorizedCount" }
+            if (-not (Has-Property $connectorTier "localAllowlistedCount")) { Add-Failure "diagnostics connector tier missing localAllowlistedCount" }
+            if (-not (Has-Property $connectorTier "callableToolCount")) { Add-Failure "diagnostics connector tier missing callableToolCount" }
+            if (-not (Has-Property $connectorTier "mode")) {
+                Add-Failure "diagnostics connector tier missing mode"
+            } elseif (@("metadata-only", "real-authorized") -notcontains [string]$connectorTier.mode) {
+                Add-Failure "diagnostics connector tier mode is not explicit"
+            }
+        }
     }
     if (-not (Has-Property $diagnostics "antigravityRetries")) {
         Add-Failure "diagnostics missing Antigravity retry audit"

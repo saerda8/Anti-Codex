@@ -120,6 +120,7 @@ function writeLocalCaches() {
   writeFileSync(join(connectorDir, "directory.json"), JSON.stringify({
     schema_version: 1,
     connectors: [
+      { id: "linked-demo", name: "Linked Demo", isAccessible: true },
       { id: "allowlisted-demo", name: "Allowlisted Demo", isAccessible: false },
       { id: "hidden-connector", name: "Hidden Connector", isAccessible: false },
       { id: "another-hidden", name: "Another Hidden", isAccessible: false },
@@ -129,6 +130,7 @@ function writeLocalCaches() {
   writeFileSync(join(toolsDir, "tools.json"), JSON.stringify({
     schema_version: 2,
     tools: [
+      { server_name: "apps", tool_namespace: "demo", tool_name: "linked_tool", connector_id: "linked-demo" },
       { server_name: "apps", tool_namespace: "demo", tool_name: "allowlisted_tool", connector_id: "allowlisted-demo" },
       { server_name: "apps", tool_namespace: "demo", tool_name: "hidden_tool", connector_id: "hidden-connector" },
       { server_name: "apps", tool_namespace: "demo", tool_name: "another_hidden_tool", connector_id: "another-hidden" },
@@ -186,25 +188,32 @@ function toolNames(payload) {
 function assertLocalConnectorProjection({ connectors, whamPost, whamGet, allowlistedDetail, hiddenDetail, linkPayloads }) {
   assert.deepEqual(
     connectors.connectors.map((connector) => connector.id).sort(),
-    ["allowlisted-demo", "another-hidden", "hidden-connector"],
+    ["allowlisted-demo", "another-hidden", "hidden-connector", "linked-demo"],
   );
 
+  const linked = connectorById(connectors, "linked-demo");
   const allowlisted = connectorById(connectors, "allowlisted-demo");
   const hidden = connectorById(connectors, "hidden-connector");
   const anotherHidden = connectorById(connectors, "another-hidden");
-  assert.equal(allowlisted.isAccessible, true);
+  assert.equal(linked.isAccessible, true);
+  assert.equal(linked.locallyAllowlisted, false);
+  assert.equal(allowlisted.isAccessible, false);
+  assert.equal(allowlisted.locallyAllowlisted, true);
   assert.equal(allowlisted.localAuthorization, "anticodex-local-allowlist");
   assert.equal(hidden.isAccessible, false);
+  assert.equal(hidden.locallyAllowlisted, false);
   assert.equal(hidden.localAuthorization, undefined);
   assert.equal(anotherHidden.isAccessible, false);
+  assert.equal(anotherHidden.locallyAllowlisted, false);
   assert.equal(anotherHidden.localAuthorization, undefined);
 
-  assert.deepEqual(toolNames(whamPost), ["allowlisted_tool"]);
-  assert.deepEqual(toolNames(whamGet), ["allowlisted_tool"]);
-  assert.equal(whamPost.tools[0].connector_id, "allowlisted-demo");
+  assert.deepEqual(toolNames(whamPost), ["linked_tool"]);
+  assert.deepEqual(toolNames(whamGet), ["linked_tool"]);
+  assert.equal(whamPost.tools[0].connector_id, "linked-demo");
 
   assert.equal(allowlistedDetail.id, "allowlisted-demo");
-  assert.equal(allowlistedDetail.isAccessible, true);
+  assert.equal(allowlistedDetail.isAccessible, false);
+  assert.equal(allowlistedDetail.locallyAllowlisted, true);
   assert.equal(allowlistedDetail.localAuthorization, "anticodex-local-allowlist");
   assert.equal(hiddenDetail.id, "hidden-connector");
   assert.equal(hiddenDetail.isAccessible, false);
@@ -284,6 +293,7 @@ async function main() {
   translator.stdout.on("data", () => {});
 
   await waitForEndpoint(translatorUrl, "/health");
+  const upstreamRequestsBeforeLocalEndpoints = requests.length;
   const connectors = await getJson(`${translatorUrl}/backend-api/aip/connectors`);
   const whamPost = await getJson(`${translatorUrl}/backend-api/wham/apps`, {
     method: "POST",
@@ -313,6 +323,12 @@ async function main() {
     hiddenDetail,
     linkPayloads: [noauth, oauth, link],
   });
+  const upstreamRequestsAfterLocalEndpoints = requests.length;
+  assert.equal(
+    upstreamRequestsAfterLocalEndpoints,
+    upstreamRequestsBeforeLocalEndpoints,
+    "local connector/app-tool endpoints must not make provider or OAuth upstream requests",
+  );
 
   return {
     ok: true,
@@ -323,9 +339,14 @@ async function main() {
       exposedToolsPost: whamPost.tools.length,
       exposedToolsGet: whamGet.tools.length,
       exposedToolNames: toolNames(whamPost),
+      linkedConnectorAccessible: connectorById(connectors, "linked-demo")?.isAccessible === true,
       allowlistedConnectorAccessible: connectorById(connectors, "allowlisted-demo")?.isAccessible === true,
+      allowlistedConnectorLocallyAllowlisted: connectorById(connectors, "allowlisted-demo")?.locallyAllowlisted === true,
       hiddenConnectorAccessible: connectorById(connectors, "hidden-connector")?.isAccessible === true,
       linkEndpointsUnsupported: [noauth, oauth, link].every((payload) => payload?.ok === false && payload?.status === "unsupported"),
+      upstreamRequestsBeforeLocalEndpoints,
+      upstreamRequestsAfterLocalEndpoints,
+      upstreamRequestsDuringLocalEndpoints: upstreamRequestsAfterLocalEndpoints - upstreamRequestsBeforeLocalEndpoints,
     },
     tempIsolation: {
       codexHome,

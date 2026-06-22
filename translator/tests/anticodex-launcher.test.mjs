@@ -396,6 +396,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /connectorAllowlistEditor/);
   assert.match(managerInject, /\/anticodex\/local-connectors\/allowlist/);
   assert.match(managerInject, /anticodex-connector-allowlist-input/);
+  assert.match(managerInject, /\\u4e0d\\u6388\\u6743/);
+  assert.match(managerInject, /\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528/);
   assert.match(managerInject, /x-anticodex-manager-token/);
   assert.match(managerInject, /window\.__ANTICODEX_MANAGER_SNAPSHOT__ = null/);
   assert.match(managerInject, /authorizedConnectorCount/);
@@ -1638,6 +1640,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /validateLocalConnectorIds/);
   assert.match(server, /writePersistedLocalConnectorAllowlist/);
   assert.match(server, /local_authorized_connectors/);
+  assert.match(server, /localAllowlisted/);
   assert.match(server, /validateManagerSourceRequest\(req,\s*"local connector allowlist"\)/);
   assert.match(server, /validateManagerActionRequest\(req\)/);
   assert.match(server, /id="connectorAllowlist"/);
@@ -1854,7 +1857,11 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(returnBlock, /readableCount/);
   assert.match(returnBlock, /current-session-tool-list/);
   assert.match(returnBlock, /authorizedCount/);
+  assert.match(returnBlock, /remoteAuthorizedCount/);
+  assert.match(returnBlock, /localAllowlistedCount/);
   assert.match(returnBlock, /callableToolCount/);
+  assert.match(returnBlock, /metadata-only/);
+  assert.match(returnBlock, /real-authorized/);
   assert.match(returnBlock, /snapshotStatus/);
   assert.match(returnBlock, /maxAgeHours/);
   assert.match(returnBlock, /sourceMtimeMax/);

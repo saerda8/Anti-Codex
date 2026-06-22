@@ -587,7 +587,10 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(payload.localFeatures.capabilityTiers.plugins.callableCount, 0);
   assert.equal(typeof payload.localFeatures.capabilityTiers.connectors.inventoryCount, "number");
   assert.equal(typeof payload.localFeatures.capabilityTiers.connectors.authorizedCount, "number");
+  assert.equal(typeof payload.localFeatures.capabilityTiers.connectors.remoteAuthorizedCount, "number");
+  assert.equal(typeof payload.localFeatures.capabilityTiers.connectors.localAllowlistedCount, "number");
   assert.equal(typeof payload.localFeatures.capabilityTiers.connectors.callableToolCount, "number");
+  assert.equal(["metadata-only", "real-authorized"].includes(payload.localFeatures.capabilityTiers.connectors.mode), true);
   assert.equal(typeof payload.localFeatures.snapshotStatus.present, "boolean");
   assert.equal(typeof payload.localFeatures.snapshotStatus.stale, "boolean");
   assert.equal(typeof payload.localFeatures.snapshotStatus.maxAgeHours, "number");
@@ -1011,7 +1014,7 @@ test("local projection exposes only app tools belonging to accessible connectors
   }
 });
 
-test("local projection can expose app tools through an Anti-Codex local connector allowlist", () => {
+test("local projection keeps Anti-Codex local connector allowlist separate from remote authorization", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "anticodex-local-connector-allowlist-"));
   const currentHome = path.join(root, "current");
   const connectorCache = path.join(currentHome, "cache", "codex_app_directory");
@@ -1053,13 +1056,13 @@ test("local projection can expose app tools through an Anti-Codex local connecto
 
     const directory = readConnectorDirectory();
     assert.deepEqual(directory.connectors
-      .filter((connector) => connector.isAccessible)
-      .map((connector) => [connector.id, connector.localAuthorization]), [
-        ["local-demo", "anticodex-local-allowlist"],
-        ["array-demo", "anticodex-local-allowlist"],
+      .filter((connector) => connector.locallyAllowlisted)
+      .map((connector) => [connector.id, connector.isAccessible, connector.localAuthorization]), [
+        ["local-demo", false, "anticodex-local-allowlist"],
+        ["array-demo", false, "anticodex-local-allowlist"],
       ]);
     const payload = localBackendApiResponse("POST", "/backend-api/wham/apps");
-    assert.deepEqual(payload.tools.map((tool) => tool.tool_name), ["local_demo_tool", "array_demo_tool"]);
+    assert.deepEqual(payload.tools, []);
   } finally {
     if (previousCodeHome === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previousCodeHome;
@@ -1101,8 +1104,12 @@ test("local projection connector allowlist can come from the environment", () =>
     delete process.env.GLOBAL_CODEX_HOME;
     process.env.ANTICODEX_LOCAL_AUTHORIZED_CONNECTORS = "env-demo";
 
+    const directory = readConnectorDirectory();
+    assert.equal(directory.connectors[0].locallyAllowlisted, true);
+    assert.equal(directory.connectors[0].isAccessible, false);
+    assert.equal(directory.connectors[0].localAuthorization, "anticodex-local-allowlist");
     const payload = localBackendApiResponse("POST", "/backend-api/wham/apps");
-    assert.deepEqual(payload.tools.map((tool) => tool.tool_name), ["env_demo_tool"]);
+    assert.deepEqual(payload.tools, []);
   } finally {
     if (previousCodeHome === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previousCodeHome;

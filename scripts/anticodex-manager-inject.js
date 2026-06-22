@@ -542,8 +542,9 @@
     textarea.value = persisted.join("\n");
     const saveButton = el("button", { type: "button", text: "\u4fdd\u5b58\u672c\u5730\u5141\u8bb8\u5217\u8868" });
     const hint = el("div", { className: "anticodex-result", text: [
-      `\u76ee\u5f55 ${counts.total ?? 0} / \u672c\u5730\u5141\u8bb8 ${counts.locallyAuthorized ?? 0} / \u5df2\u66b4\u9732\u5de5\u5177 ${counts.appTools ?? 0}`,
+      `\u76ee\u5f55 ${counts.total ?? 0} / \u672c\u5730\u7f13\u5b58\u9884\u89c8 ${counts.localAllowlisted ?? counts.locallyAuthorized ?? 0} / \u771f\u5b9e\u53ef\u8c03\u7528\u5de5\u5177 ${counts.appTools ?? 0}`,
       env.length ? `\u73af\u5883\u53d8\u91cf\u989d\u5916\u5141\u8bb8\uff1a${env.join(", ")}` : "\u672a\u914d\u7f6e\u73af\u5883\u53d8\u91cf\u989d\u5916\u5141\u8bb8",
+      "\u672c\u5730\u7f13\u5b58\u9884\u89c8\uff0c\u4e0d\u6388\u6743\uff0c\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\u3002",
       "\u6bcf\u884c\u4e00\u4e2a connector id\uff1b\u4ec5\u672c\u5730 Anti-Codex \u751f\u6548\uff0c\u4e0d\u5199\u56de\u539f\u751f Codex\u3002",
     ].join("\n") });
     saveButton.onclick = async () => {
@@ -563,7 +564,7 @@
           allowSnapshotFallback: false,
         });
         window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
-        result.textContent = `\u672c\u5730\u8fde\u63a5\u5668 allowlist \u5df2\u4fdd\u5b58\u3002\n\u5df2\u5141\u8bb8\uff1a${saved.counts?.locallyAuthorized ?? connectorIds.length}\n\u5df2\u66b4\u9732\u5de5\u5177\uff1a${saved.counts?.appTools ?? 0}`;
+        result.textContent = `\u672c\u5730\u8fde\u63a5\u5668 allowlist \u5df2\u4fdd\u5b58\u3002\n\u672c\u5730\u7f13\u5b58\u9884\u89c8\uff1a${saved.counts?.localAllowlisted ?? saved.counts?.locallyAuthorized ?? connectorIds.length}\n\u771f\u5b9e\u53ef\u8c03\u7528\u5de5\u5177\uff1a${saved.counts?.appTools ?? 0}\n\u6ce8\u610f\uff1a\u4e0d\u6388\u6743\uff0c\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\u3002`;
         await load({ updateResult: false });
       } catch (error) {
         result.classList.add("anticodex-error");
@@ -1286,13 +1287,13 @@
             ["\u672c\u5730\u63d2\u4ef6\u76ee\u5f55", `${pluginInventoryCount} / \u5143\u6570\u636e\u53ef\u89c1 / \u4e0d\u7b49\u4e8e\u53ef\u8c03\u7528`],
             ["\u8fdc\u7a0b\u8fde\u63a5\u5668\u4ec5\u76ee\u5f55", connectorInventoryCount],
             ["\u8fdc\u7a0b\u5df2\u6388\u6743", accessibleConnectors],
-            ["\u672c\u5730\u5141\u8bb8", allowlist?.counts?.locallyAuthorized ?? 0],
+            ["\u672c\u5730\u7f13\u5b58\u9884\u89c8", allowlist?.counts?.localAllowlisted ?? allowlist?.counts?.locallyAuthorized ?? 0],
             ["\u771f\u5b9e\u53ef\u8c03\u7528\u5e94\u7528\u5de5\u5177", callableAppToolCount],
             ["\u5feb\u7167", `\u8fde\u63a5\u5668 ${localFeatures.snapshots?.connectorDirectoryFiles ?? "\u672a\u77e5"} / \u5e94\u7528\u5de5\u5177 ${localFeatures.snapshots?.appToolsCacheFiles ?? "\u672a\u77e5"}`],
             ["\u5feb\u7167\u65b0\u9c9c\u5ea6", `${snapshotStateText} / \u5df2\u7528 ${snapshotAgeText} / \u4e0a\u9650 ${snapshotStatus.maxAgeHours ?? 24} \u5c0f\u65f6`],
             ["\u5237\u65b0\u65b9\u5f0f", snapshotRefreshText],
             ["\u53ef\u8c03\u7528\u72b6\u6001", accessibleConnectors > 0 ? "\u4ec5\u663e\u793a\u771f\u5b9e\u6388\u6743\u540e\u53ef\u8c03\u7528\u7684\u5e94\u7528\u5de5\u5177" : "\u672a\u6388\u6743\u8fde\u63a5\u5668\u4e0d\u4f2a\u88c5\u6210\u53ef\u8c03\u7528\u5de5\u5177"],
-            ["\u8bf4\u660e", "Skill \u662f\u672c\u5730\u6307\u4ee4\uff1bMCP \u5fc5\u987b\u7531\u5f53\u524d\u4f1a\u8bdd\u771f\u5b9e\u66b4\u9732\u5de5\u5177\uff1b\u63d2\u4ef6/\u8fde\u63a5\u5668\u76ee\u5f55\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528"],
+            ["\u8bf4\u660e", "Skill \u662f\u672c\u5730\u6307\u4ee4\uff1bMCP \u5fc5\u987b\u7531\u5f53\u524d\u4f1a\u8bdd\u771f\u5b9e\u66b4\u9732\u5de5\u5177\uff1b\u63d2\u4ef6/\u8fde\u63a5\u5668\u76ee\u5f55\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\uff1b\u672c\u5730\u7f13\u5b58\u9884\u89c8\u4e0d\u6388\u6743\u3002"],
             ["\u7ee7\u627f\u72b6\u6001", localFeatures.skills?.requiredPresent?.length ? `\u5df2\u7ee7\u627f ${localFeatures.skills.requiredPresent.join(", ")}` : "\u53ef\u901a\u8fc7\u6309\u94ae\u68c0\u67e5\u548c\u5237\u65b0"],
             optionalLoadErrors.length ? ["\u8865\u5145\u63d0\u793a", optionalLoadErrors.join("\n")] : null,
           ].filter(Boolean))),

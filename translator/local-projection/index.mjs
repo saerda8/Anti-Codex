@@ -145,7 +145,8 @@ function normalizeConnector(connector, options = {}) {
         appMetadata: connector?.appMetadata || {},
         labels: connector?.labels || {},
         installUrl: localInstallUrl(connector?.installUrl),
-        isAccessible: locallyAuthorized || connector?.isAccessible === true,
+        isAccessible: connector?.isAccessible === true,
+        locallyAllowlisted: locallyAuthorized,
         isEnabled: connector?.isEnabled !== false,
         pluginDisplayNames: Array.isArray(connector?.pluginDisplayNames) ? connector.pluginDisplayNames : [],
     };
