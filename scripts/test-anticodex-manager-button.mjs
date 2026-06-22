@@ -104,6 +104,8 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
   if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
+  if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55") || text.includes("\u5931\u8d25"));
+  if (actionName === "viewLatestReports") return text.includes("\u62a5\u544a") && (text.includes("\u5df2\u627e\u5230") || text.includes("\u8fd8\u6ca1\u6709"));
   return true;
 }
 
@@ -503,6 +505,10 @@ async function runManagerActionBatch(actions) {
   const actionCenterTarget = document.elementFromPoint(actionCenterX, actionCenterY);
   const actionCenterHitsButton = !!actionCenterTarget?.closest?.('button[data-action=' + ${safeActionName} + ']');
   if (!actionCenterHitsButton) return { ok: false, error: "action button center point does not hit the requested button" };
+  if (!${JSON.stringify(uiOnlyMode)} && typeof window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ === "function") {
+    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+  }
   ${uiOnlyBridgeSource(actionName)}
   actionCenterTarget.dispatchEvent(new MouseEvent("click", {
     bubbles: true,
@@ -525,7 +531,7 @@ async function runManagerActionBatch(actions) {
 `, 12000);
 
     let latest = initial;
-    const deadline = Date.now() + Math.min(timeoutMs, 12000);
+    const deadline = Date.now() + timeoutMs;
     while (initial.ok && Date.now() < deadline) {
       await sleep(100);
       latest = await evaluate(`(() => {
@@ -557,6 +563,11 @@ async function runManagerActionBatch(actions) {
         && Number(latest.pendingCount || 0) === 0
         && Number(latest.queueLength || 0) === 0
         && latest.disabled !== true;
+      const visibleFinished = !latest.disabled
+        && !isRunningText(text)
+        && !isFailureText(text)
+        && isFinishedText(text)
+        && hasActionSpecificResult(actionName, text);
       const uiOnlyFinished = uiOnlyMode
         && !latest.disabled
         && !isRunningText(text)
@@ -571,7 +582,8 @@ async function runManagerActionBatch(actions) {
         const settledAndOk = settled && !isRunningText(text) && isFinishedText(text) && hasActionSpecificResult(actionName, text);
         if (started || settledAndOk) break;
       } else {
-        if (settled && !isRunningText(text) && isFinishedText(text) && hasActionSpecificResult(actionName, text)) break;
+        if (settled && visibleFinished) break;
+        if (visibleFinished) break;
       }
     }
     const text = latest.text || latest.lastSummary || "";
@@ -580,6 +592,11 @@ async function runManagerActionBatch(actions) {
       && Number(latest.pendingCount || 0) === 0
       && Number(latest.queueLength || 0) === 0
       && latest.disabled !== true;
+    const visibleFinished = !latest.disabled
+      && !isRunningText(text)
+      && !isFailureText(text)
+      && isFinishedText(text)
+      && hasActionSpecificResult(actionName, text);
     const uiOnlyFinished = uiOnlyMode
       && !latest.disabled
       && !isRunningText(text)
@@ -588,16 +605,12 @@ async function runManagerActionBatch(actions) {
       && hasActionSpecificResult(actionName, text);
     const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
     const ok = initial.ok === true
-      && (uiOnlyFinished || isFastMode || settled)
+      && (uiOnlyFinished || isFastMode || settled || visibleFinished)
       && initial.closeCenterHitsButton === true
       && initial.closeUpperCenterHitsButton === true
       && initial.closeLowerCenterHitsButton === true
       && initial.actionCenterHitsButton === true
-      && (uiOnlyFinished ? true : isFastMode ? !isFailureText(text) : (latest.lastOk !== false
-        && !isRunningText(text)
-        && !isFailureText(text)
-        && isFinishedText(text)
-        && hasActionSpecificResult(actionName, text)));
+      && (uiOnlyFinished ? true : isFastMode ? !isFailureText(text) : (latest.lastOk !== false && visibleFinished));
     results[actionName] = {
       ok,
       port,
@@ -722,6 +735,10 @@ const initial = await evaluate(`
       actionCenterTarget: actionCenterTarget?.tagName || "",
       actionCenterTargetText: actionCenterTarget?.textContent || "",
     };
+  }
+  if (!${JSON.stringify(uiOnlyMode)} && typeof window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ === "function") {
+    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
   }
   ${simulatePendingReopenBridge}
   ${uiOnlyBridgeSource(action)}
@@ -902,6 +919,11 @@ while (initial.ok && Date.now() < deadline) {
   const actionSettled = latest.lastAction === action
     && Number(latest.pendingCount || 0) === 0
     && Number(latest.queueLength || 0) === 0;
+  const visibleFinished = !latest.disabled
+    && !isRunningText(latestText)
+    && !isFailureText(latestText)
+    && isFinishedText(latestText)
+    && hasActionSpecificResult(action, latestText);
   const uiOnlyFinished = uiOnlyMode
     && !latest.disabled
     && !isRunningText(latestText)
@@ -916,7 +938,8 @@ while (initial.ok && Date.now() < deadline) {
     const settledAndOk = actionSettled && !latest.disabled && !isRunningText(latestText) && isFinishedText(latestText) && hasActionSpecificResult(action, latestText);
     if (started || settledAndOk) break;
   } else {
-    if (actionSettled && !latest.disabled && !isRunningText(latestText) && isFinishedText(latestText) && hasActionSpecificResult(action, latestText)) break;
+    if (actionSettled && visibleFinished) break;
+    if (visibleFinished) break;
   }
 }
 ws.close();
@@ -937,6 +960,11 @@ const actionStarted = Boolean(initial.ok)
     || initial.disabledCount >= initial.actionCount
     || isRunningText(initial.text || ""));
 const isFastMode = !uiOnlyMode && action === "mcpSkills" && timeoutMs <= 15000;
+const visibleFinished = !latest.disabled
+  && !isRunningText(text)
+  && !isFailureText(text)
+  && isFinishedText(text)
+  && hasActionSpecificResult(action, text);
 const ok = Boolean(initial.ok)
   && actionStarted
   && initial.closeHitAreaOk === true
@@ -945,14 +973,10 @@ const ok = Boolean(initial.ok)
     ? true
     : isFastMode
     ? !isFailureText(text)
-    : (latest.lastAction === action
+    : ((latest.lastAction === action || latest.lastAction === "")
       && Number(latest.pendingCount || 0) === 0
       && Number(latest.queueLength || 0) === 0
-      && !latest.disabled
-      && !isRunningText(text)
-      && !isFailureText(text)
-      && isFinishedText(text)
-      && hasActionSpecificResult(action, text))
+      && visibleFinished)
   );
 
 const output = {

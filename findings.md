@@ -526,3 +526,5 @@
 - In this workspace, the active repo is the `deepcodex` subdirectory. Patch tools invoked from the parent path need `deepcodex/...` targets; otherwise a valid file name can fail as missing.
 - Third-party provider "save and restart" is not the same as proving provider switching. A verifier must actually continue from Provider A's last `previous_response_id` after loading Provider B, then inspect Provider B's received request for Provider A history and the new provider model/key.
 - Manager action tokens are process-local. Any verifier that restarts the translator must fetch a fresh Manager bootstrap token before the next protected Manager action.
+- Manager `ui-only` button smoke can leave a fake action bridge on the live Manager page. Any later real-click verifier must restore the saved real bridge before dispatching non-ui-only actions.
+- Some real Manager actions prove completion through visible result text without writing a `lastAction` record. Button verifiers should accept action-specific visible success text when the hit area, busy state, and failure checks all pass.

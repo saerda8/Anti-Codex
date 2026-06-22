@@ -3073,10 +3073,14 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Manager MCP\/Skill button verification/);
   assert.match(overall, /Manager plugin\/application button verification/);
   assert.match(overall, /Manager safe button smoke verification/);
+  assert.match(overall, /Manager real safe button verification/);
   assert.match(overall, /--action", "mcpSkills"/);
   assert.match(overall, /--action", "pluginCapabilities"/);
+  assert.match(overall, /--actions", "updateCheck,sourcePreflight,syncReadiness"/);
   assert.match(overall, /--verification-mode", "ui-only"/);
   assert.doesNotMatch(overall, /--actions", "mcpSkills,pluginCapabilities"/);
+  assert.match(overall, /managerButtonSafeActions/);
+  assert.match(overall, /fast mode skips real Manager safe button batch/);
   assert.match(overall, /--compact", "1"/);
   assert.doesNotMatch(overall, /fast mode skips Manager MCP\/Skill button smoke/);
   assert.doesNotMatch(overall, /fast mode skips Manager plugin\/application button smoke/);

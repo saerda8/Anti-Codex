@@ -877,16 +877,19 @@ if ($SkipUiStateProbe) {
     $checks.managerButtonMcpSkills = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"
     $checks.managerButtonPluginCapabilities = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"
     $checks.managerButtonSourcePreflight = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"
+    $checks.managerButtonSafeActions = New-SkippedCheck "SkipUiStateProbe skips real Manager safe button clicks from inside the embedded Manager" "test-anticodex-manager-button.mjs"
 } elseif ($uiCdpPort) {
     $managerButtonScript = Join-Path $scriptsRoot "test-anticodex-manager-button.mjs"
     if ($Fast) {
         $checks.managerButtonMcpSkills = New-SkippedCheck "fast mode skips the long-running MCP/Skill Manager click; standalone MCP/skills verification still runs" "test-anticodex-mcp-skills.ps1"
         $checks.managerButtonPluginCapabilities = New-SkippedCheck "fast mode covers plugin/application button state through UI verification; full verification clicks the button" "uiState"
         $checks.managerButtonSourcePreflight = New-SkippedCheck "fast mode covers source preflight through source gate; full verification clicks the Manager button" "sourcePreflight"
+        $checks.managerButtonSafeActions = New-SkippedCheck "fast mode skips real Manager safe button batch; full verification clicks the buttons" "test-anticodex-manager-button.mjs"
     } else {
         $checks.managerButtonMcpSkills = Invoke-NodeJsonScript "Manager MCP/Skill button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "mcpSkills", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonPluginCapabilities = Invoke-NodeJsonScript "Manager plugin/application button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "pluginCapabilities", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonSourcePreflight = Invoke-NodeJsonScript "Manager safe button smoke verification - Manager source preflight button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "sourcePreflight", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
+        $checks.managerButtonSafeActions = Invoke-NodeJsonScript "Manager real safe button verification" $managerButtonScript @("--port", $uiCdpPort, "--actions", "updateCheck,sourcePreflight,syncReadiness", "--timeout-ms", "30000", "--compact", "1")
     }
 } else {
     Add-Failure "UI state verification did not report a CDP port for Manager button checks"

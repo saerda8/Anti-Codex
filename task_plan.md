@@ -663,3 +663,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the verifier now rejects leaks of the second provider key in saved profile responses, public profile output, route audit output, and report files.
 - Verification: `test-anticodex-third-party-provider.mjs` passed with 7 turns and `switchedProviderWithoutHistoryLoss:true`; focused launcher/upstream regression passed 162/162.
 - Still deferred: OpenAI-to-Anthropic and Anthropic-to-OpenAI cross-protocol continuation can be added as a deeper slow verifier if needed.
+
+## 2026-06-22 Manager Real Safe Button Coverage
+- Completed: installed overall now clicks real embedded Manager buttons for `updateCheck`, `sourcePreflight`, and `syncReadiness`, instead of relying only on `ui-only` Manager smoke for those safe actions.
+- Completed: the Manager button verifier restores the real action bridge after earlier `ui-only` smoke runs, so later real clicks cannot accidentally reuse the fake bridge.
+- Completed: batch button verification now accepts explicit action result text even when the embedded Manager surface does not write a `lastAction` record.
+- Verification: real three-button batch passed against the installed UI with `lastUiOnly:false`; launcher contract tests, manager-button self-test, source preflight fast mode, runtime sync, and installed no-traffic overall all passed. The installed report recorded `managerButtonSafeActions.ok:true` for `updateCheck`, `sourcePreflight`, and `syncReadiness`, with all three `lastUiOnly:false`.
+- Still deferred: real button clicks for `diagnosticsBundle`, `viewLatestReports`, `mcpSkills`, and `pluginCapabilities` remain candidates for a slower pass; account/proxy/config/post-verification/sync-host actions stay excluded from ordinary no-traffic checks.
