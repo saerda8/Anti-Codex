@@ -31,6 +31,7 @@ let translator = null;
 let upstream = null;
 let upstreamB = null;
 let upstreamC = null;
+let upstreamD = null;
 let forceAuthFailure = false;
 
 function addFailure(message) {
@@ -125,7 +126,11 @@ function createFakeOpenAiProvider({ providerName, model, answerPrefix }) {
       return;
     }
     if (forceAuthFailure) {
-      const rejectedKey = providerName === "provider-a" ? "sk-fake-secret" : "sk-second-secret";
+      const rejectedKey = providerName === "provider-a"
+        ? "sk-fake-secret"
+        : providerName === "provider-d"
+        ? "sk-openai-return-secret"
+        : "sk-second-secret";
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: { message: `Bearer ${rejectedKey} was rejected` } }));
       return;
@@ -222,9 +227,11 @@ async function main() {
   upstream = createFakeOpenAiProvider({ providerName: "provider-a", model: "fake-gpt-4.1", answerPrefix: "PROVIDER" });
   upstreamB = createFakeOpenAiProvider({ providerName: "provider-b", model: "fake-gpt-4.2", answerPrefix: "PROVIDER_B" });
   upstreamC = createFakeAnthropicProvider({ providerName: "provider-c", model: "fake-claude-4.1", answerPrefix: "PROVIDER_C" });
+  upstreamD = createFakeOpenAiProvider({ providerName: "provider-d", model: "fake-gpt-4.3", answerPrefix: "PROVIDER_D" });
   const upstreamPort = await listen(upstream);
   const upstreamBPort = await listen(upstreamB);
   const upstreamCPort = await listen(upstreamC);
+  const upstreamDPort = await listen(upstreamD);
   const translatorProbe = http.createServer();
   const translatorPort = await listen(translatorProbe);
   await close(translatorProbe);
@@ -232,6 +239,7 @@ async function main() {
   const upstreamFullUrl = `http://127.0.0.1:${upstreamPort}/v1/chat/completions`;
   const upstreamBFullUrl = `http://127.0.0.1:${upstreamBPort}/v1/chat/completions`;
   const upstreamCFullUrl = `http://127.0.0.1:${upstreamCPort}/v1/messages`;
+  const upstreamDFullUrl = `http://127.0.0.1:${upstreamDPort}/v1/chat/completions`;
   const profilePath = join(stateRoot, "provider-profile.json");
   let runtimeProtocol = "openai-compatible";
   let runtimeUpstreamUrl = upstreamFullUrl;
@@ -633,9 +641,79 @@ async function main() {
     "x-anticodex-manager-token": protocolSwitchBootstrap.token,
   };
 
-  const restoredResponse = await fetch(`${translatorUrl}/anticodex/upstream-profile`, {
+  const openAiReturnConnection = await getJson(`${translatorUrl}/anticodex/upstream-test`, {
     method: "POST",
     headers: protocolSwitchAuthedHeaders,
+    body: JSON.stringify({
+      protocol: "openai-compatible",
+      baseUrl: upstreamDFullUrl,
+      model: "fake-gpt-4.3",
+      apiKey: "sk-openai-return-secret",
+      timeoutMs: 10_000,
+    }),
+  });
+  assert.equal(openAiReturnConnection.ok, true);
+
+  const openAiReturnSavedResponse = await fetch(`${translatorUrl}/anticodex/upstream-profile`, {
+    method: "POST",
+    headers: protocolSwitchAuthedHeaders,
+    body: JSON.stringify({
+      mode: "third-party",
+      protocol: "openai-compatible",
+      baseUrl: upstreamDFullUrl,
+      model: "fake-gpt-4.3",
+      apiKey: "sk-openai-return-secret",
+      stages: openAiReturnConnection.stages,
+    }),
+  });
+  const openAiReturnSavedText = await openAiReturnSavedResponse.text();
+  assert.equal(openAiReturnSavedResponse.status, 200, openAiReturnSavedText);
+  const openAiReturnSaved = responseJsonFromText(openAiReturnSavedText);
+  assert.equal(openAiReturnSaved.ok, true);
+  assert.equal(openAiReturnSaved.restartRequired, true);
+  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryAfterProtocolSwitchContinuation);
+  assert.doesNotMatch(readFileSync(join(stateRoot, "upstream-profile.json"), "utf8"), /sk-openai-return-secret/);
+
+  runtimeProtocol = "openai-compatible";
+  runtimeUpstreamUrl = upstreamDFullUrl;
+  runtimeModel = "fake-gpt-4.3";
+  runtimeApiKey = "sk-openai-return-secret";
+  await stopTranslator();
+  startTranslator();
+  const healthAfterReverseProtocolSwitch = await waitForHealth(translatorUrl);
+  assert.equal(healthAfterReverseProtocolSwitch.upstreamProfile.mode, "third-party");
+  assert.equal(healthAfterReverseProtocolSwitch.upstreamProfile.protocol, "openai-compatible");
+  assert.equal(healthAfterReverseProtocolSwitch.upstreamProfile.model, "fake-gpt-4.3");
+
+  const ninthAfterReverseProtocolSwitchResult = await postResponse({
+    model: "gemini-pro-agent",
+    stream: false,
+    previous_response_id: eighthAfterProtocolSwitch.id,
+    input: "turn-9 user asks iota after reverse protocol switch",
+  });
+  assert.match(ninthAfterReverseProtocolSwitchResult.text, /PROVIDER_D_HISTORY_TURN_9/);
+  const ninthAfterReverseProtocolSwitch = ninthAfterReverseProtocolSwitchResult.response;
+  assert.equal(ninthAfterReverseProtocolSwitch.previous_response_id, eighthAfterProtocolSwitch.id);
+  assert.equal(textFromResponse(ninthAfterReverseProtocolSwitch), "PROVIDER_D_HISTORY_TURN_9");
+  const ninthChat = requests.filter((request) => request.provider === "provider-d" && request.path === "/v1/chat/completions").at(-1);
+  assert.equal(ninthChat.body.model, "fake-gpt-4.3");
+  assert.equal(ninthChat.headers.authorization, "Bearer sk-openai-return-secret");
+  assert.match(requestText(ninthChat.body), /turn-1 user asks alpha/);
+  assert.match(requestText(ninthChat.body), /PROVIDER_HISTORY_TURN_1/);
+  assert.match(requestText(ninthChat.body), /turn-8 user asks theta after protocol switch/);
+  assert.match(requestText(ninthChat.body), /PROVIDER_C_HISTORY_TURN_8/);
+  const responseHistoryAfterReverseProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
+  assert.match(responseHistoryAfterReverseProtocolSwitchContinuation, new RegExp(ninthAfterReverseProtocolSwitch.id));
+
+  const reverseProtocolSwitchBootstrap = await getJson(`${translatorUrl}/anticodex/manager/bootstrap`, { headers: managerHeaders });
+  const reverseProtocolSwitchAuthedHeaders = {
+    ...authedHeaders,
+    "x-anticodex-manager-token": reverseProtocolSwitchBootstrap.token,
+  };
+
+  const restoredResponse = await fetch(`${translatorUrl}/anticodex/upstream-profile`, {
+    method: "POST",
+    headers: reverseProtocolSwitchAuthedHeaders,
     body: JSON.stringify({ mode: "antigravity" }),
   });
   const restoredText = await restoredResponse.text();
@@ -643,16 +721,17 @@ async function main() {
   const restored = responseJsonFromText(restoredText);
   assert.equal(restored.ok, true);
   assert.equal(restored.restartRequired, true);
-  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryAfterProtocolSwitchContinuation);
+  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryAfterReverseProtocolSwitchContinuation);
 
   const routeAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
   assert.equal(routeAudit.latest.transport, "upstream-provider");
-  assert.equal(routeAudit.latest.providerProtocol, "anthropic");
-  assert.equal(routeAudit.latest.resolvedModel, "fake-claude-4.1");
-  assert.ok((routeAudit.entries || []).every((entry) => ["fake-gpt-4.1", "fake-gpt-4.2", "fake-claude-4.1"].includes(entry.resolvedModel)));
+  assert.equal(routeAudit.latest.providerProtocol, "openai-compatible");
+  assert.equal(routeAudit.latest.resolvedModel, "fake-gpt-4.3");
+  assert.ok((routeAudit.entries || []).every((entry) => ["fake-gpt-4.1", "fake-gpt-4.2", "fake-claude-4.1", "fake-gpt-4.3"].includes(entry.resolvedModel)));
 
   const publicProfile = await getJson(`${translatorUrl}/anticodex/upstream-profile`, { headers: managerHeaders });
-  const secretPattern = /sk-fake-secret|sk-save-secret|sk-second-secret|sk-anthropic-secret/;
+  const secretPattern = /sk-fake-secret|sk-save-secret|sk-second-secret|sk-anthropic-secret|sk-openai-return-secret/;
+  assert.doesNotMatch(openAiReturnSavedText, secretPattern);
   assert.doesNotMatch(anthropicSavedText, secretPattern);
   assert.doesNotMatch(providerBSavedText, secretPattern);
   assert.doesNotMatch(savedText, secretPattern);
@@ -663,8 +742,10 @@ async function main() {
   const providerChatRequests = requests.filter((request) => request.path === "/v1/chat/completions");
   const providerAChatRequests = providerChatRequests.filter((request) => request.provider === "provider-a");
   const providerBChatRequests = providerChatRequests.filter((request) => request.provider === "provider-b");
+  const providerDChatRequests = providerChatRequests.filter((request) => request.provider === "provider-d");
   assert.ok(providerAChatRequests.every((request) => request.body.model === "fake-gpt-4.1"));
   assert.ok(providerBChatRequests.every((request) => request.body.model === "fake-gpt-4.2"));
+  assert.ok(providerDChatRequests.every((request) => request.body.model === "fake-gpt-4.3"));
   const anthropicMessageRequests = requests.filter((request) => request.provider === "provider-c" && request.path === "/v1/messages");
   assert.ok(anthropicMessageRequests.every((request) => request.body.model === "fake-claude-4.1"));
 
@@ -686,8 +767,8 @@ async function main() {
     failures,
     elapsedMs: Date.now() - startedAt,
     mode: "third-party",
-    protocol: "anthropic",
-    model: "fake-claude-4.1",
+    protocol: "openai-compatible",
+    model: "fake-gpt-4.3",
     upstreamFullUrlAccepted: true,
     unauthorizedManagerBlocked: true,
     savedWithoutHistoryLoss: true,
@@ -695,9 +776,10 @@ async function main() {
     restartedProviderWithoutHistoryLoss: true,
     switchedProviderWithoutHistoryLoss: true,
     crossProtocolWithoutHistoryLoss: true,
+    reverseCrossProtocolWithoutHistoryLoss: true,
     secretsRedacted: true,
     multiTurnHistory: {
-      turns: 8,
+      turns: 9,
       antigravityModelFallbacks: ["gemini-pro-agent", "gemini-3.5-flash-low", "gemini-3-flash-agent"],
       providerModelUsedForEveryTurn: [firstChat, secondChat, thirdChat, fourthChat, fifthChat, sixthChat].every((request) => request.body.model === "fake-gpt-4.1"),
       providerSwitch: {
@@ -713,6 +795,14 @@ async function main() {
         model: "fake-claude-4.1",
         continuationPreviousResponseId: eighthAfterProtocolSwitch.previous_response_id,
         requestReachedAnthropicProvider: eighthAnthropic.provider === "provider-c",
+      },
+      reverseProtocolSwitch: {
+        from: "anthropic",
+        to: "openai-compatible",
+        provider: "provider-d",
+        model: "fake-gpt-4.3",
+        continuationPreviousResponseId: ninthAfterReverseProtocolSwitch.previous_response_id,
+        requestReachedOpenAiCompatibleProvider: ninthChat.provider === "provider-d",
       },
       fourthTurnContextIncludesPriorTurns: /turn-1 user asks alpha/.test(requestText(fourthChat.body))
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(fourthChat.body))
@@ -732,11 +822,16 @@ async function main() {
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(eighthAnthropic.body))
         && /turn-7 user asks eta after provider switch/.test(requestText(eighthAnthropic.body))
         && /PROVIDER_B_HISTORY_TURN_7/.test(requestText(eighthAnthropic.body)),
+      ninthAfterReverseProtocolSwitchPreservesHistory: /turn-1 user asks alpha/.test(requestText(ninthChat.body))
+        && /PROVIDER_HISTORY_TURN_1/.test(requestText(ninthChat.body))
+        && /turn-8 user asks theta after protocol switch/.test(requestText(ninthChat.body))
+        && /PROVIDER_C_HISTORY_TURN_8/.test(requestText(ninthChat.body)),
       finalPreviousResponseId: fourth.previous_response_id,
       savedContinuationPreviousResponseId: fifthAfterSave.previous_response_id,
       restartContinuationPreviousResponseId: sixthAfterRestart.previous_response_id,
       providerSwitchContinuationPreviousResponseId: seventhAfterProviderSwitch.previous_response_id,
       protocolSwitchContinuationPreviousResponseId: eighthAfterProtocolSwitch.previous_response_id,
+      reverseProtocolSwitchContinuationPreviousResponseId: ninthAfterReverseProtocolSwitch.previous_response_id,
     },
     routeEvidence: routeAudit.latest,
     requestCount: requests.length,
@@ -758,12 +853,13 @@ try {
   await close(upstream);
   await close(upstreamB);
   await close(upstreamC);
+  await close(upstreamD);
   rmSync(stateRoot, { recursive: true, force: true });
 }
 
 const reportPaths = writeReport(result);
 const reportText = readFileSync(reportPaths.latest, "utf8");
-if (/sk-fake-secret|sk-save-secret|sk-second-secret|sk-anthropic-secret/.test(reportText)) {
+if (/sk-fake-secret|sk-save-secret|sk-second-secret|sk-anthropic-secret|sk-openai-return-secret/.test(reportText)) {
   console.error(JSON.stringify({ ok: false, failures: ["third-party provider report leaked an API key"] }));
   process.exit(1);
 }
