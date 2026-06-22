@@ -157,8 +157,8 @@ function Save-JsonReport {
     param($Paths, $Payload, [int]$Depth = 12)
     $json = $Payload | ConvertTo-Json -Depth $Depth -Compress
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText($Paths.latest, $json, $utf8NoBom)
-    [System.IO.File]::WriteAllText($Paths.history, $json, $utf8NoBom)
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath $Paths.latest -HistoryPath $Paths.history -Json $json -Encoding $utf8NoBom
     Remove-OldReports -HistoryPath $Paths.history
 }
 

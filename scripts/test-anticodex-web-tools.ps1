@@ -83,8 +83,8 @@ try {
     }
     $json = $result | ConvertTo-Json -Depth 10 -Compress
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText($result.report.latest, $json, $utf8NoBom)
-    [System.IO.File]::WriteAllText($result.report.history, $json, $utf8NoBom)
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath $result.report.latest -HistoryPath $result.report.history -Json $json -Encoding $utf8NoBom
     $json
     if ($failures.Count -gt 0) { exit 1 }
 } catch {

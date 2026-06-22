@@ -2,6 +2,7 @@
 param(
     [string]$BaseUrl = "",
     [string]$Model = $(if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.5-flash-low" }),
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$TimeoutSec = 8,
     [int]$RequestTimeoutSec = 90,
     [switch]$AllowUnready
@@ -418,7 +419,16 @@ $result = [pscustomobject]@{
     }
 }
 
-$result | ConvertTo-Json -Depth 10 -Compress
+$reportStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$reportPaths = [pscustomobject]@{
+    latest = (Join-Path $ReportRoot "latest-account-proxy-readiness.json")
+    history = (Join-Path $ReportRoot "$reportStamp-account-proxy-readiness.json")
+}
+$result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
+$json = $result | ConvertTo-Json -Depth 10 -Compress
+. (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPaths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
+$json
 if ($failures.Count -gt 0) { exit 1 }
 
 

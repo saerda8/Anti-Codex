@@ -104,7 +104,8 @@ $report = [pscustomobject]@{
 New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
 $json = $report | ConvertTo-Json -Depth 8
 $utf8 = New-Object Text.UTF8Encoding($false)
-[IO.File]::WriteAllText((Join-Path $ReportRoot "latest-model-thinking.json"), $json, $utf8)
+. (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+Write-AntiCodexTextAtomic -Path (Join-Path $ReportRoot "latest-model-thinking.json") -Text $json -Encoding $utf8 -ValidateJson
 $json
 
 if (-not $report.ok) {

@@ -34,8 +34,8 @@ function Save-Report {
     New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
     $json = $Payload | ConvertTo-Json -Depth 14 -Compress
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText((Join-Path $ReportRoot "latest-real-mini-tool.json"), $json, $utf8NoBom)
-    [System.IO.File]::WriteAllText((Join-Path $ReportRoot "$stamp-real-mini-tool.json"), $json, $utf8NoBom)
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath (Join-Path $ReportRoot "latest-real-mini-tool.json") -HistoryPath (Join-Path $ReportRoot "$stamp-real-mini-tool.json") -Json $json -Encoding $utf8NoBom
 }
 
 function Complete-Skipped {

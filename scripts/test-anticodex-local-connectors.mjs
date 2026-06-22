@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import { join, resolve } from "node:path";
@@ -172,9 +172,29 @@ function writeReport(payload) {
   const history = resolve(reportRoot, `${stamp}-local-connectors.json`);
   mkdirSync(reportRoot, { recursive: true });
   const text = JSON.stringify({ ...payload, report: { latest, history } }, null, 2);
-  writeFileSync(latest, text, "utf8");
-  writeFileSync(history, text, "utf8");
+  writeJsonReportAtomic(latest, history, text);
   return { latest, history };
+}
+
+function writeTextAtomic(filePath, text) {
+  const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(tmp, text, "utf8");
+    JSON.parse(readFileText(tmp));
+    renameSync(tmp, filePath);
+  } catch (error) {
+    try { unlinkSync(tmp); } catch {}
+    throw error;
+  }
+}
+
+function readFileText(filePath) {
+  return readFileSync(filePath, "utf8");
+}
+
+function writeJsonReportAtomic(latest, history, text) {
+  writeTextAtomic(history, text);
+  writeTextAtomic(latest, text);
 }
 
 function connectorById(payload, id) {

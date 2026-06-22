@@ -24,8 +24,8 @@ function Save-Report {
     New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
     $json = $Payload | ConvertTo-Json -Depth 16 -Compress
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText((Join-Path $ReportRoot "latest-codex-responses.json"), $json, $utf8NoBom)
-    [System.IO.File]::WriteAllText((Join-Path $ReportRoot "$stamp-codex-responses.json"), $json, $utf8NoBom)
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath (Join-Path $ReportRoot "latest-codex-responses.json") -HistoryPath (Join-Path $ReportRoot "$stamp-codex-responses.json") -Json $json -Encoding $utf8NoBom
 }
 
 function Invoke-LocalJson {

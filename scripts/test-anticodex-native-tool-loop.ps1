@@ -60,8 +60,8 @@ function Save-Report {
     New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
     $json = $Payload | ConvertTo-Json -Depth 12 -Compress
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText((Join-Path $ReportRoot "latest-native-tool-loop.json"), $json, $utf8NoBom)
-    [System.IO.File]::WriteAllText((Join-Path $ReportRoot "$(Get-Date -Format 'yyyyMMdd-HHmmss')-native-tool-loop.json"), $json, $utf8NoBom)
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath (Join-Path $ReportRoot "latest-native-tool-loop.json") -HistoryPath (Join-Path $ReportRoot "$(Get-Date -Format 'yyyyMMdd-HHmmss')-native-tool-loop.json") -Json $json -Encoding $utf8NoBom
 }
 
 try {

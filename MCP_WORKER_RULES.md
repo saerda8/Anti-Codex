@@ -1374,3 +1374,24 @@ After every failure, before another dispatch:
 - Cause classification: shell compatibility mistake during local inspection, not a product failure.
 - Rule change: use `Get-Content -Tail N <path>` for tail reads, or `Select-Object -Last N` when a pipeline is required.
 - Result: reran the inspection with `Get-Content -Tail 80` and continued without touching runtime state.
+
+## 2026-06-22 - Keep heterogeneous report-writer rewrites in small batches
+
+- Symptom: a large patch that tried to convert many report writers at once failed when one script had a slightly different signature/context.
+- Cause classification: patch batching mistake, not a product failure.
+- Rule change: when many scripts share a broad pattern but differ in parameters or output paths, inspect the outliers first or patch in smaller groups. Do not let one context mismatch hide which files were actually updated.
+- Result: split the conversion into narrower patches, then verified the final report-writer set with parser checks, launcher contracts, source preflight, and report-helper smoke tests.
+
+## 2026-06-22 - Prefer `rg` or single-quoted regex for complex PowerShell scans
+
+- Symptom: a PowerShell `Select-String` scan failed before useful inspection because the regex/string escaping around `WriteAllText\(` was malformed.
+- Cause classification: command construction failure during local inspection, not a product failure.
+- Rule change: use `rg` for complex source scans when available. If `Select-String` is necessary, use single-quoted regex literals and test the pattern on one file before running a broad scan.
+- Result: reran the direct-write scan with `rg` and confirmed no remaining PowerShell direct `latest-*.json` report writes.
+
+## 2026-06-22 - Test atomic file helpers with overwrite and relative paths
+
+- Symptom: the first atomic report helper passed syntax checks but failed at runtime when replacing existing files because `[System.IO.File]::Replace` rejected a null backup path. A follow-up helper smoke also showed raw .NET relative path resolution can ignore PowerShell `Push-Location`.
+- Cause classification: missing runtime smoke for filesystem edge cases.
+- Rule change: every new shared file-write helper must be smoke-tested for first write, overwrite, invalid payload rejection, same-directory cleanup, and relative path behavior from a changed PowerShell location.
+- Result: the helper now uses PowerShell session path resolution, a same-directory backup path for replacement, and JSON validation before publish.

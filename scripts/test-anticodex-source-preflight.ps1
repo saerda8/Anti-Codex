@@ -246,8 +246,8 @@ function Save-JsonReport {
     $paths = New-ReportPaths $Name
     $json = $Payload | ConvertTo-Json -Depth 24
     $encoding = [System.Text.UTF8Encoding]::new($false)
-    [IO.File]::WriteAllText($paths.history, $json, $encoding)
-    [IO.File]::WriteAllText($paths.latest, $json, $encoding)
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath $paths.latest -HistoryPath $paths.history -Json $json -Encoding $encoding
     return $paths
 }
 

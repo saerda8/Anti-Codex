@@ -717,3 +717,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostic bundle creation now returns top-level `ok:false` with `damagedReports` if report summaries include parse/read errors, while still producing the ZIP for support. Installed overall report encoding now treats any existing unparseable latest report as a failure, even when the file predates the current run.
 - Verification: adaptive server syntax, Manager bridge syntax, Manager button self-test, and launcher contracts 89/89 passed with invalid-report contract assertions.
 - Still deferred: report signature/hash hardening remains a future reliability improvement; current reports are parse-checked and surfaced, but not signed.
+
+## 2026-06-22 Atomic Report Writes
+- Completed: shared PowerShell report writes now go through `anticodex-report-io.ps1`, which writes UTF-8 without BOM to a same-directory temp file, validates JSON before publish, and atomically replaces existing latest/history reports.
+- Completed: core report-producing verifiers now use the shared atomic helper instead of direct latest-report writes, including MCP/skills, plugin/connectors, installed overall, source preflight, sync readiness, UI idle, model routing, tool loops, cancellation, stability, proxy drill, shortcut repair, account switch, and web/native/real-work verifiers.
+- Completed: account/proxy readiness now writes `latest-account-proxy-readiness.json` plus history output, matching the Manager latest-report inventory instead of leaving a listed report unwritten.
+- Completed: Node local connector and third-party provider verifiers now publish reports through temp-file JSON validation and rename instead of direct latest writes.
+- Verification: PowerShell parse check passed for 66 scripts; Node syntax passed for local connector and third-party provider verifiers; launcher contracts passed 89/89; source preflight fast mode passed; direct helper smoke passed for relative paths, overwrite, and bad JSON rejection.

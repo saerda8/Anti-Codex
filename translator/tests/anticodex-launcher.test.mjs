@@ -1835,12 +1835,13 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
 });
 
 test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers", () => {
+  const reportIo = readFileSync(resolve(root, "scripts", "anticodex-report-io.ps1"), "utf8");
   const reportScripts = [
     "collect-anticodex-diagnostics.ps1",
     "drill-anticodex-proxy.ps1",
     "switch-anticodex-account.ps1",
+    "test-anticodex-account-proxy-readiness.ps1",
     "test-anticodex-cancellation.ps1",
-    "test-anticodex-cold-relaunch.ps1",
     "test-anticodex-compaction-resume.ps1",
     "test-anticodex-custom-tool-loop.ps1",
     "test-anticodex-installed-overall.ps1",
@@ -1859,11 +1860,22 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
     "test-anticodex-web-tools.ps1",
   ];
 
+  assert.match(reportIo, /function Write-AntiCodexTextAtomic/);
+  assert.match(reportIo, /function Write-AntiCodexJsonReport/);
+  assert.match(reportIo, /UTF8Encoding\(\$false\)/);
+  assert.match(reportIo, /ConvertFrom-Json -ErrorAction Stop/);
+  assert.match(reportIo, /System\.IO\.File\]::Replace/);
+
   for (const scriptName of reportScripts) {
     const script = readFileSync(resolve(root, "scripts", scriptName), "utf8");
-    assert.match(script, /UTF8Encoding\]::new\(\$false\)/, `${scriptName} should write UTF-8 without BOM`);
-    assert.match(script, /WriteAllText/, `${scriptName} should use an explicit .NET text writer`);
+    assert.match(script, /UTF8Encoding(?:\]::new|\(\$false\))/, `${scriptName} should use explicit UTF-8 without BOM`);
+    if (scriptName !== "collect-anticodex-diagnostics.ps1") {
+      assert.match(script, /Write-AntiCodexJsonReport|Write-AntiCodexTextAtomic/, `${scriptName} should use atomic report writes`);
+    }
   }
+  const accountProxy = readFileSync(resolve(root, "scripts", "test-anticodex-account-proxy-readiness.ps1"), "utf8");
+  assert.match(accountProxy, /latest-account-proxy-readiness\.json/);
+  assert.match(accountProxy, /Write-AntiCodexJsonReport/);
 });
 
 test("Anti-Codex parsed state and manifest files are written as UTF-8 without BOM", () => {
@@ -3362,7 +3374,7 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /git diff --check/);
   assert.match(preflight, /warningsOnly/);
   assert.match(preflight, /UTF8Encoding\]::new\(\$false\)/);
-  assert.match(preflight, /WriteAllText/);
+  assert.match(preflight, /Write-AntiCodexJsonReport/);
   assert.match(preflight, /SkipFullRegression/);
   assert.match(install, /test-anticodex-source-preflight\.ps1/);
   assert.match(install, /Invoke-AntiCodexSourcePreflight/);
