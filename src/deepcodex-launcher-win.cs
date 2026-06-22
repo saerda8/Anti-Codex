@@ -19,7 +19,7 @@ internal static class DeepCodexLauncher
             {
                 MessageBox.Show(
                     "start-deepcodex.ps1 was not found.\n\nExpected:\n" + runtimeScript,
-                    "DeepCodex",
+                    "Anti-Codex",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
                 return 2;
@@ -40,7 +40,7 @@ internal static class DeepCodexLauncher
             {
                 if (process == null)
                 {
-                    MessageBox.Show("Failed to start PowerShell.", "DeepCodex", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Failed to start PowerShell.", "Anti-Codex", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return 3;
                 }
                 process.WaitForExit();
@@ -49,7 +49,7 @@ internal static class DeepCodexLauncher
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.ToString(), "DeepCodex", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.ToString(), "Anti-Codex", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
     }

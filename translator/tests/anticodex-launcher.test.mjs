@@ -2875,7 +2875,11 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
       "-TimeoutSec",
       "3",
     ], { encoding: "utf8", windowsHide: true });
-    const output = result.stdout.trim().split(/\r?\n/).at(-1);
+    const processOutput = [result.stdout, result.stderr]
+      .filter((value) => typeof value === "string" && value.trim())
+      .join("\n");
+    assert.ok(processOutput, result.error?.message || "MCP/skills verifier produced no output");
+    const output = processOutput.trim().split(/\r?\n/).at(-1);
     const report = JSON.parse(output);
 
     assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
@@ -4156,6 +4160,7 @@ test("third-party provider verifier preserves history across save and restart", 
 
 test("user-visible legacy DeepCodex setup and launch wording is branded as Anti-Codex", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const windowsLauncher = readFileSync(resolve(root, "src", "deepcodex-launcher-win.cs"), "utf8");
   const setupUi = readFileSync(resolve(root, "scripts", "deepcodex-setup-ui.mjs"), "utf8");
   const swiftSetup = readFileSync(resolve(root, "scripts", "DeepCodexSetup.swift"), "utf8");
 
@@ -4178,6 +4183,9 @@ test("user-visible legacy DeepCodex setup and launch wording is branded as Anti-
   assert.doesNotMatch(launcher, /DeepCodex main window closed/);
   assert.doesNotMatch(launcher, /DeepCodex main window did not appear/);
   assert.doesNotMatch(launcher, /DeepCodex started but no window appeared/);
+
+  assert.match(windowsLauncher, /MessageBox\.Show\([^;]*"Anti-Codex"[^;]*MessageBoxIcon\.Error\)/s);
+  assert.doesNotMatch(windowsLauncher, /MessageBox\.Show\([^;]*"DeepCodex"[^;]*MessageBoxIcon\.Error\)/s);
 
   assert.match(setupUi, /<title>Anti-Codex Setup<\/title>/);
   assert.match(setupUi, /<h1>Anti-Codex<\/h1>/);
