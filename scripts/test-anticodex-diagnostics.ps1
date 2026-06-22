@@ -129,6 +129,7 @@ function Test-DiagnosticBundle {
     $localConnectorsSummary = $null
     $pluginCapabilitiesSummary = $null
     $releaseGatesSummary = $null
+    $coldRelaunchSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         $summary = As-FlatArray (Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json)
         $modelSummary = @($summary | Where-Object { $_.file -eq "latest-model-routing.json" } | Select-Object -First 1)[0]
@@ -402,6 +403,20 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
         }
+        $coldRelaunchSummary = @($summary | Where-Object { $_.file -eq "latest-cold-relaunch.json" } | Select-Object -First 1)[0]
+        if ($coldRelaunchSummary) {
+            $coldEvidence = $coldRelaunchSummary.coldRelaunchEvidence
+            if (-not $coldEvidence) {
+                Add-Failure "cold relaunch summary missing coldRelaunchEvidence"
+            } elseif ($coldRelaunchSummary.ok -eq $true) {
+                if ($coldEvidence.healthOk -ne $true) { Add-Failure "cold relaunch summary missing healthy state" }
+                if ($coldEvidence.providerReady -ne $true) { Add-Failure "cold relaunch summary missing provider readiness" }
+                if ([int]$coldEvidence.mainCount -ne 1) { Add-Failure "cold relaunch summary missing exact main process count" }
+                if ([int]$coldEvidence.translatorCount -lt 1) { Add-Failure "cold relaunch summary missing translator process" }
+                if ($coldEvidence.originalCodexUnchanged -ne $true) { Add-Failure "cold relaunch summary missing original Codex isolation proof" }
+                if ([int]$coldEvidence.failedStageCount -ne 0) { Add-Failure "cold relaunch summary reports failed stages" }
+            }
+        }
         $managerRealButtonsSummary = @($summary | Where-Object { $_.file -eq "latest-manager-real-buttons.json" } | Select-Object -First 1)[0]
         if (-not $managerRealButtonsSummary) {
             Add-Failure "diagnostic reports summary missing latest-manager-real-buttons.json"
@@ -518,6 +533,12 @@ function Test-DiagnosticBundle {
                 missingShort = @($releaseGatesSummary.missingShort)
                 damagedReports = @($releaseGatesSummary.damagedReports)
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
+            }
+        } else { $null }
+        coldRelaunch = if ($coldRelaunchSummary) {
+            [pscustomobject]@{
+                ok = $coldRelaunchSummary.ok
+                evidence = $coldRelaunchSummary.coldRelaunchEvidence
             }
         } else { $null }
         mcpSkills = if ($mcpSkillsSummary) {

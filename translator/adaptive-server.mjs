@@ -2189,6 +2189,19 @@ function latestManagerReportItem(label, fileName) {
             secretsRedacted: report.secretsRedacted === true,
             turns: Number.isFinite(Number(report.turns)) ? Number(report.turns) : null,
         } : null,
+        coldRelaunchEvidence: report?.reportName === "cold-relaunch" ? {
+            healthOk: report.health?.ok === true,
+            providerReady: report.health?.providerReady === true,
+            mode: shortSafeText(report.health?.mode || "", ""),
+            upstream: shortSafeText(report.health?.upstream || "", ""),
+            modelCount: Number.isFinite(Number(report.health?.modelCount)) ? Number(report.health.modelCount) : null,
+            mainCount: Number.isFinite(Number(report.processes?.mainCount)) ? Number(report.processes.mainCount) : null,
+            translatorCount: Number.isFinite(Number(report.processes?.translatorCount)) ? Number(report.processes.translatorCount) : null,
+            launcherCount: Number.isFinite(Number(report.processes?.launcherCount)) ? Number(report.processes.launcherCount) : null,
+            originalCodexUnchanged: report.originalCodex?.unchanged === true,
+            stageCount: Array.isArray(report.stages) ? report.stages.length : 0,
+            failedStageCount: Array.isArray(report.stages) ? report.stages.filter((stage) => !stage || stage.ok !== true).length : 0,
+        } : null,
         antigravityReturnEvidence: realAntigravityEvidence ? {
             requested: realAntigravityEvidence.requested === true,
             realAntigravityTurnUsed: realAntigravityEvidence.realAntigravityTurnUsed === true,
@@ -2857,6 +2870,10 @@ function latestReportsSummary(result){
       const evidence=item.optionalRealProviderEvidence;
       lines.push("  realProvider: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
       lines.push("  realProvider route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / "+(evidence.routeResolvedModel||"unknown")+" / "+(evidence.routeStatus||"unknown"));
+    }
+    if(item.coldRelaunchEvidence){
+      const evidence=item.coldRelaunchEvidence;
+      lines.push("  coldRelaunch: health="+(evidence.healthOk?"true":"false")+" / ready="+(evidence.providerReady?"true":"false")+" / mode="+(evidence.mode||"unknown")+" / main="+(evidence.mainCount??"?")+" / translator="+(evidence.translatorCount??"?")+" / originalCodex="+(evidence.originalCodexUnchanged?"unchanged":"unknown")+" / failedStages="+(evidence.failedStageCount??"?"));
     }
     if(item.antigravityReturnEvidence){
       const evidence=item.antigravityReturnEvidence;

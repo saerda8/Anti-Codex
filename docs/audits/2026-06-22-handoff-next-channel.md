@@ -232,6 +232,13 @@ Branch: main
 - Summaries, diagnostics, and Manager latest-report text now surface the optional real-provider route fields when the report is not skipped.
 - Fresh evidence: release-gate `--self-test` rejects forged route evidence; focused summarizer/release-gate/verifier tests passed; strict passive gates remain `shortReady:true` / `releaseReady:true`; default skip report still uses no real traffic.
 
+## 2026-06-23 Cold Relaunch Optional Evidence Follow-Up
+
+- Cold relaunch reports now include explicit original Codex isolation evidence: `originalCodex.unchanged`, `beforePids`, and `afterPids`.
+- Passive release gates validate cold reports when present, requiring health/provider readiness, mode-specific readiness, one main process, translator presence, at most one launcher, required successful stages, and original Codex isolation.
+- Summaries, diagnostics, and Manager latest-report text surface cold relaunch health/readiness/mode/process/stage/original-Codex evidence. The report remains optional because producing it restarts the isolated Anti-Codex runtime.
+- Fresh evidence: no cold relaunch was run in this batch; release-gate `--self-test` rejects forged cold reports; focused cold/summarizer/diagnostics tests passed; strict passive gates remain `shortReady:true` / `releaseReady:true` with cold absent and optional.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

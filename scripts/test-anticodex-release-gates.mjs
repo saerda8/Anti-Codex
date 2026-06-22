@@ -57,7 +57,7 @@ const gateDefinitions = [
   { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true },
 
   { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false },
-  { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, note: "Manual/isolated restart evidence; optional for passive release readiness." },
+  { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, requireColdRelaunchSemantics: true, note: "Manual/isolated restart evidence; optional for passive release readiness." },
 ];
 
 function fileHash(filePath) {
@@ -352,6 +352,26 @@ function summarizeGate(definition) {
       if (rollbackHost.hostIconPalette?.ok !== true || rollbackHost.trayIconPalette?.ok !== true || rollbackHost.appRootIconPalette?.ok !== true) semanticFailures.push("sync_readiness_rollback_icon_palette");
       if (sync.rollbackSwapHostExists === true || sync.rollbackSwapMarkerExists === true) semanticFailures.push("sync_readiness_rollback_swap_stale");
       if (sync.hostSyncMarkerExists !== false || sync.staleCandidateExists !== false || sync.rollbackHostExists !== true || sync.rollbackMarkerExists !== true) semanticFailures.push("sync_readiness_clean_state");
+    }
+    if (definition.requireColdRelaunchSemantics) {
+      const health = report.health && typeof report.health === "object" ? report.health : {};
+      const processes = report.processes && typeof report.processes === "object" ? report.processes : {};
+      const originalCodex = report.originalCodex && typeof report.originalCodex === "object" ? report.originalCodex : {};
+      const stages = Array.isArray(report.stages) ? report.stages : [];
+      const stageNames = new Set(stages.filter((stage) => stage?.ok === true).map((stage) => String(stage.name || "")));
+      if (report.reportName !== "cold-relaunch") semanticFailures.push("cold_relaunch_report_name");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("cold_relaunch_failures");
+      if (health.ok !== true || health.providerReady !== true) semanticFailures.push("cold_relaunch_health_not_ready");
+      if (health.mode === "antigravity" && (health.upstream !== "antigravity-desktop" || Number(health.modelCount || 0) < 1)) semanticFailures.push("cold_relaunch_antigravity_not_ready");
+      if (health.mode === "third-party" && (!health.protocol || !health.model)) semanticFailures.push("cold_relaunch_provider_not_ready");
+      if (Number(processes.mainCount || 0) !== 1) semanticFailures.push("cold_relaunch_main_count");
+      if (Number(processes.translatorCount || 0) < 1) semanticFailures.push("cold_relaunch_translator_count");
+      if (Number(processes.launcherCount || 0) > 1) semanticFailures.push("cold_relaunch_launcher_count");
+      if (originalCodex.unchanged !== true) semanticFailures.push("cold_relaunch_original_codex_not_proven");
+      for (const name of ["stop-existing-processes", "launch-anticodex", "wait-health-ready"]) {
+        if (!stageNames.has(name)) semanticFailures.push(`cold_relaunch_stage_missing:${name}`);
+      }
+      if (String((report.failures || []).join("\n")).includes("original Codex main process set changed")) semanticFailures.push("cold_relaunch_original_codex_changed");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -751,6 +771,28 @@ if (args.has("--self-test")) {
       },
     });
 
+    writeFakeLatestReport("latest-cold-relaunch.json", {
+      ok: true,
+      reportName: "wrong-cold-relaunch",
+      failures: ["original Codex main process set changed"],
+      health: {
+        ok: false,
+        providerReady: false,
+        mode: "antigravity",
+        upstream: "unknown",
+        modelCount: 0,
+      },
+      processes: {
+        mainCount: 2,
+        translatorCount: 0,
+        launcherCount: 2,
+      },
+      originalCodex: { unchanged: false },
+      stages: [
+        { name: "stop-existing-processes", ok: false },
+      ],
+    });
+
     const semanticFailures = {};
     semanticFailures.fastOverallNoTraffic = assertSemanticFailures("fastOverallNoTraffic", "self-test failed: semantically invalid fast installed-overall report satisfied the gate", [
       "installed_overall_report_name",
@@ -841,6 +883,20 @@ if (args.has("--self-test")) {
       "sync_readiness_rollback_icon_palette",
       "sync_readiness_rollback_swap_stale",
       "sync_readiness_clean_state",
+    ]);
+    semanticFailures.coldRelaunch = assertSemanticFailures("coldRelaunch", "self-test failed: semantically invalid cold-relaunch report satisfied the gate", [
+      "cold_relaunch_report_name",
+      "cold_relaunch_failures",
+      "cold_relaunch_health_not_ready",
+      "cold_relaunch_antigravity_not_ready",
+      "cold_relaunch_main_count",
+      "cold_relaunch_translator_count",
+      "cold_relaunch_launcher_count",
+      "cold_relaunch_original_codex_not_proven",
+      "cold_relaunch_stage_missing:stop-existing-processes",
+      "cold_relaunch_stage_missing:launch-anticodex",
+      "cold_relaunch_stage_missing:wait-health-ready",
+      "cold_relaunch_original_codex_changed",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",

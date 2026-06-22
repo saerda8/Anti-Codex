@@ -1014,3 +1014,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now reject a real-provider optional report unless it proves `transport:"upstream-provider"`, provider protocol present, requested/resolved model agreement, and `status:"success"`.
 - Completed: report summaries, diagnostic verification, and Manager latest-report text now surface the optional real-provider route evidence when a non-skipped real-provider report exists.
 - Verification: syntax/parser checks passed; release-gate `--self-test` rejects forged real-provider route evidence; focused summarizer/release-gate/verifier tests passed; strict passive gates remain `shortReady:true`, `releaseReady:true`; default skip report remains green and uses no real traffic.
+
+## 2026-06-23 Cold Relaunch Optional Evidence Semantics
+- Completed: passive release gates now validate `latest-cold-relaunch.json` semantically when the optional report exists: report name, empty failures, health/provider readiness, Antigravity or third-party mode readiness, process counts, required stages, and original Codex isolation proof.
+- Completed: cold relaunch reports now carry explicit `originalCodex.unchanged`, `beforePids`, and `afterPids` fields instead of relying only on absence of an error string.
+- Completed: report summaries, diagnostic verification, and Manager latest-report text now surface cold relaunch health, readiness, mode, process counts, failed stages, and original Codex isolation.
+- Verification: no cold relaunch was run in this batch; syntax/parser checks passed; release-gate `--self-test` rejects forged cold reports; focused cold/summarizer/diagnostics/release-gate tests passed; strict passive gates remain `shortReady:true`, `releaseReady:true` with cold report absent and optional.

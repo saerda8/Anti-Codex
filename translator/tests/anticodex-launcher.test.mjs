@@ -2305,6 +2305,56 @@ test("report summarizer surfaces installed overall no-traffic evidence", () => {
   }
 });
 
+test("report summarizer surfaces cold relaunch evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-cold-relaunch-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-cold-relaunch.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "cold-relaunch",
+      failures: [],
+      health: {
+        ok: true,
+        providerReady: true,
+        mode: "antigravity",
+        upstream: "antigravity-desktop",
+        modelCount: 8,
+      },
+      processes: {
+        mainCount: 1,
+        translatorCount: 1,
+        launcherCount: 1,
+      },
+      originalCodex: {
+        unchanged: true,
+        beforePids: [11],
+        afterPids: [11],
+      },
+      stages: [
+        { name: "stop-existing-processes", ok: true },
+        { name: "launch-anticodex", ok: true },
+        { name: "wait-health-ready", ok: true },
+      ],
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.coldRelaunchEvidence.healthOk, true);
+    assert.equal(summary.coldRelaunchEvidence.providerReady, true);
+    assert.equal(summary.coldRelaunchEvidence.mode, "antigravity");
+    assert.equal(summary.coldRelaunchEvidence.upstream, "antigravity-desktop");
+    assert.equal(summary.coldRelaunchEvidence.modelCount, 8);
+    assert.equal(summary.coldRelaunchEvidence.mainCount, 1);
+    assert.equal(summary.coldRelaunchEvidence.translatorCount, 1);
+    assert.equal(summary.coldRelaunchEvidence.launcherCount, 1);
+    assert.equal(summary.coldRelaunchEvidence.originalCodexUnchanged, true);
+    assert.equal(summary.coldRelaunchEvidence.stageCount, 3);
+    assert.equal(summary.coldRelaunchEvidence.failedStageCount, 0);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("report summarizer surfaces optional real-traffic continuity evidence values", () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-optional-real-summarizer-"));
   const providerReport = resolve(tempRoot, "latest-real-third-party-provider.json");
@@ -3695,6 +3745,10 @@ test("Anti-Codex ships a cold relaunch verification script", () => {
   assert.match(relaunch, /Get-AntiCodexLauncherProcesses/);
   assert.match(relaunch, /Get-OriginalCodexMainProcesses/);
   assert.match(relaunch, /original Codex main process set changed/);
+  assert.match(relaunch, /originalCodex/);
+  assert.match(relaunch, /unchanged/);
+  assert.match(relaunch, /beforePids/);
+  assert.match(relaunch, /afterPids/);
   assert.match(relaunch, /\/health/);
   assert.match(relaunch, /antigravity-desktop/);
   assert.match(relaunch, /Resolve-AntiCodexMode/);
@@ -4556,6 +4610,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /group: "cold"/);
   assert.match(releaseGates, /latest-cold-relaunch\.json/);
   assert.match(releaseGates, /requiredForRelease: false/);
+  assert.match(releaseGates, /requireColdRelaunchSemantics/);
+  assert.match(releaseGates, /cold_relaunch_health_not_ready/);
+  assert.match(releaseGates, /cold_relaunch_main_count/);
+  assert.match(releaseGates, /cold_relaunch_original_codex_not_proven/);
+  assert.match(releaseGates, /cold_relaunch_stage_missing/);
   assert.match(releaseGates, /Manual\/isolated restart evidence/);
   assert.doesNotMatch(releaseGates, /No latest report is produced/);
   assert.match(releaseGates, /requiredForShort/);
@@ -4634,6 +4693,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid ui-idle report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid sync-readiness report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid cold-relaunch report satisfied the gate/);
   assert.match(releaseGates, /tool_bridge_codex_bridge/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);

@@ -123,6 +123,8 @@ $lastSnapshot = [pscustomobject]@{
     translator = @()
     launcher = @()
 }
+$originalCodexBefore = @()
+$originalCodexAfter = @()
 
 function Get-AntiCodexProcessSnapshot {
     $main = New-Object System.Collections.Generic.List[object]
@@ -344,6 +346,11 @@ $result = [pscustomobject]@{
         translatorCount = $translatorSnapshot.Count
         translatorPids = @($translatorSnapshot | ForEach-Object { [int]$_.ProcessId })
         launcherCount = @($finalSnapshot.launcher).Count
+    }
+    originalCodex = [pscustomobject]@{
+        unchanged = (($originalCodexBefore -join ",") -eq ($originalCodexAfter -join ","))
+        beforePids = @($originalCodexBefore)
+        afterPids = @($originalCodexAfter)
     }
     stopTimeoutSec = $StopTimeoutSec
     healthPollTimeoutSec = $HealthPollTimeoutSec
