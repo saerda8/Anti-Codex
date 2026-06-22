@@ -1995,6 +1995,7 @@ function latestManagerReportItem(label, fileName) {
     const nativeToolCapability = report?.nativeToolCapability && typeof report.nativeToolCapability === "object" ? report.nativeToolCapability : null;
     const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
     const thinkingModels = Array.isArray(report?.models) && (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? report.models : [];
+    const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2058,6 +2059,16 @@ function latestManagerReportItem(label, fileName) {
             missingBudgetCount: thinkingModels.filter((item) => !Number.isFinite(Number(item?.thinking_budget)) || !Number.isFinite(Number(item?.min_thinking_budget)) || Number(item.thinking_budget) < Number(item.min_thinking_budget)).length,
             missingReasoningLevelCount: thinkingModels.filter((item) => !item?.reasoning_level).length,
             reasoningLevels: Array.from(new Set(thinkingModels.map((item) => item?.reasoning_level).filter(Boolean).map(String))).sort().slice(0, 8),
+        } : null,
+        uiIdleEvidence: (typeof report?.sampleCount !== "undefined" || uiIdleSamples.length) ? {
+            durationSec: Number.isFinite(Number(report?.durationSec)) ? Number(report.durationSec) : null,
+            intervalSec: Number.isFinite(Number(report?.intervalSec)) ? Number(report.intervalSec) : null,
+            sampleCount: Number.isFinite(Number(report?.sampleCount)) ? Number(report.sampleCount) : uiIdleSamples.length,
+            sampleEntryCount: uiIdleSamples.length,
+            healthySampleCount: uiIdleSamples.filter((item) => item?.healthOk === true && item?.accountReady === true && item?.uiOk === true).length,
+            reconnectTextCount: uiIdleSamples.filter((item) => item?.hasReconnectText === true).length,
+            loginTextCount: uiIdleSamples.filter((item) => item?.hasLoginText === true).length,
+            missingModelTextCount: uiIdleSamples.filter((item) => !item?.matchedModelText).length,
         } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
@@ -2767,6 +2778,10 @@ function latestReportsSummary(result){
       const evidence=item.modelThinkingEvidence;
       lines.push("  modelThinking: models="+(evidence.actualModelCount??"unknown")+"/"+(evidence.expectedModelCount??"unknown")+" / thinking="+(evidence.supportsThinkingCount??0)+"/"+(evidence.modelCount??0)+" / budgetMissing="+(evidence.missingBudgetCount??0));
       if(Array.isArray(evidence.reasoningLevels)&&evidence.reasoningLevels.length) lines.push("  modelThinking levels: "+evidence.reasoningLevels.join(", "));
+    }
+    if(item.uiIdleEvidence){
+      const evidence=item.uiIdleEvidence;
+      lines.push("  uiIdle: samples="+(evidence.healthySampleCount??0)+"/"+(evidence.sampleCount??0)+" / duration="+(evidence.durationSec??"unknown")+"s / reconnectText="+(evidence.reconnectTextCount??0)+" / loginText="+(evidence.loginTextCount??0));
     }
     if(item.toolBridgeEvidence){
       const evidence=item.toolBridgeEvidence;

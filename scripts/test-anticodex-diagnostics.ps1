@@ -118,6 +118,7 @@ function Test-DiagnosticBundle {
     $modelSummary = $null
     $modelThinkingSummary = $null
     $toolBridgeSummary = $null
+    $uiIdleSummary = $null
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
@@ -184,6 +185,23 @@ function Test-DiagnosticBundle {
                 if ($bridgeEvidence.permissionPromptsDisabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing permission prompts disabled proof" }
                 if ([int]$bridgeEvidence.disabledToolCount -lt 1) { Add-Failure "diagnostic tool-bridge summary missing disabled tool count" }
                 if ($bridgeEvidence.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing Codex tool bridge proof" }
+            }
+        }
+        $uiIdleSummary = @($summary | Where-Object { $_.file -eq "latest-ui-idle-stability.json" } | Select-Object -First 1)[0]
+        if ($antigravityReportsRequired -and -not $uiIdleSummary) {
+            Add-Failure "diagnostic reports summary missing latest-ui-idle-stability.json"
+        } elseif ($antigravityReportsRequired -and $uiIdleSummary) {
+            $uiEvidence = $uiIdleSummary.uiIdleEvidence
+            if (-not $uiEvidence) {
+                Add-Failure "diagnostic ui-idle summary missing uiIdleEvidence"
+            } else {
+                if ([int]$uiEvidence.durationSec -lt 10) { Add-Failure "diagnostic ui-idle summary duration too short" }
+                if ([int]$uiEvidence.sampleCount -lt 1) { Add-Failure "diagnostic ui-idle summary missing samples" }
+                if ([int]$uiEvidence.sampleEntryCount -lt [int]$uiEvidence.sampleCount) { Add-Failure "diagnostic ui-idle summary sample entries missing" }
+                if ([int]$uiEvidence.healthySampleCount -ne [int]$uiEvidence.sampleEntryCount) { Add-Failure "diagnostic ui-idle summary has unhealthy samples" }
+                if ([int]$uiEvidence.reconnectTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary has reconnect text" }
+                if ([int]$uiEvidence.loginTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary has login text" }
+                if ([int]$uiEvidence.missingModelTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary missing model text" }
             }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
@@ -398,6 +416,12 @@ function Test-DiagnosticBundle {
             [pscustomobject]@{
                 ok = $toolBridgeSummary.ok
                 evidence = $toolBridgeSummary.toolBridgeEvidence
+            }
+        } else { $null }
+        uiIdleSummary = if ($uiIdleSummary) {
+            [pscustomobject]@{
+                ok = $uiIdleSummary.ok
+                evidence = $uiIdleSummary.uiIdleEvidence
             }
         } else { $null }
         postVerification = if ($postVerificationSummary) {

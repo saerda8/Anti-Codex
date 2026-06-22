@@ -197,6 +197,12 @@ Branch: main
 - Passive release gates now reject forged `ok:true` model-thinking reports unless they prove count consistency, unique IDs, display names, reasoning levels, thinking support, and valid thinking budgets.
 - Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with model-thinking semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, source diagnostics verification passed, and latest summary shows `8/8` thinking models with no missing budgets.
 
+## 2026-06-23 UI-Idle No-Traffic Follow-Up
+
+- UI-idle latest-report evidence now surfaces duration, interval, sample count, healthy sample count, reconnect-text count, login-text count, and missing-model-text count.
+- Passive release gates now reject forged `ok:true` UI-idle reports unless they prove healthy account/UI samples, model count, visible model text, and no reconnect/login text.
+- Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with UI-idle semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, source diagnostics verification passed, and latest summary shows healthy `1/1` samples with no reconnect/login text.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

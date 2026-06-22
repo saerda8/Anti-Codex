@@ -1921,6 +1921,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /supportsThinkingCount/);
   assert.match(reportSummarizer, /toolBridgeEvidence/);
   assert.match(reportSummarizer, /nativeMcpApprovalProtocolVerified/);
+  assert.match(reportSummarizer, /uiIdleEvidence/);
+  assert.match(reportSummarizer, /healthySampleCount/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -2149,6 +2151,35 @@ test("report summarizer surfaces tool bridge no-traffic evidence", () => {
     assert.equal(summary.toolBridgeEvidence.nativeMcpPermissionMode, "automatic-before-codex-execution");
     assert.equal(summary.toolBridgeEvidence.sameCascadeResumeProbeVerified, true);
     assert.equal(summary.toolBridgeEvidence.disabledToolCount, 23);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces UI idle no-traffic evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-ui-idle-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-ui-idle-stability.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      durationSec: 10,
+      intervalSec: 5,
+      sampleCount: 2,
+      samples: [
+        { healthOk: true, accountReady: true, modelCount: 8, uiOk: true, hasReconnectText: false, hasLoginText: false, matchedModelText: "Gemini" },
+        { healthOk: true, accountReady: true, modelCount: 8, uiOk: true, hasReconnectText: false, hasLoginText: false, matchedModelText: "Claude" },
+      ],
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.uiIdleEvidence.durationSec, 10);
+    assert.equal(summary.uiIdleEvidence.sampleCount, 2);
+    assert.equal(summary.uiIdleEvidence.sampleEntryCount, 2);
+    assert.equal(summary.uiIdleEvidence.healthySampleCount, 2);
+    assert.equal(summary.uiIdleEvidence.reconnectTextCount, 0);
+    assert.equal(summary.uiIdleEvidence.loginTextCount, 0);
+    assert.equal(summary.uiIdleEvidence.missingModelTextCount, 0);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4259,6 +4290,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing same-Cascade resume proof/);
+  assert.match(diagnostics, /uiIdleEvidence/);
+  assert.match(diagnostics, /diagnostic ui-idle summary missing uiIdleEvidence/);
+  assert.match(diagnostics, /diagnostic ui-idle summary has reconnect text/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);
@@ -4403,6 +4437,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /tool_bridge_mode_not_native_mcp_same_cascade/);
   assert.match(releaseGates, /tool_bridge_permission_mode/);
   assert.match(releaseGates, /tool_bridge_same_cascade_resume/);
+  assert.match(releaseGates, /requireUiIdleSemantics/);
+  assert.match(releaseGates, /ui_idle_reconnect_text/);
+  assert.match(releaseGates, /ui_idle_login_text/);
+  assert.match(releaseGates, /ui_idle_model_text_missing/);
   assert.match(releaseGates, /requireMcpSkillSemantics/);
   assert.match(releaseGates, /mcp_skills_missing_shared_mcp/);
   assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
@@ -4441,6 +4479,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid model-routing report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid ui-idle report satisfied the gate/);
   assert.match(releaseGates, /tool_bridge_codex_bridge/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);

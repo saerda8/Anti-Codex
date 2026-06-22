@@ -180,6 +180,7 @@ function Read-JsonSummary {
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
             toolBridgeEvidence = $json.toolBridgeEvidence
+            uiIdleEvidence = $json.uiIdleEvidence
             state = $json.state
             skipped = $json.skipped
             reason = $json.reason

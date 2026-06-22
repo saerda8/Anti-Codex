@@ -38,7 +38,7 @@ const gateDefinitions = [
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
   { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true, requireToolBridgeSemantics: true },
-  { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true },
+  { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true, requireUiIdleSemantics: true },
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true },
   { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true, requireModelThinkingSemantics: true },
 
@@ -269,6 +269,19 @@ function summarizeGate(definition) {
       if (models.some((item) => !item?.reasoning_level)) semanticFailures.push("model_thinking_reasoning_level");
       if (models.some((item) => item?.supports_thinking !== true)) semanticFailures.push("model_thinking_supports_thinking");
       if (models.some((item) => !Number.isFinite(Number(item?.thinking_budget)) || !Number.isFinite(Number(item?.min_thinking_budget)) || Number(item.thinking_budget) < Number(item.min_thinking_budget))) semanticFailures.push("model_thinking_budget");
+    }
+    if (definition.requireUiIdleSemantics) {
+      const samples = Array.isArray(report.samples) ? report.samples : [];
+      if (Number(report.durationSec || 0) < 10) semanticFailures.push("ui_idle_duration");
+      if (Number(report.sampleCount || 0) < 1) semanticFailures.push("ui_idle_sample_count");
+      if (samples.length < Number(report.sampleCount || 0)) semanticFailures.push("ui_idle_samples_missing");
+      if (samples.some((item) => item?.healthOk !== true)) semanticFailures.push("ui_idle_health_not_ok");
+      if (samples.some((item) => item?.accountReady !== true)) semanticFailures.push("ui_idle_account_not_ready");
+      if (samples.some((item) => Number(item?.modelCount || 0) < 1)) semanticFailures.push("ui_idle_model_count");
+      if (samples.some((item) => item?.uiOk !== true)) semanticFailures.push("ui_idle_ui_not_ok");
+      if (samples.some((item) => item?.hasReconnectText === true)) semanticFailures.push("ui_idle_reconnect_text");
+      if (samples.some((item) => item?.hasLoginText === true)) semanticFailures.push("ui_idle_login_text");
+      if (samples.some((item) => !item?.matchedModelText)) semanticFailures.push("ui_idle_model_text_missing");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -509,6 +522,23 @@ if (args.has("--self-test")) {
       ],
     });
 
+    writeFakeLatestReport("latest-ui-idle-stability.json", {
+      ok: true,
+      durationSec: 1,
+      sampleCount: 2,
+      samples: [
+        {
+          healthOk: false,
+          accountReady: false,
+          modelCount: 0,
+          uiOk: false,
+          hasReconnectText: true,
+          hasLoginText: true,
+          matchedModelText: "",
+        },
+      ],
+    });
+
     writeFakeLatestReport("latest-source-preflight.json", {
       ok: true,
       reportName: "wrong-source-preflight",
@@ -598,6 +628,17 @@ if (args.has("--self-test")) {
       "model_thinking_reasoning_level",
       "model_thinking_supports_thinking",
       "model_thinking_budget",
+    ]);
+    semanticFailures.uiIdleStability = assertSemanticFailures("uiIdleStability", "self-test failed: semantically invalid ui-idle report satisfied the gate", [
+      "ui_idle_duration",
+      "ui_idle_samples_missing",
+      "ui_idle_health_not_ok",
+      "ui_idle_account_not_ready",
+      "ui_idle_model_count",
+      "ui_idle_ui_not_ok",
+      "ui_idle_reconnect_text",
+      "ui_idle_login_text",
+      "ui_idle_model_text_missing",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",

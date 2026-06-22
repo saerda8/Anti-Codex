@@ -73,6 +73,7 @@ const compatibilityTools = report && report.compatibilityTools ? report.compatib
 const nativeToolCapability = report && report.nativeToolCapability ? report.nativeToolCapability : null;
 const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
 const thinkingModels = Array.isArray(report?.models) && (has(report, "expectedModelCount") || has(report, "actualModelCount")) ? report.models : [];
+const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -155,6 +156,16 @@ const summary = {
     permissionPromptsDisabled: nativeToolCapability ? boolField(nativeToolCapability, "permissionPromptsDisabled") : null,
     disabledToolCount: nativeToolCapability && has(nativeToolCapability, "disabledToolCount") ? nativeToolCapability.disabledToolCount : null,
     codexToolBridge: nativeToolCapability && has(nativeToolCapability, "codexToolBridge") ? asString(nativeToolCapability.codexToolBridge) : null,
+  } : null,
+  uiIdleEvidence: has(report, "sampleCount") || uiIdleSamples.length ? {
+    durationSec: has(report, "durationSec") ? report.durationSec : null,
+    intervalSec: has(report, "intervalSec") ? report.intervalSec : null,
+    sampleCount: has(report, "sampleCount") ? report.sampleCount : uiIdleSamples.length,
+    sampleEntryCount: uiIdleSamples.length,
+    healthySampleCount: uiIdleSamples.filter((item) => item && item.healthOk === true && item.accountReady === true && item.uiOk === true).length,
+    reconnectTextCount: uiIdleSamples.filter((item) => item && item.hasReconnectText === true).length,
+    loginTextCount: uiIdleSamples.filter((item) => item && item.hasLoginText === true).length,
+    missingModelTextCount: uiIdleSamples.filter((item) => !item || !item.matchedModelText).length,
   } : null,
   state: has(report, "state") ? asString(report.state) : null,
   skipped: boolField(report, "skipped"),
