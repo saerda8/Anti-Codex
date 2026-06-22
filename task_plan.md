@@ -791,3 +791,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: replaced remaining user-visible legacy `DeepCodex` wording in `translator/server.mjs`, `scripts/start-deepcodex.sh`, `scripts/apply-deepcodex-brand.ps1`, and `scripts/deepcodex-plugin-unlock-inject.js` with Anti-Codex wording while leaving internal compatibility names intact.
 - Completed: launcher contract coverage now asserts those macOS launcher, debug plugin unlock, legacy translator, and brand-patch surfaces are Anti-Codex-branded and rejects the old user-visible phrases.
 - Verification: JS syntax checks passed for the changed JS files; `apply-deepcodex-brand.ps1` parsed through a no-`$` scriptblock check; focused launcher contract suite passed 90/90; source-only legacy phrase search returned no matches.
+
+## 2026-06-23 Marketing Copy Refresh
+- Completed: rewrote `docs/marketing/launch-post.md` and `docs/marketing/wechat-article.md` from garbled DeepCodex/DeepSeek-only copy into current Anti-Codex messaging.
+- Completed: the refreshed copy states the current provider shape: default Antigravity Desktop, optional third-party API, no ChatGPT login path, no original Codex mutation, and no fake connector/app-tool authorization.
+- Verification: marketing-doc search finds no `DeepCodex` / `deepcodex` residues; documentation whitespace check passed.

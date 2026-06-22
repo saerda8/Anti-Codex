@@ -2,65 +2,43 @@
 
 ## 主推版本
 
-DeepCodex 发了。
+Anti-Codex 继续推进到一个更像独立产品的状态了。
 
-我做了一个可以和原版 Codex 双开的 DeepSeek 版 Codex 补丁。
+它不是把原版 Codex 偷偷改坏，也不是要求你走 ChatGPT 登录。
 
-它不是终端脚本，也不是网页代理，而是一个独立 macOS App：
+它做的是：
 
-- 独立 logo
-- 独立入口
-- 首次输入 DeepSeek API key
-- 原版 Codex 和 DeepCodex 可以并排存在
-- 本地 translator 自动把 Codex 请求转到 DeepSeek
-- 尽量复用 Codex 已安装的插件和 skills
+- 独立 Anti-Codex 入口和图标。
+- 默认接入已登录的 Antigravity Desktop 模型路线。
+- 可选配置第三方 OpenAI-compatible / Anthropic API。
+- 保留 Codex 的主要工作流、项目状态和长上下文历史。
+- 同步本机已有 MCP、skills、插件和连接器元数据。
+- 对未授权 connector / app tool 保持诚实：能显示元数据，但不伪装成可调用工具。
 
-这版最核心的不是“换 base URL”，而是做了一层近乎完整的兼容层：
+现在重点已经不是“能不能跑起来”，而是把它做得可信：
 
-- tool calls
-- context compaction
-- reasoning replay
-- model alias
-- plugins / skills reuse
-- web_search / web_fetch
-- 伪工具调用清理
-- 中文对话里的思考/状态收敛
+- 不碰原生 Codex。
+- 不走 ChatGPT 授权入口。
+- 不伪造工具权限。
+- 管理面板可检查 MCP/Skill、插件/应用、报告和同步状态。
+- 真实按钮、报告哈希、第三方 provider 历史连续性都有验证。
 
-日常写代码、改项目、生成文件，已经能认真用了。
-
-插件和 skills 这块不重造一套市场，而是尽量复用 Codex 公共宿主里已经装好的生态。边界也说清楚：computer-use、connector、app tools 这类依赖 OpenAI 宿主授权和工具下发的能力，目前不承诺完全等价。
-
-macOS only，Windows 稍后。
-
-非商业使用。
-
-GitHub:
-
-https://github.com/louchi1984-coder/deepcodex
+它适合想保留 Codex 工作流，但希望把模型路线接到 Antigravity 或自有 API 的本地开发者。
 
 ## 更短版本
 
-DeepCodex 发布。
+Anti-Codex 是一个可与原版 Codex 并存的本地桌面运行时。
 
-一个可以和原版 Codex 双开的 DeepSeek 版 Codex 补丁。
+默认走 Antigravity Desktop，也支持第三方 API；同步你本机已有 MCP、skills 和插件元数据，但不会伪造 connector 授权。
 
-独立 App，独立 logo，首次输入 DeepSeek API key。
+重点是三个边界：
 
-核心是一层本地 translator：兼容 tool calls、上下文压缩、推理内容、模型映射、插件 skills 和搜索工具。
-
-不是简单换 base URL。
-
-macOS 版已发布，非商业使用。
-
-https://github.com/louchi1984-coder/deepcodex
+- 原版 Codex 不受影响。
+- 不要求 ChatGPT 登录。
+- 没授权的 app tool 不会被假装成可调用。
 
 ## 极短版本
 
-我做了一个 DeepSeek 版 Codex：DeepCodex。
+Anti-Codex：一个和原版 Codex 并存的本地运行时。
 
-独立 macOS App，可以和原版 Codex 双开。
-
-不是简单代理，而是带 tool calls、上下文压缩、推理内容、插件 skills 兼容层的本地 translator。
-
-GitHub:
-https://github.com/louchi1984-coder/deepcodex
+默认 Antigravity，可选第三方 API，继承本机 MCP/skills，拒绝伪造连接器授权。
