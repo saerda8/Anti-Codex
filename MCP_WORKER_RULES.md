@@ -1537,3 +1537,46 @@ After every failure, before another dispatch:
 - Cause classification: command wrapper quoting failure, not script syntax failure.
 - Rule change: for simple PowerShell syntax probes, prefer `[scriptblock]::Create([System.IO.File]::ReadAllText('path')) | Out-Null` because it avoids `$null`, `[ref]`, and nested quote interpolation.
 - Result: `scripts\apply-deepcodex-brand.ps1` parsed successfully with the no-`$` scriptblock method.
+
+## 2026-06-23 - Do not combine full-history forks with an explicit agent type
+
+- Symptom: two read-only explorer dispatches were rejected before starting because they used both `fork_context:true` and `agent_type:"explorer"`.
+- Cause classification: subagent dispatch parameter conflict, not a product or worker failure.
+- Rule change: a full-history fork inherits the parent agent type. When a specialized explorer is needed, omit `fork_context` and provide a self-contained task prompt; when full history is needed, omit the explicit type.
+- Result: both investigations started successfully after switching to fresh self-contained explorer prompts.
+
+## 2026-06-23 - Recheck rtk compatibility before parallel shell batches
+
+- Symptom: a parallel startup batch wrapped `Get-Content` with `rtk`; `rtk` could not resolve the PowerShell cmdlet and the intended document reads failed.
+- Cause classification: repeated command-runner mismatch.
+- Rule change: classify every batched command before dispatch. Use `rtk` for external executables such as `git`, `rg`, and `node`; run PowerShell-native cmdlets directly with bounded paths and output.
+- Result: the reads were rerun directly and the repository state was confirmed without using the failed output as evidence.
+
+## 2026-06-23 - Sync source scripts before installed diagnostics verification
+
+- Symptom: installed diagnostics verification used the older installed summarizer after a source-only change and initially failed; direct collector execution from the development checkout also rejected the non-installed root.
+- Cause classification: deployment/entry-point mismatch, not report corruption.
+- Rule change: installed diagnostics intentionally resolves installed runtime scripts. Sync source changes before installed verification, and do not run the collector directly from a development checkout unless its install-root contract is intentionally changed.
+- Result: runtime sync was performed and installed bundle verification passed.
+
+## 2026-06-23 - Resolve PSScriptRoot defaults after the param block
+
+- Symptom: the new provider-to-Antigravity wrapper failed before its default skip path because `Split-Path -Parent $PSScriptRoot` received an empty string while evaluating a parameter default.
+- Cause classification: Windows PowerShell 5.1 script initialization ordering, not a runtime or provider failure.
+- Rule change: do not derive parameter defaults from `$PSScriptRoot` inside `param(...)`. Use an empty/default parameter and resolve the script-relative path immediately after the parameter block.
+- Result: the wrapper reaches its no-traffic skip path and writes the expected signed report.
+
+## 2026-06-23 - Ordinary subagent security review hit usage limits
+
+- Worker: ordinary explorer `019ef0d6-1d71-7893-9fc8-175cc2b3e8bb`.
+- Task: read-only review of the real third-party and provider-to-Antigravity verifier changes.
+- Result: the worker returned only a Codex usage-limit error, with no findings and no file changes.
+- Cause classification: external worker availability failure, not product evidence.
+- Rule change: close the unusable reviewer, record the failure, and replace it with direct diff review plus focused negative security tests. Do not cite the failed worker as review coverage.
+
+## 2026-06-23 - Do not place expected history markers in the continuity prompt
+
+- Symptom: the first provider-to-Antigravity turn-10 prompt included all six expected marker values.
+- Cause classification: verifier false-positive design; the model could echo the current instruction without reading prior history.
+- Rule change: continuity prompts may describe which historical positions to retrieve, but must not include the expected values. Compare the answer against values that appear only in earlier turns.
+- Result: turn 10 now requests semantic history fields and the verifier checks them against the prior provider/tool markers.

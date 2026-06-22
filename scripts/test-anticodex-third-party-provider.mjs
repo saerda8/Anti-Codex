@@ -23,6 +23,10 @@ const sourceRoot = resolve(args.get("--source-root") || resolve(import.meta.dirn
 const runtimeRoot = resolve(args.get("--runtime-root") || sourceRoot);
 const reportRoot = resolve(args.get("--report-root") || join(os.tmpdir(), "anticodex-reports"));
 const timeoutMs = Math.max(10_000, Number(args.get("--timeout-ms") || 90_000));
+const allowRealAntigravityTurn = args.has("--allow-real-antigravity-turn");
+const antigravityModel = String(args.get("--antigravity-model") || "gemini-3.5-flash-low");
+const reportName = String(args.get("--report-name") || "third-party-provider");
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(reportName)) throw new Error("Invalid report name");
 const translatorPath = resolve(runtimeRoot, "translator", "adaptive-server.mjs");
 const stateRoot = mkdtempSync(join(os.tmpdir(), "anticodex-third-party-provider-"));
 const startedAt = Date.now();
@@ -336,8 +340,8 @@ async function stopTranslator() {
 
 function writeReport(payload) {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
-  const latest = resolve(reportRoot, "latest-third-party-provider.json");
-  const history = resolve(reportRoot, `${stamp}-third-party-provider.json`);
+  const latest = resolve(reportRoot, `latest-${reportName}.json`);
+  const history = resolve(reportRoot, `${stamp}-${reportName}.json`);
   mkdirSync(reportRoot, { recursive: true });
   const text = JSON.stringify({ ...payload, report: { latest, history } });
   writeJsonReportAtomic(latest, history, text);
@@ -397,6 +401,12 @@ async function main() {
   let runtimeUpstreamUrl = upstreamFullUrl;
   let runtimeModel = "fake-gpt-4.1";
   let runtimeApiKey = "sk-fake-secret";
+  let runtimeMode = "chat";
+  let realAntigravityEvidence = {
+    requested: allowRealAntigravityTurn,
+    realAntigravityTurnUsed: false,
+    returnedToAntigravityWithHistory: false,
+  };
   writeFileSync(profilePath, JSON.stringify({
     provider: "fake-openai",
     baseUrl: upstreamFullUrl,
@@ -425,7 +435,7 @@ async function main() {
         TRANSLATOR_HOST: "127.0.0.1",
         TRANSLATOR_LISTEN_HOST: "127.0.0.1",
         TRANSLATOR_PORT: String(translatorPort),
-        TRANSLATOR_UPSTREAM_MODE: "chat",
+        TRANSLATOR_UPSTREAM_MODE: runtimeMode,
         UPSTREAM_PROTOCOL: runtimeProtocol,
         UPSTREAM_URL: runtimeUpstreamUrl,
         UPSTREAM_MODEL: runtimeModel,
@@ -1020,6 +1030,57 @@ async function main() {
   assert.doesNotMatch(failedText, secretPattern);
   assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryBeforeAuthFailure);
 
+  if (allowRealAntigravityTurn) {
+    forceAuthFailure = false;
+    await stopTranslator();
+    runtimeMode = "antigravity";
+    startTranslator();
+    const healthAfterAntigravityReturn = await waitForHealth(translatorUrl);
+    assert.equal(healthAfterAntigravityReturn.upstream, "antigravity-desktop");
+    assert.equal(healthAfterAntigravityReturn.upstreamProfile.mode, "antigravity");
+
+    const turnTenMarkers = [
+      "turn-1 user asks alpha",
+      "PROVIDER_D_HISTORY_TURN_9",
+      "provider_tool_marker",
+      "call_provider_a_tool_history",
+      "TOOL_HISTORY_MARKER_FROM_PROVIDER_A",
+      "TOOL_HISTORY_RESULT_FROM_PROVIDER_A",
+    ];
+    const tenthAfterAntigravityReturnResult = await postResponse({
+      model: antigravityModel,
+      stream: false,
+      max_output_tokens: 256,
+      previous_response_id: ninthAfterReverseProtocolSwitch.id,
+      input: [
+        "turn-10 Antigravity return: inspect only the prior conversation history.",
+        "Do not copy values from this instruction.",
+        "Return six lines: the first user request, the ninth assistant answer, the historical tool name,",
+        "the historical tool call id, the marker stored in that tool call's arguments, and the paired tool result marker.",
+      ].join(" "),
+    });
+    const tenthAfterAntigravityReturn = tenthAfterAntigravityReturnResult.response;
+    assert.equal(tenthAfterAntigravityReturn.previous_response_id, ninthAfterReverseProtocolSwitch.id);
+    const tenthText = textFromResponse(tenthAfterAntigravityReturn);
+    const missingTurnTenMarkers = turnTenMarkers.filter((marker) => !tenthText.includes(marker));
+    assert.deepEqual(missingTurnTenMarkers, []);
+    const antigravityRouteAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
+    assert.equal(antigravityRouteAudit.latest.requestedModel, antigravityModel);
+    assert.notEqual(antigravityRouteAudit.latest.transport, "upstream-provider");
+
+    realAntigravityEvidence = {
+      requested: true,
+      realAntigravityTurnUsed: true,
+      returnedToAntigravityWithHistory: true,
+      model: antigravityModel,
+      previousResponseIdMatched: tenthAfterAntigravityReturn.previous_response_id === ninthAfterReverseProtocolSwitch.id,
+      markerCount: turnTenMarkers.length,
+      missingMarkerCount: missingTurnTenMarkers.length,
+      routeTransport: antigravityRouteAudit.latest.transport || "",
+      resolvedModel: antigravityRouteAudit.latest.resolvedModel || "",
+    };
+  }
+
   return {
     ok: failures.length === 0,
     failures,
@@ -1035,6 +1096,10 @@ async function main() {
     switchedProviderWithoutHistoryLoss: true,
     crossProtocolWithoutHistoryLoss: true,
     reverseCrossProtocolWithoutHistoryLoss: true,
+    behaviorCovered: true,
+    coverageKind: allowRealAntigravityTurn ? "real-traffic" : "local-fake-provider",
+    usedRealTraffic: realAntigravityEvidence.realAntigravityTurnUsed,
+    realAntigravityEvidence,
     secretsRedacted: true,
     multiTurnHistory: {
       turns: 9,

@@ -31,13 +31,13 @@ Scope: OpenAI-compatible and Anthropic provider configuration, model identity, k
 
 ## Remaining Gaps
 
-- Real paid/free third-party endpoints still need optional smoke testing with user-provided keys.
+- An optional real third-party smoke verifier now exists, but no user-provided real endpoint/key has been exercised yet.
 - Anthropic has no generic public model-list endpoint in this implementation, so model selection still depends on the configured model.
 - Long multi-turn history across provider switching is protected at the file/state level, but still deserves a longer scenario verifier.
 - Provider capability probing is intentionally conservative. It does not claim hosted web/image tools unless proven or configured.
 
 ## Next Recommended Work
 
-1. Add a longer third-party history-switch verifier: Antigravity -> third-party -> Antigravity, with multiple `previous_response_id` turns.
+1. Run the new explicit opt-in provider-to-Antigravity turn-10 verifier when real traffic is approved.
 2. Add optional real-provider smoke tests that use explicitly supplied throwaway keys and never run by default.
 3. Surface third-party auth/quota/model-not-found errors in the Manager with the same human-readable style used for Antigravity account issues.

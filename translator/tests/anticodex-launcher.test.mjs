@@ -4345,6 +4345,61 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /assert\.equal\(readFileSync\(responseHistoryPath, "utf8"\), responseHistoryBeforeAuthFailure\)/);
 });
 
+test("real third-party provider verifier is explicit isolated and secret-safe", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-real-third-party-provider.mjs"), "utf8");
+
+  assert.match(verifier, /--allow-real-traffic/);
+  assert.match(verifier, /--api-key-env/);
+  assert.match(verifier, /command-line API keys are not accepted/);
+  assert.doesNotMatch(verifier, /args\.get\("--api-key"\)/);
+  assert.doesNotMatch(verifier, /dotenv|readFileSync\([^)]*["'`]\.env/);
+  assert.match(verifier, /parsedUrl\.search \|\| parsedUrl\.hash/);
+  assert.match(verifier, /mkdtempSync/);
+  assert.match(verifier, /DEEPCODEX_STATE_ROOT:\s*stateRoot/);
+  assert.match(verifier, /CODEX_HOME_DIR:\s*join\(stateRoot/);
+  assert.match(verifier, /TRANSLATOR_PROFILE_PATH:\s*profilePath/);
+  assert.match(verifier, /previous_response_id:\s*first\.id/);
+  assert.match(verifier, /firstMarkerObserved/);
+  assert.match(verifier, /secondMarkerObserved/);
+  assert.match(verifier, /historyContinuationObserved/);
+  assert.match(verifier, /behaviorCovered:\s*false/);
+  assert.match(verifier, /usedRealTraffic:\s*true/);
+  assert.match(verifier, /secretsRedacted/);
+  assert.match(verifier, /latest-real-third-party-provider\.json/);
+  assert.match(verifier, /JSON\.parse\(text\)/);
+  assert.match(verifier, /realTrafficAttempted/);
+  assert.match(verifier, /const reportText = JSON\.stringify\(result\)[\s\S]*?if \(apiKey && reportText\.includes\(apiKey\)\)[\s\S]*?writeReport\(result\)/);
+  assert.match(verifier, /skipped:\s*true/);
+  assert.match(verifier, /real third-party provider verification is opt-in/);
+});
+
+test("provider history can opt in to one real Antigravity return turn", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-third-party-provider.mjs"), "utf8");
+  const wrapper = readFileSync(resolve(root, "scripts", "test-anticodex-provider-antigravity-return.ps1"), "utf8");
+
+  assert.match(wrapper, /\[switch\]\$AllowRealTraffic/);
+  assert.match(wrapper, /if \(-not \$AllowRealTraffic\)/);
+  assert.match(wrapper, /behaviorCovered\s*=\s*\$false/);
+  assert.match(wrapper, /Enter-AntiCodexRealTrafficLock/);
+  assert.match(wrapper, /--allow-real-antigravity-turn/);
+  assert.match(wrapper, /--antigravity-model/);
+  assert.match(wrapper, /--report-name/);
+  assert.match(wrapper, /provider-antigravity-return/);
+  assert.match(verifier, /allowRealAntigravityTurn/);
+  assert.match(verifier, /Invalid report name/);
+  assert.match(verifier, /runtimeMode\s*=\s*"antigravity"/);
+  assert.match(verifier, /await stopTranslator\(\)[\s\S]*?runtimeMode\s*=\s*"antigravity"[\s\S]*?startTranslator\(\)/);
+  assert.match(verifier, /previous_response_id:\s*ninthAfterReverseProtocolSwitch\.id/);
+  assert.match(verifier, /turn-10 Antigravity return/);
+  assert.doesNotMatch(verifier, /turn-10 Antigravity return:[^`]*\$\{turnTenMarkers\.join/);
+  assert.match(verifier, /Do not copy values from this instruction/);
+  assert.match(verifier, /returnedToAntigravityWithHistory/);
+  assert.match(verifier, /realAntigravityTurnUsed/);
+  assert.match(verifier, /coverageKind:\s*allowRealAntigravityTurn \? "real-traffic" : "local-fake-provider"/);
+  assert.match(verifier, /usedRealTraffic:\s*realAntigravityEvidence\.realAntigravityTurnUsed/);
+  assert.match(verifier, /healthAfterAntigravityReturn\.upstream,\s*"antigravity-desktop"/);
+});
+
 test("user-visible legacy DeepCodex setup and launch wording is branded as Anti-Codex", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
   const macLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.sh"), "utf8");
