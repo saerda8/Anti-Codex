@@ -5,7 +5,8 @@ param(
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$DurationSec = 20,
     [int]$IntervalSec = 5,
-    [int]$TimeoutSec = 8
+    [int]$TimeoutSec = 8,
+    [switch]$SkipManagerActionProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,10 +39,16 @@ function Invoke-UiState {
     param([string]$ScriptPath, [string]$RuntimeRootFull)
 
     $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
-    $output = @(& $powerShellBin -NoProfile -ExecutionPolicy Bypass -File $ScriptPath `
-        -BaseUrl $BaseUrl `
-        -RuntimeRoot $RuntimeRootFull `
-        -TimeoutSec $TimeoutSec 2>&1)
+    $arguments = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath,
+        "-BaseUrl", $BaseUrl,
+        "-RuntimeRoot", $RuntimeRootFull,
+        "-TimeoutSec", "$TimeoutSec"
+    )
+    if ($SkipManagerActionProbe) {
+        $arguments += "-SkipManagerActionProbe"
+    }
+    $output = @(& $powerShellBin @arguments 2>&1)
     $exitCode = $LASTEXITCODE
     $lines = @($output | ForEach-Object { [string]$_ })
     $payloadText = ($lines -join "").Trim()

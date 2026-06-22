@@ -909,6 +909,7 @@ $checks.uiIdleStability = if ($Fast) {
         "-DurationSec", "$IdleStabilityDurationSec",
         "-IntervalSec", "$IdleStabilityIntervalSec",
         "-TimeoutSec", "$TimeoutSec"
+        $(if ($SkipManagerActionProbe) { "-SkipManagerActionProbe" })
     )
 }
 $checks.diagnostics = if ($Fast) {
@@ -1005,6 +1006,16 @@ $checks.thirdPartyProvider = if ($Fast) {
         "--timeout-ms", "90000"
     )
 }
+$checks.localConnectors = if ($Fast) {
+    New-SkippedCheck "fast mode skips local connector/app-tool allowlist verification" "test-anticodex-local-connectors.mjs"
+} else {
+    Invoke-NodeJsonScript "Local connector/app-tool allowlist verification" (Join-Path $scriptsRoot "test-anticodex-local-connectors.mjs") @(
+        "--source-root", $RuntimeRoot,
+        "--runtime-root", $RuntimeRoot,
+        "--report-root", $ReportRoot,
+        "--timeout-ms", "60000"
+    )
+}
 $checks.mcpSkills = if ($checks.managerButtonMcpSkills -and (Has-Property $checks.managerButtonMcpSkills "ok") -and $checks.managerButtonMcpSkills.ok -eq $true -and $checks.managerButtonMcpSkills.skipped -ne $true -and $checks.managerButtonMcpSkills.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager MCP/Skill button smoke" "managerButtonMcpSkills"
 } else {
@@ -1042,7 +1053,7 @@ $checks.modelRoutingNoTraffic = if ($Fast) {
 } else {
     Invoke-JsonScript "No-traffic model routing verification" (Join-Path $scriptsRoot "test-anticodex-model-routing.ps1") @(
         "-BaseUrl", $BaseUrl,
-        "-TimeoutSec", "$TimeoutSec",
+        "-TimeoutSec", "$DiagnosticsTimeoutSec",
         "-SkipRefresh",
         "-SkipRequests"
     )

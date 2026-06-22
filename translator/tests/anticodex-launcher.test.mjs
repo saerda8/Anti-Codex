@@ -2699,6 +2699,7 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(overall, /Tool bridge mode verification/);
   assert.match(overall, /\$checks\.toolBridgeMode = if \(\$healthMode -eq "third-party"\)/);
   assert.match(overall, /\$diagnosticScriptArgs = @\("-BaseUrl", \$BaseUrl, "-TimeoutSec", "\$DiagnosticsTimeoutSec"\)/);
+  assert.match(overall, /No-traffic model routing verification[\s\S]*"-TimeoutSec", "\$DiagnosticsTimeoutSec"/);
   assert.match(overall, /elseif \(\$Fast\)/);
   assert.match(overall, /Fast tool bridge verification/);
   assert.match(
@@ -2965,12 +2966,18 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Third-party provider local end-to-end verification/);
   assert.match(overall, /\$checks\.thirdPartyProvider = if \(\$Fast\)/);
   assert.match(overall, /fast mode skips local third-party provider end-to-end verification/);
+  assert.match(overall, /test-anticodex-local-connectors\.mjs/);
+  assert.match(overall, /Local connector\/app-tool allowlist verification/);
+  assert.match(overall, /\$checks\.localConnectors = if \(\$Fast\)/);
+  assert.match(overall, /fast mode skips local connector\/app-tool allowlist verification/);
   assert.match(overall, /"--runtime-root", \$RuntimeRoot/);
   assert.match(overall, /"--report-root", \$ReportRoot/);
   assert.match(overall, /test-anticodex-codex-responses\.ps1/);
   assert.match(overall, /Codex internal Responses stream verification/);
   assert.match(overall, /test-anticodex-model-switch-history\.ps1/);
   assert.match(overall, /Model switch history verification/);
+  assert.match(overall, /test-anticodex-ui-idle-stability\.ps1/);
+  assert.match(overall, /-SkipManagerActionProbe/);
   assert.match(overall, /NoTraffic/);
   assert.match(overall, /EnsureRunning/);
   assert.match(overall, /function Start-AntiCodexIfNeeded/);

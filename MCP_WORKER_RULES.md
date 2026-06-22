@@ -1288,3 +1288,33 @@ After every failure, before another dispatch:
 - Cause classification: command construction failure during status polling, not an Anti-Codex runtime failure.
 - Rule change: compute conditional values in separate variables before building a hashtable or JSON status object. Do not embed `if` directly inside hashtable property expressions.
 - Result: the corrected polling command confirmed the real-work verifier finished successfully, with file creation, real MCP execution, marker match, and normal Chinese final text.
+
+## 2026-06-22 - Cancel tiny worker jobs that stream too long without file changes
+
+- Worker: DeepSeek `dsw_mqowbabb_g4mvb3`.
+- Task: modify only `scripts/test-anticodex-third-party-provider.mjs` to add multi-turn provider history assertions.
+- Symptom: the worker streamed for about 145 seconds with no changed files, no checks run, and no usable partial output.
+- Cause classification: worker orchestration inefficiency on a small single-file patch, not a product failure.
+- Rule change: for tiny scoped patches, if a worker has active stream output but still no file changes after three 30-second checks, cancel it and let the main agent apply the small patch directly. Record the cancellation and verify there were no worker edits before taking over.
+- Result: the job was cancelled with zero file changes; the main agent implemented and verified the script update directly.
+
+## 2026-06-22 - NoRestart sync cannot recover a stopped installed gateway
+
+- Symptom: `sync-anticodex-runtime.ps1 -NoRestart -TimeoutSec 45` copied the runtime files but returned `ok:false` because `http://127.0.0.1:8484/health` was unreachable and the script was explicitly told not to restart.
+- Cause classification: validation mode mismatch, not a copy failure or product regression.
+- Rule change: if installed gateway health is unreachable before or after a `-NoRestart` sync, run the installed `start-deepcodex.ps1 -TranslatorOnly` recovery path, then re-check `/health` and the synced script evidence before declaring sync failed.
+- Result: translator-only startup restored health on 8484 with eight cached Antigravity models, and both installed verifier scripts passed from the runtime path.
+
+## 2026-06-22 - Propagate short-smoke UI skip flags through wrapper scripts
+
+- Symptom: installed overall no-traffic verification failed only in the nested UI idle stability check because `-SkipManagerActionProbe` was accepted by the top-level command but not forwarded to `test-anticodex-ui-state.ps1`.
+- Cause classification: wrapper parameter propagation bug. The Anti-Codex runtime, local connector verifier, and third-party provider verifier were healthy.
+- Rule change: when adding a skip/degrade flag for short UI smoke checks, update every wrapper that invokes the affected verifier and add a static launcher regression for the propagation path.
+- Result: `test-anticodex-ui-idle-stability.ps1` now forwards `-SkipManagerActionProbe`, the launcher regression covers it, and installed overall no-traffic passes with UI state and UI idle stability green.
+
+## 2026-06-22 - Do not reuse UI short timeouts for diagnostics-heavy subchecks
+
+- Symptom: installed overall no-traffic verification failed only in the nested model-routing check because `/anticodex/diagnostics` timed out after two 8-second attempts while the standalone diagnostics and model-routing probes passed with a normal diagnostics budget.
+- Cause classification: wrapper timeout budget mismatch. `-TimeoutSec 8` is suitable for short UI smoke probes, but model-routing in no-traffic mode still depends on diagnostics payload collection.
+- Rule change: wrapper scripts must pass the diagnostics timeout budget to diagnostics-heavy subchecks such as model routing, even when the top-level UI timeout is intentionally short. Add static regression coverage for the exact forwarded parameter.
+- Result: installed overall now forwards `-DiagnosticsTimeoutSec` into no-traffic model routing, the launcher regression covers the call site, and installed overall no-traffic passes again.

@@ -94,6 +94,24 @@ function responseJsonFromText(text) {
   throw new SyntaxError("response body did not contain a response object");
 }
 
+function textFromResponse(response) {
+  return (Array.isArray(response?.output) ? response.output : [])
+    .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+    .map((part) => part?.text || "")
+    .join("\n");
+}
+
+function requestText(body) {
+  return JSON.stringify(body?.messages || body?.input || body || "");
+}
+
+function providerAnswerFor(body) {
+  const text = requestText(body);
+  const matches = [...text.matchAll(/turn-(\d+)/g)];
+  const turn = matches.at(-1)?.[1] || "";
+  return turn ? `PROVIDER_HISTORY_TURN_${turn}` : "THIRD_PARTY_PROVIDER_OK";
+}
+
 async function waitForHealth(baseUrl) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -138,15 +156,17 @@ async function main() {
       res.end(JSON.stringify({ error: { message: "not found" } }));
       return;
     }
+    const answer = providerAnswerFor(body);
+    const answerTurn = answer.match(/TURN_(\d+)/)?.[1] || "compat";
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
-      id: "chatcmpl_fake_provider",
+      id: `chatcmpl_fake_provider_${answerTurn}`,
       object: "chat.completion",
       created: 1,
       model: "fake-gpt-4.1",
       choices: [{
         index: 0,
-        message: { role: "assistant", content: "THIRD_PARTY_PROVIDER_OK" },
+        message: { role: "assistant", content: answer },
         finish_reason: "stop",
       }],
       usage: { prompt_tokens: 5, completion_tokens: 4, total_tokens: 9 },
@@ -208,19 +228,88 @@ async function main() {
   const models = await getJson(`${translatorUrl}/v1/models`);
   assert.deepEqual(models.data.map((model) => model.id), ["fake-gpt-4.1"]);
 
-  const firstText = await fetch(`${translatorUrl}/v1/responses`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: "fake-gpt-4.1", stream: false, input: "hello" }),
-  }).then((response) => response.text());
-  assert.match(firstText, /THIRD_PARTY_PROVIDER_OK/);
-  const first = responseJsonFromText(firstText);
+  async function postResponse(body) {
+    const text = await fetch(`${translatorUrl}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((response) => response.text());
+    return { text, response: responseJsonFromText(text) };
+  }
+
+  const firstResult = await postResponse({
+    model: "fake-gpt-4.1",
+    stream: false,
+    input: "turn-1 user asks alpha",
+  });
+  assert.match(firstResult.text, /PROVIDER_HISTORY_TURN_1/);
+  const first = firstResult.response;
+  assert.equal(textFromResponse(first), "PROVIDER_HISTORY_TURN_1");
+
+  const secondResult = await postResponse({
+    model: "gemini-pro-agent",
+    stream: false,
+    previous_response_id: first.id,
+    input: "turn-2 user asks beta",
+  });
+  assert.match(secondResult.text, /PROVIDER_HISTORY_TURN_2/);
+  const second = secondResult.response;
+  assert.equal(second.previous_response_id, first.id);
+  assert.equal(textFromResponse(second), "PROVIDER_HISTORY_TURN_2");
+
+  const thirdResult = await postResponse({
+    model: "fake-gpt-4.1",
+    stream: false,
+    previous_response_id: second.id,
+    input: "turn-3 user asks gamma",
+  });
+  assert.match(thirdResult.text, /PROVIDER_HISTORY_TURN_3/);
+  const third = thirdResult.response;
+  assert.equal(third.previous_response_id, second.id);
+  assert.equal(textFromResponse(third), "PROVIDER_HISTORY_TURN_3");
+
+  const fourthResult = await postResponse({
+    model: "gemini-3.5-flash-low",
+    stream: false,
+    previous_response_id: third.id,
+    input: "turn-4 user asks delta",
+  });
+  assert.match(fourthResult.text, /PROVIDER_HISTORY_TURN_4/);
+  const fourth = fourthResult.response;
+  assert.equal(fourth.previous_response_id, third.id);
+  assert.equal(textFromResponse(fourth), "PROVIDER_HISTORY_TURN_4");
+
+  const chatRequests = requests.filter((request) => request.path === "/v1/chat/completions");
+  assert.ok(chatRequests.length >= 4);
+  const [firstChat, secondChat, thirdChat, fourthChat] = chatRequests;
+  assert.equal(firstChat.headers.authorization, "Bearer sk-fake-secret");
+  assert.equal(firstChat.body.model, "fake-gpt-4.1");
+  assert.equal(secondChat.body.model, "fake-gpt-4.1");
+  assert.equal(thirdChat.body.model, "fake-gpt-4.1");
+  assert.equal(fourthChat.body.model, "fake-gpt-4.1");
+  assert.match(requestText(secondChat.body), /turn-1 user asks alpha/);
+  assert.match(requestText(secondChat.body), /PROVIDER_HISTORY_TURN_1/);
+  assert.match(requestText(thirdChat.body), /turn-1 user asks alpha/);
+  assert.match(requestText(thirdChat.body), /PROVIDER_HISTORY_TURN_1/);
+  assert.match(requestText(thirdChat.body), /turn-2 user asks beta/);
+  assert.match(requestText(thirdChat.body), /PROVIDER_HISTORY_TURN_2/);
+  assert.match(requestText(fourthChat.body), /turn-1 user asks alpha/);
+  assert.match(requestText(fourthChat.body), /PROVIDER_HISTORY_TURN_1/);
+  assert.match(requestText(fourthChat.body), /turn-2 user asks beta/);
+  assert.match(requestText(fourthChat.body), /PROVIDER_HISTORY_TURN_2/);
+  assert.match(requestText(fourthChat.body), /turn-3 user asks gamma/);
+  assert.match(requestText(fourthChat.body), /PROVIDER_HISTORY_TURN_3/);
+
   const responseHistoryPath = join(stateRoot, "response-history.json");
   const responseHistoryBefore = readFileSync(responseHistoryPath, "utf8");
-  const chatRequest = requests.find((request) => request.path === "/v1/chat/completions");
-  assert.ok(chatRequest);
-  assert.equal(chatRequest.headers.authorization, "Bearer sk-fake-secret");
-  assert.equal(chatRequest.body.model, "fake-gpt-4.1");
+  assert.match(responseHistoryBefore, new RegExp(fourth.id));
+
+  const chatCompatText = await fetch(`${translatorUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model: "fake-gpt-4.1", messages: [{ role: "user", content: "plain chat compat" }] }),
+  }).then((response) => response.text());
+  assert.match(chatCompatText, /THIRD_PARTY_PROVIDER_OK/);
 
   const unauthorizedBefore = requests.length;
   const unauthorized = await fetch(`${translatorUrl}/anticodex/upstream-test`, {
@@ -278,6 +367,18 @@ async function main() {
   assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryBefore);
   assert.doesNotMatch(readFileSync(join(stateRoot, "upstream-profile.json"), "utf8"), /sk-save-secret/);
 
+  const restoredResponse = await fetch(`${translatorUrl}/anticodex/upstream-profile`, {
+    method: "POST",
+    headers: authedHeaders,
+    body: JSON.stringify({ mode: "antigravity" }),
+  });
+  const restoredText = await restoredResponse.text();
+  assert.equal(restoredResponse.status, 200, restoredText);
+  const restored = responseJsonFromText(restoredText);
+  assert.equal(restored.ok, true);
+  assert.equal(restored.restartRequired, true);
+  assert.equal(readFileSync(responseHistoryPath, "utf8"), responseHistoryBefore);
+
   const routeAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
   assert.equal(routeAudit.latest.transport, "upstream-provider");
   assert.equal(routeAudit.latest.providerProtocol, "openai-compatible");
@@ -304,6 +405,19 @@ async function main() {
     upstreamFullUrlAccepted: true,
     unauthorizedManagerBlocked: true,
     savedWithoutHistoryLoss: true,
+    restoredAntigravityWithoutHistoryLoss: true,
+    multiTurnHistory: {
+      turns: 4,
+      antigravityModelFallbacks: ["gemini-pro-agent", "gemini-3.5-flash-low"],
+      providerModelUsedForEveryTurn: [firstChat, secondChat, thirdChat, fourthChat].every((request) => request.body.model === "fake-gpt-4.1"),
+      fourthTurnContextIncludesPriorTurns: /turn-1 user asks alpha/.test(requestText(fourthChat.body))
+        && /PROVIDER_HISTORY_TURN_1/.test(requestText(fourthChat.body))
+        && /turn-2 user asks beta/.test(requestText(fourthChat.body))
+        && /PROVIDER_HISTORY_TURN_2/.test(requestText(fourthChat.body))
+        && /turn-3 user asks gamma/.test(requestText(fourthChat.body))
+        && /PROVIDER_HISTORY_TURN_3/.test(requestText(fourthChat.body)),
+      finalPreviousResponseId: fourth.previous_response_id,
+    },
     routeEvidence: routeAudit.latest,
     requestCount: requests.length,
   };
