@@ -354,11 +354,23 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /\\u5143\\u6570\\u636e\\u53ef\\u89c1 \/ \\u4e0d\\u7b49\\u4e8e\\u53ef\\u8c03\\u7528/);
   assert.match(managerInject, /\\u5feb\\u7167\\u65b0\\u9c9c\\u5ea6/);
   assert.match(managerInject, /\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd/);
+  assert.match(managerInject, /function formatReportAge/);
+  assert.match(managerInject, /item\.stale/);
+  assert.match(managerInject, /staleCount/);
+  assert.match(managerInject, /item\.exists && item\.latestPath/);
+  assert.match(managerInject, /\\u9700\\u91cd\\u8dd1/);
+  assert.match(managerInject, /\\u8fd8\\u6ca1\\u6709\\u53ef\\u663e\\u793a\\u7684\\u9a8c\\u6536\\u62a5\\u544a/);
+  assert.match(managerBridge, /function formatReportAge/);
+  assert.match(managerBridge, /item\.stale/);
+  assert.match(managerBridge, /staleCount/);
+  assert.match(managerBridge, /item\.exists && item\.latestPath/);
+  assert.match(managerBridge, /\\u9700\\u91cd\\u8dd1/);
+  assert.match(managerBridge, /\\u8fd8\\u6ca1\\u6709\\u53ef\\u663e\\u793a\\u7684\\u9a8c\\u6536\\u62a5\\u544a/);
   assert.match(managerInject, /\\u8fdc\\u7a0b\\u8fde\\u63a5\\u5668\\u4ec5\\u76ee\\u5f55/);
   assert.match(managerInject, /Skill \\u662f\\u672c\\u5730\\u6307\\u4ee4\\uff1bMCP \\u5fc5\\u987b\\u7531\\u5f53\\u524d\\u4f1a\\u8bdd\\u771f\\u5b9e\\u66b4\\u9732\\u5de5\\u5177/);
   assert.doesNotMatch(managerInject, /\\u672c\\u5730\\u63d2\\u4ef6\/MCP \\u53ef\\u76f4\\u63a5\\u4f7f\\u7528/);
-  assert.match(managerInject, /native-panel-v83/);
-  assert.match(syncReadiness, /native-panel-v83/);
+  assert.match(managerInject, /native-panel-v84/);
+  assert.match(syncReadiness, /native-panel-v84/);
   assert.doesNotMatch(managerInject, /native-panel-v68/);
   assert.doesNotMatch(syncReadiness, /native-panel-v68/);
   assert.doesNotMatch(managerInject, /native-panel-v67/);
@@ -489,6 +501,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "postVerificationFull",
     "refreshFeatures",
     "resetAntigravitySessionLock",
+    "stabilitySoak",
     "syncHost",
     "upstreamConfig",
   ].sort());
@@ -565,8 +578,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v83["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v83"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v84["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v84"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -637,7 +650,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v83/);
+  assert.match(managerOpenInject, /native-panel-v84/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v68/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v67/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v66/);
@@ -666,6 +679,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.ok(actionNames.includes("fastOverallNoTraffic"), "data-action list must include fastOverallNoTraffic");
   assert.ok(actionNames.includes("overallNoTraffic"), "data-action list must include overallNoTraffic");
   assert.ok(actionNames.includes("refreshFeatures"), "data-action list must include refreshFeatures");
+  assert.ok(actionNames.includes("stabilitySoak"), "data-action list must include stabilitySoak");
   assert.ok(actionNames.includes("repairShortcuts"), "data-action list must include repairShortcuts");
   assert.ok(actionNames.includes("sourcePreflight"), "data-action list must include sourcePreflight");
   assert.ok(actionNames.includes("viewLatestReports"), "data-action list must include viewLatestReports");
@@ -689,6 +703,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "refreshStatus",
     "repairShortcuts",
     "sourcePreflight",
+    "stabilitySoak",
     "syncHost",
     "syncReadiness",
     "updateCheck",
@@ -708,7 +723,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(highImpactSection, /class="[^"]*danger[^"]*"/);
   assert.match(highImpactSection, /data-action="upstreamConfig"/);
   assert.match(highImpactSection, /data-action="resetAntigravitySessionLock"/);
-  assert.equal((highImpactSection.match(/data-manager-action=/g) || []).length, 7);
+  assert.equal((highImpactSection.match(/data-manager-action=/g) || []).length, 8);
   assert.match(html, /HIGH_IMPACT_ACTION_IDS=new Set\(\[[^\]]*"resetAntigravitySessionLock"/);
   assert.match(html, /payload\?\.action==="resetAntigravitySessionLock"/);
   assert.match(html, /HIGH_IMPACT_ACTION_IDS/);
@@ -1409,7 +1424,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v83 manager script/);
+  assert.match(manager, /latest native-panel-v84 manager script/);
   assert.doesNotMatch(manager, /native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -1549,6 +1564,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /refresh-anticodex-local-features\.ps1/);
   assert.match(server, /refreshFeatures:\s*\{[\s\S]*?background:\s*true/);
   assert.match(server, /refreshFeatures:\s*\{[\s\S]*?singletonProcessPattern:\s*"refresh-anticodex-local-features\\\\\.ps1"/);
+  assert.match(server, /stabilitySoak/);
+  assert.match(server, /test-anticodex-stability-soak\.ps1/);
+  assert.match(server, /stabilitySoak:\s*\{[\s\S]*?background:\s*true/);
+  assert.match(server, /stabilitySoak:\s*\{[\s\S]*?singletonProcessPattern:\s*"test-anticodex-stability-soak\\\\\.ps1"/);
   assert.match(server, /syncHost/);
   assert.match(server, /sync-anticodex-launcher\.ps1/);
   assert.match(server, /singletonProcessPattern/);
@@ -1577,6 +1596,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(managerAction, /pluginCapabilities/);
   assert.match(managerAction, /sourcePreflight/);
   assert.match(managerAction, /resetAntigravitySessionLock/);
+  assert.match(managerAction, /stabilitySoak/);
   assert.match(managerAction, /fastOverallNoTraffic/);
   assert.match(managerAction, /document\\\.querySelectorAll\\\("button\\\[data-action\\\]"\\\)/);
   assert.match(managerAction, /setActionButtonsDisabled\\\(true\\\)/);
@@ -1612,8 +1632,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(managerAction, /resetMode\s*=\s*if \(\$isIdle\) \{ "idle" \} else \{ "stale-lock" \}/);
   assert.match(managerAction, /Session lock is not safe to reset/);
   assert.match(managerAction, /"Origin"\s*=\s*\$BaseUrl[\s\S]{0,120}"Referer"\s*=\s*"\$BaseUrl\/anticodex\/manager"/);
-  assert.doesNotMatch(managerAction, /\$SafeActionName\s*=\s*"(?:postVerificationFull|syncHost)"/);
-  assert.doesNotMatch(managerAction, /-Body\s+'\{"action":"(?:postVerificationFull|syncHost)"/);
+  assert.doesNotMatch(managerAction, /\$SafeActionName\s*=\s*"(?:postVerificationFull|syncHost|stabilitySoak)"/);
+  assert.doesNotMatch(managerAction, /-Body\s+'\{"action":"(?:postVerificationFull|syncHost|stabilitySoak)"/);
   assert.match(server, /postVerification/);
   assert.match(server, /function localFeatureSummary/);
   assert.match(server, /localFeatures/);
@@ -1687,6 +1707,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-real-work\.json/);
   assert.match(server, /latest-native-tool-loop\.json/);
   assert.match(server, /latest-mcp-tool-loop\.json/);
+  assert.match(server, /latest-mcp-skills\.json/);
+  assert.match(server, /latest-plugin-capabilities\.json/);
+  assert.match(server, /latest-refresh-features\.json/);
   assert.match(server, /latest-compaction-resume\.json/);
   assert.match(server, /latest-stability-soak\.json/);
   assert.match(server, /latestReportsSummary/);

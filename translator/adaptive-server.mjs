@@ -1824,6 +1824,15 @@ const MANAGER_ACTIONS = Object.freeze({
         singletonProcessPattern: "refresh-anticodex-local-features\\.ps1",
         backgroundLockMaxMs: 10 * 60_000,
     },
+    stabilitySoak: {
+        label: "\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09",
+        script: "test-anticodex-stability-soak.ps1",
+        args: [],
+        timeoutMs: 10_000,
+        background: true,
+        singletonProcessPattern: "test-anticodex-stability-soak\\.ps1",
+        backgroundLockMaxMs: 20 * 60_000,
+    },
     fastOverallNoTraffic: {
         label: "快速检查（不耗流量）",
         script: "test-anticodex-installed-overall.ps1",
@@ -1867,6 +1876,7 @@ const CLEAN_MANAGER_ACTION_LABELS = Object.freeze({
     mcpSkills: "检查 MCP/Skill",
     pluginCapabilities: "检查插件/应用",
     refreshFeatures: "刷新本地功能",
+    stabilitySoak: "\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09",
     fastOverallNoTraffic: "快速检查（不耗流量）",
     overallNoTraffic: "整体检查（不耗流量）",
     diagnosticsBundle: "生成诊断包",
@@ -1934,6 +1944,9 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("原生工具链", "latest-native-tool-loop.json"),
         latestManagerReportItem("兼容工具链", "latest-tool-loop.json"),
         latestManagerReportItem("MCP 工具链", "latest-mcp-tool-loop.json"),
+        latestManagerReportItem("MCP/Skill 检查", "latest-mcp-skills.json"),
+        latestManagerReportItem("插件/应用检查", "latest-plugin-capabilities.json"),
+        latestManagerReportItem("本地功能刷新", "latest-refresh-features.json"),
         latestManagerReportItem("压缩恢复", "latest-compaction-resume.json"),
         latestManagerReportItem("稳定性巡检", "latest-stability-soak.json"),
         latestManagerReportItem("源码预检", "latest-source-preflight.json"),
@@ -2306,6 +2319,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
         <button data-action="upstreamConfig" data-manager-action="upstreamConfig" class="danger">配置第三方 API</button>
         <button data-action="resetAntigravitySessionLock" data-manager-action="resetAntigravitySessionLock" class="danger">\u91cd\u7f6e Antigravity \u4f1a\u8bdd\u9501</button>
         <button data-action="refreshFeatures" data-manager-action="refreshFeatures" class="danger">刷新本地功能</button>
+        <button data-action="stabilitySoak" data-manager-action="stabilitySoak" class="danger">\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09</button>
         <button data-action="fastOverallNoTraffic" data-manager-action="fastOverallNoTraffic" class="danger">快速检查（不耗流量）</button>
         <button data-action="overallNoTraffic" data-manager-action="overallNoTraffic" class="danger">整体检查（不耗流量）</button>
         <button data-action="postVerificationFull" data-manager-action="postVerificationFull" class="danger">验证后完整检查（耗真实流量）</button>
@@ -2331,7 +2345,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
 <script>
 const managerActionToken=${JSON.stringify(MANAGER_ACTION_TOKEN)};
 const $=id=>document.getElementById(id);
-const HIGH_IMPACT_ACTION_IDS=new Set(["syncHost","upstreamConfig","resetAntigravitySessionLock","refreshFeatures","fastOverallNoTraffic","overallNoTraffic","postVerificationFull"]);
+const HIGH_IMPACT_ACTION_IDS=new Set(["syncHost","upstreamConfig","resetAntigravitySessionLock","refreshFeatures","stabilitySoak","fastOverallNoTraffic","overallNoTraffic","postVerificationFull"]);
 const HIGH_IMPACT_CONFIRMATION_MS=15000;
 let pendingHighImpactAction="";
 let pendingHighImpactUntil=0;
@@ -2533,6 +2547,12 @@ function actionText(payload){
       "Skill："+(r.skills?.count??"未知")+"    快照："+snapshotCount+"    连接器缓存："+(r.connectors?.count??"未知"),
       r.failures?.length?("失败："+r.failures.join("\\n")):"Codex 的本地插件、Skill、MCP 相关快照已同步到 Anti-Codex。"
     ].filter(Boolean).join("\\n");
+  }
+  if(payload?.action==="stabilitySoak"){
+    if(payload.alreadyRunning){
+      return "\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u5df2\\u5728\\u540e\\u53f0\\u8fd0\\u884c\\u3002\\n\\u5b83\\u4f1a\\u6d88\\u8017\\u771f\\u5b9e Antigravity \\u6d41\\u91cf\\uff1b\\u8bf7\\u7a0d\\u540e\\u70b9\\u201c\\u67e5\\u770b\\u6700\\u65b0\\u62a5\\u544a\\u201d\\u786e\\u8ba4\\u7ed3\\u679c\\u3002";
+    }
+    return (payload.ok?"\\u5df2\\u5728\\u540e\\u53f0\\u5f00\\u59cb\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u3002":"\\u542f\\u52a8\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u5931\\u8d25\\u3002")+"\\n\\u8fd9\\u4f1a\\u6d88\\u8017\\u771f\\u5b9e Antigravity \\u6d41\\u91cf\\uff0c\\u5b8c\\u6210\\u540e\\u4f1a\\u5199\\u5165 latest-stability-soak.json\\u3002";
   }
   if(payload?.action==="fastOverallNoTraffic"){
     return [

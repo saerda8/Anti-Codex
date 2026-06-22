@@ -10,6 +10,7 @@ import path from "node:path";
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
 const ports = String(args.get("--ports") || args.get("--port") || "58318,58317").split(",").map((value) => Number(value.trim())).filter(Number.isFinite);
+const baseUrl = String(args.get("--base-url") || process.env.ANTICODEX_MANAGER_API || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const simulatePendingReopen = args.has("--verify-pending-reopen");
 const defaultAction = String(args.get("--action") || (simulatePendingReopen ? "refreshFeatures" : "updateCheck"));
 const actions = String(args.get("--actions") || defaultAction).split(",").map((value) => value.trim()).filter(Boolean);
@@ -25,6 +26,7 @@ if (simulatePendingReopen) {
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.lock");
+let managerActionToken = "";
 
 async function acquireManagerButtonLock() {
   const deadline = Date.now() + Math.max(10000, timeoutMs + 5000);
@@ -171,8 +173,8 @@ function realBridgeSource(enabled = !uiOnlyMode) {
   if (!enabled) return "";
   return `
   delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-  window.__ANTICODEX_MANAGER_ACTION_PROMISES__ ||= {};
-  window.__ANTICODEX_MANAGER_ACTION_QUEUE__ ||= [];
+  window.__ANTICODEX_MANAGER_ACTION_PROMISES__ = {};
+  window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [];
   window.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = (id, payload) => {
     const entry = window.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[id];
     if (!entry) return;
@@ -247,6 +249,67 @@ function getJson(url, timeout = 3000) {
     });
     request.on("timeout", () => request.destroy(new Error(`Timed out fetching ${url}`)));
     request.on("error", reject);
+  });
+}
+
+function httpJson(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const body = options.body ? Buffer.from(options.body) : null;
+    const request = http.request({
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: `${parsed.pathname}${parsed.search}`,
+      method: options.method || "GET",
+      timeout: options.timeout || 30000,
+      headers: { ...(options.headers || {}), ...(body ? { "content-length": body.length } : {}) },
+    }, (response) => {
+      let text = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => { text += chunk; });
+      response.on("end", () => {
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch {}
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(json?.error?.message || text || `HTTP ${response.statusCode}`));
+          return;
+        }
+        resolve(json);
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error(`Timed out fetching ${url}`)));
+    request.on("error", reject);
+    if (body) request.write(body);
+    request.end();
+  });
+}
+
+async function getManagerActionToken() {
+  if (managerActionToken) return managerActionToken;
+  const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
+    timeout: 5000,
+    headers: {
+      "origin": baseUrl,
+      "referer": `${baseUrl}/anticodex/manager`,
+    },
+  });
+  managerActionToken = String(bootstrap?.token || "");
+  if (!managerActionToken) throw new Error("Manager bootstrap did not return an action token");
+  return managerActionToken;
+}
+
+async function postManagerAction(actionName) {
+  const token = await getManagerActionToken();
+  return await httpJson(`${baseUrl}/anticodex/manager/action`, {
+    method: "POST",
+    timeout: Math.max(30000, timeoutMs + 5000),
+    headers: {
+      "content-type": "application/json",
+      "origin": baseUrl,
+      "referer": `${baseUrl}/anticodex/manager`,
+      "x-anticodex-manager-token": token,
+    },
+    body: JSON.stringify({ action: actionName }),
   });
 }
 
@@ -518,6 +581,27 @@ async function evaluate(expression, timeout = 8000) {
   return message.result?.result?.value || {};
 }
 
+async function drainManagerActionQueue() {
+  const queued = await evaluate(`(() => {
+    const queue = Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__)
+      ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.splice(0)
+      : [];
+    return { items: queue };
+  })()`, 2500).catch(() => ({ items: [] }));
+  for (const item of queued.items || []) {
+    let payload;
+    try {
+      payload = await postManagerAction(item.action);
+    } catch (error) {
+      payload = { ok: false, action: item.action, message: error?.message || String(error) };
+    }
+    await evaluate(`(() => {
+      window.__ANTICODEX_RESOLVE_MANAGER_ACTION__?.(${JSON.stringify(item.id)}, ${JSON.stringify(payload)});
+      return true;
+    })()`, 2500).catch(() => {});
+  }
+}
+
 async function runManagerActionBatch(actions) {
   const startedAt = Date.now();
   const results = {};
@@ -589,8 +673,10 @@ async function runManagerActionBatch(actions) {
 
     let latest = initial;
     const deadline = Date.now() + timeoutMs;
+    await drainManagerActionQueue();
     while (initial.ok && Date.now() < deadline) {
       await sleep(100);
+      await drainManagerActionQueue();
       latest = await evaluate(`(() => {
         const overlay = document.querySelector("#anticodex-manager-overlay");
         const button = overlay?.querySelector('button[data-action=' + ${safeActionName} + ']') || null;
@@ -945,6 +1031,7 @@ if (simulatePendingReopen) {
 
 let latest = initial;
 const deadline = Date.now() + timeoutMs;
+await drainManagerActionQueue();
 const initialUiOnlyFinished = uiOnlyMode
   && !isRunningText(initial.text || "")
   && !isFailureText(initial.text || "")
@@ -957,6 +1044,7 @@ function remainingActionTimeoutMs() {
 while (initial.ok && Date.now() < deadline) {
   await sleep(Math.min(500, Math.max(50, deadline - Date.now())));
   if (Date.now() >= deadline) break;
+  await drainManagerActionQueue();
   latest = await evaluate(`(() => {
     const overlay = document.querySelector("#anticodex-manager-overlay");
     const button = overlay?.querySelector('button[data-action=' + ${safeAction} + ']');

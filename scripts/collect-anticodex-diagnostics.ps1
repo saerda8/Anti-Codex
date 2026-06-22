@@ -213,6 +213,10 @@ $latestReports = @(
     "latest-account-proxy-readiness.json",
     "latest-post-verification.json",
     "latest-source-preflight.json",
+    "latest-mcp-skills.json",
+    "latest-plugin-capabilities.json",
+    "latest-refresh-features.json",
+    "latest-stability-soak.json",
     "latest-shortcut-repair.json",
     "latest-model-routing.json",
     "latest-ui-idle-stability.json"

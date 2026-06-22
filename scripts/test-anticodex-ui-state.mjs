@@ -26,7 +26,7 @@ const expectedDailyActionIds = [
   "repairShortcuts", "updateCheck", "sourcePreflight", "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
 ];
 const expectedHighImpactActionIds = [
-  "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+  "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "stabilitySoak", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
 const mojibakePattern = /(?:缁狅紕鎮妡娣囶喖|濡偓|闁板秶鐤唡閸掗攱|韫囶偊|閺佺繝|娴狅絿鎮妡閼卞﹤|娑撳秳|锟)/;
 const pageStateProbeExpression = `(() => {
@@ -765,7 +765,7 @@ try {
   }), managerProbeTimeoutMs);
   for (let attempt = 0; attempt < 40; attempt++) {
     const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v83"
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v84"
       )`, {
       returnByValue: true,
       awaitPromise: false,
@@ -824,13 +824,13 @@ try {
       skippedDeepProbe: true,
       hasFunction: selectedContextProbe?.hasOpen === true,
       version: selectedContextProbe?.version || "",
-      installed: selectedContextProbe?.version === "native-panel-v83",
+      installed: selectedContextProbe?.version === "native-panel-v84",
       hasButton: selectedContextProbe?.hasButton === true,
       buttonText: selectedContextProbe?.buttonText || "",
       coveredBy: "fast-ui-state",
     };
     if (!managerOverlay.hasFunction) failures.push("in-app manager function is not injected");
-    if (managerOverlay.version !== "native-panel-v83") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v83`);
+    if (managerOverlay.version !== "native-panel-v84") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v84`);
     if (managerOverlay.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
@@ -1177,13 +1177,13 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (selectedContextProbe?.version === "native-panel-v83") {
+    if (selectedContextProbe?.version === "native-panel-v84") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",
         hasFunction: selectedContextProbe?.hasOpen === true,
         version: selectedContextProbe?.version || "",
-        installed: selectedContextProbe?.version === "native-panel-v83",
+        installed: selectedContextProbe?.version === "native-panel-v84",
         hasButton: selectedContextProbe?.hasButton === true,
         buttonText: selectedContextProbe?.buttonText || "",
         coveredBy: "context-probe-and-manager-page",
@@ -1206,7 +1206,7 @@ try {
     failures.push(`manager opened a separate page target: ${managerPageTargets.map((item) => item.url).join(", ")}`);
   }
   if (!managerOverlay?.hasFunction) failures.push("in-app manager function is not injected");
-  if (managerOverlay?.version !== "native-panel-v83") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v83`);
+  if (managerOverlay?.version !== "native-panel-v84") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v84`);
   if (!managerOverlay?.installed) failures.push("in-app manager install flag is not set");
   const managerOverlayDynamicUnavailable = managerOverlay?.dynamicProbeUnavailable === true;
   if (managerOverlayDynamicUnavailable) {

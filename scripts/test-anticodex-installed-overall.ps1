@@ -384,6 +384,9 @@ function Test-ReportEncoding {
         "latest-native-tool-loop.json",
         "latest-tool-loop.json",
         "latest-mcp-tool-loop.json",
+        "latest-mcp-skills.json",
+        "latest-plugin-capabilities.json",
+        "latest-refresh-features.json",
         "latest-compaction-resume.json",
         "latest-stability-soak.json"
     )

@@ -1339,3 +1339,31 @@ After every failure, before another dispatch:
 - Cause classification: command construction failure during debugging, not a product failure.
 - Rule change: for nested PowerShell diagnostics, prefer direct `-File` execution, raw script files, or single-quoted `-Command` strings with escaped variables. Avoid putting complex `&` invocations and `$LASTEXITCODE` checks inside double-quoted outer command strings.
 - Result: the Manager action issue was diagnosed with a trace file and then fixed in the script itself.
+
+## 2026-06-22 - Run diagnostics collection from the installed runtime entry point
+
+- Symptom: `test-anticodex-diagnostics.ps1 -NoPopup` failed because that script has no `NoPopup` parameter, then source-root `collect-anticodex-diagnostics.ps1 -NoPopup` failed because bundle collection expects the installed runtime layout.
+- Cause classification: wrong verifier entry point, not an Anti-Codex diagnostics regression.
+- Rule change: use `collect-anticodex-diagnostics.ps1 -NoPopup` from `%LOCALAPPDATA%\Anti-Codex\runtime\scripts` when generating a real support bundle. Use source diagnostic tests only for source contracts and inspect their `param(...)` block before passing flags.
+- Result: the installed runtime collector succeeded and wrote a diagnostic ZIP under `%APPDATA%\anticodex\diagnostic-bundles`.
+
+## 2026-06-22 - Restart translator after server-side Manager inventory changes
+
+- Symptom: runtime files were synced with `-NoRestart`, but the live Manager action inventory could still reflect old in-memory `adaptive-server.mjs` behavior.
+- Cause classification: deployment/reload mismatch, not a copy failure.
+- Rule change: after changing Manager actions, latest-report payloads, or adaptive-server protected endpoints, run a sync that restarts the Anti-Codex translator before installed UI/action verification. `-NoRestart` is only enough for file-based script changes.
+- Result: after restarting Anti-Codex translator, installed UI and Manager action checks saw `native-panel-v84` and the new action/report inventory.
+
+## 2026-06-22 - Reset Manager real-button queues before every real click
+
+- Symptom: a real Manager button verifier timed out because stale pending promises and queue entries survived from an earlier failed or ui-only run.
+- Cause classification: verifier contamination in the shared embedded Manager page, not product action failure.
+- Rule change: real Manager button verification must clear `__ANTICODEX_MANAGER_ACTION_PROMISES__`, reset `__ANTICODEX_MANAGER_ACTION_QUEUE__`, restore the real bridge after ui-only smoke, and drain queued actions through the protected local endpoint with fresh bootstrap token headers.
+- Result: standalone real button checks for `viewLatestReports` and `refreshStatus` passed serially after the verifier reset and queue-drain fixes.
+
+## 2026-06-22 - Keep skipped expensive probes from producing derived failures
+
+- Symptom: fast sync-readiness skipped icon palette decoding but still checked palette-derived ICO frame sizes, causing a false missing-frame failure.
+- Cause classification: skip-mode assertion bug, not an icon regression.
+- Rule change: when a fast verifier intentionally skips an expensive probe, every assertion that depends on that probe must also be marked skipped or not applicable.
+- Result: fast and full sync-readiness both passed after frame-size checks were gated on actual palette evidence.

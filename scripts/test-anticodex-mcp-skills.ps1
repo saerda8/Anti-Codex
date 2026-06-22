@@ -3,6 +3,7 @@ param(
     [string]$BaseUrl = "",
     [string]$InstallRoot = $(if ($env:DEEPCODEX_INSTALL_ROOT) { $env:DEEPCODEX_INSTALL_ROOT } else { Join-Path $env:LOCALAPPDATA "Anti-Codex" }),
     [string]$StateRoot = $(if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }),
+    [string]$ReportRoot = $(Join-Path $StateRoot "reports"),
     [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
     [string]$SharedCodexHome = $(if ($env:DEEPCODEX_SHARED_CODEX_HOME) { $env:DEEPCODEX_SHARED_CODEX_HOME } elseif ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
     [int]$TimeoutSec = 8
@@ -19,6 +20,24 @@ $failures = New-Object System.Collections.Generic.List[string]
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
+}
+
+function New-ReportPaths {
+    param([string]$Name)
+    New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    return [pscustomobject]@{
+        latest = (Join-Path $ReportRoot "latest-$Name.json")
+        history = (Join-Path $ReportRoot "$stamp-$Name.json")
+    }
+}
+
+function Save-JsonReport {
+    param($Paths, $Payload, [int]$Depth = 12)
+    $json = $Payload | ConvertTo-Json -Depth $Depth -Compress
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($Paths.latest, $json, $utf8NoBom)
+    [System.IO.File]::WriteAllText($Paths.history, $json, $utf8NoBom)
 }
 
 function Invoke-LocalJson {
@@ -521,6 +540,7 @@ $capabilityDegraded = ($capabilityState -ne "ready")
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    reportName = "mcp-skills"
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
     snapshotSource = "anticodex-local-copy"
@@ -600,5 +620,8 @@ $result = [pscustomobject]@{
     }
 }
 
+$reportPaths = New-ReportPaths "mcp-skills"
+$result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
+Save-JsonReport $reportPaths $result -Depth 10
 $result | ConvertTo-Json -Depth 8 -Compress
 if ($failures.Count -gt 0) { exit 1 }

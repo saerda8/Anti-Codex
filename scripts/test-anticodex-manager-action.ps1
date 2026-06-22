@@ -104,6 +104,7 @@ $expectedHighImpactManagerActions = @(
     "syncHost",
     "upstreamConfig",
     "refreshFeatures",
+    "stabilitySoak",
     "fastOverallNoTraffic",
     "overallNoTraffic",
     "postVerificationFull",
