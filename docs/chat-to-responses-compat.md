@@ -1,14 +1,30 @@
 # Chat to Responses Compatibility Notes
 
-Scope: deepcodex translates Codex Desktop's Responses-shaped traffic to an OpenAI Chat Completions-compatible DeepSeek route. Claude Messages, Gemini native formats, and other non-Chat upstream protocols are out of scope for this layer.
+Scope: Anti-Codex translates Codex Desktop's Responses-shaped traffic into the
+active upstream provider protocol, then maps the provider response back into the
+Responses shape Codex expects.
 
-The translator must remain a compatibility layer. It should preserve Codex runtime semantics, normalize provider differences, and expose diagnostics, but it should not become a separate local control plane.
+The translator is a compatibility layer. It preserves Codex runtime semantics,
+normalizes provider differences, and exposes diagnostics, but it must not become
+a separate local control plane or pretend unsupported hosted features succeeded.
+
+## Supported Provider Shapes
+
+- Antigravity Desktop is the default upstream.
+- OpenAI-compatible third-party providers use Chat Completions-compatible
+  request and response shapes.
+- Anthropic-compatible third-party providers use Messages-compatible request and
+  response shapes.
+- Legacy compatibility names and internal prefixes may remain in code when they
+  are part of persisted state or test fixtures. User-facing text should still
+  say Anti-Codex.
 
 ## Compatibility Rules
 
 ### Response Shell
 
-Chat completions should be wrapped into a full Responses-shaped object, not just `{ output }`.
+Provider completions should be wrapped into a full Responses-shaped object, not
+just `{ output }`.
 
 Preserve or echo when present:
 
@@ -27,11 +43,12 @@ Preserve or echo when present:
 - `usage`
 - `metadata`
 
-Deepcodex may omit fields only when Codex has been tested to accept the reduced shape.
+Anti-Codex may omit fields only when Codex has been tested to accept the reduced
+shape.
 
 ### Message Output
 
-Chat assistant `message.content` maps to:
+Provider assistant text maps to:
 
 ```json
 {
@@ -44,7 +61,7 @@ Chat assistant `message.content` maps to:
 }
 ```
 
-For streaming, emit:
+For streaming, emit the normal Responses event progression:
 
 - `response.created`
 - `response.in_progress`
@@ -58,66 +75,85 @@ For streaming, emit:
 
 ### Tool Calls
 
-Chat `tool_calls[]` maps to Responses `function_call` items.
+OpenAI-compatible `tool_calls[]` map to Responses `function_call` items.
 
-- Allocate stable response item ids separately from Chat call ids.
-- Preserve `call_id` from Chat `tool_call.id`.
-- Stream `function.arguments` through `response.function_call_arguments.delta`.
-- Finish with `response.function_call_arguments.done` and `response.output_item.done`.
+- Allocate stable response item ids separately from provider call ids.
+- Preserve `call_id` from the provider tool-call id when present.
+- Stream arguments through `response.function_call_arguments.delta`.
+- Finish with `response.function_call_arguments.done` and
+  `response.output_item.done`.
 - Do not execute unknown calls inside the protocol bridge.
 
-Deepcodex-specific routing still applies after this mapping:
+Anthropic-compatible `tool_use` blocks map to the same Responses tool-call
+surface. On later provider switches, matching tool results must be rehydrated in
+the target protocol:
 
-- Internal `web_search` / `web_fetch` may be intercepted before returning to Codex.
-- Unknown, MCP, plugin, and custom calls must be preserved for Codex unless explicitly recognized as internal.
+- OpenAI-compatible history needs `assistant.tool_calls` plus paired
+  `role:"tool"` messages.
+- Anthropic-compatible history needs `tool_use` plus paired `tool_result`
+  blocks.
+
+Anti-Codex-specific routing still applies after protocol mapping:
+
+- Internal `web_search` / `web_fetch` may be intercepted only when registered
+  and allowed.
+- Unknown, MCP, plugin, custom, and connector/app-tool calls must be preserved
+  for Codex unless explicitly recognized as internal.
+- Connector/app-tool metadata parity must not be treated as authorization.
 
 ### Reasoning
 
-DeepSeek `reasoning_content` is provider-native reasoning text. It should be returned as a Responses `reasoning` item.
+Provider-native reasoning text may be returned as a Responses `reasoning` item
+when the active route supplies it in a supported field.
 
-Deepcodex must not decode or reinterpret OpenAI private reasoning blobs. If reasoning replay is needed, Deepcodex owns its own opaque replay blob:
+Anti-Codex must not decode or reinterpret OpenAI private reasoning blobs. If
+reasoning replay is needed, the translator owns an opaque replay blob or local
+cache keyed by session/call id.
+
+The current persisted replay prefix is intentionally legacy-compatible:
 
 ```text
 deepcodex.reasoning.hex.v1:<hex>
 ```
 
+- Treat that prefix as an internal compatibility token, not user-facing
+  branding.
 - Never treat OpenAI encrypted reasoning as prompt text.
 - Never try to decode OpenAI private blobs.
-- If reasoning replay is needed, create a deepcodex-owned opaque blob or local cache keyed by session/call id.
-- Map `reasoning.effort` to DeepSeek `thinking`; that is separate from encrypted reasoning replay.
+- Keep provider-native reasoning separate from assistant text deltas.
 
-DeepSeek-specific handling is different from implementing a new Codex runtime:
+Provider-specific handling is allowed when it repairs or preserves what the
+active provider actually returns. Runtime implementation is not allowed inside
+the protocol bridge.
 
-- Provider-specific handling means preserving and repairing what DeepSeek actually returns, such as `reasoning_content`, prompt-cache counters, `tool_calls` deltas, and transient 429/502/503 failures.
-- Runtime implementation means adding missing API surfaces locally, such as Files, Vector Stores, `file_search`, computer calls, MCP execution, conversation CRUD, and response stores.
+Provider-specific handling examples:
 
-Deepcodex should prefer the first category inside the translator. Runtime implementation belongs to a separate project boundary, not to `translator/adaptive-server.mjs`.
+- Reconstruct streamed tool calls by stable index or id, not arrival order
+  alone.
+- Preserve provider-native reasoning fields across tool-call round trips only
+  when the provider requires them for continuity.
+- Map provider cache counters into Responses `usage` diagnostics when known.
+- Classify transient upstream failures separately from protocol translation
+  failures.
 
-Provider-specific rules:
+Runtime implementation examples that stay out of scope:
 
-- Reconstruct streamed `tool_calls` by stable `index`, not by arrival order alone.
-- Treat missing or mismatched DeepSeek `reasoning_content` as a provider-specific recoverable condition when it affects tool-call continuity.
-- Preserve `reasoning_content` across the tool-call round trip when DeepSeek requires it for a follow-up turn.
-- Map DeepSeek cache fields (`prompt_cache_hit_tokens`, `prompt_cache_miss_tokens`, provider aliases) into Responses `usage.input_tokens_details.cached_tokens`.
-- Classify upstream transient failures (`429`, `502`, `503`, connection reset) separately from protocol translation failures. Retries are only safe before any partial tool output has been emitted to Codex.
-- Detect prompt explosion / zero completion / abnormal burn rate for diagnostics, but do not let diagnostics rewrite the response contract.
-
-Translator boundaries:
-
-- Do not turn `apply_patch` into `exec_command`; it weakens Codex freeform tool semantics.
-- Do not execute MCP/computer/file-search tools inside the protocol bridge unless they are explicitly registered as deepcodex internal tools.
-- Do not implement Files or Vector Stores in the translator just to satisfy a surface area checklist.
-- Do not hide unsupported hosted OpenAI features behind fake local success.
+- Files, Vector Stores, and hosted `file_search`.
+- Computer-use execution.
+- MCP execution inside the translator.
+- Conversation CRUD or response-store emulation.
+- Fake success for unsupported hosted OpenAI features.
 
 ### Finish Status
 
-Map Chat `finish_reason` into Responses status:
+Map provider finish reasons into Responses status:
 
-- `stop` / absent successful completion -> `completed`
+- `stop` or absent successful completion -> `completed`
 - length/token limit -> `incomplete` with `incomplete_details`
-- tool calls -> completed response containing function_call output items
+- tool calls -> completed response containing function-call output items
 
-This needs tests because Codex uses the response status to decide whether to continue the turn.
+This needs tests because Codex uses response status to decide whether to
+continue the turn.
 
 ### Streaming
 
@@ -125,27 +161,30 @@ Prefer real upstream streaming when no internal tool loop is active.
 
 - Track text, reasoning, and tool calls independently.
 - Allocate output indices in the order items first appear.
-- Handle tool call deltas before arguments are complete.
+- Handle tool-call deltas before arguments are complete.
 - Emit final `response.completed` with the same output items that were streamed.
-- Keep DeepSeek `reasoning_content` deltas independent from assistant text deltas.
-- When upstream sends partial tool-call chunks, merge by `tool_call.index` and only emit a completed Responses tool item when name and arguments are complete enough for Codex.
+- Merge partial tool-call chunks only when name and arguments are complete enough
+  for Codex to continue safely.
 
-The current deepcodex synthetic SSE is acceptable only as a fallback.
+Synthetic SSE is acceptable only as a bounded fallback.
 
 ## Out of Scope
 
-- Claude Messages -> Responses
-- Gemini native contents -> Responses
-- Anthropic reasoning blocks
-- Browser automation protocol translation
-- Provider-native multimodal formats other than Chat-compatible `image_url`
+- Browser automation protocol translation.
+- Provider-native multimodal formats other than supported chat-compatible image
+  inputs.
+- Granting connector/app-tool access from cached metadata.
+- Mutating the original Codex installation or account state.
+- Using ChatGPT login as a setup route.
 
-These can exist in other projects, but they should not drive deepcodex's Chat -> Responses bridge.
+## Current Gaps
 
-## Current Deepcodex Gaps
-
-- `chatToResponsesFormat` returns a minimal response object; it should preserve more shell fields from the original request.
-- Native streaming needs continued hardening around reasoning and tool-call delta reconstruction.
-- DeepSeek `reasoning_content` is returned as a Responses reasoning item, but multi-turn replay should remain deepcodex-owned and must not pretend to decode OpenAI encrypted reasoning.
-- `context_compaction` as a later input item needs explicit handling in Responses -> Chat; this is adjacent to, but not part of, Chat -> Responses.
-- Unknown tool calls should stay unresolved and pass back to Codex, not be executed by the bridge.
+- Streaming still needs focused coverage around provider-native reasoning and
+  partial tool-call reconstruction.
+- `context_compaction` as a later input item needs explicit handling in
+  Responses -> provider conversion; this is adjacent to, but not part of,
+  provider -> Responses mapping.
+- Unknown tool calls should stay unresolved and pass back to Codex, not be
+  executed by the bridge.
+- Cross-provider history tests must keep checking structured tool history, not
+  just text markers.
