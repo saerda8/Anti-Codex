@@ -656,3 +656,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics MCP counting now reports only real MCP server sections instead of counting tool subtables.
 - Current machine evidence: shared/local MCP names are 3/3 (`antigravity-code-worker`, `deepseek-code-worker`, `node_repl`), shared/local skills are 100/100, and missing shared lists are empty.
 - Scope note: config sync still preserves Anti-Codex safety flags and Windows command normalization; the product guarantee is capability/name parity from shared Codex into Anti-Codex, not unsafe byte-for-byte overwrite.
+
+## 2026-06-22 Third-Party Provider Switch Continuity
+- Completed: the third-party provider verifier now runs a seven-turn local provider scenario. Provider A completes six turns across stale Antigravity model names, profile save, and translator restart; then Provider B is saved, the translator restarts into B, and turn 7 continues from Provider A's last `previous_response_id`.
+- Completed: the Provider B turn proves the request reaches the second provider, uses the second provider model/key, and still includes Provider A's earlier user and assistant history.
+- Completed: the verifier now rejects leaks of the second provider key in saved profile responses, public profile output, route audit output, and report files.
+- Verification: `test-anticodex-third-party-provider.mjs` passed with 7 turns and `switchedProviderWithoutHistoryLoss:true`; focused launcher/upstream regression passed 162/162.
+- Still deferred: OpenAI-to-Anthropic and Anthropic-to-OpenAI cross-protocol continuation can be added as a deeper slow verifier if needed.
