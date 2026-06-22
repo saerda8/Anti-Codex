@@ -1718,6 +1718,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-mcp-skills\.json/);
   assert.match(server, /latest-plugin-capabilities\.json/);
   assert.match(server, /latest-release-gates\.json/);
+  assert.match(server, /latest-cold-relaunch\.json/);
   assert.match(server, /latest-manager-real-buttons\.json/);
   assert.match(server, /latest-refresh-features\.json/);
   assert.match(server, /latest-compaction-resume\.json/);
@@ -1828,6 +1829,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-shortcut-repair\.json/);
   assert.match(collector, /latest-manager-real-buttons\.json/);
   assert.match(collector, /latest-release-gates\.json/);
+  assert.match(collector, /latest-cold-relaunch\.json/);
   assert.match(collector, /latest-third-party-provider\.json/);
   assert.match(collector, /translator-lifecycle\.json/);
   assert.match(collector, /translator-lifecycle\.jsonl/);
@@ -1887,6 +1889,7 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
     "switch-anticodex-account.ps1",
     "test-anticodex-account-proxy-readiness.ps1",
     "test-anticodex-cancellation.ps1",
+    "test-anticodex-cold-relaunch.ps1",
     "test-anticodex-compaction-resume.ps1",
     "test-anticodex-custom-tool-loop.ps1",
     "test-anticodex-installed-overall.ps1",
@@ -1943,6 +1946,7 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(releaseGates, /\.sha256/);
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   assert.match(installedOverall, /latest-release-gates\.json/);
+  assert.match(installedOverall, /latest-cold-relaunch\.json/);
   assert.match(installedOverall, /latest-third-party-provider\.json/);
 });
 
@@ -3150,6 +3154,15 @@ test("Anti-Codex ships a cold relaunch verification script", () => {
   assert.doesNotMatch(relaunch, /TimeoutSec = 90/);
   assert.match(relaunch, /stop-existing-processes/);
   assert.match(relaunch, /wait-health-ready/);
+  assert.match(relaunch, /ReportRoot/);
+  assert.match(relaunch, /New-ReportPaths "cold-relaunch"/);
+  assert.match(relaunch, /latest-\$Name\.json/);
+  assert.match(relaunch, /Write-AntiCodexJsonReport/);
+  assert.match(relaunch, /UTF8Encoding\]::new\(\$false\)/);
+  assert.match(relaunch, /reportName = "cold-relaunch"/);
+  assert.match(relaunch, /report = \[pscustomobject\]/);
+  assert.match(relaunch, /latest = \$reportPaths\.latest/);
+  assert.match(relaunch, /history = \$reportPaths\.history/);
 
   assert.doesNotMatch(relaunch, /Antigravity\.exe/);
   assert.doesNotMatch(relaunch, /chatgpt\.com/);
@@ -3934,6 +3947,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /group: "manager"/);
   assert.match(releaseGates, /group: "soak"/);
   assert.match(releaseGates, /group: "cold"/);
+  assert.match(releaseGates, /latest-cold-relaunch\.json/);
+  assert.match(releaseGates, /requiredForRelease: false/);
+  assert.match(releaseGates, /Manual\/isolated restart evidence/);
+  assert.doesNotMatch(releaseGates, /No latest report is produced/);
   assert.match(releaseGates, /requiredForShort/);
   assert.match(releaseGates, /requiredForRelease/);
   assert.match(releaseGates, /requireSkipRequests/);

@@ -6,10 +6,12 @@ param(
     [int]$StopTimeoutSec = 5,
     [int]$HealthPollTimeoutSec = 0,
     [int]$PollIntervalMs = 500,
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [string]$ProgressPath = $(Join-Path $env:TEMP "anticodex-cold-relaunch-progress.json")
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
 
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
@@ -98,6 +100,15 @@ function Save-Progress {
         $json = $payload | ConvertTo-Json -Depth 8 -Compress
         [System.IO.File]::WriteAllText($ProgressPath, $json, [System.Text.UTF8Encoding]::new($false))
     } catch {}
+}
+
+function New-ReportPaths {
+    param([string]$Name)
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    return [pscustomobject]@{
+        latest = Join-Path $ReportRoot "latest-$Name.json"
+        history = Join-Path $ReportRoot "$stamp-$Name.json"
+    }
 }
 
 $runtimeRootFull = Normalize-Path $RuntimeRoot
@@ -305,10 +316,14 @@ $healthProfile = if ($healthSnapshot -and (Has-Property $healthSnapshot "upstrea
 $finalSnapshot = Get-AntiCodexProcessSnapshot
 $mainSnapshot = @($finalSnapshot.main)
 $translatorSnapshot = @($finalSnapshot.translator)
+$reportPaths = New-ReportPaths "cold-relaunch"
 
 $result = [pscustomobject]@{
+    reportName = "cold-relaunch"
     ok = ($failures.Count -eq 0)
     failures = $failures.ToArray()
+    startedAt = $startedAt.ToString("o")
+    endedAt = $endedAt.ToString("o")
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
     runtimeRoot = $runtimeRootFull
     installRoot = $installRoot
@@ -333,9 +348,15 @@ $result = [pscustomobject]@{
     stopTimeoutSec = $StopTimeoutSec
     healthPollTimeoutSec = $HealthPollTimeoutSec
     stages = $stages.ToArray()
+    report = [pscustomobject]@{
+        latest = $reportPaths.latest
+        history = $reportPaths.history
+    }
 }
 
-$result | ConvertTo-Json -Depth 8 -Compress
+$json = $result | ConvertTo-Json -Depth 8 -Compress
+Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPaths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
+$json
 if ($failures.Count -gt 0) { exit 1 }
 
 

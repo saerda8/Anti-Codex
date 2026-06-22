@@ -425,6 +425,7 @@ function Test-ReportEncoding {
         "latest-plugin-capabilities.json",
         "latest-local-connectors.json",
         "latest-release-gates.json",
+        "latest-cold-relaunch.json",
         "latest-third-party-provider.json",
         "latest-manager-real-buttons.json",
         "latest-refresh-features.json",

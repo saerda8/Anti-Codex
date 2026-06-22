@@ -880,3 +880,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: release gates are grouped as `short`, `no-traffic`, `real-traffic`, `manager`, `soak`, and `cold`, with hash/fresh/ok checks plus semantic checks for `fast+noTraffic`, `skipRequests`, `usedRealTraffic`, and real Manager button evidence.
 - Completed: Manager latest reports and diagnostic bundles now include `latest-release-gates.json`; diagnostics exposes `shortReady`, `releaseReady`, `missingRequired`, and `damagedReports`.
 - Verification: release gate script passed syntax and generated `shortReady:true`, `releaseReady:false` with missing long-gate evidence listed; launcher contract suite passed `92/92`; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with release-gate summary in `20260623-020134.zip`.
+
+## 2026-06-23 Cold Relaunch Latest Report Surface
+- Completed: `test-anticodex-cold-relaunch.ps1` now writes signed latest/history JSON reports as `latest-cold-relaunch.json` plus `.sha256` through the shared atomic report writer.
+- Completed: Manager latest reports, diagnostic bundles, installed overall report-integrity checks, and passive release gates now surface the cold relaunch report when it exists.
+- Completed: cold relaunch remains optional for passive release readiness because it is an isolated restart verifier, not a read-only latest-report check.

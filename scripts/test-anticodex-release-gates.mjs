@@ -53,7 +53,7 @@ const gateDefinitions = [
   { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true },
 
   { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false },
-  { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, note: "No latest report is produced by the cold relaunch verifier yet." },
+  { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, note: "Manual/isolated restart evidence; optional for passive release readiness." },
 ];
 
 function fileHash(filePath) {

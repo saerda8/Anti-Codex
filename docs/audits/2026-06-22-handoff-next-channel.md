@@ -82,6 +82,7 @@ Branch: main
 - Latest verification: local fake-provider verifier refreshed `latest-third-party-provider.json`; launcher contract suite passed `91/91`; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with provider continuity evidence in `20260623-014948.zip`.
 - Added passive release gate summary: `test-anticodex-release-gates.mjs` reads latest reports only and writes `latest-release-gates.json`, grouping evidence into `short`, `no-traffic`, `real-traffic`, `manager`, `soak`, and `cold`.
 - Latest release-gate evidence: `shortReady:true`, `releaseReady:false`; missing release items are explicitly listed instead of inferred from old conversation context. Manager latest reports and diagnostic bundles now include the release-gate summary. Installed diagnostics bundle verification passed with release-gate evidence in `20260623-020134.zip`.
+- Added cold relaunch latest-report surface: the cold relaunch verifier now writes `latest-cold-relaunch.json` and a signed history report; Manager latest reports, diagnostics bundles, installed overall report-integrity checks, and passive release gates can now display it. It remains optional in passive release readiness because generating it restarts the isolated Anti-Codex runtime.
 
 ## Fresh Lessons For Next Channel
 
