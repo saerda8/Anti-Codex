@@ -188,6 +188,7 @@ function Read-JsonSummary {
             missingRequired = @($json.missingRequired | ForEach-Object { [string]$_ })
             missingShort = @($json.missingShort | ForEach-Object { [string]$_ })
             damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
+            releaseGateFailures = @($json.releaseGateFailures)
             upstreamFullUrlAccepted = $json.upstreamFullUrlAccepted
             unauthorizedManagerBlocked = $json.unauthorizedManagerBlocked
             savedWithoutHistoryLoss = $json.savedWithoutHistoryLoss

@@ -939,3 +939,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `summarize-anticodex-report.mjs` now exposes third-party provider late-turn all-history marker coverage booleans and counts for turns 7, 8, and 9.
 - Completed: diagnostic bundle verification now requires those marker coverage fields to be visible and at least `16/18/20`, matching the release-gate semantic contract.
 - Verification: summarizer syntax passed, latest third-party provider summary shows marker counts `16/18/20`, diagnostics PowerShell parser check passed, and focused diagnostics launcher contracts passed.
+
+## 2026-06-23 Manager Release/Provider Visibility
+- Completed: Manager latest reports now includes `latest-third-party-provider.json`, not only optional real-provider reports.
+- Completed: Manager latest-report payload/text now surfaces release gate readiness, missing short/release gates, semantic failure details, and third-party provider continuity marker/tool-pair evidence.
+- Completed: diagnostic collection and verification now preserve `missingShort` plus concise release-gate semantic failure details.
+- Verification: adaptive-server and report-summarizer syntax passed; diagnostics parser passed; full launcher contract suite passed `96/96`; `git diff --check` passed.

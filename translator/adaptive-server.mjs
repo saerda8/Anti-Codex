@@ -1985,6 +1985,26 @@ function latestManagerReportItem(label, fileName) {
     const connectorParity = capabilities?.connectorParity && typeof capabilities.connectorParity === "object" ? capabilities.connectorParity : null;
     const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object" ? capabilities.appToolParity : null;
     const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object" ? capabilities.appToolGetPostParity : null;
+    const releaseGateFailures = Array.isArray(report?.gates)
+        ? report.gates
+            .filter((gate) => {
+                const semanticFailures = Array.isArray(gate?.semanticFailures) ? gate.semanticFailures : [];
+                return gate
+                    && gate.satisfied !== true
+                    && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && gate.error));
+            })
+            .map((gate) => ({
+                id: shortSafeText(gate.id, ""),
+                group: shortSafeText(gate.group, ""),
+                error: shortSafeText(gate.error, ""),
+                semanticFailures: Array.isArray(gate.semanticFailures)
+                    ? gate.semanticFailures.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
+                    : [],
+            }))
+            .slice(0, 12)
+        : [];
+    const multiTurnHistory = report?.multiTurnHistory && typeof report.multiTurnHistory === "object" ? report.multiTurnHistory : null;
+    const toolHistory = multiTurnHistory?.toolHistory && typeof multiTurnHistory.toolHistory === "object" ? multiTurnHistory.toolHistory : null;
     let updatedAt = "";
     if (fullPath && existsSync(fullPath)) {
         try { updatedAt = statSync(fullPath).mtime.toISOString(); } catch {}
@@ -2006,6 +2026,12 @@ function latestManagerReportItem(label, fileName) {
         elapsedMs: Number.isFinite(Number(report?.elapsedMs)) ? Number(report.elapsedMs) : null,
         failureCount: invalid ? 1 : failures.length,
         firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
+        releaseReady: typeof report?.releaseReady === "boolean" ? report.releaseReady : null,
+        shortReady: typeof report?.shortReady === "boolean" ? report.shortReady : null,
+        missingRequired: Array.isArray(report?.missingRequired) ? report.missingRequired.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
+        missingShort: Array.isArray(report?.missingShort) ? report.missingShort.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
+        damagedReports: Array.isArray(report?.damagedReports) ? report.damagedReports.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
+        releaseGateFailures,
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
@@ -2032,6 +2058,16 @@ function latestManagerReportItem(label, fileName) {
                 ? appToolGetPostParity.missingFromGet.length === 0 && appToolGetPostParity.extraFromGet.length === 0
                 : null,
         } : null,
+        providerContinuity: multiTurnHistory ? {
+            turns: Number.isFinite(Number(multiTurnHistory.turns)) ? Number(multiTurnHistory.turns) : null,
+            providerModelUsedForEveryTurn: multiTurnHistory.providerModelUsedForEveryTurn === true,
+            providerSwitchPreservesOpenAiToolPair: toolHistory?.providerSwitchPreservesOpenAiToolPair === true,
+            protocolSwitchPreservesAnthropicToolPair: toolHistory?.protocolSwitchPreservesAnthropicToolPair === true,
+            reverseProtocolSwitchPreservesOpenAiToolPair: toolHistory?.reverseProtocolSwitchPreservesOpenAiToolPair === true,
+            seventhMarkerCount: Number.isFinite(Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount) : null,
+            eighthMarkerCount: Number.isFinite(Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount) : null,
+            ninthMarkerCount: Number.isFinite(Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) : null,
+        } : null,
         updatedAt,
         ageMs,
         stale,
@@ -2053,6 +2089,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("MCP/Skill 检查", "latest-mcp-skills.json"),
         latestManagerReportItem("插件/应用检查", "latest-plugin-capabilities.json"),
         latestManagerReportItem("本地连接器检查", "latest-local-connectors.json"),
+        latestManagerReportItem("第三方连续性", "latest-third-party-provider.json"),
         latestManagerReportItem("Release Gate 汇总", "latest-release-gates.json"),
         latestManagerReportItem("冷启动恢复", "latest-cold-relaunch.json"),
         latestManagerReportItem("Manager 真实按钮", "latest-manager-real-buttons.json"),
@@ -2587,6 +2624,18 @@ function latestReportsSummary(result){
     if(item.exists&&age) lines.push("  \\u66f4\\u65b0\\uff1a"+age);
     if(item.firstFailure) lines.push("  \\u9996\\u4e2a\\u5931\\u8d25\\uff1a"+item.firstFailure);
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
+    if(item.releaseReady!==null&&item.releaseReady!==undefined){
+      lines.push("  Release Gate: short="+(item.shortReady?"true":"false")+" / release="+(item.releaseReady?"true":"false"));
+      if(Array.isArray(item.missingRequired)&&item.missingRequired.length) lines.push("  missingRequired: "+item.missingRequired.slice(0,6).join(", "));
+      if(Array.isArray(item.missingShort)&&item.missingShort.length) lines.push("  missingShort: "+item.missingShort.slice(0,6).join(", "));
+    }
+    if(Array.isArray(item.releaseGateFailures)&&item.releaseGateFailures.length){
+      const gateFailures=item.releaseGateFailures.slice(0,4).map((gate)=>{
+        const details=Array.isArray(gate.semanticFailures)&&gate.semanticFailures.length?gate.semanticFailures.slice(0,4).join(", "):(gate.error||"unsatisfied");
+        return gate.id+":"+details;
+      });
+      lines.push("  semanticFailures: "+gateFailures.join(" | "));
+    }
     if(item.localConnectorEvidence){
       const evidence=item.localConnectorEvidence;
       lines.push("  \\u8fde\\u63a5\\u5668\\u8bc1\\u636e\\uff1aChatGPT URL "+(evidence.chatgptInstallUrlsScrubbed?"\\u5df2\\u6e05\\u7406":"\\u9700\\u5904\\u7406")+" / \\u4e0a\\u6e38\\u8bf7\\u6c42 "+(evidence.upstreamRequestsDuringLocalEndpoints??"\\u672a\\u77e5")+" / allowlist "+(evidence.allowlistedConnectorAccessible?"\\u88ab\\u5f53\\u6210\\u6388\\u6743":"\\u4e0d\\u7b49\\u4e8e\\u6388\\u6743"));
@@ -2597,6 +2646,12 @@ function latestReportsSummary(result){
       const parityClean=evidence.connectorParityClean===true&&evidence.appToolParityClean===true&&evidence.appToolGetPostParityClean===true;
       lines.push("  \\u5e94\\u7528\\u5de5\\u5177\\u8bc1\\u636e\\uff1a\\u672a\\u6388\\u6743\\u5de5\\u5177 "+(evidence.unauthorizedAppToolCount??"\\u672a\\u77e5")+" / \\u65e0 connector_id "+(evidence.unattributedAppToolCount??"\\u672a\\u77e5")+" / parity "+(parityClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406"));
       lines.push("  \\u539f\\u751f Codex \\u5199\\u56de\\uff1a"+(evidence.nativeCodexWriteback?"\\u9700\\u5904\\u7406":"\\u65e0"));
+    }
+    if(item.providerContinuity){
+      const continuity=item.providerContinuity;
+      const markerCounts=[continuity.seventhMarkerCount,continuity.eighthMarkerCount,continuity.ninthMarkerCount].filter((value)=>value!==null&&value!==undefined).join("/");
+      lines.push("  providerContinuity: turns="+(continuity.turns??"unknown")+" / markers="+(markerCounts||"unknown"));
+      lines.push("  toolPairs: openai="+(continuity.providerSwitchPreservesOpenAiToolPair?"true":"false")+" / anthropic="+(continuity.protocolSwitchPreservesAnthropicToolPair?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitchPreservesOpenAiToolPair?"true":"false"));
     }
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);
   }

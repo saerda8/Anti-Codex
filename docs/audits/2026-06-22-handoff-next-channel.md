@@ -149,6 +149,12 @@ Branch: main
 - Report summaries and diagnostic verification now expose late-turn provider marker coverage for turns 7, 8, and 9, including the `16/18/20` marker-count evidence required by release gates.
 - Fresh evidence: summarizer syntax passed, latest third-party provider summary shows marker counts `16/18/20`, diagnostics parser check passed, and focused diagnostics launcher contracts passed.
 
+## 2026-06-23 Manager Release/Provider Visibility Follow-Up
+
+- Manager latest reports now includes the local fake-provider continuity report `latest-third-party-provider.json`.
+- Manager and diagnostic summaries now show release gate readiness, missing short/release gates, required semantic failure details, and provider continuity marker/tool-pair evidence. Optional cold-relaunch absence is not shown as a release failure when `releaseReady:true`.
+- Fresh evidence: adaptive-server and report-summarizer syntax passed, diagnostics parser passed, full launcher contract suite passed `96/96`, and `git diff --check` passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

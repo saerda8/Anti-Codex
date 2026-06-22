@@ -1724,6 +1724,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(server, /unauthorizedAppToolCount/);
   assert.match(server, /appToolGetPostParityClean/);
+  assert.match(server, /releaseGateFailures/);
+  assert.match(server, /semanticFailures/);
+  assert.match(server, /providerContinuity/);
+  assert.match(server, /providerContinuity: turns=/);
   assert.match(server, /latest-codex-responses\.json/);
   assert.match(server, /latest-real-work\.json/);
   assert.match(server, /latest-native-tool-loop\.json/);
@@ -1731,6 +1735,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-mcp-skills\.json/);
   assert.match(server, /latest-plugin-capabilities\.json/);
   assert.match(server, /latest-local-connectors\.json/);
+  assert.match(server, /latest-third-party-provider\.json/);
   assert.match(server, /latest-release-gates\.json/);
   assert.match(server, /latest-cold-relaunch\.json/);
   assert.match(server, /latest-manager-real-buttons\.json/);
@@ -1880,6 +1885,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseReady/);
   assert.match(reportSummarizer, /shortReady/);
   assert.match(reportSummarizer, /missingRequired/);
+  assert.match(reportSummarizer, /missingShort/);
+  assert.match(reportSummarizer, /releaseGateFailures/);
+  assert.match(reportSummarizer, /semanticFailures/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -3914,7 +3922,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates summary/);
   assert.match(diagnostics, /shortReady/);
   assert.match(diagnostics, /missingRequired/);
+  assert.match(diagnostics, /missingShort/);
   assert.match(diagnostics, /damagedReports/);
+  assert.match(diagnostics, /releaseGateFailures/);
   assert.match(diagnostics, /latest-third-party-provider\.json/);
   assert.match(diagnostics, /third-party provider summary/);
   assert.match(diagnostics, /providerContinuity/);

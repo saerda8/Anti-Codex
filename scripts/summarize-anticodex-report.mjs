@@ -65,6 +65,21 @@ const capabilities = report && report.capabilities ? report.capabilities : null;
 const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : null;
 const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : null;
 const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
+const releaseGateFailures = Array.isArray(report?.gates)
+  ? report.gates
+    .filter((gate) => {
+      const semanticFailures = has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [];
+      return gate
+        && gate.satisfied !== true
+        && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && gate.error));
+    })
+    .map((gate) => ({
+      id: asString(gate.id),
+      group: asString(gate.group),
+      error: asString(gate.error),
+      semanticFailures: has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [],
+    }))
+  : [];
 
 function structuralEvidenceClean(evidence) {
   return !!evidence
@@ -108,6 +123,7 @@ const summary = {
   missingRequired: has(report, "missingRequired") ? asStringArray(report.missingRequired) : [],
   missingShort: has(report, "missingShort") ? asStringArray(report.missingShort) : [],
   damagedReports: has(report, "damagedReports") ? asStringArray(report.damagedReports) : [],
+  releaseGateFailures,
   upstreamFullUrlAccepted: boolField(report, "upstreamFullUrlAccepted"),
   unauthorizedManagerBlocked: boolField(report, "unauthorizedManagerBlocked"),
   savedWithoutHistoryLoss: boolField(report, "savedWithoutHistoryLoss"),

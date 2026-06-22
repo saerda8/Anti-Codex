@@ -218,7 +218,9 @@ function Test-DiagnosticBundle {
             if ($releaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates summary shortReady is not true" }
             if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
             if (-not (Has-Property $releaseGatesSummary "missingRequired")) { Add-Failure "release-gates summary missing missingRequired" }
+            if (-not (Has-Property $releaseGatesSummary "missingShort")) { Add-Failure "release-gates summary missing missingShort" }
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
+            if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
         }
         $managerRealButtonsSummary = @($summary | Where-Object { $_.file -eq "latest-manager-real-buttons.json" } | Select-Object -First 1)[0]
         if (-not $managerRealButtonsSummary) {
@@ -304,7 +306,9 @@ function Test-DiagnosticBundle {
                 shortReady = $releaseGatesSummary.shortReady
                 releaseReady = $releaseGatesSummary.releaseReady
                 missingRequired = @($releaseGatesSummary.missingRequired)
+                missingShort = @($releaseGatesSummary.missingShort)
                 damagedReports = @($releaseGatesSummary.damagedReports)
+                releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
             }
         } else { $null }
         thirdPartyProvider = if ($thirdPartyProviderSummary) {
