@@ -54,6 +54,19 @@ const failureCount = has(report, "failures")
   : 0;
 const wait = report && report.wait ? report.wait : null;
 const latestWait = wait && wait.latest ? wait.latest : null;
+const multiTurnHistory = report && report.multiTurnHistory ? report.multiTurnHistory : null;
+const toolHistory = multiTurnHistory && multiTurnHistory.toolHistory ? multiTurnHistory.toolHistory : null;
+const structuralEvidence = toolHistory && toolHistory.structuralEvidence ? toolHistory.structuralEvidence : null;
+const providerSwitch = multiTurnHistory && multiTurnHistory.providerSwitch ? multiTurnHistory.providerSwitch : null;
+const protocolSwitch = multiTurnHistory && multiTurnHistory.protocolSwitch ? multiTurnHistory.protocolSwitch : null;
+const reverseProtocolSwitch = multiTurnHistory && multiTurnHistory.reverseProtocolSwitch ? multiTurnHistory.reverseProtocolSwitch : null;
+
+function structuralEvidenceClean(evidence) {
+  return !!evidence
+    && evidence.pairedByCallId === true
+    && evidence.resultAfterToolCall === true
+    && evidence.protocolShapeClean === true;
+}
 
 const summary = {
   ok: has(report, "ok") ? report.ok : null,
@@ -81,6 +94,55 @@ const summary = {
   attempts: wait && has(wait, "attempts") ? wait.attempts : null,
   repairedCount: has(report, "repairedCount") ? report.repairedCount : null,
   repairedAt: has(report, "repairedAt") ? asString(report.repairedAt) : null,
+  upstreamFullUrlAccepted: boolField(report, "upstreamFullUrlAccepted"),
+  unauthorizedManagerBlocked: boolField(report, "unauthorizedManagerBlocked"),
+  savedWithoutHistoryLoss: boolField(report, "savedWithoutHistoryLoss"),
+  restoredAntigravityWithoutHistoryLoss: boolField(report, "restoredAntigravityWithoutHistoryLoss"),
+  restartedProviderWithoutHistoryLoss: boolField(report, "restartedProviderWithoutHistoryLoss"),
+  switchedProviderWithoutHistoryLoss: boolField(report, "switchedProviderWithoutHistoryLoss"),
+  crossProtocolWithoutHistoryLoss: boolField(report, "crossProtocolWithoutHistoryLoss"),
+  reverseCrossProtocolWithoutHistoryLoss: boolField(report, "reverseCrossProtocolWithoutHistoryLoss"),
+  secretsRedacted: boolField(report, "secretsRedacted"),
+  providerContinuity: multiTurnHistory ? {
+    turns: has(multiTurnHistory, "turns") ? multiTurnHistory.turns : null,
+    toolHistoryTurns: has(multiTurnHistory, "toolHistoryTurns") ? multiTurnHistory.toolHistoryTurns : null,
+    providerModelUsedForEveryTurn: boolField(multiTurnHistory, "providerModelUsedForEveryTurn"),
+    restartPreservesOpenAiToolPair: toolHistory ? boolField(toolHistory, "restartPreservesOpenAiToolPair") : null,
+    providerSwitchPreservesOpenAiToolPair: toolHistory ? boolField(toolHistory, "providerSwitchPreservesOpenAiToolPair") : null,
+    protocolSwitchPreservesAnthropicToolPair: toolHistory ? boolField(toolHistory, "protocolSwitchPreservesAnthropicToolPair") : null,
+    reverseProtocolSwitchPreservesOpenAiToolPair: toolHistory ? boolField(toolHistory, "reverseProtocolSwitchPreservesOpenAiToolPair") : null,
+    structuralEvidenceClean: structuralEvidence ? [
+      structuralEvidence.fifthOpenAiToolEvidence,
+      structuralEvidence.sixthOpenAiToolEvidence,
+      structuralEvidence.seventhOpenAiToolEvidence,
+      structuralEvidence.eighthAnthropicToolEvidence,
+      structuralEvidence.ninthOpenAiToolEvidence,
+    ].every(structuralEvidenceClean) : null,
+    fourthTurnContextIncludesPriorTurns: boolField(multiTurnHistory, "fourthTurnContextIncludesPriorTurns"),
+    fifthAfterSavePreservesHistory: boolField(multiTurnHistory, "fifthAfterSavePreservesHistory"),
+    seventhAfterProviderSwitchPreservesHistory: boolField(multiTurnHistory, "seventhAfterProviderSwitchPreservesHistory"),
+    eighthAfterProtocolSwitchPreservesHistory: boolField(multiTurnHistory, "eighthAfterProtocolSwitchPreservesHistory"),
+    ninthAfterReverseProtocolSwitchPreservesHistory: boolField(multiTurnHistory, "ninthAfterReverseProtocolSwitchPreservesHistory"),
+    providerSwitch: providerSwitch ? {
+      from: asString(providerSwitch.from),
+      to: asString(providerSwitch.to),
+      requestReachedSecondProvider: boolField(providerSwitch, "requestReachedSecondProvider"),
+    } : null,
+    protocolSwitch: protocolSwitch ? {
+      from: asString(protocolSwitch.from),
+      to: asString(protocolSwitch.to),
+      provider: asString(protocolSwitch.provider),
+      model: asString(protocolSwitch.model),
+      requestReachedAnthropicProvider: boolField(protocolSwitch, "requestReachedAnthropicProvider"),
+    } : null,
+    reverseProtocolSwitch: reverseProtocolSwitch ? {
+      from: asString(reverseProtocolSwitch.from),
+      to: asString(reverseProtocolSwitch.to),
+      provider: asString(reverseProtocolSwitch.provider),
+      model: asString(reverseProtocolSwitch.model),
+      requestReachedOpenAiCompatibleProvider: boolField(reverseProtocolSwitch, "requestReachedOpenAiCompatibleProvider"),
+    } : null,
+  } : null,
 };
 
 process.stdout.write(JSON.stringify(summary));

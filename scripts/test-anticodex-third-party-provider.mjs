@@ -132,35 +132,55 @@ function toolCallOutputItems(response) {
 
 function assertOpenAiToolHistory(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const assistantTool = messages.find((message) =>
+  const anthropicToolBlock = messages.find((message) =>
+    Array.isArray(message?.content)
+    && message.content.some((block) => block?.type === "tool_use" || block?.type === "tool_result")
+  );
+  assert.equal(anthropicToolBlock, undefined, "OpenAI-compatible history contains Anthropic tool blocks");
+  const assistantIndex = messages.findIndex((message) =>
     message?.role === "assistant"
     && Array.isArray(message.tool_calls)
     && message.tool_calls.some((toolCall) => toolCall?.id === "call_provider_a_tool_history")
   );
+  const assistantTool = messages[assistantIndex];
   assert.ok(assistantTool, "OpenAI-compatible history is missing assistant.tool_calls");
   const toolCall = assistantTool.tool_calls.find((item) => item?.id === "call_provider_a_tool_history");
   assert.equal(toolCall.function.name, "provider_tool_marker");
   assert.match(toolCall.function.arguments, /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
-  const toolResult = messages.find((message) =>
+  const toolResultIndex = messages.findIndex((message) =>
     message?.role === "tool"
     && message.tool_call_id === "call_provider_a_tool_history"
     && /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/.test(String(message.content || ""))
   );
+  const toolResult = messages[toolResultIndex];
   assert.ok(toolResult, "OpenAI-compatible history is missing paired tool result");
+  assert.ok(toolResultIndex > assistantIndex, "OpenAI-compatible tool result appears before its assistant.tool_calls entry");
+  return {
+    protocol: "openai-compatible",
+    callId: toolCall.id,
+    assistantIndex,
+    toolResultIndex,
+    pairedByCallId: toolResult.tool_call_id === toolCall.id,
+    resultAfterToolCall: toolResultIndex > assistantIndex,
+    protocolShapeClean: true,
+  };
 }
 
 function assertAnthropicToolHistory(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const assistantTool = messages.find((message) =>
+  const openAiToolMessage = messages.find((message) => message?.role === "tool" || Array.isArray(message?.tool_calls));
+  assert.equal(openAiToolMessage, undefined, "Anthropic history contains OpenAI-compatible tool fields");
+  const assistantIndex = messages.findIndex((message) =>
     message?.role === "assistant"
     && Array.isArray(message.content)
     && message.content.some((block) => block?.type === "tool_use" && block.id === "call_provider_a_tool_history")
   );
+  const assistantTool = messages[assistantIndex];
   assert.ok(assistantTool, "Anthropic history is missing tool_use");
   const toolUse = assistantTool.content.find((block) => block?.type === "tool_use" && block.id === "call_provider_a_tool_history");
   assert.equal(toolUse.name, "provider_tool_marker");
   assert.equal(toolUse.input?.marker, "TOOL_HISTORY_MARKER_FROM_PROVIDER_A");
-  const toolResultMessage = messages.find((message) =>
+  const toolResultIndex = messages.findIndex((message) =>
     message?.role === "user"
     && Array.isArray(message.content)
     && message.content.some((block) =>
@@ -169,7 +189,19 @@ function assertAnthropicToolHistory(body) {
       && /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/.test(String(block.content || ""))
     )
   );
+  const toolResultMessage = messages[toolResultIndex];
   assert.ok(toolResultMessage, "Anthropic history is missing paired tool_result");
+  assert.ok(toolResultIndex > assistantIndex, "Anthropic tool_result appears before its tool_use entry");
+  const toolResult = toolResultMessage.content.find((block) => block?.type === "tool_result" && block.tool_use_id === toolUse.id);
+  return {
+    protocol: "anthropic",
+    callId: toolUse.id,
+    assistantIndex,
+    toolResultIndex,
+    pairedByCallId: toolResult.tool_use_id === toolUse.id,
+    resultAfterToolCall: toolResultIndex > assistantIndex,
+    protocolShapeClean: true,
+  };
 }
 
 function createFakeOpenAiProvider({ providerName, model, answerPrefix }) {
@@ -629,7 +661,7 @@ async function main() {
   assert.match(requestText(fifthChat.body), /PROVIDER_HISTORY_TURN_4/);
   assert.match(requestText(fifthChat.body), /provider_tool_marker/);
   assert.match(requestText(fifthChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
-  assertOpenAiToolHistory(fifthChat.body);
+  const fifthOpenAiToolEvidence = assertOpenAiToolHistory(fifthChat.body);
   const responseHistoryAfterSaveContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterSaveContinuation, new RegExp(fifthAfterSave.id));
 
@@ -664,7 +696,7 @@ async function main() {
   assert.match(requestText(sixthChat.body), /PROVIDER_HISTORY_TURN_5/);
   assert.match(requestText(sixthChat.body), /provider_tool_marker/);
   assert.match(requestText(sixthChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
-  assertOpenAiToolHistory(sixthChat.body);
+  const sixthOpenAiToolEvidence = assertOpenAiToolHistory(sixthChat.body);
   const responseHistoryAfterRestartContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterRestartContinuation, new RegExp(sixthAfterRestart.id));
 
@@ -739,7 +771,7 @@ async function main() {
   assert.match(requestText(seventhChat.body), /provider_tool_marker/);
   assert.match(requestText(seventhChat.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(seventhChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
-  assertOpenAiToolHistory(seventhChat.body);
+  const seventhOpenAiToolEvidence = assertOpenAiToolHistory(seventhChat.body);
   const responseHistoryAfterProviderSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterProviderSwitchContinuation, new RegExp(seventhAfterProviderSwitch.id));
 
@@ -815,7 +847,7 @@ async function main() {
   assert.match(requestText(eighthAnthropic.body), /provider_tool_marker/);
   assert.match(requestText(eighthAnthropic.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(eighthAnthropic.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
-  assertAnthropicToolHistory(eighthAnthropic.body);
+  const eighthAnthropicToolEvidence = assertAnthropicToolHistory(eighthAnthropic.body);
   const responseHistoryAfterProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterProtocolSwitchContinuation, new RegExp(eighthAfterProtocolSwitch.id));
 
@@ -889,7 +921,7 @@ async function main() {
   assert.match(requestText(ninthChat.body), /provider_tool_marker/);
   assert.match(requestText(ninthChat.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(ninthChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
-  assertOpenAiToolHistory(ninthChat.body);
+  const ninthOpenAiToolEvidence = assertOpenAiToolHistory(ninthChat.body);
   const responseHistoryAfterReverseProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterReverseProtocolSwitchContinuation, new RegExp(ninthAfterReverseProtocolSwitch.id));
 
@@ -982,6 +1014,13 @@ async function main() {
         providerSwitchPreservesOpenAiToolPair: /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/.test(requestText(seventhChat.body)),
         protocolSwitchPreservesAnthropicToolPair: /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/.test(requestText(eighthAnthropic.body)),
         reverseProtocolSwitchPreservesOpenAiToolPair: /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/.test(requestText(ninthChat.body)),
+        structuralEvidence: {
+          fifthOpenAiToolEvidence,
+          sixthOpenAiToolEvidence,
+          seventhOpenAiToolEvidence,
+          eighthAnthropicToolEvidence,
+          ninthOpenAiToolEvidence,
+        },
       },
       providerSwitch: {
         from: "fake-gpt-4.1",

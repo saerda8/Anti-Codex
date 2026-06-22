@@ -183,6 +183,16 @@ function Read-JsonSummary {
             attempts = $json.attempts
             repairedCount = $json.repairedCount
             repairedAt = $json.repairedAt
+            upstreamFullUrlAccepted = $json.upstreamFullUrlAccepted
+            unauthorizedManagerBlocked = $json.unauthorizedManagerBlocked
+            savedWithoutHistoryLoss = $json.savedWithoutHistoryLoss
+            restoredAntigravityWithoutHistoryLoss = $json.restoredAntigravityWithoutHistoryLoss
+            restartedProviderWithoutHistoryLoss = $json.restartedProviderWithoutHistoryLoss
+            switchedProviderWithoutHistoryLoss = $json.switchedProviderWithoutHistoryLoss
+            crossProtocolWithoutHistoryLoss = $json.crossProtocolWithoutHistoryLoss
+            reverseCrossProtocolWithoutHistoryLoss = $json.reverseCrossProtocolWithoutHistoryLoss
+            secretsRedacted = $json.secretsRedacted
+            providerContinuity = $json.providerContinuity
             integrity = $integrity
             error = if ($integrity.signed -and $integrity.valid -eq $false) { "report hash validation failed: $($integrity.error)" } else { "" }
         }
@@ -271,6 +281,7 @@ $latestReports = @(
     "latest-source-preflight.json",
     "latest-mcp-skills.json",
     "latest-plugin-capabilities.json",
+    "latest-third-party-provider.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",
     "latest-stability-soak.json",

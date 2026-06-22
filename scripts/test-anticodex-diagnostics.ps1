@@ -119,6 +119,7 @@ function Test-DiagnosticBundle {
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
+    $thirdPartyProviderSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         $summary = As-FlatArray (Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json)
         $modelSummary = @($summary | Where-Object { $_.file -eq "latest-model-routing.json" } | Select-Object -First 1)[0]
@@ -150,6 +151,31 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
+        }
+        $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]
+        if ($thirdPartyProviderSummary) {
+            if ($thirdPartyProviderSummary.ok -ne $true) { Add-Failure "third-party provider summary ok=false" }
+            if ($thirdPartyProviderSummary.upstreamFullUrlAccepted -ne $true) { Add-Failure "third-party provider summary missing full URL acceptance" }
+            if ($thirdPartyProviderSummary.unauthorizedManagerBlocked -ne $true) { Add-Failure "third-party provider summary missing unauthorized Manager block" }
+            if ($thirdPartyProviderSummary.savedWithoutHistoryLoss -ne $true) { Add-Failure "third-party provider summary missing save continuity" }
+            if ($thirdPartyProviderSummary.restartedProviderWithoutHistoryLoss -ne $true) { Add-Failure "third-party provider summary missing restart continuity" }
+            if ($thirdPartyProviderSummary.switchedProviderWithoutHistoryLoss -ne $true) { Add-Failure "third-party provider summary missing provider-switch continuity" }
+            if ($thirdPartyProviderSummary.crossProtocolWithoutHistoryLoss -ne $true) { Add-Failure "third-party provider summary missing OpenAI-to-Anthropic continuity" }
+            if ($thirdPartyProviderSummary.reverseCrossProtocolWithoutHistoryLoss -ne $true) { Add-Failure "third-party provider summary missing Anthropic-to-OpenAI continuity" }
+            if ($thirdPartyProviderSummary.secretsRedacted -ne $true) { Add-Failure "third-party provider summary missing secret redaction evidence" }
+            $continuity = $thirdPartyProviderSummary.providerContinuity
+            if (-not $continuity) {
+                Add-Failure "third-party provider summary missing providerContinuity"
+            } else {
+                if ([int]$continuity.turns -lt 9) { Add-Failure "third-party provider summary has fewer than 9 continuity turns" }
+                if ([int]$continuity.toolHistoryTurns -lt 2) { Add-Failure "third-party provider summary has fewer than 2 tool-history turns" }
+                if ($continuity.providerModelUsedForEveryTurn -ne $true) { Add-Failure "third-party provider summary missing provider model evidence" }
+                if ($continuity.providerSwitchPreservesOpenAiToolPair -ne $true) { Add-Failure "third-party provider summary missing OpenAI tool pair after provider switch" }
+                if ($continuity.protocolSwitchPreservesAnthropicToolPair -ne $true) { Add-Failure "third-party provider summary missing Anthropic tool pair after protocol switch" }
+                if ($continuity.reverseProtocolSwitchPreservesOpenAiToolPair -ne $true) { Add-Failure "third-party provider summary missing OpenAI tool pair after reverse protocol switch" }
+                if ($continuity.structuralEvidenceClean -ne $true) { Add-Failure "third-party provider summary missing clean structured tool-pair evidence" }
+                if ($continuity.ninthAfterReverseProtocolSwitchPreservesHistory -ne $true) { Add-Failure "third-party provider summary missing final reverse-switch history evidence" }
+            }
         }
         $managerRealButtonsSummary = @($summary | Where-Object { $_.file -eq "latest-manager-real-buttons.json" } | Select-Object -First 1)[0]
         if (-not $managerRealButtonsSummary) {
@@ -227,6 +253,18 @@ function Test-DiagnosticBundle {
                 reportName = $managerRealButtonsSummary.reportName
                 actions = @($managerRealButtonsSummary.actions)
                 managerButtonOk = $managerRealButtonsSummary.managerButtonOk
+            }
+        } else { $null }
+        thirdPartyProvider = if ($thirdPartyProviderSummary) {
+            [pscustomobject]@{
+                ok = $thirdPartyProviderSummary.ok
+                savedWithoutHistoryLoss = $thirdPartyProviderSummary.savedWithoutHistoryLoss
+                restartedProviderWithoutHistoryLoss = $thirdPartyProviderSummary.restartedProviderWithoutHistoryLoss
+                switchedProviderWithoutHistoryLoss = $thirdPartyProviderSummary.switchedProviderWithoutHistoryLoss
+                crossProtocolWithoutHistoryLoss = $thirdPartyProviderSummary.crossProtocolWithoutHistoryLoss
+                reverseCrossProtocolWithoutHistoryLoss = $thirdPartyProviderSummary.reverseCrossProtocolWithoutHistoryLoss
+                secretsRedacted = $thirdPartyProviderSummary.secretsRedacted
+                continuity = $thirdPartyProviderSummary.providerContinuity
             }
         } else { $null }
     }

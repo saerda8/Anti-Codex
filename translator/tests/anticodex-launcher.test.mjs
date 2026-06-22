@@ -1701,7 +1701,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /test-anticodex-source-preflight\.ps1/);
   assert.match(server, /"-SkipFullRegression"/);
   assert.match(server, /data-action="fastOverallNoTraffic"/);
-  assert.match(server, /fastOverallNoTraffic:[\s\S]{0,260}"-SkipUiStateProbe"/);
+  assert.doesNotMatch(server, /fastOverallNoTraffic:[\s\S]{0,320}"-SkipUiStateProbe"/);
+  assert.match(server, /fastOverallNoTraffic:[\s\S]{0,320}"-SubcheckTimeoutSec",\s*"30"/);
+  assert.match(server, /fastOverallNoTraffic:[\s\S]{0,360}"-FastMaxElapsedMs",\s*"90000"/);
   assert.match(server, /overallNoTraffic:[\s\S]{0,260}"-SkipUiStateProbe"/);
   assert.match(server, /function reportSummaryLines/);
   assert.match(server, /function failureSummaryLine/);
@@ -1824,6 +1826,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-source-preflight\.json/);
   assert.match(collector, /latest-shortcut-repair\.json/);
   assert.match(collector, /latest-manager-real-buttons\.json/);
+  assert.match(collector, /latest-third-party-provider\.json/);
   assert.match(collector, /translator-lifecycle\.json/);
   assert.match(collector, /translator-lifecycle\.jsonl/);
   assert.match(collector, /Remove-OldDiagnosticBundles -Root \$OutputRoot -Keep \$KeepBundles/);
@@ -1848,6 +1851,10 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /JSON\.parse\(readFileSync\(path, "utf8"\)\)/);
   assert.match(reportSummarizer, /managerButtonResults/);
   assert.match(reportSummarizer, /payload\.results/);
+  assert.match(reportSummarizer, /providerContinuity/);
+  assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
+  assert.match(reportSummarizer, /structuralEvidenceClean/);
+  assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.match(collector, /function Update-NoTrafficModelRoutingReport/);
   assert.match(collector, /test-anticodex-model-routing\.ps1/);
@@ -1923,6 +1930,8 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(thirdPartyProvider, /createHash\("sha256"\)/);
   assert.match(thirdPartyProvider, /function writeHashSidecar/);
   assert.match(thirdPartyProvider, /\.sha256/);
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  assert.match(installedOverall, /latest-third-party-provider\.json/);
 });
 
 test("Anti-Codex parsed state and manifest files are written as UTF-8 without BOM", () => {
@@ -3816,6 +3825,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);
+  assert.match(diagnostics, /latest-third-party-provider\.json/);
+  assert.match(diagnostics, /third-party provider summary/);
+  assert.match(diagnostics, /providerContinuity/);
+  assert.match(diagnostics, /crossProtocolWithoutHistoryLoss/);
+  assert.match(diagnostics, /structuralEvidenceClean/);
+  assert.match(diagnostics, /reverseCrossProtocolWithoutHistoryLoss/);
+  assert.match(diagnostics, /secretsRedacted/);
   assert.match(diagnostics, /manager-real-buttons summary/);
   assert.match(diagnostics, /managerButtonOk/);
   assert.match(diagnostics, /managerButtonResults/);
@@ -4166,6 +4182,10 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /providerSwitchPreservesOpenAiToolPair/);
   assert.match(verifier, /protocolSwitchPreservesAnthropicToolPair/);
   assert.match(verifier, /reverseProtocolSwitchPreservesOpenAiToolPair/);
+  assert.match(verifier, /OpenAI-compatible tool result appears before its assistant\.tool_calls entry/);
+  assert.match(verifier, /Anthropic tool_result appears before its tool_use entry/);
+  assert.match(verifier, /protocolShapeClean/);
+  assert.match(verifier, /structuralEvidence/);
   assert.match(verifier, /await stopTranslator\(\)/);
   assert.match(verifier, /turn-6 user asks zeta after provider restart/);
   assert.match(verifier, /restartedProviderWithoutHistoryLoss/);

@@ -1901,7 +1901,7 @@ const MANAGER_ACTIONS = Object.freeze({
     fastOverallNoTraffic: {
         label: "快速检查（不耗流量）",
         script: "test-anticodex-installed-overall.ps1",
-        args: ["-EnsureRunning", "-NoTraffic", "-SkipAccountProxyProbe", "-Fast", "-SkipManagerActionProbe", "-SkipUiStateProbe", "-IncludePostVerification", "false"],
+        args: ["-EnsureRunning", "-NoTraffic", "-SkipAccountProxyProbe", "-Fast", "-SkipManagerActionProbe", "-SubcheckTimeoutSec", "30", "-FastMaxElapsedMs", "90000", "-IncludePostVerification", "false"],
         timeoutMs: 90_000,
     },
     overallNoTraffic: {
