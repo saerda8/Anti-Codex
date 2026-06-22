@@ -32,6 +32,8 @@ const gateDefinitions = [
   { id: "missingHistory", group: "short", file: "latest-missing-history.json", requiredForShort: true, requiredForRelease: true, requireMissingHistorySemantics: true },
   { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
   { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false },
+  { id: "realThirdPartyProviderOptional", group: "optional-real-traffic", file: "latest-real-third-party-provider.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
+  { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
 
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireSkipRequests: true },
@@ -136,6 +138,18 @@ function summarizeGate(definition) {
     }
     if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
       semanticFailures.push("expected_usedRealTraffic_true");
+    }
+    if (definition.requireOptionalRealTrafficSemantics && present) {
+      if (report.skipped === true) {
+        if (report.usedRealTraffic !== false) semanticFailures.push("optional_skipped_used_real_traffic");
+        if (report.behaviorCovered !== false) semanticFailures.push("optional_skipped_behavior_covered");
+        if (report.coverageKind !== "skipped") semanticFailures.push("optional_skipped_coverage_kind");
+        if (report.requestedRealTraffic === true && report.ok === true) semanticFailures.push("optional_requested_real_traffic_uncovered_but_ok");
+      } else {
+        if (report.usedRealTraffic !== true) semanticFailures.push("optional_real_traffic_not_used");
+        if (report.behaviorCovered !== true) semanticFailures.push("optional_real_traffic_behavior_not_covered");
+        if (report.coverageKind !== "real-traffic") semanticFailures.push("optional_real_traffic_coverage_kind");
+      }
     }
     if (definition.group === "no-traffic") {
       if (report.usedRealTraffic === true) semanticFailures.push("expected_no_real_traffic");
@@ -336,6 +350,16 @@ if (args.has("--self-test")) {
       coverageKind: "real-traffic",
     });
 
+    writeFakeLatestReport("latest-real-third-party-provider.json", {
+      ok: true,
+      reportName: "real-third-party-provider",
+      skipped: true,
+      requestedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "skipped",
+      usedRealTraffic: false,
+    });
+
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
       reportName: "third-party-provider",
@@ -376,6 +400,9 @@ if (args.has("--self-test")) {
       "expected_no_real_traffic",
       "expected_behavior_covered",
       "expected_no_real_traffic_coverage_kind",
+    ]);
+    semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
+      "optional_requested_real_traffic_uncovered_but_ok",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_secrets_not_redacted",

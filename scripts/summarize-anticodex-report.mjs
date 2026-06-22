@@ -71,7 +71,7 @@ const releaseGateFailures = Array.isArray(report?.gates)
       const semanticFailures = has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [];
       return gate
         && gate.satisfied !== true
-        && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && gate.error));
+        && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && (gate.error || gate.okField === false)));
     })
     .map((gate) => ({
       id: asString(gate.id),
@@ -112,7 +112,12 @@ const summary = {
   models: has(report, "models") ? asStringArray(report.models) : [],
   skipRequests: boolField(report, "skipRequests"),
   state: has(report, "state") ? asString(report.state) : null,
+  skipped: boolField(report, "skipped"),
+  reason: has(report, "reason") ? asString(report.reason) : null,
+  behaviorCovered: boolField(report, "behaviorCovered"),
+  coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
   usedRealTraffic: boolField(report, "usedRealTraffic"),
+  requestedRealTraffic: boolField(report, "requestedRealTraffic"),
   latestDiagnosis: wait && has(wait, "latestDiagnosis") ? asString(wait.latestDiagnosis) : null,
   latestDiagnosisDetail: latestWait && has(latestWait, "diagnosisDetail") ? asString(latestWait.diagnosisDetail) : null,
   attempts: wait && has(wait, "attempts") ? wait.attempts : null,

@@ -1991,7 +1991,7 @@ function latestManagerReportItem(label, fileName) {
                 const semanticFailures = Array.isArray(gate?.semanticFailures) ? gate.semanticFailures : [];
                 return gate
                     && gate.satisfied !== true
-                    && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && gate.error));
+                    && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && (gate.error || gate.okField === false)));
             })
             .map((gate) => ({
                 id: shortSafeText(gate.id, ""),
@@ -2019,6 +2019,12 @@ function latestManagerReportItem(label, fileName) {
         invalid,
         integrity,
         ok: !invalid && report?.ok === true,
+        skipped: typeof report?.skipped === "boolean" ? report.skipped : null,
+        reason: shortSafeText(report?.reason || "", ""),
+        behaviorCovered: typeof report?.behaviorCovered === "boolean" ? report.behaviorCovered : null,
+        coverageKind: shortSafeText(report?.coverageKind || "", ""),
+        usedRealTraffic: typeof report?.usedRealTraffic === "boolean" ? report.usedRealTraffic : null,
+        requestedRealTraffic: typeof report?.requestedRealTraffic === "boolean" ? report.requestedRealTraffic : null,
         state: invalid ? (integrityInvalid ? "invalid_report_integrity" : "invalid_report") : shortSafeText(report?.state || report?.diagnosis || "", ""),
         missingReason: read.exists ? "" : "not_generated",
         parseError: invalid ? shortSafeText(integrityInvalid ? integrity.error : read.error, "report validation failed") : "",
@@ -2624,6 +2630,9 @@ function latestReportsSummary(result){
     if(item.exists&&age) lines.push("  \\u66f4\\u65b0\\uff1a"+age);
     if(item.firstFailure) lines.push("  \\u9996\\u4e2a\\u5931\\u8d25\\uff1a"+item.firstFailure);
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
+    if(item.skipped===true){
+      lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));
+    }
     if(item.releaseReady!==null&&item.releaseReady!==undefined){
       lines.push("  Release Gate: short="+(item.shortReady?"true":"false")+" / release="+(item.releaseReady?"true":"false"));
       if(Array.isArray(item.missingRequired)&&item.missingRequired.length) lines.push("  missingRequired: "+item.missingRequired.slice(0,6).join(", "));

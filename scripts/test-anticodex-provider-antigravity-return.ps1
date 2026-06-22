@@ -21,12 +21,15 @@ $historyPath = Join-Path $ReportRoot "$stamp-provider-antigravity-return.json"
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 function Write-SkipReport {
-    param([string]$Reason, [bool]$Busy = $false)
+    param([string]$Reason, [bool]$Busy = $false, [bool]$RequestedRealTraffic = $false, [bool]$Ok = $true)
+    $failures = if ($Ok) { [string[]]@() } else { [string[]]@($Reason) }
     $payload = [ordered]@{
-        ok = $true
+        ok = $Ok
         skipped = $true
         busy = $Busy
+        requestedRealTraffic = $RequestedRealTraffic
         reason = $Reason
+        failures = @($failures)
         behaviorCovered = $false
         coverageKind = "skipped"
         usedRealTraffic = $false
@@ -44,8 +47,8 @@ if (-not $AllowRealTraffic) {
 
 $lock = Enter-AntiCodexRealTrafficLock -WaitSeconds 0
 if (-not $lock.acquired) {
-    Write-SkipReport "another Anti-Codex real Antigravity verification is already running" $true
-    exit 0
+    Write-SkipReport "another Anti-Codex real Antigravity verification is already running" $true $true $false
+    exit 1
 }
 
 try {

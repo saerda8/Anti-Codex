@@ -945,3 +945,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager latest-report payload/text now surfaces release gate readiness, missing short/release gates, semantic failure details, and third-party provider continuity marker/tool-pair evidence.
 - Completed: diagnostic collection and verification now preserve `missingShort` plus concise release-gate semantic failure details.
 - Verification: adaptive-server and report-summarizer syntax passed; diagnostics parser passed; full launcher contract suite passed `96/96`; `git diff --check` passed.
+
+## 2026-06-23 Optional Real-Traffic Report Semantics
+- Completed: optional real third-party provider and provider-to-Antigravity reports now distinguish default no-traffic skip (`ok:true`, `requestedRealTraffic:false`) from an explicitly requested real-traffic run that did not execute (`ok:false`, `requestedRealTraffic:true`).
+- Completed: skipped optional reports carry `behaviorCovered:false`, `coverageKind:"skipped"`, `usedRealTraffic:false`, and stable `failures` arrays so dashboards and scripts cannot treat a requested-but-uncovered run as proof.
+- Completed: passive release gates include optional real-traffic report semantics without making those reports release-required; forged `ok:true` requested-but-skipped reports are rejected by `--self-test`.
+- Verification: JS syntax checks passed; PowerShell scriptblock parser checks passed; release-gate `--self-test` passed; strict passive gate summary stayed `shortReady:true`, `releaseReady:true`; focused launcher contracts passed; default skip and opt-in-missing-argument behavior checks passed.

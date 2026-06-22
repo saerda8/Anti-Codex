@@ -1726,6 +1726,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /appToolGetPostParityClean/);
   assert.match(server, /releaseGateFailures/);
   assert.match(server, /semanticFailures/);
+  assert.match(server, /requestedRealTraffic/);
+  assert.match(server, /coverageKind/);
+  assert.match(server, /skipped: /);
   assert.match(server, /providerContinuity/);
   assert.match(server, /providerContinuity: turns=/);
   assert.match(server, /latest-codex-responses\.json/);
@@ -1877,6 +1880,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /node\.exe is required to summarize diagnostic reports/);
   assert.match(collector, /summarize-anticodex-report\.mjs/);
   assert.match(collector, /Invoke-NodeJsonSummary -Path \$Path/);
+  assert.match(collector, /requestedRealTraffic/);
+  assert.match(collector, /coverageKind/);
+  assert.match(collector, /behaviorCovered/);
   const reportSummarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   assert.match(reportSummarizer, /JSON\.parse\(readFileSync\(path, "utf8"\)\)/);
   assert.match(reportSummarizer, /managerButtonResults/);
@@ -1888,6 +1894,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /missingShort/);
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /semanticFailures/);
+  assert.match(reportSummarizer, /requestedRealTraffic/);
+  assert.match(reportSummarizer, /coverageKind/);
+  assert.match(reportSummarizer, /behaviorCovered/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -4024,6 +4033,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /group: "no-traffic"/);
   assert.match(releaseGates, /real-traffic/);
   assert.match(releaseGates, /group: "manager"/);
+  assert.match(releaseGates, /group: "optional-real-traffic"/);
   assert.match(releaseGates, /group: "soak"/);
   assert.match(releaseGates, /group: "cold"/);
   assert.match(releaseGates, /latest-cold-relaunch\.json/);
@@ -4038,6 +4048,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /expected_usedRealTraffic_true/);
   assert.match(releaseGates, /expected_no_real_traffic/);
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
+  assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);
   assert.match(releaseGates, /requireThirdPartyProviderSemantics/);
   assert.match(releaseGates, /third_party_provider_turn_count/);
   assert.match(releaseGates, /third_party_provider_openai_tool_pair_lost/);
@@ -4061,6 +4072,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid third-party provider report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid missing-history report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid local-connector report satisfied the gate/);
@@ -4404,6 +4416,9 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /secondMarkerObserved/);
   assert.match(verifier, /historyContinuationObserved/);
   assert.match(verifier, /behaviorCovered:\s*false/);
+  assert.match(verifier, /requestedRealTraffic/);
+  assert.match(verifier, /failures:\s*ok \? \[\] : \[reason\]/);
+  assert.match(verifier, /requestedRealTraffic:\s*true,\s*ok:\s*false/);
   assert.match(verifier, /usedRealTraffic:\s*true/);
   assert.match(verifier, /secretsRedacted/);
   assert.match(verifier, /latest-real-third-party-provider\.json/);
@@ -4420,6 +4435,10 @@ test("provider history can opt in to one real Antigravity return turn", () => {
 
   assert.match(wrapper, /\[switch\]\$AllowRealTraffic/);
   assert.match(wrapper, /if \(-not \$AllowRealTraffic\)/);
+  assert.match(wrapper, /requestedRealTraffic = \$RequestedRealTraffic/);
+  assert.match(wrapper, /\$failures = if \(\$Ok\) \{ \[string\[\]\]@\(\) \} else \{ \[string\[\]\]@\(\$Reason\) \}/);
+  assert.match(wrapper, /failures = @\(\$failures\)/);
+  assert.match(wrapper, /Write-SkipReport "another Anti-Codex real Antigravity verification is already running" \$true \$true \$false/);
   assert.match(wrapper, /behaviorCovered\s*=\s*\$false/);
   assert.match(wrapper, /Enter-AntiCodexRealTrafficLock/);
   assert.match(wrapper, /--allow-real-antigravity-turn/);

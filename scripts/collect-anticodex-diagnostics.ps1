@@ -177,7 +177,12 @@ function Read-JsonSummary {
             models = @($json.models | ForEach-Object { [string]$_ })
             skipRequests = $json.skipRequests
             state = $json.state
+            skipped = $json.skipped
+            reason = $json.reason
+            behaviorCovered = $json.behaviorCovered
+            coverageKind = $json.coverageKind
             usedRealTraffic = $json.usedRealTraffic
+            requestedRealTraffic = $json.requestedRealTraffic
             latestDiagnosis = $json.latestDiagnosis
             latestDiagnosisDetail = $json.latestDiagnosisDetail
             attempts = $json.attempts

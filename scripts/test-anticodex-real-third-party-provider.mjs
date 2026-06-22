@@ -67,11 +67,13 @@ function writeReport(payload) {
   return { latest, history };
 }
 
-function completeSkipped(reason) {
+function completeSkipped(reason, { requestedRealTraffic = false, ok = true } = {}) {
   return {
-    ok: true,
+    ok,
     skipped: true,
+    requestedRealTraffic,
     reason,
+    failures: ok ? [] : [reason],
     behaviorCovered: false,
     coverageKind: "skipped",
     usedRealTraffic: false,
@@ -278,7 +280,7 @@ try {
     const model = String(args.get("--model") || "").trim();
     const apiKeyEnv = String(args.get("--api-key-env") || "").trim();
     if (!protocol || !baseUrl || !model || !apiKeyEnv) {
-      result = completeSkipped("real provider protocol, base URL, model, and API key environment variable are required");
+      result = completeSkipped("real provider protocol, base URL, model, and API key environment variable are required", { requestedRealTraffic: true, ok: false });
     } else if (!["openai-compatible", "anthropic"].includes(protocol)) {
       throw new Error("protocol must be openai-compatible or anthropic");
     } else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv)) {
@@ -286,7 +288,7 @@ try {
     } else {
       apiKey = String(process.env[apiKeyEnv] || "");
       if (!apiKey) {
-        result = completeSkipped(`API key environment variable ${apiKeyEnv} is not set`);
+        result = completeSkipped(`API key environment variable ${apiKeyEnv} is not set`, { requestedRealTraffic: true, ok: false });
       } else {
         result = await runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv });
       }

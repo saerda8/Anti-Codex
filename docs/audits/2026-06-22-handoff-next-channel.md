@@ -155,6 +155,12 @@ Branch: main
 - Manager and diagnostic summaries now show release gate readiness, missing short/release gates, required semantic failure details, and provider continuity marker/tool-pair evidence. Optional cold-relaunch absence is not shown as a release failure when `releaseReady:true`.
 - Fresh evidence: adaptive-server and report-summarizer syntax passed, diagnostics parser passed, full launcher contract suite passed `96/96`, and `git diff --check` passed.
 
+## 2026-06-23 Optional Real-Traffic Semantics Follow-Up
+
+- Optional real-provider and provider-to-Antigravity reports now separate no-traffic default skips from requested-but-uncovered real-traffic attempts.
+- Passive release gates validate optional real-traffic report semantics when those reports exist, but they remain outside release-required readiness.
+- Fresh evidence: syntax/parser checks passed, release-gate self-test rejects forged requested-but-skipped optional reports, strict passive gates remain `shortReady:true` / `releaseReady:true`, and focused launcher plus skip-behavior checks passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.
