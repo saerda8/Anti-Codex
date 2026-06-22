@@ -1994,6 +1994,7 @@ function latestManagerReportItem(label, fileName) {
     const compatibilityTools = report?.compatibilityTools && typeof report.compatibilityTools === "object" ? report.compatibilityTools : null;
     const nativeToolCapability = report?.nativeToolCapability && typeof report.nativeToolCapability === "object" ? report.nativeToolCapability : null;
     const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
+    const thinkingModels = Array.isArray(report?.models) && (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? report.models : [];
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2049,6 +2050,15 @@ function latestManagerReportItem(label, fileName) {
         releaseGateFailures,
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
+        modelThinkingEvidence: (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? {
+            expectedModelCount: Number.isFinite(Number(report?.expectedModelCount)) ? Number(report.expectedModelCount) : null,
+            actualModelCount: Number.isFinite(Number(report?.actualModelCount)) ? Number(report.actualModelCount) : null,
+            modelCount: thinkingModels.length,
+            supportsThinkingCount: thinkingModels.filter((item) => item?.supports_thinking === true).length,
+            missingBudgetCount: thinkingModels.filter((item) => !Number.isFinite(Number(item?.thinking_budget)) || !Number.isFinite(Number(item?.min_thinking_budget)) || Number(item.thinking_budget) < Number(item.min_thinking_budget)).length,
+            missingReasoningLevelCount: thinkingModels.filter((item) => !item?.reasoning_level).length,
+            reasoningLevels: Array.from(new Set(thinkingModels.map((item) => item?.reasoning_level).filter(Boolean).map(String))).sort().slice(0, 8),
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -2752,6 +2762,11 @@ function latestReportsSummary(result){
       const evidence=item.modelRoutingEvidence;
       lines.push("  modelRouting: mode="+(evidence.mode||"unknown")+" / skipRequests="+(item.skipRequests?"true":"false")+" / results="+(evidence.skippedRequestCount??0)+"/"+(evidence.resultCount??0)+" / failed="+(evidence.failedResultCount??0));
       if(evidence.providerProtocol||evidence.providerModel||evidence.toolBridgeMode) lines.push("  modelRouting route: protocol="+(evidence.providerProtocol||"native")+" / providerModel="+(evidence.providerModel||"none")+" / toolBridge="+(evidence.toolBridgeMode||"unknown"));
+    }
+    if(item.modelThinkingEvidence){
+      const evidence=item.modelThinkingEvidence;
+      lines.push("  modelThinking: models="+(evidence.actualModelCount??"unknown")+"/"+(evidence.expectedModelCount??"unknown")+" / thinking="+(evidence.supportsThinkingCount??0)+"/"+(evidence.modelCount??0)+" / budgetMissing="+(evidence.missingBudgetCount??0));
+      if(Array.isArray(evidence.reasoningLevels)&&evidence.reasoningLevels.length) lines.push("  modelThinking levels: "+evidence.reasoningLevels.join(", "));
     }
     if(item.toolBridgeEvidence){
       const evidence=item.toolBridgeEvidence;

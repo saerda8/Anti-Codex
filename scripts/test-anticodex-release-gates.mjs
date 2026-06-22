@@ -40,7 +40,7 @@ const gateDefinitions = [
   { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true, requireToolBridgeSemantics: true },
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true },
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true },
-  { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true },
+  { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true, requireModelThinkingSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true },
@@ -255,6 +255,20 @@ function summarizeGate(definition) {
       if (nativeToolCapability.permissionPromptsDisabled !== true) semanticFailures.push("tool_bridge_permission_prompts_enabled");
       if (Number(nativeToolCapability.disabledToolCount || 0) < 1) semanticFailures.push("tool_bridge_disabled_tool_count");
       if (nativeToolCapability.codexToolBridge !== "native-mcp-same-cascade-with-prompt-fallback") semanticFailures.push("tool_bridge_codex_bridge");
+    }
+    if (definition.requireModelThinkingSemantics) {
+      const models = Array.isArray(report.models) ? report.models : [];
+      const expected = Number(report.expectedModelCount || 0);
+      const actual = Number(report.actualModelCount || 0);
+      const ids = models.map((item) => item?.id).filter(Boolean);
+      if (expected < 1) semanticFailures.push("model_thinking_expected_count");
+      if (actual !== expected) semanticFailures.push("model_thinking_actual_count");
+      if (models.length !== actual) semanticFailures.push("model_thinking_models_length");
+      if (new Set(ids).size !== ids.length || ids.length !== models.length) semanticFailures.push("model_thinking_unique_ids");
+      if (models.some((item) => !item?.display_name)) semanticFailures.push("model_thinking_display_name");
+      if (models.some((item) => !item?.reasoning_level)) semanticFailures.push("model_thinking_reasoning_level");
+      if (models.some((item) => item?.supports_thinking !== true)) semanticFailures.push("model_thinking_supports_thinking");
+      if (models.some((item) => !Number.isFinite(Number(item?.thinking_budget)) || !Number.isFinite(Number(item?.min_thinking_budget)) || Number(item.thinking_budget) < Number(item.min_thinking_budget))) semanticFailures.push("model_thinking_budget");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -485,6 +499,16 @@ if (args.has("--self-test")) {
       ],
     });
 
+    writeFakeLatestReport("latest-model-thinking.json", {
+      ok: true,
+      expectedModelCount: 2,
+      actualModelCount: 1,
+      models: [
+        { id: "fake", display_name: "", reasoning_level: "", supports_thinking: false, thinking_budget: 1, min_thinking_budget: 32 },
+        { id: "fake", display_name: "duplicate", reasoning_level: "low", supports_thinking: true, thinking_budget: 16, min_thinking_budget: 32 },
+      ],
+    });
+
     writeFakeLatestReport("latest-source-preflight.json", {
       ok: true,
       reportName: "wrong-source-preflight",
@@ -565,6 +589,15 @@ if (args.has("--self-test")) {
       "model_routing_result_not_ok",
       "model_routing_result_not_skipped",
       "model_routing_result_error",
+    ]);
+    semanticFailures.modelThinking = assertSemanticFailures("modelThinking", "self-test failed: semantically invalid model-thinking report satisfied the gate", [
+      "model_thinking_actual_count",
+      "model_thinking_models_length",
+      "model_thinking_unique_ids",
+      "model_thinking_display_name",
+      "model_thinking_reasoning_level",
+      "model_thinking_supports_thinking",
+      "model_thinking_budget",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",

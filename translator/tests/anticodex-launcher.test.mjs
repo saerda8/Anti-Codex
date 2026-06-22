@@ -1917,6 +1917,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /behaviorCovered/);
   assert.match(reportSummarizer, /upstreamProfileStorageOk/);
   assert.match(reportSummarizer, /modelRoutingEvidence/);
+  assert.match(reportSummarizer, /modelThinkingEvidence/);
+  assert.match(reportSummarizer, /supportsThinkingCount/);
   assert.match(reportSummarizer, /toolBridgeEvidence/);
   assert.match(reportSummarizer, /nativeMcpApprovalProtocolVerified/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
@@ -2077,6 +2079,33 @@ test("report summarizer surfaces model routing no-traffic evidence", () => {
     assert.equal(summary.modelRoutingEvidence.skippedRequestCount, 1);
     assert.equal(summary.modelRoutingEvidence.failedResultCount, 1);
     assert.equal(summary.modelRoutingEvidence.resultErrorCount, 1);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces model thinking no-traffic evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-model-thinking-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-model-thinking.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      expectedModelCount: 2,
+      actualModelCount: 2,
+      models: [
+        { id: "a", display_name: "A", reasoning_level: "low", supports_thinking: true, thinking_budget: 4000, min_thinking_budget: 32 },
+        { id: "b", display_name: "B", reasoning_level: "high", supports_thinking: true, thinking_budget: 10000, min_thinking_budget: 128 },
+      ],
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.modelThinkingEvidence.expectedModelCount, 2);
+    assert.equal(summary.modelThinkingEvidence.actualModelCount, 2);
+    assert.equal(summary.modelThinkingEvidence.modelCount, 2);
+    assert.equal(summary.modelThinkingEvidence.supportsThinkingCount, 2);
+    assert.equal(summary.modelThinkingEvidence.missingBudgetCount, 0);
+    assert.deepEqual(summary.modelThinkingEvidence.reasoningLevels, ["high", "low"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4224,6 +4253,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /latest-model-routing\.json/);
   assert.match(diagnostics, /modelRoutingEvidence/);
   assert.match(diagnostics, /diagnostic model-routing summary missing modelRoutingEvidence/);
+  assert.match(diagnostics, /modelThinkingEvidence/);
+  assert.match(diagnostics, /diagnostic model-thinking summary missing modelThinkingEvidence/);
+  assert.match(diagnostics, /diagnostic model-thinking summary has missing budgets/);
   assert.match(diagnostics, /toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing same-Cascade resume proof/);
@@ -4363,6 +4395,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireModelRoutingSemantics/);
   assert.match(releaseGates, /model_routing_skip_requests_not_true/);
   assert.match(releaseGates, /model_routing_result_not_skipped/);
+  assert.match(releaseGates, /requireModelThinkingSemantics/);
+  assert.match(releaseGates, /model_thinking_actual_count/);
+  assert.match(releaseGates, /model_thinking_supports_thinking/);
+  assert.match(releaseGates, /model_thinking_budget/);
   assert.match(releaseGates, /requireToolBridgeSemantics/);
   assert.match(releaseGates, /tool_bridge_mode_not_native_mcp_same_cascade/);
   assert.match(releaseGates, /tool_bridge_permission_mode/);
@@ -4404,6 +4440,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid model-routing report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);
   assert.match(releaseGates, /tool_bridge_codex_bridge/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);

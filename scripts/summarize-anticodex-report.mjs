@@ -72,6 +72,7 @@ const toolBridge = report && report.toolBridge ? report.toolBridge : null;
 const compatibilityTools = report && report.compatibilityTools ? report.compatibilityTools : null;
 const nativeToolCapability = report && report.nativeToolCapability ? report.nativeToolCapability : null;
 const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
+const thinkingModels = Array.isArray(report?.models) && (has(report, "expectedModelCount") || has(report, "actualModelCount")) ? report.models : [];
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -118,6 +119,15 @@ const summary = {
   baseUrl: has(report, "baseUrl") ? report.baseUrl : null,
   modelCount: has(report, "modelCount") ? report.modelCount : null,
   models: has(report, "models") ? asStringArray(report.models) : [],
+  modelThinkingEvidence: has(report, "expectedModelCount") || has(report, "actualModelCount") ? {
+    expectedModelCount: has(report, "expectedModelCount") ? report.expectedModelCount : null,
+    actualModelCount: has(report, "actualModelCount") ? report.actualModelCount : null,
+    modelCount: thinkingModels.length,
+    supportsThinkingCount: thinkingModels.filter((item) => item && item.supports_thinking === true).length,
+    missingBudgetCount: thinkingModels.filter((item) => !item || !Number.isFinite(Number(item.thinking_budget)) || !Number.isFinite(Number(item.min_thinking_budget)) || Number(item.thinking_budget) < Number(item.min_thinking_budget)).length,
+    missingReasoningLevelCount: thinkingModels.filter((item) => !item || !item.reasoning_level).length,
+    reasoningLevels: Array.from(new Set(thinkingModels.map((item) => item?.reasoning_level).filter(Boolean).map(String))).sort(),
+  } : null,
   skipRequests: boolField(report, "skipRequests"),
   modelRoutingEvidence: has(report, "skipRequests") || modelRoutingResults.length ? {
     mode: asString(report.mode),

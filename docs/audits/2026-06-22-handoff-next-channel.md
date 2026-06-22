@@ -191,6 +191,12 @@ Branch: main
 - Passive release gates now reject forged `ok:true` tool-bridge reports unless they prove the native MCP same-Cascade contract.
 - Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with tool-bridge semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, and focused launcher/summarizer tests passed.
 
+## 2026-06-23 Model-Thinking No-Traffic Follow-Up
+
+- Model-thinking latest-report evidence now surfaces expected/actual model counts, thinking-capable count, missing-budget count, missing-reasoning-level count, and reasoning-level set.
+- Passive release gates now reject forged `ok:true` model-thinking reports unless they prove count consistency, unique IDs, display names, reasoning levels, thinking support, and valid thinking budgets.
+- Fresh evidence: JS syntax checks passed, PowerShell parser checks passed, release-gate self-test passed with model-thinking semantic failures, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, source diagnostics verification passed, and latest summary shows `8/8` thinking models with no missing budgets.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

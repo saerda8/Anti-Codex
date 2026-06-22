@@ -116,6 +116,7 @@ function Test-DiagnosticBundle {
     }
 
     $modelSummary = $null
+    $modelThinkingSummary = $null
     $toolBridgeSummary = $null
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
@@ -141,6 +142,23 @@ function Test-DiagnosticBundle {
                 if ([int]$modelEvidence.skippedRequestCount -ne [int]$modelEvidence.resultCount) { Add-Failure "diagnostic model-routing summary did not preserve skipped per-model results" }
                 if ([int]$modelEvidence.failedResultCount -ne 0) { Add-Failure "diagnostic model-routing summary reports failed results" }
                 if ([int]$modelEvidence.resultErrorCount -ne 0) { Add-Failure "diagnostic model-routing summary reports result errors" }
+            }
+        }
+        $modelThinkingSummary = @($summary | Where-Object { $_.file -eq "latest-model-thinking.json" } | Select-Object -First 1)[0]
+        if ($antigravityReportsRequired -and -not $modelThinkingSummary) {
+            Add-Failure "diagnostic reports summary missing latest-model-thinking.json"
+        } elseif ($antigravityReportsRequired -and $modelThinkingSummary) {
+            $thinkingEvidence = $modelThinkingSummary.modelThinkingEvidence
+            if (-not $thinkingEvidence) {
+                Add-Failure "diagnostic model-thinking summary missing modelThinkingEvidence"
+            } else {
+                if ([int]$thinkingEvidence.expectedModelCount -lt 1) { Add-Failure "diagnostic model-thinking summary missing expected model count" }
+                if ([int]$thinkingEvidence.actualModelCount -ne [int]$thinkingEvidence.expectedModelCount) { Add-Failure "diagnostic model-thinking summary model counts differ" }
+                if ([int]$thinkingEvidence.modelCount -ne [int]$thinkingEvidence.actualModelCount) { Add-Failure "diagnostic model-thinking summary missing model entries" }
+                if ([int]$thinkingEvidence.supportsThinkingCount -ne [int]$thinkingEvidence.modelCount) { Add-Failure "diagnostic model-thinking summary has non-thinking models" }
+                if ([int]$thinkingEvidence.missingBudgetCount -ne 0) { Add-Failure "diagnostic model-thinking summary has missing budgets" }
+                if ([int]$thinkingEvidence.missingReasoningLevelCount -ne 0) { Add-Failure "diagnostic model-thinking summary has missing reasoning levels" }
+                if (@($thinkingEvidence.reasoningLevels).Count -lt 1) { Add-Failure "diagnostic model-thinking summary missing reasoning levels" }
             }
         }
         $toolBridgeSummary = @($summary | Where-Object { $_.file -eq "latest-tool-bridge-mode.json" } | Select-Object -First 1)[0]
@@ -368,6 +386,12 @@ function Test-DiagnosticBundle {
                 skipRequests = $modelSummary.skipRequests
                 models = @($modelSummary.models)
                 evidence = $modelSummary.modelRoutingEvidence
+            }
+        } else { $null }
+        modelThinkingSummary = if ($modelThinkingSummary) {
+            [pscustomobject]@{
+                ok = $modelThinkingSummary.ok
+                evidence = $modelThinkingSummary.modelThinkingEvidence
             }
         } else { $null }
         toolBridgeSummary = if ($toolBridgeSummary) {

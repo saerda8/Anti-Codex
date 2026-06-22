@@ -176,6 +176,7 @@ function Read-JsonSummary {
             baseUrl = $json.baseUrl
             modelCount = $json.modelCount
             models = @($json.models | ForEach-Object { [string]$_ })
+            modelThinkingEvidence = $json.modelThinkingEvidence
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
             toolBridgeEvidence = $json.toolBridgeEvidence
