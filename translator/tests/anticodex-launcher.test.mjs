@@ -4901,6 +4901,7 @@ test("third-party provider verifier preserves history across save and restart", 
 
   assert.match(verifier, /turn-5 user asks epsilon after provider save/);
   assert.match(verifier, /fifthAfterSavePreservesHistory/);
+  assert.match(verifier, /fifthOpenAiToolEvidence/);
   assert.match(verifier, /turn-tool-call user asks provider tool marker/);
   assert.match(verifier, /provider_tool_marker/);
   assert.match(verifier, /call_provider_a_tool_history/);
@@ -4922,6 +4923,8 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /turn-6 user asks zeta after provider restart/);
   assert.match(verifier, /restartedProviderWithoutHistoryLoss/);
   assert.match(verifier, /restartContinuationPreviousResponseId/);
+  assert.match(verifier, /sixthOpenAiToolEvidence/);
+  assert.match(verifier, /restartPreservesOpenAiToolPair/);
   assert.match(verifier, /turn-7 user asks eta after provider switch/);
   assert.match(verifier, /switchedProviderWithoutHistoryLoss/);
   assert.match(verifier, /providerSwitchContinuationPreviousResponseId/);
@@ -4948,6 +4951,20 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /third-party provider report leaked an API key/);
   assert.match(verifier, /responseHistoryBeforeAuthFailure/);
   assert.match(verifier, /assert\.equal\(readFileSync\(responseHistoryPath, "utf8"\), responseHistoryBeforeAuthFailure\)/);
+});
+
+test("release gates require structured provider save and restart continuity evidence", () => {
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+
+  assert.match(releaseGates, /third_party_provider_save_structural_tool_evidence/);
+  assert.match(releaseGates, /third_party_provider_restart_structural_tool_evidence/);
+  assert.match(releaseGates, /third_party_provider_save_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_restart_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_save_marker_coverage/);
+  assert.match(releaseGates, /third_party_provider_restart_marker_coverage/);
+  assert.match(releaseGates, /restartPreservesOpenAiToolPair/);
+  assert.match(releaseGates, /fifthOpenAiToolEvidence/);
+  assert.match(releaseGates, /sixthOpenAiToolEvidence/);
 });
 
 test("real third-party provider verifier is explicit isolated and secret-safe", () => {

@@ -145,6 +145,8 @@ function summarizeGate(definition) {
         "managerAction",
         "mcpSkills",
         "pluginCapabilities",
+        "realThirdPartyProviderOptional",
+        "providerAntigravityReturnOptional",
         "realMiniTool",
         "realWork",
       ]);
@@ -368,9 +370,16 @@ function summarizeGate(definition) {
       if (toolHistory.providerSwitchPreservesOpenAiToolPair !== true) semanticFailures.push("third_party_provider_openai_tool_pair_lost");
       if (toolHistory.protocolSwitchPreservesAnthropicToolPair !== true) semanticFailures.push("third_party_provider_anthropic_tool_pair_lost");
       if (toolHistory.reverseProtocolSwitchPreservesOpenAiToolPair !== true) semanticFailures.push("third_party_provider_reverse_openai_tool_pair_lost");
+      if (toolHistory.restartPreservesOpenAiToolPair !== true) semanticFailures.push("third_party_provider_restart_openai_tool_pair_lost");
       if (!validToolEvidence(structuralEvidence.seventhOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_openai_structural_tool_evidence");
       if (!validToolEvidence(structuralEvidence.eighthAnthropicToolEvidence, "anthropic")) semanticFailures.push("third_party_provider_anthropic_structural_tool_evidence");
       if (!validToolEvidence(structuralEvidence.ninthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_reverse_openai_structural_tool_evidence");
+      if (!validToolEvidence(structuralEvidence.fifthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_save_structural_tool_evidence");
+      if (!validToolEvidence(structuralEvidence.sixthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_restart_structural_tool_evidence");
+      if (!history.savedContinuationPreviousResponseId) semanticFailures.push("third_party_provider_save_previous_response_id_missing");
+      if (!history.restartContinuationPreviousResponseId) semanticFailures.push("third_party_provider_restart_previous_response_id_missing");
+      if (history.fifthAfterSavePreservesHistory !== true) semanticFailures.push("third_party_provider_save_marker_coverage");
+      if (history.seventhAfterProviderSwitchPreservesHistory !== true) semanticFailures.push("third_party_provider_restart_marker_coverage");
       if (history.seventhAfterProviderSwitchPreservesAllHistoryMarkers !== true || Number(history.seventhAfterProviderSwitchAllHistoryMarkerCount) < 16) semanticFailures.push("third_party_provider_turn7_marker_coverage");
       if (history.eighthAfterProtocolSwitchPreservesAllHistoryMarkers !== true || Number(history.eighthAfterProtocolSwitchAllHistoryMarkerCount) < 18) semanticFailures.push("third_party_provider_turn8_marker_coverage");
       if (history.ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers !== true || Number(history.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) < 20) semanticFailures.push("third_party_provider_turn9_marker_coverage");
@@ -715,12 +724,19 @@ if (args.has("--self-test")) {
           providerSwitchPreservesOpenAiToolPair: false,
           protocolSwitchPreservesAnthropicToolPair: false,
           reverseProtocolSwitchPreservesOpenAiToolPair: false,
+          restartPreservesOpenAiToolPair: false,
           structuralEvidence: {
+            fifthOpenAiToolEvidence: { protocol: "anthropic", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
+            sixthOpenAiToolEvidence: { protocol: "anthropic", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
             seventhOpenAiToolEvidence: { protocol: "openai-compatible", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
             eighthAnthropicToolEvidence: { protocol: "openai-compatible", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
             ninthOpenAiToolEvidence: { protocol: "anthropic", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
           },
         },
+        savedContinuationPreviousResponseId: "",
+        restartContinuationPreviousResponseId: "",
+        fifthAfterSavePreservesHistory: false,
+        seventhAfterProviderSwitchPreservesHistory: false,
         seventhAfterProviderSwitchPreservesAllHistoryMarkers: false,
         seventhAfterProviderSwitchAllHistoryMarkerCount: 1,
         eighthAfterProtocolSwitchPreservesAllHistoryMarkers: false,
@@ -903,6 +919,13 @@ if (args.has("--self-test")) {
       "third_party_provider_openai_tool_pair_lost",
       "third_party_provider_anthropic_tool_pair_lost",
       "third_party_provider_reverse_openai_tool_pair_lost",
+      "third_party_provider_restart_openai_tool_pair_lost",
+      "third_party_provider_save_structural_tool_evidence",
+      "third_party_provider_restart_structural_tool_evidence",
+      "third_party_provider_save_previous_response_id_missing",
+      "third_party_provider_restart_previous_response_id_missing",
+      "third_party_provider_save_marker_coverage",
+      "third_party_provider_restart_marker_coverage",
       "third_party_provider_turn7_marker_coverage",
       "third_party_provider_turn8_marker_coverage",
       "third_party_provider_turn9_marker_coverage",

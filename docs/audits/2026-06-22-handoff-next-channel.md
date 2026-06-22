@@ -218,6 +218,13 @@ Branch: main
 - Full installed-overall now treats the long plugin/application Manager click as covered by the standalone plugin capability report, avoiding local bridge stalls and later UI-idle false failures without granting connector authorization.
 - Fresh evidence: full installed-overall passed with `usedRealTraffic:false` and `coverageKind:"installed-no-traffic"`; source diagnostics passed; focused launcher/summarizer/diagnostics tests passed; strict passive gates report `shortReady:true` / `releaseReady:true`, no missing required gates, and no damaged reports.
 
+## 2026-06-23 Provider Continuity Gate Follow-Up
+
+- Third-party provider passive gates now require structured save/restart continuity evidence: save and restart OpenAI-compatible tool evidence, restart tool-pair preservation, save/restart `previous_response_id`, and marker preservation after save/restart.
+- Optional real-provider and provider-to-Antigravity scripts now generate explicit default skip reports when real traffic is not requested. These reports state `requestedRealTraffic:false`, `usedRealTraffic:false`, `behaviorCovered:false`, and `coverageKind:"skipped"`.
+- Boundary to preserve: optional real-provider is still a two-turn real-traffic sanity check. The full nine-turn provider switch/protocol switch/restart matrix remains the local fake-provider release gate unless real external traffic is explicitly requested and separately expanded.
+- Fresh evidence: release-gate `--self-test` rejects forged provider reports missing save/restart structure; focused launcher tests passed; default optional skip reports exist for real-provider and provider-to-Antigravity; strict passive gates report `shortReady:true` / `releaseReady:true`, no missing required gates, and no optional semantic failures.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

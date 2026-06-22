@@ -25,10 +25,12 @@ function Write-SkipReport {
     $failures = if ($Ok) { [string[]]@() } else { [string[]]@($Reason) }
     $payload = [ordered]@{
         ok = $Ok
+        reportName = "provider-antigravity-return"
         skipped = $true
         busy = $Busy
         requestedRealTraffic = $RequestedRealTraffic
         reason = $Reason
+        coveredBy = "test-anticodex-provider-antigravity-return.ps1"
         failures = @($failures)
         behaviorCovered = $false
         coverageKind = "skipped"

@@ -1095,6 +1095,26 @@ $checks.thirdPartyProvider = if ($Fast) {
         "--timeout-ms", "90000"
     )
 }
+$checks.realThirdPartyProviderOptional = if ($AllowRealTraffic -and (-not $NoTraffic)) {
+    New-SkippedCheck "real third-party provider verification requires explicit provider protocol, URL, model, and API key environment variable" "test-anticodex-real-third-party-provider.mjs"
+} else {
+    Invoke-NodeJsonScript "Optional real third-party provider skip report" (Join-Path $scriptsRoot "test-anticodex-real-third-party-provider.mjs") @(
+        "--report-root", $ReportRoot
+    )
+}
+$checks.providerAntigravityReturnOptional = if ($AllowRealTraffic -and (-not $NoTraffic)) {
+    Invoke-JsonScript "Optional provider-to-Antigravity return verification" (Join-Path $scriptsRoot "test-anticodex-provider-antigravity-return.ps1") @(
+        "-RuntimeRoot", $runtimeRootFull,
+        "-ReportRoot", $ReportRoot,
+        "-TimeoutSec", "$realTrafficTimeoutSec",
+        "-AllowRealTraffic"
+    )
+} else {
+    Invoke-JsonScript "Optional provider-to-Antigravity return skip report" (Join-Path $scriptsRoot "test-anticodex-provider-antigravity-return.ps1") @(
+        "-RuntimeRoot", $runtimeRootFull,
+        "-ReportRoot", $ReportRoot
+    )
+}
 $checks.localConnectors = if ($Fast) {
     New-SkippedCheck "fast mode skips local connector/app-tool allowlist verification" "test-anticodex-local-connectors.mjs"
 } else {

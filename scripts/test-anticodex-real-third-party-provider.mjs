@@ -36,6 +36,7 @@ const startedAt = Date.now();
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const stateRoot = mkdtempSync(join(os.tmpdir(), "anticodex-real-third-party-provider-"));
 const profilePath = join(stateRoot, "provider-profile.json");
+const reportName = "real-third-party-provider";
 let translator = null;
 
 function writeTextAtomic(filePath, text, encoding = "utf8") {
@@ -70,9 +71,11 @@ function writeReport(payload) {
 function completeSkipped(reason, { requestedRealTraffic = false, ok = true } = {}) {
   return {
     ok,
+    reportName,
     skipped: true,
     requestedRealTraffic,
     reason,
+    coveredBy: "test-anticodex-real-third-party-provider.mjs",
     failures: ok ? [] : [reason],
     behaviorCovered: false,
     coverageKind: "skipped",
@@ -246,6 +249,7 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
 
   return {
     ok: true,
+    reportName,
     skipped: false,
     mode: "third-party",
     protocol,
@@ -297,6 +301,7 @@ try {
 } catch (error) {
   result = {
     ok: false,
+    reportName,
     skipped: false,
     behaviorCovered: false,
     coverageKind: "failed",
@@ -313,6 +318,7 @@ const reportText = JSON.stringify(result);
 if (apiKey && reportText.includes(apiKey)) {
   result = {
     ok: false,
+    reportName,
     skipped: false,
     behaviorCovered: false,
     coverageKind: "failed",
