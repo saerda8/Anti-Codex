@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import path from "node:path";
 
 const [, , sourcePath, targetPath] = process.argv;
 
@@ -56,10 +57,10 @@ function normalizeWindowsMcpShim(block) {
   let command = "";
 
   for (let i = 0; i < block.lines.length; i += 1) {
-    const commandMatch = block.lines[i].match(/^command\s*=\s*"([^"]+)"\s*$/);
+    const commandMatch = block.lines[i].match(/^command\s*=\s*(['"])(.*?)\1\s*$/);
     if (commandMatch) {
       commandLineIndex = i;
-      command = commandMatch[1].trim().toLowerCase();
+      command = commandMatch[2].trim().toLowerCase();
       continue;
     }
     if (/^args\s*=/.test(block.lines[i])) argsLineIndex = i;
@@ -83,6 +84,49 @@ function normalizeWindowsMcpShim(block) {
   return next;
 }
 
+function findExistingSiblingCommand(command) {
+  if (!shouldNormalizeWindowsShims || !command || fs.existsSync(command)) return "";
+  if (!path.isAbsolute(command)) return "";
+  const commandName = path.basename(command);
+  if (!commandName || !/\.exe$/i.test(commandName)) return "";
+  const versionDir = path.dirname(command);
+  const binRoot = path.dirname(versionDir);
+  if (!fs.existsSync(binRoot)) return "";
+
+  const candidates = [];
+  for (const entry of fs.readdirSync(binRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(binRoot, entry.name, commandName);
+    if (!fs.existsSync(candidate)) continue;
+    const stat = fs.statSync(candidate);
+    candidates.push({ candidate, mtimeMs: stat.mtimeMs });
+  }
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs || a.candidate.localeCompare(b.candidate));
+  return candidates[0]?.candidate || "";
+}
+
+function normalizeMissingWindowsMcpCommand(block) {
+  if (!shouldNormalizeWindowsShims || !block.header?.startsWith("[mcp_servers.")) return block;
+
+  let commandLineIndex = -1;
+  let command = "";
+  for (let i = 0; i < block.lines.length; i += 1) {
+    const commandMatch = block.lines[i].match(/^command\s*=\s*(['"])(.*?)\1\s*$/);
+    if (commandMatch) {
+      commandLineIndex = i;
+      command = commandMatch[2].trim();
+      break;
+    }
+  }
+  if (commandLineIndex < 0) return block;
+
+  const replacement = findExistingSiblingCommand(command);
+  if (!replacement) return block;
+  const next = { ...block, lines: [...block.lines] };
+  next.lines[commandLineIndex] = `command = ${JSON.stringify(replacement)}`;
+  return next;
+}
+
 function render(blocks) {
   return blocks
     .map((block) => block.lines.join("\n").replace(/\n+$/g, ""))
@@ -93,7 +137,10 @@ function render(blocks) {
 }
 
 function mergeSharedBlocks(targetBlocks, sourceBlocks) {
-  const sourceShared = sourceBlocks.filter(isShared).map(normalizeWindowsMcpShim);
+  const sourceShared = sourceBlocks
+    .filter(isShared)
+    .map(normalizeWindowsMcpShim)
+    .map(normalizeMissingWindowsMcpCommand);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
   const keptTargetBlocks = targetBlocks.filter(
     (block) => !isShared(block) || !sourceHeaders.has(block.header)

@@ -2686,6 +2686,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   const mcpSkills = readFileSync(resolve(root, "scripts", "test-anticodex-mcp-skills.ps1"), "utf8");
   const realMcpSmoke = readFileSync(resolve(root, "scripts", "anticodex-real-mcp-smoke.mjs"), "utf8");
   const refreshLocalFeatures = readFileSync(resolve(root, "scripts", "refresh-anticodex-local-features.ps1"), "utf8");
+  const sharedConfigSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-config.mjs"), "utf8");
   const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
   const adaptiveServer = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
@@ -2781,6 +2782,12 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /sync-shared-codex-config\.mjs/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-sidecars\.mjs/);
   assert.match(refreshLocalFeatures, /shared config refresh failed/);
+  assert.match(sharedConfigSync, /function findExistingSiblingCommand/);
+  assert.match(sharedConfigSync, /function normalizeMissingWindowsMcpCommand/);
+  assert.match(sharedConfigSync, /fs\.existsSync\(command\)/);
+  assert.match(sharedConfigSync, /path\.dirname\(versionDir\)/);
+  assert.match(sharedConfigSync, /path\.join\(binRoot, entry\.name, commandName\)/);
+  assert.match(sharedConfigSync, /normalizeMissingWindowsMcpCommand/);
   assert.match(refreshLocalFeatures, /function Restore-AntiCodexFeatureFlags/);
   assert.match(refreshLocalFeatures, /responses_websockets/);
   assert.match(refreshLocalFeatures, /remote_plugin/);
@@ -3245,8 +3252,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.match(overall, /--action", "mcpSkills"/);
   assert.match(overall, /--action", "pluginCapabilities"/);
-  assert.match(overall, /"--action", "mcpSkills", "--timeout-ms", "90000", "--compact", "1"\) 120/);
-  assert.match(overall, /"--action", "pluginCapabilities", "--timeout-ms", "90000", "--compact", "1"\) 120/);
+  assert.match(overall, /\$managerButtonTimeoutMs = \[Math\]::Max\(120000, \[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
+  assert.match(overall, /\$managerButtonProcessTimeoutSec = \[int\]\[Math\]::Ceiling\(\$managerButtonTimeoutMs \/ 1000\) \+ 30/);
+  assert.match(overall, /"--action", "mcpSkills", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
+  assert.match(overall, /"--action", "pluginCapabilities", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.match(overall, /--verification-mode", "ui-only"/);
   assert.doesNotMatch(overall, /--actions", "mcpSkills,pluginCapabilities"/);
   assert.match(overall, /managerButtonSafeActions/);

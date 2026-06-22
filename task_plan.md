@@ -885,3 +885,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-cold-relaunch.ps1` now writes signed latest/history JSON reports as `latest-cold-relaunch.json` plus `.sha256` through the shared atomic report writer.
 - Completed: Manager latest reports, diagnostic bundles, installed overall report-integrity checks, and passive release gates now surface the cold relaunch report when it exists.
 - Completed: cold relaunch remains optional for passive release readiness because it is an isolated restart verifier, not a read-only latest-report check.
+
+## 2026-06-23 MCP Path Drift and No-Traffic Overall
+- Completed: `sync-shared-codex-config.mjs` now repairs missing absolute MCP command paths by finding an existing sibling executable under the same Codex `bin` root, fixing stale `node_repl.exe` version directories after native Codex updates.
+- Completed: refreshed Anti-Codex local features so MCP/skills now point at the existing `node_repl.exe`; standalone MCP/Skill, plugin/app-tool, and Manager real-button checks pass without granting connector authorization.
+- Completed: installed no-traffic overall is green again; passive release gates no longer list `installedOverallNoTraffic` as missing.
