@@ -25,8 +25,8 @@ const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true },
   { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true },
   { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true },
-  { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true },
-  { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true },
+  { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true, requirePluginCapabilitySemantics: true },
+  { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true, requireLocalConnectorSemantics: true },
   { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true },
   { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
   { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false },
@@ -70,6 +70,10 @@ function integrityFor(filePath) {
   const expected = match[1].toLowerCase();
   const actual = fileHash(filePath);
   return { signed: true, valid: actual === expected, hash: actual, expected, error: actual === expected ? "" : "hash_mismatch" };
+}
+
+function isEmptyArray(value) {
+  return Array.isArray(value) && value.length === 0;
 }
 
 function summarizeGate(definition) {
@@ -122,6 +126,26 @@ function summarizeGate(definition) {
     }
     if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
       semanticFailures.push("expected_usedRealTraffic_true");
+    }
+    if (definition.requireLocalConnectorSemantics) {
+      const evidence = report.endpointEvidence || {};
+      if (evidence.chatgptInstallUrlsScrubbed !== true) semanticFailures.push("local_connector_chatgpt_urls_not_scrubbed");
+      if (evidence.linkEndpointsUnsupported !== true) semanticFailures.push("local_connector_link_endpoints_not_metadata_only");
+      if (evidence.upstreamRequestsDuringLocalEndpoints !== 0) semanticFailures.push("local_connector_upstream_requests_during_local_endpoints");
+      if (evidence.allowlistedConnectorAccessible !== false) semanticFailures.push("local_connector_allowlist_marked_accessible");
+      if (evidence.allowlistedConnectorLocallyAllowlisted !== true) semanticFailures.push("local_connector_allowlist_not_recorded");
+    }
+    if (definition.requirePluginCapabilitySemantics) {
+      const capabilities = report.capabilities || {};
+      const connectorParity = capabilities.connectorParity || {};
+      const appToolParity = capabilities.appToolParity || {};
+      const appToolGetPostParity = capabilities.appToolGetPostParity || {};
+      if (capabilities.nativeCodexWriteback !== false) semanticFailures.push("plugin_capabilities_native_codex_writeback");
+      if (capabilities.accessibleConnectorCount !== 0) semanticFailures.push("plugin_capabilities_accessible_connector_count");
+      if (capabilities.unauthorizedAppToolCount !== 0) semanticFailures.push("plugin_capabilities_unauthorized_app_tools");
+      if (!isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
+      if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
+      if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
     }
     if (definition.requireManagerActions) {
       const actions = Array.isArray(report.actions) ? report.actions.map((item) => String(item)) : [];

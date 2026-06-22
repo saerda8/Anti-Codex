@@ -3980,6 +3980,13 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireUsedRealTraffic/);
   assert.match(releaseGates, /expected_usedRealTraffic_true/);
   assert.match(releaseGates, /manager_action_missing_real_click/);
+  assert.match(releaseGates, /local_connector_chatgpt_urls_not_scrubbed/);
+  assert.match(releaseGates, /local_connector_link_endpoints_not_metadata_only/);
+  assert.match(releaseGates, /local_connector_upstream_requests_during_local_endpoints/);
+  assert.match(releaseGates, /plugin_capabilities_app_tool_get_post_mismatch/);
+  assert.match(releaseGates, /plugin_capabilities_unauthorized_app_tools/);
+  assert.match(releaseGates, /plugin_capabilities_local_connector_parity_missing_shared/);
+  assert.match(releaseGates, /plugin_capabilities_local_app_tool_parity_missing_shared/);
   assert.match(releaseGates, /releaseReady/);
   assert.match(releaseGates, /shortReady/);
   assert.match(releaseGates, /missingRequired/);
