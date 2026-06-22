@@ -4232,6 +4232,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requiredForRelease/);
   assert.match(releaseGates, /requireSkipRequests/);
   assert.match(releaseGates, /expected_skipRequests_true/);
+  assert.match(releaseGates, /requireMcpSkillSemantics/);
+  assert.match(releaseGates, /mcp_skills_missing_shared_mcp/);
+  assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
+  assert.match(releaseGates, /mcp_skills_real_call_not_passed/);
+  assert.match(releaseGates, /mcp_skills_no_agents_skills/);
   assert.match(releaseGates, /requireUsedRealTraffic/);
   assert.match(releaseGates, /expected_usedRealTraffic_true/);
   assert.match(releaseGates, /expected_no_real_traffic/);
@@ -4263,6 +4268,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
+  assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid real provider optional report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid Antigravity return optional report satisfied the gate/);

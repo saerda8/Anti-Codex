@@ -25,7 +25,7 @@ const startedAt = Date.now();
 const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true },
   { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true },
-  { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true },
+  { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true, requireMcpSkillSemantics: true },
   { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true, requirePluginCapabilitySemantics: true },
   { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true, requireLocalConnectorSemantics: true },
   { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true, requireThirdPartyProviderSemantics: true },
@@ -194,6 +194,25 @@ function summarizeGate(definition) {
       if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
       if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
     }
+    if (definition.requireMcpSkillSemantics) {
+      const mcp = report.mcp || {};
+      const skills = report.skills || {};
+      const mcpSmoke = mcp.smoke || {};
+      const mcpRealCall = mcpSmoke.realCall || {};
+      if (Number(mcp.count || 0) < 1) semanticFailures.push("mcp_skills_no_mcp_servers");
+      if (Number(mcp.sharedCount || 0) < 1) semanticFailures.push("mcp_skills_no_shared_mcp_servers");
+      if (!isEmptyArray(mcp.missingShared)) semanticFailures.push("mcp_skills_missing_shared_mcp");
+      if (!isEmptyArray(mcp.extraLocal)) semanticFailures.push("mcp_skills_extra_local_mcp");
+      if (mcp.hasNodeRepl !== true) semanticFailures.push("mcp_skills_missing_node_repl");
+      if (mcpSmoke.passed !== true) semanticFailures.push("mcp_skills_smoke_not_passed");
+      if (mcpRealCall.passed !== true) semanticFailures.push("mcp_skills_real_call_not_passed");
+      if (Number(skills.count || 0) < 1) semanticFailures.push("mcp_skills_no_local_skills");
+      if (Number(skills.sharedCount || 0) < 1) semanticFailures.push("mcp_skills_no_shared_skills");
+      if (Number(skills.agentsCount || 0) < 1) semanticFailures.push("mcp_skills_no_agents_skills");
+      if (Number(skills.expectedSharedCount || 0) < Number(skills.sharedCount || 0) + Number(skills.agentsCount || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
+      if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
+      if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
+    }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
       const toolHistory = history.toolHistory || {};
@@ -360,6 +379,30 @@ if (args.has("--self-test")) {
       },
     });
 
+    writeFakeLatestReport("latest-mcp-skills.json", {
+      ok: true,
+      reportName: "mcp-skills",
+      mcp: {
+        count: 1,
+        sharedCount: 1,
+        missingShared: ["missing-mcp"],
+        extraLocal: ["extra-mcp"],
+        hasNodeRepl: false,
+        smoke: {
+          passed: false,
+          realCall: { passed: false },
+        },
+      },
+      skills: {
+        count: 1,
+        sharedCount: 1,
+        agentsCount: 0,
+        expectedSharedCount: 1,
+        missingShared: ["missing-skill"],
+        smoke: { readable: false },
+      },
+    });
+
     writeFakeLatestReport("latest-tool-bridge-mode.json", {
       ok: true,
       reportName: "tool-bridge-mode",
@@ -469,6 +512,16 @@ if (args.has("--self-test")) {
       "optional_antigravity_return_missing_markers",
       "optional_antigravity_return_route_transport",
       "optional_antigravity_return_resolved_model",
+    ]);
+    semanticFailures.mcpSkills = assertSemanticFailures("mcpSkills", "self-test failed: semantically invalid MCP/Skill report satisfied the gate", [
+      "mcp_skills_missing_shared_mcp",
+      "mcp_skills_extra_local_mcp",
+      "mcp_skills_missing_node_repl",
+      "mcp_skills_smoke_not_passed",
+      "mcp_skills_real_call_not_passed",
+      "mcp_skills_no_agents_skills",
+      "mcp_skills_missing_shared_skills",
+      "mcp_skills_skill_smoke_not_readable",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_secrets_not_redacted",
