@@ -52,6 +52,8 @@ Covered by multiple layers:
 
 Internal compatibility names remain intentionally allowed, including `DEEPCODEX_*`, `start-deepcodex.ps1`, `deepcodex-translator.exe`, local state paths, and source class names. These names are not user-facing branding unless surfaced in UI text, dialogs, prompts, or model-visible output.
 
+Historical marketing material is excluded from current launch-surface checks only when it is under `docs/marketing/legacy` and carries an explicit archive marker. Current marketing entry points must still reject `DeepCodex`, `DeepSeek-only`, `DeepSeek route`, and `DeepSeek API key` claims.
+
 ## Current Gaps
 
 - Full installed desktop and live Antigravity traffic gates are still intentionally reserved for combined acceptance passes.

@@ -856,3 +856,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the Manager button verifier self-test now rejects source-preflight latest-report text that omits the `公开文档` field-level result.
 - Completed: `README_EN.md` now carries the same default-provider, third-party upstream profile, and connector authorization boundaries as the main README and is included in public documentation checks.
 - Verification: Manager button self-test passed; Manager bridge self-test passed; launcher contract suite passed `91/91`; source preflight fast mode passed with `managerBridgeSelfTest.ok:true` and `publicDocumentation.ok:true`.
+
+## 2026-06-23 Legacy Marketing Boundary Marker
+- Completed: the historical DeepCodex / DeepSeek video script under `docs/marketing/legacy` now has an explicit archive marker saying it is not a current Anti-Codex launch asset.
+- Completed: public-documentation preflight and launcher contracts now require that marker, while current marketing entry points continue to reject legacy DeepCodex / DeepSeek-only claims.

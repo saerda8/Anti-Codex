@@ -226,6 +226,7 @@ function Test-PublicDocumentationContracts {
     $readmeEn = Read-PublicDoc "README_EN.md"
     $providerStack = Read-PublicDoc "docs\ADAPTIVE_ONE_API_STACK.md"
     $compatibility = Read-PublicDoc "docs\chat-to-responses-compat.md"
+    $legacyMarketing = Read-PublicDoc "docs\marketing\legacy\deepcodex-video-script.md"
     $marketingDocs = @(
         (Read-PublicDoc "docs\marketing\launch-post.md"),
         (Read-PublicDoc "docs\marketing\video-script.md"),
@@ -259,6 +260,7 @@ function Test-PublicDocumentationContracts {
     Add-DocAssertion -File "docs\marketing\*.md" -Name "provider-language" -Ok ($marketingDocs -match 'Antigravity Desktop|Antigravity' -and $marketingDocs -match 'third-party|provider')
     Add-DocAssertion -File "docs\marketing\*.md" -Name "connector-boundary" -Ok ($marketingDocs -match 'connector|app tool' -and $marketingDocs -match 'does not fake authorization')
     Add-DocAssertion -File "docs\marketing\*.md" -Name "no-current-legacy-marketing" -Ok ($marketingDocs -notmatch 'DeepCodex|deepcodex|DeepSeek-only|DeepSeek route|DeepSeek API key')
+    Add-DocAssertion -File "docs\marketing\legacy\deepcodex-video-script.md" -Name "legacy-marker" -Ok ($legacyMarketing -match 'archived historical DeepCodex / DeepSeek launch material' -and $legacyMarketing -match 'not a current Anti-Codex launch asset')
 
     $failed = @($assertions.ToArray() | Where-Object { -not [bool]$_.ok })
     return [pscustomobject]@{

@@ -1,3 +1,7 @@
+# Legacy Historical Marketing Script
+
+Status: archived historical DeepCodex / DeepSeek launch material. This file is not a current Anti-Codex launch asset and must not be published as current marketing copy.
+
 # 视频内容脚本
 
 ## 版本 A：60 秒吸引力短视频

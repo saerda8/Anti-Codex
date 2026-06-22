@@ -4260,6 +4260,7 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   const readmeEn = readFileSync(resolve(root, "README_EN.md"), "utf8");
   const providerStack = readFileSync(resolve(root, "docs", "ADAPTIVE_ONE_API_STACK.md"), "utf8");
   const compatibility = readFileSync(resolve(root, "docs", "chat-to-responses-compat.md"), "utf8");
+  const legacyMarketing = readFileSync(resolve(root, "docs", "marketing", "legacy", "deepcodex-video-script.md"), "utf8");
   const marketingDocs = [
     readFileSync(resolve(root, "docs", "marketing", "launch-post.md"), "utf8"),
     readFileSync(resolve(root, "docs", "marketing", "video-script.md"), "utf8"),
@@ -4306,4 +4307,6 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.match(marketingDocs, /connector|app tool/);
   assert.match(marketingDocs, /does not fake authorization/);
   assert.doesNotMatch(marketingDocs, /DeepCodex|deepcodex|DeepSeek-only|DeepSeek route|DeepSeek API key/);
+  assert.match(legacyMarketing, /archived historical DeepCodex \/ DeepSeek launch material/);
+  assert.match(legacyMarketing, /not a current Anti-Codex launch asset/);
 });
