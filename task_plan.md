@@ -716,7 +716,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: latest-report parsing now distinguishes missing files from corrupt JSON. A file that exists but cannot parse is surfaced as `invalid_report`, counted in `invalidCount`, and displayed as a damaged report instead of being hidden as "not generated". Missing reports are separately counted in `missingCount`.
 - Completed: diagnostic bundle creation now returns top-level `ok:false` with `damagedReports` if report summaries include parse/read errors, while still producing the ZIP for support. Installed overall report encoding now treats any existing unparseable latest report as a failure, even when the file predates the current run.
 - Verification: adaptive server syntax, Manager bridge syntax, Manager button self-test, and launcher contracts 89/89 passed with invalid-report contract assertions.
-- Still deferred: report signature/hash hardening remains a future reliability improvement; current reports are parse-checked and surfaced, but not signed.
+- Superseded on 2026-06-22: SHA256 sidecar hash integrity is implemented for current reports, Manager summaries, diagnostic bundles, and installed overall. True cryptographic report signing remains a future hardening option if tamper-evident hashes are not enough.
 
 ## 2026-06-22 Atomic Report Writes
 - Completed: shared PowerShell report writes now go through `anticodex-report-io.ps1`, which writes UTF-8 without BOM to a same-directory temp file, validates JSON before publish, and atomically replaces existing latest/history reports.
