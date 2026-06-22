@@ -815,3 +815,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 DeepSeek Failure Notes Legacy Marker
 - Completed: marked `docs/DEEPSEEK_RUNTIME_FAILURE_NOTES.md` as legacy route notes so it is not mistaken for the current Anti-Codex default provider description.
 - Completed: the marker states the current default: local Antigravity Desktop provider, explicit third-party profiles, and no mutation of the original Codex installation.
+
+## 2026-06-23 Windows Doc Compatibility Clarification
+- Completed: clarified that the `codex-home-deepseek-app` runtime path segment is legacy compatibility state and does not imply the current default provider.
+- Completed: clarified that Anti-Codex does not fake connector authorization; connector-backed app tools remain unavailable until the real connector is authorized.

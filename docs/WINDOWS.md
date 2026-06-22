@@ -58,10 +58,12 @@ $env:DEEPCODEX_WORKSPACE = "C:\Path\To\Project"
 ```
 
 Some internal files and environment variables still contain `deepcodex` or `DEEPCODEX_*` for compatibility with older state, launchers, and recovery scripts. These are internal names, not user-facing branding.
+The `codex-home-deepseek-app` path segment is also legacy compatibility state; it does not mean DeepSeek is the current default provider.
 
 ## Notes
 
-- Anti-Codex does not require ChatGPT login or connector authorization.
+- Anti-Codex does not require a ChatGPT login path.
+- Anti-Codex does not fake connector authorization; connector-backed app tools remain unavailable until the real connector is authorized.
 - The default route uses Antigravity Desktop through the local gateway.
 - Third-party API profiles are configured from the Anti-Codex Manager and use the same isolated state root.
 - PowerShell 5.1 is supported.
