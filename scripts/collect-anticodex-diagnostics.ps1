@@ -146,12 +146,14 @@ function Read-JsonSummary {
         $javascriptSyntaxOk = $null
         $powershellSyntaxOk = $null
         $uiStateSelfTestOk = $null
+        $publicDocumentationOk = $null
         $translatorRegressionOk = $null
         $diffWhitespaceOk = $null
         if ($checks) {
             if (($checks.PSObject.Properties.Name -contains "javascriptSyntax") -and $checks.javascriptSyntax -and ($checks.javascriptSyntax.PSObject.Properties.Name -contains "ok")) { $javascriptSyntaxOk = [bool]$checks.javascriptSyntax.ok }
             if (($checks.PSObject.Properties.Name -contains "powershellSyntax") -and $checks.powershellSyntax -and ($checks.powershellSyntax.PSObject.Properties.Name -contains "ok")) { $powershellSyntaxOk = [bool]$checks.powershellSyntax.ok }
             if (($checks.PSObject.Properties.Name -contains "uiStateSelfTest") -and $checks.uiStateSelfTest -and ($checks.uiStateSelfTest.PSObject.Properties.Name -contains "ok")) { $uiStateSelfTestOk = [bool]$checks.uiStateSelfTest.ok }
+            if (($checks.PSObject.Properties.Name -contains "publicDocumentation") -and $checks.publicDocumentation -and ($checks.publicDocumentation.PSObject.Properties.Name -contains "ok")) { $publicDocumentationOk = [bool]$checks.publicDocumentation.ok }
             if (($checks.PSObject.Properties.Name -contains "translatorRegression") -and $checks.translatorRegression -and ($checks.translatorRegression.PSObject.Properties.Name -contains "ok")) { $translatorRegressionOk = [bool]$checks.translatorRegression.ok }
             if (($checks.PSObject.Properties.Name -contains "diffWhitespace") -and $checks.diffWhitespace -and ($checks.diffWhitespace.PSObject.Properties.Name -contains "ok")) { $diffWhitespaceOk = [bool]$checks.diffWhitespace.ok }
         }
@@ -165,6 +167,7 @@ function Read-JsonSummary {
             javascriptSyntaxOk = $javascriptSyntaxOk
             powershellSyntaxOk = $powershellSyntaxOk
             uiStateSelfTestOk = $uiStateSelfTestOk
+            publicDocumentationOk = $publicDocumentationOk
             translatorRegressionOk = $translatorRegressionOk
             diffWhitespaceOk = $diffWhitespaceOk
             baseUrl = if ($json.PSObject.Properties.Name -contains "baseUrl") { $json.baseUrl } else { $null }

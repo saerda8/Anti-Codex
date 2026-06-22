@@ -833,3 +833,11 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-source-preflight.ps1` now runs a lightweight public-documentation contract check even when `-SkipFullRegression` is used.
 - Completed: the fast check uses an explicit current-doc whitelist instead of recursive `docs/**` scans, so historical audits, legacy marketing, and prompt samples can keep old evidence without breaking the gate.
 - Verification: PowerShell parser check passed; launcher contract suite passed `91/91`; fast source preflight passed with `publicDocumentation.ok:true` and translator regression skipped by design.
+
+## 2026-06-23 Public Docs Gate Diagnostics Surfacing
+- Completed: source-preflight summaries now expose `publicDocumentationOk` through the translator diagnostics payload and diagnostic bundle report summaries.
+- Completed: diagnostics verification and launcher contract coverage now require the new public-documentation summary field so the fast docs gate is visible outside the raw source-preflight report.
+
+## 2026-06-23 README Upstream Profile Wording
+- Completed: corrected README third-party API wording to match the implementation: the formal entry is Anti-Codex Manager, which tests, saves, and applies an `upstream profile`; lower-level scripts are controlled write/restart helpers, not the user-facing setup route.
+- Verification: adaptive-server syntax check passed; diagnostics PowerShell parser checks passed; launcher contract suite passed `91/91`.

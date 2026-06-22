@@ -80,7 +80,7 @@ install-windows.bat
 
 ## 第三方 API 配置
 
-默认路线仍是本机已登录的 Antigravity Desktop。需要使用第三方 API 时，只能通过 Anti-Codex Manager 显式配置、测试并应用 provider profile；不会因为旧配置读取失败就静默切回错误上游，也不需要 ChatGPT 登录。
+默认路线仍是本机已登录的 Antigravity Desktop。需要使用第三方 API 时，正式入口是 Anti-Codex Manager：先测试，再保存并应用 upstream profile；底层脚本只用于受控写入和重启。旧配置读取失败时不会静默切回错误上游，也不需要 ChatGPT 登录。
 
 ## Connector 授权边界
 

@@ -1932,6 +1932,7 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(server, /function latestInstalledCheckStatus/);
   assert.match(server, /function latestSourcePreflightStatus/);
   assert.match(server, /function sourcePreflightSummary/);
+  assert.match(server, /publicDocumentationOk/);
   assert.match(server, /function installedCheckSummary/);
   assert.match(server, /latest-source-preflight\.json/);
   assert.match(server, /latest-installed-overall-fast\.json/);
@@ -3799,6 +3800,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /javascriptSyntaxOk/);
   assert.match(diagnostics, /powershellSyntaxOk/);
   assert.match(diagnostics, /uiStateSelfTestOk/);
+  assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /translatorRegressionOk/);
   assert.match(diagnostics, /diffWhitespaceOk/);
   assert.match(diagnostics, /skipFullRegression/);
@@ -4265,7 +4267,7 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.match(readme, /ChatGPT/);
   assert.match(readme, /DeepSeek API Key/);
   assert.match(readme, /Anti-Codex\.exe/);
-  assert.match(readme, /provider profile/);
+  assert.match(readme, /upstream profile/);
   assert.match(readme, /connector-backed app tools/);
   assert.doesNotMatch(readme, /DeepCodex app|DeepSeek \u7248 Codex|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
 
