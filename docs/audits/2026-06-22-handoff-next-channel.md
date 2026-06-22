@@ -126,6 +126,12 @@ Branch: main
 - `docs/audits/2026-06-22-ui-timeout-hardening-status.md`
 - `docs/audits/2026-06-22-local-connector-allowlist-status.md`
 
+## 2026-06-23 Release-Gate Self-Test Follow-Up
+
+- Passive release-gate `--self-test` now forges bad no-traffic, missing-history, local-connector, and plugin-capability reports and verifies each is rejected despite signed `ok:true`.
+- No-traffic gates reject explicit contradictory evidence (`usedRealTraffic:true`, `behaviorCovered:false`, or `coverageKind:"real-traffic"`) while preserving compatibility for older reports that omit those fields.
+- Fresh evidence: release-gate syntax passed, self-test produced the expected semantic failures for all forged report classes, focused launcher contract passed, and strict passive gates remain `shortReady:true`, `releaseReady:true`, with no missing required or damaged reports.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

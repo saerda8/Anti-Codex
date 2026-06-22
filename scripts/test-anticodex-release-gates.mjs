@@ -129,6 +129,11 @@ function summarizeGate(definition) {
     if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
       semanticFailures.push("expected_usedRealTraffic_true");
     }
+    if (definition.group === "no-traffic") {
+      if (report.usedRealTraffic === true) semanticFailures.push("expected_no_real_traffic");
+      if (report.behaviorCovered === false) semanticFailures.push("expected_behavior_covered");
+      if (report.coverageKind === "real-traffic") semanticFailures.push("expected_no_real_traffic_coverage_kind");
+    }
     if (definition.requireLocalConnectorSemantics) {
       const evidence = report.endpointEvidence || {};
       if (evidence.chatgptInstallUrlsScrubbed !== true) semanticFailures.push("local_connector_chatgpt_urls_not_scrubbed");
@@ -221,9 +226,26 @@ if (args.has("--self-test")) {
   const tempRoot = mkdtempSync(join(tmpdir(), "anticodex-release-gates-"));
   try {
     reportRoot = tempRoot;
-    const fakeMissingHistory = join(tempRoot, "latest-missing-history.json");
     mkdirSync(tempRoot, { recursive: true });
-    writeFileSync(fakeMissingHistory, JSON.stringify({
+
+    function writeFakeLatestReport(fileName, payload) {
+      const filePath = join(tempRoot, fileName);
+      writeFileSync(filePath, JSON.stringify(payload), "utf8");
+      writeHashSidecar(filePath);
+      return filePath;
+    }
+
+    function assertSemanticFailures(gateId, invalidReportMessage, requiredFailures) {
+      const gate = summarizeGate(gateDefinitions.find((definition) => definition.id === gateId));
+      const failures = gate.semanticFailures || [];
+      if (gate.satisfied === true) throw new Error(invalidReportMessage);
+      for (const failure of requiredFailures) {
+        if (!failures.includes(failure)) throw new Error(`self-test failed: ${gateId} missing semantic failure ${failure}`);
+      }
+      return failures;
+    }
+
+    writeFakeLatestReport("latest-missing-history.json", {
       ok: true,
       reportName: "missing-history",
       status: 200,
@@ -235,11 +257,55 @@ if (args.has("--self-test")) {
       usedRealTraffic: true,
       behaviorCovered: true,
       coverageKind: "installed-no-traffic",
-    }), "utf8");
-    writeHashSidecar(fakeMissingHistory);
-    const gate = summarizeGate(gateDefinitions.find((definition) => definition.id === "missingHistory"));
-    const failures = gate.semanticFailures || [];
-    const requiredFailures = [
+    });
+
+    writeFakeLatestReport("latest-local-connectors.json", {
+      ok: true,
+      reportName: "local-connectors",
+      endpointEvidence: {
+        chatgptInstallUrlsScrubbed: false,
+        linkEndpointsUnsupported: false,
+        upstreamRequestsDuringLocalEndpoints: 1,
+        allowlistedConnectorAccessible: true,
+        allowlistedConnectorLocallyAllowlisted: false,
+      },
+    });
+
+    writeFakeLatestReport("latest-plugin-capabilities.json", {
+      ok: true,
+      reportName: "plugin-capabilities",
+      capabilities: {
+        nativeCodexWriteback: true,
+        accessibleConnectorCount: 1,
+        unauthorizedAppToolCount: 1,
+        appToolGetPostParity: {
+          missingFromGet: ["unsafe-tool"],
+          extraFromGet: [],
+        },
+        connectorParity: {
+          missingShared: ["missing-connector"],
+        },
+        appToolParity: {
+          missingShared: ["missing-app-tool"],
+        },
+      },
+    });
+
+    writeFakeLatestReport("latest-tool-bridge-mode.json", {
+      ok: true,
+      reportName: "tool-bridge-mode",
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+    });
+
+    const semanticFailures = {};
+    semanticFailures.noTraffic = assertSemanticFailures("toolBridgeMode", "self-test failed: semantically invalid no-traffic report satisfied the gate", [
+      "expected_no_real_traffic",
+      "expected_behavior_covered",
+      "expected_no_real_traffic_coverage_kind",
+    ]);
+    semanticFailures.missingHistory = assertSemanticFailures("missingHistory", "self-test failed: semantically invalid missing-history report satisfied the gate", [
       "missing_history_status_not_410",
       "missing_history_error_type",
       "missing_history_retryable_not_false",
@@ -247,12 +313,23 @@ if (args.has("--self-test")) {
       "missing_history_recovery_guidance_missing",
       "missing_history_route_changed",
       "missing_history_used_real_traffic",
-    ];
-    if (gate.satisfied === true) throw new Error("self-test failed: semantically invalid missing-history report satisfied the gate");
-    for (const failure of requiredFailures) {
-      if (!failures.includes(failure)) throw new Error(`self-test failed: missing semantic failure ${failure}`);
-    }
-    console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures: failures }));
+    ]);
+    semanticFailures.localConnectors = assertSemanticFailures("localConnectors", "self-test failed: semantically invalid local-connector report satisfied the gate", [
+      "local_connector_chatgpt_urls_not_scrubbed",
+      "local_connector_link_endpoints_not_metadata_only",
+      "local_connector_upstream_requests_during_local_endpoints",
+      "local_connector_allowlist_marked_accessible",
+      "local_connector_allowlist_not_recorded",
+    ]);
+    semanticFailures.pluginCapabilities = assertSemanticFailures("pluginCapabilities", "self-test failed: semantically invalid plugin-capability report satisfied the gate", [
+      "plugin_capabilities_native_codex_writeback",
+      "plugin_capabilities_accessible_connector_count",
+      "plugin_capabilities_unauthorized_app_tools",
+      "plugin_capabilities_app_tool_get_post_mismatch",
+      "plugin_capabilities_local_connector_parity_missing_shared",
+      "plugin_capabilities_local_app_tool_parity_missing_shared",
+    ]);
+    console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
     reportRoot = originalReportRoot;
     rmSync(tempRoot, { recursive: true, force: true });

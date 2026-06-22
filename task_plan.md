@@ -919,3 +919,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: refreshed the native Manager panel to `native-panel-v85`, added a latest-report summary refresh stamp, and relaxed the real-button acceptance around the current missing-history evidence instead of stale public-doc text.
 - Completed: passive release gates now validate missing-history semantics directly: HTTP 410, `response_history_missing`, `retryable:false`, original response ID match, recovery guidance, unchanged route fingerprint, no real traffic, and `coverageKind:"installed-no-traffic"`.
 - Verification: source and installed `viewLatestReports` button checks passed, installed fast UI state passed, release-gate strict mode passed with `shortReady:true`, `releaseReady:true`, no missing required gates, and no damaged reports.
+
+## 2026-06-23 Release Gate Negative Self-Tests
+- Completed: `test-anticodex-release-gates.mjs --self-test` now rejects forged signed `ok:true` reports for no-traffic gates, missing-history recovery, local connector allowlists, and plugin/app-tool capabilities.
+- Completed: no-traffic release gates now reject explicit contradictory evidence: `usedRealTraffic:true`, `behaviorCovered:false`, or `coverageKind:"real-traffic"` while leaving older reports without those fields compatible.
+- Verification: release-gate syntax passed; release-gate self-test reports expected semantic failures for all four forged report classes; focused launcher contract passed; strict passive gates remain green with `shortReady:true`, `releaseReady:true`, no missing required gates, and no damaged reports.
