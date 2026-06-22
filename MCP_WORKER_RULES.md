@@ -1612,3 +1612,11 @@ After every failure, before another dispatch:
 - Result: the authorized test diff and exit code 0 were present, but parsed text/stdout/stderr were empty.
 - Cause classification: worker summary failure, not implementation failure.
 - Rule change: accept no narrative evidence from the worker; inspect the one-file diff, run syntax, and independently demonstrate the RED failure with the exact test selector.
+
+## 2026-06-23 - Bounded ordinary review was stopped without evidence
+
+- Worker: ordinary explorer `019ef101-0626-7db3-95c9-6762e613141f`.
+- Task: read-only review of the 410 missing-history fix.
+- Result: still running after about 40 seconds with no findings; stopped to avoid delaying the verified checkpoint.
+- Cause classification: bounded review availability failure, not product evidence.
+- Rule change: do not cite the stopped reviewer. Use direct diff inspection plus focused history/integration and launcher regressions as the accepted review evidence.

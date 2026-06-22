@@ -94,6 +94,7 @@ Branch: main
 - Current evidence remains no-traffic for both new optional paths: static contracts, negative safety checks, default skip reports, and the existing local nine-turn provider scenario pass. Real third-party traffic and real Antigravity turn 10 have not been run.
 - Manager latest reports and diagnostic bundle collection now surface both optional report files when generated; neither was added to passive release-required gates.
 - Fast source preflight now runs the isolated upstream profile storage suite as `upstreamProfileStorage`, covering corrupt/unreadable third-party key fail-closed behavior, explicit Antigravity recovery, history preservation, and no real APPDATA profile mutation.
+- Responses missing-history handling now preserves HTTP 410 `response_history_missing` instead of generic `gateway_error`; integration coverage proves non-retryable guidance, original response ID, and no upstream request.
 
 ## Fresh Lessons For Next Channel
 

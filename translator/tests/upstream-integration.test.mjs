@@ -481,3 +481,88 @@ test("OpenAI-compatible runtime preserves model identity and bearer authenticati
     rmSync(stateRoot, { recursive: true, force: true });
   }
 });
+
+test("missing response history returns a non-retryable 410 without calling upstream", async () => {
+  const stateRoot = mkdtempSync(join(tmpdir(), "anticodex-missing-history-integration-"));
+  const requests = [];
+  const upstream = http.createServer(async (req, res) => {
+    const body = req.method === "POST" ? await readJson(req) : {};
+    requests.push({ path: req.url, body });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      id: "chatcmpl_unexpected",
+      object: "chat.completion",
+      choices: [{ index: 0, message: { role: "assistant", content: "unexpected upstream call" }, finish_reason: "stop" }],
+    }));
+  });
+
+  let child;
+  try {
+    const upstreamPort = await listen(upstream);
+    const translatorProbe = http.createServer();
+    const translatorPort = await listen(translatorProbe);
+    await close(translatorProbe);
+    const translatorUrl = "http://127.0.0.1:" + translatorPort;
+    const profilePath = join(stateRoot, "provider-profile.json");
+    writeFileSync(profilePath, JSON.stringify({
+      provider: "missing-history-test",
+      protocol: "openai-compatible",
+      baseUrl: "http://127.0.0.1:" + upstreamPort + "/v1",
+      model: "history-test-model",
+      defaultModel: "history-test-model",
+      fastModel: "history-test-model",
+      models: ["history-test-model"],
+      capabilities: { basicChat: true, stream: false, toolCalls: false },
+      toolStrategy: {},
+    }), "utf8");
+
+    child = spawn(process.execPath, [resolve(root, "translator", "adaptive-server.mjs")], {
+      cwd: root,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        TRANSLATOR_HOST: "127.0.0.1",
+        TRANSLATOR_LISTEN_HOST: "127.0.0.1",
+        TRANSLATOR_PORT: String(translatorPort),
+        TRANSLATOR_UPSTREAM_MODE: "chat",
+        UPSTREAM_PROTOCOL: "openai-compatible",
+        UPSTREAM_URL: "http://127.0.0.1:" + upstreamPort + "/v1",
+        UPSTREAM_MODEL: "",
+        UPSTREAM_API_KEY: "sk-history-test",
+        TRANSLATOR_PROFILE_PATH: profilePath,
+        DEEPCODEX_STATE_ROOT: stateRoot,
+        CODEX_HOME_DIR: join(stateRoot, "codex-home-deepseek-app"),
+        TRANSLATOR_NATIVE_STREAMING: "0",
+        TRANSLATOR_CAP_INTERNAL_WEB_TOOLS: "0",
+      },
+    });
+    await waitForHealth(translatorUrl, child);
+
+    const upstreamRequestsBefore = requests.length;
+    const missingId = "resp_expired_history_marker";
+    const response = await fetch(translatorUrl + "/v1/responses", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "history-test-model",
+        stream: false,
+        previous_response_id: missingId,
+        input: "continue expired conversation",
+      }),
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 410);
+    assert.equal(payload.error.type, "response_history_missing");
+    assert.equal(payload.error.details.status, 410);
+    assert.equal(payload.error.details.retryable, false);
+    assert.equal(payload.error.details.previous_response_id, missingId);
+    assert.match(payload.error.message, /Start a fresh request or reopen the original conversation context/);
+    assert.equal(requests.length, upstreamRequestsBefore);
+  } finally {
+    if (child && child.exitCode === null) child.kill();
+    await close(upstream);
+    rmSync(stateRoot, { recursive: true, force: true });
+  }
+});

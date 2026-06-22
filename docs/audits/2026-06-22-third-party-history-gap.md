@@ -40,6 +40,6 @@
 ## 其他边界状态
 
 - DPAPI key 文件损坏/不可解密的本地存储边界已由 `test-anticodex-upstream-profile.ps1` 覆盖，并已接入 fast source preflight；完整桌面交互提示体验仍可单独加强。
-- 历史修剪后 `410 response_history_missing` 到桌面客户端的完整容错表现。
+- `410 response_history_missing` 的 translator HTTP 契约已补齐：外层错误类型、不可重试标记、原响应号、恢复提示和零上游请求均有集成测试。桌面 UI 如何展示/引导重开上下文仍可单独做真实界面验收。
 
 这些问题不再与“跨协议工具历史是否保留”混为同一个缺口。

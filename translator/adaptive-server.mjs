@@ -6768,6 +6768,15 @@ const server = http.createServer(async (req, res) => {
 
             pipeSSE(res, fmt);
         } catch (e) {
+            if (e?.type === "response_history_missing") {
+                return failWithDetails(res, e.statusCode || 410, {
+                    type: e.type,
+                    status: e.statusCode || 410,
+                    retryable: false,
+                    message: e.message,
+                    previous_response_id: e.previous_response_id || null,
+                });
+            }
             if (isAntigravityUpstreamMode(UPSTREAM_MODE)) {
                 const failure = shouldRecordAntigravityTrafficFailure(e)
                     ? recordAntigravityTrafficFailure(e)
