@@ -796,3 +796,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: rewrote `docs/marketing/launch-post.md` and `docs/marketing/wechat-article.md` from garbled DeepCodex/DeepSeek-only copy into current Anti-Codex messaging.
 - Completed: the refreshed copy states the current provider shape: default Antigravity Desktop, optional third-party API, no ChatGPT login path, no original Codex mutation, and no fake connector/app-tool authorization.
 - Verification: marketing-doc search finds no `DeepCodex` / `deepcodex` residues; documentation whitespace check passed.
+
+## 2026-06-23 Provider Stack Doc Refresh
+- Completed: rewrote `docs/ADAPTIVE_ONE_API_STACK.md` from the old DeepCodex one-api bootstrap path into the current Anti-Codex provider stack: local translator, default Antigravity Desktop upstream, optional explicit third-party provider profile, and no ChatGPT login route.
+- Completed: the doc now states the provider-switch continuity contract and the local MCP/skill/plugin/connector metadata parity boundary, including that metadata sync does not grant connector authorization.
+- Verification: focused stale-stack search and documentation whitespace checks passed.
