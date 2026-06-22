@@ -183,6 +183,11 @@ function Read-JsonSummary {
             attempts = $json.attempts
             repairedCount = $json.repairedCount
             repairedAt = $json.repairedAt
+            releaseReady = $json.releaseReady
+            shortReady = $json.shortReady
+            missingRequired = @($json.missingRequired | ForEach-Object { [string]$_ })
+            missingShort = @($json.missingShort | ForEach-Object { [string]$_ })
+            damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
             upstreamFullUrlAccepted = $json.upstreamFullUrlAccepted
             unauthorizedManagerBlocked = $json.unauthorizedManagerBlocked
             savedWithoutHistoryLoss = $json.savedWithoutHistoryLoss
@@ -281,6 +286,7 @@ $latestReports = @(
     "latest-source-preflight.json",
     "latest-mcp-skills.json",
     "latest-plugin-capabilities.json",
+    "latest-release-gates.json",
     "latest-third-party-provider.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",

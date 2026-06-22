@@ -1717,6 +1717,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-mcp-tool-loop\.json/);
   assert.match(server, /latest-mcp-skills\.json/);
   assert.match(server, /latest-plugin-capabilities\.json/);
+  assert.match(server, /latest-release-gates\.json/);
   assert.match(server, /latest-manager-real-buttons\.json/);
   assert.match(server, /latest-refresh-features\.json/);
   assert.match(server, /latest-compaction-resume\.json/);
@@ -1826,6 +1827,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-source-preflight\.json/);
   assert.match(collector, /latest-shortcut-repair\.json/);
   assert.match(collector, /latest-manager-real-buttons\.json/);
+  assert.match(collector, /latest-release-gates\.json/);
   assert.match(collector, /latest-third-party-provider\.json/);
   assert.match(collector, /translator-lifecycle\.json/);
   assert.match(collector, /translator-lifecycle\.jsonl/);
@@ -1852,6 +1854,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /managerButtonResults/);
   assert.match(reportSummarizer, /payload\.results/);
   assert.match(reportSummarizer, /providerContinuity/);
+  assert.match(reportSummarizer, /releaseReady/);
+  assert.match(reportSummarizer, /shortReady/);
+  assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -1921,6 +1926,7 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(accountProxy, /Write-AntiCodexJsonReport/);
   const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
   const thirdPartyProvider = readFileSync(resolve(root, "scripts", "test-anticodex-third-party-provider.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   assert.match(localConnectors, /createHash\("sha256"\)/);
   assert.match(localConnectors, /function writeHashSidecar/);
   assert.match(localConnectors, /\.sha256/);
@@ -1930,7 +1936,13 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(thirdPartyProvider, /createHash\("sha256"\)/);
   assert.match(thirdPartyProvider, /function writeHashSidecar/);
   assert.match(thirdPartyProvider, /\.sha256/);
+  assert.match(releaseGates, /latest-release-gates\.json/);
+  assert.match(releaseGates, /releaseReady/);
+  assert.match(releaseGates, /shortReady/);
+  assert.match(releaseGates, /function writeHashSidecar/);
+  assert.match(releaseGates, /\.sha256/);
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  assert.match(installedOverall, /latest-release-gates\.json/);
   assert.match(installedOverall, /latest-third-party-provider\.json/);
 });
 
@@ -3827,6 +3839,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);
+  assert.match(diagnostics, /latest-release-gates\.json/);
+  assert.match(diagnostics, /release-gates summary/);
+  assert.match(diagnostics, /shortReady/);
+  assert.match(diagnostics, /missingRequired/);
+  assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /latest-third-party-provider\.json/);
   assert.match(diagnostics, /third-party provider summary/);
   assert.match(diagnostics, /providerContinuity/);
@@ -3903,6 +3920,38 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /exceeds its configured limit/);
   assert.match(diagnostics, /tool output\|messages\|input_items\|Return exactly this/);
   assert.doesNotMatch(diagnostics, /Stop-Process|Start-Process|auth\/login/);
+});
+
+test("Anti-Codex ships a passive release gate summary verifier", () => {
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+
+  assert.match(releaseGates, /latest-release-gates\.json/);
+  assert.match(releaseGates, /group: "short"/);
+  assert.match(releaseGates, /group: "no-traffic"/);
+  assert.match(releaseGates, /real-traffic/);
+  assert.match(releaseGates, /group: "manager"/);
+  assert.match(releaseGates, /group: "soak"/);
+  assert.match(releaseGates, /group: "cold"/);
+  assert.match(releaseGates, /requiredForShort/);
+  assert.match(releaseGates, /requiredForRelease/);
+  assert.match(releaseGates, /requireSkipRequests/);
+  assert.match(releaseGates, /expected_skipRequests_true/);
+  assert.match(releaseGates, /requireUsedRealTraffic/);
+  assert.match(releaseGates, /expected_usedRealTraffic_true/);
+  assert.match(releaseGates, /manager_action_missing_real_click/);
+  assert.match(releaseGates, /releaseReady/);
+  assert.match(releaseGates, /shortReady/);
+  assert.match(releaseGates, /missingRequired/);
+  assert.match(releaseGates, /missingShort/);
+  assert.match(releaseGates, /damagedReports/);
+  assert.match(releaseGates, /--strict/);
+  assert.match(releaseGates, /missing_hash_sidecar/);
+  assert.match(releaseGates, /hash_mismatch/);
+  assert.match(server, /latestManagerReportItem\("Release Gate 汇总", "latest-release-gates\.json"\)/);
+  assert.match(collector, /latest-release-gates\.json/);
+  assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {

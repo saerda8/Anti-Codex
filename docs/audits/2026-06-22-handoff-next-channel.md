@@ -80,6 +80,8 @@ Branch: main
 - Manager `fastOverallNoTraffic` now keeps UI-state coverage and carries explicit short budgets: `-SubcheckTimeoutSec 30` and `-FastMaxElapsedMs 90000`.
 - Installed overall skipped checks now include `behaviorCovered:false` and `coverageKind:"skipped"` so fast reports do not overstate behavior coverage.
 - Latest verification: local fake-provider verifier refreshed `latest-third-party-provider.json`; launcher contract suite passed `91/91`; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with provider continuity evidence in `20260623-014948.zip`.
+- Added passive release gate summary: `test-anticodex-release-gates.mjs` reads latest reports only and writes `latest-release-gates.json`, grouping evidence into `short`, `no-traffic`, `real-traffic`, `manager`, `soak`, and `cold`.
+- Latest release-gate evidence: `shortReady:true`, `releaseReady:false`; missing release items are explicitly listed instead of inferred from old conversation context. Manager latest reports and diagnostic bundles now include the release-gate summary. Installed diagnostics bundle verification passed with release-gate evidence in `20260623-020134.zip`.
 
 ## Fresh Lessons For Next Channel
 
@@ -88,6 +90,7 @@ Branch: main
 - Avoid complex nested PowerShell through `rtk proxy`; use short commands, `curl.exe`, `rg`, or a small script file for probes that need `$null`, `$_`, arrays, or regexes.
 - Avoid inline multi-line Node through PowerShell arguments; use a checked-in `.mjs` helper for JSON parsing or summarization.
 - For provider-history checks, require structured tool pair evidence and protocol-shape cleanliness instead of relying only on text markers.
+- Use passive release-gate summaries before running long acceptance. They are cheap, show exactly which latest reports are missing/stale/damaged, and keep real traffic / soak / cold relaunch as explicit later gates.
 - Current docs can mention old compatibility names, but they must say why. Historical DeepCodex/DeepSeek launch material should move under `legacy` or carry a clear legacy marker.
 
 ## Worker Note

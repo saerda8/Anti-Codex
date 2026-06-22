@@ -120,6 +120,7 @@ function Test-DiagnosticBundle {
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
     $thirdPartyProviderSummary = $null
+    $releaseGatesSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         $summary = As-FlatArray (Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json)
         $modelSummary = @($summary | Where-Object { $_.file -eq "latest-model-routing.json" } | Select-Object -First 1)[0]
@@ -176,6 +177,14 @@ function Test-DiagnosticBundle {
                 if ($continuity.structuralEvidenceClean -ne $true) { Add-Failure "third-party provider summary missing clean structured tool-pair evidence" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesHistory -ne $true) { Add-Failure "third-party provider summary missing final reverse-switch history evidence" }
             }
+        }
+        $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
+        if ($releaseGatesSummary) {
+            if ($releaseGatesSummary.ok -ne $true) { Add-Failure "release-gates summary ok=false" }
+            if ($releaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates summary shortReady is not true" }
+            if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
+            if (-not (Has-Property $releaseGatesSummary "missingRequired")) { Add-Failure "release-gates summary missing missingRequired" }
+            if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
         }
         $managerRealButtonsSummary = @($summary | Where-Object { $_.file -eq "latest-manager-real-buttons.json" } | Select-Object -First 1)[0]
         if (-not $managerRealButtonsSummary) {
@@ -253,6 +262,15 @@ function Test-DiagnosticBundle {
                 reportName = $managerRealButtonsSummary.reportName
                 actions = @($managerRealButtonsSummary.actions)
                 managerButtonOk = $managerRealButtonsSummary.managerButtonOk
+            }
+        } else { $null }
+        releaseGates = if ($releaseGatesSummary) {
+            [pscustomobject]@{
+                ok = $releaseGatesSummary.ok
+                shortReady = $releaseGatesSummary.shortReady
+                releaseReady = $releaseGatesSummary.releaseReady
+                missingRequired = @($releaseGatesSummary.missingRequired)
+                damagedReports = @($releaseGatesSummary.damagedReports)
             }
         } else { $null }
         thirdPartyProvider = if ($thirdPartyProviderSummary) {

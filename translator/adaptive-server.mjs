@@ -2025,6 +2025,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("MCP 工具链", "latest-mcp-tool-loop.json"),
         latestManagerReportItem("MCP/Skill 检查", "latest-mcp-skills.json"),
         latestManagerReportItem("插件/应用检查", "latest-plugin-capabilities.json"),
+        latestManagerReportItem("Release Gate 汇总", "latest-release-gates.json"),
         latestManagerReportItem("Manager 真实按钮", "latest-manager-real-buttons.json"),
         latestManagerReportItem("本地功能刷新", "latest-refresh-features.json"),
         latestManagerReportItem("压缩恢复", "latest-compaction-resume.json"),

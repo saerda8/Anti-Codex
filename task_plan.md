@@ -874,3 +874,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager `fastOverallNoTraffic` now keeps UI-state coverage while using a bounded short-check budget: `-SubcheckTimeoutSec 30` and `-FastMaxElapsedMs 90000`.
 - Completed: installed overall skipped subchecks now carry `behaviorCovered:false` and `coverageKind:"skipped"` so fast reports cannot be mistaken for behavior-complete coverage.
 - Verification: JS checks passed for provider and summarizer scripts; PowerShell parser checks passed for diagnostics/installed-overall scripts; launcher contract suite passed `91/91`; local fake-provider verifier passed in about 6s and refreshed the installed latest report; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with provider continuity evidence in `20260623-014948.zip`.
+
+## 2026-06-23 Passive Release Gate Summary
+- Completed: added `scripts/test-anticodex-release-gates.mjs`, a read-only latest-report summarizer that writes `latest-release-gates.json` without running any long verifier, model traffic, Manager click, soak, or cold relaunch.
+- Completed: release gates are grouped as `short`, `no-traffic`, `real-traffic`, `manager`, `soak`, and `cold`, with hash/fresh/ok checks plus semantic checks for `fast+noTraffic`, `skipRequests`, `usedRealTraffic`, and real Manager button evidence.
+- Completed: Manager latest reports and diagnostic bundles now include `latest-release-gates.json`; diagnostics exposes `shortReady`, `releaseReady`, `missingRequired`, and `damagedReports`.
+- Verification: release gate script passed syntax and generated `shortReady:true`, `releaseReady:false` with missing long-gate evidence listed; launcher contract suite passed `92/92`; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with release-gate summary in `20260623-020134.zip`.

@@ -424,6 +424,7 @@ function Test-ReportEncoding {
         "latest-mcp-skills.json",
         "latest-plugin-capabilities.json",
         "latest-local-connectors.json",
+        "latest-release-gates.json",
         "latest-third-party-provider.json",
         "latest-manager-real-buttons.json",
         "latest-refresh-features.json",

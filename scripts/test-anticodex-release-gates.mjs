@@ -1,0 +1,216 @@
+#!/usr/bin/env node
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+const args = new Map();
+for (let i = 2; i < process.argv.length; i += 1) {
+  const arg = process.argv[i];
+  if (!arg.startsWith("--")) continue;
+  const next = process.argv[i + 1];
+  if (next && !next.startsWith("--")) {
+    args.set(arg, next);
+    i += 1;
+  } else {
+    args.set(arg, true);
+  }
+}
+
+const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || ".", "anticodex", "reports"));
+const maxAgeHours = Number(args.get("--max-age-hours") || 48);
+const strict = args.has("--strict");
+const startedAt = Date.now();
+
+const gateDefinitions = [
+  { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true },
+  { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true },
+  { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true },
+  { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true },
+  { id: "localConnectors", group: "short", file: "latest-local-connectors.json", requiredForShort: true, requiredForRelease: true },
+  { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true },
+  { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
+  { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false },
+
+  { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true },
+  { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireSkipRequests: true },
+  { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true },
+  { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true },
+  { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true },
+  { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true },
+
+  { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true },
+  { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true },
+  { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true },
+  { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: true },
+  { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: true },
+  { id: "mcpToolLoop", group: "real-traffic", file: "latest-mcp-tool-loop.json", requiredForRelease: true },
+  { id: "customToolLoop", group: "real-traffic", file: "latest-custom-tool-loop.json", requiredForRelease: true },
+  { id: "compactionResume", group: "real-traffic", file: "latest-compaction-resume.json", requiredForRelease: true },
+  { id: "cancellation", group: "real-traffic", file: "latest-cancellation.json", requiredForRelease: true },
+  { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true },
+  { id: "realMiniTool", group: "real-traffic", file: "latest-real-mini-tool.json", requiredForRelease: true },
+  { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true },
+  { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true },
+
+  { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false },
+  { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, note: "No latest report is produced by the cold relaunch verifier yet." },
+];
+
+function fileHash(filePath) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function integrityFor(filePath) {
+  const sidecarPath = `${filePath}.sha256`;
+  if (!existsSync(filePath)) return { signed: false, valid: null, error: "missing_report" };
+  if (!existsSync(sidecarPath)) return { signed: false, valid: null, error: "missing_hash_sidecar" };
+  const raw = readFileSync(sidecarPath, "ascii").trim();
+  const match = raw.match(/^(?:sha256:)?([a-fA-F0-9]{64})$/);
+  if (!match) return { signed: true, valid: false, error: "invalid_hash_sidecar" };
+  const expected = match[1].toLowerCase();
+  const actual = fileHash(filePath);
+  return { signed: true, valid: actual === expected, hash: actual, expected, error: actual === expected ? "" : "hash_mismatch" };
+}
+
+function summarizeGate(definition) {
+  const filePath = join(reportRoot, definition.file);
+  const present = existsSync(filePath);
+  const gate = {
+    id: definition.id,
+    group: definition.group,
+    file: definition.file,
+    requiredForShort: definition.requiredForShort === true,
+    requiredForRelease: definition.requiredForRelease === true,
+    present,
+    parseable: false,
+    signed: false,
+    hashValid: null,
+    okField: null,
+    fresh: false,
+    ageHours: null,
+    satisfied: false,
+    note: definition.note || "",
+    error: present ? "" : "missing_report",
+  };
+  if (!present) return gate;
+
+  const stat = statSync(filePath);
+  const ageHours = (Date.now() - stat.mtimeMs) / 3_600_000;
+  gate.ageHours = Math.max(0, Number(ageHours.toFixed(3)));
+  gate.fresh = Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? ageHours <= maxAgeHours : true;
+  const integrity = integrityFor(filePath);
+  gate.signed = integrity.signed === true;
+  gate.hashValid = integrity.valid;
+  if (integrity.error) gate.error = integrity.error;
+
+  try {
+    const report = JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+    gate.parseable = true;
+    gate.okField = report.ok === true;
+    gate.reportName = typeof report.reportName === "string" ? report.reportName : "";
+    gate.failureCount = Array.isArray(report.failures) ? report.failures.length : 0;
+    gate.fast = report.fast === true;
+    gate.noTraffic = report.noTraffic === true;
+    gate.behaviorCovered = report.behaviorCovered === false ? false : null;
+    gate.coverageKind = typeof report.coverageKind === "string" ? report.coverageKind : "";
+    const semanticFailures = [];
+    if (definition.requireFastNoTraffic && (report.fast !== true || report.noTraffic !== true)) {
+      semanticFailures.push("expected_fast_no_traffic");
+    }
+    if (definition.requireSkipRequests && report.skipRequests !== true) {
+      semanticFailures.push("expected_skipRequests_true");
+    }
+    if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
+      semanticFailures.push("expected_usedRealTraffic_true");
+    }
+    if (definition.requireManagerActions) {
+      const actions = Array.isArray(report.actions) ? report.actions.map((item) => String(item)) : [];
+      const results = report.managerButton?.results || {};
+      for (const action of ["mcpSkills", "pluginCapabilities"]) {
+        const result = results[action]?.result || results[action]?.payload?.result || results[action]?.payload?.results?.[action]?.result || null;
+        if (!actions.includes(action)) semanticFailures.push(`missing_manager_action:${action}`);
+        if (results[action]?.ok !== true) semanticFailures.push(`manager_action_not_ok:${action}`);
+        if (!result || result.lastUiOnly !== false) semanticFailures.push(`manager_action_missing_real_click:${action}`);
+      }
+    }
+    gate.semanticFailures = semanticFailures;
+  } catch (error) {
+    gate.error = String(error?.message || error || "JSON parse failed").replace(/[\r\n]+/g, " ").slice(0, 240);
+  }
+
+  gate.satisfied = gate.present && gate.parseable && gate.hashValid === true && gate.okField === true && gate.fresh === true && (!gate.semanticFailures || gate.semanticFailures.length === 0);
+  return gate;
+}
+
+function writeTextAtomic(filePath, text) {
+  const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(tmp, text, "utf8");
+    JSON.parse(readFileSync(tmp, "utf8"));
+    renameSync(tmp, filePath);
+    writeHashSidecar(filePath);
+  } catch (error) {
+    try { unlinkSync(tmp); } catch {}
+    throw error;
+  }
+}
+
+function writeHashSidecar(filePath) {
+  const hash = fileHash(filePath);
+  const sidecar = `${filePath}.sha256`;
+  const tmp = `${sidecar}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(tmp, `sha256:${hash}`, "ascii");
+    renameSync(tmp, sidecar);
+  } catch (error) {
+    try { unlinkSync(tmp); } catch {}
+    throw error;
+  }
+}
+
+function writeJsonReportAtomic(payload) {
+  mkdirSync(reportRoot, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const latest = join(reportRoot, "latest-release-gates.json");
+  const history = join(reportRoot, `${stamp}-release-gates.json`);
+  const text = JSON.stringify({ ...payload, report: { latest, history } });
+  writeTextAtomic(history, text);
+  writeTextAtomic(latest, text);
+  return { latest, history };
+}
+
+const gates = gateDefinitions.map(summarizeGate);
+const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
+const requiredShort = gates.filter((gate) => gate.requiredForShort);
+const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);
+const missingShort = requiredShort.filter((gate) => !gate.satisfied).map((gate) => gate.id);
+const damagedReports = gates.filter((gate) => gate.present && (!gate.parseable || gate.hashValid !== true)).map((gate) => gate.id);
+const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].map((group) => {
+  const groupGates = gates.filter((gate) => gate.group === group);
+  return [group, {
+    total: groupGates.length,
+    satisfied: groupGates.filter((gate) => gate.satisfied).length,
+    required: groupGates.filter((gate) => gate.requiredForRelease).length,
+    missingRequired: groupGates.filter((gate) => gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id),
+  }];
+}));
+
+const releaseReady = missingRequired.length === 0;
+const shortReady = missingShort.length === 0;
+const payload = {
+  ok: strict ? releaseReady && damagedReports.length === 0 : true,
+  releaseReady,
+  shortReady,
+  strict,
+  reportName: "release-gates",
+  elapsedMs: Date.now() - startedAt,
+  reportRoot,
+  maxAgeHours,
+  missingRequired,
+  missingShort,
+  damagedReports,
+  groups,
+  gates,
+};
+writeJsonReportAtomic(payload);
+process.stdout.write(JSON.stringify(payload));
