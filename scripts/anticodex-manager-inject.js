@@ -1141,12 +1141,15 @@
     grid.replaceChildren(card("\u6b63\u5728\u8bfb\u53d6", el("div", { className: "anticodex-result anticodex-loading", text: "\u6b63\u5728\u8bfb\u53d6\u672c\u5730\u72b6\u6001\uff0c\u9762\u677f\u4e0d\u4f1a\u6253\u5f00 ChatGPT \u767b\u5f55\u3002" })));
     const result = el("div", { className: "anticodex-result", "data-anticodex-result": "action", text: "\u6b63\u5728\u8bfb\u53d6\u72b6\u6001 ..." });
     const lastActionResult = window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
+    const lastActionSummary = String(lastActionResult?.managerSummary || "");
     const preserveLastActionResult = Boolean(
-      lastActionResult?.managerSummary &&
+      lastActionSummary &&
       lastActionResult.ok !== false &&
-      !String(lastActionResult.managerSummary).includes("\u8fd0\u884c\u5931\u8d25")
+      lastActionResult.uiOnly !== true &&
+      !lastActionSummary.includes("ui-only manager button smoke") &&
+      !lastActionSummary.includes("\u8fd0\u884c\u5931\u8d25")
     );
-    if (preserveLastActionResult) result.textContent = lastActionResult.managerSummary;
+    if (preserveLastActionResult) result.textContent = lastActionSummary;
     let actionGeneration = 0;
     let actionInFlight = false;
 

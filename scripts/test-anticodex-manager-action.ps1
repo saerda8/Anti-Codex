@@ -367,38 +367,49 @@ function Invoke-ManagerJsonp {
     )
     try {
         $url = "$BaseUrl/anticodex/manager/action-script$Query"
-        $webParams = @{
-            Uri = $url
-            Method = "Get"
-            Proxy = $null
-            TimeoutSec = $RequestTimeoutSec
-            UseBasicParsing = $true
-        }
+        $request = [System.Net.HttpWebRequest]::Create($url)
+        $request.Method = "GET"
+        $request.Proxy = $null
+        $request.Timeout = [Math]::Max(1, $RequestTimeoutSec) * 1000
+        $request.ReadWriteTimeout = [Math]::Max(1, $RequestTimeoutSec) * 1000
         if ($Headers -and $Headers.Count -gt 0) {
-            $webParams["Headers"] = $Headers
+            foreach ($key in $Headers.Keys) {
+                $value = [string]$Headers[$key]
+                if ($key -ieq "Referer") {
+                    $request.Referer = $value
+                } elseif ($key -ieq "User-Agent") {
+                    $request.UserAgent = $value
+                } else {
+                    $request.Headers[$key] = $value
+                }
+            }
         }
-        $response = Invoke-WebRequest @webParams
+        $response = $request.GetResponse()
+        $reader = New-Object IO.StreamReader($response.GetResponseStream())
+        $body = $reader.ReadToEnd()
+        $reader.Dispose()
         return [pscustomobject]@{
             ok = $true
             status = [int]$response.StatusCode
-            body = [string]$response.Content
-            contentType = [string]$response.Headers["Content-Type"]
+            body = [string]$body
+            contentType = [string]$response.ContentType
         }
     } catch {
         $statusCode = 0
         $body = ""
         $contentType = ""
-        if ($_.Exception.Response) {
-            try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+        $errorResponse = if ($_.Exception.Response) { $_.Exception.Response } elseif ($_.Exception.InnerException -and $_.Exception.InnerException.Response) { $_.Exception.InnerException.Response } else { $null }
+        if ($errorResponse) {
+            try { $statusCode = [int]$errorResponse.StatusCode } catch {}
             try {
-                $stream = $_.Exception.Response.GetResponseStream()
+                $stream = $errorResponse.GetResponseStream()
                 if ($stream) {
                     $reader = New-Object IO.StreamReader($stream)
                     $body = $reader.ReadToEnd()
                     $reader.Dispose()
                 }
             } catch {}
-            try { $contentType = [string]$_.Exception.Response.Headers["Content-Type"] } catch {}
+            try { $contentType = [string]$errorResponse.ContentType } catch {}
         }
         return [pscustomobject]@{
             ok = $false
@@ -425,7 +436,8 @@ if ($jsonpBadCallback.status -ne 400) { Add-Failure "action-script with bad call
 
 $jsonpValid = $null
 if ($token) {
-    $jsonpValid = Invoke-ManagerJsonp -Query "?action=$jsonpActionName&callback=test_cb&token=$token" -Headers @{
+    $encodedToken = [Uri]::EscapeDataString($token)
+    $jsonpValid = Invoke-ManagerJsonp -Query "?action=$jsonpActionName&callback=test_cb&token=$encodedToken" -Headers @{
         "Origin" = $BaseUrl
         "Referer" = "$BaseUrl/anticodex/manager"
     }
@@ -487,5 +499,5 @@ $result = [pscustomobject]@{
         validBodyHasCallback = if ($jsonpValid) { [bool]($jsonpValid.body -match 'globalThis\["test_cb"\]\(') } else { $false }
     }
 }
-Write-Output ($result | ConvertTo-Json -Depth 8 -Compress)
+[Console]::Out.WriteLine(($result | ConvertTo-Json -Depth 8 -Compress))
 if ($failures.Count -gt 0) { exit 1 }

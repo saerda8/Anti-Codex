@@ -1325,3 +1325,17 @@ After every failure, before another dispatch:
 - Cause classification: UI contract split between static fallback HTML and dynamic injected panel. The runtime behavior was safe, but the verifier reads static Manager HTML as durable evidence.
 - Rule change: safety-critical wording must exist in both the initial static HTML and the dynamic render/update path. Update UI-state static checks whenever changing connector/app-tool authorization wording.
 - Result: the static placeholder, dynamic injected Manager, and fallback Manager now carry the non-authorization warning; installed overall no-traffic passes.
+
+## 2026-06-22 - Do not parallelize Manager button verifiers against installed overall
+
+- Symptom: installed overall no-traffic failed only in UI-state with `Timed out waiting for Manager verifier lock` while a standalone `pluginCapabilities` button verifier was running at the same time.
+- Cause classification: orchestration collision, not an Anti-Codex runtime failure. Both verifiers use the same `%TEMP%\anticodex-manager-button.lock`.
+- Rule change: treat Manager button/UI-state checks as a serial critical section. Parallel agents may investigate code or run non-UI probes, but only one live Manager button/UI-state verifier should run at a time.
+- Result: after the standalone plugin button check finished and released the lock, the serial installed overall rerun passed.
+
+## 2026-06-22 - Avoid nested PowerShell command-string quoting for verifier probes
+
+- Symptom: several diagnostic probes failed before running because `$LASTEXITCODE`, `$out`, or `&` were expanded or parsed by the outer PowerShell layer.
+- Cause classification: command construction failure during debugging, not a product failure.
+- Rule change: for nested PowerShell diagnostics, prefer direct `-File` execution, raw script files, or single-quoted `-Command` strings with escaped variables. Avoid putting complex `&` invocations and `$LASTEXITCODE` checks inside double-quoted outer command strings.
+- Result: the Manager action issue was diagnosed with a trace file and then fixed in the script itself.

@@ -86,7 +86,7 @@ function isRunningText(text) {
 }
 
 function isFailureText(text) {
-  return text.includes(FAILURE_TEXT) || /timed out|bridge failed|Action bridge failed/i.test(text);
+  return text.includes(FAILURE_TEXT) || text.includes("\u9700\u8981\u5904\u7406") || /timed out|bridge failed|Action bridge failed/i.test(text);
 }
 
 function isUiOnlySmokeText(text) {
@@ -185,6 +185,25 @@ function realBridgeSource(enabled = !uiOnlyMode) {
     window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id: requestId, action: requestedAction });
   });
   window.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
+`;
+}
+
+function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode) {
+  if (!enabled) return "";
+  return `
+  if (window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__) {
+    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+  }
+  {
+    const lastActionResult = window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
+    const lastSummary = String(lastActionResult?.managerSummary || "");
+    if (lastActionResult?.uiOnly === true || lastSummary.includes("ui-only manager button smoke")) {
+      delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
+      const result = document.querySelector('[data-anticodex-result="action"]');
+      if (result && result.textContent.includes("ui-only manager button smoke")) result.textContent = "";
+    }
+  }
 `;
 }
 
@@ -657,6 +676,10 @@ async function runManagerActionBatch(actions) {
       target: { id: target.id, title: target.title, url: target.url },
       result: { ...latest, lastUiOnly: uiOnlyMode || latest.lastUiOnly === true, action: actionName, label: initial.label, initialText: initial.initialText, text, initial },
     };
+    await evaluate(`(() => {
+      ${cleanupUiOnlyBridgeSource()}
+      return true;
+    })()`, 2000);
   }
   return {
     ok: actions.every((actionName) => results[actionName]?.ok === true),
@@ -951,6 +974,7 @@ while (initial.ok && Date.now() < deadline) {
       queueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : null,
       pendingCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
       lastAction: lastActionResult?.action || "",
+      lastOk: lastActionResult?.ok,
       lastUiOnly: lastActionResult?.uiOnly === true,
       lastSummary: lastActionResult?.managerSummary || "",
       text: result?.textContent || lastActionResult?.managerSummary || "",
@@ -986,6 +1010,10 @@ while (initial.ok && Date.now() < deadline) {
 }
 ws.close();
 releaseManagerButtonLock(managerButtonLock);
+await evaluate(`(() => {
+  ${cleanupUiOnlyBridgeSource()}
+  return true;
+})()`, 2000).catch(() => {});
 
 const text = latest.text || "";
 const uiOnlyFinished = uiOnlyMode
@@ -1009,7 +1037,8 @@ const visibleFinished = !latest.disabled
   && (uiOnlyMode || !isUiOnlySmokeText(text))
   && hasActionSpecificResult(action, text);
 const explicitActionSuccess = visibleFinished
-  && (latest.lastAction === action || latest.lastAction === "");
+  && (latest.lastAction === action || latest.lastAction === "")
+  && latest.lastOk !== false;
 const ok = Boolean(initial.ok)
   && actionStarted
   && initial.closeHitAreaOk === true
@@ -1022,6 +1051,7 @@ const ok = Boolean(initial.ok)
       || ((latest.lastAction === action || latest.lastAction === "")
         && Number(latest.pendingCount || 0) === 0
         && Number(latest.queueLength || 0) === 0
+        && latest.lastOk !== false
         && visibleFinished))
   );
 
