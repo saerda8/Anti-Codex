@@ -1580,3 +1580,12 @@ After every failure, before another dispatch:
 - Cause classification: verifier false-positive design; the model could echo the current instruction without reading prior history.
 - Rule change: continuity prompts may describe which historical positions to retrieve, but must not include the expected values. Compare the answer against values that appear only in earlier turns.
 - Result: turn 10 now requests semantic history fields and the verifier checks them against the prior provider/tool markers.
+
+## 2026-06-23 - Empty Antigravity completion still requires direct review
+
+- Worker: Antigravity `ag-7c48d50d-f6c6-4a05-990b-5519210a5802`.
+- Task: add two optional reports to Manager and diagnostic latest-report lists.
+- Result: exit code 0 and the intended three-file diff were present, but parsed text/stdout/stderr were empty.
+- Cause classification: worker summary/evidence failure, not implementation failure.
+- Rule change: do not cite the empty worker response. Review the exact diff and rerun syntax plus focused contracts from the main agent.
+- Result after review: only the three authorized files changed; syntax passed and focused launcher contracts passed 3/3.

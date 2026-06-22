@@ -292,6 +292,8 @@ $latestReports = @(
     "latest-release-gates.json",
     "latest-cold-relaunch.json",
     "latest-third-party-provider.json",
+    "latest-real-third-party-provider.json",
+    "latest-provider-antigravity-return.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",
     "latest-stability-soak.json",

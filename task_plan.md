@@ -905,3 +905,4 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Hardened: turn 10 asks for semantic positions from prior history without including the expected marker values in the current prompt, preventing a false pass from simple prompt echo.
 - Verification: launcher contracts passed `94/94`; local nine-turn provider regression passed in about 6 seconds; both new real-traffic paths defaulted to signed `ok:true, skipped:true, behaviorCovered:false` reports; negative key/URL tests failed before traffic and did not leak the test key.
 - Deferred by design: no paid third-party request and no real Antigravity turn 10 were run in this change. Both require explicit real-traffic opt-in.
+- Completed follow-up: Manager latest reports and diagnostic bundle collection now include `latest-real-third-party-provider.json` and `latest-provider-antigravity-return.json` when present. They remain optional and were not added to release-required gates.

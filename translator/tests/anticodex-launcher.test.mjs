@@ -1734,6 +1734,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-refresh-features\.json/);
   assert.match(server, /latest-compaction-resume\.json/);
   assert.match(server, /latest-stability-soak\.json/);
+  assert.match(server, /latest-real-third-party-provider\.json/);
+  assert.match(server, /latest-provider-antigravity-return\.json/);
   assert.match(server, /latestReportsSummary/);
   assert.ok(server.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || server.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || server.includes("公开文档"));
   assert.ok(inject.includes("\\\\u516c\\\\u5f00\\\\u6587\\\\u6863\\\\uff1a") || inject.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a") || inject.includes("公开文档"));
@@ -1842,6 +1844,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-release-gates\.json/);
   assert.match(collector, /latest-cold-relaunch\.json/);
   assert.match(collector, /latest-third-party-provider\.json/);
+  assert.match(collector, /latest-real-third-party-provider\.json/);
+  assert.match(collector, /latest-provider-antigravity-return\.json/);
   assert.match(collector, /translator-lifecycle\.json/);
   assert.match(collector, /translator-lifecycle\.jsonl/);
   assert.match(collector, /Remove-OldDiagnosticBundles -Root \$OutputRoot -Keep \$KeepBundles/);

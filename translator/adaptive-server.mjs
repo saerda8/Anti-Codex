@@ -2061,6 +2061,8 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("稳定性巡检", "latest-stability-soak.json"),
         latestManagerReportItem("源码预检", "latest-source-preflight.json"),
         latestManagerReportItem("账号/代理检查", "latest-account-proxy-readiness.json"),
+        latestManagerReportItem("可选真实第三方", "latest-real-third-party-provider.json"),
+        latestManagerReportItem("可选回切 Antigravity", "latest-provider-antigravity-return.json"),
     ];
     return {
         ok: true,
