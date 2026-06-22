@@ -2002,6 +2002,10 @@ function latestManagerReportItem(label, fileName) {
     const managerBridge = sync?.managerBridge && typeof sync.managerBridge === "object" ? sync.managerBridge : null;
     const updateStatus = sync?.updateStatus && typeof sync.updateStatus === "object" ? sync.updateStatus : null;
     const updateGuardrails = updateStatus?.guardrails && typeof updateStatus.guardrails === "object" ? updateStatus.guardrails : null;
+    const checkEntries = checks && typeof checks === "object"
+        ? Object.entries(checks).map(([id, value]) => ({ id, value: value && typeof value === "object" ? value : {} }))
+        : [];
+    const skippedCheckEntries = checkEntries.filter((entry) => entry.value.skipped === true);
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2091,6 +2095,23 @@ function latestManagerReportItem(label, fileName) {
             forbiddenDesktopHelperCount: Array.isArray(sync?.forbiddenDesktopHelperShortcuts) ? sync.forbiddenDesktopHelperShortcuts.length : null,
             managerBridgeReady: !!managerBridge && Number(managerBridge.processCount) === 1 && Number(managerBridge.staleProcessCount) === 0 && Array.isArray(managerBridge.processes) && managerBridge.processes.every((item) => item?.hasExpectedBaseUrl === true),
             cleanSyncState: sync?.hostSyncMarkerExists === false && sync?.staleCandidateExists === false && sync?.rollbackHostExists === true && sync?.rollbackMarkerExists === true,
+        } : null,
+        installedOverallEvidence: (report?.reportName === "installed-overall" || report?.reportName === "installed-overall-fast") ? {
+            reportName: shortSafeText(report.reportName, ""),
+            fast: report.fast === true,
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            behaviorCovered: report.behaviorCovered === true,
+            coverageKind: shortSafeText(report.coverageKind || "", ""),
+            fastMaxElapsedMs: Number.isFinite(Number(report.fastMaxElapsedMs)) ? Number(report.fastMaxElapsedMs) : null,
+            elapsedMs: Number.isFinite(Number(report.elapsedMs)) ? Number(report.elapsedMs) : null,
+            checkCount: checkEntries.length,
+            okCheckCount: checkEntries.filter((entry) => entry.value.ok === true).length,
+            failedCheckCount: checkEntries.filter((entry) => entry.value.ok !== true).length,
+            skippedCheckCount: skippedCheckEntries.length,
+            skippedChecks: skippedCheckEntries.map((entry) => shortSafeText(entry.id, "")).filter(Boolean).sort().slice(0, 20),
+            missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
+            realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork").map((entry) => entry.id).sort(),
         } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
@@ -2809,6 +2830,11 @@ function latestReportsSummary(result){
       const evidence=item.syncReadinessEvidence;
       lines.push("  syncReadiness: noTraffic="+(evidence.noTrafficReady?"true":"check")+" / full="+(evidence.fullMode?"true":"check")+" / host="+(evidence.activeHostReady&&evidence.brandReady?"ok":"check")+" / icons="+(evidence.iconReady?"ok":"check")+" / update="+(evidence.updateReady?"synced":"check")+" / guardrails="+(evidence.guardrailsReady?"ok":"check"));
       lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / clean="+(evidence.cleanSyncState?"true":"false"));
+    }
+    if(item.installedOverallEvidence){
+      const evidence=item.installedOverallEvidence;
+      lines.push("  installedOverall: noTraffic="+(evidence.noTraffic?"true":"false")+" / coverage="+(evidence.coverageKind||"unknown")+" / usedRealTraffic="+(evidence.usedRealTraffic?"true":"false")+" / behaviorCovered="+(evidence.behaviorCovered?"true":"false"));
+      lines.push("  installedOverall checks: ok="+(evidence.okCheckCount??0)+"/"+(evidence.checkCount??0)+" / skipped="+(evidence.skippedCheckCount??0)+" / realSkipped="+(Array.isArray(evidence.realTrafficSkippedChecks)?evidence.realTrafficSkippedChecks.join(","):""));
     }
     if(item.toolBridgeEvidence){
       const evidence=item.toolBridgeEvidence;

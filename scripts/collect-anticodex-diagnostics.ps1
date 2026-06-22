@@ -182,6 +182,7 @@ function Read-JsonSummary {
             toolBridgeEvidence = $json.toolBridgeEvidence
             uiIdleEvidence = $json.uiIdleEvidence
             syncReadinessEvidence = $json.syncReadinessEvidence
+            installedOverallEvidence = $json.installedOverallEvidence
             state = $json.state
             skipped = $json.skipped
             reason = $json.reason

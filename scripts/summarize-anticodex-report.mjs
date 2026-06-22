@@ -80,6 +80,11 @@ const shortcutVerification = sync && Array.isArray(sync.shortcutVerification) ? 
 const managerBridge = sync && sync.managerBridge ? sync.managerBridge : null;
 const updateStatus = sync && sync.updateStatus ? sync.updateStatus : null;
 const updateGuardrails = updateStatus && updateStatus.guardrails ? updateStatus.guardrails : null;
+const checkEntries = checks && typeof checks === "object" ? Object.entries(checks).map(([id, value]) => ({
+  id,
+  value: value && typeof value === "object" ? value : {},
+})) : [];
+const skippedCheckEntries = checkEntries.filter((entry) => entry.value.skipped === true);
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -188,6 +193,23 @@ const summary = {
     forbiddenDesktopHelperCount: Array.isArray(sync?.forbiddenDesktopHelperShortcuts) ? sync.forbiddenDesktopHelperShortcuts.length : null,
     managerBridgeReady: !!managerBridge && Number(managerBridge.processCount) === 1 && Number(managerBridge.staleProcessCount) === 0 && Array.isArray(managerBridge.processes) && managerBridge.processes.every((item) => item && item.hasExpectedBaseUrl === true),
     cleanSyncState: sync?.hostSyncMarkerExists === false && sync?.staleCandidateExists === false && sync?.rollbackHostExists === true && sync?.rollbackMarkerExists === true,
+  } : null,
+  installedOverallEvidence: report.reportName === "installed-overall" || report.reportName === "installed-overall-fast" ? {
+    reportName: asString(report.reportName),
+    fast: boolField(report, "fast"),
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    fastMaxElapsedMs: has(report, "fastMaxElapsedMs") ? report.fastMaxElapsedMs : null,
+    elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
+    checkCount: checkEntries.length,
+    okCheckCount: checkEntries.filter((entry) => entry.value.ok === true).length,
+    failedCheckCount: checkEntries.filter((entry) => entry.value.ok !== true).length,
+    skippedCheckCount: skippedCheckEntries.length,
+    skippedChecks: skippedCheckEntries.map((entry) => entry.id).sort(),
+    missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
+    realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork").map((entry) => entry.id).sort(),
   } : null,
   state: has(report, "state") ? asString(report.state) : null,
   skipped: boolField(report, "skipped"),

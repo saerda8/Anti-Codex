@@ -120,6 +120,8 @@ function Test-DiagnosticBundle {
     $toolBridgeSummary = $null
     $uiIdleSummary = $null
     $syncReadinessSummary = $null
+    $installedFastSummary = $null
+    $installedFullSummary = $null
     $postVerificationSummary = $null
     $sourcePreflightSummary = $null
     $managerRealButtonsSummary = $null
@@ -227,6 +229,32 @@ function Test-DiagnosticBundle {
                 if ([int]$syncEvidence.forbiddenDesktopHelperCount -ne 0) { Add-Failure "diagnostic sync-readiness summary has forbidden desktop helpers" }
                 if ($syncEvidence.managerBridgeReady -ne $true) { Add-Failure "diagnostic sync-readiness summary manager bridge not ready" }
                 if ($syncEvidence.cleanSyncState -ne $true) { Add-Failure "diagnostic sync-readiness summary sync state not clean" }
+            }
+        }
+        $installedFastSummary = @($summary | Where-Object { $_.file -eq "latest-installed-overall-fast.json" } | Select-Object -First 1)[0]
+        $installedFullSummary = @($summary | Where-Object { $_.file -eq "latest-installed-overall.json" } | Select-Object -First 1)[0]
+        foreach ($entry in @(
+            [pscustomobject]@{ Label = "fast"; Summary = $installedFastSummary; ExpectedReportName = "installed-overall-fast"; ExpectedCoverage = "installed-fast-no-traffic"; ExpectedFast = $true },
+            [pscustomobject]@{ Label = "full"; Summary = $installedFullSummary; ExpectedReportName = "installed-overall"; ExpectedCoverage = "installed-no-traffic"; ExpectedFast = $false }
+        )) {
+            if (-not $entry.Summary) {
+                Add-Failure "diagnostic reports summary missing latest-installed-overall $($entry.Label)"
+                continue
+            }
+            $overallEvidence = $entry.Summary.installedOverallEvidence
+            if (-not $overallEvidence) {
+                Add-Failure "diagnostic installed-overall $($entry.Label) summary missing installedOverallEvidence"
+            } else {
+                if ($overallEvidence.reportName -ne $entry.ExpectedReportName) { Add-Failure "diagnostic installed-overall $($entry.Label) summary reportName mismatch" }
+                if ($overallEvidence.fast -ne $entry.ExpectedFast) { Add-Failure "diagnostic installed-overall $($entry.Label) summary fast flag mismatch" }
+                if ($overallEvidence.noTraffic -ne $true) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing noTraffic" }
+                if ($overallEvidence.usedRealTraffic -ne $false) { Add-Failure "diagnostic installed-overall $($entry.Label) summary used real traffic" }
+                if ($overallEvidence.behaviorCovered -ne $true) { Add-Failure "diagnostic installed-overall $($entry.Label) summary behavior not covered" }
+                if ($overallEvidence.coverageKind -ne $entry.ExpectedCoverage) { Add-Failure "diagnostic installed-overall $($entry.Label) summary coverageKind mismatch" }
+                if ([int]$overallEvidence.checkCount -lt 1) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing checks" }
+                if ([int]$overallEvidence.failedCheckCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary failed checks" }
+                if ([int]$overallEvidence.missingSkipMetadataCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing skip metadata" }
+                if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 2) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
             }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
@@ -455,6 +483,10 @@ function Test-DiagnosticBundle {
                 evidence = $syncReadinessSummary.syncReadinessEvidence
             }
         } else { $null }
+        installedOverall = [pscustomobject]@{
+            fast = if ($installedFastSummary) { $installedFastSummary.installedOverallEvidence } else { $null }
+            full = if ($installedFullSummary) { $installedFullSummary.installedOverallEvidence } else { $null }
+        }
         postVerification = if ($postVerificationSummary) {
             [pscustomobject]@{
                 ok = $postVerificationSummary.ok

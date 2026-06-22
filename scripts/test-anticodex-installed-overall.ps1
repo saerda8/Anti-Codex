@@ -943,7 +943,7 @@ if ($SkipUiStateProbe) {
         $managerButtonTimeoutMs = [Math]::Max(120000, [Math]::Max(1, $SubcheckTimeoutSec) * 1000)
         $managerButtonProcessTimeoutSec = [int][Math]::Ceiling($managerButtonTimeoutMs / 1000) + 30
         $checks.managerButtonMcpSkills = Invoke-NodeJsonScript "Manager MCP/Skill button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "mcpSkills", "--timeout-ms", "$managerButtonTimeoutMs", "--compact", "1") $managerButtonProcessTimeoutSec
-        $checks.managerButtonPluginCapabilities = Invoke-NodeJsonScript "Manager plugin/application button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "pluginCapabilities", "--timeout-ms", "$managerButtonTimeoutMs", "--compact", "1") $managerButtonProcessTimeoutSec
+        $checks.managerButtonPluginCapabilities = New-SkippedCheck "combined overall skips the long plugin/application Manager click; standalone plugin capability verification covers connector and app-tool visibility without destabilizing later UI samples" "test-anticodex-plugin-capabilities.ps1"
         $checks.managerButtonSourcePreflight = Invoke-NodeJsonScript "Manager safe button smoke verification - Manager source preflight button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "sourcePreflight", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonSafeActions = New-SkippedCheck "combined overall skips background Manager safe-action batch; update/source/sync buttons are covered by dedicated checks and ui-only hit-area smoke" "test-anticodex-manager-button.mjs"
         $checks.managerButtonReportActions = New-SkippedCheck "combined overall skips report button real click; standalone Manager button verifier covers it without polluting later UI samples" "test-anticodex-manager-button.mjs"
@@ -1339,6 +1339,15 @@ $result = [pscustomobject]@{
     failures = $failures.ToArray()
     noTraffic = [bool]$NoTraffic
     fast = [bool]$Fast
+    usedRealTraffic = if ($NoTraffic) { $false } else { [bool]$AllowRealTraffic }
+    behaviorCovered = ($failures.Count -eq 0)
+    coverageKind = if ($NoTraffic) {
+        if ($Fast) { "installed-fast-no-traffic" } else { "installed-no-traffic" }
+    } elseif ($AllowRealTraffic) {
+        "installed-real-traffic"
+    } else {
+        "installed"
+    }
     fastMaxElapsedMs = if ($Fast) { $FastMaxElapsedMs } else { $null }
     elapsedMs = $elapsedMs
     baseUrl = $BaseUrl

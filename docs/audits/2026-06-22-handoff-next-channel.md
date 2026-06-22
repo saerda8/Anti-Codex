@@ -210,6 +210,14 @@ Branch: main
 - Passive release gates now reject forged `ok:true` sync-readiness reports unless they prove full mode, active/source hash match, operation success, rollback host/brand/icon readiness, shortcut inventory, Manager bridge base URL, and no stale swap/candidate state.
 - Fresh evidence: sync-readiness verifier refreshed the report, strict passive gates remain `shortReady:true` / `releaseReady:true`, focused launcher/summarizer tests passed, and source diagnostics verification passed.
 
+## 2026-06-23 Installed Overall No-Traffic Follow-Up
+
+- Installed-overall reports now self-attest no-traffic coverage with `usedRealTraffic:false`, `behaviorCovered:true`, and `coverageKind:"installed-no-traffic"` or `"installed-fast-no-traffic"`.
+- Latest-report evidence now surfaces fast/no-traffic flags, coverage kind, check counts, skipped checks, missing skip metadata, and explicit `realMiniTool` / `realWork` skips.
+- Passive release gates now reject forged `ok:true` installed-overall reports unless all checks are green, skips are documented, full-mode skips are expected, and real-traffic-only checks are visibly skipped.
+- Full installed-overall now treats the long plugin/application Manager click as covered by the standalone plugin capability report, avoiding local bridge stalls and later UI-idle false failures without granting connector authorization.
+- Fresh evidence: full installed-overall passed with `usedRealTraffic:false` and `coverageKind:"installed-no-traffic"`; source diagnostics passed; focused launcher/summarizer/diagnostics tests passed; strict passive gates report `shortReady:true` / `releaseReady:true`, no missing required gates, and no damaged reports.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

@@ -1925,6 +1925,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /healthySampleCount/);
   assert.match(reportSummarizer, /syncReadinessEvidence/);
   assert.match(reportSummarizer, /shortcutReadyCount/);
+  assert.match(reportSummarizer, /installedOverallEvidence/);
+  assert.match(reportSummarizer, /realTrafficSkippedChecks/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
@@ -2260,6 +2262,44 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
     assert.equal(summary.syncReadinessEvidence.shortcutReadyCount, 1);
     assert.equal(summary.syncReadinessEvidence.managerBridgeReady, true);
     assert.equal(summary.syncReadinessEvidence.cleanSyncState, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces installed overall no-traffic evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-installed-overall-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-installed-overall.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "installed-overall",
+      fast: false,
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      elapsedMs: 1234,
+      checks: {
+        branding: { ok: true },
+        managerAction: { ok: true, skipped: true, reason: "covered elsewhere", coveredBy: "manager" },
+        realMiniTool: { ok: true, skipped: true, reason: "requires -AllowRealTraffic", coveredBy: "test-anticodex-real-mini-tool.ps1" },
+        realWork: { ok: true, skipped: true, reason: "requires -AllowRealTraffic", coveredBy: "test-anticodex-real-work.ps1" },
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.installedOverallEvidence.reportName, "installed-overall");
+    assert.equal(summary.installedOverallEvidence.noTraffic, true);
+    assert.equal(summary.installedOverallEvidence.usedRealTraffic, false);
+    assert.equal(summary.installedOverallEvidence.behaviorCovered, true);
+    assert.equal(summary.installedOverallEvidence.coverageKind, "installed-no-traffic");
+    assert.equal(summary.installedOverallEvidence.checkCount, 4);
+    assert.equal(summary.installedOverallEvidence.failedCheckCount, 0);
+    assert.equal(summary.installedOverallEvidence.skippedCheckCount, 3);
+    assert.equal(summary.installedOverallEvidence.missingSkipMetadataCount, 0);
+    assert.deepEqual(summary.installedOverallEvidence.realTrafficSkippedChecks, ["realMiniTool", "realWork"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4376,6 +4416,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /syncReadinessEvidence/);
   assert.match(diagnostics, /diagnostic sync-readiness summary missing syncReadinessEvidence/);
   assert.match(diagnostics, /diagnostic sync-readiness summary manager bridge not ready/);
+  assert.match(diagnostics, /installedOverallEvidence/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary missing installedOverallEvidence/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary missing real traffic skipped checks/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);
@@ -4566,7 +4609,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /--strict/);
   assert.match(releaseGates, /missing_hash_sidecar/);
   assert.match(releaseGates, /hash_mismatch/);
+  assert.match(releaseGates, /requireInstalledOverallSemantics/);
+  assert.match(releaseGates, /installed_overall_coverage_kind/);
+  assert.match(releaseGates, /installed_overall_real_traffic_skip_missing/);
   assert.match(releaseGates, /--self-test/);
+  assert.match(releaseGates, /semantically invalid installed-overall report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid model-routing report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);

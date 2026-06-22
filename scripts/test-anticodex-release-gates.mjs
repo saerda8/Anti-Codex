@@ -23,7 +23,7 @@ const strict = args.has("--strict");
 const startedAt = Date.now();
 
 const gateDefinitions = [
-  { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true },
+  { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true, requireInstalledOverallSemantics: true, expectedFast: true, expectedReportName: "installed-overall-fast", expectedCoverageKind: "installed-fast-no-traffic" },
   { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true, requireSourcePreflightSemantics: true },
   { id: "mcpSkills", group: "short", file: "latest-mcp-skills.json", requiredForShort: true, requiredForRelease: true, requireMcpSkillSemantics: true },
   { id: "pluginCapabilities", group: "short", file: "latest-plugin-capabilities.json", requiredForShort: true, requiredForRelease: true, requirePluginCapabilitySemantics: true },
@@ -35,7 +35,7 @@ const gateDefinitions = [
   { id: "realThirdPartyProviderOptional", group: "optional-real-traffic", file: "latest-real-third-party-provider.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
   { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
 
-  { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true },
+  { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true, requireInstalledOverallSemantics: true, expectedFast: false, expectedReportName: "installed-overall", expectedCoverageKind: "installed-no-traffic" },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
   { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true, requireToolBridgeSemantics: true },
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true, requireUiIdleSemantics: true },
@@ -132,6 +132,35 @@ function summarizeGate(definition) {
     const semanticFailures = [];
     if (definition.requireFastNoTraffic && (report.fast !== true || report.noTraffic !== true)) {
       semanticFailures.push("expected_fast_no_traffic");
+    }
+    if (definition.requireInstalledOverallSemantics) {
+      const checks = report.checks && typeof report.checks === "object" ? report.checks : {};
+      const entries = Object.entries(checks).map(([id, value]) => ({ id, value: value && typeof value === "object" ? value : {} }));
+      const skippedEntries = entries.filter((entry) => entry.value.skipped === true);
+      const allowedFullSkipped = new Set([
+        "managerButtonSafeActions",
+        "managerButtonReportActions",
+        "managerButtonDiagnosticsBundle",
+        "managerButtonPluginCapabilities",
+        "managerAction",
+        "mcpSkills",
+        "pluginCapabilities",
+        "realMiniTool",
+        "realWork",
+      ]);
+      if (report.reportName !== definition.expectedReportName) semanticFailures.push("installed_overall_report_name");
+      if (report.fast !== definition.expectedFast) semanticFailures.push("installed_overall_fast_flag");
+      if (report.noTraffic !== true) semanticFailures.push("installed_overall_no_traffic_flag");
+      if (report.usedRealTraffic !== false) semanticFailures.push("installed_overall_used_real_traffic");
+      if (report.coverageKind !== definition.expectedCoverageKind) semanticFailures.push("installed_overall_coverage_kind");
+      if (report.behaviorCovered !== true) semanticFailures.push("installed_overall_behavior_not_covered");
+      if (definition.expectedFast && Number(report.fastMaxElapsedMs || 0) > 0 && Number(report.elapsedMs || 0) > Number(report.fastMaxElapsedMs)) semanticFailures.push("installed_overall_fast_elapsed");
+      if (entries.length < 1) semanticFailures.push("installed_overall_checks_missing");
+      if (entries.some((entry) => entry.value.ok !== true)) semanticFailures.push("installed_overall_check_not_ok");
+      if (skippedEntries.some((entry) => !entry.value.reason || !entry.value.coveredBy)) semanticFailures.push("installed_overall_skip_metadata_missing");
+      if (!definition.expectedFast && skippedEntries.some((entry) => !allowedFullSkipped.has(entry.id))) semanticFailures.push("installed_overall_unexpected_skipped_check");
+      const skippedIds = new Set(skippedEntries.map((entry) => entry.id));
+      if (!skippedIds.has("realMiniTool") || !skippedIds.has("realWork")) semanticFailures.push("installed_overall_real_traffic_skip_missing");
     }
     if (definition.requireSkipRequests && report.skipRequests !== true) {
       semanticFailures.push("expected_skipRequests_true");
@@ -483,6 +512,25 @@ if (args.has("--self-test")) {
       },
     });
 
+    for (const fileName of ["latest-installed-overall-fast.json", "latest-installed-overall.json"]) {
+      writeFakeLatestReport(fileName, {
+        ok: true,
+        reportName: "wrong-installed-overall",
+        fast: fileName.includes("fast") ? false : true,
+        noTraffic: false,
+        usedRealTraffic: true,
+        behaviorCovered: false,
+        coverageKind: "real-traffic",
+        fastMaxElapsedMs: 10,
+        elapsedMs: 100,
+        checks: {
+          branding: { ok: false },
+          skippedWithoutMetadata: { ok: true, skipped: true },
+          unexpectedSkipped: { ok: true, skipped: true, reason: "bad", coveredBy: "bad" },
+        },
+      });
+    }
+
     writeFakeLatestReport("latest-mcp-skills.json", {
       ok: true,
       reportName: "mcp-skills",
@@ -683,6 +731,30 @@ if (args.has("--self-test")) {
     });
 
     const semanticFailures = {};
+    semanticFailures.fastOverallNoTraffic = assertSemanticFailures("fastOverallNoTraffic", "self-test failed: semantically invalid fast installed-overall report satisfied the gate", [
+      "installed_overall_report_name",
+      "installed_overall_fast_flag",
+      "installed_overall_no_traffic_flag",
+      "installed_overall_used_real_traffic",
+      "installed_overall_coverage_kind",
+      "installed_overall_behavior_not_covered",
+      "installed_overall_fast_elapsed",
+      "installed_overall_check_not_ok",
+      "installed_overall_skip_metadata_missing",
+      "installed_overall_real_traffic_skip_missing",
+    ]);
+    semanticFailures.installedOverallNoTraffic = assertSemanticFailures("installedOverallNoTraffic", "self-test failed: semantically invalid installed-overall report satisfied the gate", [
+      "installed_overall_report_name",
+      "installed_overall_fast_flag",
+      "installed_overall_no_traffic_flag",
+      "installed_overall_used_real_traffic",
+      "installed_overall_coverage_kind",
+      "installed_overall_behavior_not_covered",
+      "installed_overall_check_not_ok",
+      "installed_overall_skip_metadata_missing",
+      "installed_overall_unexpected_skipped_check",
+      "installed_overall_real_traffic_skip_missing",
+    ]);
     semanticFailures.noTraffic = assertSemanticFailures("toolBridgeMode", "self-test failed: semantically invalid no-traffic report satisfied the gate", [
       "expected_no_real_traffic",
       "expected_behavior_covered",
