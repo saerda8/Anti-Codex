@@ -1519,7 +1519,7 @@ After every failure, before another dispatch:
 
 ## 2026-06-23 - Antigravity empty jobs are not review evidence
 
-- Symptom: Antigravity read-only jobs `ag-e50d32c0-1849-4d90-aa2b-26fe22c862c9` and `ag-edd29ea8-8e9e-4e39-ae12-4a29b33c6de8` returned no parsed text, stdout, or stderr; the second timed out after the explicit two-minute budget. Earlier job `ag-d711f5ec-20cb-4db3-8a82-39db5be986f7` still reported running with empty tails long after it was useful.
+- Symptom: Antigravity read-only jobs `ag-e50d32c0-1849-4d90-aa2b-26fe22c862c9`, `ag-edd29ea8-8e9e-4e39-ae12-4a29b33c6de8`, and `ag-f793e016-0e29-4ad2-a6ed-78f25c805c09` returned no parsed text, stdout, or stderr; the second timed out after the explicit two-minute budget. Earlier job `ag-d711f5ec-20cb-4db3-8a82-39db5be986f7` still reported running with empty tails long after it was useful.
 - Cause classification: worker evidence failure / stale worker state, not product evidence.
 - Rule change: a completed Antigravity job with empty output, a timed-out empty job, or a long-running empty-tail read-only job cannot be cited as review evidence. Stop waiting after the bounded window, continue with direct inspection or a narrower worker, and record the job IDs.
 - Result: stale Manager/report documentation and Windows launcher branding residue were handled through direct source inspection, focused contract tests, and committed checkpoints instead of relying on empty worker output.
