@@ -1123,3 +1123,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics/source-freshness recomputation now prefers marker roots over current environment/default roots, and exposes root source/path in `localFeatures.snapshotStatus`.
 - Completed: Manager actions for MCP/Skill, plugin capabilities, and refresh local features now pass the marker agents path through `-AgentsSkillsPath`, so follow-up checks use the same inherited surface.
 - Verification: adaptive/sync syntax checks passed; focused startup marker, diagnostics snapshot freshness, and MCP/Skill launcher contracts passed.
+
+## 2026-06-23 Cold Relaunch Manager Entry
+- Completed: cold relaunch is now exposed as a high-impact Manager action in the in-app page, injected panel, external bridge, UI-state verifier, and standalone Manager button verifier. It runs in the background with singleton protection and requires the existing high-impact confirmation; this change does not auto-run the restart verifier.
+- Completed: cold relaunch report summaries now show `mode`, `launcher`, and `failedStages` consistently across adaptive, bridge, and injected Manager summaries. Bridge/inject latest-report status now uses `effectiveOk` before `ok`, matching the in-app release-gate behavior.
+- Verification: JS syntax checks passed for adaptive, bridge, inject, and UI-state scripts; PowerShell parser check passed for the Manager action verifier; Manager bridge `--self-test` passed; focused Manager/release/cold-launcher tests passed; release-gate `--self-test` and strict passive gates passed. Strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.

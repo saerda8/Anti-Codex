@@ -105,6 +105,7 @@ $expectedHighImpactManagerActions = @(
     "upstreamConfig",
     "refreshFeatures",
     "stabilitySoak",
+    "coldRelaunch",
     "fastOverallNoTraffic",
     "overallNoTraffic",
     "postVerificationFull",

@@ -352,6 +352,14 @@ Branch: main
 - Manager MCP/Skill, plugin capability, and refresh-local-features actions now pass the marker agents path with `-AgentsSkillsPath`.
 - Fresh evidence: sync/adaptive syntax checks passed, and focused startup marker + diagnostics snapshot freshness + MCP/Skill launcher contracts passed.
 
+## 2026-06-23 Cold Relaunch Manager Entry Follow-Up
+
+- Added `coldRelaunch` as a high-impact Manager action across the fallback Manager page, injected Manager panel, external Manager bridge, UI-state verifier, and standalone Manager button verifier.
+- The action is background/singleton guarded and requires high-impact confirmation; it does not run automatically and the real restart verifier still only runs when the operator clicks it.
+- Cold relaunch summaries now include mode, launcher count, original Codex preservation, and failed-stage count consistently across adaptive, bridge, and injected summaries.
+- Bridge/inject latest-report status now follows `effectiveOk` like the adaptive Manager, preventing `ok:true` plus `releaseReady:false` from being displayed as passing.
+- Fresh evidence: syntax checks passed for adaptive/bridge/inject/UI-state; Manager action PowerShell parser passed; bridge `--self-test` passed; focused Manager/release/cold tests passed; release-gate `--self-test` and strict passive gates passed. Current strict gate remains `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

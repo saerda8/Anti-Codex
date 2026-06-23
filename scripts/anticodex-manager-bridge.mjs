@@ -260,7 +260,8 @@ function latestReportsSummary(result) {
     lines.push("\u63d0\u793a\uff1a\u8bf7\u5148\u8fd0\u884c\u5feb\u901f\u603b\u68c0\u3001\u5b8c\u6574\u603b\u68c0\u6216\u7a33\u5b9a\u6027\u5de1\u68c0\u3002");
   }
   for (const item of reports) {
-    const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (item.ok ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
+    const passed = item.effectiveOk !== null && item.effectiveOk !== undefined ? item.effectiveOk : item.ok;
+    const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
     const elapsed = item.elapsedMs != null ? ` / ${item.elapsedMs} ms` : "";
     lines.push(`${item.label}\uff1a${status}${elapsed}`);
     const age = formatReportAge(item.ageMs);
@@ -354,7 +355,7 @@ function latestReportsSummary(result) {
     }
     if (item.coldRelaunchEvidence) {
       const evidence = item.coldRelaunchEvidence;
-      lines.push(`  coldRelaunch: health=${evidence.healthOk ? "true" : "false"} / ready=${evidence.providerReady ? "true" : "false"} / main=${evidence.mainCount ?? "?"} / translator=${evidence.translatorCount ?? "?"} / originalCodex=${evidence.originalCodexUnchanged ? "unchanged" : "unknown"}`);
+      lines.push(`  coldRelaunch: health=${evidence.healthOk ? "true" : "false"} / ready=${evidence.providerReady ? "true" : "false"} / mode=${evidence.mode || "unknown"} / main=${evidence.mainCount ?? "?"} / translator=${evidence.translatorCount ?? "?"} / launcher=${evidence.launcherCount ?? "?"} / originalCodex=${evidence.originalCodexUnchanged ? "unchanged" : "unknown"} / failedStages=${evidence.failedStageCount ?? "?"}`);
     }
     if (item.stabilitySoakEvidence) {
       const evidence = item.stabilitySoakEvidence;
@@ -411,6 +412,10 @@ function managerSummary(action, payload) {
   if (action === "stabilitySoak") {
     if (payload.alreadyRunning) return "\u7a33\u5b9a\u6027\u5de1\u68c0\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
     return `${payload.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u7a33\u5b9a\u6027\u5de1\u68c0\u3002" : "\u542f\u52a8\u7a33\u5b9a\u6027\u5de1\u68c0\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-stability-soak.json\u3002`;
+  }
+  if (action === "coldRelaunch") {
+    if (payload.alreadyRunning) return "\u51b7\u542f\u52a8\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u91cd\u542f Anti-Codex\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
+    return `${payload.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u51b7\u542f\u52a8\u9a8c\u8bc1\u3002" : "\u542f\u52a8\u51b7\u542f\u52a8\u9a8c\u8bc1\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u91cd\u542f Anti-Codex\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-cold-relaunch.json\u3002`;
   }
   if (action === "syncHost") return payload?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0";
   if (action === "diagnosticsBundle") return [
@@ -540,7 +545,7 @@ if (args.has("--self-test")) {
       label: "\u51b7\u542f\u52a8",
       exists: true,
       ok: true,
-      coldRelaunchEvidence: { healthOk: true, providerReady: true, mainCount: 1, translatorCount: 1, originalCodexUnchanged: true },
+      coldRelaunchEvidence: { healthOk: true, providerReady: true, mode: "antigravity", mainCount: 1, translatorCount: 1, launcherCount: 1, originalCodexUnchanged: true, failedStageCount: 0 },
     }, {
       label: "\u7a33\u5b9a\u6027",
       exists: true,
@@ -581,6 +586,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);
   assert.match(evidenceSummary, /antigravityRoute: antigravity-native \/ gemini-pro-agent/);
   assert.match(evidenceSummary, /coldRelaunch: health=true \/ ready=true/);
+  assert.match(evidenceSummary, /coldRelaunch: .*mode=antigravity.*launcher=1.*failedStages=0/);
   assert.match(evidenceSummary, /stabilitySoak: ready=true/);
   const pluginDriftSummary = latestReportsSummary({
     reports: [{

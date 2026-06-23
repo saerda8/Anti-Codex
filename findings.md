@@ -711,3 +711,5 @@
 - Skill inheritance needs content fingerprints, not just names. Compare each local inherited skill directory against the shared `.codex\skills` or `.agents\skills` fingerprint and gate `changedShared` the same way as missing shared skills.
 - PowerShell `Get-FileHash` is too slow for 15k-file skill trees in routine verifiers. Use .NET SHA256 streaming and cache per-directory fingerprints when hashing inherited skills.
 - Startup snapshot markers must record the extra skill roots used at marker creation. Diagnostics and Manager follow-up actions should prefer marker roots over current environment defaults to avoid false stale/source-changed results when custom `.agents` roots are used.
+- Optional cold-relaunch should be easy to run but not accidental. Expose it as a high-impact Manager action with confirmation and singleton background locking, while keeping the actual restart verifier manual/operator-triggered.
+- Release-gate status display must use `effectiveOk` everywhere. Bridge/inject summaries can otherwise show a non-strict `ok:true` / `releaseReady:false` gate as passing even though the adaptive Manager correctly marks it as needing action.

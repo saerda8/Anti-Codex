@@ -504,6 +504,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "postVerificationFull",
     "refreshFeatures",
     "resetAntigravitySessionLock",
+    "coldRelaunch",
     "stabilitySoak",
     "syncHost",
     "upstreamConfig",
@@ -769,6 +770,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.ok(actionNames.includes("overallNoTraffic"), "data-action list must include overallNoTraffic");
   assert.ok(actionNames.includes("refreshFeatures"), "data-action list must include refreshFeatures");
   assert.ok(actionNames.includes("stabilitySoak"), "data-action list must include stabilitySoak");
+  assert.ok(actionNames.includes("coldRelaunch"), "data-action list must include coldRelaunch");
   assert.ok(actionNames.includes("repairShortcuts"), "data-action list must include repairShortcuts");
   assert.ok(actionNames.includes("sourcePreflight"), "data-action list must include sourcePreflight");
   assert.ok(actionNames.includes("viewLatestReports"), "data-action list must include viewLatestReports");
@@ -782,6 +784,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "accountSwitch",
     "diagnosticsBundle",
     "fastOverallNoTraffic",
+    "coldRelaunch",
     "mcpSkills",
     "overallNoTraffic",
     "pluginCapabilities",
@@ -812,7 +815,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(highImpactSection, /class="[^"]*danger[^"]*"/);
   assert.match(highImpactSection, /data-action="upstreamConfig"/);
   assert.match(highImpactSection, /data-action="resetAntigravitySessionLock"/);
-  assert.equal((highImpactSection.match(/data-manager-action=/g) || []).length, 8);
+  assert.match(highImpactSection, /data-action="coldRelaunch"/);
+  assert.equal((highImpactSection.match(/data-manager-action=/g) || []).length, 9);
   assert.match(html, /HIGH_IMPACT_ACTION_IDS=new Set\(\[[^\]]*"resetAntigravitySessionLock"/);
   assert.match(html, /payload\?\.action==="resetAntigravitySessionLock"/);
   assert.match(html, /HIGH_IMPACT_ACTION_IDS/);
@@ -1782,6 +1786,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /test-anticodex-stability-soak\.ps1/);
   assert.match(server, /stabilitySoak:\s*\{[\s\S]*?background:\s*true/);
   assert.match(server, /stabilitySoak:\s*\{[\s\S]*?singletonProcessPattern:\s*"test-anticodex-stability-soak\\\\\.ps1"/);
+  assert.match(server, /coldRelaunch/);
+  assert.match(server, /test-anticodex-cold-relaunch\.ps1/);
+  assert.match(server, /coldRelaunch:\s*\{[\s\S]*?background:\s*true/);
+  assert.match(server, /coldRelaunch:\s*\{[\s\S]*?singletonProcessPattern:\s*"test-anticodex-cold-relaunch\\\\\.ps1"/);
   assert.match(server, /syncHost/);
   assert.match(server, /sync-anticodex-launcher\.ps1/);
   assert.match(server, /singletonProcessPattern/);
@@ -1811,6 +1819,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(managerAction, /sourcePreflight/);
   assert.match(managerAction, /resetAntigravitySessionLock/);
   assert.match(managerAction, /stabilitySoak/);
+  assert.match(managerAction, /coldRelaunch/);
   assert.match(managerAction, /fastOverallNoTraffic/);
   assert.match(managerAction, /document\\\.querySelectorAll\\\("button\\\[data-action\\\]"\\\)/);
   assert.match(managerAction, /setActionButtonsDisabled\\\(true\\\)/);
@@ -1846,8 +1855,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(managerAction, /resetMode\s*=\s*if \(\$isIdle\) \{ "idle" \} else \{ "stale-lock" \}/);
   assert.match(managerAction, /Session lock is not safe to reset/);
   assert.match(managerAction, /"Origin"\s*=\s*\$BaseUrl[\s\S]{0,120}"Referer"\s*=\s*"\$BaseUrl\/anticodex\/manager"/);
-  assert.doesNotMatch(managerAction, /\$SafeActionName\s*=\s*"(?:postVerificationFull|syncHost|stabilitySoak)"/);
-  assert.doesNotMatch(managerAction, /-Body\s+'\{"action":"(?:postVerificationFull|syncHost|stabilitySoak)"/);
+  assert.doesNotMatch(managerAction, /\$SafeActionName\s*=\s*"(?:postVerificationFull|syncHost|stabilitySoak|coldRelaunch)"/);
+  assert.doesNotMatch(managerAction, /-Body\s+'\{"action":"(?:postVerificationFull|syncHost|stabilitySoak|coldRelaunch)"/);
   assert.match(server, /postVerification/);
   assert.match(server, /function localFeatureSummary/);
   assert.match(server, /localFeatures/);
@@ -5237,6 +5246,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
 
   assert.match(releaseGates, /latest-release-gates\.json/);
   assert.match(releaseGates, /group: "short"/);
@@ -5391,6 +5402,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(server, /effectiveOk/);
   assert.match(server, /report\?\.releaseReady === true/);
   assert.match(server, /const passed=\(item\.effectiveOk!==null&&item\.effectiveOk!==undefined\)\?item\.effectiveOk:item\.ok/);
+  assert.match(managerInject, /const passed = item\.effectiveOk !== null && item\.effectiveOk !== undefined \? item\.effectiveOk : item\.ok/);
+  assert.match(managerBridge, /const passed = item\.effectiveOk !== null && item\.effectiveOk !== undefined \? item\.effectiveOk : item\.ok/);
   assert.match(collector, /latest-release-gates\.json/);
   assert.match(server, /releaseGateGroups/);
   assert.match(server, /Release groups:/);

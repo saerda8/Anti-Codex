@@ -26,7 +26,7 @@ const expectedDailyActionIds = [
   "repairShortcuts", "updateCheck", "sourcePreflight", "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
 ];
 const expectedHighImpactActionIds = [
-  "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "stabilitySoak", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+  "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
 const mojibakePattern = /(?:缁狅紕鎮妡娣囶喖|濡偓|闁板秶鐤唡閸掗攱|韫囶偊|閺佺繝|娴狅絿鎮妡閼卞﹤|娑撳秳|锟)/;
 const pageStateProbeExpression = `(() => {
