@@ -1356,3 +1356,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: refresh-feature report summaries now lift `verifyOnly` and `elapsedMs` into `refreshFeatureEvidence`, diagnostics verification requires the timing field, and Manager/bridge/injected report renderers show refresh timing evidence next to parity status.
 - Completed: the refresh SHA256 helper now disposes the hash object even when file open fails, tightening the small resource-cleanup gap found during read-only review.
 - Verification: JS syntax checks passed for summarizer, Manager bridge/inject, and adaptive server; diagnostics PowerShell parser check passed; launcher contracts passed `124/124`; refresh-feature `-VerifyOnly` wrote `elapsedMs:70192`; summary extraction returned `verifyOnly:true`; installed runtime sync passed; strict passive release gate passed with `releaseReady:true` and `missingRequired:[]`.
+
+## 2026-06-24 Release Readiness Recheck
+- Completed: strict passive release gates were rechecked after fast verifier hardening; latest evidence remains `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`.
+- Completed: cold relaunch code paths were rechecked non-disruptively through focused launcher contracts and release-gate self-test. The real cold relaunch report is still optional because generating it stops and restarts Anti-Codex.
+- Verification: focused cold/release launcher contracts passed `9/9`; release-gate `--self-test` passed; current worktree was clean at the start of the recheck.
