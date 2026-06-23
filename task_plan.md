@@ -1366,3 +1366,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-cold-relaunch.ps1` now refuses to stop/restart Anti-Codex unless `-ConfirmRelaunch` is provided, returning structured JSON without writing a latest cold-relaunch report.
 - Completed: the Manager `coldRelaunch` background action and installed-overall `-IncludeColdRelaunch` path now pass `-ConfirmRelaunch`, preserving the intentional operator-approved path.
 - Verification: cold-relaunch and installed-overall parser checks passed; adaptive server syntax passed; focused launcher contracts passed including the no-confirm refusal test; runtime sync completed without restart; strict passive release gates remained `releaseReady:true`, `shortReady:true`, and `missingRequired:[]`.
+
+## 2026-06-24 Cold Relaunch Gate Hardening
+- Completed: passive release gates now explicitly reject cold-relaunch reports with `skipped:true` or `requiresConfirmation:true`, even if a malformed report claims `ok:true`.
+- Completed: release-gate self-test now includes the skipped/confirmation cold-relaunch failure markers, so the optional cold gate cannot silently accept a no-confirm refusal artifact as real restart evidence.
+- Verification: `test-anticodex-release-gates.mjs --self-test` passed after adding the new cold-relaunch semantic failure checks.

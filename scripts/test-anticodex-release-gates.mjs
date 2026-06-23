@@ -442,6 +442,8 @@ function summarizeGate(definition) {
       const stages = Array.isArray(report.stages) ? report.stages : [];
       const stageNames = new Set(stages.filter((stage) => stage?.ok === true).map((stage) => String(stage.name || "")));
       if (report.reportName !== "cold-relaunch") semanticFailures.push("cold_relaunch_report_name");
+      if (report.skipped === true) semanticFailures.push("cold_relaunch_skipped");
+      if (report.requiresConfirmation === true) semanticFailures.push("cold_relaunch_requires_confirmation");
       if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("cold_relaunch_failures");
       if (health.ok !== true || health.providerReady !== true) semanticFailures.push("cold_relaunch_health_not_ready");
       if (health.mode === "antigravity" && (health.upstream !== "antigravity-desktop" || Number(health.modelCount || 0) < 1)) semanticFailures.push("cold_relaunch_antigravity_not_ready");
@@ -928,6 +930,8 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-cold-relaunch.json", {
       ok: true,
       reportName: "wrong-cold-relaunch",
+      skipped: true,
+      requiresConfirmation: true,
       failures: ["original Codex main process set changed"],
       health: {
         ok: false,
@@ -1060,6 +1064,8 @@ if (args.has("--self-test")) {
     ]);
     semanticFailures.coldRelaunch = assertSemanticFailures("coldRelaunch", "self-test failed: semantically invalid cold-relaunch report satisfied the gate", [
       "cold_relaunch_report_name",
+      "cold_relaunch_skipped",
+      "cold_relaunch_requires_confirmation",
       "cold_relaunch_failures",
       "cold_relaunch_health_not_ready",
       "cold_relaunch_antigravity_not_ready",
