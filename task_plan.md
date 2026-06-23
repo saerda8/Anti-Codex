@@ -1246,3 +1246,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: fast installed-overall now caches the `/anticodex/diagnostics` snapshot for source-preflight and tool-bridge checks, avoiding repeated local diagnostic calls in the same short run.
 - Completed: fast installed-overall now checks remaining fast-budget before lower-priority late subchecks (`missingHistory`, `mcpSkills`, and `pluginCapabilities`); if the budget is nearly exhausted it records an explicit skipped result with remaining/minimum milliseconds instead of waiting until the final elapsed-time failure.
 - Verification: PowerShell parser check passed; focused launcher contracts passed `124/124`; `git diff --check` passed.
+
+## 2026-06-23 Manager Foreground Action Singleflight
+- Completed: long-running foreground Manager actions (`accountProxy`, `sourcePreflight`, `mcpSkills`, `pluginCapabilities`, `fastOverallNoTraffic`, `overallNoTraffic`, and `diagnosticsBundle`) now use a server-side singleflight registry.
+- Completed: duplicate foreground clicks return `alreadyRunning`, `foreground:true`, and the original `foregroundStartedAt` instead of launching parallel checks.
+- Verification: adaptive server syntax passed; focused launcher contracts passed `124/124`.

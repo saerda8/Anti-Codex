@@ -123,6 +123,7 @@ const execFileAsync = promisify(execFile);
 const MANAGER_ACTION_TOKEN = randomBytes(32).toString("base64url");
 const MANAGER_ACTION_LOCKS = new Set();
 const MANAGER_BACKGROUND_ACTIONS = new Map();
+const MANAGER_FOREGROUND_ACTIONS = new Map();
 const MANAGER_REPORT_STALE_MS_RAW = Number(process.env.ANTICODEX_MANAGER_REPORT_STALE_MS || 24 * 60 * 60 * 1000);
 const MANAGER_REPORT_STALE_MS = Number.isFinite(MANAGER_REPORT_STALE_MS_RAW)
     ? Math.max(60 * 1000, MANAGER_REPORT_STALE_MS_RAW)
@@ -2021,6 +2022,7 @@ const MANAGER_ACTIONS = Object.freeze({
         script: "test-anticodex-account-proxy-readiness.ps1",
         args: ["-AllowUnready"],
         timeoutMs: 120_000,
+        foregroundSingleton: true,
     },
     syncReadiness: {
         label: "安装/同步检查",
@@ -2045,6 +2047,7 @@ const MANAGER_ACTIONS = Object.freeze({
         script: "test-anticodex-source-preflight.ps1",
         args: ["-SkipFullRegression"],
         timeoutMs: 90_000,
+        foregroundSingleton: true,
     },
     upstreamConfig: {
         label: "配置第三方 API",
@@ -2068,12 +2071,14 @@ const MANAGER_ACTIONS = Object.freeze({
         script: "test-anticodex-mcp-skills.ps1",
         args: [],
         timeoutMs: 120_000,
+        foregroundSingleton: true,
     },
     pluginCapabilities: {
         label: "检查插件/应用",
         script: "test-anticodex-plugin-capabilities.ps1",
         args: [],
         timeoutMs: 120_000,
+        foregroundSingleton: true,
     },
     refreshFeatures: {
         label: "刷新本地功能",
@@ -2107,18 +2112,21 @@ const MANAGER_ACTIONS = Object.freeze({
         script: "test-anticodex-installed-overall.ps1",
         args: ["-EnsureRunning", "-NoTraffic", "-SkipAccountProxyProbe", "-Fast", "-SkipManagerActionProbe", "-SubcheckTimeoutSec", "30", "-FastMaxElapsedMs", "90000", "-IncludePostVerification", "false"],
         timeoutMs: 90_000,
+        foregroundSingleton: true,
     },
     overallNoTraffic: {
         label: "整体检查（不耗流量）",
         script: "test-anticodex-installed-overall.ps1",
         args: ["-EnsureRunning", "-NoTraffic", "-SkipAccountProxyProbe", "-SkipManagerActionProbe", "-SkipUiStateProbe"],
         timeoutMs: 240_000,
+        foregroundSingleton: true,
     },
     diagnosticsBundle: {
         label: "生成诊断包",
         script: "collect-anticodex-diagnostics.ps1",
         args: ["-NoPopup"],
         timeoutMs: 120_000,
+        foregroundSingleton: true,
     },
     viewLatestReports: {
         label: "查看最新报告",
@@ -2834,6 +2842,22 @@ function clearManagerBackgroundAction(lockKey) {
     MANAGER_BACKGROUND_ACTIONS.delete(lockKey);
 }
 
+function managerForegroundActionKey(actionName, action) {
+    return action?.script ? `${actionName}:${action.script}` : actionName;
+}
+
+function recordManagerForegroundAction(lockKey, { actionName, label }) {
+    MANAGER_FOREGROUND_ACTIONS.set(lockKey, {
+        actionName,
+        label,
+        foregroundStartedAt: new Date().toISOString(),
+    });
+}
+
+function clearManagerForegroundAction(lockKey) {
+    MANAGER_FOREGROUND_ACTIONS.delete(lockKey);
+}
+
 async function runManagerAction(actionName) {
     const action = MANAGER_ACTIONS[actionName];
     if (!action) {
@@ -2907,6 +2931,22 @@ async function runManagerAction(actionName) {
             throw error;
         }
     }
+    const foregroundLockKey = action.foregroundSingleton ? managerForegroundActionKey(actionName, action) : "";
+    if (foregroundLockKey) {
+        const existing = MANAGER_FOREGROUND_ACTIONS.get(foregroundLockKey);
+        if (existing) {
+            return {
+                ok: true,
+                action: actionName,
+                label,
+                alreadyRunning: true,
+                foreground: true,
+                foregroundStartedAt: existing.foregroundStartedAt || "",
+                message: `${label} \u5df2\u7ecf\u5728\u8fd0\u884c\u3002`,
+            };
+        }
+        recordManagerForegroundAction(foregroundLockKey, { actionName, label });
+    }
     try {
         const { stdout, stderr } = await execFileAsync(powershellPath(), args, {
             cwd: MANAGER_SCRIPTS_ROOT,
@@ -2937,6 +2977,8 @@ async function runManagerAction(actionName) {
             result: parseJsonFromScriptOutput(error.stdout),
             stderr: String(error.stderr || "").trim(),
         };
+    } finally {
+        if (foregroundLockKey) clearManagerForegroundAction(foregroundLockKey);
     }
 }
 

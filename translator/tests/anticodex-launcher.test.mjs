@@ -1832,6 +1832,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /singletonProcessPattern/);
   assert.match(server, /MANAGER_ACTION_LOCKS/);
   assert.match(server, /MANAGER_BACKGROUND_ACTIONS/);
+  assert.match(server, /MANAGER_FOREGROUND_ACTIONS/);
+  assert.match(server, /foregroundSingleton:\s*true/);
+  assert.match(server, /function managerForegroundActionKey/);
+  assert.match(server, /foregroundStartedAt/);
   assert.match(server, /function managerBackgroundActionItems/);
   assert.match(server, /backgroundStartedAt/);
   assert.match(server, /backgroundItems=items\.filter/);
