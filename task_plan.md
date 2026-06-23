@@ -1376,3 +1376,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: local connector report summarizer coverage now asserts ChatGPT install URL scrubbing, metadata-only link endpoint evidence, connector/app-tool parity cleanliness, and GET/POST app-tool parity drift samples.
 - Completed: diagnostics verification now requires the local connector summary to carry connector parity, app-tool parity, and GET/POST app-tool parity proof, so the support path cannot hide local cache drift.
 - Verification: diagnostics parser check passed; focused launcher contracts for local connector summary and diagnostics passed; real diagnostics verifier passed; standalone local connector verifier passed with no real traffic and clean connector/app-tool parity.
+
+## 2026-06-24 Provider Continuity Nested Evidence
+- Completed: passive release gates now require nested provider/protocol switch `continuationPreviousResponseId` evidence, not just top-level previous-response continuity booleans.
+- Completed: launcher contracts now pin the nested previous-response failure codes for provider switch, protocol switch, and reverse protocol switch.
+- Verification: release-gate syntax, self-test, strict gate, and focused launcher contracts passed; standalone third-party provider verifier passed with 9 turns, clean previous-response matches, and OpenAI/Anthropic/OpenAI tool-history structural evidence.

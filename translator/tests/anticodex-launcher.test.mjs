@@ -6407,6 +6407,9 @@ test("release gates require structured provider save and restart continuity evid
   assert.match(releaseGates, /third_party_provider_report_name/);
   assert.match(releaseGates, /third_party_provider_save_previous_response_id_missing/);
   assert.match(releaseGates, /third_party_provider_restart_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_switch_nested_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_protocol_nested_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_reverse_protocol_nested_previous_response_id_missing/);
   assert.match(releaseGates, /third_party_provider_save_previous_response_id_mismatch/);
   assert.match(releaseGates, /third_party_provider_restart_previous_response_id_mismatch/);
   assert.match(releaseGates, /third_party_provider_switch_previous_response_id_mismatch/);

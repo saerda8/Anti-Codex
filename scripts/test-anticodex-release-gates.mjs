@@ -509,6 +509,9 @@ function summarizeGate(definition) {
       if (!history.providerSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_switch_previous_response_id_missing");
       if (!history.protocolSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_protocol_previous_response_id_missing");
       if (!history.reverseProtocolSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_reverse_protocol_previous_response_id_missing");
+      if (!providerSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_switch_nested_previous_response_id_missing");
+      if (!protocolSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_protocol_nested_previous_response_id_missing");
+      if (!reverseProtocolSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_reverse_protocol_nested_previous_response_id_missing");
       if (previousResponseContinuity.saveMatched !== true) semanticFailures.push("third_party_provider_save_previous_response_id_mismatch");
       if (previousResponseContinuity.restartMatched !== true) semanticFailures.push("third_party_provider_restart_previous_response_id_mismatch");
       if (previousResponseContinuity.providerSwitchMatched !== true) semanticFailures.push("third_party_provider_switch_previous_response_id_mismatch");
@@ -1278,6 +1281,9 @@ if (args.has("--self-test")) {
       "third_party_provider_switch_previous_response_id_missing",
       "third_party_provider_protocol_previous_response_id_missing",
       "third_party_provider_reverse_protocol_previous_response_id_missing",
+      "third_party_provider_switch_nested_previous_response_id_missing",
+      "third_party_provider_protocol_nested_previous_response_id_missing",
+      "third_party_provider_reverse_protocol_nested_previous_response_id_missing",
       "third_party_provider_save_previous_response_id_mismatch",
       "third_party_provider_restart_previous_response_id_mismatch",
       "third_party_provider_switch_previous_response_id_mismatch",
