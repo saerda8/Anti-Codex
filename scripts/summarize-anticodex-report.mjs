@@ -366,6 +366,9 @@ const summary = {
     appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],
   } : null,
   mcpSkillEvidence: (mcp || skills) ? {
+    hashCacheHitCount: has(report.hashCache || {}, "hitCount") ? report.hashCache.hitCount : null,
+    hashCacheMissCount: has(report.hashCache || {}, "missCount") ? report.hashCache.missCount : null,
+    hashCacheEntryCount: has(report.hashCache || {}, "entryCount") ? report.hashCache.entryCount : null,
     mcpCount: mcp && has(mcp, "count") ? mcp.count : null,
     mcpSharedCount: mcp && has(mcp, "sharedCount") ? mcp.sharedCount : null,
     mcpMissingShared: mcp && has(mcp, "missingShared") ? asStringArray(mcp.missingShared) : [],

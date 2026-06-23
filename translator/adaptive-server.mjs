@@ -2441,6 +2441,9 @@ function latestManagerReportItem(label, fileName) {
             codexToolBridge: shortSafeText(nativeToolCapability?.codexToolBridge || "", ""),
         } : null,
         mcpSkillEvidence: (mcp || skills) ? {
+            hashCacheHitCount: Number.isFinite(Number(report?.hashCache?.hitCount)) ? Number(report.hashCache.hitCount) : null,
+            hashCacheMissCount: Number.isFinite(Number(report?.hashCache?.missCount)) ? Number(report.hashCache.missCount) : null,
+            hashCacheEntryCount: Number.isFinite(Number(report?.hashCache?.entryCount)) ? Number(report.hashCache.entryCount) : null,
             mcpCount: Number.isFinite(Number(mcp?.count)) ? Number(mcp.count) : null,
             mcpSharedCount: Number.isFinite(Number(mcp?.sharedCount)) ? Number(mcp.sharedCount) : null,
             mcpMissingSharedCount: Array.isArray(mcp?.missingShared) ? mcp.missingShared.length : null,
@@ -3321,7 +3324,8 @@ function latestReportsSummary(result){
       const evidence=item.mcpSkillEvidence;
       const mcpClean=evidence.mcpMissingSharedCount===0&&evidence.mcpExtraLocalCount===0&&evidence.mcpChangedSharedCount===0&&evidence.hasNodeRepl===true;
       const skillClean=evidence.missingSharedSkillCount===0&&(evidence.changedSharedSkillCount??0)===0&&evidence.conflictingDuplicateSkillCount===0&&evidence.skillSmokeReadable===true;
-      lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5"));
+      const hashCache=(evidence.hashCacheHitCount!=null||evidence.hashCacheMissCount!=null)?(" / hashCache="+(evidence.hashCacheHitCount??"unknown")+"/"+(evidence.hashCacheMissCount??"unknown")):"";
+      lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5")+hashCache);
       lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / real "+(evidence.mcpRealCallPassed?"ok":"?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
       if(Array.isArray(evidence.mcpChangedSharedSample)&&evidence.mcpChangedSharedSample.length) lines.push("  MCP changed: "+evidence.mcpChangedSharedSample.join(", "));
       if(Array.isArray(evidence.changedSharedSkillSample)&&evidence.changedSharedSkillSample.length) lines.push("  skill changed: "+evidence.changedSharedSkillSample.join(", "));

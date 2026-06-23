@@ -159,6 +159,23 @@ $changedSharedMcpDetails = @()
 $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
 $directoryFingerprintCache = @{}
+$script:mcpSkillFileHashCachePath = Join-Path $StateRoot "cache\mcp-skill-file-hashes.json"
+$script:mcpSkillFileHashCache = @{}
+$script:mcpSkillFileHashNewCache = [ordered]@{}
+$script:mcpSkillFileHashCacheHitCount = 0
+$script:mcpSkillFileHashCacheMissCount = 0
+if (Test-Path -LiteralPath $script:mcpSkillFileHashCachePath -PathType Leaf) {
+    try {
+        $loadedHashCache = Get-Content -LiteralPath $script:mcpSkillFileHashCachePath -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ($loadedHashCache.entries) {
+            foreach ($property in $loadedHashCache.entries.PSObject.Properties) {
+                $script:mcpSkillFileHashCache[$property.Name] = $property.Value
+            }
+        }
+    } catch {
+        $script:mcpSkillFileHashCache = @{}
+    }
+}
 $mcpRealSmoke = [pscustomobject]@{
     checked = $false
     passed = $false
@@ -293,13 +310,46 @@ function Get-DirectoryContentFingerprint {
 
 function Get-FileSha256Hex {
     param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
+    $item = Get-Item -LiteralPath $Path -Force
+    $cacheKey = $item.FullName
+    $metaSignature = "$($item.Length):$($item.LastWriteTimeUtc.Ticks)"
+    $cached = $script:mcpSkillFileHashCache[$cacheKey]
+    if ($cached -and [string]$cached.meta -eq $metaSignature -and [string]$cached.hash) {
+        $script:mcpSkillFileHashCacheHitCount += 1
+        $script:mcpSkillFileHashNewCache[$cacheKey] = $cached
+        return [string]$cached.hash
+    }
+    $script:mcpSkillFileHashCacheMissCount += 1
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [IO.File]::OpenRead($Path)
+    $stream = $null
     try {
-        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        $stream = [IO.File]::OpenRead($Path)
+        $hash = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        $script:mcpSkillFileHashNewCache[$cacheKey] = [pscustomobject]@{
+            meta = $metaSignature
+            hash = $hash
+        }
+        return $hash
     } finally {
-        $stream.Dispose()
+        if ($stream) { $stream.Dispose() }
         $sha.Dispose()
+    }
+}
+
+function Save-McpSkillFileHashCache {
+    try {
+        $cacheDir = Split-Path -Parent $script:mcpSkillFileHashCachePath
+        if ($cacheDir) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
+        $payload = [pscustomobject]@{
+            version = 1
+            generatedAt = ([DateTime]::UtcNow.ToString("o"))
+            entries = $script:mcpSkillFileHashNewCache
+        }
+        $json = $payload | ConvertTo-Json -Depth 5 -Compress
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [IO.File]::WriteAllText($script:mcpSkillFileHashCachePath, $json, $utf8NoBom)
+    } catch {
     }
 }
 
@@ -494,8 +544,8 @@ foreach ($guidanceName in $guidanceNames) {
     $sharedExists = Test-Path -LiteralPath $sharedGuidance -PathType Leaf
     $localExists = Test-Path -LiteralPath $localGuidance -PathType Leaf
     $localItem = if ($localExists) { Get-Item -LiteralPath $localGuidance -Force } else { $null }
-    $sharedHash = if ($sharedExists) { (Get-FileHash -LiteralPath $sharedGuidance -Algorithm SHA256).Hash.ToLowerInvariant() } else { "" }
-    $localHash = if ($localExists) { (Get-FileHash -LiteralPath $localGuidance -Algorithm SHA256).Hash.ToLowerInvariant() } else { "" }
+    $sharedHash = if ($sharedExists) { Get-FileSha256Hex $sharedGuidance } else { "" }
+    $localHash = if ($localExists) { Get-FileSha256Hex $localGuidance } else { "" }
     $contentMatches = ($sharedExists -and $localExists -and $sharedHash -eq $localHash)
     $guidanceChecks += [pscustomobject]@{
         name = $guidanceName
@@ -769,6 +819,7 @@ $capabilityState = if ($failures.Count -gt 0) {
 }
 $capabilityDegraded = ($capabilityState -ne "ready")
 $sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
+Save-McpSkillFileHashCache
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
@@ -777,6 +828,12 @@ $result = [pscustomobject]@{
     baseUrl = $BaseUrl
     snapshotSource = "anticodex-local-copy"
     sourceSnapshot = $sourceSnapshot
+    hashCache = [pscustomobject]@{
+        path = $script:mcpSkillFileHashCachePath
+        hitCount = $script:mcpSkillFileHashCacheHitCount
+        missCount = $script:mcpSkillFileHashCacheMissCount
+        entryCount = @($script:mcpSkillFileHashNewCache.Keys).Count
+    }
     nativeCodexWriteback = $false
     capabilityState = $capabilityState
     degraded = $capabilityDegraded

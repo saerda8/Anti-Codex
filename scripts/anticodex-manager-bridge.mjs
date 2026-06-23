@@ -319,7 +319,8 @@ function latestReportsSummary(result) {
     if (item.mcpSkillEvidence) {
       const evidence = item.mcpSkillEvidence;
       const clean = evidence.mcpMissingSharedCount === 0 && evidence.mcpExtraLocalCount === 0 && evidence.mcpChangedSharedCount === 0 && evidence.missingSharedSkillCount === 0 && (evidence.changedSharedSkillCount ?? 0) === 0 && evidence.conflictingDuplicateSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true;
-      lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}`);
+      const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
+      lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}${hashCache}`);
       lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
       if (Array.isArray(evidence.mcpChangedSharedSample) && evidence.mcpChangedSharedSample.length) lines.push(`  MCP changed: ${evidence.mcpChangedSharedSample.join(", ")}`);
       if (Array.isArray(evidence.changedSharedSkillSample) && evidence.changedSharedSkillSample.length) lines.push(`  skill changed: ${evidence.changedSharedSkillSample.join(", ")}`);
@@ -592,7 +593,7 @@ if (args.has("--self-test")) {
       label: "MCP/Skill",
       exists: true,
       ok: true,
-      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true },
+      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, hashCacheHitCount: 12000, hashCacheMissCount: 42, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true },
     }, {
       label: "\u7b2c\u4e09\u65b9 provider \u8fde\u7eed\u6027",
       exists: true,
@@ -637,6 +638,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
+  assert.match(evidenceSummary, /hashCache=12000\/42/);
   assert.match(evidenceSummary, /providerContinuity: turns=9 \/ markers=15\/16\/18\/20/);
   assert.match(evidenceSummary, /previousIds: save=true \/ restart=true \/ provider=true \/ protocol=true \/ reverse=true/);
   assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);

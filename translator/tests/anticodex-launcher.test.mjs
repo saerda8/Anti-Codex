@@ -677,6 +677,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /mcpRealCallPassed/);
   assert.match(managerBridge, /agentsSkillCount/);
   assert.match(managerInject, /agentsSkillCount/);
+  assert.match(managerBridge, /hashCacheHitCount/);
+  assert.match(managerInject, /hashCacheHitCount/);
   assert.match(managerBridge, /mcpChangedSharedCount/);
   assert.match(managerInject, /mcpChangedSharedCount/);
   assert.match(managerBridge, /conflictingDuplicateSkillCount/);
@@ -2376,6 +2378,7 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
       reportName: "mcp-skills",
       failures: [],
       baseUrl: "http://127.0.0.1:8484",
+      hashCache: { hitCount: 12000, missCount: 42, entryCount: 12042 },
       mcp: {
         count: 3,
         sharedCount: 3,
@@ -2417,6 +2420,9 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
     assert.equal(summary.mcpSkillEvidence.mcpCount, 3);
+    assert.equal(summary.mcpSkillEvidence.hashCacheHitCount, 12000);
+    assert.equal(summary.mcpSkillEvidence.hashCacheMissCount, 42);
+    assert.equal(summary.mcpSkillEvidence.hashCacheEntryCount, 12042);
     assert.equal(summary.mcpSkillEvidence.mcpSharedCount, 3);
     assert.deepEqual(summary.mcpSkillEvidence.mcpMissingShared, ["missing-mcp"]);
     assert.deepEqual(summary.mcpSkillEvidence.mcpExtraLocal, ["extra-mcp"]);
@@ -4193,8 +4199,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /DEFAULT_SKILL_ALLOWLIST\.md/);
   assert.match(mcpSkills, /RTK\.md/);
   assert.match(mcpSkills, /MCP_WORKER_USAGE_GUIDE\.md/);
-  assert.match(mcpSkills, /Get-FileHash -LiteralPath \$sharedGuidance -Algorithm SHA256/);
-  assert.match(mcpSkills, /Get-FileHash -LiteralPath \$localGuidance -Algorithm SHA256/);
+  assert.match(mcpSkills, /\$sharedHash = if \(\$sharedExists\) \{ Get-FileSha256Hex \$sharedGuidance \}/);
+  assert.match(mcpSkills, /\$localHash = if \(\$localExists\) \{ Get-FileSha256Hex \$localGuidance \}/);
   assert.match(mcpSkills, /contentMatches = \$contentMatches/);
   assert.match(mcpSkills, /content differs from shared copy/);
   assert.match(mcpSkills, /shared guidance '\$guidanceName' exists but Anti-Codex local copy is missing it/);
@@ -4216,6 +4222,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /anticodex-source-snapshot\.ps1/);
   assert.match(mcpSkills, /Get-AntiCodexSourceSnapshot/);
   assert.match(mcpSkills, /sourceSnapshot = \$sourceSnapshot/);
+  assert.match(mcpSkills, /mcpSkillFileHashCachePath/);
+  assert.match(mcpSkills, /hashCache = \[pscustomobject\]/);
   assert.match(sourceSnapshot, /Label "shared-skills"[\s\S]*-HashContent \$true/);
   assert.match(sourceSnapshot, /Label "agents-skills"[\s\S]*-HashContent \$true/);
   assert.match(mcpSkills, /nativeCodexWriteback = \$false/);
