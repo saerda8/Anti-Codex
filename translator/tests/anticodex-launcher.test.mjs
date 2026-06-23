@@ -5494,6 +5494,8 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /in-app manager rendered mojibake text/);
   assert.match(uiScript, /main page rendered mojibake text/);
   assert.match(uiScript, /manager page source contains mojibake text/);
+  assert.match(uiScript, /in-app manager is missing MCP\/Skill app-tool registry evidence/);
+  assert.match(uiScript, /manager page is missing MCP\/Skill app-tool registry evidence/);
   assert.match(uiScript, /managerProbeAttempt/);
   assert.match(uiScript, /exceptionDetails/);
   assert.match(uiScript, /manager overlay probe did not return a value/);

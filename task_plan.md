@@ -1442,3 +1442,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 MCP/Skill App-Tool Registry Release Gate
 - Completed: the passive MCP/Skill release gate now independently rejects app-tool registry missing/content/fingerprint/file-count drift even if a malformed latest report claims `ok:true`.
 - Verification: release-gate syntax passed; release-gate self-test returned `ok:true` with registry semantic failures covered; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, `missingShort:0`, `installedRuntimeSync.satisfied:true`, and `mcpSemanticFailures:0`.
+
+## 2026-06-24 UI-State Registry Evidence Coverage
+- Completed: the read-only UI-state self-test now asserts that both the injected Manager and fallback Manager source keep the MCP/Skill app-tool registry evidence line and fingerprint field visible.
+- Verification: UI-state JS syntax passed; UI-state self-test returned `ok:true`; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, `missingShort:0`, and `installedRuntimeSync.satisfied:true`.

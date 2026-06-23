@@ -89,6 +89,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/function snapshotStalenessNotice/.test(injectSource) || !/snapshotStatus/.test(injectSource) || !/source_changed/.test(injectSource)) {
     failures.push("in-app manager is missing local feature snapshot staleness notice");
   }
+  if (!/app-tool registry:/.test(injectSource) || !/appToolRegistryFingerprintMatches/.test(injectSource)) {
+    failures.push("in-app manager is missing MCP/Skill app-tool registry evidence");
+  }
 
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
@@ -134,6 +137,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/function routeSummary/.test(managerHtml) || !/providerProtocol/.test(managerHtml) || !/transport/.test(managerHtml) || !/Provider/.test(managerHtml)) {
     failures.push("manager page route summary is missing third-party provider/protocol/transport fields");
+  }
+  if (!/app-tool registry:/.test(managerHtml) || !/appToolRegistryFingerprintMatches/.test(managerHtml)) {
+    failures.push("manager page is missing MCP/Skill app-tool registry evidence");
   }
   if (/routes\.latest\?JSON\.stringify\(routeSummary/.test(managerHtml)) {
     failures.push("manager page route empty state collapses provider fields");
