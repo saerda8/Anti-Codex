@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 
 const codexHome = process.argv[2] || path.join(os.homedir(), 'Library/Application Support', 'deepcodex', 'codex-home-deepseek-app');
 const sharedCodexHome = process.argv[3] || path.join(os.homedir(), '.codex');
@@ -60,6 +61,37 @@ function syncDirContents(source, target) {
   return copied.sort();
 }
 
+function directoryContentFingerprint(root) {
+  if (!exists(root)) return { exists: false, fileCount: 0, fingerprint: null };
+  const files = [];
+  function walk(current, rel = '') {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name === '.anticodex-source-manifest.json') continue;
+      const childRel = rel ? path.join(rel, entry.name) : entry.name;
+      const childPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(childPath, childRel);
+      } else if (entry.isFile()) {
+        files.push(childRel);
+      }
+    }
+  }
+  walk(root);
+
+  const hash = crypto.createHash('sha256');
+  for (const rel of files) {
+    hash.update(rel.split(/[\\/]/).join('/'));
+    hash.update('\0');
+    hash.update(crypto.createHash('sha256').update(fs.readFileSync(path.join(root, rel))).digest('hex'));
+    hash.update('\0');
+  }
+  return {
+    exists: true,
+    fileCount: files.length,
+    fingerprint: hash.digest('hex'),
+  };
+}
+
 function collectAppEntries(root, sourceLabel, rows, seen) {
   if (!exists(root)) return;
   for (const pluginName of fs.readdirSync(root)) {
@@ -92,6 +124,12 @@ function collectAppEntries(root, sourceLabel, rows, seen) {
 
 ensureDir(targetCacheRoot);
 const syncedFiles = syncDirContents(sharedAppsToolsRoot, targetAppsToolsRoot);
+const sharedToolsSnapshot = directoryContentFingerprint(sharedAppsToolsRoot);
+const localToolsSnapshot = directoryContentFingerprint(targetAppsToolsRoot);
+const contentMatches = sharedToolsSnapshot.exists
+  ? sharedToolsSnapshot.fileCount === localToolsSnapshot.fileCount
+    && sharedToolsSnapshot.fingerprint === localToolsSnapshot.fingerprint
+  : localToolsSnapshot.fileCount === 0;
 
 const registryRows = [];
 const seen = new Set();
@@ -109,7 +147,12 @@ fs.writeFileSync(registryPath, JSON.stringify({
   shared_apps_tools_root: sharedAppsToolsRoot,
   mirrored_plugins_root: mirroredPluginsRoot,
   synced_tool_cache_files: syncedFiles,
+  shared_tools_file_count: sharedToolsSnapshot.fileCount,
+  local_tools_file_count: localToolsSnapshot.fileCount,
+  shared_tools_fingerprint: sharedToolsSnapshot.fingerprint,
+  local_tools_fingerprint: localToolsSnapshot.fingerprint,
+  content_matches: contentMatches,
   connectors: registryRows,
 }, null, 2) + '\n');
 
-console.log(`Synced app tool cache files: ${syncedFiles.length}; connectors indexed: ${registryRows.length}`);
+console.log(`Synced app tool cache files: ${syncedFiles.length}; connectors indexed: ${registryRows.length}; content matches: ${contentMatches ? 'true' : 'false'}`);

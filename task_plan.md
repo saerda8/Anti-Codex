@@ -1310,3 +1310,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: response-history unit coverage now proves a three-turn OpenAI-compatible -> Anthropic -> OpenAI-compatible chain preserves `previous_response_id`, `function_call`, and next-request `function_call_output` ordering.
 - Completed: shared sync coverage now uses nonempty connector and app-tool cache fixtures, checks selected files byte-for-byte, and compares whole-directory content fingerprints while excluding the local source manifest.
 - Verification: focused provider-history test passed; focused full-sync cache test passed; full `response-history.test.mjs` passed `15/15`; full `sync-shared.plugin-host.test.mjs` passed `23/23`; `git diff --check` passed.
+
+## 2026-06-23 App-Tool Sync Fingerprint Output
+- Completed: `sync-deepcodex-app-tools.mjs` now writes `shared_tools_fingerprint`, `local_tools_fingerprint`, shared/local file counts, and `content_matches` into `deepcodex_app_connectors.json`.
+- Completed: added a focused app-tools sync test with nonempty nested cache files and plugin app metadata, proving the registry reports matching shared/local fingerprints after sync.
+- Verification: new app-tools sync test passed; script syntax check passed; focused shared-sync cache test passed; `git diff --check` passed.
