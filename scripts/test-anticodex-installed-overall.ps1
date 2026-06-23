@@ -82,6 +82,39 @@ function Invoke-LocalJson {
     return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $RequestTimeoutSec
 }
 
+$script:InstalledOverallDiagnosticsSnapshot = $null
+function Get-InstalledOverallDiagnosticsSnapshot {
+    if ($null -eq $script:InstalledOverallDiagnosticsSnapshot) {
+        $script:InstalledOverallDiagnosticsSnapshot = Invoke-LocalJson "/anticodex/diagnostics" -RequestTimeoutSec $DiagnosticsTimeoutSec
+    }
+    return $script:InstalledOverallDiagnosticsSnapshot
+}
+
+function Get-InstalledOverallElapsedMs {
+    return [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+}
+
+function Get-FastBudgetRemainingMs {
+    if ((-not $Fast) -or $FastMaxElapsedMs -le 0) { return [int]::MaxValue }
+    return [Math]::Max(0, $FastMaxElapsedMs - (Get-InstalledOverallElapsedMs))
+}
+
+function Test-FastBudgetAvailable {
+    param([string]$Name, [int]$MinimumRemainingMs = 5000)
+    if ((-not $Fast) -or $FastMaxElapsedMs -le 0) { return $true }
+    return (Get-FastBudgetRemainingMs) -ge $MinimumRemainingMs
+}
+
+function New-FastBudgetSkippedCheck {
+    param([string]$Name, [string]$CoveredBy, [int]$MinimumRemainingMs = 5000)
+    $remainingMs = Get-FastBudgetRemainingMs
+    $check = New-SkippedCheck "fast budget skips $Name; remaining ${remainingMs}ms is below ${MinimumRemainingMs}ms" $CoveredBy
+    $check | Add-Member -NotePropertyName fastBudgetSkipped -NotePropertyValue $true -Force
+    $check | Add-Member -NotePropertyName remainingMs -NotePropertyValue $remainingMs -Force
+    $check | Add-Member -NotePropertyName minimumRemainingMs -NotePropertyValue $MinimumRemainingMs -Force
+    return $check
+}
+
 function Test-LocalHealth {
     try {
         $probe = Invoke-LocalJson "/health"
@@ -994,7 +1027,7 @@ $checks.diagnostics = if ($Fast) {
     Invoke-JsonScript "Diagnostics verification" (Join-Path $scriptsRoot "test-anticodex-diagnostics.ps1") $diagnosticScriptArgs
 }
 $checks.sourcePreflightPublicDocumentation = try {
-    $diagForSourcePreflight = Invoke-LocalJson "/anticodex/diagnostics" -RequestTimeoutSec $DiagnosticsTimeoutSec
+    $diagForSourcePreflight = Get-InstalledOverallDiagnosticsSnapshot
     $sourcePreflight = $diagForSourcePreflight.sourcePreflight
     $ok = $diagForSourcePreflight.object -eq "anticodex.diagnostics" `
         -and (Has-Property $sourcePreflight "publicDocumentationOk") `
@@ -1019,7 +1052,7 @@ $checks.sourcePreflightPublicDocumentation = try {
 $checks.toolBridgeMode = if ($healthMode -eq "third-party") {
     $thirdPartyToolBridgeStarted = [DateTime]::UtcNow
     try {
-        $thirdPartyDiagnostics = Invoke-LocalJson "/anticodex/diagnostics" -RequestTimeoutSec $DiagnosticsTimeoutSec
+        $thirdPartyDiagnostics = Get-InstalledOverallDiagnosticsSnapshot
         $thirdPartyBridge = $thirdPartyDiagnostics.toolBridge
         $thirdPartyToolBridgeOk = $thirdPartyDiagnostics.object -eq "anticodex.diagnostics" `
             -and $thirdPartyBridge.mode -eq "provider-native-or-compat" `
@@ -1047,7 +1080,7 @@ $checks.toolBridgeMode = if ($healthMode -eq "third-party") {
 } elseif ($Fast) {
     $fastToolBridgeStarted = [DateTime]::UtcNow
     try {
-        $fastDiagnostics = Invoke-LocalJson "/anticodex/diagnostics" -RequestTimeoutSec $DiagnosticsTimeoutSec
+        $fastDiagnostics = Get-InstalledOverallDiagnosticsSnapshot
         $fastBridge = $fastDiagnostics.toolBridge
         $fastNative = $fastDiagnostics.nativeToolCapability
         $fastToolBridgeOk = $fastDiagnostics.object -eq "anticodex.diagnostics" `
@@ -1095,11 +1128,15 @@ $checks.websocketProtocolAudit = if ($Fast) {
         "-InstallRoot", $installRoot
     )
 }
-$checks.missingHistory = Invoke-NodeJsonScript "Missing response history verification" (Join-Path $scriptsRoot "test-anticodex-missing-history.mjs") @(
-    "--base-url", $BaseUrl,
-    "--report-root", $ReportRoot,
-    "--timeout-ms", ([string][Math]::Max(3000, $TimeoutSec * 1000))
-) ([Math]::Max(10, $TimeoutSec + 5))
+$checks.missingHistory = if ($Fast -and -not (Test-FastBudgetAvailable "missing response history verification" 8000)) {
+    New-FastBudgetSkippedCheck "missing response history verification" "latest-missing-history.json" 8000
+} else {
+    Invoke-NodeJsonScript "Missing response history verification" (Join-Path $scriptsRoot "test-anticodex-missing-history.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--timeout-ms", ([string][Math]::Max(3000, $TimeoutSec * 1000))
+    ) ([Math]::Max(10, $TimeoutSec + 5))
+}
 $checks.thirdPartyProvider = if ($Fast) {
     New-SkippedCheck "fast mode skips local third-party provider end-to-end verification" "test-anticodex-third-party-provider.mjs"
 } else {
@@ -1144,6 +1181,8 @@ $checks.localConnectors = if ($Fast) {
 }
 $checks.mcpSkills = if ($checks.managerButtonMcpSkills -and (Has-Property $checks.managerButtonMcpSkills "ok") -and $checks.managerButtonMcpSkills.ok -eq $true -and $checks.managerButtonMcpSkills.skipped -ne $true -and $checks.managerButtonMcpSkills.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager MCP/Skill button smoke" "managerButtonMcpSkills"
+} elseif ($Fast -and -not (Test-FastBudgetAvailable "MCP/skills verification" 10000)) {
+    New-FastBudgetSkippedCheck "MCP/skills verification" "latest-mcp-skills.json" 10000
 } else {
     Invoke-JsonScript "MCP/skills verification" (Join-Path $scriptsRoot "test-anticodex-mcp-skills.ps1") $scriptArgs
 }
@@ -1154,6 +1193,8 @@ $checks.independence = if ($Fast) {
 }
 $checks.pluginCapabilities = if ($checks.managerButtonPluginCapabilities -and (Has-Property $checks.managerButtonPluginCapabilities "ok") -and $checks.managerButtonPluginCapabilities.ok -eq $true -and $checks.managerButtonPluginCapabilities.skipped -ne $true -and $checks.managerButtonPluginCapabilities.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager plugin/application button smoke" "managerButtonPluginCapabilities"
+} elseif ($Fast -and -not (Test-FastBudgetAvailable "plugin capability verification" 10000)) {
+    New-FastBudgetSkippedCheck "plugin capability verification" "latest-plugin-capabilities.json" 10000
 } else {
     Invoke-JsonScript "Plugin capability verification" (Join-Path $scriptsRoot "test-anticodex-plugin-capabilities.ps1") $scriptArgs
 }

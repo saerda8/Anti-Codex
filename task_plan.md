@@ -1241,3 +1241,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager background actions now register in a server-side background-action map when spawned and clear the same map on exit, error, timeout, or failed launch, so duplicate clicks can return the existing PID/start time instead of looking like a fresh command.
 - Completed: `/anticodex/diagnostics.longTasks.items` now includes currently running Manager background actions, and the embedded Manager background-task card shows other running background actions instead of relying only on sync-host/post-verification reports.
 - Verification: adaptive server syntax passed; focused launcher contracts passed `124/124`.
+
+## 2026-06-23 Fast Installed Overall Budget Guard
+- Completed: fast installed-overall now caches the `/anticodex/diagnostics` snapshot for source-preflight and tool-bridge checks, avoiding repeated local diagnostic calls in the same short run.
+- Completed: fast installed-overall now checks remaining fast-budget before lower-priority late subchecks (`missingHistory`, `mcpSkills`, and `pluginCapabilities`); if the budget is nearly exhausted it records an explicit skipped result with remaining/minimum milliseconds instead of waiting until the final elapsed-time failure.
+- Verification: PowerShell parser check passed; focused launcher contracts passed `124/124`; `git diff --check` passed.

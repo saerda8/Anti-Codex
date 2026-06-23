@@ -4598,6 +4598,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /UI state verification/);
   assert.match(overall, /if \(\$Fast\) \{ \$uiStateArgs \+= @\("-Fast"\) \}/);
   assert.match(overall, /SubcheckTimeoutSec = 60/);
+  assert.match(overall, /function Get-InstalledOverallDiagnosticsSnapshot/);
+  assert.match(overall, /\$script:InstalledOverallDiagnosticsSnapshot/);
+  assert.match(overall, /function Test-FastBudgetAvailable/);
+  assert.match(overall, /function New-FastBudgetSkippedCheck/);
   assert.match(overall, /function Wait-AntiCodexSubcheckProcess/);
   assert.match(overall, /\$Process\.HasExited/);
   assert.match(overall, /\[void\]\$process\.Handle/);
@@ -4679,6 +4683,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /"--timeout-ms", "\$thirdPartyProviderTimeoutMs"[\s\S]{0,120}\) \$thirdPartyProviderProcessTimeoutSec/);
   assert.match(overall, /\$checks\.thirdPartyProvider = if \(\$Fast\)/);
   assert.match(overall, /fast mode skips local third-party provider end-to-end verification/);
+  assert.match(overall, /New-FastBudgetSkippedCheck "missing response history verification"/);
   assert.match(overall, /test-anticodex-local-connectors\.mjs/);
   assert.match(overall, /Local connector\/app-tool allowlist verification/);
   assert.match(overall, /\$checks\.localConnectors = if \(\$Fast\)/);
@@ -4720,7 +4725,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Get-OriginalCodexMainProcesses/);
   assert.match(overall, /\$checks\.independence = if \(\$Fast\)/);
   assert.match(overall, /test-anticodex-mcp-skills\.ps1/);
+  assert.match(overall, /New-FastBudgetSkippedCheck "MCP\/skills verification"/);
   assert.match(overall, /test-anticodex-plugin-capabilities\.ps1/);
+  assert.match(overall, /New-FastBudgetSkippedCheck "plugin capability verification"/);
   assert.match(overall, /New-SkippedCheck/);
   assert.match(overall, /behaviorCovered = \$false/);
   assert.match(overall, /coverageKind = "skipped"/);
@@ -6308,7 +6315,8 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
   assert.match(verifier, /latest-missing-history\.json/);
   assert.match(verifier, /createHash\("sha256"\)/);
   assert.match(verifier, /usedRealTraffic:\s*false/);
-  assert.match(overall, /\$checks\.missingHistory\s*=\s*Invoke-NodeJsonScript/);
+  assert.match(overall, /\$checks\.missingHistory\s*=\s*if \(\$Fast -and -not \(Test-FastBudgetAvailable "missing response history verification" 8000\)\)/);
+  assert.match(overall, /Invoke-NodeJsonScript "Missing response history verification"/);
   assert.match(overall, /test-anticodex-missing-history\.mjs/);
   assert.match(overall, /latest-missing-history\.json/);
   assert.match(collector, /latest-missing-history\.json/);
