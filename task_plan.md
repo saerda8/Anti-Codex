@@ -1454,3 +1454,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Manager Button Token Rebootstrap
 - Completed: the standalone Manager button helper now clears a stale Manager action token and re-bootstraps once on HTTP 403, preventing false failures after translator restarts while keeping source and token checks intact.
 - Verification: Manager button helper syntax passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, `missingShort:0`, and `installedRuntimeSync.satisfied:true`.
+
+## 2026-06-24 Manager UI Token Rebootstrap
+- Completed: the injected Manager and fallback Manager page now refresh a stale Manager action token once on HTTP 403 before retrying authenticated write actions, covering action buttons, local connector allowlist saves, and third-party upstream profile/test/apply paths.
+- Verification: Manager injection and adaptive server syntax checks passed; focused launcher contracts passed `127/127`; `git diff --check` passed; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.

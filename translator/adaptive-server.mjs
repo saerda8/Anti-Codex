@@ -3184,7 +3184,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
   </section>
 </main>
 <script>
-const managerActionToken=${JSON.stringify(MANAGER_ACTION_TOKEN)};
+let managerActionToken=${JSON.stringify(MANAGER_ACTION_TOKEN)};
 const $=id=>document.getElementById(id);
 const HIGH_IMPACT_ACTION_IDS=new Set(["syncHost","upstreamConfig","resetAntigravitySessionLock","refreshFeatures","stabilitySoak","coldRelaunch","fastOverallNoTraffic","overallNoTraffic","postVerificationFull"]);
 const HIGH_IMPACT_CONFIRMATION_MS=15000;
@@ -3209,6 +3209,12 @@ const postState=v=>({not_checked:"暂无记录",waiting_for_account:"等待账�
 const checkState=x=>!x?.present?"暂无记录":((x.ok?"通过":"失败")+" / "+(x.elapsedMs!=null?(x.elapsedMs+" ms"):"耗时未知"));
 const syncState=v=>({up_to_date:"已同步",up_to_date_cached:"已同步",source_codex_changed:"发现新版 Codex",source_missing:"未找到原生 Codex",active_missing:"Anti-Codex 主体缺失",hash_mismatch:"需要同步",not_checked:"未检查"}[v]||v||"未知");
 async function getJson(path,opts){const r=await fetch(path,{cache:"no-store",...opts});const t=await r.text();try{return JSON.parse(t)}catch{return {ok:false,error:t||r.statusText,status:r.status}}}
+async function refreshManagerActionToken(){const r=await getJson("/anticodex/manager/bootstrap");managerActionToken=r?.token||managerActionToken;if(!managerActionToken)throw new Error("Anti-Codex manager bootstrap did not return an action token");return managerActionToken}
+async function managerPost(path,body){
+  if(!managerActionToken)await refreshManagerActionToken();
+  const postOnce=async()=>{const r=await fetch(path,{cache:"no-store",method:"POST",headers:{"content-type":"application/json","x-anticodex-manager-token":managerActionToken},body:JSON.stringify(body??{})});const t=await r.text();let json=null;try{json=t?JSON.parse(t):null}catch{};if(!r.ok){const e=new Error(json?.error?.message||json?.message||t||r.statusText);e.status=r.status;throw e;}return json};
+  try{return await postOnce()}catch(e){if(e?.status!==403)throw e;await refreshManagerActionToken();return await postOnce()}
+}
 function resetHighImpactConfirmation(){
   if(pendingHighImpactButton?.isConnected){
     pendingHighImpactButton.textContent=pendingHighImpactButton.getAttribute("data-original-label")||pendingHighImpactButton.textContent;
@@ -3773,9 +3779,9 @@ async function load(){
 }
 $("refresh").onclick=load;
 $("refreshModels").onclick=async()=>{ $("refreshModels").disabled=true; try{const r=await getJson("/anticodex/models/refresh",{method:"POST"}); if(!r.ok) throw new Error(r.message||r.error?.message||"刷新失败"); await load();}catch(e){$("error").style.display="block";$("error").textContent="刷新模型失败："+e.message} finally{$("refreshModels").disabled=false;} };
-$("saveConnectorAllowlist").onclick=async()=>{const button=$("saveConnectorAllowlist");const ids=$("connectorAllowlistInput").value.split(/[\\r\\n,]+/).map(x=>x.trim()).filter(Boolean);button.disabled=true;$("connectorAllowlistResult").textContent="\\u6b63\\u5728\\u4fdd\\u5b58...";try{const r=await getJson("/anticodex/local-connectors/allowlist",{method:"POST",headers:{"content-type":"application/json","x-anticodex-manager-token":managerActionToken},body:JSON.stringify({connectorIds:ids})});if(r.ok===false)throw new Error(r.message||r.error||"save failed");renderConnectorAllowlist(r);$("connectorAllowlistResult").textContent="\\u5df2\\u4fdd\\u5b58\\u672c\\u5730\\u8fde\\u63a5\\u5668 allowlist\\u3002\\n\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8\\uff1a"+(r.counts?.localAllowlisted??r.counts?.locallyAuthorized??0)+"\\n\\u771f\\u5b9e\\u53ef\\u8c03\\u7528\\u5de5\\u5177\\uff1a"+(r.counts?.appTools??0)+"\\n\\u6ce8\\u610f\\uff1a\\u4e0d\\u6388\\u6743\\uff0c\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528\\u3002";await load();}catch(e){$("connectorAllowlistResult").textContent="\\u4fdd\\u5b58\\u5931\\u8d25\\uff1a"+e.message}finally{button.disabled=false;}};
+$("saveConnectorAllowlist").onclick=async()=>{const button=$("saveConnectorAllowlist");const ids=$("connectorAllowlistInput").value.split(/[\\r\\n,]+/).map(x=>x.trim()).filter(Boolean);button.disabled=true;$("connectorAllowlistResult").textContent="\\u6b63\\u5728\\u4fdd\\u5b58...";try{const r=await managerPost("/anticodex/local-connectors/allowlist",{connectorIds:ids});if(r.ok===false)throw new Error(r.message||r.error||"save failed");renderConnectorAllowlist(r);$("connectorAllowlistResult").textContent="\\u5df2\\u4fdd\\u5b58\\u672c\\u5730\\u8fde\\u63a5\\u5668 allowlist\\u3002\\n\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8\\uff1a"+(r.counts?.localAllowlisted??r.counts?.locallyAuthorized??0)+"\\n\\u771f\\u5b9e\\u53ef\\u8c03\\u7528\\u5de5\\u5177\\uff1a"+(r.counts?.appTools??0)+"\\n\\u6ce8\\u610f\\uff1a\\u4e0d\\u6388\\u6743\\uff0c\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528\\u3002";await load();}catch(e){$("connectorAllowlistResult").textContent="\\u4fdd\\u5b58\\u5931\\u8d25\\uff1a"+e.message}finally{button.disabled=false;}};
 function setActionButtonsDisabled(disabled){document.querySelectorAll("button[data-action]").forEach(button=>{button.disabled=!!disabled;});}
-document.querySelectorAll("button[data-action]").forEach(btn=>{btn.onclick=async()=>{const action=btn.getAttribute("data-action");const label=btn.getAttribute("data-original-label")||btn.textContent;if(requireHighImpactConfirmation(action,label,btn))return;setActionButtonsDisabled(true);$("actionResult").textContent="正在运行："+label+" ...";try{const r=await getJson("/anticodex/manager/action",{method:"POST",headers:{"content-type":"application/json","x-anticodex-manager-token":managerActionToken},body:JSON.stringify({action})});$("actionResult").textContent=actionText(r);await load();}catch(e){$("actionResult").textContent="运行失败："+e.message}finally{setActionButtonsDisabled(false);}}});
+document.querySelectorAll("button[data-action]").forEach(btn=>{btn.onclick=async()=>{const action=btn.getAttribute("data-action");const label=btn.getAttribute("data-original-label")||btn.textContent;if(requireHighImpactConfirmation(action,label,btn))return;setActionButtonsDisabled(true);$("actionResult").textContent="正在运行："+label+" ...";try{const r=await managerPost("/anticodex/manager/action",{action});$("actionResult").textContent=actionText(r);await load();}catch(e){$("actionResult").textContent="运行失败："+e.message}finally{setActionButtonsDisabled(false);}}});
 $("copyActionResult").onclick=async()=>{const button=$("copyActionResult");try{await copyTextToClipboard($("actionResult").textContent||"");button.textContent="已复制";}catch(e){button.textContent="复制失败";}finally{setTimeout(()=>{button.textContent="复制结果"},1600);}};
 load().catch(e=>{$("error").style.display="block";$("error").textContent="加载失败："+e.message});
 </script>

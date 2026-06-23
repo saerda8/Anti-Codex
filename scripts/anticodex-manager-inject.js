@@ -305,7 +305,11 @@
     const text = await response.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch {}
-    if (!response.ok) throw new Error(json?.error?.message || text || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(json?.error?.message || text || `HTTP ${response.status}`);
+      error.statusCode = response.status;
+      throw error;
+    }
     return json;
   }
 
@@ -359,6 +363,35 @@
 
   function safeValue(result, fallback = null) {
     return result?.ok ? result.value : fallback;
+  }
+
+  async function refreshManagerToken() {
+    const bootstrap = await getJson("/anticodex/manager/bootstrap", { allowSnapshotFallback: false });
+    managerToken = bootstrap?.token || "";
+    if (!managerToken) throw new Error("Anti-Codex manager bootstrap did not return an action token.");
+    return managerToken;
+  }
+
+  async function managerPostJson(path, body, options = {}) {
+    if (!managerToken) await refreshManagerToken();
+    const postOnce = () => getJson(path, {
+      ...options,
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(options.headers || {}),
+        "x-anticodex-manager-token": managerToken,
+      },
+      body: typeof body === "string" ? body : JSON.stringify(body ?? {}),
+      allowSnapshotFallback: false,
+    });
+    try {
+      return await postOnce();
+    } catch (error) {
+      if (error?.statusCode !== 403) throw error;
+      await refreshManagerToken();
+      return await postOnce();
+    }
   }
 
   function modelCatalogFingerprint(payload) {
@@ -483,7 +516,7 @@
   }
 
   async function runActionViaScript(action) {
-    if (!managerToken) managerToken = (await getJson("/anticodex/manager/bootstrap"))?.token || "";
+    await refreshManagerToken();
     let lastError = null;
     for (const baseUrl of actionApiCandidates()) {
       try {
@@ -585,13 +618,7 @@
       result.classList.remove("anticodex-error");
       result.textContent = "\u6b63\u5728\u4fdd\u5b58\u672c\u5730\u8fde\u63a5\u5668 allowlist ...";
       try {
-        if (!managerToken) managerToken = (await getJson("/anticodex/manager/bootstrap"))?.token || "";
-        const saved = await getJson("/anticodex/local-connectors/allowlist", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-anticodex-manager-token": managerToken },
-          body: JSON.stringify({ connectorIds }),
-          allowSnapshotFallback: false,
-        });
+        const saved = await managerPostJson("/anticodex/local-connectors/allowlist", { connectorIds });
         window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
         result.textContent = `\u672c\u5730\u8fde\u63a5\u5668 allowlist \u5df2\u4fdd\u5b58\u3002\n\u672c\u5730\u7f13\u5b58\u9884\u89c8\uff1a${saved.counts?.localAllowlisted ?? saved.counts?.locallyAuthorized ?? connectorIds.length}\n\u771f\u5b9e\u53ef\u8c03\u7528\u5de5\u5177\uff1a${saved.counts?.appTools ?? 0}\n\u6ce8\u610f\uff1a\u4e0d\u6388\u6743\uff0c\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\u3002`;
         await load({ updateResult: false });
@@ -1689,11 +1716,7 @@
         (payload.stages || []).map((item) => String(item.stage || "") + "：" + String(item.status || "") + "\n" + String(item.detail || "")).join("\n\n"),
       ].filter(Boolean).join("\n\n") || "没有返回测试结果";
       const applyAndWait = async (expectedMode) => {
-        await getJson("/anticodex/upstream-apply", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-anticodex-manager-token": managerToken },
-          body: "{}",
-        });
+        await managerPostJson("/anticodex/upstream-apply", {});
         stageBox.textContent = "配置已保存，正在重启本地模型通道；聊天记录和项目保持不变...";
         const deadline = Date.now() + 30000;
         while (Date.now() < deadline) {
@@ -1715,11 +1738,7 @@
         setUpstreamConfigBusy(true);
         stageBox.textContent = "正在测试连通...";
         try {
-          if (!managerToken) managerToken = (await getJson("/anticodex/manager/bootstrap"))?.token || "";
-          const payload = await getJson("/anticodex/upstream-test", {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-anticodex-manager-token": managerToken },
-            body: JSON.stringify({ protocol: protocol.value, baseUrl: baseUrl.value.trim(), model: model.value.trim(), apiKey: apiKey.value }),
+          const payload = await managerPostJson("/anticodex/upstream-test", { protocol: protocol.value, baseUrl: baseUrl.value.trim(), model: model.value.trim(), apiKey: apiKey.value }, {
             timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
             retryCandidates: false,
           });
@@ -1749,13 +1768,9 @@
           return;
         }
         setUpstreamConfigBusy(true);
-        if (!managerToken) managerToken = (await getJson("/anticodex/manager/bootstrap"))?.token || "";
         stageBox.textContent = "正在保存配置...";
         try {
-          const payload = await getJson("/anticodex/upstream-profile", {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-anticodex-manager-token": managerToken },
-            body: JSON.stringify({ mode: "third-party", protocol: protocol.value, baseUrl: baseUrl.value.trim(), model: model.value.trim(), apiKey: apiKey.value, stages: lastStages }),
+          const payload = await managerPostJson("/anticodex/upstream-profile", { mode: "third-party", protocol: protocol.value, baseUrl: baseUrl.value.trim(), model: model.value.trim(), apiKey: apiKey.value, stages: lastStages }, {
             timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
             retryCandidates: false,
           });
@@ -1779,12 +1794,8 @@
       restoreButton.onclick = async () => {
         if (upstreamConfigOperationInFlight) return;
         setUpstreamConfigBusy(true);
-        if (!managerToken) managerToken = (await getJson("/anticodex/manager/bootstrap"))?.token || "";
         try {
-          const payload = await getJson("/anticodex/upstream-profile", {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-anticodex-manager-token": managerToken },
-            body: JSON.stringify({ mode: "antigravity" }),
+          const payload = await managerPostJson("/anticodex/upstream-profile", { mode: "antigravity" }, {
             timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
             retryCandidates: false,
           });

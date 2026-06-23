@@ -457,6 +457,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /\\u4e0d\\u6388\\u6743/);
   assert.match(managerInject, /\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528/);
   assert.match(managerInject, /x-anticodex-manager-token/);
+  assert.match(managerInject, /function refreshManagerToken/);
+  assert.match(managerInject, /function managerPostJson/);
+  assert.match(managerInject, /error\?\.statusCode !== 403/);
   assert.match(managerInject, /window\.__ANTICODEX_MANAGER_SNAPSHOT__ = null/);
   assert.match(managerInject, /authorizedConnectorCount/);
   assert.match(managerInject, /\\u672a\\u6388\\u6743\\u8fde\\u63a5\\u5668\\u4e0d\\u4f2a\\u88c5\\u6210\\u53ef\\u8c03\\u7528\\u5de5\\u5177/);
@@ -929,7 +932,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(html, /pendingHighImpactAction/);
   assert.match(html, /data-confirming-high-impact/);
   assert.ok(
-    html.indexOf("requireHighImpactConfirmation(action,label,btn)") < html.indexOf('getJson("/anticodex/manager/action"'),
+    html.indexOf("requireHighImpactConfirmation(action,label,btn)") < html.indexOf('managerPost("/anticodex/manager/action"'),
     "fallback manager must confirm high-impact actions before posting to the action endpoint",
   );
 
@@ -943,6 +946,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   // client-side action JS sends the token
   assert.match(server, /"x-anticodex-manager-token":managerActionToken/,
     "client-side action JS must send x-anticodex-manager-token");
+  assert.match(server, /function refreshManagerActionToken/);
+  assert.match(server, /function managerPost/);
+  assert.match(server, /e\?\.status!==403/);
+  assert.match(server, /managerPost\("\/anticodex\/manager\/action",\{action\}\)/);
   assert.match(repairShortcuts, /CreateShortcut/);
   assert.match(repairShortcuts, /start-anticodex\.ps1/);
   assert.match(repairShortcuts, /sync-anticodex-launcher\.ps1/);
@@ -6442,7 +6449,8 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(inject, /\/anticodex\/upstream-test/);
   assert.match(inject, /\/anticodex\/upstream-apply/);
   assert.match(inject, /\/anticodex\/upstream-test/);
-  assert.match(inject, /\/anticodex\/upstream-test[\s\S]*?x-anticodex-manager-token/);
+  assert.match(inject, /managerPostJson\("\/anticodex\/upstream-test"[\s\S]*?UPSTREAM_TEST_TIMEOUT_MS/);
+  assert.match(inject, /function managerPostJson[\s\S]*?x-anticodex-manager-token/);
   assert.match(inject, /\/anticodex\/upstream-profile/);
   assert.match(inject, /\/anticodex\/upstream-apply/);
   assert.match(inject, /applyAndWait/);
