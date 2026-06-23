@@ -564,6 +564,7 @@ foreach ($guidanceName in $guidanceNames) {
         Add-Failure "Anti-Codex guidance '$guidanceName' content differs from shared copy"
     }
 }
+Save-McpSkillFileHashCache
 
 try {
     $pluginsInstalled = Invoke-LocalJson "/backend-api/ps/plugins/installed"
