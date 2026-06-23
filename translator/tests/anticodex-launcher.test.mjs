@@ -2219,6 +2219,12 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /node\.exe is required to summarize diagnostic reports/);
   assert.match(collector, /summarize-anticodex-report\.mjs/);
   assert.match(collector, /Invoke-NodeJsonSummary -Path \$Path/);
+  assert.match(collector, /function Get-DiagnosticsSnapshotSummary/);
+  assert.match(collector, /diagnostics-summary\.json/);
+  assert.match(collector, /longTasks/);
+  assert.match(collector, /otherRunningItems/);
+  assert.match(collector, /manager_foreground/);
+  assert.match(collector, /diagnosticsSummary = \$diagnosticsSummary/);
   assert.match(collector, /requestedRealTraffic/);
   assert.match(collector, /coverageKind/);
   assert.match(collector, /behaviorCovered/);

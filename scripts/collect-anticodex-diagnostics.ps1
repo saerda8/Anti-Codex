@@ -133,6 +133,40 @@ function Try-InvokeJson {
     }
 }
 
+function Get-DiagnosticsSnapshotSummary {
+    param($Diagnostics)
+    $longTasks = if ($Diagnostics -and ($Diagnostics.PSObject.Properties.Name -contains "longTasks")) { $Diagnostics.longTasks } else { $null }
+    $items = if ($longTasks -and ($longTasks.PSObject.Properties.Name -contains "items")) { @($longTasks.items) } else { @() }
+    $syncHost = @($items | Where-Object { [string]$_.id -eq "syncHost" } | Select-Object -First 1)
+    $postVerification = @($items | Where-Object { [string]$_.id -eq "postVerificationFull" } | Select-Object -First 1)
+    $otherRunningItems = @($items | Where-Object {
+        [string]$_.id -ne "syncHost" -and
+        [string]$_.id -ne "postVerificationFull" -and
+        ([string]$_.state -eq "running" -or [string]$_.rawState -eq "running" -or [string]$_.stage -eq "manager_foreground")
+    } | Select-Object -First 5 | ForEach-Object {
+        [pscustomobject]@{
+            id = [string]$_.id
+            label = [string]$_.label
+            state = [string]$_.state
+            stage = [string]$_.stage
+            elapsedMs = $_.elapsedMs
+            latestLogLine = [string]$_.latestLogLine
+        }
+    })
+    return [pscustomobject]@{
+        ok = if ($longTasks -and ($longTasks.PSObject.Properties.Name -contains "ok")) { [bool]$longTasks.ok } else { $false }
+        longTasks = [pscustomobject]@{
+            runningCount = if ($longTasks -and ($longTasks.PSObject.Properties.Name -contains "runningCount")) { $longTasks.runningCount } else { 0 }
+            attentionCount = if ($longTasks -and ($longTasks.PSObject.Properties.Name -contains "attentionCount")) { $longTasks.attentionCount } else { 0 }
+            itemCount = $items.Count
+            syncHostState = if ($syncHost.Count -gt 0) { [string]$syncHost[0].state } else { "" }
+            postVerificationState = if ($postVerification.Count -gt 0) { [string]$postVerification[0].state } else { "" }
+            latestLogLine = [string](@($items | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.latestLogLine) } | Select-Object -First 1).latestLogLine)
+            otherRunningItems = @($otherRunningItems)
+        }
+    }
+}
+
 function Resolve-NodeForJsonSummary {
     $bundledNode = Join-Path $installRoot "codex-patched-app\resources\cua_node\bin\node.exe"
     if (Test-Path -LiteralPath $bundledNode -PathType Leaf) { return $bundledNode }
@@ -278,6 +312,8 @@ New-Item -ItemType Directory -Path (Join-Path $bundleRoot "logs") -Force | Out-N
 Write-JsonFile (Join-Path $bundleRoot "health.json") (Try-InvokeJson "/health")
 $diagnosticsSnapshot = Try-InvokeJson "/anticodex/diagnostics"
 Write-JsonFile (Join-Path $bundleRoot "diagnostics.json") $diagnosticsSnapshot
+$diagnosticsSummary = Get-DiagnosticsSnapshotSummary $diagnosticsSnapshot
+Write-JsonFile (Join-Path $bundleRoot "diagnostics-summary.json") $diagnosticsSummary
 if ($diagnosticsSnapshot -and ($diagnosticsSnapshot.PSObject.Properties.Name -contains "logDbGuard")) {
     Write-JsonFile (Join-Path $bundleRoot "log-db-guard.json") $diagnosticsSnapshot.logDbGuard
 }
@@ -395,6 +431,7 @@ $result = [pscustomobject]@{
     zipPath = $zipPath
     retainedBundles = [Math]::Max(1, $KeepBundles)
     damagedReports = $damagedReports
+    diagnosticsSummary = $diagnosticsSummary
 }
 if (-not $NoPopup) {
     try {

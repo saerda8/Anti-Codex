@@ -1261,3 +1261,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: duplicate foreground Manager checks now render a direct user-facing result instead of falling through to raw JSON or action-specific generic copy; the result shows the running check label, original start time, and wait/refresh guidance.
 - Completed: the injected Manager panel now mirrors the fallback Manager long-task card by listing non-core running foreground/background tasks as "other running" work, including `manager_foreground` items from diagnostics.
 - Verification: adaptive server and injected Manager syntax checks passed; focused Start Menu Manager launcher contracts passed `124/124`.
+
+## 2026-06-23 Diagnostic Bundle Long-Task Summary
+- Completed: diagnostic bundle collection now writes `diagnostics-summary.json` from the live `/anticodex/diagnostics` snapshot, carrying `longTasks` counts plus sync/post states and up to five non-core running foreground/background tasks.
+- Completed: the bundle result now includes `diagnosticsSummary`, so support tooling can see foreground Manager work without opening the full raw diagnostics payload.
+- Verification: collector PowerShell parser check passed; focused diagnostic bundle launcher contracts passed `124/124`.
