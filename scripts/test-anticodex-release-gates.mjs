@@ -2,7 +2,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -22,6 +23,26 @@ const maxAgeHours = Number(args.get("--max-age-hours") || 48);
 const strict = args.has("--strict");
 const strictOptionalRealTraffic = args.has("--strict-optional-real-traffic");
 const startedAt = Date.now();
+function currentSourceRoot() {
+  return resolve(args.get("--source-root") || join(dirname(fileURLToPath(import.meta.url)), ".."));
+}
+
+function currentTargetRuntime() {
+  return resolve(args.get("--target-runtime") || join(process.env.LOCALAPPDATA || ".", "Anti-Codex", "runtime"));
+}
+
+const runtimeSyncFiles = [
+  "scripts/start-deepcodex.ps1",
+  "scripts/protect-anticodex-log-db.mjs",
+  "scripts/resolve-anticodex-base-url.ps1",
+  "scripts/test-anticodex-installed-overall.ps1",
+  "scripts/test-anticodex-real-work.ps1",
+  "scripts/test-anticodex-real-mini-tool.ps1",
+  "scripts/test-anticodex-model-switch-history.ps1",
+  "translator/adaptive-server.mjs",
+  "translator/antigravity-session-lock.mjs",
+  "codex-home-deepseek-app/config.adaptive-oneapi.toml",
+];
 
 const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true, requireInstalledOverallSemantics: true, expectedFast: true, expectedReportName: "installed-overall-fast", expectedCoverageKind: "installed-fast-no-traffic" },
@@ -76,6 +97,91 @@ function integrityFor(filePath) {
   const expected = match[1].toLowerCase();
   const actual = fileHash(filePath);
   return { signed: true, valid: actual === expected, hash: actual, expected, error: actual === expected ? "" : "hash_mismatch" };
+}
+
+function normalizedRuntimePath(relativePath) {
+  return relativePath.split("/").join("\\");
+}
+
+function runtimeSyncFingerprint(root) {
+  const fp = createHash("sha256");
+  let maxMtimeMs = 0;
+  const files = [];
+  for (const relativePath of runtimeSyncFiles) {
+    const absolutePath = join(root, ...relativePath.split("/"));
+    if (!existsSync(absolutePath)) {
+      files.push({ relativePath: normalizedRuntimePath(relativePath), exists: false, hash: "" });
+      continue;
+    }
+    const stat = statSync(absolutePath);
+    const hash = fileHash(absolutePath);
+    if (stat.mtimeMs > maxMtimeMs) maxMtimeMs = stat.mtimeMs;
+    files.push({ relativePath: normalizedRuntimePath(relativePath), exists: true, hash });
+    fp.update(relativePath);
+    fp.update(hash);
+  }
+  return {
+    fingerprint: fp.digest("hex"),
+    fileCount: files.filter((file) => file.exists).length,
+    missing: files.filter((file) => !file.exists).map((file) => file.relativePath),
+    files,
+    sourceMtimeMax: maxMtimeMs > 0 ? new Date(maxMtimeMs).toISOString() : "",
+  };
+}
+
+function summarizeInstalledRuntimeSyncGate() {
+  const sourceRoot = currentSourceRoot();
+  const targetRuntime = currentTargetRuntime();
+  const gate = {
+    id: "installedRuntimeSync",
+    group: "short",
+    file: "",
+    requiredForShort: true,
+    requiredForRelease: true,
+    present: true,
+    parseable: true,
+    signed: true,
+    hashValid: true,
+    okField: false,
+    fresh: true,
+    ageHours: 0,
+    satisfied: false,
+    note: "Compares current source runtime files with the installed Anti-Codex runtime without restarting anything.",
+    error: "",
+    sourceRoot,
+    targetRuntime,
+  };
+  const semanticFailures = [];
+  try {
+    const source = runtimeSyncFingerprint(sourceRoot);
+    const installed = runtimeSyncFingerprint(targetRuntime);
+    gate.sourceFingerprint = source.fingerprint;
+    gate.installedRuntimeFingerprint = installed.fingerprint;
+    gate.sourceFileCount = source.fileCount;
+    gate.installedRuntimeFileCount = installed.fileCount;
+    gate.sourceMtimeMax = source.sourceMtimeMax;
+    gate.installedRuntimeMtimeMax = installed.sourceMtimeMax;
+    gate.missingSourceFiles = source.missing;
+    gate.missingInstalledRuntimeFiles = installed.missing;
+    gate.mismatchedRuntimeFiles = runtimeSyncFiles
+      .map(normalizedRuntimePath)
+      .filter((relativePath) => {
+        const sourceFile = source.files.find((file) => file.relativePath === relativePath);
+        const installedFile = installed.files.find((file) => file.relativePath === relativePath);
+        return sourceFile?.exists && installedFile?.exists && sourceFile.hash !== installedFile.hash;
+      });
+    if (source.missing.length > 0) semanticFailures.push("installed_runtime_source_missing");
+    if (installed.missing.length > 0) semanticFailures.push("installed_runtime_target_missing");
+    if (gate.mismatchedRuntimeFiles.length > 0) semanticFailures.push("installed_runtime_hash_mismatch");
+    if (source.fingerprint !== installed.fingerprint) semanticFailures.push("installed_runtime_fingerprint_mismatch");
+  } catch (error) {
+    semanticFailures.push("installed_runtime_sync_probe_failed");
+    gate.error = error instanceof Error ? error.message : String(error);
+  }
+  gate.semanticFailures = semanticFailures;
+  gate.okField = semanticFailures.length === 0;
+  gate.satisfied = gate.okField === true;
+  return gate;
 }
 
 function isEmptyArray(value) {
@@ -1400,6 +1506,26 @@ if (args.has("--self-test")) {
     };
     if (!semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch")) throw new Error("self-test failed: MCP/Skill source snapshot mismatch was not detected");
     if (!semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch")) throw new Error("self-test failed: plugin-capability source snapshot mismatch was not detected");
+    const fakeSourceRoot = join(tempRoot, "source");
+    const fakeTargetRuntime = join(tempRoot, "runtime");
+    for (const relativePath of runtimeSyncFiles) {
+      const sourcePath = join(fakeSourceRoot, ...relativePath.split("/"));
+      const targetPath = join(fakeTargetRuntime, ...relativePath.split("/"));
+      mkdirSync(dirname(sourcePath), { recursive: true });
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(sourcePath, `source:${relativePath}`, "utf8");
+      writeFileSync(targetPath, `target:${relativePath}`, "utf8");
+    }
+    const originalSourceRoot = args.get("--source-root");
+    const originalTargetRuntime = args.get("--target-runtime");
+    args.set("--source-root", fakeSourceRoot);
+    args.set("--target-runtime", fakeTargetRuntime);
+    const runtimeGate = summarizeInstalledRuntimeSyncGate();
+    if (originalSourceRoot === undefined) args.delete("--source-root"); else args.set("--source-root", originalSourceRoot);
+    if (originalTargetRuntime === undefined) args.delete("--target-runtime"); else args.set("--target-runtime", originalTargetRuntime);
+    semanticFailures.installedRuntimeSync = runtimeGate.semanticFailures || [];
+    if (!semanticFailures.installedRuntimeSync.includes("installed_runtime_hash_mismatch")) throw new Error("self-test failed: installed runtime hash mismatch was not detected");
+    if (!semanticFailures.installedRuntimeSync.includes("installed_runtime_fingerprint_mismatch")) throw new Error("self-test failed: installed runtime fingerprint mismatch was not detected");
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
     reportRoot = originalReportRoot;
@@ -1408,7 +1534,7 @@ if (args.has("--self-test")) {
   process.exit(0);
 }
 
-const gates = gateDefinitions.map(summarizeGate);
+const gates = [...gateDefinitions.map(summarizeGate), summarizeInstalledRuntimeSyncGate()];
 function addSemanticFailure(gateId, failure) {
   const gate = gates.find((item) => item.id === gateId);
   if (!gate) return;

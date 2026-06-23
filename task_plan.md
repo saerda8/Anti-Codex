@@ -1396,3 +1396,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now require nested provider/protocol switch `continuationPreviousResponseId` evidence, not just top-level previous-response continuity booleans.
 - Completed: launcher contracts now pin the nested previous-response failure codes for provider switch, protocol switch, and reverse protocol switch.
 - Verification: release-gate syntax, self-test, strict gate, and focused launcher contracts passed; standalone third-party provider verifier passed with 9 turns, clean previous-response matches, and OpenAI/Anthropic/OpenAI tool-history structural evidence.
+
+## 2026-06-24 Installed Runtime Drift Gate
+- Completed: passive release gates now include `installedRuntimeSync`, a zero-traffic source-vs-installed runtime hash comparison for the Anti-Codex runtime files copied by `sync-anticodex-runtime.ps1`.
+- Completed: release-gate self-test now forges mismatched source/runtime trees and requires `installed_runtime_hash_mismatch` plus `installed_runtime_fingerprint_mismatch`, so the new gate is proven dynamically.
+- Verification: release-gate syntax passed; focused launcher release-gate contracts passed; runtime sync ran with `NoRestart`; strict passive release gate passed with `releaseReady:true`, `shortReady:true`, and `installedRuntimeSync.satisfied:true`; real diagnostics verifier passed.

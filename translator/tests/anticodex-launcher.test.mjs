@@ -5994,6 +5994,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(collector, /latest-release-gates\.json/);
   assert.match(server, /releaseGateGroups/);
   assert.match(server, /Release groups:/);
+  assert.match(releaseGates, /installedRuntimeSync/);
+  assert.match(releaseGates, /runtimeSyncFiles/);
+  assert.match(releaseGates, /installed_runtime_hash_mismatch/);
+  assert.match(releaseGates, /installed_runtime_fingerprint_mismatch/);
+  assert.match(releaseGates, /targetRuntime/);
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 
@@ -6023,6 +6028,8 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.logDbGuard.includes("log_db_guard_trigger_missing"));
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch"));
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch"));
+  assert.ok(summary.semanticFailures.installedRuntimeSync.includes("installed_runtime_hash_mismatch"));
+  assert.ok(summary.semanticFailures.installedRuntimeSync.includes("installed_runtime_fingerprint_mismatch"));
 });
 
 test("release-required latest reports stay visible in diagnostics, Manager, and report integrity checks", () => {
