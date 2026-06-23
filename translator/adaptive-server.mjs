@@ -2284,6 +2284,14 @@ function latestManagerReportItem(label, fileName) {
 
 function latestManagerReportsPayload() {
     const reports = [
+        latestManagerReportItem("Native multi-tool loop", "latest-native-multi-tool-loop.json"),
+        latestManagerReportItem("Custom tool loop", "latest-custom-tool-loop.json"),
+        latestManagerReportItem("Web tools", "latest-web-tools.json"),
+        latestManagerReportItem("Cancellation", "latest-cancellation.json"),
+        latestManagerReportItem("Tool bridge mode", "latest-tool-bridge-mode.json"),
+        latestManagerReportItem("UI idle stability", "latest-ui-idle-stability.json"),
+        latestManagerReportItem("Diagnostics", "latest-diagnostics.json"),
+        latestManagerReportItem("Shortcut repair", "latest-shortcut-repair.json"),
         latestManagerReportItem("快速检查", "latest-installed-overall-fast.json"),
         latestManagerReportItem("整体检查", "latest-installed-overall.json"),
         latestManagerReportItem("验证后完整检查", "latest-post-verification.json"),

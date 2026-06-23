@@ -267,6 +267,27 @@ function latestReportsSummary(result) {
     if (item.exists && age) lines.push(`  \u66f4\u65b0\uff1a${age}`);
     if (item.firstFailure) lines.push(`  \u9996\u4e2a\u5931\u8d25\uff1a${item.firstFailure}`);
     if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
+    if (item.releaseReady !== null && item.releaseReady !== undefined) {
+      lines.push(`  Release Gate: short=${item.shortReady ? "true" : "false"} / release=${item.releaseReady ? "true" : "false"}`);
+      if (Array.isArray(item.missingRequired) && item.missingRequired.length) lines.push(`  missingRequired: ${item.missingRequired.slice(0, 6).join(", ")}`);
+      if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
+        const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
+        lines.push(`  Release groups: ${groupSummary}`);
+      }
+    }
+    if (item.sourcePreflightEvidence) {
+      const evidence = item.sourcePreflightEvidence;
+      lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
+    }
+    if (item.modelThinkingEvidence) {
+      const evidence = item.modelThinkingEvidence;
+      lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
+    }
+    if (item.mcpSkillEvidence) {
+      const evidence = item.mcpSkillEvidence;
+      const clean = evidence.mcpMissingSharedCount === 0 && evidence.missingSharedSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true;
+      lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / parity ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+    }
     if (item.localConnectorEvidence) {
       const evidence = item.localConnectorEvidence;
       lines.push(`  \u8fde\u63a5\u5668\u8bc1\u636e\uff1aChatGPT URL ${evidence.chatgptInstallUrlsScrubbed ? "\u5df2\u6e05\u7406" : "\u9700\u5904\u7406"} / \u4e0a\u6e38\u8bf7\u6c42 ${evidence.upstreamRequestsDuringLocalEndpoints ?? "\u672a\u77e5"} / allowlist ${evidence.allowlistedConnectorAccessible ? "\u88ab\u5f53\u6210\u6388\u6743" : "\u4e0d\u7b49\u4e8e\u6388\u6743"}`);
@@ -277,6 +298,23 @@ function latestReportsSummary(result) {
       const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
       lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
       lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
+    }
+    if (item.optionalRealProviderEvidence) {
+      const evidence = item.optionalRealProviderEvidence;
+      lines.push(`  realProvider: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
+      lines.push(`  realProvider route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / ${evidence.routeResolvedModel || "\u672a\u77e5"} / ${evidence.routeStatus || "\u672a\u77e5"}`);
+    }
+    if (item.antigravityReturnEvidence) {
+      const evidence = item.antigravityReturnEvidence;
+      lines.push(`  antigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
+    }
+    if (item.coldRelaunchEvidence) {
+      const evidence = item.coldRelaunchEvidence;
+      lines.push(`  coldRelaunch: health=${evidence.healthOk ? "true" : "false"} / ready=${evidence.providerReady ? "true" : "false"} / main=${evidence.mainCount ?? "?"} / translator=${evidence.translatorCount ?? "?"} / originalCodex=${evidence.originalCodexUnchanged ? "unchanged" : "unknown"}`);
+    }
+    if (item.stabilitySoakEvidence) {
+      const evidence = item.stabilitySoakEvidence;
+      lines.push(`  stabilitySoak: ready=${evidence.providerReady && evidence.startReady && evidence.endReady ? "true" : "false"} / model=${evidence.model || "\u672a\u77e5"} / pidStable=${evidence.pidStable ? "true" : "false"} / healthChecks=${evidence.healthChecks ?? "?"} / turns=${evidence.turnCount ?? "?"} failed=${evidence.failedTurnCount ?? "?"}`);
     }
     if (item.exists && item.latestPath) lines.push(`  \u6587\u4ef6\uff1a${item.latestPath}`);
   }
@@ -416,6 +454,62 @@ if (args.has("--self-test")) {
   assert.match(connectorSummary, /\u4e0a\u6e38\u8bf7\u6c42 0/);
   assert.match(connectorSummary, /\u5e94\u7528\u5de5\u5177\u8bc1\u636e/);
   assert.match(connectorSummary, /\u672a\u6388\u6743\u5de5\u5177 0/);
+  const evidenceSummary = latestReportsSummary({
+    reportRoot: "C:\\tmp\\anticodex\\reports",
+    existingCount: 6,
+    reports: [{
+      label: "Release Gate",
+      exists: true,
+      ok: true,
+      releaseReady: true,
+      shortReady: true,
+      releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
+    }, {
+      label: "\u6a21\u578b\u601d\u8003\u9884\u7b97",
+      exists: true,
+      ok: true,
+      modelThinkingEvidence: { expectedModelCount: 2, actualModelCount: 2, modelCount: 2, supportsThinkingCount: 2, missingBudgetCount: 0 },
+    }, {
+      label: "\u6e90\u7801\u9884\u68c0",
+      exists: true,
+      ok: true,
+      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, publicDocumentationOk: true },
+    }, {
+      label: "MCP/Skill",
+      exists: true,
+      ok: true,
+      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, mcpMissingSharedCount: 0, missingSharedSkillCount: 0, hasNodeRepl: true, skillSmokeReadable: true },
+    }, {
+      label: "\u51b7\u542f\u52a8",
+      exists: true,
+      ok: true,
+      coldRelaunchEvidence: { healthOk: true, providerReady: true, mainCount: 1, translatorCount: 1, originalCodexUnchanged: true },
+    }, {
+      label: "\u7a33\u5b9a\u6027",
+      exists: true,
+      ok: true,
+      stabilitySoakEvidence: { providerReady: true, startReady: true, endReady: true, model: "gemini", pidStable: true, healthChecks: 5, turnCount: 2, failedTurnCount: 0 },
+    }, {
+      label: "\u53ef\u9009\u771f\u5b9e\u7b2c\u4e09\u65b9",
+      exists: true,
+      ok: true,
+      optionalRealProviderEvidence: { firstMarkerObserved: true, secondMarkerObserved: true, historyContinuationObserved: true, turns: 2, routeTransport: "upstream-provider", routeProviderProtocol: "openai-compatible", routeResolvedModel: "real-model", routeStatus: "success" },
+    }, {
+      label: "\u56de\u5230 Antigravity",
+      exists: true,
+      ok: true,
+      antigravityReturnEvidence: { returnedToAntigravityWithHistory: true, previousResponseIdMatched: true, markerCount: 6, missingMarkerCount: 0 },
+    }],
+  });
+  assert.match(evidenceSummary, /Release Gate: short=true \/ release=true/);
+  assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1/);
+  assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
+  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ docs=true/);
+  assert.match(evidenceSummary, /MCP\/Skill/);
+  assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ real-model \/ success/);
+  assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);
+  assert.match(evidenceSummary, /coldRelaunch: health=true \/ ready=true/);
+  assert.match(evidenceSummary, /stabilitySoak: ready=true/);
   console.log(JSON.stringify({ ok: true, selfTest: true }));
   process.exit(0);
 }

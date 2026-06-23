@@ -609,8 +609,26 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /function reportSummaryLines/);
   assert.match(managerBridge, /function failureSummaryLine/);
   assert.match(managerBridge, /function latestReportsSummary/);
+  assert.match(managerBridge, /releaseGateGroups/);
+  assert.match(managerInject, /releaseGateGroups/);
+  assert.match(managerBridge, /sourcePreflightEvidence/);
+  assert.match(managerInject, /sourcePreflightEvidence/);
+  assert.match(managerBridge, /modelThinkingEvidence/);
+  assert.match(managerInject, /modelThinkingEvidence/);
+  assert.match(managerBridge, /mcpSkillEvidence/);
+  assert.match(managerInject, /mcpSkillEvidence/);
   assert.match(managerBridge, /localConnectorEvidence/);
+  assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
+  assert.match(managerInject, /pluginCapabilityEvidence/);
+  assert.match(managerBridge, /optionalRealProviderEvidence/);
+  assert.match(managerInject, /optionalRealProviderEvidence/);
+  assert.match(managerBridge, /antigravityReturnEvidence/);
+  assert.match(managerInject, /antigravityReturnEvidence/);
+  assert.match(managerBridge, /coldRelaunchEvidence/);
+  assert.match(managerInject, /coldRelaunchEvidence/);
+  assert.match(managerBridge, /stabilitySoakEvidence/);
+  assert.match(managerInject, /stabilitySoakEvidence/);
   assert.match(managerBridge, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(managerBridge, /unauthorizedAppToolCount/);
   assert.match(managerBridge, /appToolGetPostParityClean/);
@@ -1750,11 +1768,17 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-codex-responses\.json/);
   assert.match(server, /latest-real-work\.json/);
   assert.match(server, /latest-native-tool-loop\.json/);
+  assert.match(server, /latest-native-multi-tool-loop\.json/);
   assert.match(server, /latest-mcp-tool-loop\.json/);
+  assert.match(server, /latest-custom-tool-loop\.json/);
+  assert.match(server, /latest-web-tools\.json/);
+  assert.match(server, /latest-cancellation\.json/);
   assert.match(server, /latest-mcp-skills\.json/);
   assert.match(server, /latest-plugin-capabilities\.json/);
   assert.match(server, /latest-local-connectors\.json/);
   assert.match(server, /latest-sync-readiness\.json/);
+  assert.match(server, /latest-tool-bridge-mode\.json/);
+  assert.match(server, /latest-ui-idle-stability\.json/);
   assert.match(server, /latest-model-routing\.json/);
   assert.match(server, /latest-model-thinking\.json/);
   assert.match(server, /latest-third-party-provider\.json/);
@@ -1762,8 +1786,11 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-cold-relaunch\.json/);
   assert.match(server, /latest-manager-real-buttons\.json/);
   assert.match(server, /latest-refresh-features\.json/);
+  assert.match(server, /latest-diagnostics\.json/);
+  assert.match(server, /latest-shortcut-repair\.json/);
   assert.match(server, /latest-compaction-resume\.json/);
   assert.match(server, /latest-stability-soak\.json/);
+  assert.match(server, /latest-account-proxy-readiness\.json/);
   assert.match(server, /latest-real-third-party-provider\.json/);
   assert.match(server, /latest-provider-antigravity-return\.json/);
   assert.match(server, /latestReportsSummary/);
@@ -1871,6 +1898,17 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-installed-overall-fast\.json/);
   assert.match(collector, /latest-model-routing\.json/);
   assert.match(collector, /latest-model-thinking\.json/);
+  assert.match(collector, /latest-codex-responses\.json/);
+  assert.match(collector, /latest-real-work\.json/);
+  assert.match(collector, /latest-real-mini-tool\.json/);
+  assert.match(collector, /latest-native-tool-loop\.json/);
+  assert.match(collector, /latest-tool-loop\.json/);
+  assert.match(collector, /latest-native-multi-tool-loop\.json/);
+  assert.match(collector, /latest-mcp-tool-loop\.json/);
+  assert.match(collector, /latest-custom-tool-loop\.json/);
+  assert.match(collector, /latest-compaction-resume\.json/);
+  assert.match(collector, /latest-cancellation\.json/);
+  assert.match(collector, /latest-web-tools\.json/);
   assert.match(collector, /latest-post-verification\.json/);
   assert.match(collector, /latest-source-preflight\.json/);
   assert.match(collector, /latest-shortcut-repair\.json/);
@@ -2598,8 +2636,18 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   assert.match(installedOverall, /latest-release-gates\.json/);
   assert.match(installedOverall, /latest-cold-relaunch\.json/);
+  assert.match(installedOverall, /latest-diagnostics\.json/);
+  assert.match(installedOverall, /latest-account-proxy-readiness\.json/);
+  assert.match(installedOverall, /latest-post-verification\.json/);
   assert.match(installedOverall, /latest-model-thinking\.json/);
   assert.match(installedOverall, /latest-source-preflight\.json/);
+  assert.match(installedOverall, /latest-real-work\.json/);
+  assert.match(installedOverall, /latest-real-mini-tool\.json/);
+  assert.match(installedOverall, /latest-native-multi-tool-loop\.json/);
+  assert.match(installedOverall, /latest-custom-tool-loop\.json/);
+  assert.match(installedOverall, /latest-cancellation\.json/);
+  assert.match(installedOverall, /latest-web-tools\.json/);
+  assert.match(installedOverall, /latest-shortcut-repair\.json/);
   assert.match(installedOverall, /latest-third-party-provider\.json/);
 });
 
@@ -4769,6 +4817,24 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(server, /releaseGateGroups/);
   assert.match(server, /Release groups:/);
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
+});
+
+test("release-required latest reports stay visible in diagnostics, Manager, and report integrity checks", () => {
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const thisFile = readFileSync(new URL(import.meta.url), "utf8");
+  const requiredReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*true[^}]*\}/g), (match) => match[1]))).sort();
+  const hasReportReference = (source, report) => source.includes(report) || source.includes(report.replace(".json", "\\.json"));
+
+  assert.ok(requiredReports.length > 20, "release gate required report inventory should be parsed");
+  for (const report of requiredReports) {
+    assert.ok(collector.includes(report), `${report} missing from diagnostic bundle latestReports`);
+    assert.ok(server.includes(report), `${report} missing from Manager latest reports`);
+    assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
+    assert.ok(hasReportReference(thisFile, report), `${report} missing from launcher contract coverage`);
+  }
 });
 
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {

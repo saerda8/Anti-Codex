@@ -258,6 +258,17 @@ Branch: main
 - Optional real-traffic skipped reports now need explicit no-traffic skip evidence: `requestedRealTraffic:false`, `usedRealTraffic:false`, `behaviorCovered:false`, and `coverageKind:"skipped"`.
 - Fresh evidence: release-gate `--self-test` rejects forged skipped optional reports where traffic was requested or not explicitly marked unrequested.
 
+## 2026-06-23 External Manager Bridge Evidence Follow-Up
+
+- The external Manager bridge latest-report summary now matches the in-app server summary for release groups, source-preflight, model-thinking, MCP/Skill, optional real-provider, provider-to-Antigravity return, cold relaunch, and stability-soak evidence.
+- The injected Manager panel now mirrors the same latest-report field evidence, and Manager/latest-report inventory now includes every `requiredForRelease:true` passive gate report.
+- Fresh evidence: bridge/inject/adaptive syntax passed; diagnostics and installed-overall parser checks passed; bridge `--self-test` passed; focused report-inventory/Manager/diagnostics/overall tests passed.
+
+## 2026-06-23 Release Report Inventory Drift Follow-Up
+
+- Added a dynamic launcher contract that parses release-gate required report files and checks they are present in diagnostic bundle collection, Manager latest reports, installed-overall report-integrity checks, and launcher contract coverage.
+- Fixed missing inventory entries for release-required reports including cancellation, custom tool loop, native multi-tool loop, web tools, real mini-tool, real work, account/proxy readiness, post-verification, tool-bridge mode, and UI idle stability.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

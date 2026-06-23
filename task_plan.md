@@ -1034,3 +1034,13 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 Optional Real-Traffic Skip Semantics
 - Completed: optional real-traffic skipped reports must explicitly state `requestedRealTraffic:false`, `usedRealTraffic:false`, `behaviorCovered:false`, and `coverageKind:"skipped"` before a skipped `ok:true` report can satisfy optional semantics.
 - Verification: release-gate `--self-test` rejects forged skipped optional reports where real traffic was requested or not explicitly marked unrequested.
+
+## 2026-06-23 External Manager Bridge Evidence Parity
+- Completed: `anticodex-manager-bridge.mjs` latest-report summaries now surface release-gate group counts, source-preflight evidence, model-thinking evidence, MCP/Skill evidence, optional real-provider route/history evidence, provider-to-Antigravity return evidence, cold relaunch evidence, and stability-soak evidence.
+- Verification: bridge syntax check passed; bridge `--self-test` passed with field-level latest-report fixtures; focused launcher Manager contract passed.
+
+## 2026-06-23 Release Report Inventory Drift Guard
+- Completed: diagnostic bundle collection, Manager latest reports, installed-overall report-integrity checks, and launcher contract tests now include every `requiredForRelease:true` latest report from the passive release gate, including real-traffic reports such as cancellation, web tools, native multi-tool, custom tool, real mini-tool, and real work.
+- Completed: `anticodex-manager-inject.js` now mirrors the external bridge latest-report field evidence so the injected panel and bridge path do not diverge.
+- Completed: added a dynamic launcher contract that parses release-gate required reports and fails if any are missing from diagnostics, Manager, installed-overall integrity checks, or launcher contract coverage.
+- Verification: JS syntax checks passed for bridge, inject, and adaptive server; PowerShell parser checks passed for diagnostics and installed overall; bridge `--self-test` passed; focused report-inventory/Manager/diagnostics/overall tests passed.
