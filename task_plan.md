@@ -1401,3 +1401,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now include `installedRuntimeSync`, a zero-traffic source-vs-installed runtime hash comparison for the Anti-Codex runtime files copied by `sync-anticodex-runtime.ps1`.
 - Completed: release-gate self-test now forges mismatched source/runtime trees and requires `installed_runtime_hash_mismatch` plus `installed_runtime_fingerprint_mismatch`, so the new gate is proven dynamically.
 - Verification: release-gate syntax passed; focused launcher release-gate contracts passed; runtime sync ran with `NoRestart`; strict passive release gate passed with `releaseReady:true`, `shortReady:true`, and `installedRuntimeSync.satisfied:true`; real diagnostics verifier passed.
+
+## 2026-06-24 Local Feature Refresh Evidence Realignment
+- Completed: full local feature refresh copied the current shared `.codex` and `.agents` skills/guidance/MCP/app-tool metadata into the isolated Anti-Codex home without granting connector authorization or restarting Anti-Codex.
+- Completed: after the refresh, MCP/Skill and plugin-capability reports were rerun until their inherited-source fingerprints matched the new refresh-feature snapshot.
+- Verification: refresh-features passed with `ok:true`, connector/app-tool parity clean, and snapshot source fingerprint `4f4ac6ed...`; MCP/Skill passed with real `node_repl` smoke plus Antigravity/DeepSeek tools/list and `fingerprintSkipped:false`; plugin capabilities passed with zero unauthorized app tools; diagnostics now reports `snapshotStatus.state:"fresh"`; strict release gate remains `releaseReady:true` and `shortReady:true`.
