@@ -1220,3 +1220,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: launcher regression coverage now executes the real third-party provider verifier with an unsafe non-HTTPS non-loopback URL and a fake API-key environment variable, proving it fails before traffic and writes `usedRealTraffic:false` without leaking the key.
 - Completed: duplicate-skill fixture expectations now follow the structured report contract (`ok:false`) rather than stale exit-code assumptions.
 - Verification: real-provider verifier syntax passed; focused launcher verifier contract passed `123/123`.
+
+## 2026-06-23 Runtime logs_2.sqlite TRACE Guard
+- Completed: inspected the isolated Anti-Codex `logs_2.sqlite` under `C:\Users\XD\AppData\Roaming\anticodex\codex-home-deepseek-app`; it contained historical TRACE rows and a 4,169,472-byte WAL, but the first 8-second sample showed no active growth.
+- Completed: backed up `logs_2.sqlite`, `logs_2.sqlite-wal`, and `logs_2.sqlite-shm` to `logs_2-backup-20260623-155617`, installed trigger `anticodex_drop_trace_logs` to ignore future TRACE inserts, and ran `PRAGMA wal_checkpoint(TRUNCATE)`.
+- Verification: WAL was truncated to 0 bytes; a 10-second post-fix sample showed `deltaId:0`, `deltaCount:0`, `deltaTrace:0`, and `deltaWal:0`. Original Codex was not touched.
