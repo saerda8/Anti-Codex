@@ -45,6 +45,7 @@ $PLUGIN_HOST_SYNC = Join-Path $ROOT "scripts\sync-shared-codex-plugin-host.mjs"
 $DEEPCODEX_PLUGINS_SYNC = Join-Path $ROOT "scripts\sync-deepcodex-plugins.mjs"
 $DEEPCODEX_APP_TOOLS_SYNC = Join-Path $ROOT "scripts\sync-deepcodex-app-tools.mjs"
 $DEEPCODEX_SIDECARS_SYNC = Join-Path $ROOT "scripts\sync-shared-codex-sidecars.mjs"
+$PROTECT_ANTICODEX_LOG_DB = Join-Path $ROOT "scripts\protect-anticodex-log-db.mjs"
 $ANTIGRAVITY_MODEL_CATALOG_SYNC = Join-Path $ROOT "translator\sync-antigravity-model-catalog.mjs"
 $DEEPCODEX_CDP_INJECT = Join-Path $ROOT "scripts\deepcodex-cdp-inject.mjs"
 $DEEPCODEX_PLUGIN_UNLOCK_INJECT = Join-Path $ROOT "scripts\deepcodex-plugin-unlock-inject.js"
@@ -163,6 +164,39 @@ function Write-LaunchStage {
         $elapsed = if ($Timer) { [int]$Timer.ElapsedMilliseconds } else { 0 }
         Write-LifecycleLog "launch stage: $Name took ${elapsed}ms."
     } catch {}
+}
+
+function Set-AntiCodexRustLogDefaults {
+    if (-not $IS_ANTIGRAVITY_MODE) { return }
+    $safeDefault = "info"
+    if ($env:RUST_LOG -and ($env:RUST_LOG -notmatch "(?i)(^|,|\s)trace($|,|\s|=)")) {
+        $safeDefault = $env:RUST_LOG
+    }
+    if ($safeDefault -notmatch "codex_app_server_transport::transport::remote_control::websocket") {
+        $safeDefault = "$safeDefault,codex_app_server_transport::transport::remote_control::websocket=warn"
+    }
+    $env:RUST_LOG = $safeDefault
+}
+
+function Protect-AntiCodexLogDb {
+    if (-not $IS_ANTIGRAVITY_MODE) { return $true }
+    Set-AntiCodexRustLogDefaults
+    if (-not (Test-Path -LiteralPath $PROTECT_ANTICODEX_LOG_DB -PathType Leaf)) {
+        Write-LifecycleLog "Anti-Codex log database guard is missing: $PROTECT_ANTICODEX_LOG_DB"
+        return $false
+    }
+    try {
+        $output = & $NODE_BIN $PROTECT_ANTICODEX_LOG_DB --codex-home $CODEX_HOME_DIR 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-LifecycleLog "Anti-Codex log database guard failed with exit code $LASTEXITCODE. $output"
+            return $false
+        }
+        Write-LifecycleLog "Anti-Codex log database guard applied."
+        return $true
+    } catch {
+        Write-LifecycleLog "Anti-Codex log database guard failed: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 if (Test-Path -LiteralPath $ANTIGRAVITY_DESKTOP_HELPER) {
@@ -1772,6 +1806,7 @@ Ensure-DeepCodexUiStateDefaults
 Sync-GlobalRules
 
 $env:CODEX_HOME = $CODEX_HOME_DIR
+Protect-AntiCodexLogDb | Out-Null
 $env:LANG = "zh_CN.UTF-8"
 $env:LC_ALL = "zh_CN.UTF-8"
 $codexArgs = @(

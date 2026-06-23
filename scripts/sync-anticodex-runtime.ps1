@@ -21,6 +21,7 @@ if ($targetRuntimeFull -ne $expectedRuntime) {
 
 $requiredSourceFiles = @(
     "scripts\start-deepcodex.ps1",
+    "scripts\protect-anticodex-log-db.mjs",
     "scripts\resolve-anticodex-base-url.ps1",
     "scripts\test-anticodex-installed-overall.ps1",
     "scripts\test-anticodex-real-work.ps1",

@@ -143,6 +143,27 @@ test("translator watchdog tolerates transient health stalls before restarting", 
   assert.match(ensureFunction, /translator health lost; restarting/i);
 });
 
+test("Anti-Codex startup installs a logs_2 sqlite TRACE write guard", () => {
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const guardPath = resolve(root, "scripts", "protect-anticodex-log-db.mjs");
+
+  assert.equal(existsSync(guardPath), true, "missing Anti-Codex log database guard script");
+
+  const guard = readFileSync(guardPath, "utf8");
+  assert.match(sharedLauncher, /PROTECT_ANTICODEX_LOG_DB/);
+  assert.match(sharedLauncher, /function Protect-AntiCodexLogDb/);
+  assert.match(sharedLauncher, /protect-anticodex-log-db\.mjs/);
+  assert.match(sharedLauncher, /\$env:RUST_LOG/);
+  assert.match(sharedLauncher, /codex_app_server_transport::transport::remote_control::websocket=warn/);
+  assert.match(guard, /anticodex_drop_trace_logs/);
+  assert.match(guard, /WHEN NEW\.level = 'TRACE'/);
+  assert.match(guard, /RAISE\(IGNORE\)/);
+  assert.match(guard, /wal_checkpoint\(TRUNCATE\)/);
+  assert.match(guard, /--self-test/);
+  assert.match(guard, /allow-any-codex-home/);
+  assert.match(guard, /codex-home-deepseek-app/);
+});
+
 test("translator watchdog does not restart for Antigravity account or proxy readiness failures", () => {
   const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
   const healthFunction = sharedLauncher.match(/function Test-TranslatorHealth \{[\s\S]*?\n\}/)?.[0];

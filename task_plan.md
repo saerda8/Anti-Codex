@@ -1225,3 +1225,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: inspected the isolated Anti-Codex `logs_2.sqlite` under `C:\Users\XD\AppData\Roaming\anticodex\codex-home-deepseek-app`; it contained historical TRACE rows and a 4,169,472-byte WAL, but the first 8-second sample showed no active growth.
 - Completed: backed up `logs_2.sqlite`, `logs_2.sqlite-wal`, and `logs_2.sqlite-shm` to `logs_2-backup-20260623-155617`, installed trigger `anticodex_drop_trace_logs` to ignore future TRACE inserts, and ran `PRAGMA wal_checkpoint(TRUNCATE)`.
 - Verification: WAL was truncated to 0 bytes; a 10-second post-fix sample showed `deltaId:0`, `deltaCount:0`, `deltaTrace:0`, and `deltaWal:0`. Original Codex was not touched.
+
+## 2026-06-23 Product logs_2.sqlite TRACE Guard
+- Completed: added `scripts/protect-anticodex-log-db.mjs`, an idempotent Anti-Codex-only guard that installs `anticodex_drop_trace_logs`, checkpoints/truncates WAL, and rejects non-Anti-Codex homes unless a self-test flag explicitly allows a temp home.
+- Completed: `start-deepcodex.ps1` now sets a non-TRACE Rust log default for Anti-Codex, lowers `codex_app_server_transport::transport::remote_control::websocket` to `warn`, and applies the database guard before the desktop process starts.
+- Completed: runtime sync now requires/copies the guard script so installed Anti-Codex receives the fix, and launcher contracts cover the startup hook.
+- Verification: guard self-test passed; PowerShell parser checks passed; focused launcher contracts passed `124/124`; real Anti-Codex DB guard run was idempotent with `MAX(id)=356586`, `count=35829`, `traceCount=5878`, and `walBytes=0` before/after.
