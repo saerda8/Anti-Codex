@@ -5152,6 +5152,9 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /upstreamConfigHasExpectedControls/);
   assert.match(uiScript, /hasManagerActionEndpoint/);
   assert.match(uiScript, /hasActionResult/);
+  assert.match(uiScript, /hasDiagnosticsBundleLongTaskResultSummary/);
+  assert.match(uiScript, /diagnosticsSummary/);
+  assert.match(uiScript, /manager page missing diagnostics bundle long-task result summary/);
   assert.match(uiScript, /hasRouteProviderFields/);
   assert.match(uiScript, /manager page route summary is missing third-party provider\/protocol\/transport fields/);
   assert.match(uiScript, /manager page route empty state collapses provider fields/);

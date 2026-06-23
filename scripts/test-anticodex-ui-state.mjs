@@ -83,6 +83,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/copyTextToClipboard/.test(injectSource) || !/anticodex-copy-result/.test(injectSource)) {
     failures.push("in-app manager is missing copy result controls");
   }
+  if (!/diagnosticsSummary/.test(injectSource) || !/diagnosticsSummary/.test(serverSource) || !/longTasks/.test(injectSource) || !/longTasks/.test(serverSource)) {
+    failures.push("manager page missing diagnostics bundle long-task result summary");
+  }
   if (!/function snapshotStalenessNotice/.test(injectSource) || !/snapshotStatus/.test(injectSource) || !/source_changed/.test(injectSource)) {
     failures.push("in-app manager is missing local feature snapshot staleness notice");
   }
@@ -656,6 +659,9 @@ try {
     hasCopyActionResult: managerHtml.includes("copyActionResult") &&
       managerHtml.includes("copyTextToClipboard") &&
       managerHtml.includes("\u590d\u5236\u7ed3\u679c"),
+    hasDiagnosticsBundleLongTaskResultSummary: managerHtml.includes("diagnosticsSummary") &&
+      managerHtml.includes("longTasks") &&
+      managerHtml.includes("\u957f\u4efb\u52a1"),
     hasOldOpenEndpoint: managerHtml.includes("/anticodex/manager/open"),
     hasRouteProviderFields: managerHtml.includes("function routeSummary") &&
       managerHtml.includes("providerProtocol") &&
@@ -707,6 +713,7 @@ try {
   if (!managerPage.hasManagerActionToken) failures.push("manager page missing manager action token header");
   if (!managerPage.hasActionResult) failures.push("manager page missing action result area");
   if (!managerPage.hasCopyActionResult) failures.push("manager page missing copy action result control");
+  if (!managerPage.hasDiagnosticsBundleLongTaskResultSummary) failures.push("manager page missing diagnostics bundle long-task result summary");
   if (managerPage.hasOldOpenEndpoint) failures.push("manager page still references old /anticodex/manager/open endpoint");
   if (!managerPage.hasRouteProviderFields) failures.push("manager page route summary is missing third-party provider/protocol/transport fields");
   if (!sameActionIds(managerPage.dailyActionIds, expectedDailyActionIds)) failures.push(`manager page daily action group is incorrect: ${JSON.stringify(managerPage.dailyActionIds)}`);

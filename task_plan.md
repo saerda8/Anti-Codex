@@ -1281,3 +1281,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: injected Manager and external Manager bridge diagnostic-bundle result renderers now mirror the fallback Manager by showing the collected `diagnosticsSummary.longTasks` running/attention/other-running counts.
 - Completed: launcher contracts now require all three renderer surfaces (`adaptive-server`, injected panel, and bridge) to consume the same long-task summary evidence.
 - Verification: injected Manager and bridge syntax checks passed; focused Start Menu Manager launcher contracts passed `124/124`; `git diff --check` passed.
+
+## 2026-06-23 Diagnostic Bundle UI-State Coverage
+- Completed: read-only UI-state verifier now treats the diagnostic-bundle long-task result summary as a Manager page contract, checking both fallback Manager HTML and injected Manager source.
+- Completed: launcher coverage now requires `hasDiagnosticsBundleLongTaskResultSummary`, `diagnosticsSummary`, and the explicit failure text so future Manager result fields do not bypass UI verification.
+- Verification: UI-state verifier syntax passed; UI-state `--self-test` passed; focused launcher UI-state contracts passed `124/124`.
