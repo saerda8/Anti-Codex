@@ -1430,3 +1430,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Local Connector Manager Parity Display
 - Completed: local connector latest-report summaries in the external bridge, injected Manager, and fallback Manager now show connector parity, app-tool parity, GET/POST parity, and GET/POST drift counts/samples.
 - Verification: JS syntax checks passed; Manager bridge self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
+
+## 2026-06-24 MCP/Skill Manager Drift Samples
+- Completed: MCP/Skill latest-report summaries now show missing/extra MCP samples and missing/extra skill samples, not only changed entries and duplicate conflicts.
+- Verification: JS syntax checks passed; Manager bridge self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
