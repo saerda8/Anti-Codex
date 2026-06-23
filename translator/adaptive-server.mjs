@@ -2944,6 +2944,13 @@ function failureSummaryLine(result){
   if(!failures.length) return "";
   return "\\u5931\\u8d25\\u9879\\uff1a"+failures.length+"\\n"+failures.slice(0,3).join("\\n");
 }
+function sourceSnapshotLine(result){
+  const evidence=result?.sourceSnapshot&&typeof result.sourceSnapshot==="object"?result.sourceSnapshot:null;
+  if(!evidence)return "";
+  const fileCount=evidence.fileCount??"\\u672a\\u77e5";
+  const fingerprint=evidence.fingerprint?String(evidence.fingerprint).slice(0,12):"\\u7f3a\\u5931";
+  return "sourceSnapshot: files="+fileCount+" / fingerprint="+fingerprint;
+}
 function formatReportAge(ageMs){
   if(!Number.isFinite(Number(ageMs))) return "";
   const seconds=Math.max(0,Math.round(Number(ageMs)/1000));
@@ -3202,9 +3209,11 @@ function actionText(payload){
         : "本地功能刷新：已开始后台执行。\\n界面不会等待长时复制；完成后用 MCP/Skill 和插件/应用按钮复核。";
     }
     const snapshotCount=Array.isArray(r.snapshots)?r.snapshots.length:(r.snapshots?.count??"未知");
+    const snapshotLine=sourceSnapshotLine(r);
     return [
       "本地功能刷新："+(r.ok?"完成":"需要处理"),
       "Skill："+(r.skills?.count??"未知")+"    快照："+snapshotCount+"    连接器缓存："+(r.connectors?.count??"未知"),
+      snapshotLine,
       r.failures?.length?("失败："+r.failures.join("\\n")):"Codex 的本地插件、Skill、MCP 相关快照已同步到 Anti-Codex。"
     ].filter(Boolean).join("\\n");
   }

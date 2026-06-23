@@ -120,7 +120,7 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "sourcePreflight") return text.includes("\u6e90\u7801\u9884\u68c0") && text.includes("\u8017\u65f6");
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
-  if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
+  if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1") && text.includes("sourceSnapshot: files=");
   if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55"));
   if (actionName === "viewLatestReports") return text.includes("\u62a5\u544a") && (text.includes("\u5df2\u627e\u5230") || text.includes("\u8fd8\u6ca1\u6709")) && hasLatestReportFieldEvidence(text);
   return true;
@@ -161,6 +161,17 @@ function uiOnlyBridgeSource(actionName, enabled = uiOnlyMode) {
           },
           appToolsNote: "ui-only manager button smoke",
         },
+      },
+    },
+    refreshFeatures: {
+      ok: true,
+      action: actionName,
+      uiOnly: true,
+      result: {
+        ok: true,
+        skills: { count: 3 },
+        connectors: { count: 2 },
+        sourceSnapshot: { fingerprint: "abcdef0123456789", fileCount: 42 },
       },
     },
   };
