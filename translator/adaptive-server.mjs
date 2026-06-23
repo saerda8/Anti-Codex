@@ -3381,6 +3381,16 @@ function ensureLatestReportsEvidenceLines(summary,payload){
 }
 function actionText(payload){
   const r=payload?.result||{};
+  if(payload?.foreground && payload?.alreadyRunning){
+    const label=payload?.label||"\u8fd9\u4e2a\u68c0\u67e5";
+    const startedAt=payload?.foregroundStartedAt||"\u672a\u77e5";
+    const runningText="\u5df2\u7ecf\u5728\u8fd0\u884c";
+    return [
+      label+runningText+"\u3002",
+      "\u5f00\u59cb\u65f6\u95f4\uff1a"+startedAt,
+      "\u8bf7\u7b49\u5b83\u5b8c\u6210\u540e\u518d\u70b9\u8fd9\u4e2a\u6309\u94ae\uff0c\u6216\u70b9\u5237\u65b0\u72b6\u6001\u67e5\u770b\u8fdb\u5ea6\u3002"
+    ].join("\\n");
+  }
   if(payload?.action==="accountProxy"){
     const p=r.phaseSummary||{};
     return [

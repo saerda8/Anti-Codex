@@ -1272,6 +1272,10 @@
     const items = Array.isArray(longTasks?.items) ? longTasks.items : [];
     const sync = items.find((item) => item?.id === "syncHost") || {};
     const post = items.find((item) => item?.id === "postVerificationFull") || {};
+    const otherRunningItems = items.filter((item) => item?.id !== "syncHost" && item?.id !== "postVerificationFull" && (item?.state === "running" || item?.rawState === "running" || item?.stage === "manager_foreground"));
+    const otherRunningText = otherRunningItems.length
+      ? otherRunningItems.slice(0, 3).map((item) => item?.label || item?.id || item?.stage || "\u6b63\u5728\u8fd0\u884c").join(", ")
+      : "\u6682\u65e0";
     const latest = [post, sync].find((item) => item?.latestLogLine) || {};
     const latestAge = formatReportAge(latest.logAgeMs);
     return [
@@ -1281,6 +1285,7 @@
       ["\u540c\u6b65\u9636\u6bb5", sync.stage || "\u6682\u65e0"],
       ["\u5b8c\u6574\u9a8c\u8bc1", longTaskStatusText(post)],
       ["\u9a8c\u8bc1\u9636\u6bb5", post.stage || "\u6682\u65e0"],
+      ["\u5176\u4ed6\u8fd0\u884c", otherRunningText],
       ["\u6700\u65b0\u72b6\u6001", latest.latestLogLine || "\u6682\u65e0"],
       ["\u72b6\u6001\u66f4\u65b0", latestAge || latest.logUpdatedAt || "\u6682\u65e0"],
       ["\u6700\u8fd1\u62a5\u544a", post.reportPath || sync.reportPath || "\u6682\u65e0"],

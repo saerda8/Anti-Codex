@@ -1845,6 +1845,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /backgroundLockMaxMs/);
   assert.match(server, /function managerActionRunningProcesses/);
   assert.match(server, /alreadyRunning/);
+  assert.match(server, /payload\?\.foreground\s*&&\s*payload\?\.alreadyRunning/);
+  assert.match(server, /foregroundStartedAt\|\|"\\u672a\\u77e5"/);
+  assert.match(server, /"\\u5df2\\u7ecf\\u5728\\u8fd0\\u884c"/);
   assert.match(server, /runningPids/);
   assert.match(server, /runManagerAction/);
   assert.match(server, /\/anticodex\/manager\/action/);
@@ -1912,6 +1915,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /longTasks/);
   assert.match(server, /function longTaskSummary/);
   assert.match(server, /function longTaskRows/);
+  assert.match(inject, /manager_foreground/);
+  assert.match(inject, /otherRunningItems\s*=\s*items\.filter/);
   assert.match(server, /id="copyActionResult"/);
   assert.match(server, /function copyTextToClipboard/);
   assert.match(server, /id="snapshotAlert"/);

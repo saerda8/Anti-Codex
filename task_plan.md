@@ -1256,3 +1256,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: active foreground Manager singleflight entries now appear in `/anticodex/diagnostics.longTasks.items` with `stage:"manager_foreground"`, elapsed time, log age, and a user-visible running hint.
 - Completed: the embedded Manager long-task card now shows foreground and background non-core running actions together as "other running" tasks, while diagnostics verification remains compatible with extra `longTasks.items` entries.
 - Verification: adaptive server syntax passed; focused launcher/diagnostics contracts passed `124/124`; `git diff --check` passed.
+
+## 2026-06-23 Manager Foreground Duplicate Result Copy
+- Completed: duplicate foreground Manager checks now render a direct user-facing result instead of falling through to raw JSON or action-specific generic copy; the result shows the running check label, original start time, and wait/refresh guidance.
+- Completed: the injected Manager panel now mirrors the fallback Manager long-task card by listing non-core running foreground/background tasks as "other running" work, including `manager_foreground` items from diagnostics.
+- Verification: adaptive server and injected Manager syntax checks passed; focused Start Menu Manager launcher contracts passed `124/124`.
