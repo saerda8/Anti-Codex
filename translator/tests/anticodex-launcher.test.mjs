@@ -5234,8 +5234,12 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
 
 test("Anti-Codex ships a standalone real Manager button gate", () => {
   const managerButtons = readFileSync(resolve(root, "scripts", "test-anticodex-manager-real-buttons.ps1"), "utf8");
+  const managerButtonHelper = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
 
   assert.match(managerButtons, /test-anticodex-manager-button\.mjs/);
+  assert.match(managerButtonHelper, /bootstrapManagerActionToken/);
+  assert.match(managerButtonHelper, /error\?\.statusCode !== 403/);
+  assert.match(managerButtonHelper, /postManagerAction\(actionName, \{ refreshToken: true \}\)/);
   assert.match(managerButtons, /viewLatestReports/);
   assert.match(managerButtons, /diagnosticsBundle/);
   assert.match(managerButtons, /mcpSkills/);

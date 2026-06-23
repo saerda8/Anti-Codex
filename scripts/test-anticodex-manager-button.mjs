@@ -295,7 +295,9 @@ function httpJson(url, options = {}) {
         let json = null;
         try { json = text ? JSON.parse(text) : null; } catch {}
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(new Error(json?.error?.message || text || `HTTP ${response.statusCode}`));
+          const error = new Error(json?.error?.message || text || `HTTP ${response.statusCode}`);
+          error.statusCode = response.statusCode;
+          reject(error);
           return;
         }
         resolve(json);
@@ -310,6 +312,10 @@ function httpJson(url, options = {}) {
 
 async function getManagerActionToken() {
   if (managerActionToken) return managerActionToken;
+  return await bootstrapManagerActionToken();
+}
+
+async function bootstrapManagerActionToken() {
   const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
     timeout: 5000,
     headers: {
@@ -322,19 +328,25 @@ async function getManagerActionToken() {
   return managerActionToken;
 }
 
-async function postManagerAction(actionName) {
-  const token = await getManagerActionToken();
-  return await httpJson(`${baseUrl}/anticodex/manager/action`, {
-    method: "POST",
-    timeout: Math.max(30000, timeoutMs + 5000),
-    headers: {
-      "content-type": "application/json",
-      "origin": baseUrl,
-      "referer": `${baseUrl}/anticodex/manager`,
-      "x-anticodex-manager-token": token,
-    },
-    body: JSON.stringify({ action: actionName }),
-  });
+async function postManagerAction(actionName, options = {}) {
+  const token = options.refreshToken === true ? await bootstrapManagerActionToken() : await getManagerActionToken();
+  try {
+    return await httpJson(`${baseUrl}/anticodex/manager/action`, {
+      method: "POST",
+      timeout: Math.max(30000, timeoutMs + 5000),
+      headers: {
+        "content-type": "application/json",
+        "origin": baseUrl,
+        "referer": `${baseUrl}/anticodex/manager`,
+        "x-anticodex-manager-token": token,
+      },
+      body: JSON.stringify({ action: actionName }),
+    });
+  } catch (error) {
+    if (error?.statusCode !== 403 || options.refreshToken === true) throw error;
+    managerActionToken = "";
+    return await postManagerAction(actionName, { refreshToken: true });
+  }
 }
 
 class LocalWebSocket {
