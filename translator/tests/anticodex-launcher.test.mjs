@@ -2065,6 +2065,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /restartPreservesOpenAiToolPair/);
   assert.match(server, /markerThresholdsOk/);
   assert.match(server, /previousResponseContinuity/);
+  assert.match(server, /saveMatched/);
+  assert.match(server, /providerSwitchMatchesNested/);
   assert.match(server, /previousIds: save=/);
   assert.match(server, /previousMatches: save=/);
   assert.match(server, /sixthMarkerCount/);
@@ -4229,6 +4231,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /skill fingerprint skipped because verifier budget is exhausted/);
   assert.match(mcpSkills, /fingerprintSkipped = \$skillFingerprintSkipped/);
   assert.match(mcpSkills, /MCP real stdio smoke skipped because verifier budget is too short/);
+  assert.match(mcpSkills, /MCP real stdio tools\/list skipped because verifier budget is too short/);
   assert.match(mcpSkills, /source snapshot skipped because verifier budget is exhausted/);
   assert.match(mcpSkills, /Get-RemainingVerifierBudgetMs -lt 5000/);
   assert.match(mcpSkills, /\$consoleResult = \[pscustomobject\]@{/);

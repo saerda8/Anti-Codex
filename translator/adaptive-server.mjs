@@ -2301,6 +2301,13 @@ function latestManagerReportItem(label, fileName) {
         : [];
     const multiTurnHistory = report?.multiTurnHistory && typeof report.multiTurnHistory === "object" ? report.multiTurnHistory : null;
     const toolHistory = multiTurnHistory?.toolHistory && typeof multiTurnHistory.toolHistory === "object" ? multiTurnHistory.toolHistory : null;
+    const structuralEvidence = toolHistory?.structuralEvidence && typeof toolHistory.structuralEvidence === "object" ? toolHistory.structuralEvidence : null;
+    const providerSwitch = multiTurnHistory?.providerSwitch && typeof multiTurnHistory.providerSwitch === "object" ? multiTurnHistory.providerSwitch : null;
+    const protocolSwitch = multiTurnHistory?.protocolSwitch && typeof multiTurnHistory.protocolSwitch === "object" ? multiTurnHistory.protocolSwitch : null;
+    const reverseProtocolSwitch = multiTurnHistory?.reverseProtocolSwitch && typeof multiTurnHistory.reverseProtocolSwitch === "object" ? multiTurnHistory.reverseProtocolSwitch : null;
+    const previousResponseContinuity = multiTurnHistory?.previousResponseContinuity && typeof multiTurnHistory.previousResponseContinuity === "object"
+        ? multiTurnHistory.previousResponseContinuity
+        : (report?.previousResponseContinuity && typeof report.previousResponseContinuity === "object" ? report.previousResponseContinuity : null);
     let updatedAt = "";
     if (fullPath && existsSync(fullPath)) {
         try { updatedAt = statSync(fullPath).mtime.toISOString(); } catch {}
@@ -2620,6 +2627,14 @@ function latestManagerReportItem(label, fileName) {
                 providerSwitchPresent: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId),
                 protocolSwitchPresent: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId),
                 reverseProtocolSwitchPresent: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId),
+                saveMatched: previousResponseContinuity?.saveMatched === true,
+                restartMatched: previousResponseContinuity?.restartMatched === true,
+                providerSwitchMatched: previousResponseContinuity?.providerSwitchMatched === true,
+                protocolSwitchMatched: previousResponseContinuity?.protocolSwitchMatched === true,
+                reverseProtocolSwitchMatched: previousResponseContinuity?.reverseProtocolSwitchMatched === true,
+                providerSwitchMatchesNested: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId && providerSwitch?.continuationPreviousResponseId && multiTurnHistory.providerSwitchContinuationPreviousResponseId === providerSwitch.continuationPreviousResponseId),
+                protocolSwitchMatchesNested: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId && protocolSwitch?.continuationPreviousResponseId && multiTurnHistory.protocolSwitchContinuationPreviousResponseId === protocolSwitch.continuationPreviousResponseId),
+                reverseProtocolSwitchMatchesNested: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch?.continuationPreviousResponseId && multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId === reverseProtocolSwitch.continuationPreviousResponseId),
             },
         } : null,
         updatedAt,
