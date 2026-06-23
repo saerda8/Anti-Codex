@@ -232,10 +232,12 @@ if ($VerifyOnly) {
 }
 
 $configPath = Join-Path $CodexHome "config.toml"
-try {
-    Restore-AntiCodexFeatureFlags $configPath
-} catch {
-    Add-Failure "Anti-Codex feature flag restore failed: $($_.Exception.Message)"
+if (-not $VerifyOnly) {
+    try {
+        Restore-AntiCodexFeatureFlags $configPath
+    } catch {
+        Add-Failure "Anti-Codex feature flag restore failed: $($_.Exception.Message)"
+    }
 }
 $configText = ""
 if (Test-Path -LiteralPath $configPath -PathType Leaf) {

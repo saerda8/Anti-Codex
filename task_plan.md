@@ -1105,3 +1105,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostic collection and verification preserve `missingOptional`, and Manager summary paths already display it beside `missingRequired`, `missingShort`, and damaged reports.
 - Completed: added a static Manager source guard for known mojibake tokens after cleaning the post-verification action text path.
 - Verification: JS syntax checks passed; diagnostics parser checks passed; Manager bridge `--self-test` passed; release-gate `--self-test` passed; focused launcher contracts passed `21/21`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, and `damagedReports:[]`.
+
+## 2026-06-23 Local Feature VerifyOnly and Extra Drift
+- Completed: `refresh-anticodex-local-features.ps1 -VerifyOnly` no longer rewrites local config feature flags; verify-only mode now stays a read-only evidence path.
+- Completed: plugin capability parity now treats extra local connector/app-tool cache records as drift, not just missing or changed shared records. Summaries, Manager evidence, and passive release gates include `extraLocal` in clean/dirty decisions.
+- Verification: JS syntax checks passed for summarizer, release gates, and adaptive server; PowerShell parser checks passed for refresh/plugin scripts; release-gate `--self-test` passed with new extra-local failures; focused launcher contracts passed; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`.

@@ -475,11 +475,17 @@ if ($whamTools.Count -gt 0 -and -not $appToolsCacheSmoke.sampleReadable) {
 foreach ($connectorId in @($connectorParity.missingShared)) {
     Add-Failure "shared connector '$connectorId' exists but Anti-Codex local connector cache is missing it"
 }
+foreach ($connectorId in @($connectorParity.extraLocal)) {
+    Add-Failure "Anti-Codex local connector cache has extra connector '$connectorId' that is absent from shared Codex"
+}
 foreach ($connectorId in @($connectorParity.changedShared)) {
     Add-Failure "shared connector '$connectorId' content differs from Anti-Codex local connector cache"
 }
 foreach ($toolKey in @($appToolParity.missingShared)) {
     Add-Failure "shared app tool '$toolKey' exists but Anti-Codex local app-tools cache is missing it"
+}
+foreach ($toolKey in @($appToolParity.extraLocal)) {
+    Add-Failure "Anti-Codex local app-tools cache has extra app tool '$toolKey' that is absent from shared Codex"
 }
 foreach ($toolKey in @($appToolParity.changedShared)) {
     Add-Failure "shared app tool '$toolKey' content differs from Anti-Codex local app-tools cache"

@@ -256,8 +256,10 @@ function summarizeGate(definition) {
       if (capabilities.unauthorizedAppToolCount !== 0) semanticFailures.push("plugin_capabilities_unauthorized_app_tools");
       if (!isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
       if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
+      if (!isEmptyArray(connectorParity.extraLocal)) semanticFailures.push("plugin_capabilities_local_connector_parity_extra_local");
       if (!isEmptyArray(connectorParity.changedShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_changed_shared");
       if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
+      if (!isEmptyArray(appToolParity.extraLocal)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_extra_local");
       if (!isEmptyArray(appToolParity.changedShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_changed_shared");
       if (!gate.sourceFingerprint) semanticFailures.push("plugin_capabilities_source_snapshot_missing");
     }
@@ -617,10 +619,12 @@ if (args.has("--self-test")) {
         },
         connectorParity: {
           missingShared: ["missing-connector"],
+          extraLocal: ["extra-connector"],
           changedShared: ["changed-connector"],
         },
         appToolParity: {
           missingShared: ["missing-app-tool"],
+          extraLocal: ["extra-app-tool"],
           changedShared: ["changed-app-tool"],
         },
       },

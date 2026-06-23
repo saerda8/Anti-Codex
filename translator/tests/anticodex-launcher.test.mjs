@@ -2856,9 +2856,11 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityMissingShared, ["missing-connector"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityExtraLocal, ["extra-connector"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityChangedShared, ["changed-connector"]);
+    assert.equal(summary.pluginCapabilityEvidence.connectorParityClean, false);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityMissingShared, ["missing-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityExtraLocal, ["extra-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityChangedShared, ["changed-tool"]);
+    assert.equal(summary.pluginCapabilityEvidence.appToolParityClean, false);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostMissingFromGet, ["post-only-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostExtraFromGet, ["get-only-tool"]);
   } finally {
@@ -3916,6 +3918,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /responses_websockets/);
   assert.match(refreshLocalFeatures, /remote_plugin/);
   assert.match(refreshLocalFeatures, /Anti-Codex feature flag restore failed/);
+  assert.match(refreshLocalFeatures, /if \(-not \$VerifyOnly\) \{/);
   assert.match(refreshLocalFeatures, /--local-snapshots/);
   assert.match(refreshLocalFeatures, /mcp_servers/);
   assert.match(refreshLocalFeatures, /node_repl/);
@@ -4177,6 +4180,7 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /function Get-ProjectionMap/);
   assert.match(capabilities, /changedShared = \$changedShared/);
   assert.match(capabilities, /shared connector '\$connectorId' exists but Anti-Codex local connector cache is missing it/);
+  assert.match(capabilities, /local connector cache has extra connector/);
   assert.match(capabilities, /shared connector '\$connectorId' content differs from Anti-Codex local connector cache/);
   assert.match(capabilities, /appToolCount/);
   assert.match(capabilities, /appToolGetCount/);
@@ -4184,6 +4188,7 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /GET \/backend-api\/wham\/apps does not match POST tool projection/);
   assert.match(capabilities, /appToolParity/);
   assert.match(capabilities, /shared app tool '\$toolKey' exists but Anti-Codex local app-tools cache is missing it/);
+  assert.match(capabilities, /local app-tools cache has extra app tool/);
   assert.match(capabilities, /shared app tool '\$toolKey' content differs from Anti-Codex local app-tools cache/);
   assert.match(capabilities, /unattributedAppToolCount/);
   assert.match(capabilities, /unauthorizedAppToolCount/);
@@ -5313,8 +5318,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /plugin_capabilities_app_tool_get_post_mismatch/);
   assert.match(releaseGates, /plugin_capabilities_unauthorized_app_tools/);
   assert.match(releaseGates, /plugin_capabilities_local_connector_parity_missing_shared/);
+  assert.match(releaseGates, /plugin_capabilities_local_connector_parity_extra_local/);
   assert.match(releaseGates, /plugin_capabilities_local_connector_parity_changed_shared/);
   assert.match(releaseGates, /plugin_capabilities_local_app_tool_parity_changed_shared/);
+  assert.match(releaseGates, /plugin_capabilities_local_app_tool_parity_extra_local/);
   assert.match(releaseGates, /plugin_capabilities_local_app_tool_parity_missing_shared/);
   assert.match(releaseGates, /releaseReady/);
   assert.match(releaseGates, /shortReady/);

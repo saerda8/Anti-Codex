@@ -332,6 +332,12 @@ Branch: main
 - Added diagnostics verification for `missingOptional` and a Manager source regression guard against known mojibake tokens.
 - Fresh evidence: JS syntax checks passed, diagnostics parser checks passed, Manager bridge `--self-test` passed, release-gate `--self-test` passed, focused launcher contracts passed `21/21`, and strict passive release gates are `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, `damagedReports:[]`.
 
+## 2026-06-23 Local Feature VerifyOnly and Extra Drift Follow-Up
+
+- `refresh-anticodex-local-features.ps1 -VerifyOnly` is now read-only and no longer restores feature flags while gathering evidence.
+- Plugin capability parity now treats extra local connector/app-tool cache records as drift. Summaries, Manager evidence, and passive release gates include `extraLocal` in clean/dirty decisions.
+- Fresh evidence: JS syntax checks passed, refresh/plugin PowerShell parser checks passed, release-gate `--self-test` passed with new extra-local negative coverage, focused launcher contracts passed, and strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.
