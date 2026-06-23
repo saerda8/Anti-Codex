@@ -22,6 +22,24 @@ $pluginHostSync = Join-Path $scriptRoot "sync-shared-codex-plugin-host.mjs"
 $sidecarsSync = Join-Path $scriptRoot "sync-shared-codex-sidecars.mjs"
 $failures = New-Object System.Collections.Generic.List[string]
 $directoryFingerprintCache = @{}
+$script:refreshFeatureFileHashCachePath = Join-Path $StateRoot "cache\refresh-feature-file-hashes.json"
+$script:refreshFeatureFileHashCache = @{}
+$script:refreshFeatureFileHashNewCache = [ordered]@{}
+$script:refreshFeatureFileHashCacheHitCount = 0
+$script:refreshFeatureFileHashCacheMissCount = 0
+
+if (Test-Path -LiteralPath $script:refreshFeatureFileHashCachePath -PathType Leaf) {
+    try {
+        $loadedHashCache = Get-Content -LiteralPath $script:refreshFeatureFileHashCachePath -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ($loadedHashCache.entries) {
+            foreach ($property in $loadedHashCache.entries.PSObject.Properties) {
+                $script:refreshFeatureFileHashCache[$property.Name] = $property.Value
+            }
+        }
+    } catch {
+        $script:refreshFeatureFileHashCache = @{}
+    }
+}
 
 function Add-Failure {
     param([string]$Message)
@@ -150,14 +168,45 @@ function Get-FileInfo {
 function Get-FileSha256Hex {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
+    $item = Get-Item -LiteralPath $Path -Force
+    $cacheKey = $item.FullName
+    $metaSignature = "$($item.Length):$($item.LastWriteTimeUtc.Ticks)"
+    $cached = $script:refreshFeatureFileHashCache[$cacheKey]
+    if ($cached -and [string]$cached.meta -eq $metaSignature -and [string]$cached.hash) {
+        $script:refreshFeatureFileHashCacheHitCount += 1
+        $script:refreshFeatureFileHashNewCache[$cacheKey] = $cached
+        return [string]$cached.hash
+    }
+    $script:refreshFeatureFileHashCacheMissCount += 1
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $stream = $null
     try {
         $stream = [IO.File]::OpenRead($Path)
-        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        $hash = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        $script:refreshFeatureFileHashNewCache[$cacheKey] = [pscustomobject]@{
+            meta = $metaSignature
+            hash = $hash
+        }
+        return $hash
     } finally {
         if ($stream) { $stream.Dispose() }
         $sha.Dispose()
+    }
+}
+
+function Save-RefreshFeatureFileHashCache {
+    try {
+        $cacheDir = Split-Path -Parent $script:refreshFeatureFileHashCachePath
+        if ($cacheDir) { New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null }
+        $payload = [pscustomobject]@{
+            version = 1
+            generatedAt = ([DateTime]::UtcNow.ToString("o"))
+            entries = $script:refreshFeatureFileHashNewCache
+        }
+        $json = $payload | ConvertTo-Json -Depth 5 -Compress
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [IO.File]::WriteAllText($script:refreshFeatureFileHashCachePath, $json, $utf8NoBom)
+    } catch {
     }
 }
 
@@ -383,6 +432,7 @@ foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WO
 if (-not $skills.exists -or $skills.count -lt 1) { Add-Failure "skills local copy is empty or missing" }
 if ($skills.linkType) { Add-Failure "skills path is a link, expected local copy" }
 $sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
+Save-RefreshFeatureFileHashCache
 
 $result = [pscustomobject]@{
     ok = (@($failures).Count -eq 0)
@@ -403,6 +453,12 @@ $result = [pscustomobject]@{
     snapshots = if ($pluginSummary) { $pluginSummary.summary } else { @() }
     sidecars = if ($sidecarSummary) { $sidecarSummary } else { "" }
     sourceSnapshot = $sourceSnapshot
+    hashCache = [pscustomobject]@{
+        path = $script:refreshFeatureFileHashCachePath
+        hitCount = $script:refreshFeatureFileHashCacheHitCount
+        missCount = $script:refreshFeatureFileHashCacheMissCount
+        entryCount = @($script:refreshFeatureFileHashNewCache.Keys).Count
+    }
     mcp = [pscustomobject]@{
         count = @($mcpNames).Count
         names = $mcpNames

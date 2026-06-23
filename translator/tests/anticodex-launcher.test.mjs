@@ -689,6 +689,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /refreshFeatureEvidence/);
   assert.match(managerBridge, /refresh parity:/);
   assert.match(managerInject, /refresh parity:/);
+  assert.match(managerBridge, /hashCacheHitCount/);
+  assert.match(managerInject, /hashCacheHitCount/);
   assert.match(managerBridge, /elapsed=/);
   assert.match(managerInject, /elapsed=/);
   assert.match(managerBridge, /verifyOnly=true/);
@@ -2269,6 +2271,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /optionalRealTrafficFailures/);
   assert.match(reportSummarizer, /sourceSnapshotEvidence/);
   assert.match(reportSummarizer, /cacheHitCount/);
+  assert.match(reportSummarizer, /hashCacheHitCount/);
   assert.match(reportSummarizer, /logDbGuardEvidence/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
@@ -2452,6 +2455,7 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
       reportName: "refresh-features",
       verifyOnly: true,
       elapsedMs: 73000,
+      hashCache: { hitCount: 12000, missCount: 42, entryCount: 12042 },
       failures: ["connector drift"],
       connectorParity: { sharedExists: true, localExists: true, contentMatches: false },
       appToolParity: { sharedExists: true, localExists: false, contentMatches: false },
@@ -2468,6 +2472,9 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
     const summary = JSON.parse(result.stdout);
     assert.equal(summary.refreshFeatureEvidence.verifyOnly, true);
     assert.equal(summary.refreshFeatureEvidence.elapsedMs, 73000);
+    assert.equal(summary.refreshFeatureEvidence.hashCacheHitCount, 12000);
+    assert.equal(summary.refreshFeatureEvidence.hashCacheMissCount, 42);
+    assert.equal(summary.refreshFeatureEvidence.hashCacheEntryCount, 12042);
     assert.equal(summary.refreshFeatureEvidence.connectorSharedExists, true);
     assert.equal(summary.refreshFeatureEvidence.connectorLocalExists, true);
     assert.equal(summary.refreshFeatureEvidence.connectorContentMatches, false);
@@ -2477,6 +2484,70 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
     assert.deepEqual(summary.refreshFeatureEvidence.changedExpectedSkills, ["changed-skill"]);
     assert.deepEqual(summary.refreshFeatureEvidence.changedExpectedSkillDetails, [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }]);
     assert.deepEqual(summary.refreshFeatureEvidence.guidanceChanged, ["RTK.md"]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("refresh feature verifier reuses unchanged file hash cache", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-refresh-cache-"));
+  const stateRoot = join(tempRoot, "state");
+  const codexHome = join(tempRoot, "local");
+  const sharedHome = join(tempRoot, "shared");
+  const agentsSkills = join(tempRoot, "agents-skills");
+  const reportRoot = join(tempRoot, "reports");
+  try {
+    mkdirSync(join(sharedHome, "skills", "alpha"), { recursive: true });
+    mkdirSync(join(agentsSkills, "beta"), { recursive: true });
+    mkdirSync(join(codexHome, "skills", "alpha"), { recursive: true });
+    mkdirSync(join(codexHome, "skills", "beta"), { recursive: true });
+    mkdirSync(join(sharedHome, "cache", "codex_app_directory"), { recursive: true });
+    mkdirSync(join(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
+    mkdirSync(join(codexHome, "cache", "codex_app_directory"), { recursive: true });
+    mkdirSync(join(codexHome, "cache", "codex_apps_tools"), { recursive: true });
+    writeFileSync(join(codexHome, "config.toml"), "[mcp_servers.node_repl]\ncommand='node'\n", "utf8");
+    writeFileSync(join(sharedHome, "config.toml"), "[mcp_servers.node_repl]\ncommand='node'\n", "utf8");
+    writeFileSync(join(sharedHome, "skills", "alpha", "SKILL.md"), "alpha skill\n", "utf8");
+    writeFileSync(join(codexHome, "skills", "alpha", "SKILL.md"), "alpha skill\n", "utf8");
+    writeFileSync(join(agentsSkills, "beta", "SKILL.md"), "beta skill\n", "utf8");
+    writeFileSync(join(codexHome, "skills", "beta", "SKILL.md"), "beta skill\n", "utf8");
+    writeFileSync(join(sharedHome, "cache", "codex_app_directory", "one.json"), "{\"id\":\"one\"}\n", "utf8");
+    writeFileSync(join(codexHome, "cache", "codex_app_directory", "one.json"), "{\"id\":\"one\"}\n", "utf8");
+    writeFileSync(join(sharedHome, "cache", "codex_apps_tools", "one.json"), "{\"tool\":\"one\"}\n", "utf8");
+    writeFileSync(join(codexHome, "cache", "codex_apps_tools", "one.json"), "{\"tool\":\"one\"}\n", "utf8");
+    for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+      writeFileSync(join(sharedHome, name), `${name}\n`, "utf8");
+      writeFileSync(join(codexHome, name), `${name}\n`, "utf8");
+    }
+    const args = [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "refresh-anticodex-local-features.ps1"),
+      "-StateRoot",
+      stateRoot,
+      "-CodexHome",
+      codexHome,
+      "-SharedCodexHome",
+      sharedHome,
+      "-AgentsSkillsPath",
+      agentsSkills,
+      "-ReportRoot",
+      reportRoot,
+      "-VerifyOnly",
+    ];
+    const first = spawnSync("powershell.exe", args, { encoding: "utf8" });
+    assert.equal(first.status, 0, first.stderr || first.stdout);
+    const firstReport = JSON.parse(first.stdout.trim());
+    const second = spawnSync("powershell.exe", args, { encoding: "utf8" });
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    const secondReport = JSON.parse(second.stdout.trim());
+    assert.ok(firstReport.hashCache.missCount > 0);
+    assert.equal(firstReport.hashCache.hitCount, 0);
+    assert.ok(secondReport.hashCache.hitCount >= firstReport.hashCache.missCount);
+    assert.equal(secondReport.hashCache.missCount, 0);
+    assert.equal(secondReport.ok, true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

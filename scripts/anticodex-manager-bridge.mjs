@@ -333,7 +333,8 @@ function latestReportsSummary(result) {
       const guidanceChanged = Array.isArray(evidence.guidanceChanged) ? evidence.guidanceChanged : [];
       const elapsed = evidence.elapsedMs != null ? ` / elapsed=${evidence.elapsedMs} ms` : "";
       const mode = evidence.verifyOnly === true ? " / verifyOnly=true" : "";
-      lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${mode}${elapsed}`);
+      const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
+      lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${mode}${elapsed}${hashCache}`);
       if (skillChanged.length || guidanceChanged.length) lines.push(`  refresh drift: skills=${skillChanged.length ? skillChanged.slice(0, 5).join(", ") : "ok"} / guidance=${guidanceChanged.length ? guidanceChanged.slice(0, 5).join(", ") : "ok"}`);
     }
     if (item.localConnectorEvidence) {
@@ -541,6 +542,8 @@ if (args.has("--self-test")) {
         connectorContentMatches: true,
         appToolSharedExists: true,
         appToolContentMatches: true,
+        hashCacheHitCount: 12000,
+        hashCacheMissCount: 42,
         changedExpectedSkills: ["changed-skill"],
         guidanceChanged: ["RTK.md"],
       },
@@ -551,6 +554,7 @@ if (args.has("--self-test")) {
   assert.match(connectorSummary, /\u5e94\u7528\u5de5\u5177\u8bc1\u636e/);
   assert.match(connectorSummary, /\u672a\u6388\u6743\u5de5\u5177 0/);
   assert.match(connectorSummary, /refresh drift: skills=changed-skill \/ guidance=RTK\.md/);
+  assert.match(connectorSummary, /hashCache=12000\/42/);
   const evidenceSummary = latestReportsSummary({
     reportRoot: "C:\\tmp\\anticodex\\reports",
     existingCount: 6,

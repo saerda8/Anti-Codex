@@ -397,6 +397,9 @@ const summary = {
   refreshFeatureEvidence: refreshConnectorParity || refreshAppToolParity || refreshSkills || refreshGuidance ? {
     verifyOnly: boolField(report, "verifyOnly"),
     elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
+    hashCacheHitCount: has(report.hashCache || {}, "hitCount") ? report.hashCache.hitCount : null,
+    hashCacheMissCount: has(report.hashCache || {}, "missCount") ? report.hashCache.missCount : null,
+    hashCacheEntryCount: has(report.hashCache || {}, "entryCount") ? report.hashCache.entryCount : null,
     connectorSharedExists: refreshConnectorParity ? boolField(refreshConnectorParity, "sharedExists") : null,
     connectorLocalExists: refreshConnectorParity ? boolField(refreshConnectorParity, "localExists") : null,
     connectorContentMatches: refreshConnectorParity ? boolField(refreshConnectorParity, "contentMatches") : null,
