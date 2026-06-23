@@ -29,7 +29,7 @@ Scope: OpenAI-compatible and Anthropic provider configuration, model identity, k
 - Saved profile did not contain the raw API key.
 - Provider auth failure returned 401 with `auth_error` and redacted keys.
 
-## Remaining Gaps
+## Follow-Up Status
 
 - An optional real third-party smoke verifier now exists, but no user-provided real endpoint/key has been exercised yet.
 - Anthropic has no generic public model-list endpoint in this implementation, so model selection still depends on the configured model.

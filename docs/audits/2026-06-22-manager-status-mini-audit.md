@@ -11,8 +11,7 @@ Format: ASCII only.
    Status: fixed in this batch by adding `latest-stability-soak.json`.
 
 2. Long-running tasks show summaries, not live logs.
-   The Manager background task card shows state, stage, elapsed time, failures, and report path. It does not yet show the latest live log line.
-   Recommended next improvement: expose latest log tail and log age from diagnostics.
+   The Manager background task card originally showed state, stage, elapsed time, failures, and report path, but not structured freshness.
    Status: fixed on 2026-06-23 by rendering structured `latestLogLine` and `logAgeMs` from diagnostics in both Manager surfaces. The implementation does not tail raw logs.
 
 3. Report paths are plain text.
@@ -26,4 +25,4 @@ Format: ASCII only.
 
 ## Low-Risk Next Improvement
 
-Add stability soak to latest report discovery, then verify the installed Manager `viewLatestReports` action returns that report after a short soak.
+No low-risk Manager visibility gap is open in this audit. Remaining checks are installed/runtime acceptance gates and should be run only when the operator is ready for longer or real-traffic verification.
