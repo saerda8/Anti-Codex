@@ -1426,3 +1426,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: external Manager bridge, injected Manager, and fallback Manager now show connector/app-tool `extraLocal` counts and GET/POST extra drift alongside missing/changed drift, so Anti-Codex-only cache residue is visible without opening raw JSON.
 - Completed: diagnostics verification now requires `appToolParityMissingShared` and `appToolGetPostExtraFromGet` in plugin capability summaries, closing the last support-bundle field gap found by read-only review.
 - Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`; real diagnostic bundle verification returned `ok:true`.
+
+## 2026-06-24 Local Connector Manager Parity Display
+- Completed: local connector latest-report summaries in the external bridge, injected Manager, and fallback Manager now show connector parity, app-tool parity, GET/POST parity, and GET/POST drift counts/samples.
+- Verification: JS syntax checks passed; Manager bridge self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.

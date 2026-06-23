@@ -3372,6 +3372,10 @@ function latestReportsSummary(result){
     if(item.localConnectorEvidence){
       const evidence=item.localConnectorEvidence;
       lines.push("  \\u8fde\\u63a5\\u5668\\u8bc1\\u636e\\uff1aChatGPT URL "+(evidence.chatgptInstallUrlsScrubbed?"\\u5df2\\u6e05\\u7406":"\\u9700\\u5904\\u7406")+" / \\u4e0a\\u6e38\\u8bf7\\u6c42 "+(evidence.upstreamRequestsDuringLocalEndpoints??"\\u672a\\u77e5")+" / allowlist "+(evidence.allowlistedConnectorAccessible?"\\u88ab\\u5f53\\u6210\\u6388\\u6743":"\\u4e0d\\u7b49\\u4e8e\\u6388\\u6743"));
+      const getPostMissing=Array.isArray(evidence.appToolGetPostMissingFromGet)?evidence.appToolGetPostMissingFromGet:[];
+      const getPostExtra=Array.isArray(evidence.appToolGetPostExtraFromGet)?evidence.appToolGetPostExtraFromGet:[];
+      const getPostSamples=[...getPostMissing,...getPostExtra].slice(0,5);
+      lines.push("  local connector parity: connector="+(evidence.connectorParityClean?"ok":"\\u9700\\u5904\\u7406")+" / appTool="+(evidence.appToolParityClean?"ok":"\\u9700\\u5904\\u7406")+" / getPost="+(evidence.appToolGetPostParityClean?"ok":"\\u9700\\u5904\\u7406")+" / getPostMissing="+getPostMissing.length+" / getPostExtra="+getPostExtra.length+(getPostSamples.length?" / sample "+getPostSamples.join(", "):""));
       if(Array.isArray(evidence.exposedToolNames)&&evidence.exposedToolNames.length) lines.push("  \\u53ef\\u89c1\\u5de5\\u5177\\uff1a"+evidence.exposedToolNames.join(", "));
     }
     if(item.modelRoutingEvidence){

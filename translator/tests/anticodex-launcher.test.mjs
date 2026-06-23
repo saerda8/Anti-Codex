@@ -705,6 +705,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /refresh drift:/);
   assert.match(managerBridge, /localConnectorEvidence/);
   assert.match(managerInject, /localConnectorEvidence/);
+  assert.match(managerBridge, /local connector parity:/);
+  assert.match(managerInject, /local connector parity:/);
+  assert.match(managerBridge, /appToolGetPostExtraFromGet/);
+  assert.match(managerInject, /appToolGetPostExtraFromGet/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
   assert.match(managerInject, /pluginCapabilityEvidence/);
   assert.match(managerBridge, /connectorParityExtraLocalSample/);
@@ -2084,6 +2088,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /appToolExtra=/);
   assert.match(server, /getPostExtra=/);
   assert.match(server, /upstreamRequestsDuringLocalEndpoints/);
+  assert.match(server, /local connector parity:/);
+  assert.match(server, /appToolGetPostExtraFromGet/);
   assert.match(server, /unauthorizedAppToolCount/);
   assert.match(server, /appToolGetPostParityClean/);
   assert.match(server, /releaseGateFailures/);
