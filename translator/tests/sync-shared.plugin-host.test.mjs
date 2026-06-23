@@ -4,12 +4,39 @@ import { existsSync, mkdtempSync, writeFileSync, mkdirSync, readFileSync, readdi
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const syncScript = resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs");
 
 function tmpDir() {
   return mkdtempSync(resolve(tmpdir(), "anticodex-skills-test-"));
+}
+
+function directoryContentFingerprint(dirPath) {
+  const files = [];
+  function walk(currentPath, relPath = "") {
+    for (const entry of readdirSync(currentPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name === ".anticodex-source-manifest.json") continue;
+      const childRel = relPath ? join(relPath, entry.name) : entry.name;
+      const childPath = resolve(currentPath, entry.name);
+      if (entry.isDirectory()) {
+        walk(childPath, childRel);
+      } else if (entry.isFile()) {
+        files.push(childRel);
+      }
+    }
+  }
+  walk(dirPath);
+
+  const hash = createHash("sha256");
+  for (const rel of files) {
+    hash.update(rel.split(/[\\/]/).join("/"));
+    hash.update("\0");
+    hash.update(createHash("sha256").update(readFileSync(resolve(dirPath, rel))).digest("hex"));
+    hash.update("\0");
+  }
+  return { fileCount: files.length, fingerprint: hash.digest("hex") };
 }
 
 test("--skills-only creates independent skills directory (not a symlink)", () => {
@@ -125,9 +152,23 @@ test("full sync imports all runtime snapshots as local copies", () => {
   mkdirSync(resolve(sharedHome, "skills", "legacy", ".git", "objects"), { recursive: true });
   writeFileSync(resolve(sharedHome, "skills", "legacy", ".git", "objects", "ignored"), "git-history");
   mkdirSync(resolve(sharedHome, "cache", "codex_app_directory"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "dir.json"), JSON.stringify({ connectors: [] }));
+  writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "dir.json"), JSON.stringify({
+    connectors: [{ id: "connector.alpha", name: "Alpha", auth: { state: "authorized" } }],
+  }, null, 2));
+  mkdirSync(resolve(sharedHome, "cache", "codex_app_directory", "nested"), { recursive: true });
+  writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "nested", "connector.json"), JSON.stringify({
+    id: "connector.beta",
+    tools: ["beta.search"],
+  }, null, 2));
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "cache", "codex_apps_tools", "tools.json"), JSON.stringify({ tools: [] }));
+  writeFileSync(resolve(sharedHome, "cache", "codex_apps_tools", "tools.json"), JSON.stringify({
+    tools: [{ name: "alpha.search", connectorId: "connector.alpha", inputSchema: { type: "object" } }],
+  }, null, 2));
+  mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools", "nested"), { recursive: true });
+  writeFileSync(resolve(sharedHome, "cache", "codex_apps_tools", "nested", "tool.json"), JSON.stringify({
+    name: "beta.search",
+    connectorId: "connector.beta",
+  }, null, 2));
   for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
     writeFileSync(resolve(sharedHome, name), `${name} shared`);
   }
@@ -147,11 +188,31 @@ test("full sync imports all runtime snapshots as local copies", () => {
     const appDirPath = resolve(codexHome, "cache", "codex_app_directory");
     assert.ok(statSync(appDirPath).isDirectory());
     assert.ok(!lstatSync(appDirPath).isSymbolicLink());
+    for (const rel of ["dir.json", join("nested", "connector.json")]) {
+      assert.deepStrictEqual(
+        readFileSync(resolve(appDirPath, rel)),
+        readFileSync(resolve(sharedHome, "cache", "codex_app_directory", rel)),
+      );
+    }
+    const sharedAppDirFingerprint = directoryContentFingerprint(resolve(sharedHome, "cache", "codex_app_directory"));
+    const localAppDirFingerprint = directoryContentFingerprint(appDirPath);
+    assert.ok(sharedAppDirFingerprint.fileCount > 0);
+    assert.deepStrictEqual(localAppDirFingerprint, sharedAppDirFingerprint);
 
     // codex_apps_tools must be copied (not linked)
     const appToolsPath = resolve(codexHome, "cache", "codex_apps_tools");
     assert.ok(statSync(appToolsPath).isDirectory());
     assert.ok(!lstatSync(appToolsPath).isSymbolicLink());
+    for (const rel of ["tools.json", join("nested", "tool.json")]) {
+      assert.deepStrictEqual(
+        readFileSync(resolve(appToolsPath, rel)),
+        readFileSync(resolve(sharedHome, "cache", "codex_apps_tools", rel)),
+      );
+    }
+    const sharedAppToolsFingerprint = directoryContentFingerprint(resolve(sharedHome, "cache", "codex_apps_tools"));
+    const localAppToolsFingerprint = directoryContentFingerprint(appToolsPath);
+    assert.ok(sharedAppToolsFingerprint.fileCount > 0);
+    assert.deepStrictEqual(localAppToolsFingerprint, sharedAppToolsFingerprint);
 
     // plugin and sidecar snapshots must be copied, not linked
     const pluginsPath = resolve(codexHome, "plugins");

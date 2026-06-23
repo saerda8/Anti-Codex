@@ -324,3 +324,71 @@ test("hydrate preserves conversation history across provider and protocol switch
   assert.equal(openAiHydrated.input[1].content[0].text, "provider-a remembered marker BLUE-739");
   assert.equal(openAiHydrated.input[2].content[0].text, "provider-c follow-up");
 });
+
+test("hydrate preserves tool call order across provider and protocol switches", () => {
+  const store = createResponseHistoryStore();
+  store.remember(
+    {
+      id: "resp_openai_tool",
+      output: [
+        { type: "function_call", id: "fc_openai_1", call_id: "call_openai_1", name: "read_file", arguments: '{"path":"alpha.txt"}', status: "completed" },
+      ],
+    },
+    {
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "read alpha" }] }],
+      provider: "provider-a",
+      providerProtocol: "openai-compatible",
+      model: "provider-a-model",
+    },
+  );
+
+  const anthropicHydrated = store.hydrate({
+    previous_response_id: "resp_openai_tool",
+    provider: "provider-b",
+    providerProtocol: "anthropic",
+    model: "provider-b-model",
+    input: [
+      { type: "function_call_output", call_id: "call_openai_1", output: "alpha-marker" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "use alpha in anthropic mode" }] },
+    ],
+  });
+
+  store.remember(
+    {
+      id: "resp_anthropic_tool",
+      output: [
+        { type: "function_call", id: "fc_anthropic_1", call_id: "call_anthropic_1", name: "write_file", arguments: '{"path":"beta.txt"}', status: "completed" },
+      ],
+    },
+    anthropicHydrated,
+  );
+
+  const openAiHydrated = store.hydrate({
+    previous_response_id: "resp_anthropic_tool",
+    provider: "provider-c",
+    providerProtocol: "openai-compatible",
+    model: "provider-c-model",
+    input: [
+      { type: "function_call_output", call_id: "call_anthropic_1", output: "beta-marker" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "continue back in openai-compatible mode" }] },
+    ],
+  });
+
+  assert.equal(anthropicHydrated.previous_response_id, "resp_openai_tool");
+  assert.equal(anthropicHydrated.providerProtocol, "anthropic");
+  assert.equal(openAiHydrated.previous_response_id, "resp_anthropic_tool");
+  assert.equal(openAiHydrated.provider, "provider-c");
+  assert.equal(openAiHydrated.providerProtocol, "openai-compatible");
+  assert.deepEqual(
+    openAiHydrated.input.map((item) => item.type === "message" ? `${item.role}:${item.content?.[0]?.text}` : `${item.type}:${item.call_id}`),
+    [
+      "user:read alpha",
+      "function_call:call_openai_1",
+      "function_call_output:call_openai_1",
+      "user:use alpha in anthropic mode",
+      "function_call:call_anthropic_1",
+      "function_call_output:call_anthropic_1",
+      "user:continue back in openai-compatible mode",
+    ],
+  );
+});

@@ -1305,3 +1305,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostic summaries now copy `logDbGuardEvidence` from the report summarizer, and the diagnostics verifier selects the first long-task object before checking `latestLogLine`, `logUpdatedAt`, and `logAgeMs`.
 - Completed: third-party provider verifier reports now include top-level `reportName` on success and failure paths, so strict passive release gates can identify refreshed provider-continuity evidence.
 - Verification: PowerShell parser checks passed; third-party provider script syntax passed; strict passive release gate passed; installed Anti-Codex sync passed; live diagnostics passed; latest diagnostic bundle has `reports-summary` count `33`, `redacted:false`, log-guard row present, and guard evidence present; full launcher contracts passed `124/124`; `git diff --check` passed.
+
+## 2026-06-23 Provider Tool History and Cache Byte Parity Evidence
+- Completed: response-history unit coverage now proves a three-turn OpenAI-compatible -> Anthropic -> OpenAI-compatible chain preserves `previous_response_id`, `function_call`, and next-request `function_call_output` ordering.
+- Completed: shared sync coverage now uses nonempty connector and app-tool cache fixtures, checks selected files byte-for-byte, and compares whole-directory content fingerprints while excluding the local source manifest.
+- Verification: focused provider-history test passed; focused full-sync cache test passed; full `response-history.test.mjs` passed `15/15`; full `sync-shared.plugin-host.test.mjs` passed `23/23`; `git diff --check` passed.
