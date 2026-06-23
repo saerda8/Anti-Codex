@@ -297,7 +297,8 @@ function latestReportsSummary(result) {
     if (item.mcpSkillEvidence) {
       const evidence = item.mcpSkillEvidence;
       const clean = evidence.mcpMissingSharedCount === 0 && evidence.missingSharedSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true;
-      lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / parity ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+      lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}`);
+      lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
     }
     if (item.localConnectorEvidence) {
       const evidence = item.localConnectorEvidence;
@@ -308,6 +309,10 @@ function latestReportsSummary(result) {
       const evidence = item.pluginCapabilityEvidence;
       const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
       lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+      if (!parityClean) {
+        const samples = [...(evidence.connectorParityMissingSharedSample || []), ...(evidence.appToolParityMissingSharedSample || []), ...(evidence.appToolGetPostMissingFromGetSample || [])].slice(0, 5);
+        lines.push(`  parity drift: connectorMissing=${evidence.connectorParityMissingSharedCount ?? "\u672a\u77e5"} / appToolMissing=${evidence.appToolParityMissingSharedCount ?? "\u672a\u77e5"} / getPostMissing=${evidence.appToolGetPostMissingFromGetCount ?? "\u672a\u77e5"}${samples.length ? ` / sample ${samples.join(", ")}` : ""}`);
+      }
       lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
     }
     if (item.optionalRealProviderEvidence) {
@@ -492,7 +497,7 @@ if (args.has("--self-test")) {
       label: "MCP/Skill",
       exists: true,
       ok: true,
-      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, mcpMissingSharedCount: 0, missingSharedSkillCount: 0, hasNodeRepl: true, skillSmokeReadable: true },
+      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, mcpMissingSharedCount: 0, missingSharedSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true },
     }, {
       label: "\u51b7\u542f\u52a8",
       exists: true,
@@ -525,10 +530,34 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /MCP\/Skill/);
+  assert.match(evidenceSummary, /agents 26/);
+  assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ skill ok/);
   assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ real-model \/ success/);
   assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);
   assert.match(evidenceSummary, /coldRelaunch: health=true \/ ready=true/);
   assert.match(evidenceSummary, /stabilitySoak: ready=true/);
+  const pluginDriftSummary = latestReportsSummary({
+    reports: [{
+      label: "\u5e94\u7528\u5de5\u5177",
+      exists: true,
+      ok: false,
+      pluginCapabilityEvidence: {
+        unauthorizedAppToolCount: 0,
+        unattributedAppToolCount: 0,
+        nativeCodexWriteback: false,
+        connectorParityClean: false,
+        appToolParityClean: false,
+        appToolGetPostParityClean: false,
+        connectorParityMissingSharedCount: 1,
+        connectorParityMissingSharedSample: ["missing-connector"],
+        appToolParityMissingSharedCount: 1,
+        appToolParityMissingSharedSample: ["missing-tool"],
+        appToolGetPostMissingFromGetCount: 1,
+        appToolGetPostMissingFromGetSample: ["missing-get"],
+      },
+    }],
+  });
+  assert.match(pluginDriftSummary, /parity drift: connectorMissing=1 \/ appToolMissing=1 \/ getPostMissing=1 \/ sample missing-connector, missing-tool, missing-get/);
   console.log(JSON.stringify({ ok: true, selfTest: true }));
   process.exit(0);
 }

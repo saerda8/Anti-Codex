@@ -73,6 +73,15 @@ function Invoke-NodeText {
     return ($output | Out-String).Trim()
 }
 
+function Get-McpServerNamesFromToml {
+    param([string]$Text)
+    if (-not $Text) { return @() }
+    return @([regex]::Matches($Text, "(?m)^\s*\[mcp_servers\.([^\]]+)\]") |
+        ForEach-Object { $_.Groups[1].Value } |
+        Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
+        Sort-Object -Unique)
+}
+
 function Get-LinkTargetValue {
     param($Item)
     if (-not $Item) { return @() }
@@ -209,9 +218,7 @@ if (Test-Path -LiteralPath $configPath -PathType Leaf) {
 
 $mcpNames = @()
 if ($configText) {
-    $mcpNames = @([regex]::Matches($configText, "\[mcp_servers\.([^\]]+)\]") |
-        ForEach-Object { $_.Groups[1].Value } |
-        Where-Object { $_ -notmatch "\.env$" })
+    $mcpNames = @(Get-McpServerNamesFromToml $configText)
 }
 if ($mcpNames.Count -lt 1) { Add-Failure "no MCP servers found in Anti-Codex config" }
 if ($mcpNames -notcontains "node_repl") { Add-Failure "node_repl MCP server missing in Anti-Codex config" }

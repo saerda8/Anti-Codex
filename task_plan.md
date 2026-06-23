@@ -1050,3 +1050,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: standalone injected Manager summary now also shows missing/invalid report totals, treats unparseable latest reports as damaged, and surfaces native Codex writeback evidence for plugin capability reports.
 - Completed: optional and special latest reports now have a separate visibility guard. Optional gate reports stay non-required for release readiness but must remain visible in diagnostics, Manager latest reports, and installed-overall report-integrity checks.
 - Verification: bridge/inject/adaptive syntax passed; bridge `--self-test` passed with failure-detail fixtures; focused Manager and release-report inventory contracts passed.
+
+## 2026-06-23 Manager MCP/Skill and App-Tool Drift Detail Parity
+- Completed: external bridge and injected Manager latest-report summaries now mirror the in-app summary for MCP/Skill operational evidence: `.agents` skill count, MCP smoke, real node_repl call smoke, and skill readability.
+- Completed: external bridge and injected Manager summaries now show connector/app-tool parity drift counts and short samples when plugin capability parity is dirty, matching the in-app Manager summary.
+- Completed: local feature refresh now parses MCP server names with the same anchored TOML section rule as the MCP/Skill verifier, so `[mcp_servers.x.tools.y]` subtables are not counted as standalone MCP servers.
+- Verification: bridge/inject syntax passed; bridge `--self-test` passed with MCP/Skill and plugin drift fixtures; focused Manager contract passed.

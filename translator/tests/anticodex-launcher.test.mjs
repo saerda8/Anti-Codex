@@ -631,10 +631,18 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /reasoningLevels/);
   assert.match(managerBridge, /mcpSkillEvidence/);
   assert.match(managerInject, /mcpSkillEvidence/);
+  assert.match(managerBridge, /mcpSmokePassed/);
+  assert.match(managerInject, /mcpSmokePassed/);
+  assert.match(managerBridge, /mcpRealCallPassed/);
+  assert.match(managerInject, /mcpRealCallPassed/);
+  assert.match(managerBridge, /agentsSkillCount/);
+  assert.match(managerInject, /agentsSkillCount/);
   assert.match(managerBridge, /localConnectorEvidence/);
   assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
   assert.match(managerInject, /pluginCapabilityEvidence/);
+  assert.match(managerBridge, /parity drift: connectorMissing=/);
+  assert.match(managerInject, /parity drift: connectorMissing=/);
   assert.match(managerBridge, /optionalRealProviderEvidence/);
   assert.match(managerInject, /optionalRealProviderEvidence/);
   assert.match(managerBridge, /antigravityReturnEvidence/);
@@ -3499,6 +3507,9 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /\$previousExtraSkillsRoots = \$env:ANTICODEX_EXTRA_SKILLS_ROOTS/);
   assert.match(refreshLocalFeatures, /\.agents\\skills/);
   assert.match(refreshLocalFeatures, /agentsSkillNames/);
+  assert.match(refreshLocalFeatures, /function Get-McpServerNamesFromToml/);
+  assert.match(refreshLocalFeatures, /Get-McpServerNamesFromToml \$configText/);
+  assert.match(refreshLocalFeatures, /-notmatch "\\.tools\\."/);
   assert.match(refreshLocalFeatures, /missingExpectedSkillNames/);
   assert.match(refreshLocalFeatures, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-config\.mjs/);

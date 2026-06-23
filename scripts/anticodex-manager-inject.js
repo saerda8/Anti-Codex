@@ -822,7 +822,8 @@
       if (item.mcpSkillEvidence) {
         const evidence = item.mcpSkillEvidence;
         const clean = evidence.mcpMissingSharedCount === 0 && evidence.missingSharedSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true;
-        lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / parity ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+        lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}`);
+        lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
       }
       if (item.localConnectorEvidence) {
         const evidence = item.localConnectorEvidence;
@@ -832,6 +833,10 @@
         const evidence = item.pluginCapabilityEvidence;
         const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
         lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+        if (!parityClean) {
+          const samples = [...(evidence.connectorParityMissingSharedSample || []), ...(evidence.appToolParityMissingSharedSample || []), ...(evidence.appToolGetPostMissingFromGetSample || [])].slice(0, 5);
+          lines.push(`  parity drift: connectorMissing=${evidence.connectorParityMissingSharedCount ?? "\u672a\u77e5"} / appToolMissing=${evidence.appToolParityMissingSharedCount ?? "\u672a\u77e5"} / getPostMissing=${evidence.appToolGetPostMissingFromGetCount ?? "\u672a\u77e5"}${samples.length ? ` / sample ${samples.join(", ")}` : ""}`);
+        }
         lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
       }
       if (item.optionalRealProviderEvidence) {

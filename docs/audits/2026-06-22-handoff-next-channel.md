@@ -276,6 +276,13 @@ Branch: main
 - Optional gate reports remain non-release-required but now have a separate visibility guard across diagnostics, Manager latest reports, and installed-overall report-integrity checks. This also covers the optional real-provider and provider-to-Antigravity return reports.
 - Fresh evidence: bridge/inject/adaptive syntax passed; bridge `--self-test` passed; focused Manager and release-report inventory contracts passed. The installed runtime was then synced and restarted successfully on `http://127.0.0.1:8484` with Antigravity upstream, 8 models, and account ready; installed strict passive release gates and diagnostics both passed.
 
+## 2026-06-23 Manager MCP/Skill and App-Tool Drift Detail Follow-Up
+
+- External bridge and injected Manager latest-report summaries now mirror the in-app Manager for MCP/Skill operational evidence: `.agents` skill count, MCP smoke, real node_repl call smoke, and skill readability.
+- Connector/app-tool parity drift counts and samples are now visible in bridge/inject summaries when plugin capability parity is dirty.
+- Local feature refresh now parses MCP server names with the same anchored TOML section rule as the MCP/Skill verifier, so nested `[mcp_servers.x.tools.y]` sections are not counted as standalone servers.
+- Fresh evidence: bridge/inject syntax passed; refresh-feature PowerShell parser check passed; bridge `--self-test` passed with MCP/Skill and plugin drift fixtures; focused Manager/MCP/Skill contracts passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.
