@@ -310,7 +310,7 @@ function summarizeGate(definition) {
       if (connectorParity.sharedExists === true && connectorParity.contentMatches !== true) semanticFailures.push("refresh_features_connector_parity");
       if (appToolParity.sharedExists === true && appToolParity.localExists !== true) semanticFailures.push("refresh_features_app_tool_local_missing");
       if (appToolParity.sharedExists === true && appToolParity.contentMatches !== true) semanticFailures.push("refresh_features_app_tool_parity");
-      if (!isEmptyArray(skills.changedExpected)) semanticFailures.push("refresh_features_skill_parity");
+      if (Array.isArray(skills.changedExpected) && skills.changedExpected.length > 0) semanticFailures.push("refresh_features_skill_parity");
       if (Object.values(guidance).some((entry) => entry && entry.sharedExists === true && entry.localExists === true && entry.contentMatches !== true)) semanticFailures.push("refresh_features_guidance_parity");
       if (!gate.sourceFingerprint) semanticFailures.push("refresh_features_source_snapshot_missing");
     }
