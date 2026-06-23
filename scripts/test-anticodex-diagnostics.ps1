@@ -452,6 +452,11 @@ function Test-DiagnosticBundle {
                 if (@($mcpSkillEvidence.changedSharedSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has changed shared skills" }
                 if (@($mcpSkillEvidence.conflictingDuplicateSkillNames).Count -ne 0) { Add-Failure "MCP/Skill summary has conflicting duplicate skills" }
                 if ($mcpSkillEvidence.skillSmokeReadable -ne $true) { Add-Failure "MCP/Skill summary missing skill smoke evidence" }
+                if ($mcpSkillEvidence.appToolRegistryExists -eq $true) {
+                    if ($mcpSkillEvidence.appToolRegistryContentMatches -ne $true) { Add-Failure "MCP/Skill summary app-tool registry content mismatch" }
+                    if ($mcpSkillEvidence.appToolRegistryFingerprintMatches -ne $true) { Add-Failure "MCP/Skill summary app-tool registry fingerprint mismatch" }
+                    if ([int]$mcpSkillEvidence.appToolRegistrySharedFileCount -ne [int]$mcpSkillEvidence.appToolRegistryLocalFileCount) { Add-Failure "MCP/Skill summary app-tool registry file counts differ" }
+                }
             }
         }
         $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]

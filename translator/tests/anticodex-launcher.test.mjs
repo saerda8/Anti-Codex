@@ -2311,6 +2311,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /mcpSkillEvidence/);
   assert.match(reportSummarizer, /mcpRealCallPassed/);
   assert.match(reportSummarizer, /expectedSharedSkillCount/);
+  assert.match(reportSummarizer, /appToolRegistryContentMatches/);
+  assert.match(reportSummarizer, /appToolRegistryFingerprintMatches/);
   assert.match(reportSummarizer, /refreshFeatureEvidence/);
   assert.match(reportSummarizer, /connectorContentMatches/);
   assert.match(reportSummarizer, /appToolContentMatches/);
@@ -2385,6 +2387,16 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         conflictingDuplicateNames: ["dupe-skill"],
         smoke: { readable: true },
       },
+      appTools: {
+        registry: {
+          exists: true,
+          contentMatches: true,
+          sharedFileCount: 36,
+          localFileCount: 36,
+          sharedFingerprint: "shared-fp",
+          localFingerprint: "shared-fp",
+        },
+      },
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -2409,6 +2421,11 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.deepEqual(summary.mcpSkillEvidence.duplicateSkillNames, ["dupe-skill"]);
     assert.deepEqual(summary.mcpSkillEvidence.conflictingDuplicateSkillNames, ["dupe-skill"]);
     assert.equal(summary.mcpSkillEvidence.skillSmokeReadable, true);
+    assert.equal(summary.mcpSkillEvidence.appToolRegistryExists, true);
+    assert.equal(summary.mcpSkillEvidence.appToolRegistryContentMatches, true);
+    assert.equal(summary.mcpSkillEvidence.appToolRegistryFingerprintMatches, true);
+    assert.equal(summary.mcpSkillEvidence.appToolRegistrySharedFileCount, 36);
+    assert.equal(summary.mcpSkillEvidence.appToolRegistryLocalFileCount, 36);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4267,6 +4284,15 @@ description = "ignored"
       writeFileSync(resolve(sharedHome, guidanceName), `shared ${guidanceName}\n`);
       writeFileSync(resolve(localHome, guidanceName), guidanceName === "RTK.md" ? "stale local RTK\n" : `shared ${guidanceName}\n`);
     }
+    mkdirSync(resolve(localHome, "cache", "codex_apps_tools"), { recursive: true });
+    writeFileSync(resolve(localHome, "cache", "codex_apps_tools", "tools.json"), "{}");
+    writeFileSync(resolve(localHome, "cache", "deepcodex_app_connectors.json"), JSON.stringify({
+      content_matches: false,
+      shared_tools_file_count: 2,
+      local_tools_file_count: 1,
+      shared_tools_fingerprint: "shared-fingerprint",
+      local_tools_fingerprint: "local-fingerprint",
+    }));
     writeFileSync(fakeServerScript, `
 import http from "node:http";
 const server = http.createServer((req, res) => {
@@ -4334,6 +4360,11 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     assert.ok(report.failures.some((failure) => failure.includes("shared or agent skill 'missing-skill'")));
     assert.ok(report.failures.some((failure) => failure.includes("duplicate skill 'headroom' differs")));
     assert.ok(report.failures.some((failure) => failure.includes("Anti-Codex guidance 'RTK.md' content differs from shared copy")));
+    assert.ok(report.failures.some((failure) => failure.includes("app tools sync registry content does not match shared cache")));
+    assert.ok(report.failures.some((failure) => failure.includes("app tools sync registry fingerprint mismatch")));
+    assert.equal(report.appTools.registry.contentMatches, false);
+    assert.equal(report.appTools.registry.sharedFingerprint, "shared-fingerprint");
+    assert.equal(report.appTools.registry.localFingerprint, "local-fingerprint");
     assert.ok(!report.mcp.sharedNames.includes("commented-out"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.env"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.tools.call"));
@@ -5396,6 +5427,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /antigravityReturnEvidence/);
   assert.match(diagnostics, /connectorParityMissingShared/);
   assert.match(diagnostics, /appToolGetPostMissingFromGet/);
+  assert.match(diagnostics, /appToolRegistryContentMatches/);
+  assert.match(diagnostics, /appToolRegistryFingerprintMatches/);
+  assert.match(diagnostics, /MCP\/Skill summary app-tool registry content mismatch/);
   assert.match(diagnostics, /MCP\/Skill summary missing mcpSkillEvidence/);
   assert.match(diagnostics, /MCP\/Skill summary has extra local MCP entries/);
   assert.match(diagnostics, /MCP\/Skill summary has changed shared MCP entries/);

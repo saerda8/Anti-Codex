@@ -79,6 +79,8 @@ const refreshGuidance = report && report.guidance && typeof report.guidance === 
 const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
 const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
+const appTools = report && report.appTools ? report.appTools : null;
+const appToolRegistry = appTools && appTools.registry ? appTools.registry : null;
 const realAntigravityEvidence = report && report.realAntigravityEvidence ? report.realAntigravityEvidence : null;
 const toolBridge = report && report.toolBridge ? report.toolBridge : null;
 const compatibilityTools = report && report.compatibilityTools ? report.compatibilityTools : null;
@@ -382,6 +384,13 @@ const summary = {
     duplicateSkillNames: skills && has(skills, "duplicateNames") ? asStringArray(skills.duplicateNames) : [],
     conflictingDuplicateSkillNames: skills && has(skills, "conflictingDuplicateNames") ? asStringArray(skills.conflictingDuplicateNames) : [],
     skillSmokeReadable: skills && skills.smoke ? boolField(skills.smoke, "readable") : null,
+    appToolRegistryExists: appToolRegistry ? boolField(appToolRegistry, "exists") : null,
+    appToolRegistryContentMatches: appToolRegistry ? boolField(appToolRegistry, "contentMatches") : null,
+    appToolRegistryFingerprintMatches: appToolRegistry
+      ? asString(appToolRegistry.sharedFingerprint) === asString(appToolRegistry.localFingerprint)
+      : null,
+    appToolRegistrySharedFileCount: appToolRegistry && has(appToolRegistry, "sharedFileCount") ? appToolRegistry.sharedFileCount : null,
+    appToolRegistryLocalFileCount: appToolRegistry && has(appToolRegistry, "localFileCount") ? appToolRegistry.localFileCount : null,
   } : null,
   refreshFeatureEvidence: refreshConnectorParity || refreshAppToolParity || refreshSkills || refreshGuidance ? {
     connectorSharedExists: refreshConnectorParity ? boolField(refreshConnectorParity, "sharedExists") : null,

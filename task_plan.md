@@ -1320,3 +1320,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-mcp-skills.ps1` now reads `cache\deepcodex_app_connectors.json` whenever the local app-tool cache exists and fails if the registry is missing, lacks shared/local fingerprints, reports `content_matches:false`, or has mismatched fingerprints.
 - Completed: the MCP/Skill report now exposes `appTools.registry` with path, existence, file counts, content-match status, and shared/local fingerprints so diagnostics can consume app-tool migration proof without opening raw cache files.
 - Verification: focused launcher MCP/Skill contract passed; PowerShell parser check passed; `git diff --check` passed; installed registry was refreshed with `sync-deepcodex-app-tools.mjs` and now reports `contentMatches:true`, `sharedCount:36`, `localCount:36`, matching fingerprints, and `connectors:155`.
+
+## 2026-06-23 App-Tool Registry Summary and Diagnostics Evidence
+- Completed: report summarization now lifts `appTools.registry` into `mcpSkillEvidence`, including registry existence, content-match state, fingerprint-match state, and shared/local file counts.
+- Completed: diagnostics bundle verification now rejects MCP/Skill summaries whose app-tool registry exists but has content mismatch, fingerprint mismatch, or differing file counts; the dynamic MCP/Skill verifier fixture now proves bad registries fail.
+- Verification: focused summarizer, MCP/Skill verifier, dynamic bad-registry fixture, and diagnostics contracts passed; PowerShell parser checks passed for MCP/Skill and diagnostics verifiers; summarizer syntax check passed; `git diff --check` passed.
