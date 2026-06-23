@@ -388,6 +388,9 @@ function Test-DiagnosticBundle {
                 if ($localEvidence.hiddenConnectorAccessible -ne $false) { Add-Failure "local connector summary exposes hidden connector" }
                 if ([int]$localEvidence.exposedToolsPost -ne [int]$localEvidence.exposedToolsGet) { Add-Failure "local connector summary GET/POST tool counts differ" }
                 if (@($localEvidence.exposedToolNames).Count -ne [int]$localEvidence.exposedToolsPost) { Add-Failure "local connector summary exposed tool names mismatch" }
+                if ($localEvidence.connectorParityClean -ne $true) { Add-Failure "local connector summary missing connector parity proof" }
+                if ($localEvidence.appToolParityClean -ne $true) { Add-Failure "local connector summary missing app-tool parity proof" }
+                if ($localEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "local connector summary missing GET/POST app-tool parity proof" }
                 $exposedToolNames = As-FlatArray $localEvidence.exposedToolNames
                 if ($exposedToolNames.Count -ne 1 -or $exposedToolNames[0] -ne "linked_tool") {
                     Add-Failure "local connector summary exposed tool names is not exactly one 'linked_tool'"

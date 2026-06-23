@@ -3067,6 +3067,9 @@ test("report summarizer surfaces local connector no-traffic evidence values", ()
         linkEndpointsUnsupported: true,
         upstreamRequestsDuringLocalEndpoints: 0,
       },
+      connectorParity: { contentMatches: true },
+      appToolParity: { contentMatches: true },
+      appToolGetPostParity: { contentMatches: true, missingFromGet: [], extraFromGet: [] },
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -3083,6 +3086,13 @@ test("report summarizer surfaces local connector no-traffic evidence values", ()
     assert.equal(summary.localConnectorEvidence.allowlistedConnectorLocallyAllowlisted, true);
     assert.equal(summary.localConnectorEvidence.hiddenConnectorAccessible, false);
     assert.equal(summary.localConnectorEvidence.upstreamRequestsDuringLocalEndpoints, 0);
+    assert.equal(summary.localConnectorEvidence.chatgptInstallUrlsScrubbed, true);
+    assert.equal(summary.localConnectorEvidence.linkEndpointsUnsupported, true);
+    assert.equal(summary.localConnectorEvidence.connectorParityClean, true);
+    assert.equal(summary.localConnectorEvidence.appToolParityClean, true);
+    assert.equal(summary.localConnectorEvidence.appToolGetPostParityClean, true);
+    assert.deepEqual(summary.localConnectorEvidence.appToolGetPostMissingFromGet, []);
+    assert.deepEqual(summary.localConnectorEvidence.appToolGetPostExtraFromGet, []);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5662,6 +5672,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /local connector summary behavior not covered/);
   assert.match(diagnostics, /local connector summary coverageKind mismatch/);
   assert.match(diagnostics, /local connector summary GET\/POST tool counts differ/);
+  assert.match(diagnostics, /local connector summary missing connector parity proof/);
+  assert.match(diagnostics, /local connector summary missing app-tool parity proof/);
+  assert.match(diagnostics, /local connector summary missing GET\/POST app-tool parity proof/);
   assert.match(diagnostics, /local connector summary exposed tool names is not exactly one 'linked_tool'/);
   assert.match(diagnostics, /plugin capability summary/);
   assert.match(diagnostics, /localConnectorEvidence/);

@@ -1371,3 +1371,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now explicitly reject cold-relaunch reports with `skipped:true` or `requiresConfirmation:true`, even if a malformed report claims `ok:true`.
 - Completed: release-gate self-test now includes the skipped/confirmation cold-relaunch failure markers, so the optional cold gate cannot silently accept a no-confirm refusal artifact as real restart evidence.
 - Verification: `test-anticodex-release-gates.mjs --self-test` passed after adding the new cold-relaunch semantic failure checks.
+
+## 2026-06-24 Local Connector Support-Path Hardening
+- Completed: local connector report summarizer coverage now asserts ChatGPT install URL scrubbing, metadata-only link endpoint evidence, connector/app-tool parity cleanliness, and GET/POST app-tool parity drift samples.
+- Completed: diagnostics verification now requires the local connector summary to carry connector parity, app-tool parity, and GET/POST app-tool parity proof, so the support path cannot hide local cache drift.
+- Verification: diagnostics parser check passed; focused launcher contracts for local connector summary and diagnostics passed; real diagnostics verifier passed; standalone local connector verifier passed with no real traffic and clean connector/app-tool parity.
