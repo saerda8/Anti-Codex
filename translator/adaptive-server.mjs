@@ -1526,8 +1526,22 @@ function longTaskStateText(state) {
     return text;
 }
 
-function longTaskItem({ id, label, state, stage = "", updatedAt = "", elapsedMs = null, reportPath = "", failureCount = 0, hint = "" }) {
+function timestampAgeMs(value) {
+    const parsed = Date.parse(String(value || ""));
+    return Number.isFinite(parsed) ? Math.max(0, Date.now() - parsed) : null;
+}
+
+function firstSafeLine(...values) {
+    for (const value of values) {
+        const line = shortSafeText(value, "").replace(/[\r\n]+/g, " ").trim();
+        if (line) return line;
+    }
+    return "";
+}
+
+function longTaskItem({ id, label, state, stage = "", updatedAt = "", elapsedMs = null, reportPath = "", failureCount = 0, hint = "", latestLogLine = "", logUpdatedAt = "" }) {
     const normalized = longTaskStateText(state);
+    const logTime = shortSafeText(logUpdatedAt || updatedAt, "");
     return {
         id,
         label,
@@ -1535,6 +1549,9 @@ function longTaskItem({ id, label, state, stage = "", updatedAt = "", elapsedMs 
         rawState: shortSafeText(state || normalized, "unknown"),
         stage: shortSafeText(stage, ""),
         updatedAt: shortSafeText(updatedAt, ""),
+        latestLogLine: shortSafeText(latestLogLine, ""),
+        logUpdatedAt: logTime,
+        logAgeMs: timestampAgeMs(logTime),
         elapsedMs: Number.isFinite(Number(elapsedMs)) ? Math.max(0, Number(elapsedMs)) : null,
         reportPath: shortSafeText(reportPath, ""),
         failureCount: Number.isFinite(Number(failureCount)) ? Math.max(0, Number(failureCount)) : 0,
@@ -1555,6 +1572,8 @@ function longTaskSummary({ postVerification = latestPostVerificationStatus(), up
             state: syncState,
             stage: syncStage,
             updatedAt: operation.updatedAt || operation.completedAt || updateStatus?.checkedAt || "",
+            latestLogLine: firstSafeLine(operation.message, syncStage, syncState),
+            logUpdatedAt: operation.updatedAt || operation.completedAt || updateStatus?.checkedAt || "",
             elapsedMs: operation.elapsedMs,
             reportPath: syncReport,
             failureCount: Array.isArray(operation.failures) ? operation.failures.length : 0,
@@ -1566,6 +1585,8 @@ function longTaskSummary({ postVerification = latestPostVerificationStatus(), up
             state: postVerification?.state || "not_checked",
             stage: postVerification?.latestDiagnosis || "",
             updatedAt: postVerification?.updatedAt || postVerification?.latestAttemptAt || "",
+            latestLogLine: firstSafeLine(postVerification?.latestDiagnosisDetail, postVerification?.latestSuggestedAction, postVerification?.latestDiagnosis, postVerification?.state),
+            logUpdatedAt: postVerification?.updatedAt || postVerification?.latestAttemptAt || "",
             elapsedMs: postVerification?.elapsedMs,
             reportPath: postReport,
             failureCount: postVerification?.failureCount || 0,

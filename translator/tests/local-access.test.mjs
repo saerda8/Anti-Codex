@@ -536,6 +536,12 @@ test("diagnostics payload summarizes state without prompt text", () => {
       updateNeeded: false,
       reason: "up_to_date",
       sync: { available: true, prompted: false, launched: false },
+      operation: {
+        state: "running",
+        stage: "acceptance",
+        message: "Running post-sync readiness and compatibility checks.",
+        updatedAt: "2026-06-14T00:00:01.000Z",
+      },
     },
     postVerification: {
       present: true,
@@ -578,6 +584,14 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(payload.postVerification.latestDiagnosisDetail, "antigravity_oauth_network_failure");
   assert.equal(payload.postVerification.attempts, 3);
   assert.equal(payload.postVerification.failureCount, 1);
+  const syncTask = payload.longTasks.items.find((item) => item.id === "syncHost");
+  const postTask = payload.longTasks.items.find((item) => item.id === "postVerificationFull");
+  assert.equal(syncTask.latestLogLine, "Running post-sync readiness and compatibility checks.");
+  assert.equal(syncTask.logUpdatedAt, "2026-06-14T00:00:01.000Z");
+  assert.equal(typeof syncTask.logAgeMs, "number");
+  assert.equal(postTask.latestLogLine, "antigravity_oauth_network_failure");
+  assert.equal(postTask.logUpdatedAt, "2026-06-14T00:00:00.000Z");
+  assert.equal(typeof postTask.logAgeMs, "number");
   assert.equal(typeof payload.localFeatures.capabilityTiers.skills.inventoryCount, "number");
   assert.equal(typeof payload.localFeatures.capabilityTiers.skills.readableCount, "number");
   assert.equal(payload.localFeatures.capabilityTiers.skills.mode, "instruction");

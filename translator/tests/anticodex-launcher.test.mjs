@@ -5293,6 +5293,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /postVerification/);
   assert.match(diagnostics, /lifecycleLogs/);
   assert.match(diagnostics, /latestDiagnosisDetail/);
+  assert.match(diagnostics, /longTasks/);
+  assert.match(diagnostics, /latestLogLine/);
+  assert.match(diagnostics, /logUpdatedAt/);
+  assert.match(diagnostics, /logAgeMs/);
   assert.match(diagnostics, /lifecycle/);
   assert.match(diagnostics, /translator lifecycle status/);
   assert.match(diagnostics, /skipRequests/);

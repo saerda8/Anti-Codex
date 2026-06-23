@@ -388,3 +388,9 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - The branch requires `--allow-real-antigravity-return` and `--antigravity-model` in addition to the existing real-provider opt-in. It does not run during routine no-real-traffic checks.
 - New evidence field: `realProviderToAntigravityReturnEvidence`. It records requested/used/history/previous-ID marker and route/model proof, and is surfaced through summaries, passive release gates, the in-app Manager, external bridge, and injected Manager panel.
 - Fresh evidence: syntax checks passed; release-gate `--self-test` passed; Manager bridge `--self-test` passed; focused optional-real/Manager/release tests passed `8/8`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
+
+## 2026-06-23 Diagnostics Long-Task Log Freshness Follow-Up
+
+- Diagnostics now expose structured long-task freshness for sync-host and post-verification background work: `latestLogLine`, `logUpdatedAt`, and `logAgeMs`.
+- The implementation uses existing status/report fields instead of raw log tailing, so diagnostics show whether slow work is progressing without leaking transcript-like content.
+- Fresh evidence: adaptive/local-access/launcher syntax checks passed; diagnostics PowerShell parser check passed; focused diagnostics payload and launcher contract tests passed.

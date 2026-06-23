@@ -841,6 +841,21 @@ if ($diagnostics) {
         if (-not (Has-Property $postVerification "attempts")) { Add-Failure "diagnostics post-verification missing attempts" }
         if (-not (Has-Property $postVerification "failureCount")) { Add-Failure "diagnostics post-verification missing failureCount" }
     }
+    if (-not (Has-Property $diagnostics "longTasks")) {
+        Add-Failure "diagnostics missing long-task status"
+    } else {
+        $longTaskItems = @($diagnostics.longTasks.items)
+        foreach ($expectedTask in @("syncHost", "postVerificationFull")) {
+            $task = @($longTaskItems | Where-Object { $_.id -eq $expectedTask } | Select-Object -First 1)
+            if (-not $task) {
+                Add-Failure "diagnostics long-task status missing $expectedTask"
+            } else {
+                if (-not (Has-Property $task "latestLogLine")) { Add-Failure "diagnostics long-task $expectedTask missing latestLogLine" }
+                if (-not (Has-Property $task "logUpdatedAt")) { Add-Failure "diagnostics long-task $expectedTask missing logUpdatedAt" }
+                if (-not (Has-Property $task "logAgeMs")) { Add-Failure "diagnostics long-task $expectedTask missing logAgeMs" }
+            }
+        }
+    }
     if (-not (Has-Property $diagnostics "shortcutRepair")) {
         Add-Failure "diagnostics missing shortcut repair status"
     } else {
