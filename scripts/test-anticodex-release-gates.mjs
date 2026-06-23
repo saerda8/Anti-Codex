@@ -192,6 +192,7 @@ function summarizeGate(definition) {
         if (report.usedRealTraffic !== false) semanticFailures.push("optional_skipped_used_real_traffic");
         if (report.behaviorCovered !== false) semanticFailures.push("optional_skipped_behavior_covered");
         if (report.coverageKind !== "skipped") semanticFailures.push("optional_skipped_coverage_kind");
+        if (!report.reason || !report.coveredBy) semanticFailures.push("optional_skipped_metadata_missing");
         if (report.requestedRealTraffic === true && report.ok === true) semanticFailures.push("optional_requested_real_traffic_uncovered_but_ok");
       } else {
         if (report.usedRealTraffic !== true) semanticFailures.push("optional_real_traffic_not_used");
@@ -1014,6 +1015,7 @@ if (args.has("--self-test")) {
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_skipped_requested_real_traffic_not_false",
+      "optional_skipped_metadata_missing",
       "optional_requested_real_traffic_uncovered_but_ok",
     ]);
     writeFakeLatestReport("latest-provider-antigravity-return.json", {
@@ -1030,6 +1032,7 @@ if (args.has("--self-test")) {
       "optional_skipped_used_real_traffic",
       "optional_skipped_behavior_covered",
       "optional_skipped_coverage_kind",
+      "optional_skipped_metadata_missing",
       "optional_requested_real_traffic_uncovered_but_ok",
     ]);
     writeFakeLatestReport("latest-real-third-party-provider.json", {

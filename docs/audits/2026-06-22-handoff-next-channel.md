@@ -323,8 +323,8 @@ Branch: main
 
 - Manager latest-report summaries now expose optional real-provider requested/resolved model route evidence, redaction status, provider-to-Antigravity native route evidence, and provider continuity previous-ID status.
 - Diagnostics now validate skipped optional real-provider and provider-to-Antigravity reports as explicit no-traffic skip evidence instead of ignoring skipped reports.
-- Passive release-gate self-test now has separate skipped-report negative coverage for provider-to-Antigravity return.
-- Fresh evidence: syntax checks passed, diagnostics parser checks passed, Manager bridge self-test passed, release-gate `--self-test` passed, focused launcher contracts passed `11/11`, and strict passive gates remain `shortReady:true` / `releaseReady:true`; optional real-traffic readiness remains false because real external traffic has not been requested.
+- Passive release gates now require skipped optional real-traffic reports to carry `reason` and `coveredBy`, and the self-test has separate skipped-report negative coverage for provider-to-Antigravity return.
+- Fresh evidence: syntax checks passed, diagnostics parser checks passed, Manager bridge self-test passed, release-gate `--self-test` passed with skipped metadata failures, focused launcher contracts passed, and strict passive gates remain `shortReady:true` / `releaseReady:true`; optional real-traffic readiness remains false because real external traffic has not been requested.
 
 ## 2026-06-23 Installed Missing-History Follow-Up
 
