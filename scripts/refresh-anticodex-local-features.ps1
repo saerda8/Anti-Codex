@@ -12,6 +12,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$startedAtUtc = [DateTime]::UtcNow
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $root = Split-Path -Parent $scriptRoot
@@ -103,7 +104,7 @@ function Get-DirectoryContentFingerprint {
         Sort-Object FullName |
         ForEach-Object {
             $relative = $_.FullName.Substring($rootPath.Length).TrimStart("\", "/")
-            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+            $hash = Get-FileSha256Hex $_.FullName
             "$relative`t$hash"
         })
     $joined = [string]::Join("`n", $entries)
@@ -149,7 +150,14 @@ function Get-FileInfo {
 function Get-FileSha256Hex {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
 }
 
 function Set-FeatureFlag {
@@ -379,6 +387,8 @@ $result = [pscustomobject]@{
     ok = (@($failures).Count -eq 0)
     reportName = "refresh-features"
     verifyOnly = [bool]$VerifyOnly
+    startedAt = $startedAtUtc.ToString("o")
+    elapsedMs = [int](([DateTime]::UtcNow - $startedAtUtc).TotalMilliseconds)
     failures = $failures.ToArray()
     root = $root
     paths = [pscustomobject]@{
