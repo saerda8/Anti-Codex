@@ -1756,6 +1756,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-local-connectors\.json/);
   assert.match(server, /latest-sync-readiness\.json/);
   assert.match(server, /latest-model-routing\.json/);
+  assert.match(server, /latest-model-thinking\.json/);
   assert.match(server, /latest-third-party-provider\.json/);
   assert.match(server, /latest-release-gates\.json/);
   assert.match(server, /latest-cold-relaunch\.json/);
@@ -1869,6 +1870,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-installed-overall\.json/);
   assert.match(collector, /latest-installed-overall-fast\.json/);
   assert.match(collector, /latest-model-routing\.json/);
+  assert.match(collector, /latest-model-thinking\.json/);
   assert.match(collector, /latest-post-verification\.json/);
   assert.match(collector, /latest-source-preflight\.json/);
   assert.match(collector, /latest-shortcut-repair\.json/);
@@ -1893,6 +1895,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/);
   assert.match(collector, /report hash validation failed/);
   assert.match(collector, /damagedReports/);
+  assert.match(collector, /releaseGateGroups/);
   assert.match(collector, /function Resolve-NodeForJsonSummary/);
   assert.match(collector, /function Invoke-NodeJsonSummary/);
   assert.match(collector, /node\.exe is required to summarize diagnostic reports/);
@@ -1911,6 +1914,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
   assert.match(reportSummarizer, /releaseGateFailures/);
+  assert.match(reportSummarizer, /releaseGateGroups/);
+  assert.match(reportSummarizer, /requiredSatisfied/);
+  assert.match(reportSummarizer, /optionalSatisfied/);
   assert.match(reportSummarizer, /semanticFailures/);
   assert.match(reportSummarizer, /requestedRealTraffic/);
   assert.match(reportSummarizer, /coverageKind/);
@@ -2592,6 +2598,8 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   assert.match(installedOverall, /latest-release-gates\.json/);
   assert.match(installedOverall, /latest-cold-relaunch\.json/);
+  assert.match(installedOverall, /latest-model-thinking\.json/);
+  assert.match(installedOverall, /latest-source-preflight\.json/);
   assert.match(installedOverall, /latest-third-party-provider\.json/);
 });
 
@@ -3896,7 +3904,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.doesNotMatch(nodeJsonBody, /\$output = @\(& \$node/);
   assert.match(overall, /test-anticodex-manager-button\.mjs/);
   assert.match(overall, /Manager MCP\/Skill button verification/);
-  assert.match(overall, /Manager plugin\/application button verification/);
+  assert.match(overall, /combined overall skips the long plugin\/application Manager click/);
   assert.match(overall, /Manager safe button smoke verification/);
   assert.match(overall, /combined overall skips background Manager safe-action batch/);
   assert.match(overall, /combined overall skips report button real click/);
@@ -3905,11 +3913,11 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /anticodex-manager-button\.lock/);
   assert.match(overall, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.match(overall, /--action", "mcpSkills"/);
-  assert.match(overall, /--action", "pluginCapabilities"/);
+  assert.doesNotMatch(overall, /--action", "pluginCapabilities"/);
   assert.match(overall, /\$managerButtonTimeoutMs = \[Math\]::Max\(120000, \[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
   assert.match(overall, /\$managerButtonProcessTimeoutSec = \[int\]\[Math\]::Ceiling\(\$managerButtonTimeoutMs \/ 1000\) \+ 30/);
   assert.match(overall, /"--action", "mcpSkills", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
-  assert.match(overall, /"--action", "pluginCapabilities", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
+  assert.doesNotMatch(overall, /"--action", "pluginCapabilities", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.match(overall, /--verification-mode", "ui-only"/);
   assert.doesNotMatch(overall, /--actions", "mcpSkills,pluginCapabilities"/);
   assert.match(overall, /managerButtonSafeActions/);
@@ -4729,6 +4737,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /missingRequired/);
   assert.match(releaseGates, /missingShort/);
   assert.match(releaseGates, /damagedReports/);
+  assert.match(releaseGates, /requiredSatisfied/);
+  assert.match(releaseGates, /optionalSatisfied/);
   assert.match(releaseGates, /--strict/);
   assert.match(releaseGates, /missing_hash_sidecar/);
   assert.match(releaseGates, /hash_mismatch/);
@@ -4755,6 +4765,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid plugin-capability report satisfied the gate/);
   assert.match(server, /latestManagerReportItem\("Release Gate 汇总", "latest-release-gates\.json"\)/);
   assert.match(collector, /latest-release-gates\.json/);
+  assert.match(server, /releaseGateGroups/);
+  assert.match(server, /Release groups:/);
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 

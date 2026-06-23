@@ -100,6 +100,18 @@ const releaseGateFailures = Array.isArray(report?.gates)
       semanticFailures: has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [],
     }))
   : [];
+const releaseGateGroups = report && report.groups && typeof report.groups === "object"
+  ? Object.entries(report.groups).map(([group, value]) => ({
+    group: asString(group),
+    total: value && has(value, "total") ? value.total : null,
+    satisfied: value && has(value, "satisfied") ? value.satisfied : null,
+    required: value && has(value, "required") ? value.required : null,
+    requiredSatisfied: value && has(value, "requiredSatisfied") ? value.requiredSatisfied : null,
+    optional: value && has(value, "optional") ? value.optional : null,
+    optionalSatisfied: value && has(value, "optionalSatisfied") ? value.optionalSatisfied : null,
+    missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
+  })).filter((entry) => entry.group).slice(0, 16)
+  : [];
 
 function structuralEvidenceClean(evidence) {
   return !!evidence
@@ -257,6 +269,7 @@ const summary = {
   missingShort: has(report, "missingShort") ? asStringArray(report.missingShort) : [],
   damagedReports: has(report, "damagedReports") ? asStringArray(report.damagedReports) : [],
   releaseGateFailures,
+  releaseGateGroups,
   upstreamFullUrlAccepted: boolField(report, "upstreamFullUrlAccepted"),
   unauthorizedManagerBlocked: boolField(report, "unauthorizedManagerBlocked"),
   savedWithoutHistoryLoss: boolField(report, "savedWithoutHistoryLoss"),

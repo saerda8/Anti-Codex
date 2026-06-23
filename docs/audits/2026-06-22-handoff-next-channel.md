@@ -247,6 +247,12 @@ Branch: main
 - Summaries, diagnostics, and Manager latest-report text surface stability-soak readiness, mode/model, PID stability, health-check count, turn count, failed-turn count, and elapsed time.
 - Fresh evidence: no real soak was run in this batch; syntax/parser checks passed; release-gate `--self-test` rejects forged soak evidence; focused stability-soak summarizer/diagnostics/release-gate tests passed.
 
+## 2026-06-23 Release Report List Parity Follow-Up
+
+- Release-gate group summaries now expose required and optional counts separately, so optional cold/soak evidence is not shown like a required release blocker.
+- `latest-model-thinking.json` is now included in diagnostic bundle collection, Manager latest reports, and installed-overall report-integrity checks. `latest-source-preflight.json` is also included in installed-overall report-integrity checks.
+- Fresh evidence: JS syntax checks passed; diagnostics and installed-overall PowerShell parser checks passed; release-gate `--self-test` passed; focused diagnostic/latest-report/installed-overall/model-thinking tests passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

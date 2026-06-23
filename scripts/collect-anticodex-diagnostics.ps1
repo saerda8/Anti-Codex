@@ -201,6 +201,7 @@ function Read-JsonSummary {
             missingShort = @($json.missingShort | ForEach-Object { [string]$_ })
             damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
             releaseGateFailures = @($json.releaseGateFailures)
+            releaseGateGroups = @($json.releaseGateGroups)
             upstreamFullUrlAccepted = $json.upstreamFullUrlAccepted
             unauthorizedManagerBlocked = $json.unauthorizedManagerBlocked
             savedWithoutHistoryLoss = $json.savedWithoutHistoryLoss
@@ -316,6 +317,7 @@ $latestReports = @(
     "latest-stability-soak.json",
     "latest-shortcut-repair.json",
     "latest-model-routing.json",
+    "latest-model-thinking.json",
     "latest-ui-idle-stability.json"
 )
 $reportSummaries = foreach ($name in $latestReports) {

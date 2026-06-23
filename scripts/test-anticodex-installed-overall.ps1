@@ -414,6 +414,8 @@ function Test-ReportEncoding {
         "latest-installed-overall-fast.json",
         "latest-installed-overall.json",
         "latest-model-routing.json",
+        "latest-model-thinking.json",
+        "latest-source-preflight.json",
         "latest-tool-bridge-mode.json",
         "latest-ui-idle-stability.json",
         "latest-sync-readiness.json",

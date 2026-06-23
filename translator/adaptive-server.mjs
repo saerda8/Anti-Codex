@@ -2024,6 +2024,18 @@ function latestManagerReportItem(label, fileName) {
             }))
             .slice(0, 12)
         : [];
+    const releaseGateGroups = report?.groups && typeof report.groups === "object"
+        ? Object.entries(report.groups).map(([group, value]) => ({
+            group: shortSafeText(group, ""),
+            total: Number.isFinite(Number(value?.total)) ? Number(value.total) : null,
+            satisfied: Number.isFinite(Number(value?.satisfied)) ? Number(value.satisfied) : null,
+            required: Number.isFinite(Number(value?.required)) ? Number(value.required) : null,
+            requiredSatisfied: Number.isFinite(Number(value?.requiredSatisfied)) ? Number(value.requiredSatisfied) : null,
+            optional: Number.isFinite(Number(value?.optional)) ? Number(value.optional) : null,
+            optionalSatisfied: Number.isFinite(Number(value?.optionalSatisfied)) ? Number(value.optionalSatisfied) : null,
+            missingRequired: Array.isArray(value?.missingRequired) ? value.missingRequired.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+        })).filter((entry) => entry.group).slice(0, 16)
+        : [];
     const multiTurnHistory = report?.multiTurnHistory && typeof report.multiTurnHistory === "object" ? report.multiTurnHistory : null;
     const toolHistory = multiTurnHistory?.toolHistory && typeof multiTurnHistory.toolHistory === "object" ? multiTurnHistory.toolHistory : null;
     let updatedAt = "";
@@ -2059,6 +2071,7 @@ function latestManagerReportItem(label, fileName) {
         missingShort: Array.isArray(report?.missingShort) ? report.missingShort.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         damagedReports: Array.isArray(report?.damagedReports) ? report.damagedReports.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         releaseGateFailures,
+        releaseGateGroups,
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
         modelThinkingEvidence: (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? {
@@ -2285,6 +2298,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("本地连接器检查", "latest-local-connectors.json"),
         latestManagerReportItem("安装/同步检查", "latest-sync-readiness.json"),
         latestManagerReportItem("模型路由检查", "latest-model-routing.json"),
+        latestManagerReportItem("模型思考预算", "latest-model-thinking.json"),
         latestManagerReportItem("第三方连续性", "latest-third-party-provider.json"),
         latestManagerReportItem("Release Gate 汇总", "latest-release-gates.json"),
         latestManagerReportItem("冷启动恢复", "latest-cold-relaunch.json"),
@@ -2832,6 +2846,10 @@ function latestReportsSummary(result){
       lines.push("  Release Gate: short="+(item.shortReady?"true":"false")+" / release="+(item.releaseReady?"true":"false"));
       if(Array.isArray(item.missingRequired)&&item.missingRequired.length) lines.push("  missingRequired: "+item.missingRequired.slice(0,6).join(", "));
       if(Array.isArray(item.missingShort)&&item.missingShort.length) lines.push("  missingShort: "+item.missingShort.slice(0,6).join(", "));
+      if(Array.isArray(item.releaseGateGroups)&&item.releaseGateGroups.length){
+        const groupSummary=item.releaseGateGroups.slice(0,8).map((group)=>group.group+" req "+(group.requiredSatisfied??0)+"/"+(group.required??0)+" opt "+(group.optionalSatisfied??0)+"/"+(group.optional??0)).join(" | ");
+        lines.push("  Release groups: "+groupSummary);
+      }
     }
     if(Array.isArray(item.releaseGateFailures)&&item.releaseGateFailures.length){
       const gateFailures=item.releaseGateFailures.slice(0,4).map((gate)=>{

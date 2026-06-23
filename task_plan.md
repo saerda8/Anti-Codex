@@ -1025,3 +1025,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now validate `latest-stability-soak.json` semantically when the optional report exists: report name, empty failures, provider/start/end readiness, stable translator PID, at least one health check, elapsed duration, successful turn list, and mode-specific model evidence.
 - Completed: report summaries, diagnostic verification, and Manager latest-report text now surface stability-soak readiness, mode/model, PID stability, health-check count, turn count, failed-turn count, and elapsed time.
 - Verification: no real stability soak was run in this batch; syntax/parser checks passed; release-gate `--self-test` rejects forged soak evidence; focused stability-soak summarizer/diagnostics/release-gate tests passed.
+
+## 2026-06-23 Release Report List Parity
+- Completed: release-gate group summaries now distinguish required and optional evidence counts, so optional cold/soak state cannot be confused with required release failure.
+- Completed: `latest-model-thinking.json` is now included in diagnostic bundle collection, Manager latest reports, and installed-overall report-integrity checks. `latest-source-preflight.json` is also included in installed-overall report-integrity checks.
+- Verification: JavaScript syntax checks passed; PowerShell parser checks passed for diagnostics and installed overall; release-gate `--self-test` passed; focused diagnostic/latest-report/installed-overall/model-thinking tests passed.

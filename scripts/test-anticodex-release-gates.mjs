@@ -1089,6 +1089,9 @@ const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].
     total: groupGates.length,
     satisfied: groupGates.filter((gate) => gate.satisfied).length,
     required: groupGates.filter((gate) => gate.requiredForRelease).length,
+    requiredSatisfied: groupGates.filter((gate) => gate.requiredForRelease && gate.satisfied).length,
+    optional: groupGates.filter((gate) => !gate.requiredForRelease).length,
+    optionalSatisfied: groupGates.filter((gate) => !gate.requiredForRelease && gate.satisfied).length,
     missingRequired: groupGates.filter((gate) => gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id),
   }];
 }));
