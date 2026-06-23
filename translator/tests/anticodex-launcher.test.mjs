@@ -3448,6 +3448,10 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /DEFAULT_SKILL_ALLOWLIST\.md/);
   assert.match(mcpSkills, /RTK\.md/);
   assert.match(mcpSkills, /MCP_WORKER_USAGE_GUIDE\.md/);
+  assert.match(mcpSkills, /Get-FileHash -LiteralPath \$sharedGuidance -Algorithm SHA256/);
+  assert.match(mcpSkills, /Get-FileHash -LiteralPath \$localGuidance -Algorithm SHA256/);
+  assert.match(mcpSkills, /contentMatches = \$contentMatches/);
+  assert.match(mcpSkills, /content differs from shared copy/);
   assert.match(mcpSkills, /shared guidance '\$guidanceName' exists but Anti-Codex local copy is missing it/);
   assert.match(mcpSkills, /Anti-Codex guidance '\$guidanceName' should be a local copy, found link type/);
   assert.match(mcpSkills, /cache\\codex_app_directory/);

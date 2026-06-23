@@ -343,16 +343,24 @@ foreach ($guidanceName in $guidanceNames) {
     $sharedExists = Test-Path -LiteralPath $sharedGuidance -PathType Leaf
     $localExists = Test-Path -LiteralPath $localGuidance -PathType Leaf
     $localItem = if ($localExists) { Get-Item -LiteralPath $localGuidance -Force } else { $null }
+    $sharedHash = if ($sharedExists) { (Get-FileHash -LiteralPath $sharedGuidance -Algorithm SHA256).Hash.ToLowerInvariant() } else { "" }
+    $localHash = if ($localExists) { (Get-FileHash -LiteralPath $localGuidance -Algorithm SHA256).Hash.ToLowerInvariant() } else { "" }
+    $contentMatches = ($sharedExists -and $localExists -and $sharedHash -eq $localHash)
     $guidanceChecks += [pscustomobject]@{
         name = $guidanceName
         sharedExists = $sharedExists
         localExists = $localExists
         linkType = if ($localItem) { $localItem.LinkType } else { $null }
+        sharedHash = $sharedHash
+        localHash = $localHash
+        contentMatches = $contentMatches
     }
     if ($sharedExists -and -not $localExists) {
         Add-Failure "shared guidance '$guidanceName' exists but Anti-Codex local copy is missing it"
     } elseif ($localItem -and $localItem.LinkType) {
         Add-Failure "Anti-Codex guidance '$guidanceName' should be a local copy, found link type: $($localItem.LinkType)"
+    } elseif ($sharedExists -and $localExists -and -not $contentMatches) {
+        Add-Failure "Anti-Codex guidance '$guidanceName' content differs from shared copy"
     }
 }
 
