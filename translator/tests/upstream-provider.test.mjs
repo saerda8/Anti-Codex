@@ -545,6 +545,38 @@ test("convertUpstreamChatResponse anthropic: tool_use only response", () => {
   assert.equal(converted.choices[0].finish_reason, "tool_calls");
 });
 
+test("anthropic tool_use ids round-trip into later tool_result messages", () => {
+  const response = {
+    id: "msg_tool",
+    type: "message",
+    role: "assistant",
+    content: [{
+      type: "tool_use",
+      id: "toolu_anthropic_assigned_789",
+      name: "lookup_order",
+      input: { id: "ord_1" },
+    }],
+    model: "claude-sonnet-4-20250514",
+    stop_reason: "tool_use",
+  };
+
+  const converted = convertUpstreamChatResponse({ protocol: "anthropic" }, response);
+  const toolCall = converted.choices[0].message.tool_calls[0];
+  const { body } = buildUpstreamChatRequest(
+    { protocol: "anthropic", apiKey: "sk-ant-test" },
+    {
+      messages: [
+        converted.choices[0].message,
+        { role: "tool", tool_call_id: toolCall.id, content: "order found" },
+      ],
+    },
+  );
+
+  assert.equal(toolCall.id, "toolu_anthropic_assigned_789");
+  assert.equal(body.messages[0].content[0].id, "toolu_anthropic_assigned_789");
+  assert.equal(body.messages[1].content[0].tool_use_id, "toolu_anthropic_assigned_789");
+});
+
 test("convertUpstreamChatResponse anthropic: mixed text and tool_use", () => {
   const response = {
     id: "msg_mixed",

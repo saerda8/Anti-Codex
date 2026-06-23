@@ -1341,7 +1341,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 
 ## 2026-06-24 Anthropic Thinking Continuity
 - Completed: Anthropic upstream request conversion now preserves explicit thinking configuration. Anthropic-native `thinking` objects pass through, and `thinking:"enabled"` plus `thinking_budget` maps to Anthropic `budget_tokens`.
-- Verification: focused upstream-provider tests passed, including the new thinking-preservation case and existing Anthropic tool_use verification.
+- Completed: provider protocol tests now cover Anthropic-assigned `tool_use.id` round-tripping into later Anthropic `tool_result.tool_use_id`, proving tool result continuity is not dependent on a fixed synthetic OpenAI call ID.
+- Verification: focused upstream-provider tests passed, including the new thinking-preservation case and Anthropic tool_use ID round-trip; full upstream-provider suite passed `74/74`.
 
 ## 2026-06-23 Log DB Guard Fail-Closed Checks
 - Completed: Anti-Codex startup now fails closed when the log database guard cannot be applied, instead of logging the failure and continuing toward a possible TRACE write loop.
