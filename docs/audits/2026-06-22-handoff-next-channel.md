@@ -401,3 +401,9 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Retained native continuations now have direct short-test coverage for TTL expiry and failed-resume clearing at the `NATIVE_CONTINUATIONS` layer.
 - Same-Cascade resume now retries a transient failure that happens before any Codex-visible event without cancelling the Cascade between attempts; final failures still cancel best-effort.
 - Fresh evidence: native bridge tests passed `4/4`; focused native agentapi/upstream/bridge tests passed `37/37`; no real traffic, cold relaunch, or installed runtime sync was run.
+
+## 2026-06-23 Manager Long-Task Freshness Follow-Up
+
+- Manager background-task cards now surface diagnostics long-task freshness in both the in-app page and injected panel: latest structured status line plus age/update timestamp.
+- This remains a no-raw-log path; it uses diagnostics `latestLogLine`, `logAgeMs`, and `logUpdatedAt`, not transcript or log tail content.
+- Fresh evidence: adaptive/injected Manager syntax checks passed; diff whitespace check passed; focused Manager launcher contracts passed `8/8`.

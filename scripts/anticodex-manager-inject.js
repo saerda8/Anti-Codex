@@ -1222,6 +1222,8 @@
     const items = Array.isArray(longTasks?.items) ? longTasks.items : [];
     const sync = items.find((item) => item?.id === "syncHost") || {};
     const post = items.find((item) => item?.id === "postVerificationFull") || {};
+    const latest = [post, sync].find((item) => item?.latestLogLine) || {};
+    const latestAge = formatReportAge(latest.logAgeMs);
     return [
       ["\u6b63\u5728\u8fd0\u884c", longTasks?.runningCount ?? 0],
       ["\u9700\u5904\u7406", longTasks?.attentionCount ?? 0],
@@ -1229,6 +1231,8 @@
       ["\u540c\u6b65\u9636\u6bb5", sync.stage || "\u6682\u65e0"],
       ["\u5b8c\u6574\u9a8c\u8bc1", longTaskStatusText(post)],
       ["\u9a8c\u8bc1\u9636\u6bb5", post.stage || "\u6682\u65e0"],
+      ["\u6700\u65b0\u72b6\u6001", latest.latestLogLine || "\u6682\u65e0"],
+      ["\u72b6\u6001\u66f4\u65b0", latestAge || latest.logUpdatedAt || "\u6682\u65e0"],
       ["\u6700\u8fd1\u62a5\u544a", post.reportPath || sync.reportPath || "\u6682\u65e0"],
       ["\u8bf4\u660e", (post.hint || sync.hint || "\u957f\u4efb\u52a1\u72b6\u6001\u6765\u81ea\u672c\u5730\u62a5\u544a\uff0c\u5237\u65b0\u72b6\u6001\u5373\u53ef\u67e5\u770b")],
     ];

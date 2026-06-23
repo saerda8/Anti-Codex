@@ -1868,6 +1868,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /longTasks/);
   assert.match(server, /function longTaskSummary/);
   assert.match(server, /function longTaskRows/);
+  assert.match(server, /latestLogLine/);
+  assert.match(server, /logAgeMs/);
+  assert.match(server, /escapeHtml/);
   assert.match(server, /id="longTasks"/);
   assert.match(server, /shortcutRepair/);
   assert.match(server, /latest-installed-overall-fast\.json/);
@@ -5057,6 +5060,8 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /manager page missing plugin\/app check button/);
   assert.match(uiScript, /manager page missing plugin\/app status card/);
   assert.match(uiScript, /manager page missing long-task status card/);
+  assert.match(uiScript, /latestLogLine/);
+  assert.match(uiScript, /logAgeMs/);
   assert.match(uiScript, /manager page missing latest reports button/);
   assert.match(uiScript, /manager page missing refresh local features button/);
   assert.match(uiScript, /manager page missing refreshFeatures action binding/);

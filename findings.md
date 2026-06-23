@@ -721,3 +721,4 @@
 - PowerShell 5.1 does not accept `&&` as a command separator. Keep staging and commit commands as separate shell calls in this workspace.
 - Native continuation cleanup must be proven at the `NATIVE_CONTINUATIONS` layer, not only at the MCP bridge HTTP pending-call layer. The bridge may clean stale `tools/call` requests while an upstream retained continuation still leaks unless both layers have tests.
 - Same-Cascade resume retries are only safe before any Codex-visible event. Keep `eventEmitted` as the boundary: pre-event transient errors may retry with `cancelOnError:false`, but errors after text/tool output must not silently replay.
+- Manager long-task status should show structured freshness, not raw log tails. Use `latestLogLine` plus `logAgeMs`/`logUpdatedAt` from diagnostics, and keep rendered values escaped in the fallback HTML Manager.

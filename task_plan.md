@@ -1154,3 +1154,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `NATIVE_CONTINUATIONS` can be registered with a bounded TTL for tests and now has direct no-real-traffic coverage proving abandoned continuations expire, close their bridge, and cannot be resumed later.
 - Completed: same-Cascade resume now retries transient pre-event failures without cancelling the Cascade between attempts; final/non-retry failures still cancel best-effort. AgentAPI and upstream tests cover the `cancelOnError:false` retry path.
 - Verification: JS syntax checks passed; native bridge tests passed `4/4`; focused native upstream/agentapi/bridge tests passed `37/37`.
+
+## 2026-06-23 Manager Long-Task Freshness Visibility
+- Completed: in-app Manager and injected Manager background-task cards now display the latest structured task status line plus status age from diagnostics.
+- Completed: the in-app Manager key/value renderer now escapes HTML before insertion, so structured status text remains text.
+- Verification: adaptive/injected Manager syntax checks passed; diff whitespace check passed; focused Manager launcher contracts passed `8/8`.

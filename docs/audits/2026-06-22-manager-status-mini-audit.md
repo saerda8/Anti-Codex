@@ -13,6 +13,7 @@ Format: ASCII only.
 2. Long-running tasks show summaries, not live logs.
    The Manager background task card shows state, stage, elapsed time, failures, and report path. It does not yet show the latest live log line.
    Recommended next improvement: expose latest log tail and log age from diagnostics.
+   Status: fixed on 2026-06-23 by rendering structured `latestLogLine` and `logAgeMs` from diagnostics in both Manager surfaces. The implementation does not tail raw logs.
 
 3. Report paths are plain text.
    This is acceptable for now because the Manager is embedded in the Codex shell and should stay low-risk. A future read-only "copy report path" or "open report folder" action would improve usability.

@@ -2846,7 +2846,8 @@ let pendingHighImpactUntil=0;
 let pendingHighImpactButton=null;
 const zhBool=v=>v===true?"是":v===false?"否":"未知";
 const badge=v=>'<span class="badge '+(v===true||v==="ready"||v==="closed"?"ok":v?"warn":"bad")+'">'+String(v ?? "未知")+'</span>';
-const kv=(id,rows)=>{$(id).innerHTML=rows.map(([k,v])=>'<div class="k">'+k+'</div><div>'+v+'</div>').join('')};
+const escapeHtml=(value)=>String(value??"").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const kv=(id,rows)=>{$(id).innerHTML=rows.map(([k,v])=>'<div class="k">'+escapeHtml(k)+'</div><div>'+escapeHtml(v)+'</div>').join('')};
 const diagnosis=v=>({ready:"就绪",account_verification_required:"需要账号验证",account_verification_with_missing_token:"账号验证后令牌未刷新",antigravity_account_unavailable:"Antigravity 账号不可用",antigravity_temporarily_unavailable:"Antigravity 或代理暂不可用",quota_or_limit_reached:"Antigravity 账号额度/限额已到",not_checked:"未检查"}[v]||v||"未知");
 const postState=v=>({not_checked:"暂无记录",waiting_for_account:"等待账号/代理",account_ready:"账号已就绪",running_full_verification:"正在完整检查",completed:"已完成",verification_failed:"完整检查失败",waiting_timeout:"等待超时"}[v]||v||"未知");
 const checkState=x=>!x?.present?"暂无记录":((x.ok?"通过":"失败")+" / "+(x.elapsedMs!=null?(x.elapsedMs+" ms"):"耗时未知"));
@@ -2904,6 +2905,8 @@ function longTaskRows(longTasks){
   const items=Array.isArray(longTasks?.items)?longTasks.items:[];
   const sync=items.find((item)=>item?.id==="syncHost")||{};
   const post=items.find((item)=>item?.id==="postVerificationFull")||{};
+  const latest=[post,sync].find((item)=>item?.latestLogLine)||{};
+  const latestAge=formatReportAge(latest.logAgeMs);
   return [
     ["\\u6b63\\u5728\\u8fd0\\u884c",longTasks?.runningCount??0],
     ["\\u9700\\u5904\\u7406",longTasks?.attentionCount??0],
@@ -2911,6 +2914,8 @@ function longTaskRows(longTasks){
     ["\\u540c\\u6b65\\u9636\\u6bb5",sync.stage||"\\u6682\\u65e0"],
     ["\\u5b8c\\u6574\\u9a8c\\u8bc1",longTaskStatusText(post)],
     ["\\u9a8c\\u8bc1\\u9636\\u6bb5",post.stage||"\\u6682\\u65e0"],
+    ["\\u6700\\u65b0\\u72b6\\u6001",latest.latestLogLine||"\\u6682\\u65e0"],
+    ["\\u72b6\\u6001\\u66f4\\u65b0",latestAge||latest.logUpdatedAt||"\\u6682\\u65e0"],
     ["\\u6700\\u8fd1\\u62a5\\u544a",post.reportPath||sync.reportPath||"\\u6682\\u65e0"],
     ["\\u8bf4\\u660e",post.hint||sync.hint||"\\u957f\\u4efb\\u52a1\\u72b6\\u6001\\u6765\\u81ea\\u672c\\u5730\\u62a5\\u544a\\uff0c\\u5237\\u65b0\\u72b6\\u6001\\u5373\\u53ef\\u67e5\\u770b"]
   ];
