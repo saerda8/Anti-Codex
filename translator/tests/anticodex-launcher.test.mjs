@@ -153,6 +153,8 @@ test("Anti-Codex startup installs a logs_2 sqlite TRACE write guard", () => {
   assert.match(sharedLauncher, /PROTECT_ANTICODEX_LOG_DB/);
   assert.match(sharedLauncher, /function Protect-AntiCodexLogDb/);
   assert.match(sharedLauncher, /protect-anticodex-log-db\.mjs/);
+  assert.match(sharedLauncher, /if \(-not \(Protect-AntiCodexLogDb\)\) \{/);
+  assert.match(sharedLauncher, /Anti-Codex log database guard failed; refusing to continue startup/);
   assert.match(sharedLauncher, /\$env:RUST_LOG/);
   assert.match(sharedLauncher, /codex_app_server_transport::transport::remote_control::websocket=warn/);
   assert.match(guard, /anticodex_drop_trace_logs/);
@@ -4752,6 +4754,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /sourcePreflightPublicDocumentation/);
   assert.match(overall, /sourcePreflight\.publicDocumentationOk/);
   assert.match(overall, /source preflight public documentation status is missing or not green in diagnostics/);
+  assert.match(overall, /logDbGuardDiagnostics/);
+  assert.match(overall, /diagnostics\.logDbGuard/);
+  assert.match(overall, /installed overall log database guard is not protected/);
+  assert.match(overall, /installed overall log database guard trigger is missing/);
   assert.match(overall, /test-anticodex-tool-bridge-mode\.ps1/);
   assert.match(overall, /Tool bridge mode verification/);
   assert.match(overall, /test-anticodex-runtime-config\.ps1/);
@@ -5013,6 +5019,9 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /latest-\$Name\.json/);
   assert.match(preflight, /Save-JsonReport "source-preflight"/);
   assert.match(preflight, /node --check/);
+  assert.match(preflight, /Test-LogDbGuardSelfTest/);
+  assert.match(preflight, /protect-anticodex-log-db\.mjs/);
+  assert.match(preflight, /Log database guard self-test failed/);
   assert.match(preflight, /Test-LocalConnectorVerifier/);
   assert.match(preflight, /test-anticodex-local-connectors\.mjs/);
   assert.match(preflight, /"--report-root", \$ReportRoot/);
@@ -6414,6 +6423,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
   assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
+  assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
 
   assert.match(profileTest, /unreadable existing third-party key must fail closed/);
   assert.match(profileTest, /corrupt third-party key can still restore Antigravity/);

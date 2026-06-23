@@ -174,6 +174,14 @@ function Test-ManagerBridgeSelfTest {
     return $result
 }
 
+function Test-LogDbGuardSelfTest {
+    $node = (Get-Command "node" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\protect-anticodex-log-db.mjs"
+    $result = Invoke-SourceProcess -Name "log database guard self-test" -FilePath $node -Arguments @($script, "--self-test") -TimeoutSec 30
+    if (-not $result.ok) { Add-Failure "Log database guard self-test failed" }
+    return $result
+}
+
 function Test-UpstreamProfileStorage {
     $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
     $script = Join-Path $SourceRoot "scripts\test-anticodex-upstream-profile.ps1"
@@ -358,6 +366,7 @@ try {
     $checks["powershellSyntax"] = Test-PowerShellSyntax
     $checks["uiStateSelfTest"] = Test-UiStateSelfTest
     $checks["managerBridgeSelfTest"] = Test-ManagerBridgeSelfTest
+    $checks["logDbGuardSelfTest"] = Test-LogDbGuardSelfTest
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts

@@ -1330,3 +1330,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: refresh-feature and MCP/Skill inherited-skill fingerprints now ignore `.git` directories, matching the local snapshot copier that intentionally skips embedded repositories.
 - Completed: this removes false skill drift for repository-backed skills such as `_repos` and `keep-codex-fast` without weakening `SKILL.md` or usable asset parity.
 - Verification: focused launcher MCP/Skill contract passed `124/124`; PowerShell parser checks passed for refresh-feature and MCP/Skill verifiers; refresh-feature report passed; MCP/Skill verifier passed; strict passive release gate passed with `releaseReady:true` and `shortReady:true`.
+
+## 2026-06-23 Log DB Guard Fail-Closed Checks
+- Completed: Anti-Codex startup now fails closed when the log database guard cannot be applied, instead of logging the failure and continuing toward a possible TRACE write loop.
+- Completed: source preflight now runs `protect-anticodex-log-db.mjs --self-test`, so install/sync gates prove the trigger, backup, TRACE-drop, and WAL truncation behavior at source level.
+- Completed: installed overall now checks `diagnostics.logDbGuard` directly, requiring protected, trigger-present, no-real-traffic, and WAL evidence even in fast mode.
+- Verification: focused launcher contracts passed `124/124`; PowerShell parser checks passed for the changed scripts; `protect-anticodex-log-db.mjs --self-test` passed; `test-anticodex-source-preflight.ps1 -SkipFullRegression` passed and recorded `logDbGuardSelfTest`.

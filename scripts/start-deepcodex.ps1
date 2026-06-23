@@ -1806,7 +1806,9 @@ Ensure-DeepCodexUiStateDefaults
 Sync-GlobalRules
 
 $env:CODEX_HOME = $CODEX_HOME_DIR
-Protect-AntiCodexLogDb | Out-Null
+if (-not (Protect-AntiCodexLogDb)) {
+    throw "Anti-Codex log database guard failed; refusing to continue startup."
+}
 $env:LANG = "zh_CN.UTF-8"
 $env:LC_ALL = "zh_CN.UTF-8"
 $codexArgs = @(

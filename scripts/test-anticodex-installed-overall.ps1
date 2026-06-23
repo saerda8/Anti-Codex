@@ -1049,6 +1049,35 @@ $checks.sourcePreflightPublicDocumentation = try {
         error = $_.Exception.Message
     }
 }
+$checks.logDbGuardDiagnostics = try {
+    $diagnostics = Get-InstalledOverallDiagnosticsSnapshot
+    $guard = $diagnostics.logDbGuard
+    $protected = (Has-Property $guard "protected") -and $guard.protected -eq $true
+    $triggerPresent = (Has-Property $guard "triggerPresent") -and $guard.triggerPresent -eq $true
+    $noTraffic = (Has-Property $guard "noTraffic") -and $guard.noTraffic -eq $true
+    $usedRealTraffic = (Has-Property $guard "usedRealTraffic") -and $guard.usedRealTraffic -eq $false
+    $walBytesOk = (Has-Property $guard "walBytes") -and [long]$guard.walBytes -ge 0
+    if (-not $protected) { Add-Failure "installed overall log database guard is not protected" }
+    if (-not $triggerPresent) { Add-Failure "installed overall log database guard trigger is missing" }
+    if (-not $noTraffic -or -not $usedRealTraffic) { Add-Failure "installed overall log database guard no-traffic evidence is invalid" }
+    if (-not $walBytesOk) { Add-Failure "installed overall log database guard WAL evidence is missing" }
+    [pscustomobject]@{
+        ok = ($protected -and $triggerPresent -and $noTraffic -and $usedRealTraffic -and $walBytesOk)
+        skipped = $false
+        reason = "diagnostics.logDbGuard must prove TRACE protection before overall readiness"
+        protected = $protected
+        triggerPresent = $triggerPresent
+        noTraffic = $noTraffic
+        usedRealTraffic = if (Has-Property $guard "usedRealTraffic") { [bool]$guard.usedRealTraffic } else { $null }
+        walBytes = if (Has-Property $guard "walBytes") { [long]$guard.walBytes } else { $null }
+    }
+} catch {
+    Add-Failure "installed overall log database guard diagnostics check failed: $($_.Exception.Message)"
+    [pscustomobject]@{
+        ok = $false
+        error = $_.Exception.Message
+    }
+}
 $checks.toolBridgeMode = if ($healthMode -eq "third-party") {
     $thirdPartyToolBridgeStarted = [DateTime]::UtcNow
     try {
