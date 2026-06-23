@@ -394,8 +394,13 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /\\u8fdc\\u7a0b\\u8fde\\u63a5\\u5668\\u4ec5\\u76ee\\u5f55/);
   assert.match(managerInject, /Skill \\u662f\\u672c\\u5730\\u6307\\u4ee4\\uff1bMCP \\u5fc5\\u987b\\u7531\\u5f53\\u524d\\u4f1a\\u8bdd\\u771f\\u5b9e\\u66b4\\u9732\\u5de5\\u5177/);
   assert.doesNotMatch(managerInject, /\\u672c\\u5730\\u63d2\\u4ef6\/MCP \\u53ef\\u76f4\\u63a5\\u4f7f\\u7528/);
-  assert.match(managerInject, /native-panel-v86/);
-  assert.match(syncReadiness, /native-panel-v86/);
+  assert.match(managerInject, /skipped: /);
+  assert.match(managerInject, /requestedRealTraffic=/);
+  assert.match(managerInject, /coverage=/);
+  assert.match(managerInject, /native-panel-v87/);
+  assert.match(syncReadiness, /native-panel-v87/);
+  assert.doesNotMatch(managerInject, /native-panel-v86/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v86/);
   assert.doesNotMatch(managerInject, /native-panel-v85/);
   assert.doesNotMatch(syncReadiness, /native-panel-v85/);
   assert.doesNotMatch(managerInject, /native-panel-v84/);
@@ -611,8 +616,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v86["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v86"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v87["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v87"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -843,7 +848,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v86/);
+  assert.match(managerOpenInject, /native-panel-v87/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v86/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v85/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v84/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v68/);
@@ -1763,7 +1769,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v86 manager script/);
+  assert.match(manager, /latest native-panel-v87 manager script/);
   assert.doesNotMatch(manager, /native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -2148,6 +2154,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /requestedRealTraffic/);
   assert.match(server, /coverageKind/);
   assert.match(server, /skipped: /);
+  assert.match(managerBridge, /skipped: /);
+  assert.match(managerBridge, /requestedRealTraffic=/);
+  assert.match(managerBridge, /coverage=/);
   assert.match(server, /providerContinuity/);
   assert.match(server, /restartPreservesOpenAiToolPair/);
   assert.match(server, /markerThresholdsOk/);
@@ -6127,6 +6136,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /installedRuntimeSync/);
   assert.match(releaseGates, /runtimeSyncFiles/);
   assert.match(releaseGates, /scripts\/anticodex-manager-inject\.js/);
+  assert.match(releaseGates, /scripts\/anticodex-manager-open-inject\.js/);
   assert.match(releaseGates, /scripts\/anticodex-manager-bridge\.mjs/);
   assert.match(releaseGates, /scripts\/collect-anticodex-diagnostics\.ps1/);
   assert.match(releaseGates, /scripts\/summarize-anticodex-report\.mjs/);
@@ -6146,6 +6156,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /translator\/local-projection\/index\.mjs/);
   assert.match(releaseGates, /translator\/upstream-provider\.mjs/);
   assert.match(syncRuntime, /scripts\\anticodex-manager-inject\.js/);
+  assert.match(syncRuntime, /scripts\\anticodex-manager-open-inject\.js/);
   assert.match(syncRuntime, /scripts\\anticodex-manager-bridge\.mjs/);
   assert.match(syncRuntime, /scripts\\collect-anticodex-diagnostics\.ps1/);
   assert.match(syncRuntime, /scripts\\summarize-anticodex-report\.mjs/);

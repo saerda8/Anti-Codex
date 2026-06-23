@@ -335,6 +335,9 @@ function latestReportsSummary(result) {
       const evidence = item.missingHistoryEvidence;
       lines.push(`  missingHistory: status=${evidence.status ?? "unknown"} / type=${evidence.errorType || "unknown"} / retryable=${evidence.retryable === false ? "false" : "true"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / routeStable=${evidence.noRouteChange ? "true" : "false"} / noTraffic=${evidence.usedRealTraffic === false ? "true" : "false"}`);
     }
+    if (item.skipped === true) {
+      lines.push(`  skipped: ${item.reason || "no reason"} / requestedRealTraffic=${item.requestedRealTraffic ? "true" : "false"} / coverage=${item.coverageKind || "unknown"}`);
+    }
     if (item.modelThinkingEvidence) {
       const evidence = item.modelThinkingEvidence;
       lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
@@ -701,6 +704,18 @@ if (args.has("--self-test")) {
     }],
   });
   assert.match(missingHistorySummary, /missingHistory: status=410 \/ type=response_history_missing \/ retryable=false \/ previousId=true \/ routeStable=true \/ noTraffic=true/);
+  const skippedSummary = latestReportsSummary({
+    reports: [{
+      label: "optional real",
+      exists: true,
+      ok: true,
+      skipped: true,
+      reason: "real traffic opt-in",
+      requestedRealTraffic: false,
+      coverageKind: "skipped",
+    }],
+  });
+  assert.match(skippedSummary, /skipped: real traffic opt-in \/ requestedRealTraffic=false \/ coverage=skipped/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
   assert.match(evidenceSummary, /hashCache=12000\/42/);

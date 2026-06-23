@@ -1485,3 +1485,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager injection, Manager-open injection, sync-readiness checks, UI-state expectations, and Manager launcher text now use `native-panel-v86`, so already-open Anti-Codex pages re-inject after the latest Manager behavior changes.
 - Completed: UI-state self-test now checks the high-impact confirmation gate against the current `managerPost("/anticodex/manager/action")` submission path instead of the old direct `getJson` anchor.
 - Verification: Manager inject/open syntax checks passed; PowerShell parser checks passed; focused launcher contracts passed `127/127`; UI-state syntax and self-test passed; runtime sync ran with `NoRestart`; sync-readiness returned `ok:true`; strict passive release gates returned `releaseReady:true` and `shortReady:true`.
+
+## 2026-06-24 Optional Skip Manager Visibility
+- Completed: external Manager bridge and injected Manager summaries now show skipped optional report metadata (`reason`, `requestedRealTraffic`, and `coverage`) like the fallback Manager.
+- Completed: Manager panel version advanced to `native-panel-v87`, and `anticodex-manager-open-inject.js` is now covered by runtime sync required-file checks plus installed runtime drift gates.
+- Verification: Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; sync-readiness returned `ok:true`; strict passive release gates returned `releaseReady:true`, `shortReady:true`, and installed runtime sync `true`.

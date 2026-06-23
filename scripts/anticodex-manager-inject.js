@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v86";
+  const VERSION = "native-panel-v87";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -907,6 +907,9 @@
       if (item.missingHistoryEvidence) {
         const evidence = item.missingHistoryEvidence;
         lines.push(`  missingHistory: status=${evidence.status ?? "unknown"} / type=${evidence.errorType || "unknown"} / retryable=${evidence.retryable === false ? "false" : "true"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / routeStable=${evidence.noRouteChange ? "true" : "false"} / noTraffic=${evidence.usedRealTraffic === false ? "true" : "false"}`);
+      }
+      if (item.skipped === true) {
+        lines.push(`  skipped: ${item.reason || "no reason"} / requestedRealTraffic=${item.requestedRealTraffic ? "true" : "false"} / coverage=${item.coverageKind || "unknown"}`);
       }
       if (item.modelThinkingEvidence) {
         const evidence = item.modelThinkingEvidence;

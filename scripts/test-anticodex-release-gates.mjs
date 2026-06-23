@@ -35,6 +35,7 @@ const runtimeSyncFiles = [
   "scripts/start-deepcodex.ps1",
   "scripts/anticodex-manager-bridge.mjs",
   "scripts/anticodex-manager-inject.js",
+  "scripts/anticodex-manager-open-inject.js",
   "scripts/anticodex-report-io.ps1",
   "scripts/collect-anticodex-diagnostics.ps1",
   "scripts/protect-anticodex-log-db.mjs",
