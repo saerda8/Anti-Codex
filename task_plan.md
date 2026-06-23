@@ -1189,3 +1189,13 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostic bundle collection now materializes model-routing `failures` and `models` into explicit arrays before `ConvertTo-Json`, avoiding Windows PowerShell 5.1 inline-array serialization drift.
 - Completed: launcher contracts reject the unsafe inline `failures = if (...)` shape for this collector path and require `@($resultFailures)` / `@($resultModels)`.
 - Verification: diagnostics collector PowerShell parser check passed; focused diagnostics/report-summary launcher contracts passed `19/19`; diff whitespace check passed.
+
+## 2026-06-23 Local Feature Refresh Content Parity
+- Completed: refresh-features reports now fail when inherited skill directory content or shared guidance files differ from the Anti-Codex local copy, not only when entries are missing.
+- Completed: summaries and passive release gates expose the new `changedExpectedSkills` and guidance drift evidence, and UI-state verifier coverage was brought back in line with recent Manager result-copy/snapshot-warning fields.
+- Verification: refresh PowerShell parser check passed; release-gate `--self-test` passed; UI verifier self-test passed; focused launcher contracts passed `122/122`.
+
+## 2026-06-23 Refresh Result Snapshot Evidence
+- Completed: Manager refresh-features result formatting now shows `sourceSnapshot: files=... / fingerprint=...` when a completed refresh report is returned, across the external bridge, injected panel, and fallback Manager page.
+- Completed: background refresh start messages remain honest and do not invent a new fingerprint before the report exists.
+- Verification: adaptive/bridge/inject/button syntax checks passed; Manager bridge `--self-test` passed; Manager button `refreshFeatures` self-test passed; focused launcher contracts passed `122/122`.
