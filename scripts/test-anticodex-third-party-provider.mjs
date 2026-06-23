@@ -1189,6 +1189,7 @@ async function main() {
   };
 
   return {
+    reportName,
     ok: failures.length === 0,
     failures,
     elapsedMs: Date.now() - startedAt,
@@ -1313,6 +1314,7 @@ try {
 } catch (error) {
   addFailure(error?.stack || error?.message || String(error));
   result = {
+    reportName,
     ok: false,
     failures,
     elapsedMs: Date.now() - startedAt,

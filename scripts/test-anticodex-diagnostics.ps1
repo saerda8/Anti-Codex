@@ -916,7 +916,7 @@ if ($diagnostics) {
     } else {
         $longTaskItems = @($diagnostics.longTasks.items)
         foreach ($expectedTask in @("syncHost", "postVerificationFull")) {
-            $task = @($longTaskItems | Where-Object { $_.id -eq $expectedTask } | Select-Object -First 1)
+            $task = @($longTaskItems | Where-Object { $_.id -eq $expectedTask } | Select-Object -First 1)[0]
             if (-not $task) {
                 Add-Failure "diagnostics long-task status missing $expectedTask"
             } else {

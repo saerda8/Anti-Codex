@@ -63,9 +63,9 @@ function Remove-OldDiagnosticBundles {
 }
 
 function Write-JsonFile {
-    param([string]$Path, $Value, [int]$Depth = 12)
+    param([string]$Path, $Value, [int]$Depth = 12, [switch]$AllowSafeSummaryFields)
     $json = $Value | ConvertTo-Json -Depth $Depth
-    if ($json -match $sensitivePattern) {
+    if ((-not $AllowSafeSummaryFields) -and $json -match $sensitivePattern) {
         $json = (@{
             redacted = $true
             reason = "Sensitive transcript-like fields were not included in the diagnostic bundle."
@@ -248,6 +248,7 @@ function Read-JsonSummary {
             secretsRedacted = $json.secretsRedacted
             localConnectorEvidence = $json.localConnectorEvidence
             sourceSnapshotEvidence = $json.sourceSnapshotEvidence
+            logDbGuardEvidence = $json.logDbGuardEvidence
             refreshFeatureEvidence = $json.refreshFeatureEvidence
             mcpSkillEvidence = $json.mcpSkillEvidence
             pluginCapabilityEvidence = $json.pluginCapabilityEvidence
@@ -389,7 +390,7 @@ $damagedReports = @($reportSummaries | Where-Object {
         error = [string]$_.error
     }
 })
-Write-JsonFile (Join-Path $bundleRoot "reports-summary.json") @($reportSummaries)
+Write-JsonFile (Join-Path $bundleRoot "reports-summary.json") @($reportSummaries) -AllowSafeSummaryFields
 
 $logs = @(
     "adaptive-translator.err.log",

@@ -2232,6 +2232,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /node\.exe is required to summarize diagnostic reports/);
   assert.match(collector, /summarize-anticodex-report\.mjs/);
   assert.match(collector, /Invoke-NodeJsonSummary -Path \$Path/);
+  assert.match(collector, /logDbGuardEvidence = \$json\.logDbGuardEvidence/);
+  assert.match(collector, /AllowSafeSummaryFields/);
+  assert.match(collector, /reports-summary\.json"\) @\(\$reportSummaries\) -AllowSafeSummaryFields/);
   assert.match(collector, /function Get-DiagnosticsSnapshotSummary/);
   assert.match(collector, /diagnostics-summary\.json/);
   assert.match(collector, /longTasks/);
@@ -5451,6 +5454,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /otherRunningItems/);
   assert.match(diagnostics, /foreach \(\$expectedTask in @\("syncHost", "postVerificationFull"\)\)/);
   assert.doesNotMatch(diagnostics, /longTaskItems\.Count\s+-eq\s+2/);
+  assert.match(diagnostics, /Select-Object -First 1\)\[0\]/);
   assert.match(diagnostics, /latestLogLine/);
   assert.match(diagnostics, /logUpdatedAt/);
   assert.match(diagnostics, /logAgeMs/);
@@ -6029,6 +6033,7 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
 test("third-party provider verifier preserves history across save and restart", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-third-party-provider.mjs"), "utf8");
 
+  assert.match(verifier, /reportName,\s*\n\s*ok:/);
   assert.match(verifier, /turn-5 user asks epsilon after provider save/);
   assert.match(verifier, /fifthAfterSavePreservesHistory/);
   assert.match(verifier, /fifthOpenAiToolEvidence/);

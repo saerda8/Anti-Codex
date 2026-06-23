@@ -1299,3 +1299,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: adaptive Manager latest reports plus injected/bridge renderers now show `logDbGuard: protected=... / trigger=... / noTraffic=... / wal=...`, so operators can see the TRACE-write guard proof instead of only a pass/fail status.
 - Completed: diagnostics bundle verification now fails if `reports-summary.json` omits the log DB guard row or loses the protected/trigger/no-traffic/WAL evidence.
 - Verification: JS syntax checks passed for summarizer, adaptive server, bridge, and injected Manager; diagnostics PowerShell parser check passed; release-gate `--self-test` passed; Manager bridge `--self-test` passed; full launcher contracts passed `124/124`.
+
+## 2026-06-23 Diagnostic Summary Redaction and Provider Report Refresh
+- Completed: diagnostic bundle collection now allows already-sanitized `reports-summary.json` fields through the JSON writer instead of redacting the entire summary when report text contains transcript-like keywords.
+- Completed: diagnostic summaries now copy `logDbGuardEvidence` from the report summarizer, and the diagnostics verifier selects the first long-task object before checking `latestLogLine`, `logUpdatedAt`, and `logAgeMs`.
+- Completed: third-party provider verifier reports now include top-level `reportName` on success and failure paths, so strict passive release gates can identify refreshed provider-continuity evidence.
+- Verification: PowerShell parser checks passed; third-party provider script syntax passed; strict passive release gate passed; installed Anti-Codex sync passed; live diagnostics passed; latest diagnostic bundle has `reports-summary` count `33`, `redacted:false`, log-guard row present, and guard evidence present; full launcher contracts passed `124/124`; `git diff --check` passed.
