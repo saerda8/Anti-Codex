@@ -5941,7 +5941,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const syncRuntime = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
   const sourcePreflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const mjsVerifierPowerShellWrapper = /powershell(?:\.exe)?[\s\S]{0,240}(?:-File|-Command)[\s\S]{0,240}(?:test-anticodex-release-gates|summarize-anticodex-report)\.mjs/i;
+  const releaseGateReportFiles = [...new Set([...releaseGates.matchAll(/file: "([^"]+\.json)"/g)].map((match) => match[1]))];
+  const reportFilePattern = (file) => new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
   assert.match(releaseGates, /latest-release-gates\.json/);
   assert.match(releaseGates, /group: "short"/);
@@ -6166,6 +6169,12 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.doesNotMatch(syncRuntime, mjsVerifierPowerShellWrapper);
   assert.match(collector, /Get-Command node\.exe/);
   assert.match(collector, /summarize-anticodex-report\.mjs/);
+  assert.ok(releaseGateReportFiles.length >= 30, "release-gate report inventory should stay non-trivial");
+  for (const reportFile of releaseGateReportFiles) {
+    assert.match(collector, reportFilePattern(reportFile), `${reportFile} must be included in diagnostic bundles`);
+    assert.match(server, reportFilePattern(reportFile), `${reportFile} must be visible in Manager latest reports`);
+    assert.match(installedOverall, reportFilePattern(reportFile), `${reportFile} must be covered by installed report integrity checks`);
+  }
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 

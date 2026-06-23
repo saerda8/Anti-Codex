@@ -1466,3 +1466,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Node Verifier Command Guard
 - Completed: launcher contracts now reject PowerShell `-File`/`-Command` wrappers around Node `.mjs` release-gate and report-summarizer verifiers in support scripts, while preserving the positive Node path for report summarization.
 - Verification: focused launcher contracts passed `127/127`; `git diff --check` passed.
+
+## 2026-06-24 Release Report Inventory Guard
+- Completed: launcher contracts now derive the latest-report inventory from the release-gate definitions and require diagnostic bundles, Manager latest reports, and installed report-integrity checks to include every gate report file.
+- Verification: focused launcher contracts passed `127/127`; `git diff --check` passed.
