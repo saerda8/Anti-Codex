@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import assert from "node:assert/strict";
@@ -29,7 +30,9 @@ function httpJson(url, options = {}) {
         let json = null;
         try { json = text ? JSON.parse(text) : null; } catch {}
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(new Error(json?.error?.message || text || `HTTP ${response.statusCode}`));
+          const error = new Error(json?.error?.message || text || `HTTP ${response.statusCode}`);
+          error.statusCode = response.statusCode;
+          reject(error);
           return;
         }
         resolve(json);
@@ -198,24 +201,32 @@ async function runAction(action) {
   if (action === "refreshModels") {
     return { ok: true, action, result: await httpJson(`${baseUrl}/anticodex/models/refresh`, { method: "POST", timeout: 120000 }) };
   }
-  const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
-    timeout: 10000,
-    headers: {
-      origin: baseUrl,
-      referer: `${baseUrl}/anticodex/manager`,
-    },
-  });
-  return httpJson(`${baseUrl}/anticodex/manager/action`, {
-    method: "POST",
-    timeout: 180000,
-    headers: {
-      "content-type": "application/json",
-      "x-anticodex-manager-token": bootstrap.token,
-      origin: baseUrl,
-      referer: `${baseUrl}/anticodex/manager`,
-    },
-    body: JSON.stringify({ action }),
-  });
+  const postActionWithFreshToken = async () => {
+    const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
+      timeout: 10000,
+      headers: {
+        origin: baseUrl,
+        referer: `${baseUrl}/anticodex/manager`,
+      },
+    });
+    return httpJson(`${baseUrl}/anticodex/manager/action`, {
+      method: "POST",
+      timeout: 180000,
+      headers: {
+        "content-type": "application/json",
+        "x-anticodex-manager-token": bootstrap.token,
+        origin: baseUrl,
+        referer: `${baseUrl}/anticodex/manager`,
+      },
+      body: JSON.stringify({ action }),
+    });
+  };
+  try {
+    return await postActionWithFreshToken();
+  } catch (error) {
+    if (error?.statusCode !== 403) throw error;
+    return await postActionWithFreshToken();
+  }
 }
 
 function reportSummaryLines(result) {
@@ -502,6 +513,12 @@ function managerSummary(action, payload) {
 }
 
 if (args.has("--self-test")) {
+  const selfSource = readFileSync(new URL(import.meta.url), "utf8");
+  assert.match(selfSource, /error\.statusCode = response\.statusCode/);
+  assert.match(selfSource, /postActionWithFreshToken/);
+  assert.match(selfSource, /error\?\.statusCode !== 403/);
+  assert.match(selfSource, /return await postActionWithFreshToken\(\)/);
+
   const okSummary = latestReportsSummary({
     reportRoot: "C:\\tmp\\anticodex\\reports",
     existingCount: 1,

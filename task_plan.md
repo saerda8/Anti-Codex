@@ -1458,3 +1458,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Manager UI Token Rebootstrap
 - Completed: the injected Manager and fallback Manager page now refresh a stale Manager action token once on HTTP 403 before retrying authenticated write actions, covering action buttons, local connector allowlist saves, and third-party upstream profile/test/apply paths.
 - Verification: Manager injection and adaptive server syntax checks passed; focused launcher contracts passed `127/127`; `git diff --check` passed; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
+
+## 2026-06-24 Manager Bridge Token Race Hardening
+- Completed: the external Manager bridge now preserves HTTP status on failed JSON requests and retries `/anticodex/manager/action` once with a freshly bootstrapped token when a 403 arrives, covering the narrow translator-restart race between bootstrap and action POST.
+- Verification: Manager bridge syntax passed; Manager bridge self-test returned `ok:true`; focused launcher contracts passed `127/127`; `git diff --check` passed; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.

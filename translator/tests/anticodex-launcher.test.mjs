@@ -631,6 +631,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /splice\(0\)/);
   assert.match(managerBridge, /__ANTICODEX_RUN_MANAGER_ACTION__/);
   assert.match(managerBridge, /\/anticodex\/manager\/action/);
+  assert.match(managerBridge, /postActionWithFreshToken/);
+  assert.match(managerBridge, /error\?\.statusCode !== 403/);
   assert.match(managerBridge, /\/backend-api\/ps\/plugins\/installed/);
   assert.match(managerBridge, /\/backend-api\/aip\/connectors/);
   assert.match(managerBridge, /__ANTICODEX_MANAGER_SNAPSHOT__/);
