@@ -51,7 +51,7 @@ The system architecture defines four main local capability categories, summarize
 
 ### 3.3 User Experience and Validation Gaps
 - **No Local Connector Authorization Path**: Since remote authentication is blocked, the user is presented with a large number of connectors in the UI directory that cannot be activated or authorized. There is no local allowlist or local key mapping to authorize a connector for local execution.
-- **Automated Snapshot Staleness Alerting**: The Manager requires manual clicks to check features/snapshots status. There is no passive background drift check or automatic user warning when isolated copies diverge from the shared folder.
+- **Automated Snapshot Staleness Alerting**: Status: partially fixed. Diagnostics compute snapshot freshness and both Manager surfaces now warn when isolated copies are stale, missing, invalid, or `source_changed`. Refresh remains operator-triggered through the existing safe action.
 - **Simulated Plugin Execution Test**: There is no end-to-end integration test to simulate tool calling on a dummy authorized plugin connector to verify that mapping logic works fine.
 
 ---

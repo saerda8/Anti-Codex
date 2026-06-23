@@ -748,6 +748,21 @@
     ].join("\n") }));
   }
 
+  function snapshotStalenessNotice(snapshotStatus, refreshText) {
+    const stale = snapshotStatus?.stale === true
+      || snapshotStatus?.state === "stale"
+      || snapshotStatus?.state === "invalid"
+      || snapshotStatus?.state === "missing";
+    if (!stale) return null;
+    const reason = snapshotStatus?.staleReason === "source_changed"
+      ? "\u539f\u751f Codex \u672c\u5730\u529f\u80fd\u5df2\u53d8\u5316"
+      : (snapshotStatus?.state === "missing" ? "\u5feb\u7167\u7f3a\u5931" : "\u5feb\u7167\u5df2\u8fc7\u671f\u6216\u6807\u8bb0\u65e0\u6548");
+    return card("\u672c\u5730\u529f\u80fd\u5feb\u7167\u9700\u5237\u65b0", el("div", { className: "anticodex-result anticodex-warn", text: [
+      reason,
+      refreshText || "\u8bf7\u70b9\u201c\u5237\u65b0\u672c\u5730\u529f\u80fd\u201d\uff0c\u5b8c\u6210\u540e\u518d\u8fd0\u884c MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u68c0\u67e5\u3002",
+    ].join("\n") }));
+  }
+
   async function refreshManagerStatus() {
     try {
       const healthResult = await safeJson("/health");
@@ -1451,6 +1466,7 @@
         const updateOperation = updateStatus.operation || {};
         const cards = [
           quotaNotice,
+          snapshotStalenessNotice(snapshotStatus, snapshotRefreshText),
           card("\u8fd0\u884c\u72b6\u6001", kv([
             ["\u4e0a\u6e38", health?.upstream],
             ["\u6a21\u578b\u901a\u9053", usingThirdParty ? ((upstreamProfile.runtime?.protocol || "third-party") + " / " + (upstreamProfile.runtime?.model || "\u672a\u77e5")) : "Antigravity"],

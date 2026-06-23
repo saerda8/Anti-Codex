@@ -1870,6 +1870,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /function longTaskRows/);
   assert.match(server, /id="copyActionResult"/);
   assert.match(server, /function copyTextToClipboard/);
+  assert.match(server, /id="snapshotAlert"/);
+  assert.match(server, /function renderSnapshotAlert/);
+  assert.match(server, /source_changed/);
   assert.match(server, /latestLogLine/);
   assert.match(server, /logAgeMs/);
   assert.match(server, /escapeHtml/);
@@ -5069,6 +5072,8 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /anticodex-copy-result/);
   assert.match(uiScript, /manager page missing refresh local features button/);
   assert.match(uiScript, /manager page missing refreshFeatures action binding/);
+  assert.match(uiScript, /snapshotStalenessNotice/);
+  assert.match(uiScript, /source_changed/);
   assert.match(uiScript, /manager page missing update check button/);
   assert.match(uiScript, /manager page missing updateCheck action binding/);
   assert.match(uiScript, /manager page missing syncHost action binding/);

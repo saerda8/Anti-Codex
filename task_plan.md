@@ -1174,3 +1174,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: in-app Manager and fallback Manager now provide a copy-result button for the current action result, including latest-report paths and diagnostics summaries.
 - Completed: the control copies only currently visible result text and does not open external paths, read raw reports, or consume traffic.
 - Verification: adaptive/injected Manager syntax checks passed; diff whitespace check passed; focused Manager launcher contracts passed `8/8`.
+
+## 2026-06-23 Manager Snapshot Drift Warning
+- Completed: fallback Manager now matches the injected panel by reading `localFeatures.snapshotStatus`, showing snapshot freshness/refresh guidance, and displaying a warning when snapshots are stale, missing, invalid, or `source_changed`.
+- Completed: this remains a display-only prompt to run the existing refresh action; it does not auto-repair, rewrite native Codex, or fake connector/app-tool authorization.
+- Verification: adaptive/injected Manager syntax checks passed; focused Manager/local-feature launcher contracts passed `9/9`.

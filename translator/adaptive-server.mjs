@@ -2821,6 +2821,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
     </section>
   </div>
   <div id="error" class="card wide" style="display:none"></div>
+  <div id="snapshotAlert" class="card wide warn" style="display:none"></div>
   <section class="grid">
     <div class="card"><h2>运行状态</h2><div id="health" class="kv"></div></div>
     <div class="card"><h2>账号与代理</h2><div id="account" class="kv"></div></div>
@@ -3282,6 +3283,15 @@ function renderConnectorAllowlist(payload){
   $("connectorAllowlistInput").value=persisted.join("\\n");
   $("connectorAllowlistResult").textContent="\\u672c\\u5730\\u7f13\\u5b58\\u9884\\u89c8\\uff0c\\u4e0d\\u6388\\u6743\\uff0c\\u4e0d\\u4ee3\\u8868\\u53ef\\u8c03\\u7528\\u3002\\n\\u6bcf\\u884c\\u4e00\\u4e2a connector id\\uff1b\\u672a\\u5217\\u5165\\u7684\\u8fde\\u63a5\\u5668\\u53ea\\u4fdd\\u7559\\u5143\\u6570\\u636e\\u3002";
 }
+function renderSnapshotAlert(localFeatures){
+  const status=localFeatures?.snapshotStatus||{};
+  const stale=status.stale===true||status.state==="stale"||status.state==="invalid"||status.state==="missing";
+  const box=$("snapshotAlert");
+  if(!stale){box.style.display="none";box.textContent="";return;}
+  const reason=status.staleReason==="source_changed"?"\\u539f\\u751f Codex \\u672c\\u5730\\u529f\\u80fd\\u5df2\\u53d8\\u5316":(status.state==="missing"?"\\u5feb\\u7167\\u7f3a\\u5931":"\\u5feb\\u7167\\u5df2\\u8fc7\\u671f\\u6216\\u6807\\u8bb0\\u65e0\\u6548");
+  box.style.display="block";
+  box.textContent=reason+"\\n\\u8bf7\\u70b9\\u201c\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd\\u201d\\uff0c\\u5b8c\\u6210\\u540e\\u518d\\u8fd0\\u884c MCP/Skill \\u548c\\u63d2\\u4ef6/\\u5e94\\u7528\\u68c0\\u67e5\\u3002";
+}
 async function load(){
   $("error").style.display="none";
   const [health,diag,account,routes,installedPlugins,pluginList,connectors,appTools,allowlist]=await Promise.all([
@@ -3299,6 +3309,11 @@ async function load(){
   kv("account",[["账号",badge(health.accountReady)],["流量",badge(health.accountTrafficReady)],["状态",diagnosis(health.accountTrafficDiagnosis||health.accountTrafficState||health.accountState)],["建议",health.accountTrafficSuggestedAction||"暂无"],["套餐",((account.planName||"未知")+" / "+(account.tierName||"未知"))],["代理边界","Anti-Codex 到 Antigravity 本机通信不走代理"]]);
   const q=diag.antigravityQueue||{};
   const lf=diag.localFeatures||{};
+  renderSnapshotAlert(lf);
+  const snapshotStatus=lf.snapshotStatus||{};
+  const snapshotStateText=snapshotStatus.state==="fresh"?"\\u65b0\\u9c9c":(snapshotStatus.state==="stale"?"\\u5df2\\u8fc7\\u671f":(snapshotStatus.state==="invalid"?"\\u6807\\u8bb0\\u65e0\\u6548":"\\u6807\\u8bb0\\u7f3a\\u5931"));
+  const snapshotAgeText=Number.isFinite(Number(snapshotStatus.ageHours))?Number(snapshotStatus.ageHours).toFixed(1)+" \\u5c0f\\u65f6":"\\u672a\\u77e5";
+  const snapshotRefreshText=snapshotStatus.staleReason==="source_changed"?"\\u539f\\u751f Codex \\u672c\\u5730\\u529f\\u80fd\\u5df2\\u53d8\\u5316\\uff0c\\u8bf7\\u70b9\\u201c\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd\\u201d":(snapshotStatus.stale?"\\u5feb\\u7167\\u5df2\\u8fc7\\u671f\\u6216\\u7f3a\\u5931\\uff0c\\u8bf7\\u70b9\\u201c\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd\\u201d":"\\u5f53\\u524d\\u65e0\\u9700\\u5237\\u65b0");
   kv("tools",[["模式",diag.toolBridge?.mode==="codex-owned-tools-prompt-mediated"?"Codex 负责工具，Antigravity 只负责模型":(diag.toolBridge?.mode||"未知")],["Skill",lf.skills?.count??"未知"],["MCP",lf.mcp?.count??"未知"],["快照",("连接器 "+(lf.snapshots?.connectorDirectoryFiles??"未知")+" / 应用工具 "+(lf.snapshots?.appToolsCacheFiles??"未知"))],["原生桥默认",zhBool(diag.toolBridge?.nativeBridgeDefaultEnabled)],["排队",String(q.queued??0)+" / "+String(q.maxQueued??0)],["运行中",zhBool(q.running)],["活跃请求",diag.activeAntigravityRequests?.active??0]]);
   const pluginRows=asArray(pluginList,"plugins");
   const installedRows=asArray(installedPlugins);
@@ -3333,6 +3348,8 @@ async function load(){
   const shortcutRepair=diag.shortcutRepair||{};
   const sourcePreflight=diag.sourcePreflight||{};
   kv("localChecks",[
+    ["\\u5feb\\u7167\\u65b0\\u9c9c\\u5ea6",snapshotStateText+" / \\u5df2\\u7528 "+snapshotAgeText+" / \\u4e0a\\u9650 "+(snapshotStatus.maxAgeHours??24)+" \\u5c0f\\u65f6"],
+    ["\\u5237\\u65b0\\u65b9\\u5f0f",snapshotRefreshText],
     ["上次源码预检",checkState(sourcePreflight)],
     ["上次快检",checkState(checks.fast)],
     ["上次完整无流量",checkState(checks.full)],

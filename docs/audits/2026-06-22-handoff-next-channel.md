@@ -425,3 +425,9 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - The Manager action result area now has a copy-result control in both the injected panel and fallback page.
 - It copies only the visible result text, so latest-report paths are easier to share without adding external folder-opening behavior.
 - Fresh evidence: adaptive/injected Manager syntax checks passed; diff whitespace check passed; focused Manager launcher contracts passed `8/8`.
+
+## 2026-06-23 Manager Snapshot Drift Warning Follow-Up
+
+- Fallback Manager now shows the same local-feature snapshot freshness guidance as the injected panel, including a visible warning for stale/missing/invalid/source-changed snapshots.
+- This is display-only and points operators to the existing refresh-local-features action; it does not mutate shared/native Codex state.
+- Fresh evidence: adaptive/injected Manager syntax checks passed; focused Manager/local-feature launcher contracts passed `9/9`.
