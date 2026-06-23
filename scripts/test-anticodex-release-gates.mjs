@@ -38,6 +38,7 @@ const gateDefinitions = [
 
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true, requireInstalledOverallSemantics: true, expectedFast: false, expectedReportName: "installed-overall", expectedCoverageKind: "installed-no-traffic" },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
+  { id: "logDbGuard", group: "no-traffic", file: "latest-log-db-guard.json", requiredForRelease: true, requireLogDbGuardSemantics: true },
   { id: "toolBridgeMode", group: "no-traffic", file: "latest-tool-bridge-mode.json", requiredForRelease: true, requireToolBridgeSemantics: true },
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true, requireUiIdleSemantics: true },
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true, requireSyncReadinessSemantics: true },
@@ -182,6 +183,19 @@ function summarizeGate(definition) {
     }
     if (definition.requireSkipRequests && report.skipRequests !== true) {
       semanticFailures.push("expected_skipRequests_true");
+    }
+    if (definition.requireLogDbGuardSemantics) {
+      if (report.reportName !== "log-db-guard") semanticFailures.push("log_db_guard_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("log_db_guard_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("log_db_guard_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("log_db_guard_behavior_not_covered");
+      if (report.coverageKind !== "installed-no-traffic") semanticFailures.push("log_db_guard_coverage_kind");
+      if (report.exists !== true) semanticFailures.push("log_db_guard_database_missing");
+      if (report.logsTable !== true) semanticFailures.push("log_db_guard_logs_table_missing");
+      if (report.levelColumn !== true) semanticFailures.push("log_db_guard_level_column_missing");
+      if (report.triggerPresent !== true) semanticFailures.push("log_db_guard_trigger_missing");
+      if (report.protected !== true) semanticFailures.push("log_db_guard_not_protected");
+      if (!Number.isFinite(Number(report.walBytes)) || Number(report.walBytes) < 0) semanticFailures.push("log_db_guard_wal_bytes_invalid");
     }
     if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
       semanticFailures.push("expected_usedRealTraffic_true");
@@ -622,6 +636,21 @@ if (args.has("--self-test")) {
         allowlistedConnectorLocallyAllowlisted: false,
         hiddenConnectorAccessible: true,
       },
+    });
+
+    writeFakeLatestReport("latest-log-db-guard.json", {
+      ok: true,
+      reportName: "log-db-guard",
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      exists: true,
+      logsTable: true,
+      levelColumn: true,
+      triggerPresent: false,
+      protected: false,
+      walBytes: 0,
     });
 
     writeFakeLatestReport("latest-plugin-capabilities.json", {
@@ -1254,6 +1283,10 @@ if (args.has("--self-test")) {
       "local_connector_hidden_connector_accessible",
       "local_connector_get_post_tool_mismatch",
       "local_connector_exposed_tool_names_mismatch",
+    ]);
+    semanticFailures.logDbGuard = assertSemanticFailures("logDbGuard", "self-test failed: semantically invalid log-db guard report satisfied the gate", [
+      "log_db_guard_trigger_missing",
+      "log_db_guard_not_protected",
     ]);
     semanticFailures.pluginCapabilities = assertSemanticFailures("pluginCapabilities", "self-test failed: semantically invalid plugin-capability report satisfied the gate", [
       "plugin_capabilities_native_codex_writeback",

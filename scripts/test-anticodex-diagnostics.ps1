@@ -89,6 +89,7 @@ function Test-DiagnosticBundle {
     if (-not (Test-Path -LiteralPath $bundle.bundleRoot -PathType Container)) { Add-Failure "diagnostic bundle root missing: $($bundle.bundleRoot)" }
 
     $refreshPath = Join-Path $bundle.bundleRoot "model-routing-refresh.json"
+    $logDbGuardPath = Join-Path $bundle.bundleRoot "log-db-guard.json"
     $summaryPath = Join-Path $bundle.bundleRoot "reports-summary.json"
     $lifecycleStatusPath = Join-Path (Join-Path $bundle.bundleRoot "logs") "translator-lifecycle.json"
     $lifecycleLogPath = Join-Path (Join-Path $bundle.bundleRoot "logs") "translator-lifecycle.jsonl"
@@ -97,6 +98,16 @@ function Test-DiagnosticBundle {
     }
     if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
         Add-Failure "diagnostic bundle missing reports-summary.json"
+    }
+    if (-not (Test-Path -LiteralPath $logDbGuardPath -PathType Leaf)) {
+        Add-Failure "diagnostic bundle missing log-db-guard.json"
+    } else {
+        $logDbGuard = Get-Content -LiteralPath $logDbGuardPath -Raw | ConvertFrom-Json
+        if ($logDbGuard.reportName -ne "log-db-guard") { Add-Failure "diagnostic log database guard reportName mismatch" }
+        if ($logDbGuard.noTraffic -ne $true) { Add-Failure "diagnostic log database guard missing noTraffic" }
+        if ($logDbGuard.usedRealTraffic -ne $false) { Add-Failure "diagnostic log database guard used real traffic" }
+        if ($logDbGuard.protected -ne $true) { Add-Failure "diagnostic log database guard is not protected in bundle" }
+        if ($logDbGuard.triggerPresent -ne $true) { Add-Failure "diagnostic log database guard trigger missing in bundle" }
     }
     if (-not (Test-Path -LiteralPath $lifecycleStatusPath -PathType Leaf)) {
         Add-Failure "diagnostic bundle missing translator-lifecycle.json"
@@ -728,6 +739,15 @@ if ($diagnostics) {
     if (-not $diagnostics.paths.sharedCodexHome) { Add-Failure "diagnostics missing sharedCodexHome" }
     if ($diagnostics.paths.codexHome -eq $diagnostics.paths.sharedCodexHome) { Add-Failure "Anti-Codex codexHome should be isolated from sharedCodexHome" }
     if (-not (Has-Property $diagnostics.paths "modelRouteAudit")) { Add-Failure "diagnostics missing modelRouteAudit path" }
+    if (-not (Has-Property $diagnostics "logDbGuard")) {
+        Add-Failure "diagnostics missing log database guard status"
+    } else {
+        if ($diagnostics.logDbGuard.reportName -ne "log-db-guard") { Add-Failure "diagnostics log database guard reportName mismatch" }
+        if ($diagnostics.logDbGuard.noTraffic -ne $true) { Add-Failure "diagnostics log database guard missing noTraffic" }
+        if ($diagnostics.logDbGuard.usedRealTraffic -ne $false) { Add-Failure "diagnostics log database guard used real traffic" }
+        if ($diagnostics.logDbGuard.protected -ne $true) { Add-Failure "diagnostics log database guard is not protected" }
+        if ($diagnostics.logDbGuard.triggerPresent -ne $true) { Add-Failure "diagnostics log database guard trigger missing" }
+    }
     if ($diagnosticMode -eq "third-party") {
         if ($diagnostics.toolBridge.mode -ne "provider-native-or-compat") { Add-Failure "third-party diagnostics tool bridge mode is not provider-native-or-compat" }
         if ($diagnostics.toolBridge.transport -ne "upstream-provider") { Add-Failure "third-party diagnostics tool bridge transport is not upstream-provider" }
@@ -973,6 +993,7 @@ $result = [pscustomobject]@{
             activeAntigravityRequests = $diagnostics.activeAntigravityRequests
             updateStatus = $diagnostics.updateStatus
             lifecycle = $diagnostics.lifecycle
+            logDbGuard = $diagnostics.logDbGuard
             stateRoot = $diagnostics.paths.stateRoot
             codexHome = $diagnostics.paths.codexHome
             sharedCodexHome = $diagnostics.paths.sharedCodexHome

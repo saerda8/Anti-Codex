@@ -1231,3 +1231,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `start-deepcodex.ps1` now sets a non-TRACE Rust log default for Anti-Codex, lowers `codex_app_server_transport::transport::remote_control::websocket` to `warn`, and applies the database guard before the desktop process starts.
 - Completed: runtime sync now requires/copies the guard script so installed Anti-Codex receives the fix, and launcher contracts cover the startup hook.
 - Verification: guard self-test passed; PowerShell parser checks passed; focused launcher contracts passed `124/124`; real Anti-Codex DB guard run was idempotent with `MAX(id)=356586`, `count=35829`, `traceCount=5878`, and `walBytes=0` before/after.
+
+## 2026-06-23 Log DB Guard Evidence Chain
+- Completed: `protect-anticodex-log-db.mjs --status` now writes signed no-traffic evidence (`latest-log-db-guard.json` plus timestamped history) proving the Anti-Codex log database exists, has a `logs` table and `level` column, carries trigger `anticodex_drop_trace_logs`, and has a bounded WAL size.
+- Completed: `/anticodex/diagnostics`, diagnostic bundles, Manager latest-report visibility, installed-overall report integrity checks, and passive release gates now consume the log-guard report so a missing trigger or unprotected database cannot be hidden behind `ok:true`.
+- Verification: JS syntax checks passed for the guard, release gates, and adaptive server; PowerShell parser checks passed for diagnostics/installed-overall scripts; guard self-test passed; release-gate self-test passed; launcher contracts passed `124/124`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `damagedReports:[]`.

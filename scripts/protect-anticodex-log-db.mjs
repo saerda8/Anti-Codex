@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ process.emitWarning = (warning, ...args) => {
 const { DatabaseSync } = await import("node:sqlite");
 
 const SELF_TEST_FLAG = "--self-test";
+const STATUS_FLAG = "--status";
 const ALLOW_ANY_CODEX_HOME_FLAG = "--allow-any-codex-home";
 const BACKUP_FLAG = "--backup";
 const TRIGGER_NAME = "anticodex_drop_trace_logs";
@@ -35,7 +37,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (!arg.startsWith("--")) continue;
     const name = arg.slice(2);
-    if (arg === SELF_TEST_FLAG || arg === ALLOW_ANY_CODEX_HOME_FLAG || arg === BACKUP_FLAG) {
+    if (arg === SELF_TEST_FLAG || arg === STATUS_FLAG || arg === ALLOW_ANY_CODEX_HOME_FLAG || arg === BACKUP_FLAG) {
       parsed.flags.add(name);
       continue;
     }
@@ -107,6 +109,37 @@ function backupLogDb(dbPath, backupRoot) {
   return target;
 }
 
+function writeTextAtomic(filePath, text, encoding = "utf8") {
+  const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(tmp, text, encoding);
+    renameSync(tmp, filePath);
+  } catch (error) {
+    try { rmSync(tmp, { force: true }); } catch {}
+    throw error;
+  }
+}
+
+function writeSignedLogDbGuardReport(reportRoot, status) {
+  const root = resolve(reportRoot);
+  mkdirSync(root, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const latest = join(root, "latest-log-db-guard.json");
+  const history = join(root, `${stamp}-log-db-guard.json`);
+  const payload = {
+    ...status,
+    reportName: "log-db-guard",
+    report: { latest, history },
+  };
+  const text = `${JSON.stringify(payload, null, 2)}\n`;
+  for (const target of [history, latest]) {
+    writeTextAtomic(target, text, "utf8");
+    const hash = createHash("sha256").update(text).digest("hex");
+    writeTextAtomic(`${target}.sha256`, `sha256:${hash}`, "ascii");
+  }
+  return { latest, history };
+}
+
 export function protectAntiCodexLogDb(options = {}) {
   const codexHome = options.codexHome ? resolve(options.codexHome) : defaultAntiCodexHome();
   if (!options.allowAnyCodexHome && !isSafeAntiCodexHome(codexHome)) {
@@ -152,6 +185,57 @@ export function protectAntiCodexLogDb(options = {}) {
       before,
       after,
     };
+  } finally {
+    db.close();
+  }
+}
+
+export function antiCodexLogDbStatus(options = {}) {
+  const codexHome = options.codexHome ? resolve(options.codexHome) : defaultAntiCodexHome();
+  if (!options.allowAnyCodexHome && !isSafeAntiCodexHome(codexHome)) {
+    throw new Error(`refusing to inspect non-Anti-Codex home: ${codexHome}`);
+  }
+  const dbPath = options.dbPath ? resolve(options.dbPath) : join(codexHome, "logs_2.sqlite");
+  if (basename(dbPath).toLowerCase() !== "logs_2.sqlite") {
+    throw new Error(`refusing unexpected log database name: ${dbPath}`);
+  }
+  const base = {
+    reportName: "log-db-guard",
+    noTraffic: true,
+    usedRealTraffic: false,
+    behaviorCovered: true,
+    coverageKind: "installed-no-traffic",
+    codexHome,
+    dbPath,
+    exists: existsSync(dbPath),
+    logsTable: false,
+    levelColumn: false,
+    triggerPresent: false,
+    trigger: TRIGGER_NAME,
+    protected: false,
+    walBytes: getWalSize(dbPath),
+    count: null,
+    maxId: null,
+    traceCount: null,
+  };
+  if (!base.exists) {
+    return { ...base, ok: false, reason: "logs_2.sqlite not present" };
+  }
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    db.exec("PRAGMA busy_timeout = 5000");
+    base.logsTable = hasLogsTable(db);
+    if (!base.logsTable) return { ...base, ok: false, reason: "logs table not present" };
+    base.levelColumn = hasLevelColumn(db);
+    if (!base.levelColumn) return { ...base, ok: false, reason: "logs table is missing level column" };
+    base.triggerPresent = hasTraceTrigger(db);
+    const snapshot = readSnapshot(db, dbPath);
+    base.count = snapshot.count;
+    base.maxId = snapshot.maxId;
+    base.traceCount = snapshot.traceCount;
+    base.walBytes = snapshot.walBytes;
+    base.protected = base.triggerPresent;
+    return { ...base, ok: base.protected, reason: base.protected ? "" : "TRACE trigger missing" };
   } finally {
     db.close();
   }
@@ -218,7 +302,13 @@ function runSelfTest() {
     const second = protectAntiCodexLogDb({ codexHome, allowAnyCodexHome: true });
     assert.equal(second.ok, true);
     assert.equal(second.alreadyProtected, true);
-    return { ok: true, first, second };
+    const status = antiCodexLogDbStatus({ codexHome, allowAnyCodexHome: true });
+    assert.equal(status.ok, true);
+    assert.equal(status.protected, true);
+    assert.equal(status.triggerPresent, true);
+    assert.equal(status.walBytes, 0);
+    assert.equal(status.usedRealTraffic, false);
+    return { ok: true, first, second, status };
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -229,6 +319,17 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const parsed = parseArgs(process.argv.slice(2));
     const result = parsed.flags.has("self-test")
       ? runSelfTest()
+      : parsed.flags.has("status")
+        ? (() => {
+          const status = antiCodexLogDbStatus({
+            codexHome: parsed.args.get("codex-home"),
+            dbPath: parsed.args.get("db"),
+            allowAnyCodexHome: parsed.flags.has("allow-any-codex-home"),
+          });
+          const reportRoot = parsed.args.get("report-root");
+          if (reportRoot) status.report = writeSignedLogDbGuardReport(reportRoot, status);
+          return status;
+        })()
       : protectAntiCodexLogDb({
           codexHome: parsed.args.get("codex-home"),
           dbPath: parsed.args.get("db"),

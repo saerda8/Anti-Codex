@@ -276,7 +276,11 @@ New-Item -ItemType Directory -Path $bundleRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $bundleRoot "logs") -Force | Out-Null
 
 Write-JsonFile (Join-Path $bundleRoot "health.json") (Try-InvokeJson "/health")
-Write-JsonFile (Join-Path $bundleRoot "diagnostics.json") (Try-InvokeJson "/anticodex/diagnostics")
+$diagnosticsSnapshot = Try-InvokeJson "/anticodex/diagnostics"
+Write-JsonFile (Join-Path $bundleRoot "diagnostics.json") $diagnosticsSnapshot
+if ($diagnosticsSnapshot -and ($diagnosticsSnapshot.PSObject.Properties.Name -contains "logDbGuard")) {
+    Write-JsonFile (Join-Path $bundleRoot "log-db-guard.json") $diagnosticsSnapshot.logDbGuard
+}
 Write-JsonFile (Join-Path $bundleRoot "account.json") (Try-InvokeJson "/anticodex/account")
 Write-JsonFile (Join-Path $bundleRoot "models.json") (Try-InvokeJson "/models")
 Write-JsonFile (Join-Path $bundleRoot "model-routing-refresh.json") (Update-NoTrafficModelRoutingReport)
@@ -334,6 +338,7 @@ $latestReports = @(
     "latest-shortcut-repair.json",
     "latest-model-routing.json",
     "latest-model-thinking.json",
+    "latest-log-db-guard.json",
     "latest-ui-idle-stability.json"
 )
 $reportSummaries = foreach ($name in $latestReports) {

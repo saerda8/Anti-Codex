@@ -22,7 +22,7 @@
 import http from "node:http";
 import zlib from "node:zlib";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join as joinPath, relative as relativePath, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,7 @@ const DEEPCODEX_DISPLAY_NAME = process.env.DEEPCODEX_DISPLAY_NAME || "娄老师�
 const TRANSLATOR_BRAND = process.env.ANTICODEX_TRANSLATOR_BRAND || "Anti-Codex";
 const TRANSLATOR_DIR = dirname(fileURLToPath(import.meta.url));
 const MANAGER_SCRIPTS_ROOT = resolvePath(TRANSLATOR_DIR, "..", "scripts");
+const LOG_DB_GUARD_SCRIPT = resolvePath(MANAGER_SCRIPTS_ROOT, "protect-anticodex-log-db.mjs");
 const execFileAsync = promisify(execFile);
 const MANAGER_ACTION_TOKEN = randomBytes(32).toString("base64url");
 const MANAGER_ACTION_LOCKS = new Set();
@@ -1066,6 +1067,107 @@ function localFeatureSummary({ includeProjection = false } = {}) {
     };
 }
 
+function logDbGuardStatus() {
+    if (!CODEX_HOME_DIR) {
+        return {
+            ok: false,
+            reportName: "log-db-guard",
+            noTraffic: true,
+            usedRealTraffic: false,
+            behaviorCovered: true,
+            coverageKind: "installed-no-traffic",
+            exists: false,
+            protected: false,
+            triggerPresent: false,
+            walBytes: null,
+            reason: "CODEX_HOME_DIR is not set",
+        };
+    }
+    if (!existsSync(LOG_DB_GUARD_SCRIPT)) {
+        return {
+            ok: false,
+            reportName: "log-db-guard",
+            noTraffic: true,
+            usedRealTraffic: false,
+            behaviorCovered: true,
+            coverageKind: "installed-no-traffic",
+            exists: false,
+            protected: false,
+            triggerPresent: false,
+            walBytes: null,
+            reason: "log database guard script missing",
+        };
+    }
+    const result = spawnSync(process.execPath, [LOG_DB_GUARD_SCRIPT, "--status", "--codex-home", CODEX_HOME_DIR], {
+        cwd: MANAGER_SCRIPTS_ROOT,
+        encoding: "utf8",
+        timeout: 3000,
+        windowsHide: true,
+    });
+    if (result.error || result.status !== 0) {
+        return {
+            ok: false,
+            reportName: "log-db-guard",
+            noTraffic: true,
+            usedRealTraffic: false,
+            behaviorCovered: true,
+            coverageKind: "installed-no-traffic",
+            exists: null,
+            protected: false,
+            triggerPresent: false,
+            walBytes: null,
+            reason: result.error?.message || `status exit ${result.status}`,
+        };
+    }
+    const stdout = String(result.stdout || "").trim();
+    const jsonStart = stdout.indexOf("{");
+    const jsonEnd = stdout.lastIndexOf("}");
+    if (jsonStart < 0 || jsonEnd < jsonStart) {
+        return {
+            ok: false,
+            reportName: "log-db-guard",
+            noTraffic: true,
+            usedRealTraffic: false,
+            behaviorCovered: true,
+            coverageKind: "installed-no-traffic",
+            exists: null,
+            protected: false,
+            triggerPresent: false,
+            walBytes: null,
+            reason: "status command emitted no JSON",
+        };
+    }
+    try {
+        const status = JSON.parse(stdout.slice(jsonStart, jsonEnd + 1));
+        return {
+            reportName: "log-db-guard",
+            noTraffic: true,
+            usedRealTraffic: false,
+            behaviorCovered: true,
+            coverageKind: "installed-no-traffic",
+            ...status,
+            ok: status.ok === true,
+            protected: status.protected === true,
+            triggerPresent: status.triggerPresent === true,
+            walBytes: Number.isFinite(Number(status.walBytes)) ? Number(status.walBytes) : null,
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            reportName: "log-db-guard",
+            noTraffic: true,
+            usedRealTraffic: false,
+            behaviorCovered: true,
+            coverageKind: "installed-no-traffic",
+            exists: null,
+            protected: false,
+            triggerPresent: false,
+            walBytes: null,
+            reason: `status JSON parse failed: ${error.message}`,
+        };
+    }
+}
+
 function diagnosticsPayload({
     health = translatorHealthPayload({
         readiness: ANTIGRAVITY_READINESS?.getSnapshot() ?? null,
@@ -1131,6 +1233,7 @@ function diagnosticsPayload({
             recent: latestRoutes,
         },
         localFeatures: localFeatureSummary({ includeProjection: true }),
+        logDbGuard: logDbGuardStatus(),
         toolBridge,
         nativeToolCapability,
         lifecycle,
@@ -2427,6 +2530,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("安装/同步检查", "latest-sync-readiness.json"),
         latestManagerReportItem("模型路由检查", "latest-model-routing.json"),
         latestManagerReportItem("模型思考预算", "latest-model-thinking.json"),
+        latestManagerReportItem("日志库防护", "latest-log-db-guard.json"),
         latestManagerReportItem("第三方连续性", "latest-third-party-provider.json"),
         latestManagerReportItem("Release Gate 汇总", "latest-release-gates.json"),
         latestManagerReportItem("冷启动恢复", "latest-cold-relaunch.json"),

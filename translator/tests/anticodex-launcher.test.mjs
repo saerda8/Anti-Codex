@@ -160,6 +160,7 @@ test("Anti-Codex startup installs a logs_2 sqlite TRACE write guard", () => {
   assert.match(guard, /RAISE\(IGNORE\)/);
   assert.match(guard, /wal_checkpoint\(TRUNCATE\)/);
   assert.match(guard, /--self-test/);
+  assert.match(guard, /--status/);
   assert.match(guard, /allow-any-codex-home/);
   assert.match(guard, /codex-home-deepseek-app/);
 });
@@ -2175,6 +2176,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-shortcut-repair\.json/);
   assert.match(collector, /latest-manager-real-buttons\.json/);
   assert.match(collector, /latest-release-gates\.json/);
+  assert.match(collector, /latest-log-db-guard\.json/);
   assert.match(collector, /latest-cold-relaunch\.json/);
   assert.match(collector, /latest-third-party-provider\.json/);
   assert.match(collector, /latest-real-third-party-provider\.json/);
@@ -3232,8 +3234,12 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   const diagnosticsFunc = server.match(/function diagnosticsPayload\(\{[\s\S]*?return \{[\s\S]*?\n    \};/)?.[0];
   assert.ok(diagnosticsFunc, "missing diagnosticsPayload return");
   assert.match(diagnosticsFunc, /localFeatures:\s*localFeatureSummary\(\{\s*includeProjection:\s*true\s*\}\)/);
+  assert.match(diagnosticsFunc, /logDbGuard:\s*logDbGuardStatus\(\)/);
   assert.match(diagnosticsFunc, /installedChecks/);
   assert.match(diagnosticsFunc, /sourcePreflight/);
+  assert.match(server, /function logDbGuardStatus/);
+  assert.match(server, /protect-anticodex-log-db\.mjs/);
+  assert.match(server, /"--status"/);
   assert.match(server, /function latestInstalledCheckStatus/);
   assert.match(server, /function latestSourcePreflightStatus/);
   assert.match(server, /function sourcePreflightSummary/);
@@ -5353,6 +5359,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /lastUiOnly/);
   assert.match(diagnostics, /shortcutRepair/);
   assert.match(diagnostics, /sourcePreflight/);
+  assert.match(diagnostics, /logDbGuard/);
+  assert.match(diagnostics, /diagnostics missing log database guard status/);
+  assert.match(diagnostics, /diagnostics log database guard is not protected/);
   assert.match(diagnostics, /source preflight status/);
   assert.match(diagnostics, /source-preflight summary/);
   assert.match(diagnostics, /javascriptSyntaxOk/);
@@ -5585,6 +5594,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid missing-history report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid local-connector report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid plugin-capability report satisfied the gate/);
+  assert.match(releaseGates, /latest-log-db-guard\.json/);
+  assert.match(releaseGates, /requireLogDbGuardSemantics/);
+  assert.match(releaseGates, /log_db_guard_trigger_missing/);
   assert.match(releaseGates, /requireRefreshFeatureSemantics/);
   assert.match(releaseGates, /refresh_features_connector_parity/);
   assert.match(releaseGates, /refresh_features_app_tool_parity/);
@@ -5623,6 +5635,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_used_real_traffic"));
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_get_post_tool_mismatch"));
   assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
+  assert.ok(summary.semanticFailures.logDbGuard.includes("log_db_guard_trigger_missing"));
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch"));
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch"));
 });

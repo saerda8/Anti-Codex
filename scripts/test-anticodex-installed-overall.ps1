@@ -415,6 +415,7 @@ function Test-ReportEncoding {
         "latest-installed-overall.json",
         "latest-model-routing.json",
         "latest-model-thinking.json",
+        "latest-log-db-guard.json",
         "latest-source-preflight.json",
         "latest-diagnostics.json",
         "latest-account-proxy-readiness.json",
