@@ -663,6 +663,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /refreshFeatureEvidence/);
   assert.match(managerBridge, /refresh parity:/);
   assert.match(managerInject, /refresh parity:/);
+  assert.match(managerBridge, /refresh drift:/);
+  assert.match(managerInject, /refresh drift:/);
   assert.match(managerBridge, /localConnectorEvidence/);
   assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
@@ -1348,7 +1350,7 @@ test("Anti-Codex refuses conflicting duplicate skill names across shared roots",
   }
 });
 
-test("Anti-Codex refuses conflicting duplicate skill names through linked skill directories", () => {
+test("Anti-Codex refuses conflicting duplicate skill names through linked skill directories", (t) => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-skills-linked-duplicate-"));
   const currentHome = resolve(tempRoot, "current");
   const sharedHome = resolve(tempRoot, "shared");
@@ -1361,7 +1363,16 @@ test("Anti-Codex refuses conflicting duplicate skill names through linked skill 
   mkdirSync(agentsSkills, { recursive: true });
   writeFileSync(resolve(codexSkill, "SKILL.md"), "# Codex Dupe\n");
   writeFileSync(resolve(linkedSkillSource, "SKILL.md"), "# Linked Agent Dupe\n");
-  symlinkSync(linkedSkillSource, linkedSkill, process.platform === "win32" ? "junction" : "dir");
+  try {
+    symlinkSync(linkedSkillSource, linkedSkill, process.platform === "win32" ? "junction" : "dir");
+  } catch (error) {
+    if (error && (error.code === "EPERM" || error.code === "EACCES" || error.code === "EINVAL")) {
+      t.skip("current environment cannot create linked skill directories");
+      rmSync(tempRoot, { recursive: true, force: true });
+      return;
+    }
+    throw error;
+  }
 
   try {
     const result = spawnSync(process.execPath, [
@@ -1961,6 +1972,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /skill duplicate conflicts:/);
   assert.match(server, /refreshFeatureEvidence/);
   assert.match(server, /refresh parity:/);
+  assert.match(server, /refresh drift:/);
   assert.match(server, /optionalRealProviderEvidence/);
   assert.match(server, /realProviderToAntigravityReturnEvidence/);
   assert.match(server, /antigravityReturnEvidence/);
@@ -5294,9 +5306,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /MCP\/Skill summary has changed shared MCP entries/);
   assert.match(diagnostics, /MCP\/Skill summary has conflicting duplicate skills/);
   assert.match(diagnostics, /refreshFeatureEvidence/);
+  assert.match(diagnostics, /changedExpectedSkills/);
+  assert.match(diagnostics, /guidanceChanged/);
   assert.match(diagnostics, /refresh-features summary missing refreshFeatureEvidence/);
   assert.match(diagnostics, /refresh-features summary connector parity not clean/);
   assert.match(diagnostics, /refresh-features summary app-tool parity not clean/);
+  assert.match(diagnostics, /refresh-features summary skill content parity not clean/);
+  assert.match(diagnostics, /refresh-features summary guidance parity not clean/);
   assert.match(diagnostics, /refreshFeatures = if \(\$refreshFeaturesSummary\)/);
   assert.match(diagnostics, /optional real-provider summary missing continuity evidence/);
   assert.match(diagnostics, /optional real-provider summary reportName mismatch/);

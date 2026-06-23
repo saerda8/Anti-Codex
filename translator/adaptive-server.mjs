@@ -2047,6 +2047,8 @@ function latestManagerReportItem(label, fileName) {
     const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object" ? capabilities.appToolParity : null;
     const refreshConnectorParity = report?.connectorParity && typeof report.connectorParity === "object" ? report.connectorParity : null;
     const refreshAppToolParity = report?.appToolParity && typeof report.appToolParity === "object" ? report.appToolParity : null;
+    const refreshReport = report?.reportName === "refresh-features";
+    const refreshGuidance = refreshReport && report?.guidance && typeof report.guidance === "object" ? report.guidance : null;
     const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object" ? capabilities.appToolGetPostParity : null;
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
@@ -2274,13 +2276,20 @@ function latestManagerReportItem(label, fileName) {
             conflictingDuplicateSkillSample: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             skillSmokeReadable: skills?.smoke?.readable === true,
         } : null,
-        refreshFeatureEvidence: (refreshConnectorParity || refreshAppToolParity) ? {
+        refreshFeatureEvidence: (refreshConnectorParity || refreshAppToolParity || (refreshReport && skills) || refreshGuidance) ? {
             connectorSharedExists: refreshConnectorParity?.sharedExists === true,
             connectorLocalExists: refreshConnectorParity?.localExists === true,
             connectorContentMatches: refreshConnectorParity?.contentMatches === true,
             appToolSharedExists: refreshAppToolParity?.sharedExists === true,
             appToolLocalExists: refreshAppToolParity?.localExists === true,
             appToolContentMatches: refreshAppToolParity?.contentMatches === true,
+            changedExpectedSkills: refreshReport && Array.isArray(skills?.changedExpected) ? skills.changedExpected.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+            changedExpectedSkillDetails: refreshReport && Array.isArray(skills?.changedExpectedDetails) ? skills.changedExpectedDetails.slice(0, 8) : [],
+            guidanceChanged: refreshGuidance ? Object.entries(refreshGuidance)
+                .filter(([, entry]) => entry && entry.sharedExists === true && entry.localExists === true && entry.contentMatches !== true)
+                .map(([name]) => shortSafeText(name, ""))
+                .filter(Boolean)
+                .slice(0, 8) : [],
         } : null,
         optionalRealProviderEvidence: (typeof report?.firstMarkerObserved === "boolean" || typeof report?.secondMarkerObserved === "boolean" || typeof report?.historyContinuationObserved === "boolean") ? {
             firstMarkerObserved: report.firstMarkerObserved === true,
@@ -3069,7 +3078,10 @@ function latestReportsSummary(result){
       const evidence=item.refreshFeatureEvidence;
       const connectorOk=evidence.connectorSharedExists!==true||evidence.connectorContentMatches===true;
       const appToolOk=evidence.appToolSharedExists!==true||evidence.appToolContentMatches===true;
+      const skillChanged=Array.isArray(evidence.changedExpectedSkills)?evidence.changedExpectedSkills:[];
+      const guidanceChanged=Array.isArray(evidence.guidanceChanged)?evidence.guidanceChanged:[];
       lines.push("  refresh parity: connector="+(connectorOk?"ok":"需处理")+" / appTool="+(appToolOk?"ok":"需处理"));
+      if(skillChanged.length||guidanceChanged.length) lines.push("  refresh drift: skills="+(skillChanged.length?skillChanged.slice(0,5).join(", "):"ok")+" / guidance="+(guidanceChanged.length?guidanceChanged.slice(0,5).join(", "):"ok"));
     }
     if(item.optionalRealProviderEvidence){
       const evidence=item.optionalRealProviderEvidence;

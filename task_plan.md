@@ -1199,3 +1199,14 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager refresh-features result formatting now shows `sourceSnapshot: files=... / fingerprint=...` when a completed refresh report is returned, across the external bridge, injected panel, and fallback Manager page.
 - Completed: background refresh start messages remain honest and do not invent a new fingerprint before the report exists.
 - Verification: adaptive/bridge/inject/button syntax checks passed; Manager bridge `--self-test` passed; Manager button `refreshFeatures` self-test passed; focused launcher contracts passed `122/122`.
+
+## 2026-06-23 Refresh Drift Manager Visibility
+- Completed: refresh-features latest-report items now carry inherited skill content drift and guidance-file drift (`changedExpectedSkills`, `changedExpectedSkillDetails`, `guidanceChanged`) into the Manager evidence model.
+- Completed: fallback Manager, injected Manager, and external bridge summaries now show `refresh drift: skills=... / guidance=...` when a completed refresh report detects stale inherited skills or shared guidance files.
+- Completed: diagnostic bundle verification now fails a supposedly clean refresh summary if skill content drift or guidance drift is still present.
+- Verification: adaptive/bridge/inject syntax checks passed; diagnostics PowerShell parser check passed; Manager bridge `--self-test` passed; focused launcher contracts passed `122/122`.
+
+## 2026-06-23 Provider/Protocol-Neutral History Unit Contract
+- Completed: `response-history` now has a lightweight unit test proving hydration preserves the previous conversation when a later request changes provider, protocol, and model metadata from OpenAI-compatible to Anthropic and back.
+- Completed: the Windows linked-skill fixture now skips only when the environment cannot create linked directories, avoiding false red runs while preserving coverage where links are available.
+- Verification: `response-history` tests passed `14/14`; focused launcher contracts passed `122/122`.

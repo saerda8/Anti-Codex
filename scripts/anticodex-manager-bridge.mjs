@@ -323,7 +323,10 @@ function latestReportsSummary(result) {
       const evidence = item.refreshFeatureEvidence;
       const connectorOk = evidence.connectorSharedExists !== true || evidence.connectorContentMatches === true;
       const appToolOk = evidence.appToolSharedExists !== true || evidence.appToolContentMatches === true;
+      const skillChanged = Array.isArray(evidence.changedExpectedSkills) ? evidence.changedExpectedSkills : [];
+      const guidanceChanged = Array.isArray(evidence.guidanceChanged) ? evidence.guidanceChanged : [];
       lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}`);
+      if (skillChanged.length || guidanceChanged.length) lines.push(`  refresh drift: skills=${skillChanged.length ? skillChanged.slice(0, 5).join(", ") : "ok"} / guidance=${guidanceChanged.length ? guidanceChanged.slice(0, 5).join(", ") : "ok"}`);
     }
     if (item.localConnectorEvidence) {
       const evidence = item.localConnectorEvidence;
@@ -492,7 +495,7 @@ if (args.has("--self-test")) {
 
   const connectorSummary = latestReportsSummary({
     reportRoot: "C:\\tmp\\anticodex\\reports",
-    existingCount: 2,
+    existingCount: 3,
     reports: [{
       label: "\u672c\u5730\u8fde\u63a5\u5668\u68c0\u67e5",
       exists: true,
@@ -515,12 +518,25 @@ if (args.has("--self-test")) {
         appToolParityClean: true,
         appToolGetPostParityClean: true,
       },
+    }, {
+      label: "\u672c\u5730\u529f\u80fd\u5237\u65b0",
+      exists: true,
+      ok: false,
+      refreshFeatureEvidence: {
+        connectorSharedExists: true,
+        connectorContentMatches: true,
+        appToolSharedExists: true,
+        appToolContentMatches: true,
+        changedExpectedSkills: ["changed-skill"],
+        guidanceChanged: ["RTK.md"],
+      },
     }],
   });
   assert.match(connectorSummary, /\u8fde\u63a5\u5668\u8bc1\u636e/);
   assert.match(connectorSummary, /\u4e0a\u6e38\u8bf7\u6c42 0/);
   assert.match(connectorSummary, /\u5e94\u7528\u5de5\u5177\u8bc1\u636e/);
   assert.match(connectorSummary, /\u672a\u6388\u6743\u5de5\u5177 0/);
+  assert.match(connectorSummary, /refresh drift: skills=changed-skill \/ guidance=RTK\.md/);
   const evidenceSummary = latestReportsSummary({
     reportRoot: "C:\\tmp\\anticodex\\reports",
     existingCount: 6,

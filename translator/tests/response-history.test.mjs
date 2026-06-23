@@ -270,3 +270,57 @@ test("hydrate preserves conversation history when model name differs from previo
   // previous_response_id still refers to the same entry
   assert.equal(hydrated.previous_response_id, "resp_model_neutral");
 });
+
+test("hydrate preserves conversation history across provider and protocol switches", () => {
+  const store = createResponseHistoryStore();
+  store.remember(
+    {
+      id: "resp_provider_switch",
+      output: [{
+        type: "message",
+        id: "msg_openai_assistant",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "provider-a remembered marker BLUE-739", annotations: [] }],
+      }],
+    },
+    {
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "provider-a user marker" }] }],
+      provider: "provider-a",
+      providerProtocol: "openai-compatible",
+      model: "provider-a-model",
+    },
+  );
+
+  const anthropicHydrated = store.hydrate({
+    previous_response_id: "resp_provider_switch",
+    provider: "provider-b",
+    providerProtocol: "anthropic",
+    model: "provider-b-model",
+    input: "provider-b follow-up",
+  });
+
+  assert.equal(anthropicHydrated.provider, "provider-b");
+  assert.equal(anthropicHydrated.providerProtocol, "anthropic");
+  assert.equal(anthropicHydrated.model, "provider-b-model");
+  assert.equal(anthropicHydrated.input.length, 3);
+  assert.equal(anthropicHydrated.input[0].content[0].text, "provider-a user marker");
+  assert.equal(anthropicHydrated.input[1].content[0].text, "provider-a remembered marker BLUE-739");
+  assert.equal(anthropicHydrated.input[2].content[0].text, "provider-b follow-up");
+
+  const openAiHydrated = store.hydrate({
+    previous_response_id: "resp_provider_switch",
+    provider: "provider-c",
+    providerProtocol: "openai-compatible",
+    model: "provider-c-model",
+    input: "provider-c follow-up",
+  });
+
+  assert.equal(openAiHydrated.provider, "provider-c");
+  assert.equal(openAiHydrated.providerProtocol, "openai-compatible");
+  assert.equal(openAiHydrated.model, "provider-c-model");
+  assert.equal(openAiHydrated.input.length, 3);
+  assert.equal(openAiHydrated.input[0].content[0].text, "provider-a user marker");
+  assert.equal(openAiHydrated.input[1].content[0].text, "provider-a remembered marker BLUE-739");
+  assert.equal(openAiHydrated.input[2].content[0].text, "provider-c follow-up");
+});
