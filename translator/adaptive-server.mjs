@@ -2299,6 +2299,21 @@ function latestManagerReportItem(label, fileName) {
             missingRequired: Array.isArray(value?.missingRequired) ? value.missingRequired.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
         })).filter((entry) => entry.group).slice(0, 16)
         : [];
+    const installedRuntimeGate = Array.isArray(report?.gates)
+        ? report.gates.find((gate) => gate && gate.id === "installedRuntimeSync")
+        : null;
+    const installedRuntimeEvidence = installedRuntimeGate ? {
+        satisfied: installedRuntimeGate.satisfied === true,
+        sourceFingerprint: shortSafeText(installedRuntimeGate.sourceFingerprint || "", ""),
+        installedRuntimeFingerprint: shortSafeText(installedRuntimeGate.installedRuntimeFingerprint || "", ""),
+        sourceFileCount: Number.isFinite(Number(installedRuntimeGate.sourceFileCount)) ? Number(installedRuntimeGate.sourceFileCount) : null,
+        installedRuntimeFileCount: Number.isFinite(Number(installedRuntimeGate.installedRuntimeFileCount)) ? Number(installedRuntimeGate.installedRuntimeFileCount) : null,
+        sourceMtimeMax: shortSafeText(installedRuntimeGate.sourceMtimeMax || "", ""),
+        installedRuntimeMtimeMax: shortSafeText(installedRuntimeGate.installedRuntimeMtimeMax || "", ""),
+        missingSourceFiles: Array.isArray(installedRuntimeGate.missingSourceFiles) ? installedRuntimeGate.missingSourceFiles.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+        missingInstalledRuntimeFiles: Array.isArray(installedRuntimeGate.missingInstalledRuntimeFiles) ? installedRuntimeGate.missingInstalledRuntimeFiles.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+        mismatchedRuntimeFiles: Array.isArray(installedRuntimeGate.mismatchedRuntimeFiles) ? installedRuntimeGate.mismatchedRuntimeFiles.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+    } : null;
     const multiTurnHistory = report?.multiTurnHistory && typeof report.multiTurnHistory === "object" ? report.multiTurnHistory : null;
     const toolHistory = multiTurnHistory?.toolHistory && typeof multiTurnHistory.toolHistory === "object" ? multiTurnHistory.toolHistory : null;
     const structuralEvidence = toolHistory?.structuralEvidence && typeof toolHistory.structuralEvidence === "object" ? toolHistory.structuralEvidence : null;
@@ -2373,6 +2388,7 @@ function latestManagerReportItem(label, fileName) {
         damagedReports: Array.isArray(report?.damagedReports) ? report.damagedReports.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         releaseGateFailures,
         releaseGateGroups,
+        installedRuntimeEvidence,
         latestPath: shortSafeText(report?.report?.latest || fullPath, ""),
         historyPath: shortSafeText(report?.report?.history || "", ""),
         modelThinkingEvidence: (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? {
@@ -3339,6 +3355,11 @@ function latestReportsSummary(result){
       if(Array.isArray(item.releaseGateGroups)&&item.releaseGateGroups.length){
         const groupSummary=item.releaseGateGroups.slice(0,8).map((group)=>group.group+" req "+(group.requiredSatisfied??0)+"/"+(group.required??0)+" opt "+(group.optionalSatisfied??0)+"/"+(group.optional??0)).join(" | ");
         lines.push("  Release groups: "+groupSummary);
+      }
+      if(item.installedRuntimeEvidence){
+        const evidence=item.installedRuntimeEvidence;
+        const fingerprintMatch=evidence.sourceFingerprint&&evidence.installedRuntimeFingerprint&&evidence.sourceFingerprint===evidence.installedRuntimeFingerprint;
+        lines.push("  installedRuntime: files="+(evidence.sourceFileCount??"unknown")+"/"+(evidence.installedRuntimeFileCount??"unknown")+" / fingerprint="+(fingerprintMatch?"match":"mismatch")+" / mismatches="+(Array.isArray(evidence.mismatchedRuntimeFiles)?evidence.mismatchedRuntimeFiles.length:0));
       }
     }
     if(Array.isArray(item.releaseGateFailures)&&item.releaseGateFailures.length){

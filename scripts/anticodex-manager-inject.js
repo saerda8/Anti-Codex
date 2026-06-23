@@ -850,6 +850,11 @@
           const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
           lines.push(`  Release groups: ${groupSummary}`);
         }
+        if (item.installedRuntimeEvidence) {
+          const evidence = item.installedRuntimeEvidence;
+          const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
+          lines.push(`  installedRuntime: files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0}`);
+        }
       }
       if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
         const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {

@@ -1689,3 +1689,11 @@ After every failure, before another dispatch:
 - Result: caller timeout stopped the worker after it produced one policy-compliant docs file; the output was partial and required direct review.
 - Cause classification: task was still too broad for the 180s audit budget, even with docs-only scope.
 - Rule change: split future DeepSeek audit jobs by one subsystem and one question, or increase the timeout before asking for a long structured audit. Treat partial docs as suggestions only until the main agent verifies the source and tests.
+
+## 2026-06-24 - DeepSeek runtime-summary audit timed out without output
+
+- Worker: DeepSeek `dsw_mqr5j13n_22ur2h`.
+- Task: write one audit for whether `installedRuntimeSync` evidence reaches summary, diagnostics, and Manager display paths.
+- Result: caller timeout with no file changes and no usable diff.
+- Cause classification: worker availability/latency failure for a read-only docs audit, not product evidence.
+- Rule change: do not retry the same summary-path audit through DeepSeek in this session. Use direct source inspection and focused tests for this support-path evidence.

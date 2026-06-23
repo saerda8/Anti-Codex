@@ -289,6 +289,11 @@ function latestReportsSummary(result) {
         const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
         lines.push(`  Release groups: ${groupSummary}`);
       }
+      if (item.installedRuntimeEvidence) {
+        const evidence = item.installedRuntimeEvidence;
+        const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
+        lines.push(`  installedRuntime: files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0}`);
+      }
     }
     if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
       const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
@@ -578,6 +583,7 @@ if (args.has("--self-test")) {
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
       releaseGateFailures: [{ id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] }],
+      installedRuntimeEvidence: { sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", mismatchedRuntimeFiles: [] },
     }, {
       label: "\u6a21\u578b\u601d\u8003\u9884\u7b97",
       exists: true,
@@ -631,6 +637,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1/);
+  assert.match(evidenceSummary, /installedRuntime: files=58\/58 \/ fingerprint=match \/ mismatches=0/);
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);

@@ -404,7 +404,7 @@ function Test-DiagnosticBundle {
                 if ($localEvidence.connectorParityClean -ne $true) { Add-Failure "local connector summary missing connector parity proof" }
                 if ($localEvidence.appToolParityClean -ne $true) { Add-Failure "local connector summary missing app-tool parity proof" }
                 if ($localEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "local connector summary missing GET/POST app-tool parity proof" }
-                $exposedToolNames = As-FlatArray $localEvidence.exposedToolNames
+                $exposedToolNames = @(As-FlatArray $localEvidence.exposedToolNames)
                 if ($exposedToolNames.Count -ne 1 -or $exposedToolNames[0] -ne "linked_tool") {
                     Add-Failure "local connector summary exposed tool names is not exactly one 'linked_tool'"
                 }
@@ -556,6 +556,21 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "missingOptional")) { Add-Failure "release-gates summary missing missingOptional" }
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
+            $installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
+            if (-not $installedRuntimeEvidence) {
+                Add-Failure "release-gates summary missing installed runtime drift evidence"
+            } else {
+                if ([int]$installedRuntimeEvidence.sourceFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime source file count" }
+                if ([int]$installedRuntimeEvidence.installedRuntimeFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime target file count" }
+                if (-not [string]$installedRuntimeEvidence.sourceFingerprint) { Add-Failure "release-gates summary missing installed runtime source fingerprint" }
+                if (-not [string]$installedRuntimeEvidence.installedRuntimeFingerprint) { Add-Failure "release-gates summary missing installed runtime target fingerprint" }
+                if ($installedRuntimeEvidence.satisfied -eq $true -and [string]$installedRuntimeEvidence.sourceFingerprint -ne [string]$installedRuntimeEvidence.installedRuntimeFingerprint) {
+                    Add-Failure "release-gates summary reports installed runtime satisfied with mismatched fingerprints"
+                }
+                if ($installedRuntimeEvidence.satisfied -eq $true -and @($installedRuntimeEvidence.mismatchedRuntimeFiles).Count -ne 0) {
+                    Add-Failure "release-gates summary reports installed runtime satisfied with mismatched files"
+                }
+            }
         }
         $coldRelaunchSummary = @($summary | Where-Object { $_.file -eq "latest-cold-relaunch.json" } | Select-Object -First 1)[0]
         if ($coldRelaunchSummary) {

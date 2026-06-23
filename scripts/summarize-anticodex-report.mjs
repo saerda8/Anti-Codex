@@ -126,6 +126,21 @@ const releaseGateGroups = report && report.groups && typeof report.groups === "o
     missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
   })).filter((entry) => entry.group).slice(0, 16)
   : [];
+const installedRuntimeGate = Array.isArray(report?.gates)
+  ? report.gates.find((gate) => gate && gate.id === "installedRuntimeSync")
+  : null;
+const installedRuntimeEvidence = installedRuntimeGate ? {
+  satisfied: boolField(installedRuntimeGate, "satisfied"),
+  sourceFingerprint: has(installedRuntimeGate, "sourceFingerprint") ? asString(installedRuntimeGate.sourceFingerprint) : null,
+  installedRuntimeFingerprint: has(installedRuntimeGate, "installedRuntimeFingerprint") ? asString(installedRuntimeGate.installedRuntimeFingerprint) : null,
+  sourceFileCount: has(installedRuntimeGate, "sourceFileCount") ? installedRuntimeGate.sourceFileCount : null,
+  installedRuntimeFileCount: has(installedRuntimeGate, "installedRuntimeFileCount") ? installedRuntimeGate.installedRuntimeFileCount : null,
+  sourceMtimeMax: has(installedRuntimeGate, "sourceMtimeMax") ? asString(installedRuntimeGate.sourceMtimeMax) : null,
+  installedRuntimeMtimeMax: has(installedRuntimeGate, "installedRuntimeMtimeMax") ? asString(installedRuntimeGate.installedRuntimeMtimeMax) : null,
+  missingSourceFiles: has(installedRuntimeGate, "missingSourceFiles") ? asStringArray(installedRuntimeGate.missingSourceFiles) : [],
+  missingInstalledRuntimeFiles: has(installedRuntimeGate, "missingInstalledRuntimeFiles") ? asStringArray(installedRuntimeGate.missingInstalledRuntimeFiles) : [],
+  mismatchedRuntimeFiles: has(installedRuntimeGate, "mismatchedRuntimeFiles") ? asStringArray(installedRuntimeGate.mismatchedRuntimeFiles) : [],
+} : null;
 
 function structuralEvidenceClean(evidence) {
   return !!evidence
@@ -319,6 +334,7 @@ const summary = {
   damagedReports: has(report, "damagedReports") ? asStringArray(report.damagedReports) : [],
   releaseGateFailures,
   releaseGateGroups,
+  installedRuntimeEvidence,
   upstreamFullUrlAccepted: boolField(report, "upstreamFullUrlAccepted"),
   unauthorizedManagerBlocked: boolField(report, "unauthorizedManagerBlocked"),
   savedWithoutHistoryLoss: boolField(report, "savedWithoutHistoryLoss"),

@@ -204,6 +204,7 @@ function Read-JsonSummary {
             powershellSyntaxOk = $json.powershellSyntaxOk
             uiStateSelfTestOk = $json.uiStateSelfTestOk
             upstreamProfileStorageOk = $json.upstreamProfileStorageOk
+            localConnectorVerifierOk = $json.localConnectorVerifierOk
             publicDocumentationOk = $json.publicDocumentationOk
             translatorRegressionOk = $json.translatorRegressionOk
             diffWhitespaceOk = $json.diffWhitespaceOk
@@ -217,9 +218,12 @@ function Read-JsonSummary {
             uiIdleEvidence = $json.uiIdleEvidence
             syncReadinessEvidence = $json.syncReadinessEvidence
             installedOverallEvidence = $json.installedOverallEvidence
+            coldRelaunchEvidence = $json.coldRelaunchEvidence
+            stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
             skipped = $json.skipped
             reason = $json.reason
+            coveredBy = $json.coveredBy
             behaviorCovered = $json.behaviorCovered
             coverageKind = $json.coverageKind
             usedRealTraffic = $json.usedRealTraffic
@@ -231,12 +235,16 @@ function Read-JsonSummary {
             repairedAt = $json.repairedAt
             releaseReady = $json.releaseReady
             shortReady = $json.shortReady
+            strictOptionalRealTraffic = $json.strictOptionalRealTraffic
+            optionalRealTrafficReady = $json.optionalRealTrafficReady
+            optionalRealTrafficFailures = @($json.optionalRealTrafficFailures | ForEach-Object { [string]$_ })
             missingRequired = @($json.missingRequired | ForEach-Object { [string]$_ })
             missingShort = @($json.missingShort | ForEach-Object { [string]$_ })
             missingOptional = @($json.missingOptional | ForEach-Object { [string]$_ })
             damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
             releaseGateFailures = @($json.releaseGateFailures)
             releaseGateGroups = @($json.releaseGateGroups)
+            installedRuntimeEvidence = $json.installedRuntimeEvidence
             upstreamFullUrlAccepted = $json.upstreamFullUrlAccepted
             unauthorizedManagerBlocked = $json.unauthorizedManagerBlocked
             savedWithoutHistoryLoss = $json.savedWithoutHistoryLoss

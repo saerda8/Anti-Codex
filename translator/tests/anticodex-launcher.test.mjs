@@ -637,6 +637,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /function latestReportsSummary/);
   assert.match(managerBridge, /releaseGateGroups/);
   assert.match(managerInject, /releaseGateGroups/);
+  assert.match(managerBridge, /installedRuntimeEvidence/);
+  assert.match(managerInject, /installedRuntimeEvidence/);
+  assert.match(managerBridge, /installedRuntime: files=/);
+  assert.match(managerInject, /installedRuntime: files=/);
   assert.match(managerBridge, /optionalRealTraffic: strict=/);
   assert.match(managerInject, /optionalRealTraffic: strict=/);
   assert.match(managerBridge, /optionalRealTrafficFailures/);
@@ -2065,6 +2069,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /unauthorizedAppToolCount/);
   assert.match(server, /appToolGetPostParityClean/);
   assert.match(server, /releaseGateFailures/);
+  assert.match(server, /installedRuntimeEvidence/);
+  assert.match(server, /installedRuntime: files=/);
   assert.match(server, /semanticFailures/);
   assert.match(server, /requestedRealTraffic/);
   assert.match(server, /coverageKind/);
@@ -2255,6 +2261,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /missingOptional/);
   assert.match(collector, /damagedReports/);
   assert.match(collector, /releaseGateGroups/);
+  assert.match(collector, /installedRuntimeEvidence = \$json\.installedRuntimeEvidence/);
   assert.match(collector, /function Resolve-NodeForJsonSummary/);
   assert.match(collector, /function Invoke-NodeJsonSummary/);
   assert.match(collector, /node\.exe is required to summarize diagnostic reports/);
@@ -2272,6 +2279,12 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /requestedRealTraffic/);
   assert.match(collector, /coverageKind/);
   assert.match(collector, /behaviorCovered/);
+  assert.match(collector, /localConnectorVerifierOk = \$json\.localConnectorVerifierOk/);
+  assert.match(collector, /coveredBy = \$json\.coveredBy/);
+  assert.match(collector, /strictOptionalRealTraffic = \$json\.strictOptionalRealTraffic/);
+  assert.match(collector, /optionalRealTrafficReady = \$json\.optionalRealTrafficReady/);
+  assert.match(collector, /optionalRealTrafficFailures = @\(\$json\.optionalRealTrafficFailures/);
+  assert.match(collector, /stabilitySoakEvidence = \$json\.stabilitySoakEvidence/);
   const reportSummarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   assert.match(reportSummarizer, /JSON\.parse\(readFileSync\(path, "utf8"\)\)/);
   assert.match(reportSummarizer, /managerButtonResults/);
@@ -2293,6 +2306,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /missingOptional/);
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
+  assert.match(reportSummarizer, /installedRuntimeEvidence/);
+  assert.match(reportSummarizer, /installedRuntimeFingerprint/);
+  assert.match(reportSummarizer, /mismatchedRuntimeFiles/);
   assert.match(reportSummarizer, /requiredSatisfied/);
   assert.match(reportSummarizer, /optionalSatisfied/);
   assert.match(reportSummarizer, /semanticFailures/);
@@ -3171,6 +3187,19 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       missingRequired: ["latest-real-work.json"],
       missingShort: [],
       damagedReports: [],
+      gates: [{
+        id: "installedRuntimeSync",
+        satisfied: true,
+        sourceFingerprint: "source-runtime-fingerprint",
+        installedRuntimeFingerprint: "source-runtime-fingerprint",
+        sourceFileCount: 58,
+        installedRuntimeFileCount: 58,
+        sourceMtimeMax: "2026-06-24T00:00:00.000Z",
+        installedRuntimeMtimeMax: "2026-06-24T00:00:00.000Z",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
+        mismatchedRuntimeFiles: [],
+      }],
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -3182,6 +3211,11 @@ test("report summarizer treats releaseReady false as not effectively passing", (
     assert.equal(summary.optionalRealTrafficReady, false);
     assert.deepEqual(summary.optionalRealTrafficFailures, ["realThirdPartyProviderOptional"]);
     assert.deepEqual(summary.missingRequired, ["latest-real-work.json"]);
+    assert.equal(summary.installedRuntimeEvidence.sourceFileCount, 58);
+    assert.equal(summary.installedRuntimeEvidence.installedRuntimeFileCount, 58);
+    assert.equal(summary.installedRuntimeEvidence.sourceFingerprint, "source-runtime-fingerprint");
+    assert.equal(summary.installedRuntimeEvidence.installedRuntimeFingerprint, "source-runtime-fingerprint");
+    assert.deepEqual(summary.installedRuntimeEvidence.mismatchedRuntimeFiles, []);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5649,6 +5683,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /missingOptional/);
   assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /releaseGateFailures/);
+  assert.match(diagnostics, /installedRuntimeEvidence/);
+  assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
+  assert.match(diagnostics, /installed runtime source fingerprint/);
   assert.match(diagnostics, /latest-third-party-provider\.json/);
   assert.match(diagnostics, /third-party provider summary/);
   assert.match(diagnostics, /providerContinuity/);
