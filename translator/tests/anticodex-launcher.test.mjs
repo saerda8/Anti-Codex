@@ -5940,6 +5940,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const syncRuntime = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const sourcePreflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const mjsVerifierPowerShellWrapper = /powershell(?:\.exe)?[\s\S]{0,240}(?:-File|-Command)[\s\S]{0,240}(?:test-anticodex-release-gates|summarize-anticodex-report)\.mjs/i;
 
   assert.match(releaseGates, /latest-release-gates\.json/);
   assert.match(releaseGates, /group: "short"/);
@@ -6159,6 +6161,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /mcp_skills_app_tool_registry_content_mismatch/);
   assert.match(releaseGates, /mcp_skills_app_tool_registry_fingerprint_mismatch/);
   assert.match(releaseGates, /targetRuntime/);
+  assert.doesNotMatch(collector, mjsVerifierPowerShellWrapper);
+  assert.doesNotMatch(sourcePreflight, mjsVerifierPowerShellWrapper);
+  assert.doesNotMatch(syncRuntime, mjsVerifierPowerShellWrapper);
+  assert.match(collector, /Get-Command node\.exe/);
+  assert.match(collector, /summarize-anticodex-report\.mjs/);
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 

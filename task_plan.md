@@ -1462,3 +1462,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Manager Bridge Token Race Hardening
 - Completed: the external Manager bridge now preserves HTTP status on failed JSON requests and retries `/anticodex/manager/action` once with a freshly bootstrapped token when a 403 arrives, covering the narrow translator-restart race between bootstrap and action POST.
 - Verification: Manager bridge syntax passed; Manager bridge self-test returned `ok:true`; focused launcher contracts passed `127/127`; `git diff --check` passed; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
+
+## 2026-06-24 Node Verifier Command Guard
+- Completed: launcher contracts now reject PowerShell `-File`/`-Command` wrappers around Node `.mjs` release-gate and report-summarizer verifiers in support scripts, while preserving the positive Node path for report summarization.
+- Verification: focused launcher contracts passed `127/127`; `git diff --check` passed.
