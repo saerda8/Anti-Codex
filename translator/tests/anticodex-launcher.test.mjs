@@ -6140,6 +6140,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(syncRuntime, /translator\\upstream-provider\.mjs/);
   assert.match(releaseGates, /installed_runtime_hash_mismatch/);
   assert.match(releaseGates, /installed_runtime_fingerprint_mismatch/);
+  assert.match(releaseGates, /mcp_skills_app_tool_registry_content_mismatch/);
+  assert.match(releaseGates, /mcp_skills_app_tool_registry_fingerprint_mismatch/);
   assert.match(releaseGates, /targetRuntime/);
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
@@ -6163,6 +6165,9 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.optionalAntigravityReturn.includes("optional_antigravity_return_report_name"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_conflicting_duplicate_skills"));
+  assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_app_tool_registry_content_mismatch"));
+  assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_app_tool_registry_fingerprint_mismatch"));
+  assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_app_tool_registry_file_count_mismatch"));
   assert.ok(summary.semanticFailures.refreshFeatures.includes("refresh_features_connector_parity"));
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_used_real_traffic"));
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_get_post_tool_mismatch"));

@@ -448,6 +448,8 @@ function summarizeGate(definition) {
     if (definition.requireMcpSkillSemantics) {
       const mcp = report.mcp || {};
       const skills = report.skills || {};
+      const appTools = report.appTools && typeof report.appTools === "object" ? report.appTools : {};
+      const appToolRegistry = appTools.registry && typeof appTools.registry === "object" ? appTools.registry : {};
       const mcpSmoke = mcp.smoke || {};
       const mcpRealCall = mcpSmoke.realCall || {};
       if (Number(mcp.count || 0) < 1) semanticFailures.push("mcp_skills_no_mcp_servers");
@@ -467,6 +469,10 @@ function summarizeGate(definition) {
       if (!isEmptyArray(skills.changedShared)) semanticFailures.push("mcp_skills_changed_shared_skills");
       if (!isEmptyArray(skills.conflictingDuplicateNames)) semanticFailures.push("mcp_skills_conflicting_duplicate_skills");
       if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
+      if (appToolRegistry.exists !== true) semanticFailures.push("mcp_skills_app_tool_registry_missing");
+      if (appToolRegistry.contentMatches !== true) semanticFailures.push("mcp_skills_app_tool_registry_content_mismatch");
+      if (!appToolRegistry.sharedFingerprint || !appToolRegistry.localFingerprint || appToolRegistry.sharedFingerprint !== appToolRegistry.localFingerprint) semanticFailures.push("mcp_skills_app_tool_registry_fingerprint_mismatch");
+      if (Number(appToolRegistry.sharedFileCount || 0) !== Number(appToolRegistry.localFileCount || 0)) semanticFailures.push("mcp_skills_app_tool_registry_file_count_mismatch");
       if (!gate.sourceFingerprint) semanticFailures.push("mcp_skills_source_snapshot_missing");
     }
     if (definition.requireRefreshFeatureSemantics) {
@@ -872,6 +878,7 @@ if (args.has("--self-test")) {
         sharedCount: 1,
         missingShared: ["missing-mcp"],
         extraLocal: ["extra-mcp"],
+        changedShared: ["changed-mcp"],
         hasNodeRepl: false,
         smoke: {
           passed: false,
@@ -886,7 +893,18 @@ if (args.has("--self-test")) {
         missingShared: ["missing-skill"],
         extraLocal: ["extra-skill"],
         changedShared: ["changed-skill"],
+        conflictingDuplicateNames: ["dupe-skill"],
         smoke: { readable: false },
+      },
+      appTools: {
+        registry: {
+          exists: true,
+          contentMatches: false,
+          sharedFingerprint: "shared-fingerprint",
+          localFingerprint: "local-fingerprint",
+          sharedFileCount: 36,
+          localFileCount: 35,
+        },
       },
     });
 
@@ -1363,6 +1381,9 @@ if (args.has("--self-test")) {
       "mcp_skills_extra_local_skills",
       "mcp_skills_conflicting_duplicate_skills",
       "mcp_skills_skill_smoke_not_readable",
+      "mcp_skills_app_tool_registry_content_mismatch",
+      "mcp_skills_app_tool_registry_fingerprint_mismatch",
+      "mcp_skills_app_tool_registry_file_count_mismatch",
       "mcp_skills_source_snapshot_missing",
     ]);
     writeFakeLatestReport("latest-refresh-features.json", {

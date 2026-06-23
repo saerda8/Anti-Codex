@@ -1438,3 +1438,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 MCP/Skill App-Tool Registry Manager Evidence
 - Completed: MCP/Skill latest-report summaries now show app-tool registry existence, content match, fingerprint match, and shared/local file counts in the external bridge, injected Manager, and fallback Manager renderer.
 - Verification: JS syntax checks passed; Manager bridge self-test passed; launcher contracts passed `127/127`; `git diff --check` passed; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, and `installedRuntimeSync.satisfied:true`.
+
+## 2026-06-24 MCP/Skill App-Tool Registry Release Gate
+- Completed: the passive MCP/Skill release gate now independently rejects app-tool registry missing/content/fingerprint/file-count drift even if a malformed latest report claims `ok:true`.
+- Verification: release-gate syntax passed; release-gate self-test returned `ok:true` with registry semantic failures covered; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, `missingShort:0`, `installedRuntimeSync.satisfied:true`, and `mcpSemanticFailures:0`.
