@@ -1271,3 +1271,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: read-only diagnostics verification now requires `diagnostics-summary.json` in collected bundles and checks the `longTasks` summary shape, including `runningCount`, `attentionCount`, and `otherRunningItems`.
 - Completed: optional `manager_foreground` summary items are validated for an id or label when present, without requiring a foreground task to be active during routine checks.
 - Verification: diagnostics verifier PowerShell parser check passed; focused diagnostics launcher contracts passed `124/124`.
+
+## 2026-06-23 Diagnostic Bundle Manager Result Summary
+- Completed: Manager diagnostic-bundle action results now surface the collected long-task summary directly, showing running count, attention count, and other-running count next to the ZIP and bundle directory.
+- Completed: the Manager contract now requires diagnostic bundle result copy to read `diagnosticsSummary.longTasks`, keeping the UI result in parity with the bundle payload.
+- Verification: adaptive server syntax passed; focused Start Menu Manager launcher contracts passed `124/124`; `git diff --check` passed.

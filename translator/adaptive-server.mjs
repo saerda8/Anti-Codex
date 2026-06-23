@@ -3502,10 +3502,13 @@ function actionText(payload){
   }
   if(payload?.action==="diagnosticsBundle"){
     const unwrapped=r?.result&&typeof r.result==="object"?r.result:r;
+    const longTasks=unwrapped.diagnosticsSummary?.longTasks;
+    const otherRunningCount=longTasks?.otherRunningItems?.length;
     return [
       "\\u8bca\\u65ad\\u5305\\uff1a"+((unwrapped.ok??r.ok)?"\\u5df2\\u751f\\u6210":"\\u5931\\u8d25"),
       unwrapped.zipPath?"ZIP\\uff1a"+unwrapped.zipPath:"",
       unwrapped.bundleRoot?"\\u76ee\\u5f55\\uff1a"+unwrapped.bundleRoot:"",
+      longTasks?"\\u957f\\u4efb\\u52a1\\uff1a\\u8fd0\\u884c "+(longTasks.runningCount??0)+" / \\u9700\\u5904\\u7406 "+(longTasks.attentionCount??0)+" / \\u5176\\u4ed6\\u8fd0\\u884c "+(otherRunningCount??0):"",
       failureSummaryLine(unwrapped),
       (!unwrapped.zipPath&&!unwrapped.bundleRoot&&!unwrapped.failures?.length)?(payload?.message||r.message||""):""
     ].filter(Boolean).join("\\n");
