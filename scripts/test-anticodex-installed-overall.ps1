@@ -115,6 +115,125 @@ function New-FastBudgetSkippedCheck {
     return $check
 }
 
+function Get-FreshMcpSkillsReportCheck {
+    param([int]$MaxAgeHours = 48)
+    $path = Join-Path $ReportRoot "latest-mcp-skills.json"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+    try {
+        $item = Get-Item -LiteralPath $path
+        $ageHours = ([DateTime]::UtcNow - $item.LastWriteTimeUtc).TotalHours
+        if ($ageHours -gt $MaxAgeHours) { return $null }
+        $integrity = Test-ReportIntegrity $path
+        if (-not $integrity.signed -or $integrity.valid -ne $true) { return $null }
+        $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
+        $realListPassed = @($report.mcp.smoke.realList | Where-Object { $_.passed -eq $true }).Count
+        $sourceFingerprint = if ($report.sourceSnapshot) { [string]$report.sourceSnapshot.fingerprint } else { "" }
+        $acceptable = (
+            $report.ok -eq $true -and
+            [string]$report.reportName -eq "mcp-skills" -and
+            $report.shortBudgetMode -ne $true -and
+            [string]$report.capabilityState -eq "ready" -and
+            $report.mcp.smoke.passed -eq $true -and
+            $report.mcp.smoke.realCall.passed -eq $true -and
+            $realListPassed -ge 2 -and
+            $report.skills.fingerprintSkipped -ne $true -and
+            $sourceFingerprint
+        )
+        if (-not $acceptable) { return $null }
+        return [pscustomobject]@{
+            ok = $true
+            skipped = $false
+            reusedLatestReport = $true
+            behaviorCovered = $true
+            coverageKind = "fresh-mcp-skills-report"
+            coveredBy = "latest-mcp-skills.json"
+            reportPath = $path
+            reportUpdatedAt = $item.LastWriteTimeUtc.ToString("o")
+            reportAgeHours = [Math]::Round($ageHours, 3)
+            integrity = $integrity
+            reportName = [string]$report.reportName
+            capabilityState = [string]$report.capabilityState
+            mcpPassed = [bool]$report.mcp.smoke.passed
+            realCallPassed = [bool]$report.mcp.smoke.realCall.passed
+            realListPassed = $realListPassed
+            skillFingerprintSkipped = [bool]$report.skills.fingerprintSkipped
+            sourceFingerprint = $sourceFingerprint
+            durationMs = 0
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Get-FreshPluginCapabilitiesReportCheck {
+    param([int]$MaxAgeHours = 48)
+    $path = Join-Path $ReportRoot "latest-plugin-capabilities.json"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+    try {
+        $item = Get-Item -LiteralPath $path
+        $ageHours = ([DateTime]::UtcNow - $item.LastWriteTimeUtc).TotalHours
+        if ($ageHours -gt $MaxAgeHours) { return $null }
+        $integrity = Test-ReportIntegrity $path
+        if (-not $integrity.signed -or $integrity.valid -ne $true) { return $null }
+        $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
+        $capabilities = $report.capabilities
+        $connectorParity = $capabilities.connectorParity
+        $appToolParity = $capabilities.appToolParity
+        $appToolGetPostParity = $capabilities.appToolGetPostParity
+        $sourceFingerprint = if ($report.sourceSnapshot) { [string]$report.sourceSnapshot.fingerprint } else { "" }
+        $missingConnectors = @($connectorParity.missingShared | Where-Object { $_ })
+        $extraConnectors = @($connectorParity.extraLocal | Where-Object { $_ })
+        $changedConnectors = @($connectorParity.changedShared | Where-Object { $_ })
+        $missingAppTools = @($appToolParity.missingShared | Where-Object { $_ })
+        $extraAppTools = @($appToolParity.extraLocal | Where-Object { $_ })
+        $changedAppTools = @($appToolParity.changedShared | Where-Object { $_ })
+        $missingAppToolsFromGet = @($appToolGetPostParity.missingFromGet | Where-Object { $_ })
+        $extraAppToolsFromGet = @($appToolGetPostParity.extraFromGet | Where-Object { $_ })
+        $acceptable = (
+            $report.ok -eq $true -and
+            [string]$report.reportName -eq "plugin-capabilities" -and
+            $sourceFingerprint -and
+            $connectorParity.checked -eq $true -and
+            $missingConnectors.Count -eq 0 -and
+            $extraConnectors.Count -eq 0 -and
+            $changedConnectors.Count -eq 0 -and
+            $appToolParity.checked -eq $true -and
+            $missingAppTools.Count -eq 0 -and
+            $extraAppTools.Count -eq 0 -and
+            $changedAppTools.Count -eq 0 -and
+            $appToolGetPostParity.checked -eq $true -and
+            $missingAppToolsFromGet.Count -eq 0 -and
+            $extraAppToolsFromGet.Count -eq 0 -and
+            [int]$capabilities.unauthorizedAppToolCount -eq 0 -and
+            [int]$capabilities.unattributedAppToolCount -eq 0
+        )
+        if (-not $acceptable) { return $null }
+        return [pscustomobject]@{
+            ok = $true
+            skipped = $false
+            reusedLatestReport = $true
+            behaviorCovered = $true
+            coverageKind = "fresh-plugin-capabilities-report"
+            coveredBy = "latest-plugin-capabilities.json"
+            reportPath = $path
+            reportUpdatedAt = $item.LastWriteTimeUtc.ToString("o")
+            reportAgeHours = [Math]::Round($ageHours, 3)
+            integrity = $integrity
+            reportName = [string]$report.reportName
+            capabilityState = [string]$capabilities.capabilityState
+            connectorParityClean = $true
+            appToolParityClean = $true
+            appToolGetPostParityClean = $true
+            unauthorizedAppToolCount = [int]$capabilities.unauthorizedAppToolCount
+            unattributedAppToolCount = [int]$capabilities.unattributedAppToolCount
+            sourceFingerprint = $sourceFingerprint
+            durationMs = 0
+        }
+    } catch {
+        return $null
+    }
+}
+
 function Test-LocalHealth {
     try {
         $probe = Invoke-LocalJson "/health"
@@ -1208,8 +1327,11 @@ $checks.localConnectors = if ($Fast) {
         "--timeout-ms", "60000"
     )
 }
+$freshMcpSkillsCheck = if ($Fast) { Get-FreshMcpSkillsReportCheck } else { $null }
 $checks.mcpSkills = if ($checks.managerButtonMcpSkills -and (Has-Property $checks.managerButtonMcpSkills "ok") -and $checks.managerButtonMcpSkills.ok -eq $true -and $checks.managerButtonMcpSkills.skipped -ne $true -and $checks.managerButtonMcpSkills.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager MCP/Skill button smoke" "managerButtonMcpSkills"
+} elseif ($freshMcpSkillsCheck) {
+    $freshMcpSkillsCheck
 } elseif ($Fast -and -not (Test-FastBudgetAvailable "MCP/skills verification" 10000)) {
     New-FastBudgetSkippedCheck "MCP/skills verification" "latest-mcp-skills.json" 10000
 } else {
@@ -1220,8 +1342,11 @@ $checks.independence = if ($Fast) {
 } else {
     Invoke-JsonScript "Independence verification" (Join-Path $scriptsRoot "test-anticodex-independence.ps1")
 }
+$freshPluginCapabilitiesCheck = if ($Fast) { Get-FreshPluginCapabilitiesReportCheck } else { $null }
 $checks.pluginCapabilities = if ($checks.managerButtonPluginCapabilities -and (Has-Property $checks.managerButtonPluginCapabilities "ok") -and $checks.managerButtonPluginCapabilities.ok -eq $true -and $checks.managerButtonPluginCapabilities.skipped -ne $true -and $checks.managerButtonPluginCapabilities.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager plugin/application button smoke" "managerButtonPluginCapabilities"
+} elseif ($freshPluginCapabilitiesCheck) {
+    $freshPluginCapabilitiesCheck
 } elseif ($Fast -and -not (Test-FastBudgetAvailable "plugin capability verification" 10000)) {
     New-FastBudgetSkippedCheck "plugin capability verification" "latest-plugin-capabilities.json" 10000
 } else {

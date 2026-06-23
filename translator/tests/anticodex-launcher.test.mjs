@@ -1493,6 +1493,9 @@ test("Anti-Codex plugin, connector, and sidecar snapshots are local copies", () 
   assert.match(pluginHostSync, /relPath: 'RTK\.md'.*mode: 'copy-file'/s);
   assert.match(pluginHostSync, /relPath: 'MCP_WORKER_USAGE_GUIDE\.md'.*mode: 'copy-file'/s);
   assert.match(pluginHostSync, /mode: 'copied-file'/);
+  assert.match(pluginHostSync, /target: targetPath/);
+  assert.match(pluginHostSync, /sharedPath/);
+  assert.doesNotMatch(pluginHostSync, /mode: 'copied-file',\s*target: sharedPath/s);
 
   assert.doesNotMatch(sidecarSync, /symlinkSync/);
   assert.match(sidecarSync, /ensureLocalCopy/);
@@ -4233,7 +4236,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /MCP real stdio smoke skipped because verifier budget is too short/);
   assert.match(mcpSkills, /MCP real stdio tools\/list skipped because verifier budget is too short/);
   assert.match(mcpSkills, /source snapshot skipped because verifier budget is exhausted/);
-  assert.match(mcpSkills, /Get-RemainingVerifierBudgetMs -lt 5000/);
+  assert.match(mcpSkills, /\(Get-RemainingVerifierBudgetMs\) -lt 5000/);
+  assert.doesNotMatch(mcpSkills, /elseif \(Get-RemainingVerifierBudgetMs -lt 5000\)/);
   assert.match(mcpSkills, /\$consoleResult = \[pscustomobject\]@{/);
   assert.match(mcpSkills, /failureCount = \$failures\.Count/);
   assert.match(mcpSkills, /\$consoleResult \| ConvertTo-Json -Depth 6 -Compress/);
@@ -4870,6 +4874,23 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$script:InstalledOverallDiagnosticsSnapshot/);
   assert.match(overall, /function Test-FastBudgetAvailable/);
   assert.match(overall, /function New-FastBudgetSkippedCheck/);
+  assert.match(overall, /function Get-FreshMcpSkillsReportCheck/);
+  assert.match(overall, /fresh-mcp-skills-report/);
+  assert.match(overall, /function Get-FreshPluginCapabilitiesReportCheck/);
+  assert.match(overall, /fresh-plugin-capabilities-report/);
+  assert.match(overall, /reusedLatestReport = \$true/);
+  assert.match(overall, /realListPassed -ge 2/);
+  assert.match(overall, /\$report\.skills\.fingerprintSkipped -ne \$true/);
+  assert.match(overall, /connectorParityClean = \$true/);
+  assert.match(overall, /appToolParityClean = \$true/);
+  assert.match(overall, /appToolGetPostParityClean = \$true/);
+  assert.match(overall, /\$appToolGetPostParity\.checked -eq \$true/);
+  assert.match(overall, /\$missingAppToolsFromGet\.Count -eq 0/);
+  assert.match(overall, /\$extraAppToolsFromGet\.Count -eq 0/);
+  assert.match(overall, /\[int\]\$capabilities\.unauthorizedAppToolCount -eq 0/);
+  assert.match(overall, /\[int\]\$capabilities\.unattributedAppToolCount -eq 0/);
+  assert.match(overall, /\$freshMcpSkillsCheck = if \(\$Fast\) \{ Get-FreshMcpSkillsReportCheck \}/);
+  assert.match(overall, /\$freshPluginCapabilitiesCheck = if \(\$Fast\) \{ Get-FreshPluginCapabilitiesReportCheck \}/);
   assert.match(overall, /function Wait-AntiCodexSubcheckProcess/);
   assert.match(overall, /\$Process\.HasExited/);
   assert.match(overall, /\[void\]\$process\.Handle/);

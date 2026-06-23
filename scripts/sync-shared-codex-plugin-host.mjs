@@ -518,7 +518,7 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
   const targetPath = path.join(codexHome, relPath);
   if (mode === 'copy-file') {
     if (!fs.existsSync(sharedPath)) {
-      summary.push({ relPath, mode: 'missing-shared-target', target: sharedPath });
+      summary.push({ relPath, mode: 'missing-shared-target', target: targetPath, sharedPath });
       continue;
     }
     ensureDir(path.dirname(targetPath));
@@ -527,13 +527,15 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
       summary.push({
         relPath,
         mode: 'copied-file',
-        target: sharedPath,
+        target: targetPath,
+        sharedPath,
       });
     } catch (error) {
       summary.push({
         relPath,
         mode: 'copy-failed',
-        target: sharedPath,
+        target: targetPath,
+        sharedPath,
         error: error?.message || String(error),
       });
     }
@@ -545,7 +547,7 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
       ? detectDuplicateSkillNames(sharedPath, existingExtraSharedPaths)
       : null;
     if (!fs.existsSync(sharedPath) && existingExtraSharedPaths.length === 0) {
-      summary.push({ relPath, mode: 'missing-shared-target', target: sharedPath, extraTargets: extraSharedPaths });
+      summary.push({ relPath, mode: 'missing-shared-target', target: targetPath, sharedPath, extraTargets: extraSharedPaths, extraSharedPaths });
       continue;
     }
     ensureDir(path.dirname(targetPath));
@@ -558,7 +560,8 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
         summary.push({
           relPath,
           mode: 'kept-existing-startup-snapshot',
-          target: sharedPath,
+          target: targetPath,
+          sharedPath,
           sourceFingerprint,
           existingFingerprint,
           duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
@@ -575,8 +578,10 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
       summary.push({
         relPath,
         mode: 'copied',
-        target: sharedPath,
+        target: targetPath,
+        sharedPath,
         extraTargets: existingExtraSharedPaths,
+        extraSharedPaths: existingExtraSharedPaths,
         duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
         conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
       });
@@ -584,8 +589,10 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
       summary.push({
         relPath,
         mode: 'copy-failed',
-        target: sharedPath,
+        target: targetPath,
+        sharedPath,
         extraTargets: existingExtraSharedPaths,
+        extraSharedPaths: existingExtraSharedPaths,
         duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
         conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
         error: error?.message || String(error),

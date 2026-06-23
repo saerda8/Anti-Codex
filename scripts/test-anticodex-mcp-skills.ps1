@@ -979,7 +979,7 @@ if ($script:shortBudgetMode) {
         Add-Failure $sourceSnapshotSkipReason
         $sourceSnapshot = New-SkippedSourceSnapshot $sourceSnapshotSkipReason
     }
-} elseif (Get-RemainingVerifierBudgetMs -lt 5000) {
+} elseif ((Get-RemainingVerifierBudgetMs) -lt 5000) {
     $sourceSnapshotSkipReason = "source snapshot skipped because verifier budget is exhausted"
     Add-Failure $sourceSnapshotSkipReason
     $sourceSnapshot = New-SkippedSourceSnapshot $sourceSnapshotSkipReason

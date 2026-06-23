@@ -63,6 +63,8 @@ test("--skills-only creates independent skills directory (not a symlink)", () =>
     const summary = JSON.parse(result.stdout);
     assert.ok(summary.ok);
     assert.strictEqual(summary.summary[0].mode, "copied");
+    assert.strictEqual(summary.summary[0].target, skillsPath);
+    assert.strictEqual(summary.summary[0].sharedPath, resolve(sharedHome, "skills"));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -96,6 +98,8 @@ test("--skills-only merges shared skills into an existing local skills directory
     const summary = JSON.parse(result.stdout);
     assert.ok(summary.ok);
     assert.strictEqual(summary.summary[0].mode, "copied");
+    assert.strictEqual(summary.summary[0].target, skillsPath);
+    assert.strictEqual(summary.summary[0].sharedPath, resolve(sharedHome, "skills"));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -758,6 +762,8 @@ test("missing shared startup sources do not create empty snapshot parent directo
     const summary = JSON.parse(result.stdout);
     assert.ok(summary.ok);
     assert.ok(summary.summary.every((item) => item.mode === "missing-shared-target"));
+    assert.ok(summary.summary.every((item) => String(item.target).startsWith(codexHome)));
+    assert.ok(summary.summary.every((item) => String(item.sharedPath).startsWith(sharedHome)));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
