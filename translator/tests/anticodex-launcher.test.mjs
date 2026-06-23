@@ -1189,6 +1189,10 @@ test("Antigravity mode avoids slow plugin marketplace startup by default", () =>
   assert.match(pluginHostSync, /copyDirectoryContents/);
   assert.match(pluginHostSync, /syncDirectoryTransactional/);
   assert.match(pluginHostSync, /syncFileTransactional/);
+  assert.match(pluginHostSync, /function detectDuplicateSkillNames/);
+  assert.match(pluginHostSync, /duplicateSkillNames/);
+  assert.match(pluginHostSync, /conflictingDuplicateSkillNames/);
+  assert.match(pluginHostSync, /conflicting duplicate skill names across shared skill roots/);
   assert.match(pluginHostSync, /acquireSyncLock/);
   assert.match(pluginHostSync, /local snapshot refresh is already running/);
   assert.match(pluginHostSync, /\.tmp-/);
@@ -1250,6 +1254,46 @@ test("Anti-Codex imports skills as a local copy instead of linking shared Codex 
     assert.equal(summary.ok, true);
     assert.equal(summary.summary[0].relPath, "skills");
     assert.equal(summary.summary[0].mode, "copied");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Anti-Codex refuses conflicting duplicate skill names across shared roots", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-skills-duplicate-"));
+  const currentHome = resolve(tempRoot, "current");
+  const sharedHome = resolve(tempRoot, "shared");
+  const agentsSkills = resolve(tempRoot, "agents-skills");
+  const codexSkill = resolve(sharedHome, "skills", "dupe-skill");
+  const agentSkill = resolve(agentsSkills, "dupe-skill");
+  mkdirSync(codexSkill, { recursive: true });
+  mkdirSync(agentSkill, { recursive: true });
+  writeFileSync(resolve(codexSkill, "SKILL.md"), "# Codex Dupe\n");
+  writeFileSync(resolve(agentSkill, "SKILL.md"), "# Agent Dupe\n");
+
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"),
+      currentHome,
+      sharedHome,
+      "--skills-only",
+    ], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ANTICODEX_EXTRA_SKILLS_ROOTS: agentsSkills,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    const skillsSummary = summary.summary.find((item) => item.relPath === "skills");
+    assert.equal(summary.ok, false);
+    assert.equal(skillsSummary.mode, "copy-failed");
+    assert.deepEqual(skillsSummary.duplicateSkillNames, ["dupe-skill"]);
+    assert.deepEqual(skillsSummary.conflictingDuplicateSkillNames, ["dupe-skill"]);
+    assert.match(skillsSummary.error, /conflicting duplicate skill names across shared skill roots/);
+    assert.equal(existsSync(resolve(currentHome, "skills", "dupe-skill")), false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

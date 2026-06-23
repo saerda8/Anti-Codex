@@ -176,6 +176,42 @@ function computeSourceFingerprint(manifest) {
   return hash.digest('hex').slice(0, 32);
 }
 
+function topLevelDirectoryNames(dirPath) {
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function skillDirectoryFingerprint(dirPath) {
+  return computeSourceFingerprint(computeSnapshotManifest(dirPath));
+}
+
+function detectDuplicateSkillNames(sharedPath, extraSharedPaths) {
+  const recordsByName = new Map();
+  for (const sourceRoot of [sharedPath, ...extraSharedPaths].filter((item) => fs.existsSync(item))) {
+    for (const name of topLevelDirectoryNames(sourceRoot)) {
+      const skillPath = path.join(sourceRoot, name);
+      const records = recordsByName.get(name) || [];
+      records.push({ sourceRoot, fingerprint: skillDirectoryFingerprint(skillPath) });
+      recordsByName.set(name, records);
+    }
+  }
+  const duplicateSkillNames = [];
+  const conflictingDuplicateSkillNames = [];
+  for (const [name, records] of recordsByName.entries()) {
+    if (records.length < 2) continue;
+    duplicateSkillNames.push(name);
+    const fingerprints = new Set(records.map((record) => record.fingerprint).filter(Boolean));
+    if (fingerprints.size > 1) conflictingDuplicateSkillNames.push(name);
+  }
+  return {
+    duplicateSkillNames: duplicateSkillNames.sort((a, b) => a.localeCompare(b)),
+    conflictingDuplicateSkillNames: conflictingDuplicateSkillNames.sort((a, b) => a.localeCompare(b)),
+  };
+}
+
 function computeStartupSourceFingerprint() {
   let sourceMtimeMax = null;
   let maxMtime = 0;
@@ -485,6 +521,9 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
   }
   if (mode === 'copy') {
     const existingExtraSharedPaths = extraSharedPaths.filter((item) => fs.existsSync(item));
+    const skillDuplicateInfo = relPath === 'skills'
+      ? detectDuplicateSkillNames(sharedPath, existingExtraSharedPaths)
+      : null;
     if (!fs.existsSync(sharedPath) && existingExtraSharedPaths.length === 0) {
       summary.push({ relPath, mode: 'missing-shared-target', target: sharedPath, extraTargets: extraSharedPaths });
       continue;
@@ -495,18 +534,26 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
       continue;
     }
     try {
+      if (skillDuplicateInfo?.conflictingDuplicateSkillNames?.length) {
+        throw new Error(`conflicting duplicate skill names across shared skill roots: ${skillDuplicateInfo.conflictingDuplicateSkillNames.join(', ')}`);
+      }
       syncDirectoryTransactional(sharedPath, targetPath, true, existingExtraSharedPaths);
       summary.push({
         relPath,
         mode: 'copied',
         target: sharedPath,
         extraTargets: existingExtraSharedPaths,
+        duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
+        conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
       });
     } catch (error) {
       summary.push({
         relPath,
         mode: 'copy-failed',
         target: sharedPath,
+        extraTargets: existingExtraSharedPaths,
+        duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
+        conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
         error: error?.message || String(error),
       });
     }
