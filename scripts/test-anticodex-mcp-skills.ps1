@@ -456,6 +456,25 @@ if ($configText) {
     }
 }
 
+$expectedMcpToolNames = @{
+    "antigravity-code-worker" = @(
+        "antigravity_get_conversation",
+        "antigravity_get_job",
+        "antigravity_health",
+        "antigravity_send_message",
+        "antigravity_start_implementation",
+        "antigravity_tail_job"
+    )
+    "deepseek-code-worker" = @(
+        "deepseek_cancel_job",
+        "deepseek_get_job",
+        "deepseek_implement_in_workspace",
+        "deepseek_start_implementation",
+        "deepseek_tail_job",
+        "deepseek_wait_for_job"
+    )
+}
+
 if ($mcpNames -contains "node_repl") {
     try {
         $realSmoke = Invoke-RealNodeReplMcpSmoke
@@ -488,17 +507,26 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
     try {
         $listSmoke = Invoke-RealMcpListSmoke $mcpName
         $toolCount = [int]$listSmoke.toolCount
-        $passed = ($listSmoke.ok -eq $true -and $toolCount -gt 0)
+        $toolNames = @($listSmoke.toolNames)
+        $missingExpectedTools = @()
+        if ($expectedMcpToolNames.ContainsKey($mcpName)) {
+            $missingExpectedTools = @($expectedMcpToolNames[$mcpName] | Where-Object { $toolNames -notcontains $_ })
+        }
+        $passed = ($listSmoke.ok -eq $true -and $toolCount -gt 0 -and $missingExpectedTools.Count -eq 0)
         $mcpListSmokeChecks += [pscustomobject]@{
             checked = $true
             passed = $passed
             server = [string]$listSmoke.serverName
             toolCount = $toolCount
-            toolNames = @($listSmoke.toolNames)
+            toolNames = $toolNames
+            expectedToolNames = if ($expectedMcpToolNames.ContainsKey($mcpName)) { @($expectedMcpToolNames[$mcpName]) } else { @() }
+            missingExpectedTools = $missingExpectedTools
             elapsedMs = [int]$listSmoke.elapsedMs
             error = ""
         }
-        if (-not $passed) {
+        if ($missingExpectedTools.Count -gt 0) {
+            Add-Failure "MCP '$mcpName' real stdio tools/list missing expected tools: $($missingExpectedTools -join ', ')"
+        } elseif (-not $passed) {
             Add-Failure "MCP '$mcpName' real stdio tools/list returned no tools"
         }
     } catch {

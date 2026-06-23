@@ -3472,6 +3472,11 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /realCall = \$mcpRealSmoke/);
   assert.match(mcpSkills, /realList = @\(\$mcpListSmokeChecks\)/);
   assert.match(mcpSkills, /MCP node_repl real stdio tool call failed/);
+  assert.match(mcpSkills, /expectedMcpToolNames/);
+  assert.match(mcpSkills, /antigravity_start_implementation/);
+  assert.match(mcpSkills, /deepseek_start_implementation/);
+  assert.match(mcpSkills, /missingExpectedTools/);
+  assert.match(mcpSkills, /real stdio tools\/list missing expected tools/);
   assert.match(mcpSkills, /real stdio tools\/list failed/);
   assert.match(mcpSkills, /\$sharedConfigPath = Join-Path \$SharedCodexHome "config\.toml"/);
   assert.match(mcpSkills, /function Get-McpServerNamesFromToml/);

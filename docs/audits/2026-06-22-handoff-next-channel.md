@@ -281,7 +281,8 @@ Branch: main
 - External bridge and injected Manager latest-report summaries now mirror the in-app Manager for MCP/Skill operational evidence: `.agents` skill count, MCP smoke, real node_repl call smoke, and skill readability.
 - Connector/app-tool parity drift counts and samples are now visible in bridge/inject summaries when plugin capability parity is dirty.
 - Local feature refresh now parses MCP server names with the same anchored TOML section rule as the MCP/Skill verifier, so nested `[mcp_servers.x.tools.y]` sections are not counted as standalone servers.
-- Fresh evidence: bridge/inject syntax passed; refresh-feature PowerShell parser check passed; bridge `--self-test` passed with MCP/Skill and plugin drift fixtures; focused Manager/MCP/Skill contracts passed.
+- MCP/Skill verification now requires expected DeepSeek and Antigravity worker MCP tool names, not just a non-empty `tools/list` response.
+- Fresh evidence: bridge/inject syntax passed; refresh-feature and MCP/Skill PowerShell parser checks passed; bridge `--self-test` passed with MCP/Skill and plugin drift fixtures; focused Manager/MCP/Skill contracts passed; real MCP/Skill verifier passed with worker expected-tool lists present and no missing expected tools.
 
 ## 2026-06-23 Installed Missing-History Follow-Up
 
