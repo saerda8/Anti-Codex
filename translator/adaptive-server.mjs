@@ -2636,6 +2636,16 @@ function latestManagerReportItem(label, fileName) {
                 protocolSwitchMatchesNested: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId && protocolSwitch?.continuationPreviousResponseId && multiTurnHistory.protocolSwitchContinuationPreviousResponseId === protocolSwitch.continuationPreviousResponseId),
                 reverseProtocolSwitchMatchesNested: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch?.continuationPreviousResponseId && multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId === reverseProtocolSwitch.continuationPreviousResponseId),
             },
+            previousResponseIdChain: {
+                save: shortSafeText(multiTurnHistory.savedContinuationPreviousResponseId || "", ""),
+                restart: shortSafeText(multiTurnHistory.restartContinuationPreviousResponseId || "", ""),
+                providerSwitch: shortSafeText(multiTurnHistory.providerSwitchContinuationPreviousResponseId || "", ""),
+                protocolSwitch: shortSafeText(multiTurnHistory.protocolSwitchContinuationPreviousResponseId || "", ""),
+                reverseProtocolSwitch: shortSafeText(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId || "", ""),
+                providerSwitchNested: shortSafeText(providerSwitch?.continuationPreviousResponseId || "", ""),
+                protocolSwitchNested: shortSafeText(protocolSwitch?.continuationPreviousResponseId || "", ""),
+                reverseProtocolSwitchNested: shortSafeText(reverseProtocolSwitch?.continuationPreviousResponseId || "", ""),
+            },
         } : null,
         updatedAt,
         ageMs,
@@ -3436,6 +3446,11 @@ function latestReportsSummary(result){
         const ids=continuity.previousResponseContinuity;
         lines.push("  previousIds: save="+(ids.savePresent?"true":"false")+" / restart="+(ids.restartPresent?"true":"false")+" / provider="+(ids.providerSwitchPresent?"true":"false")+" / protocol="+(ids.protocolSwitchPresent?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchPresent?"true":"false"));
         lines.push("  previousMatches: save="+(ids.saveMatched?"true":"false")+" / restart="+(ids.restartMatched?"true":"false")+" / provider="+(ids.providerSwitchMatched?"true":"false")+" / protocol="+(ids.protocolSwitchMatched?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchMatched?"true":"false"));
+        lines.push("  nestedMatches: provider="+(ids.providerSwitchMatchesNested?"true":"false")+" / protocol="+(ids.protocolSwitchMatchesNested?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchMatchesNested?"true":"false"));
+      }
+      if(continuity.previousResponseIdChain){
+        const chain=continuity.previousResponseIdChain;
+        lines.push("  previousChain: save="+(chain.save||"missing")+" / restart="+(chain.restart||"missing")+" / provider="+(chain.providerSwitch||"missing")+" / protocol="+(chain.protocolSwitch||"missing")+" / reverse="+(chain.reverseProtocolSwitch||"missing"));
       }
     }
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);

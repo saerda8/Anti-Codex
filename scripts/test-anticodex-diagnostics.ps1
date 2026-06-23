@@ -366,6 +366,19 @@ function Test-DiagnosticBundle {
                     if ($previousIds.protocolSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary protocol-switch previous_response_id mismatch" }
                     if ($previousIds.reverseProtocolSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary reverse-protocol previous_response_id mismatch" }
                 }
+                $previousChain = $continuity.previousResponseIdChain
+                if (-not $previousChain) {
+                    Add-Failure "third-party provider summary missing previous_response_id chain values"
+                } else {
+                    if (-not [string]$previousChain.save) { Add-Failure "third-party provider summary missing save previous_response_id value" }
+                    if (-not [string]$previousChain.restart) { Add-Failure "third-party provider summary missing restart previous_response_id value" }
+                    if (-not [string]$previousChain.providerSwitch) { Add-Failure "third-party provider summary missing provider-switch previous_response_id value" }
+                    if (-not [string]$previousChain.protocolSwitch) { Add-Failure "third-party provider summary missing protocol-switch previous_response_id value" }
+                    if (-not [string]$previousChain.reverseProtocolSwitch) { Add-Failure "third-party provider summary missing reverse-protocol previous_response_id value" }
+                    if (-not [string]$previousChain.providerSwitchNested) { Add-Failure "third-party provider summary missing nested provider-switch previous_response_id value" }
+                    if (-not [string]$previousChain.protocolSwitchNested) { Add-Failure "third-party provider summary missing nested protocol-switch previous_response_id value" }
+                    if (-not [string]$previousChain.reverseProtocolSwitchNested) { Add-Failure "third-party provider summary missing nested reverse-protocol previous_response_id value" }
+                }
             }
         }
         $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]

@@ -1344,6 +1344,11 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: provider protocol tests now cover Anthropic-assigned `tool_use.id` round-tripping into later Anthropic `tool_result.tool_use_id`, proving tool result continuity is not dependent on a fixed synthetic OpenAI call ID.
 - Verification: focused upstream-provider tests passed, including the new thinking-preservation case and Anthropic tool_use ID round-trip; full upstream-provider suite passed `74/74`.
 
+## 2026-06-24 Provider Continuity Support Visibility
+- Completed: provider-continuity summaries now expose `previousResponseIdChain` with save/restart/provider/protocol/reverse IDs plus nested switch IDs, so support bundles and Manager summaries show the actual chain instead of only booleans.
+- Completed: external Manager bridge, injected Manager, and fallback Manager render `previousChain` and `nestedMatches` lines for third-party provider continuity.
+- Verification: JS syntax checks passed for adaptive server, report summarizer, Manager bridge, and injected Manager; focused launcher report/diagnostics contracts passed `18/18`; real diagnostics verifier passed and accepted the strengthened previous_response_id chain checks.
+
 ## 2026-06-23 Log DB Guard Fail-Closed Checks
 - Completed: Anti-Codex startup now fails closed when the log database guard cannot be applied, instead of logging the failure and continuing toward a possible TRACE write loop.
 - Completed: source preflight now runs `protect-anticodex-log-db.mjs --self-test`, so install/sync gates prove the trigger, backup, TRACE-drop, and WAL truncation behavior at source level.

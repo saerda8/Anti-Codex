@@ -719,6 +719,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /previousIds: save=/);
   assert.match(managerBridge, /previousMatches: save=/);
   assert.match(managerInject, /previousMatches: save=/);
+  assert.match(managerBridge, /nestedMatches: provider=/);
+  assert.match(managerInject, /nestedMatches: provider=/);
+  assert.match(managerBridge, /previousChain: save=/);
+  assert.match(managerInject, /previousChain: save=/);
   assert.match(managerBridge, /orderedHistory: clean=/);
   assert.match(managerInject, /orderedHistory: clean=/);
   assert.match(managerBridge, /optionalRealProviderEvidence/);
@@ -2069,10 +2073,13 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /restartPreservesOpenAiToolPair/);
   assert.match(server, /markerThresholdsOk/);
   assert.match(server, /previousResponseContinuity/);
+  assert.match(server, /previousResponseIdChain/);
   assert.match(server, /saveMatched/);
   assert.match(server, /providerSwitchMatchesNested/);
   assert.match(server, /previousIds: save=/);
   assert.match(server, /previousMatches: save=/);
+  assert.match(server, /nestedMatches: provider=/);
+  assert.match(server, /previousChain: save=/);
   assert.match(server, /sixthMarkerCount/);
   assert.match(server, /sixthOrderedHistoryCount/);
   assert.match(server, /providerContinuity: turns=/);
@@ -2309,6 +2316,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /orderedHistoryClean/);
   assert.match(reportSummarizer, /previousResponseContinuity/);
+  assert.match(reportSummarizer, /previousResponseIdChain/);
   assert.match(reportSummarizer, /saveMatched/);
   assert.match(reportSummarizer, /restartMatched/);
   assert.match(reportSummarizer, /providerSwitchMatchesNested/);
@@ -5644,6 +5652,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /structuralEvidenceClean/);
   assert.match(diagnostics, /orderedHistoryClean/);
   assert.match(diagnostics, /previousResponseContinuity/);
+  assert.match(diagnostics, /previousResponseIdChain/);
+  assert.match(diagnostics, /previous_response_id chain values/);
   assert.match(diagnostics, /provider-switch previous_response_id continuity/);
   assert.match(diagnostics, /save previous_response_id mismatch/);
   assert.match(diagnostics, /restart previous_response_id mismatch/);

@@ -362,6 +362,11 @@ function latestReportsSummary(result) {
         const ids = continuity.previousResponseContinuity;
         lines.push(`  previousIds: save=${ids.savePresent ? "true" : "false"} / restart=${ids.restartPresent ? "true" : "false"} / provider=${ids.providerSwitchPresent ? "true" : "false"} / protocol=${ids.protocolSwitchPresent ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchPresent ? "true" : "false"}`);
         lines.push(`  previousMatches: save=${ids.saveMatched ? "true" : "false"} / restart=${ids.restartMatched ? "true" : "false"} / provider=${ids.providerSwitchMatched ? "true" : "false"} / protocol=${ids.protocolSwitchMatched ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchMatched ? "true" : "false"}`);
+        lines.push(`  nestedMatches: provider=${ids.providerSwitchMatchesNested ? "true" : "false"} / protocol=${ids.protocolSwitchMatchesNested ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchMatchesNested ? "true" : "false"}`);
+      }
+      if (continuity.previousResponseIdChain) {
+        const chain = continuity.previousResponseIdChain;
+        lines.push(`  previousChain: save=${chain.save || "missing"} / restart=${chain.restart || "missing"} / provider=${chain.providerSwitch || "missing"} / protocol=${chain.protocolSwitch || "missing"} / reverse=${chain.reverseProtocolSwitch || "missing"}`);
       }
       lines.push(`  orderedHistory: clean=${continuity.orderedHistoryClean ? "true" : "false"} / counts=${[continuity.sixthOrderedHistoryCount, continuity.seventhOrderedHistoryCount, continuity.eighthOrderedHistoryCount, continuity.ninthOrderedHistoryCount].filter((value) => value !== null && value !== undefined).join("/") || "unknown"}`);
     }

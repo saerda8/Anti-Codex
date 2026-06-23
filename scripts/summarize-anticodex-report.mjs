@@ -508,6 +508,16 @@ const summary = {
       protocolSwitchMatchesNested: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId && protocolSwitch?.continuationPreviousResponseId && multiTurnHistory.protocolSwitchContinuationPreviousResponseId === protocolSwitch.continuationPreviousResponseId),
       reverseProtocolSwitchMatchesNested: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch?.continuationPreviousResponseId && multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId === reverseProtocolSwitch.continuationPreviousResponseId),
     },
+    previousResponseIdChain: {
+      save: asString(multiTurnHistory.savedContinuationPreviousResponseId),
+      restart: asString(multiTurnHistory.restartContinuationPreviousResponseId),
+      providerSwitch: asString(multiTurnHistory.providerSwitchContinuationPreviousResponseId),
+      protocolSwitch: asString(multiTurnHistory.protocolSwitchContinuationPreviousResponseId),
+      reverseProtocolSwitch: asString(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId),
+      providerSwitchNested: asString(providerSwitch?.continuationPreviousResponseId),
+      protocolSwitchNested: asString(protocolSwitch?.continuationPreviousResponseId),
+      reverseProtocolSwitchNested: asString(reverseProtocolSwitch?.continuationPreviousResponseId),
+    },
     providerSwitch: providerSwitch ? {
       from: asString(providerSwitch.from),
       to: asString(providerSwitch.to),
