@@ -286,7 +286,7 @@ function latestReportsSummary(result) {
     }
     if (item.sourcePreflightEvidence) {
       const evidence = item.sourcePreflightEvidence;
-      lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
+      lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
       lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
     }
     if (item.modelThinkingEvidence) {
@@ -500,7 +500,7 @@ if (args.has("--self-test")) {
       label: "\u6e90\u7801\u9884\u68c0",
       exists: true,
       ok: true,
-      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
+      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
       label: "MCP/Skill",
       exists: true,
@@ -535,7 +535,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
-  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ docs=true/);
+  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);

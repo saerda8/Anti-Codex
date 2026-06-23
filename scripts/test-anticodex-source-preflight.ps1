@@ -186,6 +186,19 @@ function Test-UpstreamProfileStorage {
     return $result
 }
 
+function Test-LocalConnectorVerifier {
+    $node = (Get-Command "node" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\test-anticodex-local-connectors.mjs"
+    $timeoutMs = [Math]::Max(10000, $SubcheckTimeoutSec * 1000)
+    $result = Invoke-SourceProcess `
+        -Name "local connector/app-tool verifier" `
+        -FilePath $node `
+        -Arguments @($script, "--source-root", $SourceRoot, "--runtime-root", $SourceRoot, "--report-root", $ReportRoot, "--timeout-ms", "$timeoutMs") `
+        -TimeoutSec $SubcheckTimeoutSec
+    if (-not $result.ok) { Add-Failure "Local connector/app-tool verifier failed" }
+    return $result
+}
+
 function Test-TranslatorRegression {
     if ($SkipFullRegression) {
         return [pscustomobject]@{ ok = $true; skipped = $true; reason = "SkipFullRegression" }
@@ -346,6 +359,7 @@ try {
     $checks["uiStateSelfTest"] = Test-UiStateSelfTest
     $checks["managerBridgeSelfTest"] = Test-ManagerBridgeSelfTest
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
+    $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
     $checks["diffWhitespace"] = Test-GitDiffCheck

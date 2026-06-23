@@ -288,6 +288,7 @@ function summarizeGate(definition) {
       if (!checks.powershellSyntax || checks.powershellSyntax.ok !== true) semanticFailures.push("source_preflight_powershell_syntax");
       if (!checks.uiStateSelfTest || checks.uiStateSelfTest.ok !== true) semanticFailures.push("source_preflight_ui_state_self_test");
       if (!checks.upstreamProfileStorage || checks.upstreamProfileStorage.ok !== true) semanticFailures.push("source_preflight_upstream_profile_storage");
+      if (!checks.localConnectorVerifier || checks.localConnectorVerifier.ok !== true) semanticFailures.push("source_preflight_local_connector_verifier");
       if (!checks.publicDocumentation || checks.publicDocumentation.ok !== true) semanticFailures.push("source_preflight_public_documentation");
       if (!checks.translatorRegression || checks.translatorRegression.ok !== true) semanticFailures.push("source_preflight_translator_regression");
       if (!checks.diffWhitespace || checks.diffWhitespace.ok !== true) semanticFailures.push("source_preflight_diff_whitespace");
@@ -772,6 +773,7 @@ if (args.has("--self-test")) {
         powershellSyntax: { ok: false },
         uiStateSelfTest: { ok: false },
         upstreamProfileStorage: { ok: false },
+        localConnectorVerifier: { ok: false },
         publicDocumentation: { ok: false },
         translatorRegression: { ok: false },
         diffWhitespace: { ok: false },
@@ -1094,6 +1096,7 @@ if (args.has("--self-test")) {
       "source_preflight_powershell_syntax",
       "source_preflight_ui_state_self_test",
       "source_preflight_upstream_profile_storage",
+      "source_preflight_local_connector_verifier",
       "source_preflight_public_documentation",
       "source_preflight_translator_regression",
       "source_preflight_diff_whitespace",

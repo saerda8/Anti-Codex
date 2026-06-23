@@ -1322,6 +1322,7 @@ function sourcePreflightSummary(report) {
             powershellSyntaxOk: null,
             uiStateSelfTestOk: null,
             upstreamProfileStorageOk: null,
+            localConnectorVerifierOk: null,
             publicDocumentationOk: null,
             translatorRegressionOk: null,
             diffWhitespaceOk: null,
@@ -1350,6 +1351,7 @@ function sourcePreflightSummary(report) {
         powershellSyntaxOk: checks.powershellSyntax?.ok === true,
         uiStateSelfTestOk: checks.uiStateSelfTest?.ok === true,
         upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
+        localConnectorVerifierOk: checks.localConnectorVerifier?.ok === true,
         publicDocumentationOk: checks.publicDocumentation?.ok === true,
         translatorRegressionOk: checks.translatorRegression?.ok === true,
         diffWhitespaceOk: checks.diffWhitespace?.ok === true,
@@ -2140,6 +2142,7 @@ function latestManagerReportItem(label, fileName) {
             powershellSyntaxOk: checks.powershellSyntax?.ok === true,
             uiStateSelfTestOk: checks.uiStateSelfTest?.ok === true,
             upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
+            localConnectorVerifierOk: checks.localConnectorVerifier?.ok === true,
             publicDocumentationOk: checks.publicDocumentation?.ok === true,
             translatorRegressionOk: checks.translatorRegression?.ok === true,
             diffWhitespaceOk: checks.diffWhitespace?.ok === true,
@@ -2876,7 +2879,7 @@ function latestReportsSummary(result){
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
     if(item.sourcePreflightEvidence){
       const evidence=item.sourcePreflightEvidence;
-      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false"));
+      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false"));
       lines.push("  sourcePreflight: ui="+(evidence.uiStateSelfTestOk?"true":"false")+" / regression="+(evidence.translatorRegressionOk?"true":"false")+" / diff="+(evidence.diffWhitespaceOk?"true":"false")+" / skipFull="+(evidence.skipFullRegression?"true":"false"));
     }
     if(item.skipped===true){

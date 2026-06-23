@@ -152,6 +152,7 @@ const summary = {
   powershellSyntaxOk: checkOk("powershellSyntax"),
   uiStateSelfTestOk: checkOk("uiStateSelfTest"),
   upstreamProfileStorageOk: checkOk("upstreamProfileStorage"),
+  localConnectorVerifierOk: checkOk("localConnectorVerifier"),
   publicDocumentationOk: checkOk("publicDocumentation"),
   translatorRegressionOk: checkOk("translatorRegression"),
   diffWhitespaceOk: checkOk("diffWhitespace"),

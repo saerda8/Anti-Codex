@@ -277,6 +277,7 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.powershellSyntaxOk -ne $true) { Add-Failure "source-preflight summary missing PowerShell syntax success" }
             if ($sourcePreflightSummary.uiStateSelfTestOk -ne $true) { Add-Failure "source-preflight summary missing UI state self-test success" }
             if ($sourcePreflightSummary.upstreamProfileStorageOk -ne $true) { Add-Failure "source-preflight summary missing upstream profile storage success" }
+            if ($sourcePreflightSummary.localConnectorVerifierOk -ne $true) { Add-Failure "source-preflight summary missing local connector verifier success" }
             if ($sourcePreflightSummary.publicDocumentationOk -ne $true) { Add-Failure "source-preflight summary missing public documentation success" }
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
@@ -805,6 +806,7 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "powershellSyntaxOk")) { Add-Failure "diagnostics source preflight missing PowerShell syntax result" }
         if (-not (Has-Property $sourcePreflight "uiStateSelfTestOk")) { Add-Failure "diagnostics source preflight missing UI state self-test result" }
         if (-not (Has-Property $sourcePreflight "upstreamProfileStorageOk")) { Add-Failure "diagnostics source preflight missing upstream profile storage result" }
+        if (-not (Has-Property $sourcePreflight "localConnectorVerifierOk")) { Add-Failure "diagnostics source preflight missing local connector verifier result" }
         if (-not (Has-Property $sourcePreflight "publicDocumentationOk")) { Add-Failure "diagnostics source preflight missing public documentation result" }
         if (-not (Has-Property $sourcePreflight "translatorRegressionOk")) { Add-Failure "diagnostics source preflight missing translator regression result" }
         if (-not (Has-Property $sourcePreflight "diffWhitespaceOk")) { Add-Failure "diagnostics source preflight missing diff whitespace result" }
