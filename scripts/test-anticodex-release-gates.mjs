@@ -1266,6 +1266,66 @@ if (args.has("--self-test")) {
       "plugin_capabilities_local_app_tool_parity_changed_shared",
       "plugin_capabilities_source_snapshot_missing",
     ]);
+    writeFakeLatestReport("latest-refresh-features.json", {
+      ok: true,
+      reportName: "refresh-features",
+      failures: [],
+      connectorParity: { sharedExists: true, localExists: true, contentMatches: true },
+      appToolParity: { sharedExists: true, localExists: true, contentMatches: true },
+      skills: { changedExpected: [] },
+      guidance: { "RTK.md": { sharedExists: true, localExists: true, contentMatches: true } },
+      sourceSnapshot: { fingerprint: "fresh-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
+    });
+    writeFakeLatestReport("latest-mcp-skills.json", {
+      ok: true,
+      mcp: {
+        count: 1,
+        sharedCount: 1,
+        missingShared: [],
+        extraLocal: [],
+        changedShared: [],
+        hasNodeRepl: true,
+        smoke: { passed: true, realCall: { passed: true } },
+      },
+      skills: {
+        count: 2,
+        sharedCount: 1,
+        agentsCount: 1,
+        expectedSharedCount: 2,
+        missingShared: [],
+        changedShared: [],
+        conflictingDuplicateNames: [],
+        smoke: { readable: true },
+      },
+      sourceSnapshot: { fingerprint: "stale-mcp-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
+    });
+    writeFakeLatestReport("latest-plugin-capabilities.json", {
+      ok: true,
+      capabilities: {
+        nativeCodexWriteback: false,
+        accessibleConnectorCount: 0,
+        unauthorizedAppToolCount: 0,
+        connectorParity: { missingShared: [], extraLocal: [], changedShared: [] },
+        appToolParity: { missingShared: [], extraLocal: [], changedShared: [] },
+        appToolGetPostParity: { missingFromGet: [], extraFromGet: [] },
+      },
+      sourceSnapshot: { fingerprint: "stale-plugin-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
+    });
+    const crossSourceGates = gateDefinitions.map(summarizeGate);
+    const crossRefreshGate = crossSourceGates.find((gate) => gate.id === "refreshFeatures");
+    for (const gateId of ["mcpSkills", "pluginCapabilities"]) {
+      const gate = crossSourceGates.find((item) => item.id === gateId);
+      if (crossRefreshGate?.sourceFingerprint && gate?.sourceFingerprint && crossRefreshGate.sourceFingerprint !== gate.sourceFingerprint) {
+        if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
+        gate.semanticFailures.push(gateId === "mcpSkills" ? "mcp_skills_source_snapshot_mismatch" : "plugin_capabilities_source_snapshot_mismatch");
+      }
+    }
+    semanticFailures.sourceSnapshotMismatch = {
+      mcpSkills: crossSourceGates.find((gate) => gate.id === "mcpSkills")?.semanticFailures || [],
+      pluginCapabilities: crossSourceGates.find((gate) => gate.id === "pluginCapabilities")?.semanticFailures || [],
+    };
+    if (!semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch")) throw new Error("self-test failed: MCP/Skill source snapshot mismatch was not detected");
+    if (!semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch")) throw new Error("self-test failed: plugin-capability source snapshot mismatch was not detected");
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
     reportRoot = originalReportRoot;

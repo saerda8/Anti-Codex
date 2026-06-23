@@ -5602,6 +5602,8 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_used_real_traffic"));
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_get_post_tool_mismatch"));
   assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
+  assert.ok(summary.semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch"));
+  assert.ok(summary.semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch"));
 });
 
 test("release-required latest reports stay visible in diagnostics, Manager, and report integrity checks", () => {

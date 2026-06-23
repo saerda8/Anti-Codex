@@ -1210,3 +1210,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `response-history` now has a lightweight unit test proving hydration preserves the previous conversation when a later request changes provider, protocol, and model metadata from OpenAI-compatible to Anthropic and back.
 - Completed: the Windows linked-skill fixture now skips only when the environment cannot create linked directories, avoiding false red runs while preserving coverage where links are available.
 - Verification: `response-history` tests passed `14/14`; focused launcher contracts passed `122/122`.
+
+## 2026-06-23 Source Snapshot Mismatch Self-Test
+- Completed: passive release-gate self-test now forges semantically clean refresh/MCP/plugin reports with divergent `sourceSnapshot.fingerprint` values and proves MCP/Skill plus plugin-capability gates receive mismatch failures.
+- Completed: launcher contract coverage now asserts the dynamic self-test output includes both `mcp_skills_source_snapshot_mismatch` and `plugin_capabilities_source_snapshot_mismatch`.
+- Verification: release-gate syntax passed; release-gate `--self-test` passed; focused launcher self-test contract passed `122/122`.
