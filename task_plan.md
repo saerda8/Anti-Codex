@@ -1314,4 +1314,4 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 App-Tool Sync Fingerprint Output
 - Completed: `sync-deepcodex-app-tools.mjs` now writes `shared_tools_fingerprint`, `local_tools_fingerprint`, shared/local file counts, and `content_matches` into `deepcodex_app_connectors.json`.
 - Completed: added a focused app-tools sync test with nonempty nested cache files and plugin app metadata, proving the registry reports matching shared/local fingerprints after sync.
-- Verification: new app-tools sync test passed; script syntax check passed; focused shared-sync cache test passed; `git diff --check` passed.
+- Verification: new app-tools sync test passed; script syntax check passed; focused shared-sync cache test passed; installed Anti-Codex runtime sync passed; strict passive release gate passed with `releaseReady:true`; `git diff --check` passed.
