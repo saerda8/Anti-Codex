@@ -1164,3 +1164,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: third-party connection tests now return a stable `summary` with human-readable title, suggested action, retryability, failed stage, and machine type.
 - Completed: Manager connection-test output displays the summary before stage details, covering auth, quota/billing, model-not-found, rate-limit, network, timeout, URL, TLS, not-found, and protocol mismatch failures.
 - Verification: syntax checks passed; focused upstream classification tests passed `12/12`; focused Manager third-party contract passed; local fake third-party provider verifier passed with `usedRealTraffic:false`.
+
+## 2026-06-23 Passive Release Gate Refresh
+- Completed: strict passive release gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `damagedReports:[]` after the Manager long-task and third-party error-summary changes.
+- Completed: release-gate `--self-test` still passes with expected forged-report semantic failures.
+- Note: `missingOptional:["coldRelaunch"]` remains non-blocking and should only be closed by an operator-approved cold relaunch check.

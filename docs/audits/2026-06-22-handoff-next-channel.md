@@ -413,3 +413,9 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - `/anticodex/upstream-test` now returns a structured `summary` beside stage details, and the injected Manager panel shows the summary first.
 - Summary categories include auth, quota/billing, model-not-found, rate-limit, network, timeout, invalid URL, TLS, not-found, protocol mismatch, and ready.
 - Fresh evidence: syntax checks passed; focused upstream classification tests passed `12/12`; focused Manager third-party contract passed; local fake third-party provider verifier passed with no real traffic.
+
+## 2026-06-23 Passive Release Gate Refresh
+
+- Strict passive release gates still report `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, and `damagedReports:[]`.
+- Release-gate `--self-test` still passes.
+- The only current optional miss is `coldRelaunch`; it remains non-blocking and should not be run without operator approval because it restarts Anti-Codex.
