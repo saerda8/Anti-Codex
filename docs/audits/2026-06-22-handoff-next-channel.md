@@ -287,6 +287,7 @@ Branch: main
 - Local skill snapshot sync now refuses conflicting duplicate skill names across `.codex\skills` and `.agents\skills`; identical names with different content are reported as copy failures instead of silent overlay overrides.
 - MCP/Skill verification now reports duplicate and conflicting duplicate skill names too, so a stale same-name skill can fail the runtime verifier even when directory names still match.
 - MCP/Skill verification now reports same-name MCP config drift as `changedShared` when shared/local `command`, `args`, or `env` differ.
+- Release-gate summaries now expose `effectiveOk`, and Manager/diagnostics treat `ok:true` plus `releaseReady:false` as needing action rather than passing.
 - Fresh evidence: bridge/inject/adaptive/summarizer syntax passed; refresh-feature, MCP/Skill, and plugin-capability parser checks passed; bridge `--self-test` passed; release-gate `--self-test` and strict passive release gates passed; focused Manager/MCP/Skill/plugin contracts passed. The stricter plugin verifier first caught stale connector cache drift, then `refresh-anticodex-local-features.ps1` refreshed snapshots and the rerun passed with connector parity `5760/5760`, app-tool parity `58/58`, and no missing/extra/changed shared entries.
 
 ## 2026-06-23 Installed Missing-History Follow-Up

@@ -2016,6 +2016,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /payload\.results/);
   assert.match(reportSummarizer, /providerContinuity/);
   assert.match(reportSummarizer, /releaseReady/);
+  assert.match(reportSummarizer, /effectiveOk/);
+  assert.match(reportSummarizer, /releaseGateEffectiveOk/);
   assert.match(reportSummarizer, /shortReady/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
@@ -2624,6 +2626,31 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityChangedShared, ["changed-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostMissingFromGet, ["post-only-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostExtraFromGet, ["get-only-tool"]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer treats releaseReady false as not effectively passing", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-release-summary-"));
+  const reportPath = resolve(tempRoot, "latest-release-gates.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "release-gates",
+      shortReady: true,
+      releaseReady: false,
+      missingRequired: ["latest-real-work.json"],
+      missingShort: [],
+      damagedReports: [],
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, true);
+    assert.equal(summary.effectiveOk, false);
+    assert.equal(summary.releaseReady, false);
+    assert.deepEqual(summary.missingRequired, ["latest-real-work.json"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4707,6 +4734,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /latest-release-gates\.json/);
   assert.match(diagnostics, /release-gates summary/);
   assert.match(diagnostics, /shortReady/);
+  assert.match(diagnostics, /release-gates summary releaseReady is not true/);
+  assert.match(diagnostics, /release-gates summary effectiveOk is not true/);
   assert.match(diagnostics, /missingRequired/);
   assert.match(diagnostics, /missingShort/);
   assert.match(diagnostics, /damagedReports/);
@@ -4931,6 +4960,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid local-connector report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid plugin-capability report satisfied the gate/);
   assert.match(server, /latestManagerReportItem\("Release Gate 汇总", "latest-release-gates\.json"\)/);
+  assert.match(server, /effectiveOk/);
+  assert.match(server, /report\?\.releaseReady === true/);
+  assert.match(server, /const passed=\(item\.effectiveOk!==null&&item\.effectiveOk!==undefined\)\?item\.effectiveOk:item\.ok/);
   assert.match(collector, /latest-release-gates\.json/);
   assert.match(server, /releaseGateGroups/);
   assert.match(server, /Release groups:/);

@@ -2044,6 +2044,11 @@ function latestManagerReportItem(label, fileName) {
     }
     const ageMs = updatedAt ? Math.max(0, Date.now() - Date.parse(updatedAt)) : null;
     const stale = Number.isFinite(ageMs) && ageMs > MANAGER_REPORT_STALE_MS;
+    const isReleaseGateReport = fileName === "latest-release-gates.json" || report?.reportName === "release-gates";
+    const rawOk = !invalid && report?.ok === true;
+    const effectiveOk = isReleaseGateReport
+        ? rawOk && report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
+        : rawOk;
     return {
         label,
         fileName,
@@ -2051,7 +2056,8 @@ function latestManagerReportItem(label, fileName) {
         parseable: read.parseable,
         invalid,
         integrity,
-        ok: !invalid && report?.ok === true,
+        ok: rawOk,
+        effectiveOk,
         skipped: typeof report?.skipped === "boolean" ? report.skipped : null,
         reason: shortSafeText(report?.reason || "", ""),
         behaviorCovered: typeof report?.behaviorCovered === "boolean" ? report.behaviorCovered : null,
@@ -2839,7 +2845,8 @@ function latestReportsSummary(result){
     lines.push("\\u63d0\\u793a\\uff1a\\u8bf7\\u5148\\u8fd0\\u884c\\u5feb\\u901f\\u603b\\u68c0\\u3001\\u5b8c\\u6574\\u603b\\u68c0\\u6216\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u3002");
   }
   for(const item of reports){
-    const status=item.exists?((item.parseable===false||item.invalid)?"\\u62a5\\u544a\\u635f\\u574f":(item.stale?"\\u9700\\u91cd\\u8dd1":(item.ok?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"))):"\\u672a\\u751f\\u6210";
+    const passed=(item.effectiveOk!==null&&item.effectiveOk!==undefined)?item.effectiveOk:item.ok;
+    const status=item.exists?((item.parseable===false||item.invalid)?"\\u62a5\\u544a\\u635f\\u574f":(item.stale?"\\u9700\\u91cd\\u8dd1":(passed?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"))):"\\u672a\\u751f\\u6210";
     const elapsed=item.elapsedMs!=null?(" / "+item.elapsedMs+" ms"):"";
     lines.push(item.label+"\\uff1a"+status+elapsed);
     const age=formatReportAge(item.ageMs);

@@ -54,6 +54,10 @@ const failureCount = has(report, "failures")
   : 0;
 const wait = report && report.wait ? report.wait : null;
 const latestWait = wait && wait.latest ? wait.latest : null;
+const isReleaseGateReport = report?.reportName === "release-gates" || /latest-release-gates\.json$/i.test(path);
+const releaseGateEffectiveOk = isReleaseGateReport
+  ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
+  : null;
 const multiTurnHistory = report && report.multiTurnHistory ? report.multiTurnHistory : null;
 const toolHistory = multiTurnHistory && multiTurnHistory.toolHistory ? multiTurnHistory.toolHistory : null;
 const structuralEvidence = toolHistory && toolHistory.structuralEvidence ? toolHistory.structuralEvidence : null;
@@ -126,6 +130,7 @@ function emptyArrayField(object, key) {
 
 const summary = {
   ok: has(report, "ok") ? report.ok : null,
+  effectiveOk: isReleaseGateReport ? releaseGateEffectiveOk : (has(report, "ok") ? report.ok : null),
   reportName: has(report, "reportName") ? asString(report.reportName) : null,
   skipFullRegression: boolField(report, "skipFullRegression"),
   failureCount,

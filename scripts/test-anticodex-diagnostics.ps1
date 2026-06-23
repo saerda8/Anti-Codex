@@ -398,6 +398,8 @@ function Test-DiagnosticBundle {
             if ($releaseGatesSummary.ok -ne $true) { Add-Failure "release-gates summary ok=false" }
             if ($releaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates summary shortReady is not true" }
             if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
+            elseif ($releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
+            if ((Has-Property $releaseGatesSummary "effectiveOk") -and $releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
             if (-not (Has-Property $releaseGatesSummary "missingRequired")) { Add-Failure "release-gates summary missing missingRequired" }
             if (-not (Has-Property $releaseGatesSummary "missingShort")) { Add-Failure "release-gates summary missing missingShort" }
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
