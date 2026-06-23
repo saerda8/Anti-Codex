@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$BaseUrl = "",
     [int]$TimeoutSec = 20,
@@ -388,6 +388,10 @@ function Test-DiagnosticBundle {
                 if ($localEvidence.hiddenConnectorAccessible -ne $false) { Add-Failure "local connector summary exposes hidden connector" }
                 if ([int]$localEvidence.exposedToolsPost -ne [int]$localEvidence.exposedToolsGet) { Add-Failure "local connector summary GET/POST tool counts differ" }
                 if (@($localEvidence.exposedToolNames).Count -ne [int]$localEvidence.exposedToolsPost) { Add-Failure "local connector summary exposed tool names mismatch" }
+                $exposedToolNames = As-FlatArray $localEvidence.exposedToolNames
+                if ($exposedToolNames.Count -ne 1 -or $exposedToolNames[0] -ne "linked_tool") {
+                    Add-Failure "local connector summary exposed tool names is not exactly one 'linked_tool'"
+                }
             }
         }
         $pluginCapabilitiesSummary = @($summary | Where-Object { $_.file -eq "latest-plugin-capabilities.json" } | Select-Object -First 1)[0]
@@ -848,6 +852,15 @@ if ($diagnostics) {
         } else {
             if (-not (Has-Property $localFeatures.snapshots "connectorDirectoryFiles")) { Add-Failure "diagnostics localFeatures missing connector snapshot count" }
             if (-not (Has-Property $localFeatures.snapshots "appToolsCacheFiles")) { Add-Failure "diagnostics localFeatures missing app-tools snapshot count" }
+        }
+        if (-not (Has-Property $localFeatures "connectorVerifier")) {
+            Add-Failure "diagnostics localFeatures missing connector verifier summary"
+        } else {
+            $connectorVerifier = $localFeatures.connectorVerifier
+            if (-not (Has-Property $connectorVerifier "noFakeAuthorization")) { Add-Failure "diagnostics connector verifier missing no-fake authorization proof" }
+            if (-not (Has-Property $connectorVerifier "getPostParityClean")) { Add-Failure "diagnostics connector verifier missing GET/POST parity proof" }
+            if (-not (Has-Property $connectorVerifier "connectorParityClean")) { Add-Failure "diagnostics connector verifier missing connector parity proof" }
+            if (-not (Has-Property $connectorVerifier "appToolParityClean")) { Add-Failure "diagnostics connector verifier missing app-tool parity proof" }
         }
         if (-not (Has-Property $localFeatures "snapshotStatus")) {
             Add-Failure "diagnostics localFeatures missing snapshot freshness status"

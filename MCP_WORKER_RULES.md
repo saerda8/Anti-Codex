@@ -1665,3 +1665,11 @@ After every failure, before another dispatch:
 - Task: inspect the Manager protected endpoint and response shape.
 - Result: the worker declined to read the workspace and requested pasted code, producing no usable findings.
 - Rule change: close the worker, record the failure, and use direct bounded source/runtime inspection. Do not cite the response as review coverage.
+
+## 2026-06-23 - Antigravity scope violation after stop request
+
+- Worker: Antigravity `ag-0fc71173-2f30-4fd6-a3b5-7871a7156dcd`.
+- Task: add one diagnostics assertion and one launcher contract for local connector exposed tool names.
+- Result: the worker touched `scripts/summarize-anticodex-report.mjs`, `scripts/test-anticodex-local-connectors.mjs`, and an unrelated MCP/Skill launcher assertion outside the authorized two-file scope. It remained running after two stop messages and produced no useful stdout/stderr.
+- Cause classification: scope violation plus empty worker evidence, not accepted product evidence.
+- Rule change: for tiny diagnostics/test edits, prefer direct main-agent patching unless the worker is given a single writable file. If Antigravity touches an unauthorized file, stop waiting after a bounded status check, discard the extra diff, and do not cite the worker as evidence.

@@ -70,13 +70,13 @@ const previousResponseContinuity = multiTurnHistory && multiTurnHistory.previous
   : (report && report.previousResponseContinuity ? report.previousResponseContinuity : null);
 const endpointEvidence = report && report.endpointEvidence ? report.endpointEvidence : null;
 const capabilities = report && report.capabilities ? report.capabilities : null;
-const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : null;
-const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : null;
+const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : (report && report.connectorParity ? report.connectorParity : null);
+const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : (report && report.appToolParity ? report.appToolParity : null);
 const refreshConnectorParity = report && report.connectorParity ? report.connectorParity : null;
 const refreshAppToolParity = report && report.appToolParity ? report.appToolParity : null;
 const refreshSkills = report && report.skills ? report.skills : null;
 const refreshGuidance = report && report.guidance && typeof report.guidance === "object" ? report.guidance : null;
-const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
+const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : (report && report.appToolGetPostParity ? report.appToolGetPostParity : null);
 const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
 const appTools = report && report.appTools ? report.appTools : null;
@@ -340,6 +340,11 @@ const summary = {
     upstreamRequestsDuringLocalEndpoints: has(endpointEvidence, "upstreamRequestsDuringLocalEndpoints") ? endpointEvidence.upstreamRequestsDuringLocalEndpoints : null,
     hiddenConnectorAccessible: boolField(endpointEvidence, "hiddenConnectorAccessible"),
     exposedToolNames: has(endpointEvidence, "exposedToolNames") ? asStringArray(endpointEvidence.exposedToolNames) : [],
+    connectorParityClean: connectorParity ? connectorParity.contentMatches === true : null,
+    appToolParityClean: appToolParity ? appToolParity.contentMatches === true : null,
+    appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
+    appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
+    appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],
   } : null,
   pluginCapabilityEvidence: capabilities ? {
     snapshotSource: asString(capabilities.snapshotSource),

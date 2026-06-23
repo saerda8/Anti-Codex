@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import { join, resolve } from "node:path";
@@ -27,6 +27,7 @@ const timeoutMs = Math.max(10_000, Number(args.get("--timeout-ms") || 90_000));
 const translatorPath = resolve(runtimeRoot, "translator", "adaptive-server.mjs");
 const stateRoot = mkdtempSync(join(os.tmpdir(), "anticodex-local-connectors-"));
 const codexHome = join(stateRoot, "codex-home-deepseek-app");
+const sharedCodexHome = join(stateRoot, "shared-codex-home");
 const startedAt = Date.now();
 const failures = [];
 const requests = [];
@@ -112,9 +113,9 @@ function stderrTail() {
   return String(translator?.stderrText || "").split(/\r?\n/).slice(-12).join("\n");
 }
 
-function writeLocalCaches() {
-  const connectorDir = join(codexHome, "cache", "codex_app_directory");
-  const toolsDir = join(codexHome, "cache", "codex_apps_tools");
+function writeProjectionCaches(home) {
+  const connectorDir = join(home, "cache", "codex_app_directory");
+  const toolsDir = join(home, "cache", "codex_apps_tools");
   mkdirSync(connectorDir, { recursive: true });
   mkdirSync(toolsDir, { recursive: true });
   const blockedInstallHost = ["chatgpt", "com"].join(".");
@@ -141,11 +142,18 @@ function writeLocalCaches() {
     ],
   }), "utf8");
 
+  return { connectorDir, toolsDir };
+}
+
+function writeLocalCaches() {
+  const local = writeProjectionCaches(codexHome);
+  const shared = writeProjectionCaches(sharedCodexHome);
   writeFileSync(join(codexHome, "config.toml"), [
     "[local_authorized_connectors]",
     "\"allowlisted-demo\" = true",
     "",
   ].join("\n"), "utf8");
+  return { local, shared };
 }
 
 function writeProviderProfile(profilePath, upstreamUrl) {
@@ -214,6 +222,44 @@ function writeJsonReportAtomic(latest, history, text) {
   writeTextAtomic(latest, text);
 }
 
+function listFilesRecursive(directory, root = directory) {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) return listFilesRecursive(absolute, root);
+      if (!entry.isFile()) return [];
+      return [absolute.slice(root.length + 1).replace(/\\/g, "/")];
+    })
+    .sort();
+}
+
+function fileSha256(filePath) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function directoryContentFingerprint(directory) {
+  const stat = statSync(directory, { throwIfNoEntry: false });
+  if (!stat?.isDirectory()) return "";
+  const entries = listFilesRecursive(directory).map((relative) => `${relative}\t${fileSha256(join(directory, relative))}`);
+  return createHash("sha256").update(entries.join("\n")).digest("hex");
+}
+
+function projectionParity(sharedPath, localPath) {
+  const sharedStat = statSync(sharedPath, { throwIfNoEntry: false });
+  const localStat = statSync(localPath, { throwIfNoEntry: false });
+  const sharedExists = !!sharedStat?.isDirectory();
+  const localExists = !!localStat?.isDirectory();
+  const sharedFingerprint = sharedExists ? directoryContentFingerprint(sharedPath) : "";
+  const localFingerprint = localExists ? directoryContentFingerprint(localPath) : "";
+  return {
+    sharedExists,
+    localExists,
+    contentMatches: sharedExists && localExists && sharedFingerprint === localFingerprint,
+    sharedFingerprint,
+    localFingerprint,
+  };
+}
+
 function connectorById(payload, id) {
   return payload.connectors.find((connector) => connector.id === id);
 }
@@ -274,7 +320,7 @@ function assertLocalConnectorProjection({ connectors, whamPost, whamGet, allowli
 }
 
 async function main() {
-  writeLocalCaches();
+  const cachePaths = writeLocalCaches();
 
   upstream = http.createServer(async (req, res) => {
     const body = req.method === "POST" ? await readJson(req) : {};
@@ -327,7 +373,7 @@ async function main() {
       DEEPCODEX_STATE_ROOT: stateRoot,
       CODEX_HOME: codexHome,
       CODEX_HOME_DIR: codexHome,
-      DEEPCODEX_SHARED_CODEX_HOME: join(stateRoot, "missing-shared-codex-home"),
+      DEEPCODEX_SHARED_CODEX_HOME: sharedCodexHome,
       GLOBAL_CODEX_HOME: join(stateRoot, "missing-global-codex-home"),
       ANTICODEX_LOCAL_AUTHORIZED_CONNECTORS: "",
       TRANSLATOR_NATIVE_STREAMING: "0",
@@ -377,7 +423,18 @@ async function main() {
     upstreamRequestsBeforeLocalEndpoints,
     "local connector/app-tool endpoints must not make provider or OAuth upstream requests",
   );
-
+  const connectorParity = projectionParity(cachePaths.shared.connectorDir, cachePaths.local.connectorDir);
+  const appToolParity = projectionParity(cachePaths.shared.toolsDir, cachePaths.local.toolsDir);
+  const postToolNames = toolNames(whamPost);
+  const getToolNames = toolNames(whamGet);
+  const appToolGetPostParity = {
+    contentMatches: JSON.stringify(postToolNames) === JSON.stringify(getToolNames),
+    missingFromGet: postToolNames.filter((name) => !getToolNames.includes(name)),
+    extraFromGet: getToolNames.filter((name) => !postToolNames.includes(name)),
+  };
+  assert.equal(connectorParity.contentMatches, true, "local connector cache should match shared fixture source");
+  assert.equal(appToolParity.contentMatches, true, "local app-tool cache should match shared fixture source");
+  assert.equal(appToolGetPostParity.contentMatches, true, "GET and POST /backend-api/wham/apps should expose the same tools");
   return {
     ok: true,
     reportName: "local-connectors",
@@ -405,9 +462,13 @@ async function main() {
       upstreamRequestsAfterLocalEndpoints,
       upstreamRequestsDuringLocalEndpoints: upstreamRequestsAfterLocalEndpoints - upstreamRequestsBeforeLocalEndpoints,
     },
+    connectorParity,
+    appToolParity,
+    appToolGetPostParity,
     tempIsolation: {
       codexHome,
       stateRoot,
+      sharedCodexHome,
       sharedHomeUsed: false,
     },
     disclaimer: "This verifies only Anti-Codex local metadata projection and local allowlist filtering. It does not claim remote OAuth or real connector authorization.",

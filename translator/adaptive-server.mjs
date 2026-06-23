@@ -1005,6 +1005,11 @@ function localFeatureSummary({ includeProjection = false } = {}) {
     const authorizedConnectors = connectors.filter((connector) => connector?.isAccessible === true);
     const localAllowlistedConnectors = connectors.filter((connector) =>
         connector?.locallyAllowlisted === true || connector?.localAuthorization === "anticodex-local-allowlist");
+    const localConnectorReport = latestManagerReportItem("local connector check", "latest-local-connectors.json");
+    const localConnectorEvidence = localConnectorReport?.localConnectorEvidence || null;
+    const localConnectorExposedToolNames = Array.isArray(localConnectorEvidence?.exposedToolNames)
+        ? localConnectorEvidence.exposedToolNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
+        : [];
     return {
         codexHome: codexHome || null,
         sharedCodexHome: sharedCodexHome || null,
@@ -1022,6 +1027,24 @@ function localFeatureSummary({ includeProjection = false } = {}) {
         snapshots: {
             connectorDirectoryFiles: countLocalJsonFiles(connectorCachePath),
             appToolsCacheFiles: countLocalJsonFiles(appToolsCachePath),
+        },
+        connectorVerifier: {
+            reportPresent: localConnectorReport?.exists === true,
+            ok: localConnectorReport?.effectiveOk === true,
+            coverageKind: shortSafeText(localConnectorReport?.coverageKind || "", ""),
+            usedRealTraffic: localConnectorReport?.usedRealTraffic === true,
+            noFakeAuthorization: localConnectorEvidence
+                ? localConnectorEvidence.allowlistedConnectorAccessible === false
+                    && localConnectorEvidence.hiddenConnectorAccessible === false
+                    && localConnectorEvidence.linkEndpointsUnsupported === true
+                    && Number(localConnectorEvidence.upstreamRequestsDuringLocalEndpoints) === 0
+                : null,
+            exposedToolNames: localConnectorExposedToolNames,
+            exposedToolCount: localConnectorExposedToolNames.length,
+            linkedToolOnly: localConnectorExposedToolNames.length === 1 && localConnectorExposedToolNames[0] === "linked_tool",
+            getPostParityClean: localConnectorEvidence?.appToolGetPostParityClean ?? null,
+            connectorParityClean: localConnectorEvidence?.connectorParityClean ?? null,
+            appToolParityClean: localConnectorEvidence?.appToolParityClean ?? null,
         },
         snapshotStatus: {
             present: Boolean(snapshotMarker),
@@ -2214,13 +2237,19 @@ function latestManagerReportItem(label, fileName) {
     const publicDocumentation = checks.publicDocumentation && typeof checks.publicDocumentation === "object" ? checks.publicDocumentation : null;
     const endpointEvidence = report?.endpointEvidence && typeof report.endpointEvidence === "object" ? report.endpointEvidence : null;
     const capabilities = report?.capabilities && typeof report.capabilities === "object" ? report.capabilities : null;
-    const connectorParity = capabilities?.connectorParity && typeof capabilities.connectorParity === "object" ? capabilities.connectorParity : null;
-    const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object" ? capabilities.appToolParity : null;
+    const connectorParity = capabilities?.connectorParity && typeof capabilities.connectorParity === "object"
+        ? capabilities.connectorParity
+        : (report?.connectorParity && typeof report.connectorParity === "object" ? report.connectorParity : null);
+    const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object"
+        ? capabilities.appToolParity
+        : (report?.appToolParity && typeof report.appToolParity === "object" ? report.appToolParity : null);
     const refreshConnectorParity = report?.connectorParity && typeof report.connectorParity === "object" ? report.connectorParity : null;
     const refreshAppToolParity = report?.appToolParity && typeof report.appToolParity === "object" ? report.appToolParity : null;
     const refreshReport = report?.reportName === "refresh-features";
     const refreshGuidance = refreshReport && report?.guidance && typeof report.guidance === "object" ? report.guidance : null;
-    const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object" ? capabilities.appToolGetPostParity : null;
+    const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object"
+        ? capabilities.appToolGetPostParity
+        : (report?.appToolGetPostParity && typeof report.appToolGetPostParity === "object" ? report.appToolGetPostParity : null);
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
     const realAntigravityEvidence = report?.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : null;
@@ -2405,13 +2434,21 @@ function latestManagerReportItem(label, fileName) {
         } : null,
         publicDocumentationFailureCount: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation && Array.isArray(publicDocumentation.failed) ? publicDocumentation.failed.length : null,
         localConnectorEvidence: endpointEvidence ? {
+            exposedToolsPost: Number.isFinite(Number(endpointEvidence.exposedToolsPost)) ? Number(endpointEvidence.exposedToolsPost) : null,
+            exposedToolsGet: Number.isFinite(Number(endpointEvidence.exposedToolsGet)) ? Number(endpointEvidence.exposedToolsGet) : null,
             chatgptInstallUrlsScrubbed: endpointEvidence.chatgptInstallUrlsScrubbed === true,
             linkEndpointsUnsupported: endpointEvidence.linkEndpointsUnsupported === true,
+            linkedConnectorAccessible: endpointEvidence.linkedConnectorAccessible === true,
             allowlistedConnectorAccessible: endpointEvidence.allowlistedConnectorAccessible === true,
             allowlistedConnectorLocallyAllowlisted: endpointEvidence.allowlistedConnectorLocallyAllowlisted === true,
             upstreamRequestsDuringLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints) : null,
             hiddenConnectorAccessible: endpointEvidence.hiddenConnectorAccessible === true,
             exposedToolNames: Array.isArray(endpointEvidence.exposedToolNames) ? endpointEvidence.exposedToolNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+            connectorParityClean: connectorParity ? connectorParity.contentMatches === true : null,
+            appToolParityClean: appToolParity ? appToolParity.contentMatches === true : null,
+            appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
+            appToolGetPostMissingFromGet: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+            appToolGetPostExtraFromGet: Array.isArray(appToolGetPostParity?.extraFromGet) ? appToolGetPostParity.extraFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
         } : null,
         modelRoutingEvidence: (typeof report?.skipRequests === "boolean" || modelRoutingResults.length) ? {
             mode: shortSafeText(report?.mode || "", ""),

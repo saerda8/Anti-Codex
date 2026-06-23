@@ -5612,6 +5612,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /local connector summary behavior not covered/);
   assert.match(diagnostics, /local connector summary coverageKind mismatch/);
   assert.match(diagnostics, /local connector summary GET\/POST tool counts differ/);
+  assert.match(diagnostics, /local connector summary exposed tool names is not exactly one 'linked_tool'/);
   assert.match(diagnostics, /plugin capability summary/);
   assert.match(diagnostics, /localConnectorEvidence/);
   assert.match(diagnostics, /mcpSkillEvidence/);
