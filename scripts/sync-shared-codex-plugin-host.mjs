@@ -488,6 +488,8 @@ function writeStartupSnapshotMarker(summary) {
     updatedAt: new Date().toISOString(),
     codexHome,
     sharedCodexHome,
+    extraSkillsRoots,
+    agentsSkillsPath: extraSkillsRoots[0] || null,
     relPaths: startupSnapshotMappings.map(item => item.relPath),
     summary,
     sourceFingerprint,

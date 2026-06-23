@@ -705,18 +705,40 @@ function computeSnapshotManifest(dirPath) {
 }
 
 function defaultExtraSkillsRoots() {
+    return extraSkillsRootsFromValue(process.env.ANTICODEX_EXTRA_SKILLS_ROOTS, "default").roots;
+}
+
+function extraSkillsRootsFromValue(value, fallbackMode = "none") {
     const home = process.env.USERPROFILE || process.env.HOME || "";
-    const configured = process.env.ANTICODEX_EXTRA_SKILLS_ROOTS || (home ? resolvePath(home, ".agents", "skills") : "");
-    return configured
+    const configured = value || (fallbackMode === "default" && home ? resolvePath(home, ".agents", "skills") : "");
+    const roots = String(configured || "")
         .split(process.platform === "win32" ? ";" : ":")
         .map((item) => item.trim())
         .filter(Boolean);
+    return {
+        roots,
+        source: value ? "env" : (fallbackMode === "default" ? "default" : "none"),
+        agentsSkillsPath: roots[0] || null,
+    };
 }
 
-function computeStartupSnapshotSourceFingerprint(sharedCodexHome) {
+function markerExtraSkillsRootInfo(snapshotMarker) {
+    if (Array.isArray(snapshotMarker?.extraSkillsRoots)) {
+        const roots = snapshotMarker.extraSkillsRoots.map((item) => String(item || "").trim()).filter(Boolean);
+        return { roots, source: "marker", agentsSkillsPath: String(snapshotMarker?.agentsSkillsPath || roots[0] || "").trim() || null };
+    }
+    if (typeof snapshotMarker?.agentsSkillsPath === "string" && snapshotMarker.agentsSkillsPath.trim()) {
+        const agentsSkillsPath = snapshotMarker.agentsSkillsPath.trim();
+        return { roots: [agentsSkillsPath], source: "marker", agentsSkillsPath };
+    }
+    return extraSkillsRootsFromValue(process.env.ANTICODEX_EXTRA_SKILLS_ROOTS, "default");
+}
+
+function computeStartupSnapshotSourceFingerprint(sharedCodexHome, { extraSkillsRoots = null } = {}) {
     if (!sharedCodexHome || !existsSync(sharedCodexHome)) return null;
+    const effectiveExtraSkillsRoots = Array.isArray(extraSkillsRoots) ? extraSkillsRoots : defaultExtraSkillsRoots();
     const startupMappings = [
-        { relPath: "skills", sharedPath: resolvePath(sharedCodexHome, "skills"), extraSharedPaths: defaultExtraSkillsRoots() },
+        { relPath: "skills", sharedPath: resolvePath(sharedCodexHome, "skills"), extraSharedPaths: effectiveExtraSkillsRoots },
         { relPath: "AGENTS.md", sharedPath: resolvePath(sharedCodexHome, "AGENTS.md") },
         { relPath: "DEFAULT_SKILL_ALLOWLIST.md", sharedPath: resolvePath(sharedCodexHome, "DEFAULT_SKILL_ALLOWLIST.md") },
         { relPath: "RTK.md", sharedPath: resolvePath(sharedCodexHome, "RTK.md") },
@@ -941,6 +963,7 @@ function localFeatureSummary({ includeProjection = false } = {}) {
     const requiredSkills = ["headroom", "context-save", "context-restore", "keep-codex-fast"];
     const snapshotMaxAgeHours = Math.max(1, Number(process.env.ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS) || 24);
     const snapshotMarker = readJsonIfPresent(snapshotMarkerPath);
+    const extraSkillsRootInfo = markerExtraSkillsRootInfo(snapshotMarker);
     const snapshotUpdatedAtMs = Date.parse(String(snapshotMarker?.updatedAt || ""));
     const snapshotAgeHours = Number.isFinite(snapshotUpdatedAtMs)
         ? Math.max(0, (Date.now() - snapshotUpdatedAtMs) / 3_600_000)
@@ -948,7 +971,7 @@ function localFeatureSummary({ includeProjection = false } = {}) {
     const snapshotMarkerValid = snapshotMarker?.schema === "anticodex-startup-snapshots-ready-v1"
         && Number.isFinite(snapshotUpdatedAtMs);
     const snapshotSource = snapshotMarkerValid
-        ? computeStartupSnapshotSourceFingerprint(snapshotMarker?.sharedCodexHome || sharedCodexHome)
+        ? computeStartupSnapshotSourceFingerprint(snapshotMarker?.sharedCodexHome || sharedCodexHome, { extraSkillsRoots: extraSkillsRootInfo.roots })
         : null;
     const sourceFingerprintPresent = typeof snapshotMarker?.sourceFingerprint === "string"
         && snapshotMarker.sourceFingerprint.length > 0;
@@ -1006,6 +1029,9 @@ function localFeatureSummary({ includeProjection = false } = {}) {
             maxAgeHours: snapshotMaxAgeHours,
             sourceMtimeMax: snapshotMarker?.sourceMtimeMax || null,
             currentSourceMtimeMax: snapshotSource?.sourceMtimeMax || null,
+            extraSkillsRoots: extraSkillsRootInfo.roots,
+            agentsSkillsPath: extraSkillsRootInfo.agentsSkillsPath,
+            extraSkillsRootsSource: extraSkillsRootInfo.source,
             sourceFingerprintPresent,
             sourceFingerprintComparable,
             sourceFingerprintMatches,
@@ -2593,6 +2619,17 @@ function managerActionScriptResponse(callbackName, payload) {
     return `;try{globalThis[${JSON.stringify(callbackName)}](${JSON.stringify(payload)});}catch(e){console.error(e);}`;
 }
 
+function managerActionArgs(actionName, action) {
+    const args = [...(action.args || [])];
+    if (["mcpSkills", "pluginCapabilities", "refreshFeatures"].includes(actionName)) {
+        const codexHome = process.env.CODEX_HOME_DIR || process.env.CODEX_HOME || (ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "codex-home-deepseek-app") : "");
+        const marker = codexHome ? readJsonIfPresent(resolvePath(codexHome, ".anticodex-startup-snapshots-ready.json")) : null;
+        const agentsSkillsPath = markerExtraSkillsRootInfo(marker).agentsSkillsPath;
+        if (agentsSkillsPath) args.push("-AgentsSkillsPath", agentsSkillsPath);
+    }
+    return args;
+}
+
 async function runManagerAction(actionName) {
     const action = MANAGER_ACTIONS[actionName];
     if (!action) {
@@ -2602,10 +2639,11 @@ async function runManagerAction(actionName) {
     }
     const label = managerActionLabel(actionName, action);
     const scriptPath = managerScriptPath(action);
+    const scriptArgs = managerActionArgs(actionName, action);
     const command = [
         "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)",
         "$OutputEncoding = [Console]::OutputEncoding",
-        `& ${psSingleQuoted(scriptPath)} ${action.args.map(psArgument).join(" ")}`,
+        `& ${psSingleQuoted(scriptPath)} ${scriptArgs.map(psArgument).join(" ")}`,
     ].join("; ");
     const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command];
     if (action.background) {
@@ -7314,4 +7352,4 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
     });
 }
 
-export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, requestNeedsInternalWebTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, MAX_TOOL_LOOPS };
+export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, requestNeedsInternalWebTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, MAX_TOOL_LOOPS };

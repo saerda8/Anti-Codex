@@ -15,6 +15,7 @@ const {
   applyAntigravityTrafficFailure,
   applyAntigravityTrafficSuccess,
   buildAntigravityModelRefresh,
+  computeStartupSnapshotSourceFingerprint,
   providerModelRefreshSnapshot,
   antigravityReadinessFailure,
   antigravityVisibleModelIds,
@@ -652,6 +653,7 @@ test("diagnostics marks local feature snapshots fresh or stale using the startup
   const previousCodeHomeDir = process.env.CODEX_HOME_DIR;
   const previousSharedHome = process.env.DEEPCODEX_SHARED_CODEX_HOME;
   const previousMaxAge = process.env.ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS;
+  const previousExtraSkills = process.env.ANTICODEX_EXTRA_SKILLS_ROOTS;
   try {
     process.env.CODEX_HOME = root;
     process.env.CODEX_HOME_DIR = root;
@@ -702,6 +704,29 @@ test("diagnostics marks local feature snapshots fresh or stale using the startup
     assert.equal(sourceChanged.localFeatures.snapshotStatus.staleReason, "source_changed");
     assert.equal(sourceChanged.localFeatures.snapshotStatus.sourceFingerprintComparable, true);
     assert.equal(sourceChanged.localFeatures.snapshotStatus.sourceFingerprintMatches, false);
+
+    const customAgents = path.join(root, "custom-agents-skills");
+    const defaultAgents = path.join(root, ".agents", "skills");
+    mkdirSync(path.join(customAgents, "agent-skill"), { recursive: true });
+    writeFileSync(path.join(customAgents, "agent-skill", "SKILL.md"), "custom-agent");
+    mkdirSync(path.join(defaultAgents, "different-agent-skill"), { recursive: true });
+    writeFileSync(path.join(defaultAgents, "different-agent-skill", "SKILL.md"), "default-agent");
+    const markerSource = computeStartupSnapshotSourceFingerprint(shared, { extraSkillsRoots: [customAgents] });
+    delete process.env.ANTICODEX_EXTRA_SKILLS_ROOTS;
+    writeFileSync(markerPath, JSON.stringify({
+      schema: "anticodex-startup-snapshots-ready-v1",
+      updatedAt: new Date().toISOString(),
+      sharedCodexHome: shared,
+      extraSkillsRoots: [customAgents],
+      agentsSkillsPath: customAgents,
+      sourceFingerprint: markerSource.sourceFingerprint,
+      sourceMtimeMax: markerSource.sourceMtimeMax,
+    }));
+    const customRootFresh = diagnosticsPayload({ health: { upstream: "antigravity-desktop" } });
+    assert.equal(customRootFresh.localFeatures.snapshotStatus.state, "fresh");
+    assert.equal(customRootFresh.localFeatures.snapshotStatus.extraSkillsRootsSource, "marker");
+    assert.deepEqual(customRootFresh.localFeatures.snapshotStatus.extraSkillsRoots, [customAgents]);
+    assert.equal(customRootFresh.localFeatures.snapshotStatus.agentsSkillsPath, customAgents);
   } finally {
     if (previousCodeHome === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previousCodeHome;
@@ -711,6 +736,8 @@ test("diagnostics marks local feature snapshots fresh or stale using the startup
     else process.env.DEEPCODEX_SHARED_CODEX_HOME = previousSharedHome;
     if (previousMaxAge === undefined) delete process.env.ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS;
     else process.env.ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS = previousMaxAge;
+    if (previousExtraSkills === undefined) delete process.env.ANTICODEX_EXTRA_SKILLS_ROOTS;
+    else process.env.ANTICODEX_EXTRA_SKILLS_ROOTS = previousExtraSkills;
     rmSync(root, { recursive: true, force: true });
   }
 });

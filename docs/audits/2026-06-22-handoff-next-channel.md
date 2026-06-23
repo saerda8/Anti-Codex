@@ -345,6 +345,13 @@ Branch: main
 - Targeted runtime repair refreshed `.system`, `_repos`, and `keep-codex-fast` in Anti-Codex local skills from shared Codex; native Codex was not changed.
 - Fresh evidence: parser checks passed, focused launcher contracts passed, Manager bridge self-test passed, release-gate `--self-test` passed, refreshed MCP/Skill + refresh verify-only + plugin capability reports agree on source fingerprint `ebc8ecb9d202...`, and strict passive gates are `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, `damagedReports:[]`.
 
+## 2026-06-23 Startup Snapshot Agents Root Pinning Follow-Up
+
+- Startup snapshot markers now store `extraSkillsRoots` and `agentsSkillsPath`.
+- Diagnostics recompute source freshness with marker roots first, then environment/default roots, and expose the selected root source/path in `localFeatures.snapshotStatus`.
+- Manager MCP/Skill, plugin capability, and refresh-local-features actions now pass the marker agents path with `-AgentsSkillsPath`.
+- Fresh evidence: sync/adaptive syntax checks passed, and focused startup marker + diagnostics snapshot freshness + MCP/Skill launcher contracts passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

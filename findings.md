@@ -710,3 +710,4 @@
 - Connector/app-tool parity must reject extra local cache records too. Missing/changed shared records catch stale inheritance, while extra local records catch Anti-Codex-only residue that would violate the "same inherited surface" contract.
 - Skill inheritance needs content fingerprints, not just names. Compare each local inherited skill directory against the shared `.codex\skills` or `.agents\skills` fingerprint and gate `changedShared` the same way as missing shared skills.
 - PowerShell `Get-FileHash` is too slow for 15k-file skill trees in routine verifiers. Use .NET SHA256 streaming and cache per-directory fingerprints when hashing inherited skills.
+- Startup snapshot markers must record the extra skill roots used at marker creation. Diagnostics and Manager follow-up actions should prefer marker roots over current environment defaults to avoid false stale/source-changed results when custom `.agents` roots are used.

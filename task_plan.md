@@ -1117,3 +1117,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: replaced hot `Get-FileHash` loops with .NET SHA256 streaming in the skill-heavy paths; the MCP/Skill verifier dropped from timing out after 74 seconds to passing in about 37 seconds on the current inherited surface.
 - Runtime repair: targeted local Anti-Codex skill refresh copied `.system`, `_repos`, and `keep-codex-fast` from shared Codex into `codex-home-deepseek-app\skills`; native Codex was not modified.
 - Verification: parser checks passed; focused launcher contracts passed; Manager bridge self-test passed; release-gate `--self-test` passed with `mcp_skills_changed_shared_skills`; MCP/Skill, refresh verify-only, and plugin capability reports were refreshed; strict passive gates are back to `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, `damagedReports:[]`.
+
+## 2026-06-23 Startup Snapshot Agents Root Pinning
+- Completed: startup snapshot markers now store `extraSkillsRoots` and `agentsSkillsPath`, preserving the exact `.agents` skill root used during startup snapshot creation.
+- Completed: diagnostics/source-freshness recomputation now prefers marker roots over current environment/default roots, and exposes root source/path in `localFeatures.snapshotStatus`.
+- Completed: Manager actions for MCP/Skill, plugin capabilities, and refresh local features now pass the marker agents path through `-AgentsSkillsPath`, so follow-up checks use the same inherited surface.
+- Verification: adaptive/sync syntax checks passed; focused startup marker, diagnostics snapshot freshness, and MCP/Skill launcher contracts passed.

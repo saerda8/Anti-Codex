@@ -3955,13 +3955,18 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.doesNotMatch(refreshLocalFeatures, /target = if \(\$item\) \{ \$item\.Target \}/);
   assert.match(refreshLocalFeatures, /ConvertTo-Json/);
   assert.match(pluginHostSync, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
+  assert.match(pluginHostSync, /extraSkillsRoots/);
+  assert.match(pluginHostSync, /agentsSkillsPath/);
   assert.match(pluginHostSync, /\.agents', 'skills'/);
   assert.match(pluginHostSync, /extraSharedPaths/);
   assert.match(pluginHostSync, /computeCombinedSnapshotManifest/);
   assert.match(adaptiveServer, /function defaultExtraSkillsRoots/);
+  assert.match(adaptiveServer, /function markerExtraSkillsRootInfo/);
+  assert.match(adaptiveServer, /function managerActionArgs/);
   assert.match(adaptiveServer, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
   assert.match(adaptiveServer, /\.agents", "skills"/);
-  assert.match(adaptiveServer, /extraSharedPaths: defaultExtraSkillsRoots/);
+  assert.match(adaptiveServer, /extraSkillsRootsSource/);
+  assert.match(adaptiveServer, /-AgentsSkillsPath/);
 
   // Must NOT reference ChatGPT login or kill processes
   assert.doesNotMatch(mcpSkills, /Stop-Process/);

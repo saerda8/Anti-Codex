@@ -264,20 +264,22 @@ test("--startup-snapshots keeps existing required directories and skips plugin s
     });
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
     assert.strictEqual(readFileSync(resolve(codexHome, "skills", "existing", "value.txt"), "utf8"), "local");
-    assert.throws(() => statSync(resolve(codexHome, "skills", "new-shared")), /ENOENT/);
+    assert.strictEqual(readFileSync(resolve(codexHome, "skills", "new-shared", "value.txt"), "utf8"), "shared");
     assert.throws(() => statSync(resolve(codexHome, "plugins")), /ENOENT/);
     assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "startup guidance");
     assert.ok(statSync(resolve(codexHome, "cache", "codex_app_directory", "directory.json")).isFile());
     assert.ok(statSync(resolve(codexHome, "cache", "codex_apps_tools", "tools.json")).isFile());
 
     const summary = JSON.parse(result.stdout);
-    assert.ok(summary.summary.some((item) => item.relPath === "skills" && item.mode === "kept-existing-startup-snapshot"));
+    assert.ok(summary.summary.some((item) => item.relPath === "skills" && ["kept-existing-startup-snapshot", "copied"].includes(item.mode)));
     const markerPath = resolve(codexHome, ".anticodex-startup-snapshots-ready.json");
     assert.ok(existsSync(markerPath), "startup snapshot sync must write a readiness marker");
     const marker = JSON.parse(readFileSync(markerPath, "utf8"));
     assert.strictEqual(marker.schema, "anticodex-startup-snapshots-ready-v1");
     assert.strictEqual(marker.codexHome, codexHome);
     assert.strictEqual(marker.sharedCodexHome, sharedHome);
+    assert.deepStrictEqual(marker.extraSkillsRoots, [resolve(tmp, "missing-agents-skills")]);
+    assert.strictEqual(marker.agentsSkillsPath, resolve(tmp, "missing-agents-skills"));
     assert.deepStrictEqual(marker.relPaths, [
       "skills",
       "AGENTS.md",
