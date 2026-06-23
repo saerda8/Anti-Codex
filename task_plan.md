@@ -1020,3 +1020,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: cold relaunch reports now carry explicit `originalCodex.unchanged`, `beforePids`, and `afterPids` fields instead of relying only on absence of an error string.
 - Completed: report summaries, diagnostic verification, and Manager latest-report text now surface cold relaunch health, readiness, mode, process counts, failed stages, and original Codex isolation.
 - Verification: no cold relaunch was run in this batch; syntax/parser checks passed; release-gate `--self-test` rejects forged cold reports; focused cold/summarizer/diagnostics/release-gate tests passed; strict passive gates remain `shortReady:true`, `releaseReady:true` with cold report absent and optional.
+
+## 2026-06-23 Stability Soak Optional Evidence Semantics
+- Completed: passive release gates now validate `latest-stability-soak.json` semantically when the optional report exists: report name, empty failures, provider/start/end readiness, stable translator PID, at least one health check, elapsed duration, successful turn list, and mode-specific model evidence.
+- Completed: report summaries, diagnostic verification, and Manager latest-report text now surface stability-soak readiness, mode/model, PID stability, health-check count, turn count, failed-turn count, and elapsed time.
+- Verification: no real stability soak was run in this batch; syntax/parser checks passed; release-gate `--self-test` rejects forged soak evidence; focused stability-soak summarizer/diagnostics/release-gate tests passed.

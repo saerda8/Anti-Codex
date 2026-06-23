@@ -56,7 +56,7 @@ const gateDefinitions = [
   { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true },
   { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true },
 
-  { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false },
+  { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false, requireStabilitySoakSemantics: true },
   { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, requireColdRelaunchSemantics: true, note: "Manual/isolated restart evidence; optional for passive release readiness." },
 ];
 
@@ -372,6 +372,19 @@ function summarizeGate(definition) {
         if (!stageNames.has(name)) semanticFailures.push(`cold_relaunch_stage_missing:${name}`);
       }
       if (String((report.failures || []).join("\n")).includes("original Codex main process set changed")) semanticFailures.push("cold_relaunch_original_codex_changed");
+    }
+    if (definition.requireStabilitySoakSemantics) {
+      const turns = Array.isArray(report.turns) ? report.turns : [];
+      if (report.reportName !== "stability-soak") semanticFailures.push("stability_soak_report_name");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("stability_soak_failures");
+      if (report.providerReady !== true || report.startReady !== true || report.endReady !== true) semanticFailures.push("stability_soak_provider_not_ready");
+      if (report.pidStable !== true || !report.startPid || !report.endPid || report.startPid !== report.endPid) semanticFailures.push("stability_soak_pid_not_stable");
+      if (Number(report.healthChecks || 0) < 1) semanticFailures.push("stability_soak_health_checks_missing");
+      if (Number(report.elapsedMs || 0) < 1000) semanticFailures.push("stability_soak_elapsed_too_short");
+      if (turns.length < 1) semanticFailures.push("stability_soak_turns_missing");
+      if (turns.some((turn) => turn?.ok !== true)) semanticFailures.push("stability_soak_turn_not_ok");
+      if (report.mode === "antigravity" && Number(report.modelCount || 0) < 1) semanticFailures.push("stability_soak_model_count");
+      if (report.mode === "third-party" && !report.model) semanticFailures.push("stability_soak_provider_model");
     }
     if (definition.requireThirdPartyProviderSemantics) {
       const history = report.multiTurnHistory || {};
@@ -793,6 +806,26 @@ if (args.has("--self-test")) {
       ],
     });
 
+    writeFakeLatestReport("latest-stability-soak.json", {
+      ok: true,
+      reportName: "wrong-stability-soak",
+      failures: ["translator PID changed"],
+      mode: "antigravity",
+      model: "",
+      providerReady: false,
+      startReady: false,
+      endReady: false,
+      modelCount: 0,
+      startPid: 100,
+      endPid: 200,
+      pidStable: false,
+      healthChecks: 0,
+      elapsedMs: 10,
+      turns: [
+        { name: "cn-1", ok: false },
+      ],
+    });
+
     const semanticFailures = {};
     semanticFailures.fastOverallNoTraffic = assertSemanticFailures("fastOverallNoTraffic", "self-test failed: semantically invalid fast installed-overall report satisfied the gate", [
       "installed_overall_report_name",
@@ -897,6 +930,16 @@ if (args.has("--self-test")) {
       "cold_relaunch_stage_missing:launch-anticodex",
       "cold_relaunch_stage_missing:wait-health-ready",
       "cold_relaunch_original_codex_changed",
+    ]);
+    semanticFailures.stabilitySoak = assertSemanticFailures("stabilitySoak", "self-test failed: semantically invalid stability-soak report satisfied the gate", [
+      "stability_soak_report_name",
+      "stability_soak_failures",
+      "stability_soak_provider_not_ready",
+      "stability_soak_pid_not_stable",
+      "stability_soak_health_checks_missing",
+      "stability_soak_elapsed_too_short",
+      "stability_soak_turn_not_ok",
+      "stability_soak_model_count",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_requested_real_traffic_uncovered_but_ok",

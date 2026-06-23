@@ -239,6 +239,13 @@ Branch: main
 - Summaries, diagnostics, and Manager latest-report text surface cold relaunch health/readiness/mode/process/stage/original-Codex evidence. The report remains optional because producing it restarts the isolated Anti-Codex runtime.
 - Fresh evidence: no cold relaunch was run in this batch; release-gate `--self-test` rejects forged cold reports; focused cold/summarizer/diagnostics tests passed; strict passive gates remain `shortReady:true` / `releaseReady:true` with cold absent and optional.
 
+## 2026-06-23 Stability Soak Optional Evidence Follow-Up
+
+- Stability-soak reports remain optional in passive release readiness because producing them can be long and may touch real upstream traffic.
+- Passive release gates now validate soak reports when present, requiring readiness before/after, stable translator PID, health checks, successful turns, zero failures, elapsed duration, and mode/model evidence.
+- Summaries, diagnostics, and Manager latest-report text surface stability-soak readiness, mode/model, PID stability, health-check count, turn count, failed-turn count, and elapsed time.
+- Fresh evidence: no real soak was run in this batch; syntax/parser checks passed; release-gate `--self-test` rejects forged soak evidence; focused stability-soak summarizer/diagnostics/release-gate tests passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

@@ -2202,6 +2202,21 @@ function latestManagerReportItem(label, fileName) {
             stageCount: Array.isArray(report.stages) ? report.stages.length : 0,
             failedStageCount: Array.isArray(report.stages) ? report.stages.filter((stage) => !stage || stage.ok !== true).length : 0,
         } : null,
+        stabilitySoakEvidence: report?.reportName === "stability-soak" ? {
+            mode: shortSafeText(report.mode || "", ""),
+            model: shortSafeText(report.model || "", ""),
+            providerReady: report.providerReady === true,
+            startReady: report.startReady === true,
+            endReady: report.endReady === true,
+            modelCount: Number.isFinite(Number(report.modelCount)) ? Number(report.modelCount) : null,
+            pidStable: report.pidStable === true,
+            startPid: Number.isFinite(Number(report.startPid)) ? Number(report.startPid) : null,
+            endPid: Number.isFinite(Number(report.endPid)) ? Number(report.endPid) : null,
+            healthChecks: Number.isFinite(Number(report.healthChecks)) ? Number(report.healthChecks) : null,
+            turnCount: Array.isArray(report.turns) ? report.turns.length : 0,
+            failedTurnCount: Array.isArray(report.turns) ? report.turns.filter((turn) => !turn || turn.ok !== true).length : 0,
+            elapsedMs: Number.isFinite(Number(report.elapsedMs)) ? Number(report.elapsedMs) : null,
+        } : null,
         antigravityReturnEvidence: realAntigravityEvidence ? {
             requested: realAntigravityEvidence.requested === true,
             realAntigravityTurnUsed: realAntigravityEvidence.realAntigravityTurnUsed === true,
@@ -2874,6 +2889,10 @@ function latestReportsSummary(result){
     if(item.coldRelaunchEvidence){
       const evidence=item.coldRelaunchEvidence;
       lines.push("  coldRelaunch: health="+(evidence.healthOk?"true":"false")+" / ready="+(evidence.providerReady?"true":"false")+" / mode="+(evidence.mode||"unknown")+" / main="+(evidence.mainCount??"?")+" / translator="+(evidence.translatorCount??"?")+" / originalCodex="+(evidence.originalCodexUnchanged?"unchanged":"unknown")+" / failedStages="+(evidence.failedStageCount??"?"));
+    }
+    if(item.stabilitySoakEvidence){
+      const evidence=item.stabilitySoakEvidence;
+      lines.push("  stabilitySoak: ready="+(evidence.providerReady&&evidence.startReady&&evidence.endReady?"true":"false")+" / mode="+(evidence.mode||"unknown")+" / model="+(evidence.model||"unknown")+" / pidStable="+(evidence.pidStable?"true":"false")+" / healthChecks="+(evidence.healthChecks??"?")+" / turns="+(evidence.turnCount??"?")+" failed="+(evidence.failedTurnCount??"?"));
     }
     if(item.antigravityReturnEvidence){
       const evidence=item.antigravityReturnEvidence;

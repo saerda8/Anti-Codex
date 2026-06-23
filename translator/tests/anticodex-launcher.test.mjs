@@ -2355,6 +2355,48 @@ test("report summarizer surfaces cold relaunch evidence", () => {
   }
 });
 
+test("report summarizer surfaces stability soak evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-stability-soak-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-stability-soak.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "stability-soak",
+      mode: "antigravity",
+      model: "gemini-3.5-flash-low",
+      providerReady: true,
+      startReady: true,
+      endReady: true,
+      modelCount: 8,
+      startPid: 123,
+      endPid: 123,
+      pidStable: true,
+      healthChecks: 5,
+      elapsedMs: 45000,
+      turns: [
+        { name: "cn-1", ok: true },
+        { name: "stream", ok: true },
+      ],
+      failures: [],
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.stabilitySoakEvidence.mode, "antigravity");
+    assert.equal(summary.stabilitySoakEvidence.model, "gemini-3.5-flash-low");
+    assert.equal(summary.stabilitySoakEvidence.providerReady, true);
+    assert.equal(summary.stabilitySoakEvidence.startReady, true);
+    assert.equal(summary.stabilitySoakEvidence.endReady, true);
+    assert.equal(summary.stabilitySoakEvidence.pidStable, true);
+    assert.equal(summary.stabilitySoakEvidence.healthChecks, 5);
+    assert.equal(summary.stabilitySoakEvidence.turnCount, 2);
+    assert.equal(summary.stabilitySoakEvidence.failedTurnCount, 0);
+    assert.equal(summary.stabilitySoakEvidence.elapsedMs, 45000);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("report summarizer surfaces optional real-traffic continuity evidence values", () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-optional-real-summarizer-"));
   const providerReport = resolve(tempRoot, "latest-real-third-party-provider.json");
@@ -2992,6 +3034,9 @@ test("Anti-Codex ships a repeatable installed stability soak script", () => {
   assert.match(soak, /stream completion missing final marker/);
   assert.match(soak, /pidStable/);
   assert.match(soak, /healthChecks/);
+  assert.match(soak, /reportName = "stability-soak"/);
+  assert.match(soak, /startReady/);
+  assert.match(soak, /endReady/);
   assert.doesNotMatch(soak, /ConvertFrom-Json -Depth/);
   assert.doesNotMatch(soak, /Stop-Process|Codex\.exe|Antigravity\.exe/);
 });
@@ -4607,6 +4652,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /group: "manager"/);
   assert.match(releaseGates, /group: "optional-real-traffic"/);
   assert.match(releaseGates, /group: "soak"/);
+  assert.match(releaseGates, /requireStabilitySoakSemantics/);
+  assert.match(releaseGates, /stability_soak_pid_not_stable/);
+  assert.match(releaseGates, /stability_soak_health_checks_missing/);
+  assert.match(releaseGates, /stability_soak_turn_not_ok/);
   assert.match(releaseGates, /group: "cold"/);
   assert.match(releaseGates, /latest-cold-relaunch\.json/);
   assert.match(releaseGates, /requiredForRelease: false/);

@@ -417,6 +417,19 @@ function Test-DiagnosticBundle {
                 if ([int]$coldEvidence.failedStageCount -ne 0) { Add-Failure "cold relaunch summary reports failed stages" }
             }
         }
+        $stabilitySoakSummary = @($summary | Where-Object { $_.file -eq "latest-stability-soak.json" } | Select-Object -First 1)[0]
+        if ($stabilitySoakSummary) {
+            $soakEvidence = $stabilitySoakSummary.stabilitySoakEvidence
+            if (-not $soakEvidence) {
+                Add-Failure "stability soak summary missing stabilitySoakEvidence"
+            } elseif ($stabilitySoakSummary.ok -eq $true) {
+                if ($soakEvidence.providerReady -ne $true -or $soakEvidence.startReady -ne $true -or $soakEvidence.endReady -ne $true) { Add-Failure "stability soak summary missing readiness proof" }
+                if ($soakEvidence.pidStable -ne $true) { Add-Failure "stability soak summary missing stable PID proof" }
+                if ([int]$soakEvidence.healthChecks -lt 1) { Add-Failure "stability soak summary missing health checks" }
+                if ([int]$soakEvidence.turnCount -lt 1) { Add-Failure "stability soak summary missing turns" }
+                if ([int]$soakEvidence.failedTurnCount -ne 0) { Add-Failure "stability soak summary reports failed turns" }
+            }
+        }
         $managerRealButtonsSummary = @($summary | Where-Object { $_.file -eq "latest-manager-real-buttons.json" } | Select-Object -First 1)[0]
         if (-not $managerRealButtonsSummary) {
             Add-Failure "diagnostic reports summary missing latest-manager-real-buttons.json"
