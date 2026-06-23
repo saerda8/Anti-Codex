@@ -1134,3 +1134,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the real third-party provider verifier now writes `requestedRealTraffic:true` on successful opt-in real traffic, and strict optional readiness also filters out optional reports that are real-traffic-shaped but missing the requested flag.
 - Completed: release-gate self-test and launcher contracts now require the new `optional_real_traffic_not_requested` failure for forged successful optional reports.
 - Verification: real-provider and release-gate syntax passed; release-gate `--self-test` passed; focused optional-real/release tests passed, including the forged success-without-requested fixture; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
+
+## 2026-06-23 Optional Real-Traffic Evidence Label Boundary
+- Completed: Manager latest-report summaries now label the two optional real-traffic proofs as `realProviderSmoke` and `fakeProviderToAntigravityReturn` instead of wording that could imply one continuous real third-party-to-Antigravity chain.
+- Verification: adaptive/bridge/injected Manager syntax passed; Manager bridge `--self-test` passed; focused Manager/optional-real tests passed; strict passive gates remain green with only optional cold relaunch missing.

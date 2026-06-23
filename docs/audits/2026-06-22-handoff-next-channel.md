@@ -367,6 +367,12 @@ Branch: main
 - Release-gate self-test and launcher contracts now include a forged success-without-requested fixture and expect `optional_real_traffic_not_requested`.
 - Fresh evidence: real-provider and release-gate syntax passed; release-gate `--self-test` passed; focused optional-real/release tests passed; strict passive gates remain `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
 
+## 2026-06-23 Optional Real-Traffic Evidence Label Follow-Up
+
+- Manager latest-report summaries now label the separate optional proofs as `realProviderSmoke` and `fakeProviderToAntigravityReturn`.
+- This is a display boundary only: the existing evidence remains two optional reports, not one continuous real third-party provider to Antigravity chain.
+- Fresh evidence: adaptive/bridge/injected Manager syntax passed; Manager bridge `--self-test` passed; focused Manager/optional-real tests passed; strict passive gates remain green with only optional cold relaunch missing.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

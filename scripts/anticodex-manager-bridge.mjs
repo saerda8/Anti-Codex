@@ -345,13 +345,13 @@ function latestReportsSummary(result) {
     }
     if (item.optionalRealProviderEvidence) {
       const evidence = item.optionalRealProviderEvidence;
-      lines.push(`  realProvider: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
-      lines.push(`  realProvider route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / requested=${evidence.routeRequestedModel || "\u672a\u77e5"} / resolved=${evidence.routeResolvedModel || "\u672a\u77e5"} / status=${evidence.routeStatus || "\u672a\u77e5"} / redaction=${evidence.secretsRedacted ? "true" : "false"}`);
+      lines.push(`  realProviderSmoke: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
+      lines.push(`  realProviderSmoke route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / requested=${evidence.routeRequestedModel || "\u672a\u77e5"} / resolved=${evidence.routeResolvedModel || "\u672a\u77e5"} / status=${evidence.routeStatus || "\u672a\u77e5"} / redaction=${evidence.secretsRedacted ? "true" : "false"}`);
     }
     if (item.antigravityReturnEvidence) {
       const evidence = item.antigravityReturnEvidence;
-      lines.push(`  antigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
-      lines.push(`  antigravityRoute: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.resolvedModel || "\u672a\u77e5"}`);
+      lines.push(`  fakeProviderToAntigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
+      lines.push(`  fakeProviderToAntigravityRoute: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.resolvedModel || "\u672a\u77e5"}`);
     }
     if (item.coldRelaunchEvidence) {
       const evidence = item.coldRelaunchEvidence;
@@ -582,9 +582,9 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /previousIds: save=true \/ restart=true \/ provider=true \/ protocol=true \/ reverse=true/);
   assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);
   assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ skill ok/);
-  assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ requested=real-model \/ resolved=real-model \/ status=success \/ redaction=true/);
-  assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);
-  assert.match(evidenceSummary, /antigravityRoute: antigravity-native \/ gemini-pro-agent/);
+  assert.match(evidenceSummary, /realProviderSmoke route: upstream-provider \/ openai-compatible \/ requested=real-model \/ resolved=real-model \/ status=success \/ redaction=true/);
+  assert.match(evidenceSummary, /fakeProviderToAntigravityReturn: history=true \/ previousId=true/);
+  assert.match(evidenceSummary, /fakeProviderToAntigravityRoute: antigravity-native \/ gemini-pro-agent/);
   assert.match(evidenceSummary, /coldRelaunch: health=true \/ ready=true/);
   assert.match(evidenceSummary, /coldRelaunch: .*mode=antigravity.*launcher=1.*failedStages=0/);
   assert.match(evidenceSummary, /stabilitySoak: ready=true/);

@@ -3030,8 +3030,8 @@ function latestReportsSummary(result){
     }
     if(item.optionalRealProviderEvidence){
       const evidence=item.optionalRealProviderEvidence;
-      lines.push("  realProvider: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
-      lines.push("  realProvider route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / requested="+(evidence.routeRequestedModel||"unknown")+" / resolved="+(evidence.routeResolvedModel||"unknown")+" / status="+(evidence.routeStatus||"unknown")+" / redaction="+(evidence.secretsRedacted?"true":"false"));
+      lines.push("  realProviderSmoke: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
+      lines.push("  realProviderSmoke route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / requested="+(evidence.routeRequestedModel||"unknown")+" / resolved="+(evidence.routeResolvedModel||"unknown")+" / status="+(evidence.routeStatus||"unknown")+" / redaction="+(evidence.secretsRedacted?"true":"false"));
     }
     if(item.coldRelaunchEvidence){
       const evidence=item.coldRelaunchEvidence;
@@ -3043,8 +3043,8 @@ function latestReportsSummary(result){
     }
     if(item.antigravityReturnEvidence){
       const evidence=item.antigravityReturnEvidence;
-      lines.push("  antigravityReturn: history="+(evidence.returnedToAntigravityWithHistory?"true":"false")+" / previousId="+(evidence.previousResponseIdMatched?"true":"false")+" / markers="+(evidence.markerCount??"unknown")+" missing="+(evidence.missingMarkerCount??"unknown"));
-      lines.push("  antigravityRoute: "+(evidence.routeTransport||"unknown")+" / "+(evidence.resolvedModel||"unknown"));
+      lines.push("  fakeProviderToAntigravityReturn: history="+(evidence.returnedToAntigravityWithHistory?"true":"false")+" / previousId="+(evidence.previousResponseIdMatched?"true":"false")+" / markers="+(evidence.markerCount??"unknown")+" missing="+(evidence.missingMarkerCount??"unknown"));
+      lines.push("  fakeProviderToAntigravityRoute: "+(evidence.routeTransport||"unknown")+" / "+(evidence.resolvedModel||"unknown"));
     }
     if(item.pluginCapabilityEvidence){
       const evidence=item.pluginCapabilityEvidence;

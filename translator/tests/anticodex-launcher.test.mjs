@@ -687,8 +687,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /redaction=/);
   assert.match(managerBridge, /antigravityReturnEvidence/);
   assert.match(managerInject, /antigravityReturnEvidence/);
-  assert.match(managerBridge, /antigravityRoute:/);
-  assert.match(managerInject, /antigravityRoute:/);
+  assert.match(managerBridge, /fakeProviderToAntigravityRoute:/);
+  assert.match(managerInject, /fakeProviderToAntigravityRoute:/);
   assert.match(managerBridge, /coldRelaunchEvidence/);
   assert.match(managerInject, /coldRelaunchEvidence/);
   assert.match(managerBridge, /stabilitySoakEvidence/);
@@ -1951,10 +1951,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /refresh parity:/);
   assert.match(server, /optionalRealProviderEvidence/);
   assert.match(server, /antigravityReturnEvidence/);
-  assert.match(server, /realProvider: first=/);
+  assert.match(server, /realProviderSmoke: first=/);
   assert.match(server, /redaction=/);
-  assert.match(server, /antigravityReturn: history=/);
-  assert.match(server, /antigravityRoute:/);
+  assert.match(server, /fakeProviderToAntigravityReturn: history=/);
+  assert.match(server, /fakeProviderToAntigravityRoute:/);
   assert.match(server, /pluginCapabilityEvidence/);
   assert.match(server, /connectorParityMissingSharedSample/);
   assert.match(server, /connectorParityChangedSharedSample/);
