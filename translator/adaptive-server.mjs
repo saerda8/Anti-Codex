@@ -1986,6 +1986,8 @@ function latestManagerReportItem(label, fileName) {
     const capabilities = report?.capabilities && typeof report.capabilities === "object" ? report.capabilities : null;
     const connectorParity = capabilities?.connectorParity && typeof capabilities.connectorParity === "object" ? capabilities.connectorParity : null;
     const appToolParity = capabilities?.appToolParity && typeof capabilities.appToolParity === "object" ? capabilities.appToolParity : null;
+    const refreshConnectorParity = report?.connectorParity && typeof report.connectorParity === "object" ? report.connectorParity : null;
+    const refreshAppToolParity = report?.appToolParity && typeof report.appToolParity === "object" ? report.appToolParity : null;
     const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object" ? capabilities.appToolGetPostParity : null;
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
@@ -2185,6 +2187,8 @@ function latestManagerReportItem(label, fileName) {
             mcpSharedCount: Number.isFinite(Number(mcp?.sharedCount)) ? Number(mcp.sharedCount) : null,
             mcpMissingSharedCount: Array.isArray(mcp?.missingShared) ? mcp.missingShared.length : null,
             mcpExtraLocalCount: Array.isArray(mcp?.extraLocal) ? mcp.extraLocal.length : null,
+            mcpChangedSharedCount: Array.isArray(mcp?.changedShared) ? mcp.changedShared.length : null,
+            mcpChangedSharedSample: Array.isArray(mcp?.changedShared) ? mcp.changedShared.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             hasNodeRepl: mcp?.hasNodeRepl === true,
             mcpSmokePassed: mcp?.smoke?.passed === true,
             mcpRealCallPassed: mcp?.smoke?.realCall?.passed === true,
@@ -2194,7 +2198,18 @@ function latestManagerReportItem(label, fileName) {
             expectedSharedSkillCount: Number.isFinite(Number(skills?.expectedSharedCount)) ? Number(skills.expectedSharedCount) : null,
             missingSharedSkillCount: Array.isArray(skills?.missingShared) ? skills.missingShared.length : null,
             extraLocalSkillCount: Array.isArray(skills?.extraLocal) ? skills.extraLocal.length : null,
+            duplicateSkillCount: Array.isArray(skills?.duplicateNames) ? skills.duplicateNames.length : null,
+            conflictingDuplicateSkillCount: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.length : null,
+            conflictingDuplicateSkillSample: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             skillSmokeReadable: skills?.smoke?.readable === true,
+        } : null,
+        refreshFeatureEvidence: (refreshConnectorParity || refreshAppToolParity) ? {
+            connectorSharedExists: refreshConnectorParity?.sharedExists === true,
+            connectorLocalExists: refreshConnectorParity?.localExists === true,
+            connectorContentMatches: refreshConnectorParity?.contentMatches === true,
+            appToolSharedExists: refreshAppToolParity?.sharedExists === true,
+            appToolLocalExists: refreshAppToolParity?.localExists === true,
+            appToolContentMatches: refreshAppToolParity?.contentMatches === true,
         } : null,
         optionalRealProviderEvidence: (typeof report?.firstMarkerObserved === "boolean" || typeof report?.secondMarkerObserved === "boolean" || typeof report?.historyContinuationObserved === "boolean") ? {
             firstMarkerObserved: report.firstMarkerObserved === true,
@@ -2918,10 +2933,18 @@ function latestReportsSummary(result){
     }
     if(item.mcpSkillEvidence){
       const evidence=item.mcpSkillEvidence;
-      const mcpClean=evidence.mcpMissingSharedCount===0&&evidence.mcpExtraLocalCount===0&&evidence.hasNodeRepl===true;
-      const skillClean=evidence.missingSharedSkillCount===0&&evidence.skillSmokeReadable===true;
+      const mcpClean=evidence.mcpMissingSharedCount===0&&evidence.mcpExtraLocalCount===0&&evidence.mcpChangedSharedCount===0&&evidence.hasNodeRepl===true;
+      const skillClean=evidence.missingSharedSkillCount===0&&evidence.conflictingDuplicateSkillCount===0&&evidence.skillSmokeReadable===true;
       lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5"));
       lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
+      if(Array.isArray(evidence.mcpChangedSharedSample)&&evidence.mcpChangedSharedSample.length) lines.push("  MCP changed: "+evidence.mcpChangedSharedSample.join(", "));
+      if(Array.isArray(evidence.conflictingDuplicateSkillSample)&&evidence.conflictingDuplicateSkillSample.length) lines.push("  skill duplicate conflicts: "+evidence.conflictingDuplicateSkillSample.join(", "));
+    }
+    if(item.refreshFeatureEvidence){
+      const evidence=item.refreshFeatureEvidence;
+      const connectorOk=evidence.connectorSharedExists!==true||evidence.connectorContentMatches===true;
+      const appToolOk=evidence.appToolSharedExists!==true||evidence.appToolContentMatches===true;
+      lines.push("  refresh parity: connector="+(connectorOk?"ok":"需处理")+" / appTool="+(appToolOk?"ok":"需处理"));
     }
     if(item.optionalRealProviderEvidence){
       const evidence=item.optionalRealProviderEvidence;

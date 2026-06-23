@@ -355,6 +355,7 @@ function Test-DiagnosticBundle {
                 if ([int]$mcpSkillEvidence.mcpCount -lt 1) { Add-Failure "MCP/Skill summary has no MCP entries" }
                 if ([int]$mcpSkillEvidence.mcpSharedCount -lt 1) { Add-Failure "MCP/Skill summary has no shared MCP entries" }
                 if (@($mcpSkillEvidence.mcpMissingShared).Count -ne 0) { Add-Failure "MCP/Skill summary has missing shared MCP entries" }
+                if (@($mcpSkillEvidence.mcpChangedShared).Count -ne 0) { Add-Failure "MCP/Skill summary has changed shared MCP entries" }
                 if ($mcpSkillEvidence.hasNodeRepl -ne $true) { Add-Failure "MCP/Skill summary missing node_repl evidence" }
                 if ($mcpSkillEvidence.mcpSmokePassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP smoke evidence" }
                 if ($mcpSkillEvidence.mcpRealCallPassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP real-call evidence" }
@@ -362,7 +363,18 @@ function Test-DiagnosticBundle {
                 if ([int]$mcpSkillEvidence.expectedSharedSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing expected shared skill count" }
                 if ([int]$mcpSkillEvidence.agentsSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing .agents skill count" }
                 if (@($mcpSkillEvidence.missingSharedSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has missing shared skills" }
+                if (@($mcpSkillEvidence.conflictingDuplicateSkillNames).Count -ne 0) { Add-Failure "MCP/Skill summary has conflicting duplicate skills" }
                 if ($mcpSkillEvidence.skillSmokeReadable -ne $true) { Add-Failure "MCP/Skill summary missing skill smoke evidence" }
+            }
+        }
+        $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
+        if ($refreshFeaturesSummary) {
+            $refreshEvidence = $refreshFeaturesSummary.refreshFeatureEvidence
+            if (-not $refreshEvidence) {
+                Add-Failure "refresh-features summary missing refreshFeatureEvidence"
+            } elseif ($refreshFeaturesSummary.ok -eq $true) {
+                if ($refreshEvidence.connectorSharedExists -eq $true -and $refreshEvidence.connectorContentMatches -ne $true) { Add-Failure "refresh-features summary connector parity not clean" }
+                if ($refreshEvidence.appToolSharedExists -eq $true -and $refreshEvidence.appToolContentMatches -ne $true) { Add-Failure "refresh-features summary app-tool parity not clean" }
             }
         }
         $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
@@ -564,6 +576,12 @@ function Test-DiagnosticBundle {
             [pscustomobject]@{
                 ok = $mcpSkillsSummary.ok
                 evidence = $mcpSkillsSummary.mcpSkillEvidence
+            }
+        } else { $null }
+        refreshFeatures = if ($refreshFeaturesSummary) {
+            [pscustomobject]@{
+                ok = $refreshFeaturesSummary.ok
+                evidence = $refreshFeaturesSummary.refreshFeatureEvidence
             }
         } else { $null }
         optionalRealProvider = if ($optionalRealProviderSummary) {

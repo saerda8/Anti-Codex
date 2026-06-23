@@ -637,6 +637,18 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /mcpRealCallPassed/);
   assert.match(managerBridge, /agentsSkillCount/);
   assert.match(managerInject, /agentsSkillCount/);
+  assert.match(managerBridge, /mcpChangedSharedCount/);
+  assert.match(managerInject, /mcpChangedSharedCount/);
+  assert.match(managerBridge, /conflictingDuplicateSkillCount/);
+  assert.match(managerInject, /conflictingDuplicateSkillCount/);
+  assert.match(managerBridge, /MCP changed:/);
+  assert.match(managerInject, /MCP changed:/);
+  assert.match(managerBridge, /skill duplicate conflicts:/);
+  assert.match(managerInject, /skill duplicate conflicts:/);
+  assert.match(managerBridge, /refreshFeatureEvidence/);
+  assert.match(managerInject, /refreshFeatureEvidence/);
+  assert.match(managerBridge, /refresh parity:/);
+  assert.match(managerInject, /refresh parity:/);
   assert.match(managerBridge, /localConnectorEvidence/);
   assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
@@ -1888,8 +1900,14 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /modelRouting: mode=/);
   assert.match(server, /mcpSkillEvidence/);
   assert.match(server, /mcpMissingSharedCount/);
+  assert.match(server, /mcpChangedSharedCount/);
+  assert.match(server, /conflictingDuplicateSkillCount/);
   assert.match(server, /expectedSharedSkillCount/);
   assert.match(server, /MCP\/Skill parity/);
+  assert.match(server, /MCP changed:/);
+  assert.match(server, /skill duplicate conflicts:/);
+  assert.match(server, /refreshFeatureEvidence/);
+  assert.match(server, /refresh parity:/);
   assert.match(server, /optionalRealProviderEvidence/);
   assert.match(server, /antigravityReturnEvidence/);
   assert.match(server, /realProvider: first=/);
@@ -2139,6 +2157,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /mcpSkillEvidence/);
   assert.match(reportSummarizer, /mcpRealCallPassed/);
   assert.match(reportSummarizer, /expectedSharedSkillCount/);
+  assert.match(reportSummarizer, /refreshFeatureEvidence/);
+  assert.match(reportSummarizer, /connectorContentMatches/);
+  assert.match(reportSummarizer, /appToolContentMatches/);
   assert.match(reportSummarizer, /optionalRealProviderEvidence/);
   assert.match(reportSummarizer, /antigravityReturnEvidence/);
   assert.match(reportSummarizer, /historyContinuationObserved/);
@@ -2180,6 +2201,8 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         sharedCount: 3,
         missingShared: ["missing-mcp"],
         extraLocal: ["extra-mcp"],
+        changedShared: ["changed-mcp"],
+        changedSharedDetails: [{ name: "changed-mcp", fields: ["args"] }],
         hasNodeRepl: true,
         smoke: {
           passed: true,
@@ -2193,6 +2216,8 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         expectedSharedCount: 126,
         missingShared: ["missing-skill"],
         extraLocal: ["extra-skill"],
+        duplicateNames: ["dupe-skill"],
+        conflictingDuplicateNames: ["dupe-skill"],
         smoke: { readable: true },
       },
     }), "utf8");
@@ -2203,6 +2228,8 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(summary.mcpSkillEvidence.mcpSharedCount, 3);
     assert.deepEqual(summary.mcpSkillEvidence.mcpMissingShared, ["missing-mcp"]);
     assert.deepEqual(summary.mcpSkillEvidence.mcpExtraLocal, ["extra-mcp"]);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpChangedShared, ["changed-mcp"]);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpChangedSharedDetails, [{ name: "changed-mcp", fields: ["args"] }]);
     assert.equal(summary.mcpSkillEvidence.hasNodeRepl, true);
     assert.equal(summary.mcpSkillEvidence.mcpSmokePassed, true);
     assert.equal(summary.mcpSkillEvidence.mcpRealCallPassed, true);
@@ -2212,7 +2239,34 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(summary.mcpSkillEvidence.expectedSharedSkillCount, 126);
     assert.deepEqual(summary.mcpSkillEvidence.missingSharedSkills, ["missing-skill"]);
     assert.deepEqual(summary.mcpSkillEvidence.extraLocalSkills, ["extra-skill"]);
+    assert.deepEqual(summary.mcpSkillEvidence.duplicateSkillNames, ["dupe-skill"]);
+    assert.deepEqual(summary.mcpSkillEvidence.conflictingDuplicateSkillNames, ["dupe-skill"]);
     assert.equal(summary.mcpSkillEvidence.skillSmokeReadable, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces refresh feature parity evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-refresh-summary-"));
+  const reportPath = resolve(tempRoot, "latest-refresh-features.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: false,
+      reportName: "refresh-features",
+      failures: ["connector drift"],
+      connectorParity: { sharedExists: true, localExists: true, contentMatches: false },
+      appToolParity: { sharedExists: true, localExists: false, contentMatches: false },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.refreshFeatureEvidence.connectorSharedExists, true);
+    assert.equal(summary.refreshFeatureEvidence.connectorLocalExists, true);
+    assert.equal(summary.refreshFeatureEvidence.connectorContentMatches, false);
+    assert.equal(summary.refreshFeatureEvidence.appToolSharedExists, true);
+    assert.equal(summary.refreshFeatureEvidence.appToolLocalExists, false);
+    assert.equal(summary.refreshFeatureEvidence.appToolContentMatches, false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4858,6 +4912,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /connectorParityMissingShared/);
   assert.match(diagnostics, /appToolGetPostMissingFromGet/);
   assert.match(diagnostics, /MCP\/Skill summary missing mcpSkillEvidence/);
+  assert.match(diagnostics, /MCP\/Skill summary has changed shared MCP entries/);
+  assert.match(diagnostics, /MCP\/Skill summary has conflicting duplicate skills/);
+  assert.match(diagnostics, /refreshFeatureEvidence/);
+  assert.match(diagnostics, /refresh-features summary missing refreshFeatureEvidence/);
+  assert.match(diagnostics, /refresh-features summary connector parity not clean/);
+  assert.match(diagnostics, /refresh-features summary app-tool parity not clean/);
+  assert.match(diagnostics, /refreshFeatures = if \(\$refreshFeaturesSummary\)/);
   assert.match(diagnostics, /optional real-provider summary missing continuity evidence/);
   assert.match(diagnostics, /Antigravity return summary missing continuity evidence/);
   assert.match(diagnostics, /mcpSkills = if \(\$mcpSkillsSummary\)/);
@@ -4988,7 +5049,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /sync_readiness_source_active_hash_mismatch/);
   assert.match(releaseGates, /requireMcpSkillSemantics/);
   assert.match(releaseGates, /mcp_skills_missing_shared_mcp/);
+  assert.match(releaseGates, /mcp_skills_changed_shared_mcp/);
   assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
+  assert.match(releaseGates, /mcp_skills_conflicting_duplicate_skills/);
   assert.match(releaseGates, /mcp_skills_real_call_not_passed/);
   assert.match(releaseGates, /mcp_skills_no_agents_skills/);
   assert.match(releaseGates, /requireUsedRealTraffic/);
@@ -5050,6 +5113,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid missing-history report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid local-connector report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid plugin-capability report satisfied the gate/);
+  assert.match(releaseGates, /requireRefreshFeatureSemantics/);
+  assert.match(releaseGates, /refresh_features_connector_parity/);
+  assert.match(releaseGates, /refresh_features_app_tool_parity/);
   assert.match(server, /latestManagerReportItem\("Release Gate 汇总", "latest-release-gates\.json"\)/);
   assert.match(server, /effectiveOk/);
   assert.match(server, /report\?\.releaseReady === true/);
@@ -5072,6 +5138,9 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(Array.isArray(summary.semanticFailures.thirdPartyProvider));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_marker_coverage"));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_ordered_history"));
+  assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
+  assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_conflicting_duplicate_skills"));
+  assert.ok(summary.semanticFailures.refreshFeatures.includes("refresh_features_connector_parity"));
   assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
 });
 

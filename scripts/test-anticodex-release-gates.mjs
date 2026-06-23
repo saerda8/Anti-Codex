@@ -31,7 +31,7 @@ const gateDefinitions = [
   { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true, requireThirdPartyProviderSemantics: true },
   { id: "missingHistory", group: "short", file: "latest-missing-history.json", requiredForShort: true, requiredForRelease: true, requireMissingHistorySemantics: true },
   { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
-  { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false },
+  { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false, requireRefreshFeatureSemantics: true },
   { id: "realThirdPartyProviderOptional", group: "optional-real-traffic", file: "latest-real-third-party-provider.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
   { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
 
@@ -250,6 +250,7 @@ function summarizeGate(definition) {
       if (Number(mcp.sharedCount || 0) < 1) semanticFailures.push("mcp_skills_no_shared_mcp_servers");
       if (!isEmptyArray(mcp.missingShared)) semanticFailures.push("mcp_skills_missing_shared_mcp");
       if (!isEmptyArray(mcp.extraLocal)) semanticFailures.push("mcp_skills_extra_local_mcp");
+      if (!isEmptyArray(mcp.changedShared)) semanticFailures.push("mcp_skills_changed_shared_mcp");
       if (mcp.hasNodeRepl !== true) semanticFailures.push("mcp_skills_missing_node_repl");
       if (mcpSmoke.passed !== true) semanticFailures.push("mcp_skills_smoke_not_passed");
       if (mcpRealCall.passed !== true) semanticFailures.push("mcp_skills_real_call_not_passed");
@@ -258,7 +259,18 @@ function summarizeGate(definition) {
       if (Number(skills.agentsCount || 0) < 1) semanticFailures.push("mcp_skills_no_agents_skills");
       if (Number(skills.expectedSharedCount || 0) < Number(skills.sharedCount || 0) + Number(skills.agentsCount || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
       if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
+      if (!isEmptyArray(skills.conflictingDuplicateNames)) semanticFailures.push("mcp_skills_conflicting_duplicate_skills");
       if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
+    }
+    if (definition.requireRefreshFeatureSemantics) {
+      const connectorParity = report.connectorParity || {};
+      const appToolParity = report.appToolParity || {};
+      if (report.reportName !== "refresh-features") semanticFailures.push("refresh_features_report_name");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("refresh_features_failures");
+      if (connectorParity.sharedExists === true && connectorParity.localExists !== true) semanticFailures.push("refresh_features_connector_local_missing");
+      if (connectorParity.sharedExists === true && connectorParity.contentMatches !== true) semanticFailures.push("refresh_features_connector_parity");
+      if (appToolParity.sharedExists === true && appToolParity.localExists !== true) semanticFailures.push("refresh_features_app_tool_local_missing");
+      if (appToolParity.sharedExists === true && appToolParity.contentMatches !== true) semanticFailures.push("refresh_features_app_tool_parity");
     }
     if (definition.requireSourcePreflightSemantics) {
       const checks = report.checks || {};
@@ -1023,12 +1035,35 @@ if (args.has("--self-test")) {
     semanticFailures.mcpSkills = assertSemanticFailures("mcpSkills", "self-test failed: semantically invalid MCP/Skill report satisfied the gate", [
       "mcp_skills_missing_shared_mcp",
       "mcp_skills_extra_local_mcp",
+      "mcp_skills_changed_shared_mcp",
       "mcp_skills_missing_node_repl",
       "mcp_skills_smoke_not_passed",
       "mcp_skills_real_call_not_passed",
       "mcp_skills_no_agents_skills",
       "mcp_skills_missing_shared_skills",
+      "mcp_skills_conflicting_duplicate_skills",
       "mcp_skills_skill_smoke_not_readable",
+    ]);
+    writeFakeLatestReport("latest-refresh-features.json", {
+      ok: true,
+      reportName: "refresh-features",
+      failures: ["parity drift"],
+      connectorParity: {
+        sharedExists: true,
+        localExists: false,
+        contentMatches: false,
+      },
+      appToolParity: {
+        sharedExists: true,
+        localExists: true,
+        contentMatches: false,
+      },
+    });
+    semanticFailures.refreshFeatures = assertSemanticFailures("refreshFeatures", "self-test failed: semantically invalid refresh-features report satisfied the gate", [
+      "refresh_features_failures",
+      "refresh_features_connector_local_missing",
+      "refresh_features_connector_parity",
+      "refresh_features_app_tool_parity",
     ]);
     semanticFailures.sourcePreflight = assertSemanticFailures("sourcePreflight", "self-test failed: semantically invalid source-preflight report satisfied the gate", [
       "source_preflight_report_name",

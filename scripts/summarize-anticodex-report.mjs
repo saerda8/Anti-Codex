@@ -68,6 +68,8 @@ const endpointEvidence = report && report.endpointEvidence ? report.endpointEvid
 const capabilities = report && report.capabilities ? report.capabilities : null;
 const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : null;
 const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : null;
+const refreshConnectorParity = report && report.connectorParity ? report.connectorParity : null;
+const refreshAppToolParity = report && report.appToolParity ? report.appToolParity : null;
 const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
 const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
@@ -334,6 +336,8 @@ const summary = {
     mcpSharedCount: mcp && has(mcp, "sharedCount") ? mcp.sharedCount : null,
     mcpMissingShared: mcp && has(mcp, "missingShared") ? asStringArray(mcp.missingShared) : [],
     mcpExtraLocal: mcp && has(mcp, "extraLocal") ? asStringArray(mcp.extraLocal) : [],
+    mcpChangedShared: mcp && has(mcp, "changedShared") ? asStringArray(mcp.changedShared) : [],
+    mcpChangedSharedDetails: mcp && Array.isArray(mcp.changedSharedDetails) ? mcp.changedSharedDetails : [],
     hasNodeRepl: mcp ? boolField(mcp, "hasNodeRepl") : null,
     mcpSmokePassed: mcp && mcp.smoke ? boolField(mcp.smoke, "passed") : null,
     mcpRealCallPassed: mcp && mcp.smoke && mcp.smoke.realCall ? boolField(mcp.smoke.realCall, "passed") : null,
@@ -343,7 +347,17 @@ const summary = {
     expectedSharedSkillCount: skills && has(skills, "expectedSharedCount") ? skills.expectedSharedCount : null,
     missingSharedSkills: skills && has(skills, "missingShared") ? asStringArray(skills.missingShared) : [],
     extraLocalSkills: skills && has(skills, "extraLocal") ? asStringArray(skills.extraLocal) : [],
+    duplicateSkillNames: skills && has(skills, "duplicateNames") ? asStringArray(skills.duplicateNames) : [],
+    conflictingDuplicateSkillNames: skills && has(skills, "conflictingDuplicateNames") ? asStringArray(skills.conflictingDuplicateNames) : [],
     skillSmokeReadable: skills && skills.smoke ? boolField(skills.smoke, "readable") : null,
+  } : null,
+  refreshFeatureEvidence: refreshConnectorParity || refreshAppToolParity ? {
+    connectorSharedExists: refreshConnectorParity ? boolField(refreshConnectorParity, "sharedExists") : null,
+    connectorLocalExists: refreshConnectorParity ? boolField(refreshConnectorParity, "localExists") : null,
+    connectorContentMatches: refreshConnectorParity ? boolField(refreshConnectorParity, "contentMatches") : null,
+    appToolSharedExists: refreshAppToolParity ? boolField(refreshAppToolParity, "sharedExists") : null,
+    appToolLocalExists: refreshAppToolParity ? boolField(refreshAppToolParity, "localExists") : null,
+    appToolContentMatches: refreshAppToolParity ? boolField(refreshAppToolParity, "contentMatches") : null,
   } : null,
   optionalRealProviderEvidence: has(report, "firstMarkerObserved") || has(report, "secondMarkerObserved") || has(report, "historyContinuationObserved") ? {
     firstMarkerObserved: boolField(report, "firstMarkerObserved"),
