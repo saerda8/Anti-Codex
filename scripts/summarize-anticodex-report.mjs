@@ -292,6 +292,8 @@ const summary = {
     fingerprint: has(report.sourceSnapshot, "fingerprint") ? asString(report.sourceSnapshot.fingerprint) : null,
     sourceMtimeMax: has(report.sourceSnapshot, "sourceMtimeMax") ? asString(report.sourceSnapshot.sourceMtimeMax) : null,
     fileCount: has(report.sourceSnapshot, "fileCount") ? report.sourceSnapshot.fileCount : null,
+    cacheHitCount: has(report.sourceSnapshot, "cacheHitCount") ? report.sourceSnapshot.cacheHitCount : null,
+    cacheMissCount: has(report.sourceSnapshot, "cacheMissCount") ? report.sourceSnapshot.cacheMissCount : null,
   } : null,
   logDbGuardEvidence: isLogDbGuardReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,

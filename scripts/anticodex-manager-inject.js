@@ -795,7 +795,8 @@
     if (!evidence) return "";
     const fileCount = evidence.fileCount ?? "\u672a\u77e5";
     const fingerprint = evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931";
-    return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}`;
+    const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
+    return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}${cache}`;
   }
 
   function formatReportAge(ageMs) {
@@ -859,7 +860,8 @@
       }
       if (item.sourceSnapshotEvidence) {
         const evidence = item.sourceSnapshotEvidence;
-        lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}`);
+        const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
+        lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}`);
       }
       if (item.sourcePreflightEvidence) {
         const evidence = item.sourcePreflightEvidence;

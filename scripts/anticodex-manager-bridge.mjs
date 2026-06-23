@@ -239,7 +239,8 @@ function sourceSnapshotLine(result) {
   if (!evidence) return "";
   const fileCount = evidence.fileCount ?? "\u672a\u77e5";
   const fingerprint = evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931";
-  return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}`;
+  const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
+  return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}${cache}`;
 }
 
 function formatReportAge(ageMs) {
@@ -298,7 +299,8 @@ function latestReportsSummary(result) {
     }
     if (item.sourceSnapshotEvidence) {
       const evidence = item.sourceSnapshotEvidence;
-      lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}`);
+      const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
+      lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}`);
     }
     if (item.sourcePreflightEvidence) {
       const evidence = item.sourcePreflightEvidence;
@@ -575,7 +577,7 @@ if (args.has("--self-test")) {
       label: "\u6e90\u7801\u9884\u68c0",
       exists: true,
       ok: true,
-      sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589 },
+      sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589, cacheHitCount: 12000, cacheMissCount: 42 },
       sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
       label: "\u65e5\u5fd7\u5e93\u9632\u62a4",
@@ -625,7 +627,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
-  assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345/);
+  assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42/);
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);

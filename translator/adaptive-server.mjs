@@ -2310,6 +2310,8 @@ function latestManagerReportItem(label, fileName) {
             fingerprint: shortSafeText(report.sourceSnapshot.fingerprint || "", ""),
             sourceMtimeMax: shortSafeText(report.sourceSnapshot.sourceMtimeMax || "", ""),
             fileCount: Number.isFinite(Number(report.sourceSnapshot.fileCount)) ? Number(report.sourceSnapshot.fileCount) : null,
+            cacheHitCount: Number.isFinite(Number(report.sourceSnapshot.cacheHitCount)) ? Number(report.sourceSnapshot.cacheHitCount) : null,
+            cacheMissCount: Number.isFinite(Number(report.sourceSnapshot.cacheMissCount)) ? Number(report.sourceSnapshot.cacheMissCount) : null,
         } : null,
         logDbGuardEvidence: isLogDbGuardReport ? {
             reportName: shortSafeText(report?.reportName || "", ""),
@@ -3203,7 +3205,8 @@ function sourceSnapshotLine(result){
   if(!evidence)return "";
   const fileCount=evidence.fileCount??"\\u672a\\u77e5";
   const fingerprint=evidence.fingerprint?String(evidence.fingerprint).slice(0,12):"\\u7f3a\\u5931";
-  return "sourceSnapshot: files="+fileCount+" / fingerprint="+fingerprint;
+  const cache=(evidence.cacheHitCount!=null||evidence.cacheMissCount!=null)?(" / cache="+(evidence.cacheHitCount??"\\u672a\\u77e5")+"/"+(evidence.cacheMissCount??"\\u672a\\u77e5")):"";
+  return "sourceSnapshot: files="+fileCount+" / fingerprint="+fingerprint+cache;
 }
 function formatReportAge(ageMs){
   if(!Number.isFinite(Number(ageMs))) return "";
@@ -3250,7 +3253,8 @@ function latestReportsSummary(result){
     }
     if(item.sourceSnapshotEvidence){
       const evidence=item.sourceSnapshotEvidence;
-      lines.push("  sourceSnapshot: files="+(evidence.fileCount??"unknown")+" / fingerprint="+(evidence.fingerprint?evidence.fingerprint.slice(0,12):"missing"));
+      const cache=(evidence.cacheHitCount!=null||evidence.cacheMissCount!=null)?(" / cache="+(evidence.cacheHitCount??"unknown")+"/"+(evidence.cacheMissCount??"unknown")):"";
+      lines.push("  sourceSnapshot: files="+(evidence.fileCount??"unknown")+" / fingerprint="+(evidence.fingerprint?evidence.fingerprint.slice(0,12):"missing")+cache);
     }
     if(item.logDbGuardEvidence){
       const evidence=item.logDbGuardEvidence;

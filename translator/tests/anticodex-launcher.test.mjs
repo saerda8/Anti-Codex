@@ -655,6 +655,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /sourceSnapshotEvidence/);
   assert.match(managerBridge, /sourceSnapshot: files=/);
   assert.match(managerInject, /sourceSnapshot: files=/);
+  assert.match(managerBridge, /cacheHitCount/);
+  assert.match(managerInject, /cacheHitCount/);
   assert.match(managerBridge, /sourcePreflightEvidence/);
   assert.match(managerInject, /sourcePreflightEvidence/);
   assert.match(managerBridge, /localConnectorVerifierOk/);
@@ -756,6 +758,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(server, /url\.pathname === "\/anticodex\/manager\/action-script"[\s\S]*?validateManagerSourceRequest\(req, "manager action"\)/);
   assert.match(server, /runManagerBridgeAction/);
   assert.match(server, /isValidJsonpCallbackName/);
+  assert.match(server, /cacheHitCount/);
+  assert.match(server, /sourceSnapshot: files=/);
   assert.match(server, /managerActionScriptResponse/);
   assert.match(server, /function visibleModelPayload/);
   assert.match(server, /display_name/);
@@ -2264,6 +2268,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /optionalRealTrafficReady/);
   assert.match(reportSummarizer, /optionalRealTrafficFailures/);
   assert.match(reportSummarizer, /sourceSnapshotEvidence/);
+  assert.match(reportSummarizer, /cacheHitCount/);
   assert.match(reportSummarizer, /logDbGuardEvidence/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
@@ -2496,6 +2501,13 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
         translatorRegression: { ok: true },
         diffWhitespace: { ok: true },
       },
+      sourceSnapshot: {
+        fingerprint: "source-fingerprint",
+        sourceMtimeMax: "2026-06-23T00:00:00.000Z",
+        fileCount: 15589,
+        cacheHitCount: 12000,
+        cacheMissCount: 42,
+      },
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -2508,6 +2520,8 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     assert.equal(summary.publicDocumentationOk, true);
     assert.equal(summary.translatorRegressionOk, true);
     assert.equal(summary.diffWhitespaceOk, true);
+    assert.equal(summary.sourceSnapshotEvidence.cacheHitCount, 12000);
+    assert.equal(summary.sourceSnapshotEvidence.cacheMissCount, 42);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
