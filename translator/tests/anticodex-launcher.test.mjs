@@ -1299,6 +1299,43 @@ test("Anti-Codex refuses conflicting duplicate skill names across shared roots",
   }
 });
 
+test("Anti-Codex startup snapshots refresh when shared skill content changes", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-startup-snapshot-refresh-"));
+  const currentHome = resolve(tempRoot, "current");
+  const sharedHome = resolve(tempRoot, "shared");
+  const sourceSkill = resolve(sharedHome, "skills", "demo-skill");
+  const targetSkillFile = resolve(currentHome, "skills", "demo-skill", "SKILL.md");
+  mkdirSync(sourceSkill, { recursive: true });
+  writeFileSync(resolve(sourceSkill, "SKILL.md"), "# Demo v1\n");
+
+  try {
+    const first = spawnSync(process.execPath, [
+      resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"),
+      currentHome,
+      sharedHome,
+      "--startup-snapshots",
+    ], { encoding: "utf8" });
+    assert.equal(first.status, 0, first.stderr || first.stdout);
+    assert.equal(readFileSync(targetSkillFile, "utf8"), "# Demo v1\n");
+
+    writeFileSync(resolve(sourceSkill, "SKILL.md"), "# Demo v2\n");
+    const second = spawnSync(process.execPath, [
+      resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"),
+      currentHome,
+      sharedHome,
+      "--startup-snapshots",
+    ], { encoding: "utf8" });
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    const summary = JSON.parse(second.stdout);
+    const skillsSummary = summary.summary.find((item) => item.relPath === "skills");
+    assert.equal(summary.ok, true);
+    assert.equal(skillsSummary.mode, "copied");
+    assert.equal(readFileSync(targetSkillFile, "utf8"), "# Demo v2\n");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("Anti-Codex plugin, connector, and sidecar snapshots are local copies", () => {
   const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
   const sidecarSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-sidecars.mjs"), "utf8");

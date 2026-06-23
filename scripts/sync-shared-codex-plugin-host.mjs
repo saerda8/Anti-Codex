@@ -160,6 +160,16 @@ function computeCombinedSnapshotManifest(dirPaths) {
     .map((dirPath) => computeSnapshotManifest(dirPath)));
 }
 
+function readSnapshotManifest(targetPath) {
+  const manifestPath = path.join(targetPath, '.anticodex-source-manifest.json');
+  if (!fs.existsSync(manifestPath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Compute a single fingerprint from a manifest, suitable for detecting
  * any content change in the source tree.
@@ -530,8 +540,22 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
     }
     ensureDir(path.dirname(targetPath));
     if (startupSnapshotsOnly && isLocalDirectory(targetPath) && hasDirectoryEntries(targetPath)) {
-      summary.push({ relPath, mode: 'kept-existing-startup-snapshot', target: sharedPath });
-      continue;
+      const sourceManifest = computeCombinedSnapshotManifest([sharedPath, ...existingExtraSharedPaths]);
+      const existingManifest = readSnapshotManifest(targetPath);
+      const sourceFingerprint = computeSourceFingerprint(sourceManifest);
+      const existingFingerprint = Object.keys(existingManifest).length ? computeSourceFingerprint(existingManifest) : '';
+      if (sourceFingerprint && existingFingerprint && sourceFingerprint === existingFingerprint) {
+        summary.push({
+          relPath,
+          mode: 'kept-existing-startup-snapshot',
+          target: sharedPath,
+          sourceFingerprint,
+          existingFingerprint,
+          duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
+          conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
+        });
+        continue;
+      }
     }
     try {
       if (skillDuplicateInfo?.conflictingDuplicateSkillNames?.length) {
