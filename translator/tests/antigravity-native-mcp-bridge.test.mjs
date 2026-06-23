@@ -69,6 +69,36 @@ test("native MCP bridge rejects unknown tools and waitForCall supports abort", a
   }
 });
 
+test("native MCP bridge evicts abandoned calls after waiter timeout", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({
+    pendingCallTimeoutMs: 20,
+    tools: [{
+      name: "late_tool",
+      description: "Late tool",
+      parameters: { type: "object" },
+    }],
+  });
+  try {
+    await assert.rejects(
+      bridge.waitForCall({ timeoutMs: 10 }),
+      /Timed out waiting for native tool call/,
+    );
+
+    const lateCall = rpc(bridge.url, 5, "tools/call", {
+      name: "late_tool",
+      arguments: { value: 1 },
+    });
+    await waitFor(() => bridge.pendingCount === 1);
+    const result = await lateCall;
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Timed out waiting for Codex tool result/);
+    assert.equal(bridge.pendingCount, 0);
+    assert.deepEqual(bridge.takeCalls(), []);
+  } finally {
+    await bridge.close();
+  }
+});
+
 async function rpc(url, id, method, params) {
   const response = await fetch(url, {
     method: "POST",
@@ -76,4 +106,13 @@ async function rpc(url, id, method, params) {
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
   return response.json();
+}
+
+async function waitFor(predicate, timeoutMs = 500) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  } while (Date.now() < deadline);
+  assert.equal(predicate(), true);
 }

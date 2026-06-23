@@ -394,3 +394,10 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Diagnostics now expose structured long-task freshness for sync-host and post-verification background work: `latestLogLine`, `logUpdatedAt`, and `logAgeMs`.
 - The implementation uses existing status/report fields instead of raw log tailing, so diagnostics show whether slow work is progressing without leaking transcript-like content.
 - Fresh evidence: adaptive/local-access/launcher syntax checks passed; diagnostics PowerShell parser check passed; focused diagnostics payload and launcher contract tests passed.
+
+## 2026-06-23 Native Continuation Cleanup Follow-Up
+
+- Native MCP bridge pending calls now time out and evict queued stale calls if Codex never supplies a result.
+- Retained native continuations now have direct short-test coverage for TTL expiry and failed-resume clearing at the `NATIVE_CONTINUATIONS` layer.
+- Same-Cascade resume now retries a transient failure that happens before any Codex-visible event without cancelling the Cascade between attempts; final failures still cancel best-effort.
+- Fresh evidence: native bridge tests passed `4/4`; focused native agentapi/upstream/bridge tests passed `37/37`; no real traffic, cold relaunch, or installed runtime sync was run.

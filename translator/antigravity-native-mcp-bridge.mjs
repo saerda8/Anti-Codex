@@ -44,7 +44,12 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     }
     const callId = `call_${randomUUID().replaceAll("-", "")}`;
     const completion = deferred();
-    pending.set(callId, { completion, response, rpcId: body.id });
+    const timeoutMs = Math.max(1, Number(options.pendingCallTimeoutMs ?? options.callTimeoutMs ?? 300_000) || 300_000);
+    const timeout = setTimeout(() => {
+      removeQueuedCall(callId);
+      completion.reject(new Error(`Timed out waiting for Codex tool result after ${timeoutMs}ms.`));
+    }, timeoutMs);
+    pending.set(callId, { completion, response, rpcId: body.id, timeout });
     enqueue({
       callId,
       name,
@@ -56,6 +61,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     } catch (error) {
       sendError(response, body.id, -32000, String(error?.message ?? error));
     } finally {
+      clearTimeout(timeout);
       pending.delete(callId);
     }
   });
@@ -74,6 +80,11 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     const waiter = waiters.shift();
     if (waiter) waiter.resolve(call);
     else calls.push(call);
+  }
+
+  function removeQueuedCall(callId) {
+    const index = calls.findIndex((call) => call?.callId === callId);
+    if (index >= 0) calls.splice(index, 1);
   }
 
   async function waitForCall(waitOptions = {}) {
@@ -95,6 +106,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
   function completeCall(callId, output, completeOptions = {}) {
     const item = pending.get(callId);
     if (!item) return false;
+    clearTimeout(item.timeout);
     item.completion.resolve({ output, isError: completeOptions.isError === true });
     return true;
   }
@@ -108,7 +120,10 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     closed = true;
     options.signal?.removeEventListener("abort", onAbort);
     for (const waiter of waiters.splice(0)) waiter.reject(reason);
-    for (const item of pending.values()) item.completion.reject(reason);
+    for (const item of pending.values()) {
+      clearTimeout(item.timeout);
+      item.completion.reject(reason);
+    }
     server.closeAllConnections?.();
     await new Promise((resolve) => server.close(resolve));
   }

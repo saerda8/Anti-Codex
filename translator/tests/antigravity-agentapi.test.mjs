@@ -1419,3 +1419,48 @@ test("resumeAntigravityNativeTurnStreamed completes a pre-approved MCP call with
   assert.equal(events.at(-1).type, "done");
   assert.equal(events.at(-1).result.text, "done");
 });
+
+test("resumeAntigravityNativeTurnStreamed can preserve the Cascade for upstream retry", async () => {
+  const requests = [];
+  const nativeToolBridge = {
+    tools: [{ name: "read_file" }],
+    waitForCall: async () => {
+      throw new Error("pre-approved continuation must not wait for another MCP call");
+    },
+    completeCall: () => true,
+  };
+  const fetchImpl = async (url, init) => {
+    const method = String(url).split("/").at(-1);
+    requests.push({ method, body: JSON.parse(init.body) });
+    if (method === "WaitForConversationFullyIdle") return jsonResponse({});
+    if (method === "GetCascadeTrajectory") throw new Error("ECONNRESET before visible event");
+    if (method === "CancelCascadeInvocation") return jsonResponse({});
+    return jsonResponse({}, 404);
+  };
+  const session = {
+    connection: { lsAddress: "127.0.0.1:1", csrfToken: "secret" },
+    cascadeId: "cascade-preserved-for-retry",
+    nativeToolBridge,
+    pendingCalls: [{
+      callId: "call_native_retry",
+      bridgeCallId: "bridge_call_retry",
+      approvalHandled: true,
+      name: "read_file",
+      arguments: { path: "README.md" },
+    }],
+    prompt: "use read_file",
+    model: "gemini-pro-agent",
+    displayName: "Pro",
+    internalModel: "MODEL_M16",
+  };
+
+  await assert.rejects(async () => {
+    for await (const _event of resumeAntigravityNativeTurnStreamed(session, [{
+      callId: "call_native_retry",
+      output: "file contents",
+      isError: false,
+    }], { fetchImpl, pollIntervalMs: 1, timeoutMs: 1000, cancelOnError: false })) {}
+  }, /ECONNRESET before visible event/);
+
+  assert.equal(requests.some((request) => request.method === "CancelCascadeInvocation"), false);
+});

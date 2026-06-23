@@ -1242,6 +1242,210 @@ test("streamAntigravityUpstream resumes a retained native Cascade with the match
   assert.equal(closeCount, 1);
 });
 
+test("streamAntigravityUpstream evicts abandoned native continuations after TTL", async () => {
+  let closeCount = 0;
+  let resumeCount = 0;
+  let freshTurnCount = 0;
+  const nativeToolBridge = {
+    tools: [{ name: "read_file" }],
+    customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9997" } },
+    close: async () => { closeCount += 1; },
+  };
+  const pendingCall = {
+    callId: "call_native_expired",
+    name: "read_file",
+    arguments: { path: "README.md" },
+    interaction: { trajectoryId: "trajectory-expired", stepIndex: 3 },
+  };
+  for await (const _event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "Read README.md" }],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    nativeToolBridge,
+    nativeContinuationTtlMs: 20,
+    runTurnStreamed: async function* () {
+      yield {
+        type: "tool_call",
+        calls: [pendingCall],
+        continuation: {
+          connection: { lsAddress: "127.0.0.1:1", csrfToken: "token" },
+          cascadeId: "cascade-expired",
+          nativeToolBridge,
+          pendingCalls: [pendingCall],
+        },
+      };
+    },
+  })) {}
+
+  await delay(50);
+  assert.equal(closeCount, 1);
+
+  const events = [];
+  for await (const event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "tool", tool_call_id: "call_native_expired", content: "late README contents" },
+      { role: "user", content: "Continue after late tool result." },
+    ],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    nativeToolBridge,
+    runTurnStreamed: async function* () {
+      freshTurnCount += 1;
+      yield { type: "done", result: { text: "Started a fresh turn.", model: "gemini-pro-agent" } };
+    },
+    resumeTurnStreamed: async function* () {
+      resumeCount += 1;
+      yield { type: "done", result: { text: "should not resume", model: "gemini-pro-agent" } };
+    },
+  })) events.push(event);
+
+  assert.equal(resumeCount, 0);
+  assert.equal(freshTurnCount, 1);
+  assert.equal(events[0].completion.choices[0].message.content, "Started a fresh turn.");
+});
+
+test("streamAntigravityUpstream clears retained native continuations when resume fails", async () => {
+  let closeCount = 0;
+  let resumeCount = 0;
+  let freshTurnCount = 0;
+  const nativeToolBridge = {
+    tools: [{ name: "read_file" }],
+    customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9996" } },
+    close: async () => { closeCount += 1; },
+  };
+  const pendingCall = {
+    callId: "call_native_failed_resume",
+    name: "read_file",
+    arguments: { path: "README.md" },
+    interaction: { trajectoryId: "trajectory-failed-resume", stepIndex: 3 },
+  };
+  for await (const _event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "Read README.md" }],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    nativeToolBridge,
+    runTurnStreamed: async function* () {
+      yield {
+        type: "tool_call",
+        calls: [pendingCall],
+        continuation: {
+          connection: { lsAddress: "127.0.0.1:1", csrfToken: "token" },
+          cascadeId: "cascade-failed-resume",
+          nativeToolBridge,
+          pendingCalls: [pendingCall],
+        },
+      };
+    },
+  })) {}
+
+  await assert.rejects(async () => {
+    for await (const _event of streamAntigravityUpstream({
+      model: "gemini-pro-agent",
+      messages: [
+        { role: "tool", tool_call_id: "call_native_failed_resume", content: "README contents" },
+      ],
+      tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+    }, {
+      resumeTurnStreamed: async function* () {
+        resumeCount += 1;
+        throw new Error("resume failed before visible event");
+      },
+    })) {}
+  }, /resume failed before visible event/);
+
+  const events = [];
+  for await (const event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "tool", tool_call_id: "call_native_failed_resume", content: "README contents" },
+    ],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    nativeToolBridge,
+    runTurnStreamed: async function* () {
+      freshTurnCount += 1;
+      yield { type: "done", result: { text: "Fresh after failed resume.", model: "gemini-pro-agent" } };
+    },
+    resumeTurnStreamed: async function* () {
+      resumeCount += 1;
+      yield { type: "done", result: { text: "should not resume twice", model: "gemini-pro-agent" } };
+    },
+  })) events.push(event);
+
+  assert.equal(resumeCount, 1);
+  assert.equal(freshTurnCount, 1);
+  assert.equal(closeCount, 1);
+  assert.equal(events[0].completion.choices[0].message.content, "Fresh after failed resume.");
+});
+
+test("streamAntigravityUpstream retries same-Cascade resume after pre-event transient failure", async () => {
+  const nativeToolBridge = {
+    tools: [{ name: "read_file" }],
+    customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9995" } },
+    close: async () => {},
+  };
+  const pendingCall = {
+    callId: "call_native_retry_resume",
+    name: "read_file",
+    arguments: { path: "README.md" },
+    interaction: { trajectoryId: "trajectory-retry-resume", stepIndex: 3 },
+  };
+  for await (const _event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "Read README.md" }],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    nativeToolBridge,
+    runTurnStreamed: async function* () {
+      yield {
+        type: "tool_call",
+        calls: [pendingCall],
+        continuation: {
+          connection: { lsAddress: "127.0.0.1:1", csrfToken: "token" },
+          cascadeId: "cascade-retry-resume",
+          nativeToolBridge,
+          pendingCalls: [pendingCall],
+        },
+      };
+    },
+  })) {}
+
+  const resumedCascadeIds = [];
+  const cancelOnErrorFlags = [];
+  const retries = [];
+  let fallbackUsed = false;
+  const events = [];
+  for await (const event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "tool", tool_call_id: "call_native_retry_resume", content: "README contents" },
+    ],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    retryDelayMs: 1,
+    onRetry: (retry) => retries.push(retry),
+    onNativeToolFallback: () => { fallbackUsed = true; },
+    resumeTurnStreamed: async function* (session, _results, options) {
+      resumedCascadeIds.push(session.cascadeId);
+      cancelOnErrorFlags.push(options.cancelOnError);
+      if (resumedCascadeIds.length === 1) {
+        throw new Error("ECONNRESET before visible event");
+      }
+      yield { type: "done", result: { text: "Retried same Cascade.", model: "gemini-pro-agent" } };
+    },
+  })) events.push(event);
+
+  assert.deepEqual(resumedCascadeIds, ["cascade-retry-resume", "cascade-retry-resume"]);
+  assert.deepEqual(cancelOnErrorFlags, [false, false]);
+  assert.equal(retries.length, 1);
+  assert.equal(retries[0].reason, "connection");
+  assert.equal(fallbackUsed, false);
+  assert.equal(events[0].completion.choices[0].message.content, "Retried same Cascade.");
+});
+
 test("streamAntigravityUpstream forwards user text after a native tool result into the same Cascade", async () => {
   const nativeToolBridge = {
     tools: [{ name: "marker_tool" }],
@@ -1291,3 +1495,7 @@ test("streamAntigravityUpstream forwards user text after a native tool result in
 
   assert.equal(followUpPrompt, "Confirm X and RECORDED.");
 });
+
+async function delay(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -359,7 +359,9 @@ export async function* resumeAntigravityNativeTurnStreamed(session, toolResults 
       if (idleController && !idleController.signal.aborted) idleController.abort();
     }
   } catch (error) {
-    await cancelCascadeBestEffort(connection, cascadeId, options.fetchImpl);
+    if (options.cancelOnError !== false) {
+      await cancelCascadeBestEffort(connection, cascadeId, options.fetchImpl);
+    }
     throw error;
   }
 }

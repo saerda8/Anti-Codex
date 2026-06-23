@@ -1148,3 +1148,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics `longTasks.items` now include `latestLogLine`, `logUpdatedAt`, and `logAgeMs` for sync-host and post-verification background work, using existing update-status/post-verification state rather than tailing raw logs.
 - Completed: diagnostic verification now requires those fields for both long-task entries, and local-access plus launcher contracts cover the new shape.
 - Verification: JS syntax checks passed; diagnostics PowerShell parser check passed; focused local diagnostics payload test passed; focused launcher diagnostics contract passed.
+
+## 2026-06-23 Native Continuation Cleanup and Resume Hardening
+- Completed: native MCP bridge calls now have a pending-call timeout that rejects abandoned `tools/call` requests and removes queued stale calls, instead of retaining them until bridge close.
+- Completed: `NATIVE_CONTINUATIONS` can be registered with a bounded TTL for tests and now has direct no-real-traffic coverage proving abandoned continuations expire, close their bridge, and cannot be resumed later.
+- Completed: same-Cascade resume now retries transient pre-event failures without cancelling the Cascade between attempts; final/non-retry failures still cancel best-effort. AgentAPI and upstream tests cover the `cancelOnError:false` retry path.
+- Verification: JS syntax checks passed; native bridge tests passed `4/4`; focused native upstream/agentapi/bridge tests passed `37/37`.

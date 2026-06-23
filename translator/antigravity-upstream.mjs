@@ -239,7 +239,7 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
   let continuationRetained = false;
   let resumedCompleted = false;
   let nativeFallbackError = null;
-  const maxAttempts = resumed ? 1 : retryMaxAttempts(options);
+  const maxAttempts = retryMaxAttempts(options);
   let attempt = 0;
 
   try {
@@ -250,6 +250,7 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
           ? resumeTurnStreamed(resumed.session, resumed.results, {
               ...turnOptions,
               followUpPrompt: resumed.followUpPrompt,
+              cancelOnError: false,
             })
           : runTurnStreamed(prompt, turnOptions);
         for await (const event of events) {
@@ -266,7 +267,7 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
         } else if (event.type === "tool_call") {
           eventEmitted = true;
           if (event.continuation) {
-            registerNativeContinuation(event.continuation);
+            registerNativeContinuation(event.continuation, { ttlMs: options.nativeContinuationTtlMs });
             continuationRetained = true;
           }
           const toolCalls = (event.calls ?? []).map((call) => ({
@@ -314,6 +315,10 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
         break;
       } catch (error) {
         if (eventEmitted) throw error;
+        if (resumed && (attempt >= maxAttempts || !shouldRetryAntigravityFailure(error))) {
+          await cancelAntigravityCascade(resumed.session.connection, resumed.session.cascadeId).catch(() => {});
+          throw error;
+        }
         if (!resumed
           && nativeToolsEnabled
           && options.nativeToolFallbackEnabled !== false
@@ -354,14 +359,15 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
   }
 }
 
-function registerNativeContinuation(session) {
+function registerNativeContinuation(session, options = {}) {
   if (!session?.nativeToolBridge || !session?.cascadeId || !Array.isArray(session?.pendingCalls)) return false;
   clearNativeContinuation(session);
+  const ttlMs = positiveInteger(options.ttlMs, NATIVE_CONTINUATION_TTL_MS);
   session.expires = setTimeout(() => {
     clearNativeContinuation(session);
     void cancelAntigravityCascade(session.connection, session.cascadeId).catch(() => {});
     void session.nativeToolBridge.close().catch(() => {});
-  }, NATIVE_CONTINUATION_TTL_MS);
+  }, ttlMs);
   session.expires.unref?.();
   for (const call of session.pendingCalls) {
     if (call?.callId) NATIVE_CONTINUATIONS.set(String(call.callId), session);
