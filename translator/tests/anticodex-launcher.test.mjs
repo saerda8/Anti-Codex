@@ -4969,6 +4969,20 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 
+test("passive release gate self-test executes successfully", () => {
+  const result = spawnSync(process.execPath, [
+    resolve(root, "scripts", "test-anticodex-release-gates.mjs"),
+    "--self-test",
+  ], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.ok, true);
+  assert.equal(summary.selfTest, true);
+  assert.ok(Array.isArray(summary.semanticFailures.thirdPartyProvider));
+  assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_marker_coverage"));
+  assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
+});
+
 test("release-required latest reports stay visible in diagnostics, Manager, and report integrity checks", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
