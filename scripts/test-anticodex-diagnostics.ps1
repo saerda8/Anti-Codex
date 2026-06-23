@@ -317,15 +317,23 @@ function Test-DiagnosticBundle {
         $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
         if ($localConnectorsSummary) {
             if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
+            if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
+            if ($localConnectorsSummary.usedRealTraffic -ne $false) { Add-Failure "local connector summary used real traffic" }
+            if ($localConnectorsSummary.behaviorCovered -ne $true) { Add-Failure "local connector summary behavior not covered" }
+            if ($localConnectorsSummary.coverageKind -ne "local-fake-provider") { Add-Failure "local connector summary coverageKind mismatch" }
             $localEvidence = $localConnectorsSummary.localConnectorEvidence
             if (-not $localEvidence) {
                 Add-Failure "local connector summary missing localConnectorEvidence"
             } else {
+                if ($localEvidence.linkedConnectorAccessible -ne $true) { Add-Failure "local connector summary missing linked connector access proof" }
                 if ($localEvidence.chatgptInstallUrlsScrubbed -ne $true) { Add-Failure "local connector summary missing ChatGPT URL scrub evidence" }
                 if ($localEvidence.linkEndpointsUnsupported -ne $true) { Add-Failure "local connector summary missing metadata-only link endpoint evidence" }
                 if ([int]$localEvidence.upstreamRequestsDuringLocalEndpoints -ne 0) { Add-Failure "local connector summary recorded upstream requests during local endpoints" }
                 if ($localEvidence.allowlistedConnectorAccessible -ne $false) { Add-Failure "local connector summary treats allowlist as access" }
                 if ($localEvidence.allowlistedConnectorLocallyAllowlisted -ne $true) { Add-Failure "local connector summary missing local allowlist evidence" }
+                if ($localEvidence.hiddenConnectorAccessible -ne $false) { Add-Failure "local connector summary exposes hidden connector" }
+                if ([int]$localEvidence.exposedToolsPost -ne [int]$localEvidence.exposedToolsGet) { Add-Failure "local connector summary GET/POST tool counts differ" }
+                if (@($localEvidence.exposedToolNames).Count -ne [int]$localEvidence.exposedToolsPost) { Add-Failure "local connector summary exposed tool names mismatch" }
             }
         }
         $pluginCapabilitiesSummary = @($summary | Where-Object { $_.file -eq "latest-plugin-capabilities.json" } | Select-Object -First 1)[0]

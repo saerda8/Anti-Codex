@@ -295,6 +295,7 @@ Branch: main
 - Local feature refresh now records connector/app-tool cache parity fingerprints and fails if local copied caches differ from shared source after refresh.
 - MCP `changedShared` drift and conflicting duplicate skill names are now consumed by summaries, diagnostics, Manager bridge/injected panels, and passive release-gate semantics, not only stored in raw verifier output.
 - Refresh-feature connector/app-tool cache parity now surfaces as `refreshFeatureEvidence` in summaries, diagnostics, Manager bridge/injected panels, and release-gate self-tests.
+- Script-level local connector/app-tool verifier reports now include `reportName`, no-real-traffic coverage semantics, linked/allowlisted/hidden connector evidence, GET/POST tool parity, and upstream-request absence; diagnostics and passive release gates reject forged local connector reports that contradict those fields.
 - Fresh evidence: bridge/inject/adaptive/summarizer syntax passed; refresh-feature, MCP/Skill, and plugin-capability parser checks passed; bridge `--self-test` passed; release-gate `--self-test` and strict passive release gates passed; focused Manager/MCP/Skill/plugin contracts passed. The stricter plugin verifier first caught stale connector cache drift, then `refresh-anticodex-local-features.ps1` refreshed snapshots and the rerun passed with connector parity `5760/5760`, app-tool parity `58/58`, and no missing/extra/changed shared entries.
 
 ## 2026-06-23 Installed Missing-History Follow-Up

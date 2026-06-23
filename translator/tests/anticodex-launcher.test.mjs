@@ -2151,6 +2151,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(reportSummarizer, /hiddenConnectorAccessible/);
   assert.match(reportSummarizer, /exposedToolNames/);
+  assert.match(reportSummarizer, /behaviorCovered/);
+  assert.match(reportSummarizer, /coverageKind/);
   assert.match(reportSummarizer, /pluginCapabilityEvidence/);
   assert.match(reportSummarizer, /connectorParityMissingShared/);
   assert.match(reportSummarizer, /appToolGetPostMissingFromGet/);
@@ -2713,6 +2715,50 @@ test("report summarizer surfaces optional real-traffic continuity evidence value
     assert.equal(summary.antigravityReturnEvidence.missingMarkerCount, 1);
     assert.equal(summary.antigravityReturnEvidence.routeTransport, "antigravity-native");
     assert.equal(summary.antigravityReturnEvidence.resolvedModel, "gemini-pro-agent");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces local connector no-traffic evidence values", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-local-connector-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-local-connectors.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "local-connectors",
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "local-fake-provider",
+      endpointEvidence: {
+        connectors: 4,
+        exposedToolsPost: 1,
+        exposedToolsGet: 1,
+        exposedToolNames: ["linked_tool"],
+        linkedConnectorAccessible: true,
+        allowlistedConnectorAccessible: false,
+        allowlistedConnectorLocallyAllowlisted: true,
+        hiddenConnectorAccessible: false,
+        chatgptInstallUrlsScrubbed: true,
+        linkEndpointsUnsupported: true,
+        upstreamRequestsDuringLocalEndpoints: 0,
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.reportName, "local-connectors");
+    assert.equal(summary.usedRealTraffic, false);
+    assert.equal(summary.behaviorCovered, true);
+    assert.equal(summary.coverageKind, "local-fake-provider");
+    assert.equal(summary.localConnectorEvidence.exposedToolsPost, 1);
+    assert.equal(summary.localConnectorEvidence.exposedToolsGet, 1);
+    assert.deepEqual(summary.localConnectorEvidence.exposedToolNames, ["linked_tool"]);
+    assert.equal(summary.localConnectorEvidence.linkedConnectorAccessible, true);
+    assert.equal(summary.localConnectorEvidence.allowlistedConnectorAccessible, false);
+    assert.equal(summary.localConnectorEvidence.allowlistedConnectorLocallyAllowlisted, true);
+    assert.equal(summary.localConnectorEvidence.hiddenConnectorAccessible, false);
+    assert.equal(summary.localConnectorEvidence.upstreamRequestsDuringLocalEndpoints, 0);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4061,6 +4107,25 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.doesNotMatch(capabilities, /auth\/login/);
 });
 
+test("Anti-Codex ships a script-level local connector and app-tool verifier", () => {
+  const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
+
+  assert.match(localConnectors, /reportName:\s*"local-connectors"/);
+  assert.match(localConnectors, /usedRealTraffic:\s*false/);
+  assert.match(localConnectors, /behaviorCovered:\s*true/);
+  assert.match(localConnectors, /coverageKind:\s*"local-fake-provider"/);
+  assert.match(localConnectors, /assertLocalConnectorProjection/);
+  assert.match(localConnectors, /toolNames\(whamPost\)/);
+  assert.match(localConnectors, /toolNames\(whamGet\)/);
+  assert.match(localConnectors, /allowlisted_tool/);
+  assert.match(localConnectors, /hidden_tool/);
+  assert.match(localConnectors, /orphan_tool/);
+  assert.match(localConnectors, /local connector\/app-tool endpoints must not make provider or OAuth upstream requests/);
+  assert.match(localConnectors, /linkEndpointsUnsupported/);
+  assert.match(localConnectors, /upstreamRequestsDuringLocalEndpoints/);
+  assert.doesNotMatch(localConnectors, /auth\/login/);
+});
+
 test("Anti-Codex ships a translator-only recovery verification script", () => {
   const recovery = readFileSync(resolve(root, "scripts", "test-anticodex-translator-recovery.ps1"), "utf8");
 
@@ -4903,6 +4968,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /latest-local-connectors\.json/);
   assert.match(diagnostics, /latest-plugin-capabilities\.json/);
   assert.match(diagnostics, /local connector summary/);
+  assert.match(diagnostics, /local connector summary missing reportName/);
+  assert.match(diagnostics, /local connector summary used real traffic/);
+  assert.match(diagnostics, /local connector summary behavior not covered/);
+  assert.match(diagnostics, /local connector summary coverageKind mismatch/);
+  assert.match(diagnostics, /local connector summary GET\/POST tool counts differ/);
   assert.match(diagnostics, /plugin capability summary/);
   assert.match(diagnostics, /localConnectorEvidence/);
   assert.match(diagnostics, /mcpSkillEvidence/);
@@ -4925,6 +4995,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /optionalRealProvider = if \(\$optionalRealProviderSummary\)/);
   assert.match(diagnostics, /antigravityReturn = if \(\$antigravityReturnSummary\)/);
   assert.match(diagnostics, /upstreamRequestsDuringLocalEndpoints/);
+  assert.match(diagnostics, /exposedToolsPost/);
+  assert.match(diagnostics, /exposedToolsGet/);
   assert.match(diagnostics, /unauthorizedAppToolCount/);
   assert.match(diagnostics, /lastUiOnly/);
   assert.match(diagnostics, /shortcutRepair/);
@@ -5073,9 +5145,17 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /third_party_provider_anthropic_tool_pair_lost/);
   assert.match(releaseGates, /third_party_provider_turn9_marker_coverage/);
   assert.match(releaseGates, /manager_action_missing_real_click/);
+  assert.match(releaseGates, /local_connector_report_name/);
+  assert.match(releaseGates, /local_connector_used_real_traffic/);
+  assert.match(releaseGates, /local_connector_behavior_not_covered/);
+  assert.match(releaseGates, /local_connector_coverage_kind/);
   assert.match(releaseGates, /local_connector_chatgpt_urls_not_scrubbed/);
   assert.match(releaseGates, /local_connector_link_endpoints_not_metadata_only/);
   assert.match(releaseGates, /local_connector_upstream_requests_during_local_endpoints/);
+  assert.match(releaseGates, /local_connector_linked_connector_not_accessible/);
+  assert.match(releaseGates, /local_connector_hidden_connector_accessible/);
+  assert.match(releaseGates, /local_connector_get_post_tool_mismatch/);
+  assert.match(releaseGates, /local_connector_exposed_tool_names_mismatch/);
   assert.match(releaseGates, /plugin_capabilities_app_tool_get_post_mismatch/);
   assert.match(releaseGates, /plugin_capabilities_unauthorized_app_tools/);
   assert.match(releaseGates, /plugin_capabilities_local_connector_parity_missing_shared/);
@@ -5141,6 +5221,8 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_conflicting_duplicate_skills"));
   assert.ok(summary.semanticFailures.refreshFeatures.includes("refresh_features_connector_parity"));
+  assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_used_real_traffic"));
+  assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_get_post_tool_mismatch"));
   assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
 });
 

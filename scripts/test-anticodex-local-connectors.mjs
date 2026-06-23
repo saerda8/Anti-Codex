@@ -379,8 +379,12 @@ async function main() {
 
   return {
     ok: true,
+    reportName: "local-connectors",
     failures,
     elapsedMs: Date.now() - startedAt,
+    usedRealTraffic: false,
+    behaviorCovered: true,
+    coverageKind: "local-fake-provider",
     endpointEvidence: {
       connectors: connectors.connectors.length,
       exposedToolsPost: whamPost.tools.length,

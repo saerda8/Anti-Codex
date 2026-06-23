@@ -221,11 +221,19 @@ function summarizeGate(definition) {
     }
     if (definition.requireLocalConnectorSemantics) {
       const evidence = report.endpointEvidence || {};
+      if (report.reportName !== "local-connectors") semanticFailures.push("local_connector_report_name");
+      if (report.usedRealTraffic !== false) semanticFailures.push("local_connector_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("local_connector_behavior_not_covered");
+      if (report.coverageKind !== "local-fake-provider") semanticFailures.push("local_connector_coverage_kind");
       if (evidence.chatgptInstallUrlsScrubbed !== true) semanticFailures.push("local_connector_chatgpt_urls_not_scrubbed");
       if (evidence.linkEndpointsUnsupported !== true) semanticFailures.push("local_connector_link_endpoints_not_metadata_only");
       if (evidence.upstreamRequestsDuringLocalEndpoints !== 0) semanticFailures.push("local_connector_upstream_requests_during_local_endpoints");
+      if (evidence.linkedConnectorAccessible !== true) semanticFailures.push("local_connector_linked_connector_not_accessible");
       if (evidence.allowlistedConnectorAccessible !== false) semanticFailures.push("local_connector_allowlist_marked_accessible");
       if (evidence.allowlistedConnectorLocallyAllowlisted !== true) semanticFailures.push("local_connector_allowlist_not_recorded");
+      if (evidence.hiddenConnectorAccessible !== false) semanticFailures.push("local_connector_hidden_connector_accessible");
+      if (Number(evidence.exposedToolsPost) !== Number(evidence.exposedToolsGet)) semanticFailures.push("local_connector_get_post_tool_mismatch");
+      if (!Array.isArray(evidence.exposedToolNames) || evidence.exposedToolNames.length !== Number(evidence.exposedToolsPost)) semanticFailures.push("local_connector_exposed_tool_names_mismatch");
     }
     if (definition.requirePluginCapabilitySemantics) {
       const capabilities = report.capabilities || {};
@@ -555,13 +563,21 @@ if (args.has("--self-test")) {
 
     writeFakeLatestReport("latest-local-connectors.json", {
       ok: true,
-      reportName: "local-connectors",
+      reportName: "wrong-local-connectors",
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
       endpointEvidence: {
+        exposedToolsPost: 1,
+        exposedToolsGet: 2,
+        exposedToolNames: [],
         chatgptInstallUrlsScrubbed: false,
         linkEndpointsUnsupported: false,
         upstreamRequestsDuringLocalEndpoints: 1,
+        linkedConnectorAccessible: false,
         allowlistedConnectorAccessible: true,
         allowlistedConnectorLocallyAllowlisted: false,
+        hiddenConnectorAccessible: true,
       },
     });
 
@@ -1110,11 +1126,19 @@ if (args.has("--self-test")) {
       "missing_history_used_real_traffic",
     ]);
     semanticFailures.localConnectors = assertSemanticFailures("localConnectors", "self-test failed: semantically invalid local-connector report satisfied the gate", [
+      "local_connector_report_name",
+      "local_connector_used_real_traffic",
+      "local_connector_behavior_not_covered",
+      "local_connector_coverage_kind",
       "local_connector_chatgpt_urls_not_scrubbed",
       "local_connector_link_endpoints_not_metadata_only",
       "local_connector_upstream_requests_during_local_endpoints",
+      "local_connector_linked_connector_not_accessible",
       "local_connector_allowlist_marked_accessible",
       "local_connector_allowlist_not_recorded",
+      "local_connector_hidden_connector_accessible",
+      "local_connector_get_post_tool_mismatch",
+      "local_connector_exposed_tool_names_mismatch",
     ]);
     semanticFailures.pluginCapabilities = assertSemanticFailures("pluginCapabilities", "self-test failed: semantically invalid plugin-capability report satisfied the gate", [
       "plugin_capabilities_native_codex_writeback",
