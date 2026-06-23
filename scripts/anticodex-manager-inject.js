@@ -888,6 +888,10 @@
         const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
         lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}${hashCache}`);
         lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
+        if (evidence.appToolRegistryExists !== null && evidence.appToolRegistryExists !== undefined) {
+          const registryClean = evidence.appToolRegistryExists === true && evidence.appToolRegistryContentMatches === true && evidence.appToolRegistryFingerprintMatches === true && (evidence.appToolRegistrySharedFileCount == null || evidence.appToolRegistryLocalFileCount == null || evidence.appToolRegistrySharedFileCount === evidence.appToolRegistryLocalFileCount);
+          lines.push(`  app-tool registry: ${registryClean ? "ok" : "\u9700\u5904\u7406"} / files=${evidence.appToolRegistrySharedFileCount ?? "\u672a\u77e5"}/${evidence.appToolRegistryLocalFileCount ?? "\u672a\u77e5"} / content=${evidence.appToolRegistryContentMatches ? "match" : "mismatch"} / fingerprint=${evidence.appToolRegistryFingerprintMatches ? "match" : "mismatch"}`);
+        }
         if (Array.isArray(evidence.mcpMissingSharedSample) && evidence.mcpMissingSharedSample.length) lines.push(`  MCP missing: ${evidence.mcpMissingSharedSample.join(", ")}`);
         if (Array.isArray(evidence.mcpExtraLocalSample) && evidence.mcpExtraLocalSample.length) lines.push(`  MCP extra: ${evidence.mcpExtraLocalSample.join(", ")}`);
         if (Array.isArray(evidence.mcpChangedSharedSample) && evidence.mcpChangedSharedSample.length) lines.push(`  MCP changed: ${evidence.mcpChangedSharedSample.join(", ")}`);

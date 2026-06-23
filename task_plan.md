@@ -1434,3 +1434,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 MCP/Skill Manager Drift Samples
 - Completed: MCP/Skill latest-report summaries now show missing/extra MCP samples and missing/extra skill samples, not only changed entries and duplicate conflicts.
 - Verification: JS syntax checks passed; Manager bridge self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
+
+## 2026-06-24 MCP/Skill App-Tool Registry Manager Evidence
+- Completed: MCP/Skill latest-report summaries now show app-tool registry existence, content match, fingerprint match, and shared/local file counts in the external bridge, injected Manager, and fallback Manager renderer.
+- Verification: JS syntax checks passed; Manager bridge self-test passed; launcher contracts passed `127/127`; `git diff --check` passed; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, and `installedRuntimeSync.satisfied:true`.

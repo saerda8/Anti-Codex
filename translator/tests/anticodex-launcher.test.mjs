@@ -683,6 +683,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /agentsSkillCount/);
   assert.match(managerBridge, /hashCacheHitCount/);
   assert.match(managerInject, /hashCacheHitCount/);
+  assert.match(managerBridge, /appToolRegistryExists/);
+  assert.match(managerInject, /appToolRegistryExists/);
+  assert.match(managerBridge, /appToolRegistryContentMatches/);
+  assert.match(managerInject, /appToolRegistryContentMatches/);
+  assert.match(managerBridge, /appToolRegistryFingerprintMatches/);
+  assert.match(managerInject, /appToolRegistryFingerprintMatches/);
+  assert.match(managerBridge, /app-tool registry:/);
+  assert.match(managerInject, /app-tool registry:/);
   assert.match(managerBridge, /mcpMissingSharedSample/);
   assert.match(managerInject, /mcpMissingSharedSample/);
   assert.match(managerBridge, /mcpExtraLocalSample/);
@@ -2076,7 +2084,11 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /conflictingDuplicateSkillCount/);
   assert.match(server, /expectedSharedSkillCount/);
   assert.match(server, /mcpRealCallPassed/);
+  assert.match(server, /appToolRegistryExists/);
+  assert.match(server, /appToolRegistryContentMatches/);
+  assert.match(server, /appToolRegistryFingerprintMatches/);
   assert.match(server, /MCP\/Skill parity/);
+  assert.match(server, /app-tool registry:/);
   assert.match(server, /\/ real /);
   assert.match(server, /MCP missing:/);
   assert.match(server, /MCP extra:/);

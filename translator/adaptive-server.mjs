@@ -2252,6 +2252,8 @@ function latestManagerReportItem(label, fileName) {
         : (report?.appToolGetPostParity && typeof report.appToolGetPostParity === "object" ? report.appToolGetPostParity : null);
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
+    const appTools = report?.appTools && typeof report.appTools === "object" ? report.appTools : null;
+    const appToolRegistry = appTools?.registry && typeof appTools.registry === "object" ? appTools.registry : null;
     const realAntigravityEvidence = report?.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : null;
     const toolBridge = report?.toolBridge && typeof report.toolBridge === "object" ? report.toolBridge : null;
     const compatibilityTools = report?.compatibilityTools && typeof report.compatibilityTools === "object" ? report.compatibilityTools : null;
@@ -2529,6 +2531,11 @@ function latestManagerReportItem(label, fileName) {
             conflictingDuplicateSkillCount: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.length : null,
             conflictingDuplicateSkillSample: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             skillSmokeReadable: skills?.smoke?.readable === true,
+            appToolRegistryExists: appToolRegistry ? appToolRegistry.exists === true : null,
+            appToolRegistryContentMatches: appToolRegistry ? appToolRegistry.contentMatches === true : null,
+            appToolRegistryFingerprintMatches: appToolRegistry ? shortSafeText(appToolRegistry.sharedFingerprint || "", "") === shortSafeText(appToolRegistry.localFingerprint || "", "") : null,
+            appToolRegistrySharedFileCount: Number.isFinite(Number(appToolRegistry?.sharedFileCount)) ? Number(appToolRegistry.sharedFileCount) : null,
+            appToolRegistryLocalFileCount: Number.isFinite(Number(appToolRegistry?.localFileCount)) ? Number(appToolRegistry.localFileCount) : null,
         } : null,
         refreshFeatureEvidence: (refreshConnectorParity || refreshAppToolParity || (refreshReport && skills) || refreshGuidance) ? {
             connectorSharedExists: refreshConnectorParity?.sharedExists === true,
@@ -3418,6 +3425,10 @@ function latestReportsSummary(result){
       const hashCache=(evidence.hashCacheHitCount!=null||evidence.hashCacheMissCount!=null)?(" / hashCache="+(evidence.hashCacheHitCount??"unknown")+"/"+(evidence.hashCacheMissCount??"unknown")):"";
       lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5")+hashCache);
       lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / real "+(evidence.mcpRealCallPassed?"ok":"?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
+      if(evidence.appToolRegistryExists!==null&&evidence.appToolRegistryExists!==undefined){
+        const registryClean=evidence.appToolRegistryExists===true&&evidence.appToolRegistryContentMatches===true&&evidence.appToolRegistryFingerprintMatches===true&&(evidence.appToolRegistrySharedFileCount==null||evidence.appToolRegistryLocalFileCount==null||evidence.appToolRegistrySharedFileCount===evidence.appToolRegistryLocalFileCount);
+        lines.push("  app-tool registry: "+(registryClean?"ok":"\\u9700\\u5904\\u7406")+" / files="+(evidence.appToolRegistrySharedFileCount??"\\u672a\\u77e5")+"/"+(evidence.appToolRegistryLocalFileCount??"\\u672a\\u77e5")+" / content="+(evidence.appToolRegistryContentMatches?"match":"mismatch")+" / fingerprint="+(evidence.appToolRegistryFingerprintMatches?"match":"mismatch"));
+      }
       if(Array.isArray(evidence.mcpMissingSharedSample)&&evidence.mcpMissingSharedSample.length) lines.push("  MCP missing: "+evidence.mcpMissingSharedSample.join(", "));
       if(Array.isArray(evidence.mcpExtraLocalSample)&&evidence.mcpExtraLocalSample.length) lines.push("  MCP extra: "+evidence.mcpExtraLocalSample.join(", "));
       if(Array.isArray(evidence.mcpChangedSharedSample)&&evidence.mcpChangedSharedSample.length) lines.push("  MCP changed: "+evidence.mcpChangedSharedSample.join(", "));

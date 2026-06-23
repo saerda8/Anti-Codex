@@ -327,6 +327,10 @@ function latestReportsSummary(result) {
       const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
       lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}${hashCache}`);
       lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
+      if (evidence.appToolRegistryExists !== null && evidence.appToolRegistryExists !== undefined) {
+        const registryClean = evidence.appToolRegistryExists === true && evidence.appToolRegistryContentMatches === true && evidence.appToolRegistryFingerprintMatches === true && (evidence.appToolRegistrySharedFileCount == null || evidence.appToolRegistryLocalFileCount == null || evidence.appToolRegistrySharedFileCount === evidence.appToolRegistryLocalFileCount);
+        lines.push(`  app-tool registry: ${registryClean ? "ok" : "\u9700\u5904\u7406"} / files=${evidence.appToolRegistrySharedFileCount ?? "\u672a\u77e5"}/${evidence.appToolRegistryLocalFileCount ?? "\u672a\u77e5"} / content=${evidence.appToolRegistryContentMatches ? "match" : "mismatch"} / fingerprint=${evidence.appToolRegistryFingerprintMatches ? "match" : "mismatch"}`);
+      }
       if (Array.isArray(evidence.mcpMissingSharedSample) && evidence.mcpMissingSharedSample.length) lines.push(`  MCP missing: ${evidence.mcpMissingSharedSample.join(", ")}`);
       if (Array.isArray(evidence.mcpExtraLocalSample) && evidence.mcpExtraLocalSample.length) lines.push(`  MCP extra: ${evidence.mcpExtraLocalSample.join(", ")}`);
       if (Array.isArray(evidence.mcpChangedSharedSample) && evidence.mcpChangedSharedSample.length) lines.push(`  MCP changed: ${evidence.mcpChangedSharedSample.join(", ")}`);
@@ -612,7 +616,7 @@ if (args.has("--self-test")) {
       label: "MCP/Skill",
       exists: true,
       ok: true,
-      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, hashCacheHitCount: 12000, hashCacheMissCount: 42, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true },
+      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, hashCacheHitCount: 12000, hashCacheMissCount: 42, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true, appToolRegistryExists: true, appToolRegistryContentMatches: true, appToolRegistryFingerprintMatches: true, appToolRegistrySharedFileCount: 36, appToolRegistryLocalFileCount: 36 },
     }, {
       label: "\u7b2c\u4e09\u65b9 provider \u8fde\u7eed\u6027",
       exists: true,
@@ -659,6 +663,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
   assert.match(evidenceSummary, /hashCache=12000\/42/);
+  assert.match(evidenceSummary, /app-tool registry: ok \/ files=36\/36 \/ content=match \/ fingerprint=match/);
   assert.match(evidenceSummary, /providerContinuity: turns=9 \/ markers=15\/16\/18\/20/);
   assert.match(evidenceSummary, /previousIds: save=true \/ restart=true \/ provider=true \/ protocol=true \/ reverse=true/);
   assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);
