@@ -201,7 +201,7 @@ async function runAction(action) {
   if (action === "refreshModels") {
     return { ok: true, action, result: await httpJson(`${baseUrl}/anticodex/models/refresh`, { method: "POST", timeout: 120000 }) };
   }
-  const postActionWithFreshToken = async () => {
+  const bootstrapManagerActionToken = async () => {
     const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
       timeout: 10000,
       headers: {
@@ -209,6 +209,9 @@ async function runAction(action) {
         referer: `${baseUrl}/anticodex/manager`,
       },
     });
+    return bootstrap.token;
+  };
+  const postManagerActionWithToken = (token) => {
     return httpJson(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
       timeout: 180000,
@@ -221,11 +224,12 @@ async function runAction(action) {
       body: JSON.stringify({ action }),
     });
   };
+  const token = await bootstrapManagerActionToken();
   try {
-    return await postActionWithFreshToken();
+    return await postManagerActionWithToken(token);
   } catch (error) {
     if (error?.statusCode !== 403) throw error;
-    return await postActionWithFreshToken();
+    return await postManagerActionWithToken(await bootstrapManagerActionToken());
   }
 }
 
@@ -515,9 +519,9 @@ function managerSummary(action, payload) {
 if (args.has("--self-test")) {
   const selfSource = readFileSync(new URL(import.meta.url), "utf8");
   assert.match(selfSource, /error\.statusCode = response\.statusCode/);
-  assert.match(selfSource, /postActionWithFreshToken/);
+  assert.match(selfSource, /const token = await bootstrapManagerActionToken\(\);[\s\S]*?try \{[\s\S]*?return await postManagerActionWithToken\(token\);/);
   assert.match(selfSource, /error\?\.statusCode !== 403/);
-  assert.match(selfSource, /return await postActionWithFreshToken\(\)/);
+  assert.match(selfSource, /return await postManagerActionWithToken\(await bootstrapManagerActionToken\(\)\)/);
 
   const okSummary = latestReportsSummary({
     reportRoot: "C:\\tmp\\anticodex\\reports",
