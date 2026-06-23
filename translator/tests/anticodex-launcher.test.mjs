@@ -2249,6 +2249,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /appToolGetCount/);
   assert.match(reportSummarizer, /appToolGetPostParityClean/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
+  assert.doesNotMatch(collector, /failures = if \(\$result\.PSObject\.Properties\.Name -contains "failures"\)/);
+  assert.match(collector, /\$resultFailures = if \(\$result\.PSObject\.Properties\.Name -contains "failures"\)/);
+  assert.match(collector, /failures = @\(\$resultFailures\)/);
+  assert.match(collector, /\$resultModels = if \(\$result\.PSObject\.Properties\.Name -contains "models"\)/);
+  assert.match(collector, /models = @\(\$resultModels\)/);
   assert.match(collector, /function Update-NoTrafficModelRoutingReport/);
   assert.match(collector, /test-anticodex-model-routing\.ps1/);
   assert.match(collector, /-SkipRefresh -SkipRequests/);

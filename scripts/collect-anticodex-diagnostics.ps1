@@ -254,11 +254,13 @@ function Update-NoTrafficModelRoutingReport {
     }
     try {
         $result = & $scriptPath -BaseUrl $BaseUrl -SkipRefresh -SkipRequests | ConvertFrom-Json
+        $resultFailures = if ($result.PSObject.Properties.Name -contains "failures") { @($result.failures) } else { @() }
+        $resultModels = if ($result.PSObject.Properties.Name -contains "models") { @($result.models | ForEach-Object { [string]$_ }) } else { @() }
         return [pscustomobject]@{
             ok = [bool]$result.ok
-            failures = if ($result.PSObject.Properties.Name -contains "failures") { @($result.failures) } else { @() }
+            failures = @($resultFailures)
             modelCount = if ($result.PSObject.Properties.Name -contains "modelCount") { $result.modelCount } else { $null }
-            models = if ($result.PSObject.Properties.Name -contains "models") { @($result.models | ForEach-Object { [string]$_ }) } else { @() }
+            models = @($resultModels)
             skipRequests = if ($result.PSObject.Properties.Name -contains "skipRequests") { [bool]$result.skipRequests } else { $null }
             report = if ($result.PSObject.Properties.Name -contains "report") { $result.report } else { $null }
         }

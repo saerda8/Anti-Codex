@@ -1184,3 +1184,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: installed overall now gives the local fake third-party provider verifier a process timeout derived from its `--timeout-ms` value, avoiding a 90s inner verifier being killed by the default 60s subcheck budget.
 - Completed: launcher contracts now require the explicit timeout variable and outer-process margin.
 - Verification: installed overall PowerShell parser check passed; focused installed overall/third-party/Manager launcher contracts passed `14/14`; diff whitespace check passed.
+
+## 2026-06-23 Diagnostics PowerShell Array Serialization Guard
+- Completed: diagnostic bundle collection now materializes model-routing `failures` and `models` into explicit arrays before `ConvertTo-Json`, avoiding Windows PowerShell 5.1 inline-array serialization drift.
+- Completed: launcher contracts reject the unsafe inline `failures = if (...)` shape for this collector path and require `@($resultFailures)` / `@($resultModels)`.
+- Verification: diagnostics collector PowerShell parser check passed; focused diagnostics/report-summary launcher contracts passed `19/19`; diff whitespace check passed.

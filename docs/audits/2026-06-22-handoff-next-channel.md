@@ -437,3 +437,9 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Installed overall now sets the third-party local verifier process timeout from its 90s `--timeout-ms` plus margin, instead of relying on the default 60s subcheck timeout.
 - This avoids false timeout failures in no-traffic fake-provider verification without running real traffic.
 - Fresh evidence: PowerShell parser check passed; focused installed overall/third-party/Manager launcher contracts passed `14/14`; diff whitespace check passed.
+
+## 2026-06-23 Diagnostics Array Serialization Follow-Up
+
+- Diagnostic bundle collection now stores model-routing `failures` and `models` in explicit arrays before emitting JSON.
+- This closes the known Windows PowerShell 5.1 risk where inline conditional empty arrays can serialize as `{}`.
+- Fresh evidence: diagnostics collector parser check passed; focused diagnostics/report-summary launcher contracts passed `19/19`; diff whitespace check passed.
