@@ -1315,3 +1315,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `sync-deepcodex-app-tools.mjs` now writes `shared_tools_fingerprint`, `local_tools_fingerprint`, shared/local file counts, and `content_matches` into `deepcodex_app_connectors.json`.
 - Completed: added a focused app-tools sync test with nonempty nested cache files and plugin app metadata, proving the registry reports matching shared/local fingerprints after sync.
 - Verification: new app-tools sync test passed; script syntax check passed; focused shared-sync cache test passed; installed Anti-Codex runtime sync passed; strict passive release gate passed with `releaseReady:true`; `git diff --check` passed.
+
+## 2026-06-23 MCP/Skill App-Tool Registry Fingerprint Gate
+- Completed: `test-anticodex-mcp-skills.ps1` now reads `cache\deepcodex_app_connectors.json` whenever the local app-tool cache exists and fails if the registry is missing, lacks shared/local fingerprints, reports `content_matches:false`, or has mismatched fingerprints.
+- Completed: the MCP/Skill report now exposes `appTools.registry` with path, existence, file counts, content-match status, and shared/local fingerprints so diagnostics can consume app-tool migration proof without opening raw cache files.
+- Verification: focused launcher MCP/Skill contract passed; PowerShell parser check passed; `git diff --check` passed; installed registry was refreshed with `sync-deepcodex-app-tools.mjs` and now reports `contentMatches:true`, `sharedCount:36`, `localCount:36`, matching fingerprints, and `connectors:155`.

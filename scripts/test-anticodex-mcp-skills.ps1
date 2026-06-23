@@ -122,6 +122,7 @@ $guidanceNames = @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WOR
 $guidanceChecks = @()
 $connectorDirectoryPath = Join-Path $CodexHome "cache\codex_app_directory"
 $appToolsCachePath = Join-Path $CodexHome "cache\codex_apps_tools"
+$appToolsRegistryPath = Join-Path $CodexHome "cache\deepcodex_app_connectors.json"
 $health = $null
 $healthMode = "unknown"
 $healthProtocol = $null
@@ -134,6 +135,7 @@ $connectorDirectoryItem = $null
 $connectorDirectoryEntries = @()
 $appToolsCacheItem = $null
 $appToolsCacheEntries = @()
+$appToolsRegistry = $null
 $pluginsInstalled = $null
 $pluginsList = $null
 $connectors = $null
@@ -546,6 +548,19 @@ if (-not (Test-Path -LiteralPath $appToolsCachePath -PathType Container)) {
             Add-Failure "app tools cache should be an Anti-Codex local copy, found link type: $($appToolsCacheItem.LinkType)"
         }
         $appToolsCacheEntries = @(Get-ChildItem -LiteralPath $appToolsCachePath -File -ErrorAction Stop | Select-Object -First 50 | ForEach-Object { Select-LightFileSystemItem $_ })
+        if (-not (Test-Path -LiteralPath $appToolsRegistryPath -PathType Leaf)) {
+            Add-Failure "app tools sync registry is missing: $appToolsRegistryPath"
+        } else {
+            $appToolsRegistry = Get-Content -LiteralPath $appToolsRegistryPath -Raw | ConvertFrom-Json
+            if ($appToolsRegistry.content_matches -ne $true) {
+                Add-Failure "app tools sync registry content does not match shared cache"
+            }
+            if (-not $appToolsRegistry.shared_tools_fingerprint -or -not $appToolsRegistry.local_tools_fingerprint) {
+                Add-Failure "app tools sync registry is missing shared/local fingerprints"
+            } elseif ($appToolsRegistry.shared_tools_fingerprint -ne $appToolsRegistry.local_tools_fingerprint) {
+                Add-Failure "app tools sync registry fingerprint mismatch"
+            }
+        }
     } catch {
         Add-Failure "app tools cache read failed: $($_.Exception.Message)"
     }
@@ -824,6 +839,15 @@ $result = [pscustomobject]@{
         cacheTarget = Get-LinkTargetValue $appToolsCacheItem
         cacheFileCount = $appToolsCacheEntries.Count
         cacheSample = @($appToolsCacheEntries | Select-Object -First 10)
+        registry = [pscustomobject]@{
+            path = $appToolsRegistryPath
+            exists = (Test-Path -LiteralPath $appToolsRegistryPath -PathType Leaf)
+            contentMatches = if ($appToolsRegistry) { $appToolsRegistry.content_matches -eq $true } else { $false }
+            sharedFileCount = if ($appToolsRegistry) { [int]$appToolsRegistry.shared_tools_file_count } else { 0 }
+            localFileCount = if ($appToolsRegistry) { [int]$appToolsRegistry.local_tools_file_count } else { 0 }
+            sharedFingerprint = if ($appToolsRegistry) { [string]$appToolsRegistry.shared_tools_fingerprint } else { "" }
+            localFingerprint = if ($appToolsRegistry) { [string]$appToolsRegistry.local_tools_fingerprint } else { "" }
+        }
     }
 }
 

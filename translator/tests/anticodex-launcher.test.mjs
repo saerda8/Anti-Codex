@@ -4052,6 +4052,11 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /cacheFileCount/);
   assert.match(mcpSkills, /cache\\codex_apps_tools/);
   assert.match(mcpSkills, /app tools endpoint has tools but Anti-Codex local app-tools cache is missing/);
+  assert.match(mcpSkills, /deepcodex_app_connectors\.json/);
+  assert.match(mcpSkills, /content_matches/);
+  assert.match(mcpSkills, /app tools sync registry content does not match shared cache/);
+  assert.match(mcpSkills, /shared_tools_fingerprint/);
+  assert.match(mcpSkills, /local_tools_fingerprint/);
   assert.match(mcpSkills, /appTools/);
   assert.match(mcpSkills, /Proxy\s*=\s*\$null/);
   assert.match(mcpSkills, /ConvertTo-Json/);
