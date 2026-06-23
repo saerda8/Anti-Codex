@@ -1110,3 +1110,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `refresh-anticodex-local-features.ps1 -VerifyOnly` no longer rewrites local config feature flags; verify-only mode now stays a read-only evidence path.
 - Completed: plugin capability parity now treats extra local connector/app-tool cache records as drift, not just missing or changed shared records. Summaries, Manager evidence, and passive release gates include `extraLocal` in clean/dirty decisions.
 - Verification: JS syntax checks passed for summarizer, release gates, and adaptive server; PowerShell parser checks passed for refresh/plugin scripts; release-gate `--self-test` passed with new extra-local failures; focused launcher contracts passed; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`.
+
+## 2026-06-23 Skill Content Inheritance
+- Completed: source snapshots now content-hash shared `.codex\skills` and extra `.agents\skills`, so preserved mtimes cannot hide skill content drift.
+- Completed: MCP/Skill verification now compares every inherited local skill directory against its shared or `.agents` source fingerprint, reports `skills.changedShared`, and surfaces changed-skill samples through summaries, diagnostics, Manager, and passive release gates.
+- Completed: replaced hot `Get-FileHash` loops with .NET SHA256 streaming in the skill-heavy paths; the MCP/Skill verifier dropped from timing out after 74 seconds to passing in about 37 seconds on the current inherited surface.
+- Runtime repair: targeted local Anti-Codex skill refresh copied `.system`, `_repos`, and `keep-codex-fast` from shared Codex into `codex-home-deepseek-app\skills`; native Codex was not modified.
+- Verification: parser checks passed; focused launcher contracts passed; Manager bridge self-test passed; release-gate `--self-test` passed with `mcp_skills_changed_shared_skills`; MCP/Skill, refresh verify-only, and plugin capability reports were refreshed; strict passive gates are back to `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, `damagedReports:[]`.

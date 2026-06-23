@@ -147,6 +147,8 @@ $missingSharedSkillNames = @()
 $extraLocalSkillNames = @()
 $duplicateSkillNames = @()
 $conflictingDuplicateSkillNames = @()
+$changedSharedSkillNames = @()
+$changedSharedSkillDetails = @()
 $sharedMcpNames = @()
 $missingSharedMcpNames = @()
 $extraLocalMcpNames = @()
@@ -154,6 +156,7 @@ $changedSharedMcpNames = @()
 $changedSharedMcpDetails = @()
 $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
+$directoryFingerprintCache = @{}
 $mcpRealSmoke = [pscustomobject]@{
     checked = $false
     passed = $false
@@ -248,17 +251,32 @@ function Get-DirectoryContentFingerprint {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
     $root = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
+    if ($directoryFingerprintCache.ContainsKey($root)) { return $directoryFingerprintCache[$root] }
     $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop | Sort-Object FullName | ForEach-Object {
         $relative = $_.FullName.Substring($root.Length).TrimStart("\", "/")
-        $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        $hash = Get-FileSha256Hex $_.FullName
         "$relative`t$hash"
     })
     $joined = [string]::Join("`n", $entries)
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
-        return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+        $fingerprint = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+        $directoryFingerprintCache[$root] = $fingerprint
+        return $fingerprint
     } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-FileSha256Hex {
+    param([string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
         $sha.Dispose()
     }
 }
@@ -413,15 +431,37 @@ if ((Test-Path -LiteralPath $sharedSkillsPath -PathType Container) -or (Test-Pat
     foreach ($skillName in $missingSharedSkillNames) {
         Add-Failure "shared or agent skill '$skillName' exists but Anti-Codex local skills copy is missing it"
     }
-    foreach ($skillName in $expectedInheritedSkillNames) {
+    foreach ($skillName in $expectedSharedSkillNames) {
         $sharedSkill = Join-Path $sharedSkillsPath $skillName
+        $agentSkill = Join-Path $AgentsSkillsPath $skillName
         $localSkill = Join-Path $skillsPath $skillName
         $sharedExists = Test-Path -LiteralPath $sharedSkill -PathType Container
+        $agentExists = Test-Path -LiteralPath $agentSkill -PathType Container
         $localExists = Test-Path -LiteralPath $localSkill -PathType Container
+        $sharedFingerprint = if ($sharedExists) { Get-DirectoryContentFingerprint $sharedSkill } else { "" }
+        $agentFingerprint = if ($agentExists) { Get-DirectoryContentFingerprint $agentSkill } else { "" }
+        $localFingerprint = if ($localExists) { Get-DirectoryContentFingerprint $localSkill } else { "" }
+        $sourceFingerprints = @($sharedFingerprint, $agentFingerprint) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+        $contentMatches = $localExists -and -not [string]::IsNullOrWhiteSpace($localFingerprint) -and ($sourceFingerprints -contains $localFingerprint)
         $inheritedSkillChecks += [pscustomobject]@{
             name = $skillName
             sharedExists = $sharedExists
+            agentsExists = $agentExists
             localExists = $localExists
+            sharedFingerprint = $sharedFingerprint
+            agentsFingerprint = $agentFingerprint
+            localFingerprint = $localFingerprint
+            contentMatches = $contentMatches
+        }
+        if ($localExists -and $sourceFingerprints.Count -gt 0 -and -not $contentMatches) {
+            $changedSharedSkillNames += $skillName
+            $changedSharedSkillDetails += [pscustomobject]@{
+                name = $skillName
+                sharedFingerprint = $sharedFingerprint
+                agentsFingerprint = $agentFingerprint
+                localFingerprint = $localFingerprint
+            }
+            Add-Failure "shared or agent skill '$skillName' content differs from Anti-Codex local skills copy"
         }
     }
 }
@@ -757,6 +797,8 @@ $result = [pscustomobject]@{
         expectedSharedCount = $expectedSharedSkillNames.Count
         missingShared = $missingSharedSkillNames
         extraLocal = $extraLocalSkillNames
+        changedShared = $changedSharedSkillNames
+        changedSharedDetails = @($changedSharedSkillDetails)
         duplicateNames = $duplicateSkillNames
         conflictingDuplicateNames = $conflictingDuplicateSkillNames
         smoke = $skillSmoke

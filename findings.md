@@ -708,3 +708,5 @@
 - Embedded Manager JavaScript can accumulate mojibake when copied between generated and standalone renderers. Keep a static guard for known mojibake tokens in `translator/adaptive-server.mjs` and `anticodex-manager-inject.js` whenever Manager text is edited.
 - `-VerifyOnly` commands must not repair or rewrite local state. If a verifier needs feature-flag restoration, keep that in the refresh/repair path and let verify-only report current drift without mutation.
 - Connector/app-tool parity must reject extra local cache records too. Missing/changed shared records catch stale inheritance, while extra local records catch Anti-Codex-only residue that would violate the "same inherited surface" contract.
+- Skill inheritance needs content fingerprints, not just names. Compare each local inherited skill directory against the shared `.codex\skills` or `.agents\skills` fingerprint and gate `changedShared` the same way as missing shared skills.
+- PowerShell `Get-FileHash` is too slow for 15k-file skill trees in routine verifiers. Use .NET SHA256 streaming and cache per-directory fingerprints when hashing inherited skills.

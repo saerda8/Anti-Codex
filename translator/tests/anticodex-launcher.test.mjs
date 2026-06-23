@@ -2270,6 +2270,8 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         expectedSharedCount: 126,
         missingShared: ["missing-skill"],
         extraLocal: ["extra-skill"],
+        changedShared: ["changed-skill"],
+        changedSharedDetails: [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }],
         duplicateNames: ["dupe-skill"],
         conflictingDuplicateNames: ["dupe-skill"],
         smoke: { readable: true },
@@ -2293,6 +2295,8 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(summary.mcpSkillEvidence.expectedSharedSkillCount, 126);
     assert.deepEqual(summary.mcpSkillEvidence.missingSharedSkills, ["missing-skill"]);
     assert.deepEqual(summary.mcpSkillEvidence.extraLocalSkills, ["extra-skill"]);
+    assert.deepEqual(summary.mcpSkillEvidence.changedSharedSkills, ["changed-skill"]);
+    assert.deepEqual(summary.mcpSkillEvidence.changedSharedSkillDetails, [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }]);
     assert.deepEqual(summary.mcpSkillEvidence.duplicateSkillNames, ["dupe-skill"]);
     assert.deepEqual(summary.mcpSkillEvidence.conflictingDuplicateSkillNames, ["dupe-skill"]);
     assert.equal(summary.mcpSkillEvidence.skillSmokeReadable, true);
@@ -3783,6 +3787,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   const refreshLocalFeatures = readFileSync(resolve(root, "scripts", "refresh-anticodex-local-features.ps1"), "utf8");
   const sharedConfigSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-config.mjs"), "utf8");
   const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
+  const sourceSnapshot = readFileSync(resolve(root, "scripts", "anticodex-source-snapshot.ps1"), "utf8");
   const adaptiveServer = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   // Must include health check and MCP/skills endpoints
@@ -3800,6 +3805,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /expectedSharedSkillNames/);
   assert.match(mcpSkills, /duplicateSkillNames/);
   assert.match(mcpSkills, /conflictingDuplicateSkillNames/);
+  assert.match(mcpSkills, /changedSharedSkillNames/);
+  assert.match(mcpSkills, /changedSharedSkillDetails/);
   assert.match(mcpSkills, /Get-DirectoryContentFingerprint/);
   assert.match(mcpSkills, /duplicate skill '\$skillName' differs between shared Codex skills and agents skills/);
   assert.match(mcpSkills, /expectedInheritedSkillNames/);
@@ -3808,6 +3815,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /context-restore/);
   assert.match(mcpSkills, /keep-codex-fast/);
   assert.match(mcpSkills, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
+  assert.match(mcpSkills, /shared or agent skill '\$skillName' content differs from Anti-Codex local skills copy/);
   assert.doesNotMatch(mcpSkills, /\$skillEntries\s*=\s*@\([^\r\n]*Select-Object -First 50/);
   assert.match(mcpSkills, /function Get-LinkTargetValue/);
   assert.match(mcpSkills, /function Select-LightFileSystemItem/);
@@ -3837,6 +3845,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /anticodex-source-snapshot\.ps1/);
   assert.match(mcpSkills, /Get-AntiCodexSourceSnapshot/);
   assert.match(mcpSkills, /sourceSnapshot = \$sourceSnapshot/);
+  assert.match(sourceSnapshot, /Label "shared-skills"[\s\S]*-HashContent \$true/);
+  assert.match(sourceSnapshot, /Label "agents-skills"[\s\S]*-HashContent \$true/);
   assert.match(mcpSkills, /nativeCodexWriteback = \$false/);
   assert.match(mcpSkills, /capabilityState =/);
   assert.match(mcpSkills, /degraded =/);
@@ -3879,6 +3889,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /agentsCount = \$agentsSkillNames\.Count/);
   assert.match(mcpSkills, /expectedSharedCount = \$expectedSharedSkillNames\.Count/);
   assert.match(mcpSkills, /missingShared = \$missingSharedSkillNames/);
+  assert.match(mcpSkills, /changedShared = \$changedSharedSkillNames/);
+  assert.match(mcpSkills, /changedSharedDetails = @\(\$changedSharedSkillDetails\)/);
   assert.match(mcpSkills, /duplicateNames = \$duplicateSkillNames/);
   assert.match(mcpSkills, /conflictingDuplicateNames = \$conflictingDuplicateSkillNames/);
   assert.match(mcpSkills, /\$healthMode = "unknown"/);
@@ -5107,6 +5119,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /managerButtonOk/);
   assert.match(diagnostics, /managerButtonResults/);
   assert.match(diagnostics, /mcpSkills/);
+  assert.match(diagnostics, /MCP\/Skill summary has changed shared skills/);
   assert.match(diagnostics, /pluginCapabilities/);
   assert.match(diagnostics, /latest-local-connectors\.json/);
   assert.match(diagnostics, /latest-plugin-capabilities\.json/);
@@ -5333,6 +5346,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /refresh_features_source_snapshot_missing/);
   assert.match(releaseGates, /mcp_skills_source_snapshot_missing/);
   assert.match(releaseGates, /mcp_skills_source_snapshot_mismatch/);
+  assert.match(releaseGates, /mcp_skills_changed_shared_skills/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_missing/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_mismatch/);
   assert.match(releaseGates, /missingRequired/);

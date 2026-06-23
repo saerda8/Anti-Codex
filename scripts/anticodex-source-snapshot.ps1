@@ -8,13 +8,25 @@ function Get-AntiCodexSourceSnapshot {
     $sources = New-Object System.Collections.Generic.List[object]
     $mtimeMax = $null
 
+    function Get-FileSha256Hex {
+        param([string]$Path)
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+            $sha.Dispose()
+        }
+    }
+
     function Add-SourceFile {
         param([string]$Label, [string]$Path, [string]$Relative, [bool]$HashContent)
         if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
         $item = Get-Item -LiteralPath $Path -Force
         $normalized = ([string]$Relative).Replace("\", "/")
         $signature = if ($HashContent) {
-            (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            Get-FileSha256Hex $Path
         } else {
             "$($item.Length):$($item.LastWriteTimeUtc.Ticks)"
         }
@@ -61,8 +73,8 @@ function Get-AntiCodexSourceSnapshot {
 
     $script:__anticodexSourceMtimeMax = $null
     Add-SourcePath -Label "shared-config" -Path (Join-Path $SharedCodexHome "config.toml") -Kind "file" -HashContent $true
-    Add-SourcePath -Label "shared-skills" -Path (Join-Path $SharedCodexHome "skills") -Kind "directory"
-    Add-SourcePath -Label "agents-skills" -Path $AgentsSkillsPath -Kind "directory"
+    Add-SourcePath -Label "shared-skills" -Path (Join-Path $SharedCodexHome "skills") -Kind "directory" -HashContent $true
+    Add-SourcePath -Label "agents-skills" -Path $AgentsSkillsPath -Kind "directory" -HashContent $true
     Add-SourcePath -Label "shared-connectors" -Path (Join-Path $SharedCodexHome "cache\codex_app_directory") -Kind "directory" -HashContent $true
     Add-SourcePath -Label "shared-app-tools" -Path (Join-Path $SharedCodexHome "cache\codex_apps_tools") -Kind "directory" -HashContent $true
     foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md")) {

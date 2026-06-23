@@ -338,6 +338,13 @@ Branch: main
 - Plugin capability parity now treats extra local connector/app-tool cache records as drift. Summaries, Manager evidence, and passive release gates include `extraLocal` in clean/dirty decisions.
 - Fresh evidence: JS syntax checks passed, refresh/plugin PowerShell parser checks passed, release-gate `--self-test` passed with new extra-local negative coverage, focused launcher contracts passed, and strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`.
 
+## 2026-06-23 Skill Content Inheritance Follow-Up
+
+- Source snapshots now content-hash shared `.codex\skills` and `.agents\skills`.
+- MCP/Skill verification now reports inherited skill content drift as `skills.changedShared`, and diagnostics, Manager summaries, report summaries, and passive release gates consume it.
+- Targeted runtime repair refreshed `.system`, `_repos`, and `keep-codex-fast` in Anti-Codex local skills from shared Codex; native Codex was not changed.
+- Fresh evidence: parser checks passed, focused launcher contracts passed, Manager bridge self-test passed, release-gate `--self-test` passed, refreshed MCP/Skill + refresh verify-only + plugin capability reports agree on source fingerprint `ebc8ecb9d202...`, and strict passive gates are `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, `damagedReports:[]`.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

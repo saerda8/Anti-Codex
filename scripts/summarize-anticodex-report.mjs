@@ -358,6 +358,8 @@ const summary = {
     expectedSharedSkillCount: skills && has(skills, "expectedSharedCount") ? skills.expectedSharedCount : null,
     missingSharedSkills: skills && has(skills, "missingShared") ? asStringArray(skills.missingShared) : [],
     extraLocalSkills: skills && has(skills, "extraLocal") ? asStringArray(skills.extraLocal) : [],
+    changedSharedSkills: skills && has(skills, "changedShared") ? asStringArray(skills.changedShared) : [],
+    changedSharedSkillDetails: skills && Array.isArray(skills.changedSharedDetails) ? skills.changedSharedDetails : [],
     duplicateSkillNames: skills && has(skills, "duplicateNames") ? asStringArray(skills.duplicateNames) : [],
     conflictingDuplicateSkillNames: skills && has(skills, "conflictingDuplicateNames") ? asStringArray(skills.conflictingDuplicateNames) : [],
     skillSmokeReadable: skills && skills.smoke ? boolField(skills.smoke, "readable") : null,

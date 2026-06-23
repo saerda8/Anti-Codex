@@ -281,6 +281,7 @@ function summarizeGate(definition) {
       if (Number(skills.agentsCount || 0) < 1) semanticFailures.push("mcp_skills_no_agents_skills");
       if (Number(skills.expectedSharedCount || 0) < Number(skills.sharedCount || 0) + Number(skills.agentsCount || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
       if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
+      if (!isEmptyArray(skills.changedShared)) semanticFailures.push("mcp_skills_changed_shared_skills");
       if (!isEmptyArray(skills.conflictingDuplicateNames)) semanticFailures.push("mcp_skills_conflicting_duplicate_skills");
       if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
       if (!gate.sourceFingerprint) semanticFailures.push("mcp_skills_source_snapshot_missing");
@@ -669,6 +670,7 @@ if (args.has("--self-test")) {
         agentsCount: 0,
         expectedSharedCount: 1,
         missingShared: ["missing-skill"],
+        changedShared: ["changed-skill"],
         smoke: { readable: false },
       },
     });
