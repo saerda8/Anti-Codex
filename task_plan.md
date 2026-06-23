@@ -1030,3 +1030,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: release-gate group summaries now distinguish required and optional evidence counts, so optional cold/soak state cannot be confused with required release failure.
 - Completed: `latest-model-thinking.json` is now included in diagnostic bundle collection, Manager latest reports, and installed-overall report-integrity checks. `latest-source-preflight.json` is also included in installed-overall report-integrity checks.
 - Verification: JavaScript syntax checks passed; PowerShell parser checks passed for diagnostics and installed overall; release-gate `--self-test` passed; focused diagnostic/latest-report/installed-overall/model-thinking tests passed.
+
+## 2026-06-23 Optional Real-Traffic Skip Semantics
+- Completed: optional real-traffic skipped reports must explicitly state `requestedRealTraffic:false`, `usedRealTraffic:false`, `behaviorCovered:false`, and `coverageKind:"skipped"` before a skipped `ok:true` report can satisfy optional semantics.
+- Verification: release-gate `--self-test` rejects forged skipped optional reports where real traffic was requested or not explicitly marked unrequested.

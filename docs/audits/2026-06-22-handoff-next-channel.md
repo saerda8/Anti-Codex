@@ -253,6 +253,11 @@ Branch: main
 - `latest-model-thinking.json` is now included in diagnostic bundle collection, Manager latest reports, and installed-overall report-integrity checks. `latest-source-preflight.json` is also included in installed-overall report-integrity checks.
 - Fresh evidence: JS syntax checks passed; diagnostics and installed-overall PowerShell parser checks passed; release-gate `--self-test` passed; focused diagnostic/latest-report/installed-overall/model-thinking tests passed.
 
+## 2026-06-23 Optional Real-Traffic Skip Follow-Up
+
+- Optional real-traffic skipped reports now need explicit no-traffic skip evidence: `requestedRealTraffic:false`, `usedRealTraffic:false`, `behaviorCovered:false`, and `coverageKind:"skipped"`.
+- Fresh evidence: release-gate `--self-test` rejects forged skipped optional reports where traffic was requested or not explicitly marked unrequested.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

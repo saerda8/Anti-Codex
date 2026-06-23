@@ -172,6 +172,7 @@ function summarizeGate(definition) {
     }
     if (definition.requireOptionalRealTrafficSemantics && present) {
       if (report.skipped === true) {
+        if (report.requestedRealTraffic !== false) semanticFailures.push("optional_skipped_requested_real_traffic_not_false");
         if (report.usedRealTraffic !== false) semanticFailures.push("optional_skipped_used_real_traffic");
         if (report.behaviorCovered !== false) semanticFailures.push("optional_skipped_behavior_covered");
         if (report.coverageKind !== "skipped") semanticFailures.push("optional_skipped_coverage_kind");
@@ -942,6 +943,7 @@ if (args.has("--self-test")) {
       "stability_soak_model_count",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
+      "optional_skipped_requested_real_traffic_not_false",
       "optional_requested_real_traffic_uncovered_but_ok",
     ]);
     writeFakeLatestReport("latest-real-third-party-provider.json", {

@@ -4712,6 +4712,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /expected_no_real_traffic/);
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
   assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);
+  assert.match(releaseGates, /optional_skipped_requested_real_traffic_not_false/);
   assert.match(releaseGates, /optional_real_provider_history_missing/);
   assert.match(releaseGates, /optional_real_provider_route_transport/);
   assert.match(releaseGates, /optional_real_provider_route_protocol/);
