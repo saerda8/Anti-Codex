@@ -3711,6 +3711,11 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /node_repl/);
   assert.match(refreshLocalFeatures, /cache\\codex_app_directory/);
   assert.match(refreshLocalFeatures, /cache\\codex_apps_tools/);
+  assert.match(refreshLocalFeatures, /function Get-DirectoryContentFingerprint/);
+  assert.match(refreshLocalFeatures, /connectorParity/);
+  assert.match(refreshLocalFeatures, /appToolParity/);
+  assert.match(refreshLocalFeatures, /connector directory local snapshot differs from shared source after refresh/);
+  assert.match(refreshLocalFeatures, /app-tools cache local snapshot differs from shared source after refresh/);
   assert.match(refreshLocalFeatures, /skills local copy is empty or missing/);
   assert.match(refreshLocalFeatures, /function Get-FileInfo/);
   assert.match(refreshLocalFeatures, /AGENTS\.md/);

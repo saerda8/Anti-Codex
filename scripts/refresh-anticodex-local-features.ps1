@@ -90,6 +90,28 @@ function Get-LinkTargetValue {
     return @($Item.Target | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ })
 }
 
+function Get-DirectoryContentFingerprint {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
+    $rootPath = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
+    $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
+        Where-Object { $_.Name -ne ".anticodex-source-manifest.json" } |
+        Sort-Object FullName |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($rootPath.Length).TrimStart("\", "/")
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+            "$relative`t$hash"
+        })
+    $joined = [string]::Join("`n", $entries)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Get-DirectoryInfo {
     param([string]$Path)
     $exists = Test-Path -LiteralPath $Path -PathType Container
@@ -244,6 +266,44 @@ foreach ($skillName in $missingExpectedSkillNames) {
 }
 $connectors = Get-DirectoryInfo (Join-Path $CodexHome "cache\codex_app_directory")
 $appTools = Get-DirectoryInfo (Join-Path $CodexHome "cache\codex_apps_tools")
+$sharedConnectorDirectoryPath = Join-Path $SharedCodexHome "cache\codex_app_directory"
+$sharedAppToolsCachePath = Join-Path $SharedCodexHome "cache\codex_apps_tools"
+$connectorParity = [pscustomobject]@{
+    sharedExists = Test-Path -LiteralPath $sharedConnectorDirectoryPath -PathType Container
+    localExists = Test-Path -LiteralPath (Join-Path $CodexHome "cache\codex_app_directory") -PathType Container
+    sharedFingerprint = ""
+    localFingerprint = ""
+    contentMatches = $null
+}
+$appToolParity = [pscustomobject]@{
+    sharedExists = Test-Path -LiteralPath $sharedAppToolsCachePath -PathType Container
+    localExists = Test-Path -LiteralPath (Join-Path $CodexHome "cache\codex_apps_tools") -PathType Container
+    sharedFingerprint = ""
+    localFingerprint = ""
+    contentMatches = $null
+}
+if ($connectorParity.sharedExists) {
+    $connectorParity.sharedFingerprint = Get-DirectoryContentFingerprint $sharedConnectorDirectoryPath
+    if ($connectorParity.localExists) {
+        $connectorParity.localFingerprint = Get-DirectoryContentFingerprint (Join-Path $CodexHome "cache\codex_app_directory")
+        $connectorParity.contentMatches = ($connectorParity.sharedFingerprint -eq $connectorParity.localFingerprint)
+        if ($connectorParity.contentMatches -ne $true) { Add-Failure "connector directory local snapshot differs from shared source after refresh" }
+    } else {
+        $connectorParity.contentMatches = $false
+        Add-Failure "connector directory shared source exists but local snapshot is missing after refresh"
+    }
+}
+if ($appToolParity.sharedExists) {
+    $appToolParity.sharedFingerprint = Get-DirectoryContentFingerprint $sharedAppToolsCachePath
+    if ($appToolParity.localExists) {
+        $appToolParity.localFingerprint = Get-DirectoryContentFingerprint (Join-Path $CodexHome "cache\codex_apps_tools")
+        $appToolParity.contentMatches = ($appToolParity.sharedFingerprint -eq $appToolParity.localFingerprint)
+        if ($appToolParity.contentMatches -ne $true) { Add-Failure "app-tools cache local snapshot differs from shared source after refresh" }
+    } else {
+        $appToolParity.contentMatches = $false
+        Add-Failure "app-tools cache shared source exists but local snapshot is missing after refresh"
+    }
+}
 $guidance = [ordered]@{}
 foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md")) {
     $info = Get-FileInfo (Join-Path $CodexHome $name)
@@ -291,6 +351,8 @@ $result = [pscustomobject]@{
     guidance = $guidance
     connectors = $connectors
     appTools = $appTools
+    connectorParity = $connectorParity
+    appToolParity = $appToolParity
 }
 
 $reportPaths = New-ReportPaths "refresh-features"
