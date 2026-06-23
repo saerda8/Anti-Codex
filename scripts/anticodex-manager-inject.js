@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v87";
+  const VERSION = "native-panel-v88";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -878,10 +878,16 @@
           lines.push(`  Release groups: ${groupSummary}`);
         }
         if (item.installedRuntimeEvidence) {
-          const evidence = item.installedRuntimeEvidence;
-          const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
-          lines.push(`  installedRuntime: files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0}`);
-        }
+        const evidence = item.installedRuntimeEvidence;
+        const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
+        lines.push(`  installedRuntime: files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0}`);
+        const runtimeSamples = [
+          ...(Array.isArray(evidence.missingSourceFiles) ? evidence.missingSourceFiles.map((item) => `missingSource:${item}`) : []),
+          ...(Array.isArray(evidence.missingInstalledRuntimeFiles) ? evidence.missingInstalledRuntimeFiles.map((item) => `missingInstalled:${item}`) : []),
+          ...(Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.map((item) => `mismatch:${item}`) : []),
+        ].slice(0, 3);
+        if (runtimeSamples.length) lines.push(`  installedRuntime drift: ${runtimeSamples.join(", ")}`);
+      }
       }
       if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
         const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {

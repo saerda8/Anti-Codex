@@ -308,6 +308,12 @@ function latestReportsSummary(result) {
         const evidence = item.installedRuntimeEvidence;
         const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
         lines.push(`  installedRuntime: files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0}`);
+        const runtimeSamples = [
+          ...(Array.isArray(evidence.missingSourceFiles) ? evidence.missingSourceFiles.map((item) => `missingSource:${item}`) : []),
+          ...(Array.isArray(evidence.missingInstalledRuntimeFiles) ? evidence.missingInstalledRuntimeFiles.map((item) => `missingInstalled:${item}`) : []),
+          ...(Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.map((item) => `mismatch:${item}`) : []),
+        ].slice(0, 3);
+        if (runtimeSamples.length) lines.push(`  installedRuntime drift: ${runtimeSamples.join(", ")}`);
       }
     }
     if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
@@ -623,7 +629,7 @@ if (args.has("--self-test")) {
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
       releaseGateFailures: [{ id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] }],
-      installedRuntimeEvidence: { sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", mismatchedRuntimeFiles: [] },
+      installedRuntimeEvidence: { sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", missingSourceFiles: ["scripts/a.ps1"], missingInstalledRuntimeFiles: ["scripts/b.ps1"], mismatchedRuntimeFiles: ["scripts/c.ps1"] },
     }, {
       label: "\u6a21\u578b\u601d\u8003\u9884\u7b97",
       exists: true,
@@ -677,7 +683,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1/);
-  assert.match(evidenceSummary, /installedRuntime: files=58\/58 \/ fingerprint=match \/ mismatches=0/);
+  assert.match(evidenceSummary, /installedRuntime: files=58\/58 \/ fingerprint=match \/ mismatches=1/);
+  assert.match(evidenceSummary, /installedRuntime drift: missingSource:scripts\/a\.ps1, missingInstalled:scripts\/b\.ps1, mismatch:scripts\/c\.ps1/);
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);

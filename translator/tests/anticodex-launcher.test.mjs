@@ -397,8 +397,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /skipped: /);
   assert.match(managerInject, /requestedRealTraffic=/);
   assert.match(managerInject, /coverage=/);
-  assert.match(managerInject, /native-panel-v87/);
-  assert.match(syncReadiness, /native-panel-v87/);
+  assert.match(managerInject, /native-panel-v88/);
+  assert.match(syncReadiness, /native-panel-v88/);
+  assert.doesNotMatch(managerInject, /native-panel-v87/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v87/);
   assert.doesNotMatch(managerInject, /native-panel-v86/);
   assert.doesNotMatch(syncReadiness, /native-panel-v86/);
   assert.doesNotMatch(managerInject, /native-panel-v85/);
@@ -616,8 +618,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v87["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v87"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v88["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v88"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -654,6 +656,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /installedRuntimeEvidence/);
   assert.match(managerBridge, /installedRuntime: files=/);
   assert.match(managerInject, /installedRuntime: files=/);
+  assert.match(managerBridge, /installedRuntime drift:/);
+  assert.match(managerInject, /installedRuntime drift:/);
   assert.match(managerBridge, /optionalRealTraffic: strict=/);
   assert.match(managerInject, /optionalRealTraffic: strict=/);
   assert.match(managerBridge, /optionalRealTrafficFailures/);
@@ -848,7 +852,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v87/);
+  assert.match(managerOpenInject, /native-panel-v88/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v87/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v86/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v85/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v84/);
@@ -1769,7 +1774,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v87 manager script/);
+  assert.match(manager, /latest native-panel-v88 manager script/);
   assert.doesNotMatch(manager, /native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -2150,6 +2155,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /releaseGateFailures/);
   assert.match(server, /installedRuntimeEvidence/);
   assert.match(server, /installedRuntime: files=/);
+  assert.match(server, /installedRuntime drift:/);
   assert.match(server, /semanticFailures/);
   assert.match(server, /requestedRealTraffic/);
   assert.match(server, /coverageKind/);
