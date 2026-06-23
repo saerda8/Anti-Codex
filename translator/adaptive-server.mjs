@@ -122,6 +122,7 @@ const LOG_DB_GUARD_SCRIPT = resolvePath(MANAGER_SCRIPTS_ROOT, "protect-anticodex
 const execFileAsync = promisify(execFile);
 const MANAGER_ACTION_TOKEN = randomBytes(32).toString("base64url");
 const MANAGER_ACTION_LOCKS = new Set();
+const MANAGER_BACKGROUND_ACTIONS = new Map();
 const MANAGER_REPORT_STALE_MS_RAW = Number(process.env.ANTICODEX_MANAGER_REPORT_STALE_MS || 24 * 60 * 60 * 1000);
 const MANAGER_REPORT_STALE_MS = Number.isFinite(MANAGER_REPORT_STALE_MS_RAW)
     ? Math.max(60 * 1000, MANAGER_REPORT_STALE_MS_RAW)
@@ -1662,6 +1663,26 @@ function longTaskItem({ id, label, state, stage = "", updatedAt = "", elapsedMs 
     };
 }
 
+function managerBackgroundActionItems() {
+    return [...MANAGER_BACKGROUND_ACTIONS.values()].map((task) => {
+        const startedAt = shortSafeText(task.backgroundStartedAt || "", "");
+        const startedMs = Date.parse(startedAt);
+        return longTaskItem({
+            id: task.actionName,
+            label: task.label || managerActionLabel(task.actionName),
+            state: "running",
+            stage: "manager_background",
+            updatedAt: startedAt,
+            latestLogLine: task.pid ? `pid ${task.pid}` : "started",
+            logUpdatedAt: startedAt,
+            elapsedMs: Number.isFinite(startedMs) ? Date.now() - startedMs : null,
+            reportPath: task.reportPath || "",
+            failureCount: 0,
+            hint: "\u7ba1\u7406\u9762\u677f\u540e\u53f0\u52a8\u4f5c\u6b63\u5728\u8fd0\u884c\uff1b\u91cd\u590d\u70b9\u51fb\u4f1a\u88ab\u5ffd\u7565\u3002",
+        });
+    });
+}
+
 function longTaskSummary({ postVerification = latestPostVerificationStatus(), updateStatus = null } = {}) {
     const operation = updateStatus?.operation && typeof updateStatus.operation === "object" ? updateStatus.operation : {};
     const syncState = operation.state || (updateStatus?.sync?.launched ? "running" : "idle");
@@ -1696,6 +1717,26 @@ function longTaskSummary({ postVerification = latestPostVerificationStatus(), up
             hint: postVerification?.usedRealTraffic ? "会消耗真实 Antigravity 流量" : "尚未运行真实流量完整检查",
         }),
     ];
+    for (const backgroundItem of managerBackgroundActionItems()) {
+        const existingIndex = items.findIndex((item) => item.id === backgroundItem.id);
+        if (existingIndex >= 0) {
+            const existing = items[existingIndex];
+            items[existingIndex] = {
+                ...existing,
+                state: "running",
+                rawState: "running",
+                stage: backgroundItem.stage || existing.stage,
+                updatedAt: backgroundItem.updatedAt || existing.updatedAt,
+                latestLogLine: backgroundItem.latestLogLine || existing.latestLogLine,
+                logUpdatedAt: backgroundItem.logUpdatedAt || existing.logUpdatedAt,
+                logAgeMs: backgroundItem.logAgeMs,
+                elapsedMs: backgroundItem.elapsedMs,
+                hint: backgroundItem.hint || existing.hint,
+            };
+        } else {
+            items.push(backgroundItem);
+        }
+    }
     const runningCount = items.filter((item) => item.state === "running").length;
     const attentionCount = items.filter((item) => item.state === "attention").length;
     return {
@@ -2774,6 +2815,25 @@ function managerActionArgs(actionName, action) {
     return args;
 }
 
+function managerBackgroundActionKey(actionName, action) {
+    return action?.singletonProcessPattern || actionName;
+}
+
+function recordManagerBackgroundAction(lockKey, { actionName, label, pid, reportPath = "" }) {
+    MANAGER_BACKGROUND_ACTIONS.set(lockKey, {
+        actionName,
+        label,
+        pid: Number.isFinite(Number(pid)) ? Number(pid) : null,
+        backgroundStartedAt: new Date().toISOString(),
+        reportPath,
+    });
+}
+
+function clearManagerBackgroundAction(lockKey) {
+    MANAGER_ACTION_LOCKS.delete(lockKey);
+    MANAGER_BACKGROUND_ACTIONS.delete(lockKey);
+}
+
 async function runManagerAction(actionName) {
     const action = MANAGER_ACTIONS[actionName];
     if (!action) {
@@ -2791,15 +2851,17 @@ async function runManagerAction(actionName) {
     ].join("; ");
     const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command];
     if (action.background) {
-        const lockKey = action.singletonProcessPattern || actionName;
+        const lockKey = managerBackgroundActionKey(actionName, action);
         if (MANAGER_ACTION_LOCKS.has(lockKey)) {
+            const task = MANAGER_BACKGROUND_ACTIONS.get(lockKey) || {};
             return {
                 ok: true,
                 action: actionName,
                 label,
                 background: true,
                 alreadyRunning: true,
-                runningPids: [],
+                runningPids: Number.isFinite(Number(task.pid)) ? [Number(task.pid)] : [],
+                backgroundStartedAt: task.backgroundStartedAt || "",
                 message: `${label} 已经在后台运行。`,
             };
         }
@@ -2807,7 +2869,7 @@ async function runManagerAction(actionName) {
         try {
             const running = await managerActionRunningProcesses(action);
             if (running.length > 0) {
-                MANAGER_ACTION_LOCKS.delete(lockKey);
+                clearManagerBackgroundAction(lockKey);
                 return {
                     ok: true,
                     action: actionName,
@@ -2824,7 +2886,8 @@ async function runManagerAction(actionName) {
                 stdio: "ignore",
                 windowsHide: true,
             });
-            const clearLock = () => MANAGER_ACTION_LOCKS.delete(lockKey);
+            recordManagerBackgroundAction(lockKey, { actionName, label, pid: child.pid });
+            const clearLock = () => clearManagerBackgroundAction(lockKey);
             child.once("exit", clearLock);
             child.once("error", clearLock);
             const lockTimer = setTimeout(clearLock, action.backgroundLockMaxMs || 30 * 60_000);
@@ -2836,10 +2899,11 @@ async function runManagerAction(actionName) {
                 label,
                 background: true,
                 pid: child.pid,
+                backgroundStartedAt: MANAGER_BACKGROUND_ACTIONS.get(lockKey)?.backgroundStartedAt || "",
                 message: `${label} 已在后台开始。`,
             };
         } catch (error) {
-            MANAGER_ACTION_LOCKS.delete(lockKey);
+            clearManagerBackgroundAction(lockKey);
             throw error;
         }
     }
@@ -3028,11 +3092,13 @@ function longTaskRows(longTasks){
   const items=Array.isArray(longTasks?.items)?longTasks.items:[];
   const sync=items.find((item)=>item?.id==="syncHost")||{};
   const post=items.find((item)=>item?.id==="postVerificationFull")||{};
-  const latest=[post,sync].find((item)=>item?.latestLogLine)||{};
+  const backgroundItems=items.filter((item)=>item?.state==="running"&&item?.id!=="syncHost"&&item?.id!=="postVerificationFull");
+  const latest=[...backgroundItems,post,sync].find((item)=>item?.latestLogLine)||{};
   const latestAge=formatReportAge(latest.logAgeMs);
   return [
     ["\\u6b63\\u5728\\u8fd0\\u884c",longTasks?.runningCount??0],
     ["\\u9700\\u5904\\u7406",longTasks?.attentionCount??0],
+    ["\\u5176\\u4ed6\\u540e\\u53f0",backgroundItems.map((item)=>item.label||item.id).filter(Boolean).join(" / ")||"\\u6682\\u65e0"],
     ["Codex \\u540c\\u6b65",longTaskStatusText(sync)],
     ["\\u540c\\u6b65\\u9636\\u6bb5",sync.stage||"\\u6682\\u65e0"],
     ["\\u5b8c\\u6574\\u9a8c\\u8bc1",longTaskStatusText(post)],

@@ -1831,6 +1831,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /sync-anticodex-launcher\.ps1/);
   assert.match(server, /singletonProcessPattern/);
   assert.match(server, /MANAGER_ACTION_LOCKS/);
+  assert.match(server, /MANAGER_BACKGROUND_ACTIONS/);
+  assert.match(server, /function managerBackgroundActionItems/);
+  assert.match(server, /backgroundStartedAt/);
+  assert.match(server, /backgroundItems=items\.filter/);
   assert.match(server, /backgroundLockMaxMs/);
   assert.match(server, /function managerActionRunningProcesses/);
   assert.match(server, /alreadyRunning/);

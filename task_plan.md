@@ -1236,3 +1236,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `protect-anticodex-log-db.mjs --status` now writes signed no-traffic evidence (`latest-log-db-guard.json` plus timestamped history) proving the Anti-Codex log database exists, has a `logs` table and `level` column, carries trigger `anticodex_drop_trace_logs`, and has a bounded WAL size.
 - Completed: `/anticodex/diagnostics`, diagnostic bundles, Manager latest-report visibility, installed-overall report integrity checks, and passive release gates now consume the log-guard report so a missing trigger or unprotected database cannot be hidden behind `ok:true`.
 - Verification: JS syntax checks passed for the guard, release gates, and adaptive server; PowerShell parser checks passed for diagnostics/installed-overall scripts; guard self-test passed; release-gate self-test passed; launcher contracts passed `124/124`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `damagedReports:[]`.
+
+## 2026-06-23 Manager Background Task Visibility
+- Completed: Manager background actions now register in a server-side background-action map when spawned and clear the same map on exit, error, timeout, or failed launch, so duplicate clicks can return the existing PID/start time instead of looking like a fresh command.
+- Completed: `/anticodex/diagnostics.longTasks.items` now includes currently running Manager background actions, and the embedded Manager background-task card shows other running background actions instead of relying only on sync-host/post-verification reports.
+- Verification: adaptive server syntax passed; focused launcher contracts passed `124/124`.
