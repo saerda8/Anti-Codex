@@ -141,6 +141,10 @@ function summarizeGate(definition) {
     gate.usedRealTraffic = report.usedRealTraffic === true ? true : report.usedRealTraffic === false ? false : null;
     gate.behaviorCovered = report.behaviorCovered === true ? true : report.behaviorCovered === false ? false : null;
     gate.coverageKind = typeof report.coverageKind === "string" ? report.coverageKind : "";
+    const sourceSnapshot = report.sourceSnapshot && typeof report.sourceSnapshot === "object" ? report.sourceSnapshot : {};
+    gate.sourceFingerprint = typeof sourceSnapshot.fingerprint === "string" ? sourceSnapshot.fingerprint : "";
+    gate.sourceMtimeMax = typeof sourceSnapshot.sourceMtimeMax === "string" ? sourceSnapshot.sourceMtimeMax : "";
+    gate.sourceFileCount = Number.isFinite(Number(sourceSnapshot.fileCount)) ? Number(sourceSnapshot.fileCount) : null;
     const semanticFailures = [];
     if (definition.requireFastNoTraffic && (report.fast !== true || report.noTraffic !== true)) {
       semanticFailures.push("expected_fast_no_traffic");
@@ -254,6 +258,7 @@ function summarizeGate(definition) {
       if (!isEmptyArray(connectorParity.changedShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_changed_shared");
       if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
       if (!isEmptyArray(appToolParity.changedShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_changed_shared");
+      if (!gate.sourceFingerprint) semanticFailures.push("plugin_capabilities_source_snapshot_missing");
     }
     if (definition.requireMcpSkillSemantics) {
       const mcp = report.mcp || {};
@@ -275,6 +280,7 @@ function summarizeGate(definition) {
       if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
       if (!isEmptyArray(skills.conflictingDuplicateNames)) semanticFailures.push("mcp_skills_conflicting_duplicate_skills");
       if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
+      if (!gate.sourceFingerprint) semanticFailures.push("mcp_skills_source_snapshot_missing");
     }
     if (definition.requireRefreshFeatureSemantics) {
       const connectorParity = report.connectorParity || {};
@@ -285,6 +291,7 @@ function summarizeGate(definition) {
       if (connectorParity.sharedExists === true && connectorParity.contentMatches !== true) semanticFailures.push("refresh_features_connector_parity");
       if (appToolParity.sharedExists === true && appToolParity.localExists !== true) semanticFailures.push("refresh_features_app_tool_local_missing");
       if (appToolParity.sharedExists === true && appToolParity.contentMatches !== true) semanticFailures.push("refresh_features_app_tool_parity");
+      if (!gate.sourceFingerprint) semanticFailures.push("refresh_features_source_snapshot_missing");
     }
     if (definition.requireSourcePreflightSemantics) {
       const checks = report.checks || {};
@@ -1075,6 +1082,7 @@ if (args.has("--self-test")) {
       "mcp_skills_missing_shared_skills",
       "mcp_skills_conflicting_duplicate_skills",
       "mcp_skills_skill_smoke_not_readable",
+      "mcp_skills_source_snapshot_missing",
     ]);
     writeFakeLatestReport("latest-refresh-features.json", {
       ok: true,
@@ -1096,6 +1104,7 @@ if (args.has("--self-test")) {
       "refresh_features_connector_local_missing",
       "refresh_features_connector_parity",
       "refresh_features_app_tool_parity",
+      "refresh_features_source_snapshot_missing",
     ]);
     semanticFailures.sourcePreflight = assertSemanticFailures("sourcePreflight", "self-test failed: semantically invalid source-preflight report satisfied the gate", [
       "source_preflight_report_name",
@@ -1168,6 +1177,7 @@ if (args.has("--self-test")) {
       "plugin_capabilities_local_connector_parity_changed_shared",
       "plugin_capabilities_local_app_tool_parity_missing_shared",
       "plugin_capabilities_local_app_tool_parity_changed_shared",
+      "plugin_capabilities_source_snapshot_missing",
     ]);
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
@@ -1178,6 +1188,21 @@ if (args.has("--self-test")) {
 }
 
 const gates = gateDefinitions.map(summarizeGate);
+function addSemanticFailure(gateId, failure) {
+  const gate = gates.find((item) => item.id === gateId);
+  if (!gate) return;
+  if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
+  if (!gate.semanticFailures.includes(failure)) gate.semanticFailures.push(failure);
+  gate.satisfied = gate.present && gate.parseable && gate.hashValid === true && gate.okField === true && gate.fresh === true && gate.semanticFailures.length === 0;
+}
+
+const refreshFeatureGate = gates.find((gate) => gate.id === "refreshFeatures");
+for (const gateId of ["mcpSkills", "pluginCapabilities"]) {
+  const gate = gates.find((item) => item.id === gateId);
+  if (refreshFeatureGate?.sourceFingerprint && gate?.sourceFingerprint && refreshFeatureGate.sourceFingerprint !== gate.sourceFingerprint) {
+    addSemanticFailure(gateId, gateId === "mcpSkills" ? "mcp_skills_source_snapshot_mismatch" : "plugin_capabilities_source_snapshot_mismatch");
+  }
+}
 const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);
 const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);

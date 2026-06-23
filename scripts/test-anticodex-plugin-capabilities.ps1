@@ -5,10 +5,12 @@ param(
     [string]$ReportRoot = $(Join-Path $StateRoot "reports"),
     [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
     [string]$SharedCodexHome = $(if ($env:DEEPCODEX_SHARED_CODEX_HOME) { $env:DEEPCODEX_SHARED_CODEX_HOME } elseif ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
+    [string]$AgentsSkillsPath = $(if ($env:ANTICODEX_AGENTS_SKILLS_PATH) { $env:ANTICODEX_AGENTS_SKILLS_PATH } else { Join-Path $env:USERPROFILE ".agents\skills" }),
     [int]$TimeoutSec = 8
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "anticodex-source-snapshot.ps1")
 
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
@@ -515,12 +517,14 @@ $capabilityState = if ($failures.Count -gt 0) {
     "callable_tools_available"
 }
 $capabilityDegraded = ($capabilityState -ne "callable_tools_available")
+$sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     reportName = "plugin-capabilities"
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
+    sourceSnapshot = $sourceSnapshot
     health = [pscustomobject]@{
         ok = if ($health) { $health.ok } else { $false }
         upstream = if ($health) { $health.upstream } else { $null }

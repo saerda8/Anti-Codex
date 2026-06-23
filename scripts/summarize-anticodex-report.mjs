@@ -279,6 +279,11 @@ const summary = {
   attempts: wait && has(wait, "attempts") ? wait.attempts : null,
   repairedCount: has(report, "repairedCount") ? report.repairedCount : null,
   repairedAt: has(report, "repairedAt") ? asString(report.repairedAt) : null,
+  sourceSnapshotEvidence: report.sourceSnapshot && typeof report.sourceSnapshot === "object" ? {
+    fingerprint: has(report.sourceSnapshot, "fingerprint") ? asString(report.sourceSnapshot.fingerprint) : null,
+    sourceMtimeMax: has(report.sourceSnapshot, "sourceMtimeMax") ? asString(report.sourceSnapshot.sourceMtimeMax) : null,
+    fileCount: has(report.sourceSnapshot, "fileCount") ? report.sourceSnapshot.fileCount : null,
+  } : null,
   releaseReady: boolField(report, "releaseReady"),
   shortReady: boolField(report, "shortReady"),
   strictOptionalRealTraffic: boolField(report, "strictOptionalRealTraffic"),

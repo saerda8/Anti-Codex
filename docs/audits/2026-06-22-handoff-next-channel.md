@@ -304,6 +304,14 @@ Branch: main
 - Optional real-traffic now has an explicit hard mode: `--strict-optional-real-traffic`. Default `--strict` remains unchanged, but the explicit flag reports optional readiness/failures and treats skipped optional real-provider or provider-to-Antigravity reports as not ready.
 - Earlier evidence before the latest release-required refresh-features hardening: bridge/inject/adaptive/summarizer syntax passed; refresh-feature, MCP/Skill, and plugin-capability parser checks passed; bridge `--self-test` passed; release-gate `--self-test` and strict passive release gates passed; focused Manager/MCP/Skill/plugin contracts passed. The stricter plugin verifier first caught stale connector cache drift, then `refresh-anticodex-local-features.ps1` refreshed snapshots and the rerun passed with connector parity `5760/5760`, app-tool parity `58/58`, and no missing/extra/changed shared entries.
 
+## 2026-06-23 Source Snapshot Release Evidence Follow-Up
+
+- Refresh-feature, MCP/Skill, and plugin-capability reports now carry source snapshot evidence and must agree on the same source fingerprint before passive release readiness can pass.
+- The source snapshot covers shared config, shared `.codex\skills`, extra `.agents\skills`, connector cache, app-tool cache, and global guidance files. It uses content hashing for compact/high-risk sources and metadata signatures for huge inherited skill trees.
+- Summaries, diagnostics, adaptive Manager latest reports, and launcher contracts now surface or require source snapshot evidence.
+- Fresh evidence: parser checks passed for the new helper plus refresh/MCP/plugin/diagnostics scripts; JS syntax checks passed; release-gate `--self-test` passed; focused launcher contracts passed `11/11`; full refresh repaired stale connector snapshot parity and then passed in about 72 seconds; MCP/Skill and plugin-capability reports both used source fingerprint `7255ed564418...`; strict passive gates are `shortReady:true`, `releaseReady:true`, with no missing required reports and matching source fingerprints.
+- Next-channel note: use narrow verifier reruns or `refresh-anticodex-local-features.ps1 -VerifyOnly` for routine evidence refresh. Run full local feature refresh only when connector/app-tool/skill parity drift is detected, because the current inherited surface is roughly 15.6k files.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

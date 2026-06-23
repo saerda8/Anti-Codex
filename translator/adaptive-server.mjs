@@ -2075,6 +2075,11 @@ function latestManagerReportItem(label, fileName) {
         elapsedMs: Number.isFinite(Number(report?.elapsedMs)) ? Number(report.elapsedMs) : null,
         failureCount: invalid ? 1 : failures.length,
         firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
+        sourceSnapshotEvidence: report?.sourceSnapshot && typeof report.sourceSnapshot === "object" ? {
+            fingerprint: shortSafeText(report.sourceSnapshot.fingerprint || "", ""),
+            sourceMtimeMax: shortSafeText(report.sourceSnapshot.sourceMtimeMax || "", ""),
+            fileCount: Number.isFinite(Number(report.sourceSnapshot.fileCount)) ? Number(report.sourceSnapshot.fileCount) : null,
+        } : null,
         releaseReady: typeof report?.releaseReady === "boolean" ? report.releaseReady : null,
         shortReady: typeof report?.shortReady === "boolean" ? report.shortReady : null,
         strictOptionalRealTraffic: typeof report?.strictOptionalRealTraffic === "boolean" ? report.strictOptionalRealTraffic : null,
@@ -2884,6 +2889,10 @@ function latestReportsSummary(result){
       const evidence=item.sourcePreflightEvidence;
       lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false"));
       lines.push("  sourcePreflight: ui="+(evidence.uiStateSelfTestOk?"true":"false")+" / regression="+(evidence.translatorRegressionOk?"true":"false")+" / diff="+(evidence.diffWhitespaceOk?"true":"false")+" / skipFull="+(evidence.skipFullRegression?"true":"false"));
+    }
+    if(item.sourceSnapshotEvidence){
+      const evidence=item.sourceSnapshotEvidence;
+      lines.push("  sourceSnapshot: files="+(evidence.fileCount??"unknown")+" / fingerprint="+(evidence.fingerprint?evidence.fingerprint.slice(0,12):"missing"));
     }
     if(item.skipped===true){
       lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));

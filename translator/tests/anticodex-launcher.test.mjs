@@ -2123,6 +2123,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /strictOptionalRealTraffic/);
   assert.match(reportSummarizer, /optionalRealTrafficReady/);
   assert.match(reportSummarizer, /optionalRealTrafficFailures/);
+  assert.match(reportSummarizer, /sourceSnapshotEvidence/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
   assert.match(reportSummarizer, /releaseGateFailures/);
@@ -3792,6 +3793,9 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /Proxy\s*=\s*\$null/);
   assert.match(mcpSkills, /ConvertTo-Json/);
   assert.match(mcpSkills, /snapshotSource = "anticodex-local-copy"/);
+  assert.match(mcpSkills, /anticodex-source-snapshot\.ps1/);
+  assert.match(mcpSkills, /Get-AntiCodexSourceSnapshot/);
+  assert.match(mcpSkills, /sourceSnapshot = \$sourceSnapshot/);
   assert.match(mcpSkills, /nativeCodexWriteback = \$false/);
   assert.match(mcpSkills, /capabilityState =/);
   assert.match(mcpSkills, /degraded =/);
@@ -3879,6 +3883,9 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /cache\\codex_app_directory/);
   assert.match(refreshLocalFeatures, /cache\\codex_apps_tools/);
   assert.match(refreshLocalFeatures, /function Get-DirectoryContentFingerprint/);
+  assert.match(refreshLocalFeatures, /anticodex-source-snapshot\.ps1/);
+  assert.match(refreshLocalFeatures, /Get-AntiCodexSourceSnapshot/);
+  assert.match(refreshLocalFeatures, /sourceSnapshot = \$sourceSnapshot/);
   assert.match(refreshLocalFeatures, /connectorParity/);
   assert.match(refreshLocalFeatures, /appToolParity/);
   assert.match(refreshLocalFeatures, /connector directory local snapshot differs from shared source after refresh/);
@@ -4145,6 +4152,9 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /app tools exposed without connector_id attribution; refusing fake callable capability/);
   assert.match(capabilities, /app tools exposed for connector_id outside accessible connectors; refusing fake callable capability/);
   assert.match(capabilities, /snapshotSource = "anticodex-local-copy"/);
+  assert.match(capabilities, /anticodex-source-snapshot\.ps1/);
+  assert.match(capabilities, /Get-AntiCodexSourceSnapshot/);
+  assert.match(capabilities, /sourceSnapshot = \$sourceSnapshot/);
   assert.match(capabilities, /nativeCodexWriteback = \$false/);
   assert.match(capabilities, /capabilityState =/);
   assert.match(capabilities, /degraded =/);
@@ -5014,6 +5024,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /strictOptionalRealTraffic/);
   assert.match(diagnostics, /optionalRealTrafficReady/);
   assert.match(diagnostics, /optionalRealTrafficFailures/);
+  assert.match(diagnostics, /sourceSnapshotEvidence/);
+  assert.match(diagnostics, /source snapshot evidence/);
   assert.match(diagnostics, /missingRequired/);
   assert.match(diagnostics, /missingShort/);
   assert.match(diagnostics, /damagedReports/);
@@ -5249,6 +5261,12 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /strictOptionalRealTraffic/);
   assert.match(releaseGates, /optionalRealTrafficReady/);
   assert.match(releaseGates, /optionalRealTrafficFailures/);
+  assert.match(releaseGates, /sourceFingerprint/);
+  assert.match(releaseGates, /refresh_features_source_snapshot_missing/);
+  assert.match(releaseGates, /mcp_skills_source_snapshot_missing/);
+  assert.match(releaseGates, /mcp_skills_source_snapshot_mismatch/);
+  assert.match(releaseGates, /plugin_capabilities_source_snapshot_missing/);
+  assert.match(releaseGates, /plugin_capabilities_source_snapshot_mismatch/);
   assert.match(releaseGates, /missingRequired/);
   assert.match(releaseGates, /missingShort/);
   assert.match(releaseGates, /damagedReports/);

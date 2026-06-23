@@ -6,7 +6,8 @@ param(
     [string]$SharedCodexHome = $(if ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
     [string]$AgentsSkillsPath = $(if ($env:ANTICODEX_AGENTS_SKILLS_PATH) { $env:ANTICODEX_AGENTS_SKILLS_PATH } else { Join-Path $env:USERPROFILE ".agents\skills" }),
     [string]$ReportRoot = $(Join-Path $StateRoot "reports"),
-    [string]$NodeBin = $(if ($env:NODE_BIN) { $env:NODE_BIN } else { "" })
+    [string]$NodeBin = $(if ($env:NODE_BIN) { $env:NODE_BIN } else { "" }),
+    [switch]$VerifyOnly
 )
 
 Set-StrictMode -Version Latest
@@ -14,6 +15,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $root = Split-Path -Parent $scriptRoot
+. (Join-Path $PSScriptRoot "anticodex-source-snapshot.ps1")
 $sharedConfigSync = Join-Path $scriptRoot "sync-shared-codex-config.mjs"
 $pluginHostSync = Join-Path $scriptRoot "sync-shared-codex-plugin-host.mjs"
 $sidecarsSync = Join-Path $scriptRoot "sync-shared-codex-sidecars.mjs"
@@ -190,7 +192,11 @@ $resolvedNode = Resolve-NodeBin
 $configSyncSummary = ""
 $pluginSummary = $null
 $sidecarSummary = ""
-if (-not $resolvedNode) {
+if ($VerifyOnly) {
+    $configSyncSummary = "verify-only: skipped config copy"
+    $pluginSummary = [pscustomobject]@{ ok = $true; summary = @([pscustomobject]@{ relPath = "verify-only"; mode = "skipped-copy" }) }
+    $sidecarSummary = "verify-only: skipped sidecar copy"
+} elseif (-not $resolvedNode) {
     Add-Failure "Node.js was not found."
 } else {
     try {
@@ -317,10 +323,12 @@ foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WO
 }
 if (-not $skills.exists -or $skills.count -lt 1) { Add-Failure "skills local copy is empty or missing" }
 if ($skills.linkType) { Add-Failure "skills path is a link, expected local copy" }
+$sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     reportName = "refresh-features"
+    verifyOnly = [bool]$VerifyOnly
     failures = $failures.ToArray()
     root = $root
     paths = [pscustomobject]@{
@@ -333,6 +341,7 @@ $result = [pscustomobject]@{
     configSync = $configSyncSummary
     snapshots = if ($pluginSummary) { $pluginSummary.summary } else { @() }
     sidecars = if ($sidecarSummary) { $sidecarSummary } else { "" }
+    sourceSnapshot = $sourceSnapshot
     mcp = [pscustomobject]@{
         count = $mcpNames.Count
         names = $mcpNames

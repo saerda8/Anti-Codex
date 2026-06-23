@@ -343,6 +343,7 @@ function Test-DiagnosticBundle {
         $pluginCapabilitiesSummary = @($summary | Where-Object { $_.file -eq "latest-plugin-capabilities.json" } | Select-Object -First 1)[0]
         if ($pluginCapabilitiesSummary) {
             if ($pluginCapabilitiesSummary.ok -ne $true) { Add-Failure "plugin capability summary ok=false" }
+            if (-not $pluginCapabilitiesSummary.sourceSnapshotEvidence) { Add-Failure "plugin capability summary missing source snapshot evidence" }
             $pluginEvidence = $pluginCapabilitiesSummary.pluginCapabilityEvidence
             if (-not $pluginEvidence) {
                 Add-Failure "plugin capability summary missing pluginCapabilityEvidence"
@@ -360,6 +361,7 @@ function Test-DiagnosticBundle {
         $mcpSkillsSummary = @($summary | Where-Object { $_.file -eq "latest-mcp-skills.json" } | Select-Object -First 1)[0]
         if ($mcpSkillsSummary) {
             if ($mcpSkillsSummary.ok -ne $true) { Add-Failure "MCP/Skill summary ok=false" }
+            if (-not $mcpSkillsSummary.sourceSnapshotEvidence) { Add-Failure "MCP/Skill summary missing source snapshot evidence" }
             $mcpSkillEvidence = $mcpSkillsSummary.mcpSkillEvidence
             if (-not $mcpSkillEvidence) {
                 Add-Failure "MCP/Skill summary missing mcpSkillEvidence"
@@ -381,6 +383,7 @@ function Test-DiagnosticBundle {
         }
         $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
         if ($refreshFeaturesSummary) {
+            if (-not $refreshFeaturesSummary.sourceSnapshotEvidence) { Add-Failure "refresh-features summary missing source snapshot evidence" }
             $refreshEvidence = $refreshFeaturesSummary.refreshFeatureEvidence
             if (-not $refreshEvidence) {
                 Add-Failure "refresh-features summary missing refreshFeatureEvidence"
@@ -596,12 +599,14 @@ function Test-DiagnosticBundle {
             [pscustomobject]@{
                 ok = $mcpSkillsSummary.ok
                 evidence = $mcpSkillsSummary.mcpSkillEvidence
+                sourceSnapshot = $mcpSkillsSummary.sourceSnapshotEvidence
             }
         } else { $null }
         refreshFeatures = if ($refreshFeaturesSummary) {
             [pscustomobject]@{
                 ok = $refreshFeaturesSummary.ok
                 evidence = $refreshFeaturesSummary.refreshFeatureEvidence
+                sourceSnapshot = $refreshFeaturesSummary.sourceSnapshotEvidence
             }
         } else { $null }
         optionalRealProvider = if ($optionalRealProviderSummary) {

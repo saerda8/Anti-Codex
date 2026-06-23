@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "anticodex-source-snapshot.ps1")
 
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
@@ -692,6 +693,7 @@ $capabilityState = if ($failures.Count -gt 0) {
     "ready"
 }
 $capabilityDegraded = ($capabilityState -ne "ready")
+$sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
@@ -699,6 +701,7 @@ $result = [pscustomobject]@{
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
     snapshotSource = "anticodex-local-copy"
+    sourceSnapshot = $sourceSnapshot
     nativeCodexWriteback = $false
     capabilityState = $capabilityState
     degraded = $capabilityDegraded
