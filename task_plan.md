@@ -1276,3 +1276,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager diagnostic-bundle action results now surface the collected long-task summary directly, showing running count, attention count, and other-running count next to the ZIP and bundle directory.
 - Completed: the Manager contract now requires diagnostic bundle result copy to read `diagnosticsSummary.longTasks`, keeping the UI result in parity with the bundle payload.
 - Verification: adaptive server syntax passed; focused Start Menu Manager launcher contracts passed `124/124`; `git diff --check` passed.
+
+## 2026-06-23 Diagnostic Bundle Renderer Parity
+- Completed: injected Manager and external Manager bridge diagnostic-bundle result renderers now mirror the fallback Manager by showing the collected `diagnosticsSummary.longTasks` running/attention/other-running counts.
+- Completed: launcher contracts now require all three renderer surfaces (`adaptive-server`, injected panel, and bridge) to consume the same long-task summary evidence.
+- Verification: injected Manager and bridge syntax checks passed; focused Start Menu Manager launcher contracts passed `124/124`; `git diff --check` passed.

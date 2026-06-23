@@ -1853,6 +1853,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /\/anticodex\/manager\/action/);
   assert.match(server, /unwrapped\.diagnosticsSummary\?\.longTasks/);
   assert.match(server, /otherRunningItems\?\.length/);
+  assert.match(inject, /unwrapped\.diagnosticsSummary\?\.longTasks/);
+  assert.match(managerBridge, /unwrappedResult\.diagnosticsSummary\?\.longTasks/);
   assert.match(managerAction, /\/anticodex\/manager/);
   assert.match(managerAction, /\/anticodex\/manager\/action/);
   assert.match(managerAction, /x-anticodex-manager-token/);
