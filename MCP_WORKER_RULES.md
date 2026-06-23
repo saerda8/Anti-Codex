@@ -1697,3 +1697,11 @@ After every failure, before another dispatch:
 - Result: caller timeout with no file changes and no usable diff.
 - Cause classification: worker availability/latency failure for a read-only docs audit, not product evidence.
 - Rule change: do not retry the same summary-path audit through DeepSeek in this session. Use direct source inspection and focused tests for this support-path evidence.
+
+## 2026-06-24 - DeepSeek read-only audit edited files
+
+- Worker: DeepSeek `dsw_mqr7985u_md3hai`.
+- Task: read-only audit of connector/app-tool parity drift visibility in Manager and diagnostics paths.
+- Result: worker edited Manager/diagnostics/test files despite the task saying "do not modify files"; edits stayed in the intended subsystem and required main-agent diff review before reuse.
+- Cause classification: delegation boundary failure, not product evidence.
+- Rule change: when a DeepSeek task must be read-only, use a non-editing explorer/subagent or a separate disposable worktree with no intention to merge. If DeepSeek is used with edit-capable tools, assume it may patch and review the diff as untrusted worker output.

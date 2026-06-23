@@ -427,9 +427,11 @@ function Test-DiagnosticBundle {
                 if (-not (Has-Property $pluginEvidence "connectorParityMissingShared")) { Add-Failure "plugin capability summary missing connector parity drift samples" }
                 if (-not (Has-Property $pluginEvidence "connectorParityExtraLocal")) { Add-Failure "plugin capability summary missing extra local connector drift samples" }
                 if (-not (Has-Property $pluginEvidence "connectorParityChangedShared")) { Add-Failure "plugin capability summary missing changed connector drift samples" }
+                if (-not (Has-Property $pluginEvidence "appToolParityMissingShared")) { Add-Failure "plugin capability summary missing app-tool missing drift samples" }
                 if (-not (Has-Property $pluginEvidence "appToolParityExtraLocal")) { Add-Failure "plugin capability summary missing extra local app-tool drift samples" }
                 if (-not (Has-Property $pluginEvidence "appToolParityChangedShared")) { Add-Failure "plugin capability summary missing changed app-tool drift samples" }
                 if (-not (Has-Property $pluginEvidence "appToolGetPostMissingFromGet")) { Add-Failure "plugin capability summary missing GET/POST drift samples" }
+                if (-not (Has-Property $pluginEvidence "appToolGetPostExtraFromGet")) { Add-Failure "plugin capability summary missing GET/POST extra drift samples" }
             }
         }
         $logDbGuardSummary = @($summary | Where-Object { $_.file -eq "latest-log-db-guard.json" } | Select-Object -First 1)[0]
