@@ -1251,3 +1251,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: long-running foreground Manager actions (`accountProxy`, `sourcePreflight`, `mcpSkills`, `pluginCapabilities`, `fastOverallNoTraffic`, `overallNoTraffic`, and `diagnosticsBundle`) now use a server-side singleflight registry.
 - Completed: duplicate foreground clicks return `alreadyRunning`, `foreground:true`, and the original `foregroundStartedAt` instead of launching parallel checks.
 - Verification: adaptive server syntax passed; focused launcher contracts passed `124/124`.
+
+## 2026-06-23 Manager Foreground Task Visibility
+- Completed: active foreground Manager singleflight entries now appear in `/anticodex/diagnostics.longTasks.items` with `stage:"manager_foreground"`, elapsed time, log age, and a user-visible running hint.
+- Completed: the embedded Manager long-task card now shows foreground and background non-core running actions together as "other running" tasks, while diagnostics verification remains compatible with extra `longTasks.items` entries.
+- Verification: adaptive server syntax passed; focused launcher/diagnostics contracts passed `124/124`; `git diff --check` passed.

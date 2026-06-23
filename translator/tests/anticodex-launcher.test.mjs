@@ -1835,10 +1835,13 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /MANAGER_FOREGROUND_ACTIONS/);
   assert.match(server, /foregroundSingleton:\s*true/);
   assert.match(server, /function managerForegroundActionKey/);
+  assert.match(server, /function managerForegroundActionItems/);
+  assert.match(server, /\[\.\.\.managerForegroundActionItems\(\),\s*\.\.\.managerBackgroundActionItems\(\)\]/);
+  assert.match(server, /stage:\s*"manager_foreground"/);
   assert.match(server, /foregroundStartedAt/);
   assert.match(server, /function managerBackgroundActionItems/);
   assert.match(server, /backgroundStartedAt/);
-  assert.match(server, /backgroundItems=items\.filter/);
+  assert.match(server, /otherRunningItems=items\.filter/);
   assert.match(server, /backgroundLockMaxMs/);
   assert.match(server, /function managerActionRunningProcesses/);
   assert.match(server, /alreadyRunning/);
@@ -5394,6 +5397,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /lifecycleLogs/);
   assert.match(diagnostics, /latestDiagnosisDetail/);
   assert.match(diagnostics, /longTasks/);
+  assert.match(diagnostics, /foreach \(\$expectedTask in @\("syncHost", "postVerificationFull"\)\)/);
+  assert.doesNotMatch(diagnostics, /longTaskItems\.Count\s+-eq\s+2/);
   assert.match(diagnostics, /latestLogLine/);
   assert.match(diagnostics, /logUpdatedAt/);
   assert.match(diagnostics, /logAgeMs/);

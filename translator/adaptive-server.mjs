@@ -1684,6 +1684,25 @@ function managerBackgroundActionItems() {
     });
 }
 
+function managerForegroundActionItems() {
+    return [...MANAGER_FOREGROUND_ACTIONS.values()].map((task) => {
+        const startedAt = shortSafeText(task.foregroundStartedAt || "", "");
+        const startedMs = Date.parse(startedAt);
+        return longTaskItem({
+            id: task.actionName,
+            label: task.label || managerActionLabel(task.actionName),
+            state: "running",
+            stage: "manager_foreground",
+            updatedAt: startedAt,
+            latestLogLine: "\u524d\u53f0\u68c0\u67e5\u6b63\u5728\u8fd0\u884c",
+            logUpdatedAt: startedAt,
+            elapsedMs: Number.isFinite(startedMs) ? Date.now() - startedMs : null,
+            failureCount: 0,
+            hint: "\u7ba1\u7406\u9762\u677f\u524d\u53f0\u957f\u68c0\u67e5\u6b63\u5728\u8fd0\u884c\uff1b\u91cd\u590d\u70b9\u51fb\u4f1a\u8fd4\u56de\u73b0\u6709\u4efb\u52a1\u3002",
+        });
+    });
+}
+
 function longTaskSummary({ postVerification = latestPostVerificationStatus(), updateStatus = null } = {}) {
     const operation = updateStatus?.operation && typeof updateStatus.operation === "object" ? updateStatus.operation : {};
     const syncState = operation.state || (updateStatus?.sync?.launched ? "running" : "idle");
@@ -1718,7 +1737,7 @@ function longTaskSummary({ postVerification = latestPostVerificationStatus(), up
             hint: postVerification?.usedRealTraffic ? "会消耗真实 Antigravity 流量" : "尚未运行真实流量完整检查",
         }),
     ];
-    for (const backgroundItem of managerBackgroundActionItems()) {
+    for (const backgroundItem of [...managerForegroundActionItems(), ...managerBackgroundActionItems()]) {
         const existingIndex = items.findIndex((item) => item.id === backgroundItem.id);
         if (existingIndex >= 0) {
             const existing = items[existingIndex];
@@ -3134,13 +3153,13 @@ function longTaskRows(longTasks){
   const items=Array.isArray(longTasks?.items)?longTasks.items:[];
   const sync=items.find((item)=>item?.id==="syncHost")||{};
   const post=items.find((item)=>item?.id==="postVerificationFull")||{};
-  const backgroundItems=items.filter((item)=>item?.state==="running"&&item?.id!=="syncHost"&&item?.id!=="postVerificationFull");
-  const latest=[...backgroundItems,post,sync].find((item)=>item?.latestLogLine)||{};
+  const otherRunningItems=items.filter((item)=>item?.state==="running"&&item?.id!=="syncHost"&&item?.id!=="postVerificationFull");
+  const latest=[...otherRunningItems,post,sync].find((item)=>item?.latestLogLine)||{};
   const latestAge=formatReportAge(latest.logAgeMs);
   return [
     ["\\u6b63\\u5728\\u8fd0\\u884c",longTasks?.runningCount??0],
     ["\\u9700\\u5904\\u7406",longTasks?.attentionCount??0],
-    ["\\u5176\\u4ed6\\u540e\\u53f0",backgroundItems.map((item)=>item.label||item.id).filter(Boolean).join(" / ")||"\\u6682\\u65e0"],
+    ["\\u5176\\u4ed6\\u8fd0\\u884c",otherRunningItems.map((item)=>item.label||item.id).filter(Boolean).join(" / ")||"\\u6682\\u65e0"],
     ["Codex \\u540c\\u6b65",longTaskStatusText(sync)],
     ["\\u540c\\u6b65\\u9636\\u6bb5",sync.stage||"\\u6682\\u65e0"],
     ["\\u5b8c\\u6574\\u9a8c\\u8bc1",longTaskStatusText(post)],
