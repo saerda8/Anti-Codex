@@ -4223,6 +4223,14 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /anticodex-source-snapshot\.ps1/);
   assert.match(mcpSkills, /Get-AntiCodexSourceSnapshot/);
   assert.match(mcpSkills, /sourceSnapshot = \$sourceSnapshot/);
+  assert.match(mcpSkills, /\$script:verifierDeadlineUtc = \[DateTime\]::UtcNow\.AddSeconds\(\[Math\]::Max\(1, \$TimeoutSec\)\)/);
+  assert.match(mcpSkills, /function Get-RemainingVerifierBudgetMs/);
+  assert.match(mcpSkills, /function New-SkippedSourceSnapshot/);
+  assert.match(mcpSkills, /skill fingerprint skipped because verifier budget is exhausted/);
+  assert.match(mcpSkills, /fingerprintSkipped = \$skillFingerprintSkipped/);
+  assert.match(mcpSkills, /MCP real stdio smoke skipped because verifier budget is too short/);
+  assert.match(mcpSkills, /source snapshot skipped because verifier budget is exhausted/);
+  assert.match(mcpSkills, /Get-RemainingVerifierBudgetMs -lt 5000/);
   assert.match(mcpSkills, /\$consoleResult = \[pscustomobject\]@{/);
   assert.match(mcpSkills, /failureCount = \$failures\.Count/);
   assert.match(mcpSkills, /\$consoleResult \| ConvertTo-Json -Depth 6 -Compress/);
@@ -4231,6 +4239,9 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /exit 0/);
   assert.match(mcpSkills, /mcpSkillFileHashCachePath/);
   assert.match(mcpSkills, /hashCache = \[pscustomobject\]/);
+  assert.match(mcpSkills, /\$script:shortBudgetMode = \(\$TimeoutSec -lt 8\)/);
+  assert.match(mcpSkills, /function Get-PreviousSourceSnapshot/);
+  assert.match(mcpSkills, /reusedFromPreviousReport/);
   assert.match(mcpSkills, /function Get-McpSmokeTimeoutMs/);
   assert.match(mcpSkills, /\[Math\]::Min\(8000,/);
   assert.match(mcpSkills, /function Invoke-NodeJsonWithProcessTimeout/);

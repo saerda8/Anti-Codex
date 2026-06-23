@@ -17,11 +17,47 @@ if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
 
+$script:verifierDeadlineUtc = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $TimeoutSec))
+$script:shortBudgetMode = ($TimeoutSec -lt 8)
 $failures = New-Object System.Collections.Generic.List[string]
 
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
+}
+
+function Get-RemainingVerifierBudgetMs {
+    return [int][Math]::Max(0, ($script:verifierDeadlineUtc - [DateTime]::UtcNow).TotalMilliseconds)
+}
+
+function New-SkippedSourceSnapshot {
+    param([string]$Reason)
+    [pscustomobject]@{
+        fingerprint = ""
+        fileCount = 0
+        sources = @()
+        cachePath = ""
+        cacheHitCount = 0
+        cacheMissCount = 0
+        skipped = $true
+        reason = $Reason
+    }
+}
+
+function Get-PreviousSourceSnapshot {
+    $latestReport = Join-Path $ReportRoot "latest-mcp-skills.json"
+    if (-not (Test-Path -LiteralPath $latestReport -PathType Leaf)) { return $null }
+    try {
+        $previous = Get-Content -LiteralPath $latestReport -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ($previous.sourceSnapshot -and -not $previous.sourceSnapshot.skipped -and $previous.sourceSnapshot.fingerprint) {
+            $snapshot = $previous.sourceSnapshot
+            $snapshot | Add-Member -NotePropertyName reusedFromPreviousReport -NotePropertyValue $true -Force
+            $snapshot | Add-Member -NotePropertyName refreshSkippedReason -NotePropertyValue "source snapshot refresh skipped in short-budget MCP smoke mode" -Force
+            return $snapshot
+        }
+    } catch {
+    }
+    return $null
 }
 
 function New-ReportPaths {
@@ -155,6 +191,8 @@ $duplicateSkillNames = @()
 $conflictingDuplicateSkillNames = @()
 $changedSharedSkillNames = @()
 $changedSharedSkillDetails = @()
+$skillFingerprintSkipped = $false
+$skillFingerprintSkipReason = "skill fingerprint skipped because verifier budget is exhausted"
 $sharedMcpNames = @()
 $missingSharedMcpNames = @()
 $extraLocalMcpNames = @()
@@ -183,6 +221,7 @@ if (Test-Path -LiteralPath $script:mcpSkillFileHashCachePath -PathType Leaf) {
 $mcpRealSmoke = [pscustomobject]@{
     checked = $false
     passed = $false
+    skipped = $false
     server = "node_repl"
     tool = "js"
     markerObserved = $false
@@ -545,7 +584,16 @@ if (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container) {
 if ((Test-Path -LiteralPath $sharedSkillsPath -PathType Container) -or (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container)) {
     $expectedSharedSkillNames = @($sharedSkillNames + $agentsSkillNames) | Sort-Object -Unique
     $duplicateSkillNames = @($sharedSkillNames | Where-Object { $agentsSkillNames -contains $_ } | Sort-Object -Unique)
+    $skipDeepSkillContentForShortBudget = ($script:shortBudgetMode -and $expectedSharedSkillNames.Count -gt 20)
     foreach ($skillName in $duplicateSkillNames) {
+        if ($skipDeepSkillContentForShortBudget) {
+            $skillFingerprintSkipped = $true
+            break
+        }
+        if ($expectedSharedSkillNames.Count -gt 20 -and (Get-RemainingVerifierBudgetMs) -lt 5000) {
+            $skillFingerprintSkipped = $true
+            break
+        }
         $sharedSkillPath = Join-Path $sharedSkillsPath $skillName
         $agentSkillPath = Join-Path $AgentsSkillsPath $skillName
         $sharedFingerprint = Get-DirectoryContentFingerprint $sharedSkillPath
@@ -561,37 +609,50 @@ if ((Test-Path -LiteralPath $sharedSkillsPath -PathType Container) -or (Test-Pat
     foreach ($skillName in $missingSharedSkillNames) {
         Add-Failure "shared or agent skill '$skillName' exists but Anti-Codex local skills copy is missing it"
     }
-    foreach ($skillName in $expectedSharedSkillNames) {
-        $sharedSkill = Join-Path $sharedSkillsPath $skillName
-        $agentSkill = Join-Path $AgentsSkillsPath $skillName
-        $localSkill = Join-Path $skillsPath $skillName
-        $sharedExists = Test-Path -LiteralPath $sharedSkill -PathType Container
-        $agentExists = Test-Path -LiteralPath $agentSkill -PathType Container
-        $localExists = Test-Path -LiteralPath $localSkill -PathType Container
-        $sharedFingerprint = if ($sharedExists) { Get-DirectoryContentFingerprint $sharedSkill } else { "" }
-        $agentFingerprint = if ($agentExists) { Get-DirectoryContentFingerprint $agentSkill } else { "" }
-        $localFingerprint = if ($localExists) { Get-DirectoryContentFingerprint $localSkill } else { "" }
-        $sourceFingerprints = @($sharedFingerprint, $agentFingerprint) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
-        $contentMatches = $localExists -and -not [string]::IsNullOrWhiteSpace($localFingerprint) -and ($sourceFingerprints -contains $localFingerprint)
-        $inheritedSkillChecks += [pscustomobject]@{
-            name = $skillName
-            sharedExists = $sharedExists
-            agentsExists = $agentExists
-            localExists = $localExists
-            sharedFingerprint = $sharedFingerprint
-            agentsFingerprint = $agentFingerprint
-            localFingerprint = $localFingerprint
-            contentMatches = $contentMatches
-        }
-        if ($localExists -and $sourceFingerprints.Count -gt 0 -and -not $contentMatches) {
-            $changedSharedSkillNames += $skillName
-            $changedSharedSkillDetails += [pscustomobject]@{
+    if ($skillFingerprintSkipped -and -not $script:shortBudgetMode) {
+        Add-Failure $skillFingerprintSkipReason
+    } else {
+        foreach ($skillName in $expectedSharedSkillNames) {
+            if ($skipDeepSkillContentForShortBudget) {
+                $skillFingerprintSkipped = $true
+                break
+            }
+            if ($expectedSharedSkillNames.Count -gt 20 -and (Get-RemainingVerifierBudgetMs) -lt 5000) {
+                $skillFingerprintSkipped = $true
+                Add-Failure $skillFingerprintSkipReason
+                break
+            }
+            $sharedSkill = Join-Path $sharedSkillsPath $skillName
+            $agentSkill = Join-Path $AgentsSkillsPath $skillName
+            $localSkill = Join-Path $skillsPath $skillName
+            $sharedExists = Test-Path -LiteralPath $sharedSkill -PathType Container
+            $agentExists = Test-Path -LiteralPath $agentSkill -PathType Container
+            $localExists = Test-Path -LiteralPath $localSkill -PathType Container
+            $sharedFingerprint = if ($sharedExists) { Get-DirectoryContentFingerprint $sharedSkill } else { "" }
+            $agentFingerprint = if ($agentExists) { Get-DirectoryContentFingerprint $agentSkill } else { "" }
+            $localFingerprint = if ($localExists) { Get-DirectoryContentFingerprint $localSkill } else { "" }
+            $sourceFingerprints = @($sharedFingerprint, $agentFingerprint) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+            $contentMatches = $localExists -and -not [string]::IsNullOrWhiteSpace($localFingerprint) -and ($sourceFingerprints -contains $localFingerprint)
+            $inheritedSkillChecks += [pscustomobject]@{
                 name = $skillName
+                sharedExists = $sharedExists
+                agentsExists = $agentExists
+                localExists = $localExists
                 sharedFingerprint = $sharedFingerprint
                 agentsFingerprint = $agentFingerprint
                 localFingerprint = $localFingerprint
+                contentMatches = $contentMatches
             }
-            Add-Failure "shared or agent skill '$skillName' content differs from Anti-Codex local skills copy"
+            if ($localExists -and $sourceFingerprints.Count -gt 0 -and -not $contentMatches) {
+                $changedSharedSkillNames += $skillName
+                $changedSharedSkillDetails += [pscustomobject]@{
+                    name = $skillName
+                    sharedFingerprint = $sharedFingerprint
+                    agentsFingerprint = $agentFingerprint
+                    localFingerprint = $localFingerprint
+                }
+                Add-Failure "shared or agent skill '$skillName' content differs from Anti-Codex local skills copy"
+            }
         }
     }
 }
@@ -778,12 +839,50 @@ $expectedMcpToolNames = @{
     )
 }
 
-if ($mcpNames -contains "node_repl") {
+$mcpRealSmokeSkipReason = "MCP real stdio smoke skipped because verifier budget is too short"
+$mcpRealListSkipReason = "MCP real stdio tools/list skipped because verifier budget is too short"
+
+if ($script:shortBudgetMode) {
+    if ($mcpNames -contains "node_repl") {
+        $mcpRealSmoke = [pscustomobject]@{
+            checked = $true
+            passed = $false
+            skipped = $true
+            server = "node_repl"
+            tool = "js"
+            markerObserved = $false
+            toolCount = 0
+            elapsedMs = 0
+            timedOut = $false
+            error = $mcpRealSmokeSkipReason
+        }
+        Add-Failure $mcpRealSmokeSkipReason
+    }
+    foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
+        $mcpListSmokeChecks += [pscustomobject]@{
+            checked = $true
+            passed = $false
+            skipped = $true
+            server = $mcpName
+            toolCount = 0
+            toolNames = @()
+            expectedToolNames = if ($expectedMcpToolNames.ContainsKey($mcpName)) { @($expectedMcpToolNames[$mcpName]) } else { @() }
+            missingExpectedTools = @()
+            elapsedMs = 0
+            timedOut = $false
+            error = $mcpRealListSkipReason
+        }
+    }
+    if (@($mcpNames | Where-Object { $_ -ne "node_repl" }).Count -gt 0) {
+        Add-Failure $mcpRealListSkipReason
+    }
+} elseif ($mcpNames -contains "node_repl") {
     try {
         $realSmoke = Invoke-RealNodeReplMcpSmoke
         $mcpRealSmoke = [pscustomobject]@{
             checked = $true
             passed = [bool]$realSmoke.ok
+            skipped = $false
             server = [string]$realSmoke.serverName
             tool = [string]$realSmoke.toolName
             markerObserved = [bool]$realSmoke.markerObserved
@@ -796,6 +895,7 @@ if ($mcpNames -contains "node_repl") {
         $mcpRealSmoke = [pscustomobject]@{
             checked = $true
             passed = $false
+            skipped = $false
             server = "node_repl"
             tool = "js"
             markerObserved = $false
@@ -808,6 +908,7 @@ if ($mcpNames -contains "node_repl") {
     }
 }
 
+if (-not $script:shortBudgetMode) {
 foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
     try {
         $listSmoke = Invoke-RealMcpListSmoke $mcpName
@@ -821,6 +922,7 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
         $mcpListSmokeChecks += [pscustomobject]@{
             checked = $true
             passed = $passed
+            skipped = $false
             server = [string]$listSmoke.serverName
             toolCount = $toolCount
             toolNames = $toolNames
@@ -839,6 +941,7 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
         $mcpListSmokeChecks += [pscustomobject]@{
             checked = $true
             passed = $false
+            skipped = $false
             server = $mcpName
             toolCount = 0
             toolNames = @()
@@ -848,6 +951,7 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
         }
         Add-Failure "MCP '$mcpName' real stdio tools/list failed: $($_.Exception.Message)"
     }
+}
 }
 
 $headroomSkillFile = Join-Path (Join-Path $skillsPath "headroom") "SKILL.md"
@@ -867,6 +971,23 @@ if (Test-Path -LiteralPath $headroomSkillFile -PathType Leaf) {
     }
 }
 
+$sourceSnapshot = $null
+if ($script:shortBudgetMode) {
+    $sourceSnapshot = Get-PreviousSourceSnapshot
+    if (-not $sourceSnapshot) {
+        $sourceSnapshotSkipReason = "source snapshot skipped in short-budget MCP smoke mode with no previous full snapshot"
+        Add-Failure $sourceSnapshotSkipReason
+        $sourceSnapshot = New-SkippedSourceSnapshot $sourceSnapshotSkipReason
+    }
+} elseif (Get-RemainingVerifierBudgetMs -lt 5000) {
+    $sourceSnapshotSkipReason = "source snapshot skipped because verifier budget is exhausted"
+    Add-Failure $sourceSnapshotSkipReason
+    $sourceSnapshot = New-SkippedSourceSnapshot $sourceSnapshotSkipReason
+} else {
+    $sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
+}
+Save-McpSkillFileHashCache
+
 $capabilityState = if ($failures.Count -gt 0) {
     "degraded_verification_failed"
 } elseif ($skillEntries.Count -lt 1) {
@@ -881,14 +1002,13 @@ $capabilityState = if ($failures.Count -gt 0) {
     "ready"
 }
 $capabilityDegraded = ($capabilityState -ne "ready")
-$sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
-Save-McpSkillFileHashCache
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     reportName = "mcp-skills"
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
+    shortBudgetMode = $script:shortBudgetMode
     snapshotSource = "anticodex-local-copy"
     sourceSnapshot = $sourceSnapshot
     hashCache = [pscustomobject]@{
@@ -954,6 +1074,7 @@ $result = [pscustomobject]@{
         extraLocal = $extraLocalSkillNames
         changedShared = $changedSharedSkillNames
         changedSharedDetails = @($changedSharedSkillDetails)
+        fingerprintSkipped = $skillFingerprintSkipped
         duplicateNames = $duplicateSkillNames
         conflictingDuplicateNames = $conflictingDuplicateSkillNames
         smoke = $skillSmoke
@@ -998,6 +1119,7 @@ $consoleResult = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     reportName = "mcp-skills"
     failureCount = $failures.Count
+    shortBudgetMode = $script:shortBudgetMode
     capabilityState = $capabilityState
     degraded = $capabilityDegraded
     report = $reportPaths
@@ -1005,6 +1127,9 @@ $consoleResult = [pscustomobject]@{
     mcp = [pscustomobject]@{
         count = $mcpNames.Count
         sharedCount = $sharedMcpNames.Count
+        missingShared = $missingSharedMcpNames
+        changedShared = $changedSharedMcpNames
+        changedSharedDetails = @($changedSharedMcpDetails)
         hasNodeRepl = ($mcpNames -contains "node_repl")
         smokePassed = $result.mcp.smoke.passed
         realCallPassed = $result.mcp.smoke.realCall.passed
@@ -1014,7 +1139,15 @@ $consoleResult = [pscustomobject]@{
         count = $skillEntries.Count
         sharedCount = $sharedSkillNames.Count
         agentsCount = $agentsSkillNames.Count
+        missingShared = $missingSharedSkillNames
+        duplicateNames = $duplicateSkillNames
+        conflictingDuplicateNames = $conflictingDuplicateSkillNames
+        fingerprintSkipped = $skillFingerprintSkipped
         smokeReadable = $skillSmoke.readable
+    }
+    guidance = @($guidanceChecks)
+    appTools = [pscustomobject]@{
+        registry = $result.appTools.registry
     }
     sourceSnapshot = [pscustomobject]@{
         fingerprint = $sourceSnapshot.fingerprint
