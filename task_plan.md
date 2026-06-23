@@ -1470,3 +1470,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Release Report Inventory Guard
 - Completed: launcher contracts now derive the latest-report inventory from the release-gate definitions and require diagnostic bundles, Manager latest reports, and installed report-integrity checks to include every gate report file.
 - Verification: focused launcher contracts passed `127/127`; `git diff --check` passed.
+
+## 2026-06-24 Release Gate EffectiveOk Diagnostics Guard
+- Completed: diagnostics verification now requires release-gate summaries to include `effectiveOk`, instead of only checking it when present, so `ok:true` with `releaseReady:false` cannot disappear from support-bundle validation.
+- Verification: PowerShell parser check passed after fixing the wrapper quoting; focused launcher contracts passed `127/127`; real diagnostics verifier returned `ok:true`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.

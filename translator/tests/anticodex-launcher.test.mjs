@@ -5748,6 +5748,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates summary/);
   assert.match(diagnostics, /shortReady/);
   assert.match(diagnostics, /release-gates summary releaseReady is not true/);
+  assert.match(diagnostics, /release-gates summary missing effectiveOk/);
   assert.match(diagnostics, /release-gates summary effectiveOk is not true/);
   assert.match(diagnostics, /strictOptionalRealTraffic/);
   assert.match(diagnostics, /optionalRealTrafficReady/);

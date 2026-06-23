@@ -549,7 +549,8 @@ function Test-DiagnosticBundle {
             if ($releaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates summary shortReady is not true" }
             if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
             elseif ($releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
-            if ((Has-Property $releaseGatesSummary "effectiveOk") -and $releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
+            if (-not (Has-Property $releaseGatesSummary "effectiveOk")) { Add-Failure "release-gates summary missing effectiveOk" }
+            elseif ($releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
             if (-not (Has-Property $releaseGatesSummary "strictOptionalRealTraffic")) { Add-Failure "release-gates summary missing strict optional real-traffic flag" }
             if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficReady")) { Add-Failure "release-gates summary missing optional real-traffic readiness" }
             if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficFailures")) { Add-Failure "release-gates summary missing optional real-traffic failures" }
