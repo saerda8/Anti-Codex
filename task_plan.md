@@ -1044,3 +1044,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `anticodex-manager-inject.js` now mirrors the external bridge latest-report field evidence so the injected panel and bridge path do not diverge.
 - Completed: added a dynamic launcher contract that parses release-gate required reports and fails if any are missing from diagnostics, Manager, installed-overall integrity checks, or launcher contract coverage.
 - Verification: JS syntax checks passed for bridge, inject, and adaptive server; PowerShell parser checks passed for diagnostics and installed overall; bridge `--self-test` passed; focused report-inventory/Manager/diagnostics/overall tests passed.
+
+## 2026-06-23 Manager Report Failure Detail Parity
+- Completed: in-app, external bridge, and injected Manager latest-report summaries now surface release failure detail consistently: `missingShort`, `damagedReports`, release-gate semantic failures, source-preflight UI/regression/diff/skip evidence, and model-thinking reasoning levels.
+- Completed: standalone injected Manager summary now also shows missing/invalid report totals, treats unparseable latest reports as damaged, and surfaces native Codex writeback evidence for plugin capability reports.
+- Completed: optional and special latest reports now have a separate visibility guard. Optional gate reports stay non-required for release readiness but must remain visible in diagnostics, Manager latest reports, and installed-overall report-integrity checks.
+- Verification: bridge/inject/adaptive syntax passed; bridge `--self-test` passed with failure-detail fixtures; focused Manager and release-report inventory contracts passed.

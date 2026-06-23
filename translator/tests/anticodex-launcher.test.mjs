@@ -611,10 +611,24 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /function latestReportsSummary/);
   assert.match(managerBridge, /releaseGateGroups/);
   assert.match(managerInject, /releaseGateGroups/);
+  assert.match(managerBridge, /missingShort/);
+  assert.match(managerInject, /missingShort/);
+  assert.match(managerBridge, /damagedReports/);
+  assert.match(managerInject, /damagedReports/);
+  assert.match(managerBridge, /releaseGateFailures/);
+  assert.match(managerInject, /releaseGateFailures/);
+  assert.match(managerBridge, /semanticFailures/);
+  assert.match(managerInject, /semanticFailures/);
   assert.match(managerBridge, /sourcePreflightEvidence/);
   assert.match(managerInject, /sourcePreflightEvidence/);
+  assert.match(managerBridge, /uiStateSelfTestOk/);
+  assert.match(managerInject, /uiStateSelfTestOk/);
+  assert.match(managerBridge, /translatorRegressionOk/);
+  assert.match(managerInject, /translatorRegressionOk/);
   assert.match(managerBridge, /modelThinkingEvidence/);
   assert.match(managerInject, /modelThinkingEvidence/);
+  assert.match(managerBridge, /reasoningLevels/);
+  assert.match(managerInject, /reasoningLevels/);
   assert.match(managerBridge, /mcpSkillEvidence/);
   assert.match(managerInject, /mcpSkillEvidence/);
   assert.match(managerBridge, /localConnectorEvidence/);
@@ -2648,6 +2662,8 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(installedOverall, /latest-cancellation\.json/);
   assert.match(installedOverall, /latest-web-tools\.json/);
   assert.match(installedOverall, /latest-shortcut-repair\.json/);
+  assert.match(installedOverall, /latest-real-third-party-provider\.json/);
+  assert.match(installedOverall, /latest-provider-antigravity-return\.json/);
   assert.match(installedOverall, /latest-third-party-provider\.json/);
 });
 
@@ -4834,6 +4850,32 @@ test("release-required latest reports stay visible in diagnostics, Manager, and 
     assert.ok(server.includes(report), `${report} missing from Manager latest reports`);
     assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
     assert.ok(hasReportReference(thisFile, report), `${report} missing from launcher contract coverage`);
+  }
+});
+
+test("optional and special latest reports stay visible without becoming release-required", () => {
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const optionalReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*false[^}]*\}/g), (match) => match[1]))).sort();
+  const specialReports = [
+    "latest-diagnostics.json",
+    "latest-release-gates.json",
+    "latest-shortcut-repair.json",
+  ];
+
+  assert.deepEqual(optionalReports, [
+    "latest-cold-relaunch.json",
+    "latest-provider-antigravity-return.json",
+    "latest-real-third-party-provider.json",
+    "latest-refresh-features.json",
+    "latest-stability-soak.json",
+  ]);
+  for (const report of [...optionalReports, ...specialReports]) {
+    assert.ok(collector.includes(report), `${report} missing from diagnostic bundle latestReports`);
+    assert.ok(server.includes(report), `${report} missing from Manager latest reports`);
+    assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
   }
 });
 

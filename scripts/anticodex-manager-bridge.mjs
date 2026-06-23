@@ -270,18 +270,29 @@ function latestReportsSummary(result) {
     if (item.releaseReady !== null && item.releaseReady !== undefined) {
       lines.push(`  Release Gate: short=${item.shortReady ? "true" : "false"} / release=${item.releaseReady ? "true" : "false"}`);
       if (Array.isArray(item.missingRequired) && item.missingRequired.length) lines.push(`  missingRequired: ${item.missingRequired.slice(0, 6).join(", ")}`);
+      if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
+      if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
         const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
         lines.push(`  Release groups: ${groupSummary}`);
       }
     }
+    if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
+      const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
+        const details = Array.isArray(gate.semanticFailures) && gate.semanticFailures.length ? gate.semanticFailures.slice(0, 4).join(", ") : (gate.error || "unsatisfied");
+        return `${gate.id}:${details}`;
+      });
+      lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
+    }
     if (item.sourcePreflightEvidence) {
       const evidence = item.sourcePreflightEvidence;
       lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
+      lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
     }
     if (item.modelThinkingEvidence) {
       const evidence = item.modelThinkingEvidence;
       lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
+      if (Array.isArray(evidence.reasoningLevels) && evidence.reasoningLevels.length) lines.push(`  modelThinking levels: ${evidence.reasoningLevels.join(", ")}`);
     }
     if (item.mcpSkillEvidence) {
       const evidence = item.mcpSkillEvidence;
@@ -463,17 +474,20 @@ if (args.has("--self-test")) {
       ok: true,
       releaseReady: true,
       shortReady: true,
+      missingShort: ["latest-ui-idle.json"],
+      damagedReports: ["latest-native-tool-loop.json"],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
+      releaseGateFailures: [{ id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] }],
     }, {
       label: "\u6a21\u578b\u601d\u8003\u9884\u7b97",
       exists: true,
       ok: true,
-      modelThinkingEvidence: { expectedModelCount: 2, actualModelCount: 2, modelCount: 2, supportsThinkingCount: 2, missingBudgetCount: 0 },
+      modelThinkingEvidence: { expectedModelCount: 2, actualModelCount: 2, modelCount: 2, supportsThinkingCount: 2, missingBudgetCount: 0, reasoningLevels: ["high", "low"] },
     }, {
       label: "\u6e90\u7801\u9884\u68c0",
       exists: true,
       ok: true,
-      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, publicDocumentationOk: true },
+      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
       label: "MCP/Skill",
       exists: true,
@@ -503,8 +517,13 @@ if (args.has("--self-test")) {
   });
   assert.match(evidenceSummary, /Release Gate: short=true \/ release=true/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1/);
+  assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
+  assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
+  assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
+  assert.match(evidenceSummary, /modelThinking levels: high, low/);
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ docs=true/);
+  assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ real-model \/ success/);
   assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);

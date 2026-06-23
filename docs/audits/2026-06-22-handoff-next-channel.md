@@ -269,6 +269,13 @@ Branch: main
 - Added a dynamic launcher contract that parses release-gate required report files and checks they are present in diagnostic bundle collection, Manager latest reports, installed-overall report-integrity checks, and launcher contract coverage.
 - Fixed missing inventory entries for release-required reports including cancellation, custom tool loop, native multi-tool loop, web tools, real mini-tool, real work, account/proxy readiness, post-verification, tool-bridge mode, and UI idle stability.
 
+## 2026-06-23 Manager Report Failure Detail Follow-Up
+
+- In-app, external bridge, and injected Manager latest-report summaries now all show `missingShort`, `damagedReports`, release-gate semantic failures, source-preflight UI/regression/diff/skip evidence, and model-thinking reasoning levels.
+- The standalone injected Manager summary also shows missing/invalid report totals, damaged report status, and native Codex writeback evidence for plugin capability reports.
+- Optional gate reports remain non-release-required but now have a separate visibility guard across diagnostics, Manager latest reports, and installed-overall report-integrity checks. This also covers the optional real-provider and provider-to-Antigravity return reports.
+- Fresh evidence: bridge/inject/adaptive syntax passed; bridge `--self-test` passed; focused Manager and release-report inventory contracts passed.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

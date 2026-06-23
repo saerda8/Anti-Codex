@@ -775,11 +775,17 @@
     if (result.staleCount) {
       lines.push(`\u9700\u91cd\u8dd1\uff1a${result.staleCount} \u4efd\u62a5\u544a\u5df2\u8fc7\u671f`);
     }
+    if (result.missingCount) {
+      lines.push(`\u672a\u751f\u6210\uff1a${result.missingCount} \u4efd`);
+    }
+    if (result.invalidCount) {
+      lines.push(`\u635f\u574f\u62a5\u544a\uff1a${result.invalidCount} \u4efd\u65e0\u6cd5\u8bfb\u53d6`);
+    }
     if (!(result.existingCount ?? reports.filter((item) => item.exists).length)) {
       lines.push("\u63d0\u793a\uff1a\u8bf7\u5148\u8fd0\u884c\u5feb\u901f\u603b\u68c0\u3001\u5b8c\u6574\u603b\u68c0\u6216\u7a33\u5b9a\u6027\u5de1\u68c0\u3002");
     }
     for (const item of reports) {
-      const status = item.exists ? (item.stale ? "\u9700\u91cd\u8dd1" : (item.ok ? "\u901a\u8fc7" : "\u9700\u5904\u7406")) : "\u672a\u751f\u6210";
+      const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (item.ok ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
       const elapsed = item.elapsedMs != null ? ` / ${item.elapsedMs} ms` : "";
       lines.push(`${item.label}\uff1a${status}${elapsed}`);
       const age = formatReportAge(item.ageMs);
@@ -789,18 +795,29 @@
       if (item.releaseReady !== null && item.releaseReady !== undefined) {
         lines.push(`  Release Gate: short=${item.shortReady ? "true" : "false"} / release=${item.releaseReady ? "true" : "false"}`);
         if (Array.isArray(item.missingRequired) && item.missingRequired.length) lines.push(`  missingRequired: ${item.missingRequired.slice(0, 6).join(", ")}`);
+        if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
+        if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
         if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
           const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
           lines.push(`  Release groups: ${groupSummary}`);
         }
       }
+      if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
+        const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
+          const details = Array.isArray(gate.semanticFailures) && gate.semanticFailures.length ? gate.semanticFailures.slice(0, 4).join(", ") : (gate.error || "unsatisfied");
+          return `${gate.id}:${details}`;
+        });
+        lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
+      }
       if (item.sourcePreflightEvidence) {
         const evidence = item.sourcePreflightEvidence;
         lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
+        lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
       }
       if (item.modelThinkingEvidence) {
         const evidence = item.modelThinkingEvidence;
         lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
+        if (Array.isArray(evidence.reasoningLevels) && evidence.reasoningLevels.length) lines.push(`  modelThinking levels: ${evidence.reasoningLevels.join(", ")}`);
       }
       if (item.mcpSkillEvidence) {
         const evidence = item.mcpSkillEvidence;
@@ -815,6 +832,7 @@
         const evidence = item.pluginCapabilityEvidence;
         const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
         lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
+        lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
       }
       if (item.optionalRealProviderEvidence) {
         const evidence = item.optionalRealProviderEvidence;

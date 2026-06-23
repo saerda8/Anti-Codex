@@ -437,6 +437,8 @@ function Test-ReportEncoding {
         "latest-local-connectors.json",
         "latest-release-gates.json",
         "latest-cold-relaunch.json",
+        "latest-real-third-party-provider.json",
+        "latest-provider-antigravity-return.json",
         "latest-third-party-provider.json",
         "latest-missing-history.json",
         "latest-manager-real-buttons.json",
