@@ -1215,3 +1215,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release-gate self-test now forges semantically clean refresh/MCP/plugin reports with divergent `sourceSnapshot.fingerprint` values and proves MCP/Skill plus plugin-capability gates receive mismatch failures.
 - Completed: launcher contract coverage now asserts the dynamic self-test output includes both `mcp_skills_source_snapshot_mismatch` and `plugin_capabilities_source_snapshot_mismatch`.
 - Verification: release-gate syntax passed; release-gate `--self-test` passed; focused launcher self-test contract passed `122/122`.
+
+## 2026-06-23 Real Provider Unsafe URL Negative Test
+- Completed: launcher regression coverage now executes the real third-party provider verifier with an unsafe non-HTTPS non-loopback URL and a fake API-key environment variable, proving it fails before traffic and writes `usedRealTraffic:false` without leaking the key.
+- Completed: duplicate-skill fixture expectations now follow the structured report contract (`ok:false`) rather than stale exit-code assumptions.
+- Verification: real-provider verifier syntax passed; focused launcher verifier contract passed `123/123`.

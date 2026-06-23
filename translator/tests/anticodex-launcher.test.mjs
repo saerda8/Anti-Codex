@@ -6043,6 +6043,39 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /real third-party provider verification is opt-in/);
 });
 
+test("real third-party provider verifier rejects unsafe URLs before traffic", () => {
+  const reportRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-real-provider-negative-"));
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-real-third-party-provider.mjs"),
+      "--allow-real-traffic",
+      "--protocol", "openai-compatible",
+      "--base-url", "http://evil.example/v1/responses",
+      "--model", "unsafe-model",
+      "--api-key-env", "ANTICODEX_TEST_REAL_PROVIDER_KEY",
+      "--report-root", reportRoot,
+      "--timeout-ms", "10000",
+    ], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ANTICODEX_TEST_REAL_PROVIDER_KEY: "sk-negative-test-secret",
+      },
+    });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, false);
+    assert.equal(summary.usedRealTraffic, false);
+    assert.equal(summary.coverageKind, "failed");
+    assert.match(summary.failures.join("\n"), /non-loopback provider URLs must use HTTPS/);
+    assert.doesNotMatch(JSON.stringify(summary), /sk-negative-test-secret/);
+    const latest = JSON.parse(readFileSync(resolve(reportRoot, "latest-real-third-party-provider.json"), "utf8"));
+    assert.equal(latest.usedRealTraffic, false);
+  } finally {
+    rmSync(reportRoot, { recursive: true, force: true });
+  }
+});
+
 test("provider history can opt in to one real Antigravity return turn", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-third-party-provider.mjs"), "utf8");
   const wrapper = readFileSync(resolve(root, "scripts", "test-anticodex-provider-antigravity-return.ps1"), "utf8");
