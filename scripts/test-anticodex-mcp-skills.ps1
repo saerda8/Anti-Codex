@@ -144,6 +144,8 @@ $agentsSkillNames = @()
 $expectedSharedSkillNames = @()
 $missingSharedSkillNames = @()
 $extraLocalSkillNames = @()
+$duplicateSkillNames = @()
+$conflictingDuplicateSkillNames = @()
 $sharedMcpNames = @()
 $missingSharedMcpNames = @()
 $extraLocalMcpNames = @()
@@ -183,6 +185,25 @@ function Get-McpServerNamesFromToml {
         ForEach-Object { $_.Groups[1].Value } |
         Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
         Sort-Object -Unique)
+}
+
+function Get-DirectoryContentFingerprint {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
+    $root = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
+    $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop | Sort-Object FullName | ForEach-Object {
+        $relative = $_.FullName.Substring($root.Length).TrimStart("\", "/")
+        $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        "$relative`t$hash"
+    })
+    $joined = [string]::Join("`n", $entries)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
 }
 
 function Resolve-NodeRuntime {
@@ -318,6 +339,17 @@ if (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container) {
 }
 if ((Test-Path -LiteralPath $sharedSkillsPath -PathType Container) -or (Test-Path -LiteralPath $AgentsSkillsPath -PathType Container)) {
     $expectedSharedSkillNames = @($sharedSkillNames + $agentsSkillNames) | Sort-Object -Unique
+    $duplicateSkillNames = @($sharedSkillNames | Where-Object { $agentsSkillNames -contains $_ } | Sort-Object -Unique)
+    foreach ($skillName in $duplicateSkillNames) {
+        $sharedSkillPath = Join-Path $sharedSkillsPath $skillName
+        $agentSkillPath = Join-Path $AgentsSkillsPath $skillName
+        $sharedFingerprint = Get-DirectoryContentFingerprint $sharedSkillPath
+        $agentFingerprint = Get-DirectoryContentFingerprint $agentSkillPath
+        if ($sharedFingerprint -and $agentFingerprint -and $sharedFingerprint -ne $agentFingerprint) {
+            $conflictingDuplicateSkillNames += $skillName
+            Add-Failure "duplicate skill '$skillName' differs between shared Codex skills and agents skills"
+        }
+    }
     $localSkillNames = @($skillEntries | ForEach-Object { $_.Name } | Sort-Object -Unique)
     $missingSharedSkillNames = @($expectedSharedSkillNames | Where-Object { $localSkillNames -notcontains $_ })
     $extraLocalSkillNames = @($localSkillNames | Where-Object { $expectedSharedSkillNames -notcontains $_ })
@@ -642,6 +674,8 @@ $result = [pscustomobject]@{
         expectedSharedCount = $expectedSharedSkillNames.Count
         missingShared = $missingSharedSkillNames
         extraLocal = $extraLocalSkillNames
+        duplicateNames = $duplicateSkillNames
+        conflictingDuplicateNames = $conflictingDuplicateSkillNames
         smoke = $skillSmoke
         sample = @($skillSampleEntries | Select-Object -First 10)
     }

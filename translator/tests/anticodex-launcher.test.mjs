@@ -3481,6 +3481,10 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /\.agents\\skills/);
   assert.match(mcpSkills, /agentsSkillNames/);
   assert.match(mcpSkills, /expectedSharedSkillNames/);
+  assert.match(mcpSkills, /duplicateSkillNames/);
+  assert.match(mcpSkills, /conflictingDuplicateSkillNames/);
+  assert.match(mcpSkills, /Get-DirectoryContentFingerprint/);
+  assert.match(mcpSkills, /duplicate skill '\$skillName' differs between shared Codex skills and agents skills/);
   assert.match(mcpSkills, /expectedInheritedSkillNames/);
   assert.match(mcpSkills, /headroom/);
   assert.match(mcpSkills, /context-save/);
@@ -3547,6 +3551,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /agentsCount = \$agentsSkillNames\.Count/);
   assert.match(mcpSkills, /expectedSharedCount = \$expectedSharedSkillNames\.Count/);
   assert.match(mcpSkills, /missingShared = \$missingSharedSkillNames/);
+  assert.match(mcpSkills, /duplicateNames = \$duplicateSkillNames/);
+  assert.match(mcpSkills, /conflictingDuplicateNames = \$conflictingDuplicateSkillNames/);
   assert.match(mcpSkills, /\$healthMode = "unknown"/);
   assert.match(mcpSkills, /\$healthMode -eq "third-party"/);
   assert.match(mcpSkills, /third-party upstream missing protocol/);
@@ -3648,6 +3654,8 @@ test("installed MCP/skills verifier fails on missing shared entries without coun
     }
     mkdirSync(resolve(sharedHome, "skills", "missing-skill"), { recursive: true });
     writeFileSync(resolve(sharedHome, "skills", "missing-skill", "SKILL.md"), "# missing\n");
+    mkdirSync(resolve(tempRoot, "agents-skills", "headroom"), { recursive: true });
+    writeFileSync(resolve(tempRoot, "agents-skills", "headroom", "SKILL.md"), "# conflicting headroom\n");
     mkdirSync(localHome, { recursive: true });
     writeFileSync(resolve(localHome, "fake-node-repl.mjs"), "process.stdin.resume();\n");
     writeFileSync(resolve(localHome, "config.toml"), `
@@ -3727,8 +3735,11 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
     assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
     assert.deepEqual(report.skills.missingShared, ["missing-skill"]);
+    assert.deepEqual(report.skills.duplicateNames, ["headroom"]);
+    assert.deepEqual(report.skills.conflictingDuplicateNames, ["headroom"]);
     assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'missing-worker'")));
     assert.ok(report.failures.some((failure) => failure.includes("shared or agent skill 'missing-skill'")));
+    assert.ok(report.failures.some((failure) => failure.includes("duplicate skill 'headroom' differs")));
     assert.ok(!report.mcp.sharedNames.includes("commented-out"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.env"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.tools.call"));
