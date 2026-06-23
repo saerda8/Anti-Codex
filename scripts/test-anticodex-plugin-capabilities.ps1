@@ -263,6 +263,71 @@ process.stdout.write(Array.from(keys).sort().join("\n"));
     return @($keys.ToArray() | Sort-Object -Unique)
 }
 
+function Get-ProjectionMap {
+    param(
+        [string]$Path,
+        [string]$ArrayProperty,
+        [ValidateSet("connector", "tool")]
+        [string]$Kind
+    )
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return $map }
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if ($node) {
+        $nodeScript = @'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const [dir, arrayProperty, kind] = process.argv.slice(2);
+const records = new Map();
+function hashItem(item) {
+  return crypto.createHash("sha256").update(JSON.stringify(item)).digest("hex");
+}
+for (const name of fs.readdirSync(dir)) {
+  if (!name.endsWith(".json") || name === ".anticodex-source-manifest.json") continue;
+  const full = path.join(dir, name);
+  let payload;
+  try { payload = JSON.parse(fs.readFileSync(full, "utf8")); } catch { continue; }
+  const items = Array.isArray(payload?.[arrayProperty]) ? payload[arrayProperty] : [];
+  for (const item of items) {
+    let key = "";
+    if (kind === "connector") {
+      key = item?.id ? String(item.id) : "";
+    } else {
+      const connectorId = item?.connector_id ? String(item.connector_id) : "";
+      const toolName = item?.tool_name ? String(item.tool_name) : "";
+      if (connectorId && toolName) key = `${connectorId}|${item?.server_name || ""}|${item?.tool_namespace || ""}|${toolName}`;
+    }
+    if (key) records.set(key, hashItem(item));
+  }
+}
+for (const [key, hash] of Array.from(records.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+  process.stdout.write(`${key}\t${hash}\n`);
+}
+'@
+        $tempNodeScript = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-projection-map-{0}.js" -f ([Guid]::NewGuid().ToString("N")))
+        try {
+            [System.IO.File]::WriteAllText($tempNodeScript, $nodeScript, [System.Text.UTF8Encoding]::new($false))
+            foreach ($line in @(& $node.Source $tempNodeScript $Path $ArrayProperty $Kind)) {
+                $parts = ([string]$line).Split("`t", 2)
+                if ($parts.Count -eq 2 -and -not [string]::IsNullOrWhiteSpace($parts[0])) {
+                    $map[$parts[0]] = $parts[1]
+                }
+            }
+            return $map
+        } catch {
+        } finally {
+            if (Test-Path -LiteralPath $tempNodeScript -PathType Leaf) {
+                Remove-Item -LiteralPath $tempNodeScript -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    foreach ($key in @(Get-ProjectionKeys -Path $Path -ArrayProperty $ArrayProperty -Kind $Kind)) {
+        $map[$key] = ""
+    }
+    return $map
+}
+
 function New-ProjectionParity {
     param(
         [string]$SharedPath,
@@ -271,15 +336,24 @@ function New-ProjectionParity {
         [ValidateSet("connector", "tool")]
         [string]$Kind
     )
-    $sharedKeys = @(Get-ProjectionKeys -Path $SharedPath -ArrayProperty $ArrayProperty -Kind $Kind)
-    $localKeys = @(Get-ProjectionKeys -Path $LocalPath -ArrayProperty $ArrayProperty -Kind $Kind)
+    $sharedMap = Get-ProjectionMap -Path $SharedPath -ArrayProperty $ArrayProperty -Kind $Kind
+    $localMap = Get-ProjectionMap -Path $LocalPath -ArrayProperty $ArrayProperty -Kind $Kind
+    $sharedKeys = @($sharedMap.Keys | Sort-Object -Unique)
+    $localKeys = @($localMap.Keys | Sort-Object -Unique)
     $missingShared = @($sharedKeys | Where-Object { $localKeys -notcontains $_ })
     $extraLocal = @($localKeys | Where-Object { $sharedKeys -notcontains $_ })
+    $changedShared = @($sharedKeys | Where-Object {
+        $localKeys -contains $_ -and
+        -not [string]::IsNullOrWhiteSpace([string]$sharedMap[$_]) -and
+        -not [string]::IsNullOrWhiteSpace([string]$localMap[$_]) -and
+        $sharedMap[$_] -ne $localMap[$_]
+    })
     return [pscustomobject]@{
         sharedCount = $sharedKeys.Count
         localCount = $localKeys.Count
         missingShared = $missingShared
         extraLocal = $extraLocal
+        changedShared = $changedShared
         checked = $true
     }
 }
@@ -399,8 +473,14 @@ if ($whamTools.Count -gt 0 -and -not $appToolsCacheSmoke.sampleReadable) {
 foreach ($connectorId in @($connectorParity.missingShared)) {
     Add-Failure "shared connector '$connectorId' exists but Anti-Codex local connector cache is missing it"
 }
+foreach ($connectorId in @($connectorParity.changedShared)) {
+    Add-Failure "shared connector '$connectorId' content differs from Anti-Codex local connector cache"
+}
 foreach ($toolKey in @($appToolParity.missingShared)) {
     Add-Failure "shared app tool '$toolKey' exists but Anti-Codex local app-tools cache is missing it"
+}
+foreach ($toolKey in @($appToolParity.changedShared)) {
+    Add-Failure "shared app tool '$toolKey' content differs from Anti-Codex local app-tools cache"
 }
 
 # appToolCount=0 is expected when no connectors are marked isAccessible:

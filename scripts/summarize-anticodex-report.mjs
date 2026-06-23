@@ -302,12 +302,14 @@ const summary = {
     appToolGetCount: has(capabilities, "appToolGetCount") ? capabilities.appToolGetCount : null,
     unattributedAppToolCount: has(capabilities, "unattributedAppToolCount") ? capabilities.unattributedAppToolCount : null,
     unauthorizedAppToolCount: has(capabilities, "unauthorizedAppToolCount") ? capabilities.unauthorizedAppToolCount : null,
-    connectorParityClean: connectorParity ? emptyArrayField(connectorParity, "missingShared") : null,
+    connectorParityClean: connectorParity ? emptyArrayField(connectorParity, "missingShared") && emptyArrayField(connectorParity, "changedShared") : null,
     connectorParityMissingShared: connectorParity && has(connectorParity, "missingShared") ? asStringArray(connectorParity.missingShared) : [],
     connectorParityExtraLocal: connectorParity && has(connectorParity, "extraLocal") ? asStringArray(connectorParity.extraLocal) : [],
-    appToolParityClean: appToolParity ? emptyArrayField(appToolParity, "missingShared") : null,
+    connectorParityChangedShared: connectorParity && has(connectorParity, "changedShared") ? asStringArray(connectorParity.changedShared) : [],
+    appToolParityClean: appToolParity ? emptyArrayField(appToolParity, "missingShared") && emptyArrayField(appToolParity, "changedShared") : null,
     appToolParityMissingShared: appToolParity && has(appToolParity, "missingShared") ? asStringArray(appToolParity.missingShared) : [],
     appToolParityExtraLocal: appToolParity && has(appToolParity, "extraLocal") ? asStringArray(appToolParity.extraLocal) : [],
+    appToolParityChangedShared: appToolParity && has(appToolParity, "changedShared") ? asStringArray(appToolParity.changedShared) : [],
     appToolGetPostParityClean: appToolGetPostParity
       ? emptyArrayField(appToolGetPostParity, "missingFromGet") === true && emptyArrayField(appToolGetPostParity, "extraFromGet") === true
       : null,

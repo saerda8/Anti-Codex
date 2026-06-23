@@ -229,7 +229,9 @@ function summarizeGate(definition) {
       if (capabilities.unauthorizedAppToolCount !== 0) semanticFailures.push("plugin_capabilities_unauthorized_app_tools");
       if (!isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
       if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
+      if (!isEmptyArray(connectorParity.changedShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_changed_shared");
       if (!isEmptyArray(appToolParity.missingShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_missing_shared");
+      if (!isEmptyArray(appToolParity.changedShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_changed_shared");
     }
     if (definition.requireMcpSkillSemantics) {
       const mcp = report.mcp || {};
@@ -553,9 +555,11 @@ if (args.has("--self-test")) {
         },
         connectorParity: {
           missingShared: ["missing-connector"],
+          changedShared: ["changed-connector"],
         },
         appToolParity: {
           missingShared: ["missing-app-tool"],
+          changedShared: ["changed-app-tool"],
         },
       },
     });
@@ -1069,7 +1073,9 @@ if (args.has("--self-test")) {
       "plugin_capabilities_unauthorized_app_tools",
       "plugin_capabilities_app_tool_get_post_mismatch",
       "plugin_capabilities_local_connector_parity_missing_shared",
+      "plugin_capabilities_local_connector_parity_changed_shared",
       "plugin_capabilities_local_app_tool_parity_missing_shared",
+      "plugin_capabilities_local_app_tool_parity_changed_shared",
     ]);
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {

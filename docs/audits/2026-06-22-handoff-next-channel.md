@@ -283,7 +283,8 @@ Branch: main
 - Local feature refresh now parses MCP server names with the same anchored TOML section rule as the MCP/Skill verifier, so nested `[mcp_servers.x.tools.y]` sections are not counted as standalone servers.
 - MCP/Skill verification now requires expected DeepSeek and Antigravity worker MCP tool names, not just a non-empty `tools/list` response.
 - MCP/Skill verification now hash-compares global guidance files against the shared originals, covering `AGENTS.md`, `DEFAULT_SKILL_ALLOWLIST.md`, `RTK.md`, and `MCP_WORKER_USAGE_GUIDE.md`.
-- Fresh evidence: bridge/inject syntax passed; refresh-feature and MCP/Skill PowerShell parser checks passed; bridge `--self-test` passed with MCP/Skill and plugin drift fixtures; focused Manager/MCP/Skill contracts passed; real MCP/Skill verifier passed with worker expected-tool lists present, no missing expected tools, and all four guidance hashes matching.
+- Plugin capability parity now compares per-record hashes, so same-ID connector/app-tool content drift is reported as `changedShared` and is covered by Manager summaries and passive release-gate semantics.
+- Fresh evidence: bridge/inject/adaptive/summarizer syntax passed; refresh-feature, MCP/Skill, and plugin-capability parser checks passed; bridge `--self-test` passed; release-gate `--self-test` and strict passive release gates passed; focused Manager/MCP/Skill/plugin contracts passed. The stricter plugin verifier first caught stale connector cache drift, then `refresh-anticodex-local-features.ps1` refreshed snapshots and the rerun passed with connector parity `5760/5760`, app-tool parity `58/58`, and no missing/extra/changed shared entries.
 
 ## 2026-06-23 Installed Missing-History Follow-Up
 
