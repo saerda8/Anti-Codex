@@ -539,6 +539,25 @@
     ]);
   }
 
+  async function copyTextToClipboard(text) {
+    const value = String(text || "");
+    if (!value.trim()) throw new Error("\u6ca1\u6709\u53ef\u590d\u5236\u7684\u5185\u5bb9");
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+    const textarea = el("textarea", { value, style: "position:fixed;left:-9999px;top:0" });
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      if (!document.execCommand("copy")) throw new Error("\u590d\u5236\u88ab\u6d4f\u89c8\u5668\u62d2\u7edd");
+      return true;
+    } finally {
+      textarea.remove();
+    }
+  }
+
   function connectorAllowlistEditor(allowlist) {
     const persisted = Array.isArray(allowlist?.persisted) ? allowlist.persisted : [];
     const env = Array.isArray(allowlist?.env) ? allowlist.env : [];
@@ -1274,6 +1293,7 @@
       .anticodex-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.anticodex-card{border:1px solid var(--ac-line);background:var(--ac-surface);border-radius:12px;padding:14px;min-height:112px}
       .anticodex-card h2{font-size:13px;font-weight:650;margin:0 0 10px;color:var(--ac-text)}.anticodex-kv{display:grid;grid-template-columns:130px 1fr;gap:7px 10px;font-size:12px}.anticodex-k{color:var(--ac-muted)}.anticodex-v{color:var(--ac-value);word-break:break-word}
       .anticodex-result{white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--ac-result)}.anticodex-wide{grid-column:1/-1}.anticodex-error{color:var(--ac-error)}.anticodex-loading{color:var(--ac-muted)}.anticodex-warn{color:var(--ac-warn)}
+      .anticodex-result-tools{display:flex;justify-content:flex-end;margin-top:10px}.anticodex-copy-result{border:1px solid var(--ac-line-strong);border-radius:8px;min-height:34px;padding:0 12px;background:var(--ac-raised);color:var(--ac-text);font:600 12px "Segoe UI",Microsoft YaHei,sans-serif;cursor:pointer}.anticodex-copy-result:hover{background:var(--ac-hover);border-color:var(--ac-button-hover-line)}
       .anticodex-connector-allowlist-input{width:100%;min-height:86px;resize:vertical;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-input-bg);color:var(--ac-text);padding:10px 11px;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
       .anticodex-connector-allowlist-input:focus{outline:2px solid var(--ac-focus);outline-offset:2px}
       @media(max-width:820px){#${MANAGER_ID}{padding:12px}.anticodex-grid{grid-template-columns:1fr}.anticodex-panel{padding:15px}.anticodex-kv{grid-template-columns:1fr}.anticodex-action-section-head{display:block}.anticodex-action-section p{text-align:left;margin-top:3px}}
@@ -1307,10 +1327,25 @@
       !lastActionSummary.includes("\u8fd0\u884c\u5931\u8d25")
     );
     if (preserveLastActionResult) result.textContent = lastActionSummary;
+    const copyResultButton = el("button", { type: "button", className: "anticodex-copy-result", text: "\u590d\u5236\u7ed3\u679c" });
+    copyResultButton.onclick = async () => {
+      try {
+        await copyTextToClipboard(result.textContent || "");
+        copyResultButton.textContent = "\u5df2\u590d\u5236";
+      } catch (error) {
+        copyResultButton.textContent = "\u590d\u5236\u5931\u8d25";
+      } finally {
+        setTimeout(() => { copyResultButton.textContent = "\u590d\u5236\u7ed3\u679c"; }, 1600);
+      }
+    };
+    const resultBody = el("div", {}, [
+      result,
+      el("div", { className: "anticodex-result-tools" }, [copyResultButton]),
+    ]);
     let actionGeneration = 0;
     let actionInFlight = false;
 
-    panel.append(style, head, actions, grid, card("\u68c0\u67e5\u7ed3\u679c", result));
+    panel.append(style, head, actions, grid, card("\u68c0\u67e5\u7ed3\u679c", resultBody));
     root.append(panel);
     root.addEventListener("click", (event) => {
       if (event.target?.closest?.("[data-anticodex-close]")) {

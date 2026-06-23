@@ -1169,3 +1169,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: strict passive release gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `damagedReports:[]` after the Manager long-task and third-party error-summary changes.
 - Completed: release-gate `--self-test` still passes with expected forged-report semantic failures.
 - Note: `missingOptional:["coldRelaunch"]` remains non-blocking and should only be closed by an operator-approved cold relaunch check.
+
+## 2026-06-23 Manager Result Copy Control
+- Completed: in-app Manager and fallback Manager now provide a copy-result button for the current action result, including latest-report paths and diagnostics summaries.
+- Completed: the control copies only currently visible result text and does not open external paths, read raw reports, or consume traffic.
+- Verification: adaptive/injected Manager syntax checks passed; diff whitespace check passed; focused Manager launcher contracts passed `8/8`.

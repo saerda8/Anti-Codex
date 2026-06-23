@@ -16,6 +16,7 @@ Format: ASCII only.
 
 3. Report paths are plain text.
    This is acceptable for now because the Manager is embedded in the Codex shell and should stay low-risk. A future read-only "copy report path" or "open report folder" action would improve usability.
+   Status: mitigated on 2026-06-23 by adding a copy-result control for the Manager action result area. It copies the visible summary/path text only and does not open external folders or read raw reports.
 
 4. Connector/plugin numbers need careful wording.
    The product already treats connector/app tool state as metadata-only when authorizations are unavailable. Keep wording explicit so users do not confuse catalog size with callable tools.
