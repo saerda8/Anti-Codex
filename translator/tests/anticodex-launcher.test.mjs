@@ -397,8 +397,25 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /skipped: /);
   assert.match(managerInject, /requestedRealTraffic=/);
   assert.match(managerInject, /coverage=/);
-  assert.match(managerInject, /native-panel-v88/);
-  assert.match(syncReadiness, /native-panel-v88/);
+  for (const source of [managerBridge, managerInject]) {
+    assert.match(source, /modelRoutingEvidence/);
+    assert.match(source, /modelRouting: mode=/);
+    assert.match(source, /modelRouting route: protocol=/);
+    assert.match(source, /modelThinkingEvidence/);
+    assert.match(source, /modelThinking: models=/);
+    assert.match(source, /uiIdleEvidence/);
+    assert.match(source, /uiIdle: samples=/);
+    assert.match(source, /syncReadinessEvidence/);
+    assert.match(source, /syncReadiness: noTraffic=/);
+    assert.match(source, /installedOverallEvidence/);
+    assert.match(source, /installedOverall: noTraffic=/);
+    assert.match(source, /toolBridgeEvidence/);
+    assert.match(source, /toolBridge: mode=/);
+  }
+  assert.match(managerInject, /native-panel-v89/);
+  assert.match(syncReadiness, /native-panel-v89/);
+  assert.doesNotMatch(managerInject, /native-panel-v88/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v88/);
   assert.doesNotMatch(managerInject, /native-panel-v87/);
   assert.doesNotMatch(syncReadiness, /native-panel-v87/);
   assert.doesNotMatch(managerInject, /native-panel-v86/);
@@ -618,8 +635,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v88["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v88"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v89["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v89"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -852,7 +869,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v88/);
+  assert.match(managerOpenInject, /native-panel-v89/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v88/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v87/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v86/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v85/);
@@ -1774,8 +1792,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v88 manager script/);
-  assert.doesNotMatch(manager, /native-panel-v68|native-panel-v56/);
+  assert.match(manager, /latest native-panel-v89 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
   assert.match(manager, /PassThru/);
@@ -2121,6 +2139,11 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /skill extra:/);
   assert.match(server, /skill duplicate conflicts:/);
   assert.match(server, /refreshFeatureEvidence/);
+  assert.match(server, /verifyOnly:\s*report\?\.verifyOnly === true/);
+  assert.match(server, /elapsedMs:\s*Number\.isFinite/);
+  assert.match(server, /hashCacheHitCount/);
+  assert.match(server, /hashCacheMissCount/);
+  assert.match(server, /hashCacheEntryCount/);
   assert.match(server, /refresh parity:/);
   assert.match(server, /refresh timing:/);
   assert.match(server, /refresh drift:/);

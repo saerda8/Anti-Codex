@@ -1491,3 +1491,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager panel version advanced to `native-panel-v88`, and `anticodex-manager-open-inject.js` is now covered by runtime sync required-file checks plus installed runtime drift gates.
 - Completed: installed runtime drift summaries now show up to three missing/mismatched runtime file samples in fallback Manager, external Manager bridge, and injected Manager.
 - Verification: Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; sync-readiness returned `ok:true`; strict passive release gates returned `releaseReady:true`, `shortReady:true`, and installed runtime sync `true`.
+
+## 2026-06-24 Manager Evidence Display Alignment
+- Completed: external Manager bridge and injected Manager now mirror fallback Manager display for model-routing, UI-idle, sync-readiness, installed-overall, and tool-bridge evidence instead of only surfacing model-thinking evidence.
+- Completed: Manager panel version advanced to `native-panel-v89` so already-open Anti-Codex pages rebootstrap the updated Manager script.
+- Completed: adaptive latest-report summaries now forward refresh-feature verify-only timing and hash-cache hit/miss/entry counts, matching the standalone report summarizer and existing Manager display.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; sync-readiness returned `ok:true`; passive strict release gate returned `releaseReady:true`, `shortReady:true`, installed runtime `59/59`, and only optional `coldRelaunch` missing.

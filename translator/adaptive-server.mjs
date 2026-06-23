@@ -2554,6 +2554,11 @@ function latestManagerReportItem(label, fileName) {
             appToolRegistryLocalFileCount: Number.isFinite(Number(appToolRegistry?.localFileCount)) ? Number(appToolRegistry.localFileCount) : null,
         } : null,
         refreshFeatureEvidence: (refreshConnectorParity || refreshAppToolParity || (refreshReport && skills) || refreshGuidance) ? {
+            verifyOnly: report?.verifyOnly === true,
+            elapsedMs: Number.isFinite(Number(report?.elapsedMs)) ? Number(report.elapsedMs) : null,
+            hashCacheHitCount: Number.isFinite(Number(report?.hashCache?.hitCount)) ? Number(report.hashCache.hitCount) : null,
+            hashCacheMissCount: Number.isFinite(Number(report?.hashCache?.missCount)) ? Number(report.hashCache.missCount) : null,
+            hashCacheEntryCount: Number.isFinite(Number(report?.hashCache?.entryCount)) ? Number(report.hashCache.entryCount) : null,
             connectorSharedExists: refreshConnectorParity?.sharedExists === true,
             connectorLocalExists: refreshConnectorParity?.localExists === true,
             connectorContentMatches: refreshConnectorParity?.contentMatches === true,
