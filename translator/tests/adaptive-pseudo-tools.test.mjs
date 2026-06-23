@@ -2206,6 +2206,74 @@ test("pseudo DSML external tools are passed through to Codex as tool_calls", asy
   }
 });
 
+test("non-stream chat loop retries local fake tool promises before blocking", async () => {
+  let upstreamCalls = 0;
+  const result = await callUpstreamWithInternalTools({
+    model: "deepseek-v4-pro",
+    messages: [{ role: "user", content: "run the marker tool" }],
+    tools: [{
+      type: "function",
+      function: {
+        name: "marker_tool",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
+      },
+    }],
+  }, {
+    callOnce: async (body) => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        assert.equal(body.messages.at(-1).content, "run the marker tool");
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            id: "chatcmpl_fake_local_1",
+            object: "chat.completion",
+            created: 1,
+            model: "deepseek-v4-pro",
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: "I will run the marker tool now." },
+              finish_reason: "stop",
+            }],
+          },
+        };
+      }
+
+      assert.match(body.messages.at(-1).content, /This is not the final answer|CODEX_TOOLS/);
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_fake_local_2",
+          object: "chat.completion",
+          created: 2,
+          model: "deepseek-v4-pro",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_marker",
+                type: "function",
+                function: { name: "marker_tool", arguments: "{}" },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 2);
+  const msg = result.json.choices[0].message;
+  assert.equal(msg.content, null);
+  assert.equal(msg.tool_calls.length, 1);
+  assert.equal(msg.tool_calls[0].function.name, "marker_tool");
+});
+
 test("internal tool execution exceptions are converted into tool failure messages", async () => {
   const originalFetch = globalThis.fetch;
   let upstreamCalls = 0;
