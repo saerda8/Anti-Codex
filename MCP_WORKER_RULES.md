@@ -1673,3 +1673,19 @@ After every failure, before another dispatch:
 - Result: the worker touched `scripts/summarize-anticodex-report.mjs`, `scripts/test-anticodex-local-connectors.mjs`, and an unrelated MCP/Skill launcher assertion outside the authorized two-file scope. It remained running after two stop messages and produced no useful stdout/stderr.
 - Cause classification: scope violation plus empty worker evidence, not accepted product evidence.
 - Rule change: for tiny diagnostics/test edits, prefer direct main-agent patching unless the worker is given a single writable file. If Antigravity touches an unauthorized file, stop waiting after a bounded status check, discard the extra diff, and do not cite the worker as evidence.
+
+## 2026-06-24 - Antigravity docs audit completed with empty summary
+
+- Worker: Antigravity `ag-0f443319-ed07-4e86-a0b9-0ede7e7f1037`.
+- Task: write one runtime-sync manifest audit under `docs/audits` in an isolated worktree.
+- Result: exit code 0 and one docs file was created, but parsed text/stdout/stderr were empty.
+- Cause classification: worker summary/evidence failure, not product evidence.
+- Rule change: for Antigravity audit jobs, read and review the generated file directly; do not cite the empty worker response. If the generated file is mojibake or stale against main, extract only independently confirmed findings.
+
+## 2026-06-24 - DeepSeek docs audit hit caller timeout after valid changes
+
+- Worker: DeepSeek `dsw_mqr062a4_944szc`.
+- Task: write one passive release-gate evidence audit under `docs/audits` in an isolated worktree.
+- Result: caller timeout stopped the worker after it produced one policy-compliant docs file; the output was partial and required direct review.
+- Cause classification: task was still too broad for the 180s audit budget, even with docs-only scope.
+- Rule change: split future DeepSeek audit jobs by one subsystem and one question, or increase the timeout before asking for a long structured audit. Treat partial docs as suggestions only until the main agent verifies the source and tests.
