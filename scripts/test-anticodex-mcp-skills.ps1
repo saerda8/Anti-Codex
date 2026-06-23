@@ -52,6 +52,10 @@ function Invoke-LocalJsonPost {
     return Invoke-LocalJsonWithRetry -Path $Path -Method Post
 }
 
+function Get-LocalRequestTimeoutSec {
+    return [Math]::Max(1, [Math]::Min(2, $TimeoutSec))
+}
+
 function Invoke-LocalJsonWithRetry {
     param(
         [string]$Path,
@@ -65,7 +69,7 @@ function Invoke-LocalJsonWithRetry {
             $args = @{
                 Uri = "$BaseUrl$Path"
                 Proxy = $null
-                TimeoutSec = $TimeoutSec
+                TimeoutSec = Get-LocalRequestTimeoutSec
             }
             if ($Method -eq "Post") { $args.Method = "Post" }
             return Invoke-RestMethod @args
@@ -184,6 +188,7 @@ $mcpRealSmoke = [pscustomobject]@{
     markerObserved = $false
     toolCount = 0
     elapsedMs = 0
+    timedOut = $false
     error = ""
 }
 $skillSmoke = [pscustomobject]@{
@@ -361,6 +366,69 @@ function Resolve-NodeRuntime {
     throw "node.exe not found"
 }
 
+function Get-McpSmokeTimeoutMs {
+    return [Math]::Max(3000, [Math]::Min(8000, $TimeoutSec * 1000))
+}
+
+function Limit-TextForError {
+    param([string]$Text, [int]$MaxLength = 2000)
+    if (-not $Text) { return "" }
+    if ($Text.Length -le $MaxLength) { return $Text }
+    return $Text.Substring(0, $MaxLength) + "...(truncated)"
+}
+
+function Invoke-NodeJsonWithProcessTimeout {
+    param(
+        [string]$NodePath,
+        [string[]]$Arguments,
+        [int]$ProcessTimeoutMs,
+        [string]$Description
+    )
+    $tempRoot = Join-Path $StateRoot "tmp"
+    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+    $stamp = [guid]::NewGuid().ToString("N")
+    $stdoutPath = Join-Path $tempRoot "mcp-smoke-$stamp.out"
+    $stderrPath = Join-Path $tempRoot "mcp-smoke-$stamp.err"
+    $process = $null
+    try {
+        $process = Start-Process -FilePath $NodePath -ArgumentList $Arguments -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $completed = $process.WaitForExit([Math]::Max(1000, $ProcessTimeoutMs))
+        if (-not $completed) {
+            try {
+                $process.Kill($true)
+            } catch {
+                try { $process.Kill() } catch {}
+            }
+            if ($Description -eq "real MCP smoke") {
+                throw "real MCP smoke process timed out after $ProcessTimeoutMs ms"
+            }
+            throw "$Description process timed out after $ProcessTimeoutMs ms"
+        }
+        $stdout = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { Get-Content -LiteralPath $stdoutPath -Raw } else { "" }
+        $stderr = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { Get-Content -LiteralPath $stderrPath -Raw } else { "" }
+        $parsed = $null
+        if ($stdout.Trim()) {
+            try {
+                $parsed = $stdout | ConvertFrom-Json -ErrorAction Stop
+                if ($parsed.PSObject.Properties.Name -contains "ok") { return $parsed }
+            } catch {
+                if ($process.ExitCode -eq 0) { throw "$Description produced invalid JSON output: $($_.Exception.Message)" }
+            }
+        }
+        if ($process.ExitCode -ne 0) {
+            $text = Limit-TextForError ((@($stdout, $stderr) | Where-Object { $_ }) -join "`n")
+            throw "$Description failed: $text"
+        }
+        if (-not $stdout.Trim()) {
+            throw "$Description produced no JSON output"
+        }
+        if ($null -ne $parsed) { return $parsed }
+        return ($stdout | ConvertFrom-Json -ErrorAction Stop)
+    } finally {
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-RealNodeReplMcpSmoke {
     $scriptPath = Join-Path $PSScriptRoot "anticodex-real-mcp-smoke.mjs"
     if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
@@ -369,22 +437,17 @@ function Invoke-RealNodeReplMcpSmoke {
     $node = Resolve-NodeRuntime
     $marker = "ANTICODEX_MCP_SKILLS_" + ([guid]::NewGuid().ToString("N").Substring(0, 12))
     $reportRoot = Join-Path $StateRoot "reports"
+    $smokeTimeoutMs = Get-McpSmokeTimeoutMs
     $nodeArgs = @(
         $scriptPath,
         "--install-root", $InstallRoot,
         "--state-root", $StateRoot,
         "--server", "node_repl",
-        "--timeout-ms", ([Math]::Max(3000, $TimeoutSec * 1000)),
+        "--timeout-ms", $smokeTimeoutMs,
         "--report-root", $reportRoot,
         "--marker", $marker
     )
-    $output = & $node @nodeArgs 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = @($output | ForEach-Object { [string]$_ }) -join "`n"
-    if ($exitCode -ne 0) {
-        throw "real MCP smoke failed: $text"
-    }
-    $parsed = $text | ConvertFrom-Json
+    $parsed = Invoke-NodeJsonWithProcessTimeout -NodePath $node -Arguments $nodeArgs -ProcessTimeoutMs ($smokeTimeoutMs + 2000) -Description "real MCP smoke"
     if (-not $parsed.ok -or -not $parsed.markerObserved) {
         throw "real MCP smoke did not observe marker"
     }
@@ -399,22 +462,17 @@ function Invoke-RealMcpListSmoke {
     }
     $node = Resolve-NodeRuntime
     $reportRoot = Join-Path $StateRoot "reports"
+    $smokeTimeoutMs = Get-McpSmokeTimeoutMs
     $nodeArgs = @(
         $scriptPath,
         "--install-root", $InstallRoot,
         "--state-root", $StateRoot,
         "--server", $ServerName,
         "--list-only",
-        "--timeout-ms", ([Math]::Max(3000, $TimeoutSec * 1000)),
+        "--timeout-ms", $smokeTimeoutMs,
         "--report-root", $reportRoot
     )
-    $output = & $node @nodeArgs 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = @($output | ForEach-Object { [string]$_ }) -join "`n"
-    if ($exitCode -ne 0) {
-        throw "real MCP tools/list failed: $text"
-    }
-    $parsed = $text | ConvertFrom-Json
+    $parsed = Invoke-NodeJsonWithProcessTimeout -NodePath $node -Arguments $nodeArgs -ProcessTimeoutMs ($smokeTimeoutMs + 2000) -Description "real MCP tools/list"
     if (-not $parsed.ok) {
         throw "real MCP tools/list returned ok=false"
     }
@@ -731,6 +789,7 @@ if ($mcpNames -contains "node_repl") {
             markerObserved = [bool]$realSmoke.markerObserved
             toolCount = [int]$realSmoke.toolCount
             elapsedMs = [int]$realSmoke.elapsedMs
+            timedOut = $false
             error = ""
         }
     } catch {
@@ -742,6 +801,7 @@ if ($mcpNames -contains "node_repl") {
             markerObserved = $false
             toolCount = 0
             elapsedMs = 0
+            timedOut = ([string]$_.Exception.Message) -match "process timed out"
             error = [string]$_.Exception.Message
         }
         Add-Failure "MCP node_repl real stdio tool call failed: $($_.Exception.Message)"
@@ -767,6 +827,7 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
             expectedToolNames = if ($expectedMcpToolNames.ContainsKey($mcpName)) { @($expectedMcpToolNames[$mcpName]) } else { @() }
             missingExpectedTools = $missingExpectedTools
             elapsedMs = [int]$listSmoke.elapsedMs
+            timedOut = $false
             error = ""
         }
         if ($missingExpectedTools.Count -gt 0) {
@@ -782,6 +843,7 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
             toolCount = 0
             toolNames = @()
             elapsedMs = 0
+            timedOut = ([string]$_.Exception.Message) -match "process timed out"
             error = [string]$_.Exception.Message
         }
         Add-Failure "MCP '$mcpName' real stdio tools/list failed: $($_.Exception.Message)"
@@ -932,5 +994,35 @@ $result = [pscustomobject]@{
 $reportPaths = New-ReportPaths "mcp-skills"
 $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
 Save-JsonReport $reportPaths $result -Depth 10
-$result | ConvertTo-Json -Depth 8 -Compress
+$consoleResult = [pscustomobject]@{
+    ok = ($failures.Count -eq 0)
+    reportName = "mcp-skills"
+    failureCount = $failures.Count
+    capabilityState = $capabilityState
+    degraded = $capabilityDegraded
+    report = $reportPaths
+    hashCache = $result.hashCache
+    mcp = [pscustomobject]@{
+        count = $mcpNames.Count
+        sharedCount = $sharedMcpNames.Count
+        hasNodeRepl = ($mcpNames -contains "node_repl")
+        smokePassed = $result.mcp.smoke.passed
+        realCallPassed = $result.mcp.smoke.realCall.passed
+        realListCount = @($mcpListSmokeChecks).Count
+    }
+    skills = [pscustomobject]@{
+        count = $skillEntries.Count
+        sharedCount = $sharedSkillNames.Count
+        agentsCount = $agentsSkillNames.Count
+        smokeReadable = $skillSmoke.readable
+    }
+    sourceSnapshot = [pscustomobject]@{
+        fingerprint = $sourceSnapshot.fingerprint
+        fileCount = $sourceSnapshot.fileCount
+        cacheHitCount = $sourceSnapshot.cacheHitCount
+        cacheMissCount = $sourceSnapshot.cacheMissCount
+    }
+}
+$consoleResult | ConvertTo-Json -Depth 6 -Compress
 if ($failures.Count -gt 0) { exit 1 }
+exit 0

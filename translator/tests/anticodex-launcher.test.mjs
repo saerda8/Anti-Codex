@@ -4155,6 +4155,7 @@ test("Anti-Codex source snapshot reuses unchanged cached file hashes", () => {
 test("Anti-Codex ships an installed MCP/skills verification script", () => {
   const mcpSkills = readFileSync(resolve(root, "scripts", "test-anticodex-mcp-skills.ps1"), "utf8");
   const realMcpSmoke = readFileSync(resolve(root, "scripts", "anticodex-real-mcp-smoke.mjs"), "utf8");
+  const mcpStdioClient = readFileSync(resolve(root, "scripts", "mcp-stdio-client.mjs"), "utf8");
   const refreshLocalFeatures = readFileSync(resolve(root, "scripts", "refresh-anticodex-local-features.ps1"), "utf8");
   const sharedConfigSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-config.mjs"), "utf8");
   const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
@@ -4222,8 +4223,26 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /anticodex-source-snapshot\.ps1/);
   assert.match(mcpSkills, /Get-AntiCodexSourceSnapshot/);
   assert.match(mcpSkills, /sourceSnapshot = \$sourceSnapshot/);
+  assert.match(mcpSkills, /\$consoleResult = \[pscustomobject\]@{/);
+  assert.match(mcpSkills, /failureCount = \$failures\.Count/);
+  assert.match(mcpSkills, /\$consoleResult \| ConvertTo-Json -Depth 6 -Compress/);
+  assert.doesNotMatch(mcpSkills, /\$result \| ConvertTo-Json -Depth 8 -Compress/);
+  assert.match(mcpSkills, /if \(\$failures\.Count -gt 0\) \{ exit 1 \}/);
+  assert.match(mcpSkills, /exit 0/);
   assert.match(mcpSkills, /mcpSkillFileHashCachePath/);
   assert.match(mcpSkills, /hashCache = \[pscustomobject\]/);
+  assert.match(mcpSkills, /function Get-McpSmokeTimeoutMs/);
+  assert.match(mcpSkills, /\[Math\]::Min\(8000,/);
+  assert.match(mcpSkills, /function Invoke-NodeJsonWithProcessTimeout/);
+  assert.match(mcpSkills, /Start-Process/);
+  assert.match(mcpSkills, /WaitForExit/);
+  assert.match(mcpSkills, /\.Kill\(\$true\)/);
+  assert.match(mcpSkills, /ConvertFrom-Json -ErrorAction Stop/);
+  assert.match(mcpSkills, /if \(\$parsed\.PSObject\.Properties\.Name -contains "ok"\) \{ return \$parsed \}/);
+  assert.match(mcpSkills, /real MCP smoke process timed out/);
+  assert.match(mcpSkills, /timedOut = \$false/);
+  assert.match(mcpSkills, /timedOut = \(\[string\]\$_.Exception.Message\) -match "process timed out"/);
+  assert.doesNotMatch(mcpSkills, /& \$node @nodeArgs 2>&1/);
   assert.match(sourceSnapshot, /Label "shared-skills"[\s\S]*-HashContent \$true/);
   assert.match(sourceSnapshot, /Label "agents-skills"[\s\S]*-HashContent \$true/);
   assert.match(mcpSkills, /nativeCodexWriteback = \$false/);
@@ -4232,6 +4251,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /Invoke-RealNodeReplMcpSmoke/);
   assert.match(mcpSkills, /Invoke-RealMcpListSmoke/);
   assert.match(mcpSkills, /Invoke-LocalJsonWithRetry/);
+  assert.match(mcpSkills, /function Get-LocalRequestTimeoutSec/);
+  assert.match(mcpSkills, /TimeoutSec = Get-LocalRequestTimeoutSec/);
   assert.match(mcpSkills, /Start-Sleep -Milliseconds/);
   assert.match(mcpSkills, /attempt \$attempt of \$MaxAttempts/);
   assert.match(mcpSkills, /\$MaxAttempts = 2/);
@@ -4287,6 +4308,11 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(realMcpSmoke, /runMcpStdioList/);
   assert.match(realMcpSmoke, /list-only/);
   assert.match(realMcpSmoke, /anticodex-real-mcp-smoke-latest\.json/);
+  assert.match(mcpStdioClient, /from "node:events"/);
+  assert.match(mcpStdioClient, /await Promise\.race\(\[once\(child, "close"\)/);
+  assert.match(mcpStdioClient, /child\.stdout\.destroy\(\)/);
+  assert.match(mcpStdioClient, /child\.stderr\.destroy\(\)/);
+  assert.match(mcpStdioClient, /\.unref\(\)/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-plugin-host\.mjs/);
   assert.match(refreshLocalFeatures, /AgentsSkillsPath/);
   assert.match(refreshLocalFeatures, /\$env:ANTICODEX_EXTRA_SKILLS_ROOTS = \$AgentsSkillsPath/);

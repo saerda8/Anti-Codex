@@ -1,8 +1,16 @@
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { createInterface } from "node:readline";
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    if (typeof timer.unref === "function") timer.unref();
+  });
 }
 
 export async function runMcpStdioList(options = {}) {
@@ -146,9 +154,15 @@ async function runMcpStdioExchange({
     const stderr = stderrLines.join("").trim();
     throw new Error(`${errorMessage(error)}${stderr ? `; stderr: ${stderr}` : ""}`);
   } finally {
+    const waitForChildClose = child.exitCode === null && child.signalCode === null;
     stdout.close();
-    child.stdin.end();
-    if (child.exitCode === null && child.signalCode === null) child.kill();
+    if (!child.stdin.destroyed) child.stdin.end();
+    child.stdout.destroy();
+    child.stderr.destroy();
+    if (waitForChildClose) child.kill();
     rejectPending(new Error("MCP stdio client closed."));
+    if (waitForChildClose) {
+      await Promise.race([once(child, "close").catch(() => null), delay(750)]);
+    }
   }
 }
