@@ -681,6 +681,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /orderedHistory: clean=/);
   assert.match(managerBridge, /optionalRealProviderEvidence/);
   assert.match(managerInject, /optionalRealProviderEvidence/);
+  assert.match(managerBridge, /realProviderToAntigravityReturnEvidence/);
+  assert.match(managerInject, /realProviderToAntigravityReturnEvidence/);
+  assert.match(managerBridge, /realProviderToAntigravityRoute:/);
+  assert.match(managerInject, /realProviderToAntigravityRoute:/);
   assert.match(managerBridge, /requested=/);
   assert.match(managerInject, /requested=/);
   assert.match(managerBridge, /redaction=/);
@@ -1950,8 +1954,11 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /refreshFeatureEvidence/);
   assert.match(server, /refresh parity:/);
   assert.match(server, /optionalRealProviderEvidence/);
+  assert.match(server, /realProviderToAntigravityReturnEvidence/);
   assert.match(server, /antigravityReturnEvidence/);
   assert.match(server, /realProviderSmoke: first=/);
+  assert.match(server, /realProviderToAntigravityReturn: requested=/);
+  assert.match(server, /realProviderToAntigravityRoute:/);
   assert.match(server, /redaction=/);
   assert.match(server, /fakeProviderToAntigravityReturn: history=/);
   assert.match(server, /fakeProviderToAntigravityRoute:/);
@@ -2224,6 +2231,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /connectorContentMatches/);
   assert.match(reportSummarizer, /appToolContentMatches/);
   assert.match(reportSummarizer, /optionalRealProviderEvidence/);
+  assert.match(reportSummarizer, /realProviderToAntigravityReturnEvidence/);
+  assert.match(reportSummarizer, /returnUpstream/);
   assert.match(reportSummarizer, /antigravityReturnEvidence/);
   assert.match(reportSummarizer, /historyContinuationObserved/);
   assert.match(reportSummarizer, /returnedToAntigravityWithHistory/);
@@ -2737,8 +2746,20 @@ test("report summarizer surfaces optional real-traffic continuity evidence value
         resolvedModel: "real-model",
         status: "success",
       },
+      realProviderToAntigravityReturnEvidence: {
+        requested: true,
+        realAntigravityTurnUsed: true,
+        returnedToAntigravityWithHistory: true,
+        previousResponseIdMatched: true,
+        markerCount: 3,
+        missingMarkerCount: 0,
+        returnUpstream: "antigravity-desktop",
+        routeTransport: "antigravity-native",
+        requestedModel: "gemini-pro-agent",
+        resolvedModel: "gemini-pro-agent",
+      },
       secretsRedacted: true,
-      turns: 2,
+      turns: 3,
     }), "utf8");
     let result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), providerReport], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -2751,7 +2772,17 @@ test("report summarizer surfaces optional real-traffic continuity evidence value
     assert.equal(summary.optionalRealProviderEvidence.routeResolvedModel, "real-model");
     assert.equal(summary.optionalRealProviderEvidence.routeStatus, "success");
     assert.equal(summary.optionalRealProviderEvidence.secretsRedacted, true);
-    assert.equal(summary.optionalRealProviderEvidence.turns, 2);
+    assert.equal(summary.optionalRealProviderEvidence.turns, 3);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.requested, true);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.realAntigravityTurnUsed, true);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.returnedToAntigravityWithHistory, true);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.previousResponseIdMatched, true);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.markerCount, 3);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.missingMarkerCount, 0);
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.returnUpstream, "antigravity-desktop");
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.routeTransport, "antigravity-native");
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.requestedModel, "gemini-pro-agent");
+    assert.equal(summary.realProviderToAntigravityReturnEvidence.resolvedModel, "gemini-pro-agent");
 
     writeFileSync(antigravityReport, JSON.stringify({
       ok: true,
@@ -5391,6 +5422,15 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_real_provider_route_protocol/);
   assert.match(releaseGates, /optional_real_provider_route_model/);
   assert.match(releaseGates, /optional_real_provider_route_status/);
+  assert.match(releaseGates, /optional_real_provider_return_not_used/);
+  assert.match(releaseGates, /optional_real_provider_return_history_missing/);
+  assert.match(releaseGates, /optional_real_provider_return_previous_response_id_mismatch/);
+  assert.match(releaseGates, /optional_real_provider_return_marker_count/);
+  assert.match(releaseGates, /optional_real_provider_return_missing_markers/);
+  assert.match(releaseGates, /optional_real_provider_return_upstream_not_antigravity/);
+  assert.match(releaseGates, /optional_real_provider_return_route_transport/);
+  assert.match(releaseGates, /optional_real_provider_return_requested_model/);
+  assert.match(releaseGates, /optional_real_provider_return_resolved_model/);
   assert.match(releaseGates, /optional_antigravity_return_report_name/);
   assert.match(releaseGates, /optional_antigravity_return_missing_markers/);
   assert.match(releaseGates, /optional_antigravity_return_route_transport/);
@@ -5896,6 +5936,8 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-real-third-party-provider.mjs"), "utf8");
 
   assert.match(verifier, /--allow-real-traffic/);
+  assert.match(verifier, /--allow-real-antigravity-return/);
+  assert.match(verifier, /--antigravity-model/);
   assert.match(verifier, /--api-key-env/);
   assert.match(verifier, /command-line API keys are not accepted/);
   assert.doesNotMatch(verifier, /args\.get\("--api-key"\)/);
@@ -5906,6 +5948,9 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /CODEX_HOME_DIR:\s*join\(stateRoot/);
   assert.match(verifier, /TRANSLATOR_PROFILE_PATH:\s*profilePath/);
   assert.match(verifier, /previous_response_id:\s*first\.id/);
+  assert.match(verifier, /previous_response_id:\s*second\.id/);
+  assert.match(verifier, /startTranslator\("chat"\)/);
+  assert.match(verifier, /stopTranslator\(\)[\s\S]*?startTranslator\("antigravity"\)/);
   assert.match(verifier, /firstMarkerObserved/);
   assert.match(verifier, /secondMarkerObserved/);
   assert.match(verifier, /historyContinuationObserved/);
@@ -5919,6 +5964,8 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /failures:\s*ok \? \[\] : \[reason\]/);
   assert.match(verifier, /requestedRealTraffic:\s*true,\s*ok:\s*false/);
   assert.match(verifier, /coverageKind:\s*"real-traffic"[\s\S]*?requestedRealTraffic:\s*true[\s\S]*?usedRealTraffic:\s*true/);
+  assert.match(verifier, /realProviderToAntigravityReturnEvidence/);
+  assert.match(verifier, /returnUpstream:\s*antigravityHealth\.upstream/);
   assert.match(verifier, /usedRealTraffic:\s*true/);
   assert.match(verifier, /secretsRedacted/);
   assert.match(verifier, /latest-real-third-party-provider\.json/);

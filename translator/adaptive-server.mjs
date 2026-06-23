@@ -3033,6 +3033,11 @@ function latestReportsSummary(result){
       lines.push("  realProviderSmoke: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
       lines.push("  realProviderSmoke route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / requested="+(evidence.routeRequestedModel||"unknown")+" / resolved="+(evidence.routeResolvedModel||"unknown")+" / status="+(evidence.routeStatus||"unknown")+" / redaction="+(evidence.secretsRedacted?"true":"false"));
     }
+    if(item.realProviderToAntigravityReturnEvidence){
+      const evidence=item.realProviderToAntigravityReturnEvidence;
+      lines.push("  realProviderToAntigravityReturn: requested="+(evidence.requested?"true":"false")+" / used="+(evidence.realAntigravityTurnUsed?"true":"false")+" / history="+(evidence.returnedToAntigravityWithHistory?"true":"false")+" / previousId="+(evidence.previousResponseIdMatched?"true":"false")+" / markers="+(evidence.markerCount??"unknown")+" missing="+(evidence.missingMarkerCount??"unknown"));
+      lines.push("  realProviderToAntigravityRoute: "+(evidence.returnUpstream||"unknown")+" / "+(evidence.routeTransport||"unknown")+" / requested="+(evidence.requestedModel||"unknown")+" / resolved="+(evidence.resolvedModel||"unknown"));
+    }
     if(item.coldRelaunchEvidence){
       const evidence=item.coldRelaunchEvidence;
       lines.push("  coldRelaunch: health="+(evidence.healthOk?"true":"false")+" / ready="+(evidence.providerReady?"true":"false")+" / mode="+(evidence.mode||"unknown")+" / main="+(evidence.mainCount??"?")+" / translator="+(evidence.translatorCount??"?")+" / launcher="+(evidence.launcherCount??"?")+" / originalCodex="+(evidence.originalCodexUnchanged?"unchanged":"unknown")+" / failedStages="+(evidence.failedStageCount??"?"));

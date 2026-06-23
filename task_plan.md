@@ -1138,3 +1138,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-23 Optional Real-Traffic Evidence Label Boundary
 - Completed: Manager latest-report summaries now label the two optional real-traffic proofs as `realProviderSmoke` and `fakeProviderToAntigravityReturn` instead of wording that could imply one continuous real third-party-to-Antigravity chain.
 - Verification: adaptive/bridge/injected Manager syntax passed; Manager bridge `--self-test` passed; focused Manager/optional-real tests passed; strict passive gates remain green with only optional cold relaunch missing.
+
+## 2026-06-23 Optional Same-Chain Real Provider to Antigravity Return
+- Completed: the real third-party provider verifier now has a default-off `--allow-real-antigravity-return` branch. When explicitly requested, it keeps the same isolated state root, runs two real provider turns, restarts the isolated translator in Antigravity mode, and sends a third turn with `previous_response_id` chained to the second real-provider response.
+- Completed: same-chain return evidence is reported as `realProviderToAntigravityReturnEvidence` with request/usage/history/previous-ID/marker/route/model fields. Summaries, passive release gates, the in-app Manager, the external bridge, and the injected Manager panel all surface the evidence separately from the existing fake-provider return report.
+- Verification: no real traffic or cold relaunch was run in this batch. JS syntax checks passed; release-gate `--self-test` passed; Manager bridge `--self-test` passed; focused launcher tests passed `8/8`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.

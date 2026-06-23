@@ -874,6 +874,11 @@
         lines.push(`  realProviderSmoke: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
         lines.push(`  realProviderSmoke route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / requested=${evidence.routeRequestedModel || "\u672a\u77e5"} / resolved=${evidence.routeResolvedModel || "\u672a\u77e5"} / status=${evidence.routeStatus || "\u672a\u77e5"} / redaction=${evidence.secretsRedacted ? "true" : "false"}`);
       }
+      if (item.realProviderToAntigravityReturnEvidence) {
+        const evidence = item.realProviderToAntigravityReturnEvidence;
+        lines.push(`  realProviderToAntigravityReturn: requested=${evidence.requested ? "true" : "false"} / used=${evidence.realAntigravityTurnUsed ? "true" : "false"} / history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
+        lines.push(`  realProviderToAntigravityRoute: ${evidence.returnUpstream || "\u672a\u77e5"} / ${evidence.routeTransport || "\u672a\u77e5"} / requested=${evidence.requestedModel || "\u672a\u77e5"} / resolved=${evidence.resolvedModel || "\u672a\u77e5"}`);
+      }
       if (item.antigravityReturnEvidence) {
         const evidence = item.antigravityReturnEvidence;
         lines.push(`  fakeProviderToAntigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);

@@ -37,6 +37,7 @@ const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const stateRoot = mkdtempSync(join(os.tmpdir(), "anticodex-real-third-party-provider-"));
 const profilePath = join(stateRoot, "provider-profile.json");
 const reportName = "real-third-party-provider";
+const allowRealAntigravityReturn = args.has("--allow-real-antigravity-return");
 let translator = null;
 
 function writeTextAtomic(filePath, text, encoding = "utf8") {
@@ -166,7 +167,7 @@ async function stopTranslator() {
   ]);
 }
 
-async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv }) {
+async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv, antigravityModel }) {
   const parsedUrl = new URL(baseUrl);
   if (parsedUrl.username || parsedUrl.password) throw new Error("provider URL must not contain credentials");
   if (parsedUrl.search || parsedUrl.hash) throw new Error("provider URL must not contain query parameters or fragments");
@@ -198,12 +199,11 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
 
   const translatorPort = await reservePort();
   const translatorUrl = `http://127.0.0.1:${translatorPort}`;
-  const translatorEnv = {
+  const baseTranslatorEnv = {
     ...process.env,
     TRANSLATOR_HOST: "127.0.0.1",
     TRANSLATOR_LISTEN_HOST: "127.0.0.1",
     TRANSLATOR_PORT: String(translatorPort),
-    TRANSLATOR_UPSTREAM_MODE: "chat",
     UPSTREAM_PROTOCOL: protocol,
     UPSTREAM_URL: baseUrl,
     UPSTREAM_MODEL: model,
@@ -214,14 +214,22 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
     TRANSLATOR_NATIVE_STREAMING: "0",
     TRANSLATOR_CAP_INTERNAL_WEB_TOOLS: "0",
   };
-  delete translatorEnv[apiKeyEnv];
+  delete baseTranslatorEnv[apiKeyEnv];
   realTrafficAttempted = true;
-  translator = spawn(process.execPath, [translatorPath], {
-    cwd: sourceRoot,
-    windowsHide: true,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: translatorEnv,
-  });
+
+  const startTranslator = (upstreamMode) => {
+    translator = spawn(process.execPath, [translatorPath], {
+      cwd: sourceRoot,
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "ignore"],
+      env: {
+        ...baseTranslatorEnv,
+        TRANSLATOR_UPSTREAM_MODE: upstreamMode,
+      },
+    });
+  };
+
+  startTranslator("chat");
 
   const health = await waitForHealth(translatorUrl);
   assert.equal(health?.upstreamProfile?.mode, "third-party");
@@ -262,6 +270,55 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
   assert.equal(routeEvidence.resolvedModel, model);
   assert.equal(routeEvidence.status, "success");
 
+  let realProviderToAntigravityReturnEvidence = {
+    requested: allowRealAntigravityReturn,
+    realAntigravityTurnUsed: false,
+    returnedToAntigravityWithHistory: false,
+  };
+  if (allowRealAntigravityReturn) {
+    await stopTranslator();
+    startTranslator("antigravity");
+    const antigravityHealth = await waitForHealth(translatorUrl);
+    assert.equal(antigravityHealth?.upstream, "antigravity-desktop");
+    assert.equal(antigravityHealth?.upstreamProfile?.mode, "antigravity");
+
+    const returnMarker = `REAL_PROVIDER_TO_ANTIGRAVITY_${randomUUID()}`;
+    const returned = await postResponse(translatorUrl, {
+      model: antigravityModel,
+      stream: false,
+      max_output_tokens: 192,
+      previous_response_id: second.id,
+      input: [
+        "Inspect the previous two turns in this same conversation.",
+        "Repeat both prior marker strings from conversation history, then append this new marker:",
+        returnMarker,
+        "Do not invent marker strings and do not copy unavailable values.",
+      ].join(" "),
+    });
+    assert.equal(returned.previous_response_id, second.id);
+    const returnedText = textFromResponse(returned);
+    const returnMarkers = [firstMarker, secondMarker, returnMarker];
+    const missingReturnMarkers = returnMarkers.filter((marker) => !returnedText.includes(marker));
+    assert.deepEqual(missingReturnMarkers, []);
+    const antigravityRouteAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
+    const antigravityRoute = antigravityRouteAudit?.latest || {};
+    assert.equal(antigravityRoute.requestedModel, antigravityModel);
+    assert.notEqual(antigravityRoute.transport, "upstream-provider");
+
+    realProviderToAntigravityReturnEvidence = {
+      requested: true,
+      realAntigravityTurnUsed: true,
+      returnedToAntigravityWithHistory: true,
+      previousResponseIdMatched: returned.previous_response_id === second.id,
+      markerCount: returnMarkers.length,
+      missingMarkerCount: missingReturnMarkers.length,
+      returnUpstream: antigravityHealth.upstream || "",
+      routeTransport: antigravityRoute.transport || "",
+      requestedModel: antigravityRoute.requestedModel || "",
+      resolvedModel: antigravityRoute.resolvedModel || "",
+    };
+  }
+
   return {
     ok: true,
     reportName,
@@ -279,6 +336,7 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
     firstMarkerObserved,
     secondMarkerObserved,
     historyContinuationObserved,
+    realProviderToAntigravityReturnEvidence,
     routeEvidence: {
       transport: routeEvidence.transport || "",
       providerProtocol: routeEvidence.providerProtocol || "",
@@ -287,7 +345,7 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
       status: routeEvidence.status || "",
     },
     secretsRedacted: true,
-    turns: 2,
+    turns: allowRealAntigravityReturn ? 3 : 2,
     elapsedMs: Date.now() - startedAt,
   };
 }
@@ -306,8 +364,11 @@ try {
     const baseUrl = String(args.get("--base-url") || "").trim();
     const model = String(args.get("--model") || "").trim();
     const apiKeyEnv = String(args.get("--api-key-env") || "").trim();
+    const antigravityModel = String(args.get("--antigravity-model") || "").trim();
     if (!protocol || !baseUrl || !model || !apiKeyEnv) {
       result = completeSkipped("real provider protocol, base URL, model, and API key environment variable are required", { requestedRealTraffic: true, ok: false });
+    } else if (allowRealAntigravityReturn && !antigravityModel) {
+      result = completeSkipped("real Antigravity return requires --antigravity-model", { requestedRealTraffic: true, ok: false });
     } else if (!["openai-compatible", "anthropic"].includes(protocol)) {
       throw new Error("protocol must be openai-compatible or anthropic");
     } else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv)) {
@@ -317,7 +378,7 @@ try {
       if (!apiKey) {
         result = completeSkipped(`API key environment variable ${apiKeyEnv} is not set`, { requestedRealTraffic: true, ok: false });
       } else {
-        result = await runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv });
+        result = await runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv, antigravityModel });
       }
     }
   }

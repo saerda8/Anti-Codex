@@ -381,3 +381,10 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - The report is now collected by installed overall and diagnostics, shown by Manager latest reports, and required by short/release passive gates.
 - Fresh evidence: launcher contracts `96/96`; installed probe green; strict passive gates `shortReady:true`, `releaseReady:true`, no missing required or damaged reports; runtime healthy on Antigravity with 8 models and account ready.
 - A real Manager latest-report click now passes on installed `native-panel-v85` and displays `历史过期恢复：通过`; installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.
+
+## 2026-06-23 Optional Same-Chain Real Provider Return Follow-Up
+
+- Added a default-off same-chain branch to the real third-party provider verifier: explicit real provider turns 1-2 can now be followed by a real Antigravity return turn in the same isolated response-history chain.
+- The branch requires `--allow-real-antigravity-return` and `--antigravity-model` in addition to the existing real-provider opt-in. It does not run during routine no-real-traffic checks.
+- New evidence field: `realProviderToAntigravityReturnEvidence`. It records requested/used/history/previous-ID marker and route/model proof, and is surfaced through summaries, passive release gates, the in-app Manager, external bridge, and injected Manager panel.
+- Fresh evidence: syntax checks passed; release-gate `--self-test` passed; Manager bridge `--self-test` passed; focused optional-real/Manager/release tests passed `8/8`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.

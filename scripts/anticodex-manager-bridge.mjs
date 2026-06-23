@@ -348,6 +348,11 @@ function latestReportsSummary(result) {
       lines.push(`  realProviderSmoke: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
       lines.push(`  realProviderSmoke route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / requested=${evidence.routeRequestedModel || "\u672a\u77e5"} / resolved=${evidence.routeResolvedModel || "\u672a\u77e5"} / status=${evidence.routeStatus || "\u672a\u77e5"} / redaction=${evidence.secretsRedacted ? "true" : "false"}`);
     }
+    if (item.realProviderToAntigravityReturnEvidence) {
+      const evidence = item.realProviderToAntigravityReturnEvidence;
+      lines.push(`  realProviderToAntigravityReturn: requested=${evidence.requested ? "true" : "false"} / used=${evidence.realAntigravityTurnUsed ? "true" : "false"} / history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
+      lines.push(`  realProviderToAntigravityRoute: ${evidence.returnUpstream || "\u672a\u77e5"} / ${evidence.routeTransport || "\u672a\u77e5"} / requested=${evidence.requestedModel || "\u672a\u77e5"} / resolved=${evidence.resolvedModel || "\u672a\u77e5"}`);
+    }
     if (item.antigravityReturnEvidence) {
       const evidence = item.antigravityReturnEvidence;
       lines.push(`  fakeProviderToAntigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
@@ -556,6 +561,7 @@ if (args.has("--self-test")) {
       exists: true,
       ok: true,
       optionalRealProviderEvidence: { firstMarkerObserved: true, secondMarkerObserved: true, historyContinuationObserved: true, turns: 2, routeTransport: "upstream-provider", routeProviderProtocol: "openai-compatible", routeRequestedModel: "real-model", routeResolvedModel: "real-model", routeStatus: "success", secretsRedacted: true },
+      realProviderToAntigravityReturnEvidence: { requested: true, realAntigravityTurnUsed: true, returnedToAntigravityWithHistory: true, previousResponseIdMatched: true, markerCount: 3, missingMarkerCount: 0, returnUpstream: "antigravity-desktop", routeTransport: "antigravity-native", requestedModel: "gemini-pro-agent", resolvedModel: "gemini-pro-agent" },
     }, {
       label: "\u56de\u5230 Antigravity",
       exists: true,
@@ -583,6 +589,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);
   assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ skill ok/);
   assert.match(evidenceSummary, /realProviderSmoke route: upstream-provider \/ openai-compatible \/ requested=real-model \/ resolved=real-model \/ status=success \/ redaction=true/);
+  assert.match(evidenceSummary, /realProviderToAntigravityReturn: requested=true \/ used=true \/ history=true \/ previousId=true \/ markers=3 missing=0/);
+  assert.match(evidenceSummary, /realProviderToAntigravityRoute: antigravity-desktop \/ antigravity-native \/ requested=gemini-pro-agent \/ resolved=gemini-pro-agent/);
   assert.match(evidenceSummary, /fakeProviderToAntigravityReturn: history=true \/ previousId=true/);
   assert.match(evidenceSummary, /fakeProviderToAntigravityRoute: antigravity-native \/ gemini-pro-agent/);
   assert.match(evidenceSummary, /coldRelaunch: health=true \/ ready=true/);

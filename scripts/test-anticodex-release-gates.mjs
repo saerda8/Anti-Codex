@@ -201,6 +201,7 @@ function summarizeGate(definition) {
         if (report.coverageKind !== "real-traffic") semanticFailures.push("optional_real_traffic_coverage_kind");
         if (definition.id === "realThirdPartyProviderOptional") {
           const routeEvidence = report.routeEvidence && typeof report.routeEvidence === "object" ? report.routeEvidence : {};
+          const sameChainReturn = report.realProviderToAntigravityReturnEvidence && typeof report.realProviderToAntigravityReturnEvidence === "object" ? report.realProviderToAntigravityReturnEvidence : {};
           if (report.reportName !== "real-third-party-provider") semanticFailures.push("optional_real_provider_report_name");
           if (report.firstMarkerObserved !== true) semanticFailures.push("optional_real_provider_first_marker_missing");
           if (report.secondMarkerObserved !== true) semanticFailures.push("optional_real_provider_second_marker_missing");
@@ -211,6 +212,17 @@ function summarizeGate(definition) {
           if (!routeEvidence.providerProtocol) semanticFailures.push("optional_real_provider_route_protocol");
           if (!routeEvidence.requestedModel || !routeEvidence.resolvedModel || routeEvidence.requestedModel !== routeEvidence.resolvedModel) semanticFailures.push("optional_real_provider_route_model");
           if (routeEvidence.status !== "success") semanticFailures.push("optional_real_provider_route_status");
+          if (sameChainReturn.requested === true) {
+            if (sameChainReturn.realAntigravityTurnUsed !== true) semanticFailures.push("optional_real_provider_return_not_used");
+            if (sameChainReturn.returnedToAntigravityWithHistory !== true) semanticFailures.push("optional_real_provider_return_history_missing");
+            if (sameChainReturn.previousResponseIdMatched !== true) semanticFailures.push("optional_real_provider_return_previous_response_id_mismatch");
+            if (Number(sameChainReturn.markerCount || 0) < 3) semanticFailures.push("optional_real_provider_return_marker_count");
+            if (Number(sameChainReturn.missingMarkerCount || 0) !== 0) semanticFailures.push("optional_real_provider_return_missing_markers");
+            if (sameChainReturn.returnUpstream !== "antigravity-desktop") semanticFailures.push("optional_real_provider_return_upstream_not_antigravity");
+            if (!sameChainReturn.routeTransport || sameChainReturn.routeTransport === "upstream-provider") semanticFailures.push("optional_real_provider_return_route_transport");
+            if (!sameChainReturn.requestedModel) semanticFailures.push("optional_real_provider_return_requested_model");
+            if (!sameChainReturn.resolvedModel) semanticFailures.push("optional_real_provider_return_resolved_model");
+          }
         }
         if (definition.id === "providerAntigravityReturnOptional") {
           const evidence = report.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : {};
@@ -1059,6 +1071,18 @@ if (args.has("--self-test")) {
         resolvedModel: "",
         status: "failed",
       },
+      realProviderToAntigravityReturnEvidence: {
+        requested: true,
+        realAntigravityTurnUsed: false,
+        returnedToAntigravityWithHistory: false,
+        previousResponseIdMatched: false,
+        markerCount: 1,
+        missingMarkerCount: 1,
+        returnUpstream: "upstream-provider",
+        routeTransport: "upstream-provider",
+        requestedModel: "",
+        resolvedModel: "",
+      },
       secretsRedacted: false,
       turns: 1,
     });
@@ -1074,6 +1098,15 @@ if (args.has("--self-test")) {
       "optional_real_provider_route_protocol",
       "optional_real_provider_route_model",
       "optional_real_provider_route_status",
+      "optional_real_provider_return_not_used",
+      "optional_real_provider_return_history_missing",
+      "optional_real_provider_return_previous_response_id_mismatch",
+      "optional_real_provider_return_marker_count",
+      "optional_real_provider_return_missing_markers",
+      "optional_real_provider_return_upstream_not_antigravity",
+      "optional_real_provider_return_route_transport",
+      "optional_real_provider_return_requested_model",
+      "optional_real_provider_return_resolved_model",
     ]);
     writeFakeLatestReport("latest-provider-antigravity-return.json", {
       ok: true,

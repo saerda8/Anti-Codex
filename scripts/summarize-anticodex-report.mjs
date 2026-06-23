@@ -384,6 +384,18 @@ const summary = {
     secretsRedacted: boolField(report, "secretsRedacted"),
     turns: has(report, "turns") ? report.turns : null,
   } : null,
+  realProviderToAntigravityReturnEvidence: report.realProviderToAntigravityReturnEvidence && typeof report.realProviderToAntigravityReturnEvidence === "object" ? {
+    requested: boolField(report.realProviderToAntigravityReturnEvidence, "requested"),
+    realAntigravityTurnUsed: boolField(report.realProviderToAntigravityReturnEvidence, "realAntigravityTurnUsed"),
+    returnedToAntigravityWithHistory: boolField(report.realProviderToAntigravityReturnEvidence, "returnedToAntigravityWithHistory"),
+    previousResponseIdMatched: boolField(report.realProviderToAntigravityReturnEvidence, "previousResponseIdMatched"),
+    markerCount: has(report.realProviderToAntigravityReturnEvidence, "markerCount") ? report.realProviderToAntigravityReturnEvidence.markerCount : null,
+    missingMarkerCount: has(report.realProviderToAntigravityReturnEvidence, "missingMarkerCount") ? report.realProviderToAntigravityReturnEvidence.missingMarkerCount : null,
+    returnUpstream: asString(report.realProviderToAntigravityReturnEvidence.returnUpstream),
+    routeTransport: asString(report.realProviderToAntigravityReturnEvidence.routeTransport),
+    requestedModel: asString(report.realProviderToAntigravityReturnEvidence.requestedModel),
+    resolvedModel: asString(report.realProviderToAntigravityReturnEvidence.resolvedModel),
+  } : null,
   antigravityReturnEvidence: realAntigravityEvidence ? {
     requested: boolField(realAntigravityEvidence, "requested"),
     realAntigravityTurnUsed: boolField(realAntigravityEvidence, "realAntigravityTurnUsed"),
