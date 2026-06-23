@@ -311,6 +311,7 @@ Branch: main
 - Summaries, diagnostics, adaptive Manager latest reports, and launcher contracts now surface or require source snapshot evidence.
 - Fresh evidence: parser checks passed for the new helper plus refresh/MCP/plugin/diagnostics scripts; JS syntax checks passed; release-gate `--self-test` passed; focused launcher contracts passed `11/11`; full refresh repaired stale connector snapshot parity and then passed in about 72 seconds; MCP/Skill and plugin-capability reports both used source fingerprint `7255ed564418...`; strict passive gates are `shortReady:true`, `releaseReady:true`, with no missing required reports and matching source fingerprints.
 - Next-channel note: use narrow verifier reruns or `refresh-anticodex-local-features.ps1 -VerifyOnly` for routine evidence refresh. Run full local feature refresh only when connector/app-tool/skill parity drift is detected, because the current inherited surface is roughly 15.6k files.
+- Follow-up: external Manager bridge and injected Manager summaries now display the same source snapshot line as the in-app Manager. Bridge/inject syntax checks passed, bridge `--self-test` asserts the rendered line, and focused launcher Manager/MCP/plugin contracts passed `4/4`.
 
 ## 2026-06-23 Installed Missing-History Follow-Up
 

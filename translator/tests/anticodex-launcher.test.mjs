@@ -620,6 +620,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /releaseGateFailures/);
   assert.match(managerBridge, /semanticFailures/);
   assert.match(managerInject, /semanticFailures/);
+  assert.match(managerBridge, /sourceSnapshotEvidence/);
+  assert.match(managerInject, /sourceSnapshotEvidence/);
+  assert.match(managerBridge, /sourceSnapshot: files=/);
+  assert.match(managerInject, /sourceSnapshot: files=/);
   assert.match(managerBridge, /sourcePreflightEvidence/);
   assert.match(managerInject, /sourcePreflightEvidence/);
   assert.match(managerBridge, /localConnectorVerifierOk/);

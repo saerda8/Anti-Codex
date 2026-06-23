@@ -697,3 +697,5 @@
 - Full local feature refresh is a repair path, not a cheap health check. On this machine it can take about 72 seconds after source-snapshot hardening because it copies/verifies roughly 15.6k inherited files; prefer narrow verifier reruns or `-VerifyOnly` unless parity drift needs repair.
 - `test-anticodex-plugin-capabilities.ps1` needs the same `.agents\skills` default as the refresh and MCP/Skill verifiers. Without an `AgentsSkillsPath` default, source snapshot generation can fail even though connector/app-tool parity itself is healthy.
 - A verifier can time out after emitting useful JSON if the timeout is too tight for process cleanup and source scanning. Treat the JSON as a clue, then rerun with a bounded but realistic timeout before changing product logic.
+- Manager latest-report evidence must stay in parity across adaptive server, external bridge, and injected panel. When adding a field such as `sourceSnapshotEvidence`, add a rendered line and tests in all three surfaces.
+- In PowerShell, `Select-Object -Index 38..55` passes the range as a string. Use an array first, such as `$lines = Get-Content file; $lines[38..55]`, for bounded line reads.

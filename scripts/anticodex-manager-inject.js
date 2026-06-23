@@ -809,6 +809,10 @@
         });
         lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
       }
+      if (item.sourceSnapshotEvidence) {
+        const evidence = item.sourceSnapshotEvidence;
+        lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}`);
+      }
       if (item.sourcePreflightEvidence) {
         const evidence = item.sourcePreflightEvidence;
         lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);

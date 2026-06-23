@@ -284,6 +284,10 @@ function latestReportsSummary(result) {
       });
       lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
     }
+    if (item.sourceSnapshotEvidence) {
+      const evidence = item.sourceSnapshotEvidence;
+      lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}`);
+    }
     if (item.sourcePreflightEvidence) {
       const evidence = item.sourcePreflightEvidence;
       lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
@@ -500,6 +504,7 @@ if (args.has("--self-test")) {
       label: "\u6e90\u7801\u9884\u68c0",
       exists: true,
       ok: true,
+      sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589 },
       sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
       label: "MCP/Skill",
@@ -535,6 +540,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
+  assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345/);
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /MCP\/Skill/);
