@@ -91,6 +91,7 @@ function Test-DiagnosticBundle {
     $refreshPath = Join-Path $bundle.bundleRoot "model-routing-refresh.json"
     $logDbGuardPath = Join-Path $bundle.bundleRoot "log-db-guard.json"
     $summaryPath = Join-Path $bundle.bundleRoot "reports-summary.json"
+    $diagnosticsSummaryPath = Join-Path $bundle.bundleRoot "diagnostics-summary.json"
     $lifecycleStatusPath = Join-Path (Join-Path $bundle.bundleRoot "logs") "translator-lifecycle.json"
     $lifecycleLogPath = Join-Path (Join-Path $bundle.bundleRoot "logs") "translator-lifecycle.jsonl"
     if ($antigravityReportsRequired -and -not (Test-Path -LiteralPath $refreshPath -PathType Leaf)) {
@@ -98,6 +99,25 @@ function Test-DiagnosticBundle {
     }
     if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
         Add-Failure "diagnostic bundle missing reports-summary.json"
+    }
+    if (-not (Test-Path -LiteralPath $diagnosticsSummaryPath -PathType Leaf)) {
+        Add-Failure "diagnostic bundle missing diagnostics-summary.json"
+    } else {
+        $diagnosticsSummary = Get-Content -LiteralPath $diagnosticsSummaryPath -Raw | ConvertFrom-Json
+        if (-not (Has-Property $diagnosticsSummary "longTasks")) {
+            Add-Failure "diagnostic summary missing longTasks"
+        } else {
+            $longTaskSummary = $diagnosticsSummary.longTasks
+            if (-not (Has-Property $longTaskSummary "runningCount")) { Add-Failure "diagnostic summary missing longTasks runningCount" }
+            if (-not (Has-Property $longTaskSummary "attentionCount")) { Add-Failure "diagnostic summary missing longTasks attentionCount" }
+            if (-not (Has-Property $longTaskSummary "otherRunningItems")) { Add-Failure "diagnostic summary missing longTasks otherRunningItems" }
+            $foregroundSummaryItems = @(As-FlatArray $longTaskSummary.otherRunningItems | Where-Object { $_.stage -eq "manager_foreground" })
+            foreach ($foregroundItem in $foregroundSummaryItems) {
+                if ([string]::IsNullOrWhiteSpace([string]$foregroundItem.id) -and [string]::IsNullOrWhiteSpace([string]$foregroundItem.label)) {
+                    Add-Failure "diagnostic summary manager_foreground item missing id or label"
+                }
+            }
+        }
     }
     if (-not (Test-Path -LiteralPath $logDbGuardPath -PathType Leaf)) {
         Add-Failure "diagnostic bundle missing log-db-guard.json"

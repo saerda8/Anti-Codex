@@ -1266,3 +1266,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostic bundle collection now writes `diagnostics-summary.json` from the live `/anticodex/diagnostics` snapshot, carrying `longTasks` counts plus sync/post states and up to five non-core running foreground/background tasks.
 - Completed: the bundle result now includes `diagnosticsSummary`, so support tooling can see foreground Manager work without opening the full raw diagnostics payload.
 - Verification: collector PowerShell parser check passed; focused diagnostic bundle launcher contracts passed `124/124`.
+
+## 2026-06-23 Diagnostic Bundle Long-Task Verification
+- Completed: read-only diagnostics verification now requires `diagnostics-summary.json` in collected bundles and checks the `longTasks` summary shape, including `runningCount`, `attentionCount`, and `otherRunningItems`.
+- Completed: optional `manager_foreground` summary items are validated for an id or label when present, without requiring a foreground task to be active during routine checks.
+- Verification: diagnostics verifier PowerShell parser check passed; focused diagnostics launcher contracts passed `124/124`.

@@ -5408,6 +5408,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /lifecycleLogs/);
   assert.match(diagnostics, /latestDiagnosisDetail/);
   assert.match(diagnostics, /longTasks/);
+  assert.match(diagnostics, /diagnostics-summary\.json/);
+  assert.match(diagnostics, /\$diagnosticsSummaryPath/);
+  assert.match(diagnostics, /diagnostic bundle missing diagnostics-summary\.json/);
+  assert.match(diagnostics, /diagnostic summary missing longTasks/);
+  assert.match(diagnostics, /otherRunningItems/);
   assert.match(diagnostics, /foreach \(\$expectedTask in @\("syncHost", "postVerificationFull"\)\)/);
   assert.doesNotMatch(diagnostics, /longTaskItems\.Count\s+-eq\s+2/);
   assert.match(diagnostics, /latestLogLine/);
