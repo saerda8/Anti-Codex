@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import os from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 
@@ -4021,6 +4021,44 @@ test("Windows shared sidecars are imported as local copies", () => {
   assert.match(sync, /ensureLocalCopy/);
   assert.match(sync, /copyDirectoryContents/);
   assert.doesNotMatch(sync, /junction/);
+});
+
+test("Anti-Codex source snapshot reuses unchanged cached file hashes", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-source-cache-"));
+  const sharedHome = join(tempRoot, "shared");
+  const agentsSkills = join(tempRoot, "agents-skills");
+  const cachePath = join(tempRoot, "source-cache.json");
+  mkdirSync(join(sharedHome, "skills", "alpha"), { recursive: true });
+  mkdirSync(join(sharedHome, "cache", "codex_app_directory"), { recursive: true });
+  mkdirSync(join(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
+  mkdirSync(join(agentsSkills, "beta"), { recursive: true });
+  writeFileSync(join(sharedHome, "config.toml"), "[mcp_servers.node_repl]\ncommand='node'\n", "utf8");
+  writeFileSync(join(sharedHome, "skills", "alpha", "SKILL.md"), "alpha skill\n", "utf8");
+  writeFileSync(join(agentsSkills, "beta", "SKILL.md"), "beta skill\n", "utf8");
+  writeFileSync(join(sharedHome, "cache", "codex_app_directory", "one.json"), "{\"id\":\"one\"}\n", "utf8");
+  writeFileSync(join(sharedHome, "cache", "codex_apps_tools", "one.json"), "{\"tool\":\"one\"}\n", "utf8");
+  for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+    writeFileSync(join(sharedHome, name), `${name}\n`, "utf8");
+  }
+  try {
+    const script = `
+      . '${resolve(root, "scripts", "anticodex-source-snapshot.ps1").replaceAll("'", "''")}'
+      $first = Get-AntiCodexSourceSnapshot -SharedCodexHome '${sharedHome.replaceAll("'", "''")}' -AgentsSkillsPath '${agentsSkills.replaceAll("'", "''")}' -CachePath '${cachePath.replaceAll("'", "''")}'
+      $second = Get-AntiCodexSourceSnapshot -SharedCodexHome '${sharedHome.replaceAll("'", "''")}' -AgentsSkillsPath '${agentsSkills.replaceAll("'", "''")}' -CachePath '${cachePath.replaceAll("'", "''")}'
+      [pscustomobject]@{ first = $first; second = $second } | ConvertTo-Json -Depth 8 -Compress
+    `;
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", script], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout.trim());
+    assert.equal(payload.first.fingerprint, payload.second.fingerprint);
+    assert.equal(payload.first.fileCount, payload.second.fileCount);
+    assert.equal(payload.first.cacheHitCount, 0);
+    assert.ok(payload.first.cacheMissCount > 0);
+    assert.ok(payload.second.cacheHitCount >= payload.second.fileCount);
+    assert.equal(payload.second.cacheMissCount, 0);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex ships an installed MCP/skills verification script", () => {
