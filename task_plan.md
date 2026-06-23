@@ -1325,3 +1325,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: report summarization now lifts `appTools.registry` into `mcpSkillEvidence`, including registry existence, content-match state, fingerprint-match state, and shared/local file counts.
 - Completed: diagnostics bundle verification now rejects MCP/Skill summaries whose app-tool registry exists but has content mismatch, fingerprint mismatch, or differing file counts; the dynamic MCP/Skill verifier fixture now proves bad registries fail.
 - Verification: focused summarizer, MCP/Skill verifier, dynamic bad-registry fixture, and diagnostics contracts passed; PowerShell parser checks passed for MCP/Skill and diagnostics verifiers; summarizer syntax check passed; `git diff --check` passed.
+
+## 2026-06-23 Skill Snapshot Fingerprint Parity
+- Completed: refresh-feature and MCP/Skill inherited-skill fingerprints now ignore `.git` directories, matching the local snapshot copier that intentionally skips embedded repositories.
+- Completed: this removes false skill drift for repository-backed skills such as `_repos` and `keep-codex-fast` without weakening `SKILL.md` or usable asset parity.
+- Verification: focused launcher MCP/Skill contract passed `124/124`; PowerShell parser checks passed for refresh-feature and MCP/Skill verifiers; refresh-feature report passed; MCP/Skill verifier passed; strict passive release gate passed with `releaseReady:true` and `shortReady:true`.

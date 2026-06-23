@@ -254,7 +254,10 @@ function Get-DirectoryContentFingerprint {
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
     $root = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
     if ($directoryFingerprintCache.ContainsKey($root)) { return $directoryFingerprintCache[$root] }
-    $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop | Sort-Object FullName | ForEach-Object {
+    $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
+        Where-Object { $_.FullName -notmatch '(?i)[\\/]\.git(?:[\\/]|$)' } |
+        Sort-Object FullName |
+        ForEach-Object {
         $relative = $_.FullName.Substring($root.Length).TrimStart("\", "/")
         $hash = Get-FileSha256Hex $_.FullName
         "$relative`t$hash"

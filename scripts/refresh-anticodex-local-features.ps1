@@ -99,7 +99,7 @@ function Get-DirectoryContentFingerprint {
     $rootPath = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
     if ($directoryFingerprintCache.ContainsKey($rootPath)) { return $directoryFingerprintCache[$rootPath] }
     $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
-        Where-Object { $_.Name -ne ".anticodex-source-manifest.json" } |
+        Where-Object { $_.Name -ne ".anticodex-source-manifest.json" -and $_.FullName -notmatch '(?i)[\\/]\.git(?:[\\/]|$)' } |
         Sort-Object FullName |
         ForEach-Object {
             $relative = $_.FullName.Substring($rootPath.Length).TrimStart("\", "/")
@@ -124,7 +124,8 @@ function Get-DirectoryInfo {
     $item = if ($exists) { Get-Item -LiteralPath $Path -Force } else { $null }
     $count = 0
     if ($exists) {
-        $count = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue | Select-Object -First 500).Count
+        $items = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue | Select-Object -First 500)
+        $count = @($items).Count
     }
     return [pscustomobject]@{
         exists = $exists
@@ -260,7 +261,7 @@ $mcpNames = @()
 if ($configText) {
     $mcpNames = @(Get-McpServerNamesFromToml $configText)
 }
-if ($mcpNames.Count -lt 1) { Add-Failure "no MCP servers found in Anti-Codex config" }
+if (@($mcpNames).Count -lt 1) { Add-Failure "no MCP servers found in Anti-Codex config" }
 if ($mcpNames -notcontains "node_repl") { Add-Failure "node_repl MCP server missing in Anti-Codex config" }
 
 $skills = Get-DirectoryInfo (Join-Path $CodexHome "skills")
@@ -296,7 +297,7 @@ foreach ($skillName in $expectedSkillNames) {
     $localFingerprint = if ($localExists) { Get-DirectoryContentFingerprint $localSkillPath } else { "" }
     $sourceFingerprints = @($sharedFingerprint, $agentFingerprint) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
     $contentMatches = $localExists -and -not [string]::IsNullOrWhiteSpace($localFingerprint) -and ($sourceFingerprints -contains $localFingerprint)
-    if ($localExists -and $sourceFingerprints.Count -gt 0 -and -not $contentMatches) {
+    if ($localExists -and @($sourceFingerprints).Count -gt 0 -and -not $contentMatches) {
         $changedExpectedSkillNames += $skillName
         $changedExpectedSkillDetails += [pscustomobject]@{
             name = $skillName
@@ -375,7 +376,7 @@ if ($skills.linkType) { Add-Failure "skills path is a link, expected local copy"
 $sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
 
 $result = [pscustomobject]@{
-    ok = ($failures.Count -eq 0)
+    ok = (@($failures).Count -eq 0)
     reportName = "refresh-features"
     verifyOnly = [bool]$VerifyOnly
     failures = $failures.ToArray()
@@ -392,7 +393,7 @@ $result = [pscustomobject]@{
     sidecars = if ($sidecarSummary) { $sidecarSummary } else { "" }
     sourceSnapshot = $sourceSnapshot
     mcp = [pscustomobject]@{
-        count = $mcpNames.Count
+        count = @($mcpNames).Count
         names = $mcpNames
         hasNodeRepl = ($mcpNames -contains "node_repl")
     }
@@ -401,9 +402,9 @@ $result = [pscustomobject]@{
         count = $skills.count
         linkType = $skills.linkType
         target = $skills.target
-        sharedCount = $sharedSkillNames.Count
-        agentsCount = $agentsSkillNames.Count
-        expectedCount = $expectedSkillNames.Count
+        sharedCount = @($sharedSkillNames).Count
+        agentsCount = @($agentsSkillNames).Count
+        expectedCount = @($expectedSkillNames).Count
         missingExpected = $missingExpectedSkillNames
         changedExpected = $changedExpectedSkillNames
         changedExpectedDetails = @($changedExpectedSkillDetails)
@@ -419,4 +420,4 @@ $reportPaths = New-ReportPaths "refresh-features"
 $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
 Save-JsonReport $reportPaths $result -Depth 10
 $result | ConvertTo-Json -Depth 8 -Compress
-if ($failures.Count -gt 0) { exit 1 }
+if (@($failures).Count -gt 0) { exit 1 }

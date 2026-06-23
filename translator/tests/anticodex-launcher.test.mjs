@@ -4039,6 +4039,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /changedSharedSkillNames/);
   assert.match(mcpSkills, /changedSharedSkillDetails/);
   assert.match(mcpSkills, /Get-DirectoryContentFingerprint/);
+  assert.match(mcpSkills, /\$_\.FullName -notmatch '\(\?i\)\[\\\\\/\]\\\.git\(\?:\[\\\\\/\]\|\$\)'/);
   assert.match(mcpSkills, /duplicate skill '\$skillName' differs between shared Codex skills and agents skills/);
   assert.match(mcpSkills, /expectedInheritedSkillNames/);
   assert.match(mcpSkills, /headroom/);
@@ -4176,6 +4177,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /cache\\codex_app_directory/);
   assert.match(refreshLocalFeatures, /cache\\codex_apps_tools/);
   assert.match(refreshLocalFeatures, /function Get-DirectoryContentFingerprint/);
+  assert.match(refreshLocalFeatures, /\$_\.FullName -notmatch '\(\?i\)\[\\\\\/\]\\\.git\(\?:\[\\\\\/\]\|\$\)'/);
   assert.match(refreshLocalFeatures, /anticodex-source-snapshot\.ps1/);
   assert.match(refreshLocalFeatures, /Get-AntiCodexSourceSnapshot/);
   assert.match(refreshLocalFeatures, /sourceSnapshot = \$sourceSnapshot/);
