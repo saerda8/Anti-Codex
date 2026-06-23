@@ -1371,12 +1371,15 @@ if (args.has("--self-test")) {
       sourceSnapshot: { fingerprint: "stale-plugin-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
     });
     const crossSourceGates = gateDefinitions.map(summarizeGate);
-    const crossRefreshGate = crossSourceGates.find((gate) => gate.id === "refreshFeatures");
-    for (const gateId of ["mcpSkills", "pluginCapabilities"]) {
-      const gate = crossSourceGates.find((item) => item.id === gateId);
-      if (crossRefreshGate?.sourceFingerprint && gate?.sourceFingerprint && crossRefreshGate.sourceFingerprint !== gate.sourceFingerprint) {
+    const crossMcpGate = crossSourceGates.find((gate) => gate.id === "mcpSkills");
+    const crossPluginGate = crossSourceGates.find((gate) => gate.id === "pluginCapabilities");
+    if (crossMcpGate?.sourceFingerprint && crossPluginGate?.sourceFingerprint && crossMcpGate.sourceFingerprint !== crossPluginGate.sourceFingerprint) {
+      for (const [gate, failure] of [
+        [crossMcpGate, "mcp_skills_source_snapshot_mismatch"],
+        [crossPluginGate, "plugin_capabilities_source_snapshot_mismatch"],
+      ]) {
         if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
-        gate.semanticFailures.push(gateId === "mcpSkills" ? "mcp_skills_source_snapshot_mismatch" : "plugin_capabilities_source_snapshot_mismatch");
+        gate.semanticFailures.push(failure);
       }
     }
     semanticFailures.sourceSnapshotMismatch = {
@@ -1402,12 +1405,11 @@ function addSemanticFailure(gateId, failure) {
   gate.satisfied = gate.present && gate.parseable && gate.hashValid === true && gate.okField === true && gate.fresh === true && gate.semanticFailures.length === 0;
 }
 
-const refreshFeatureGate = gates.find((gate) => gate.id === "refreshFeatures");
-for (const gateId of ["mcpSkills", "pluginCapabilities"]) {
-  const gate = gates.find((item) => item.id === gateId);
-  if (refreshFeatureGate?.sourceFingerprint && gate?.sourceFingerprint && refreshFeatureGate.sourceFingerprint !== gate.sourceFingerprint) {
-    addSemanticFailure(gateId, gateId === "mcpSkills" ? "mcp_skills_source_snapshot_mismatch" : "plugin_capabilities_source_snapshot_mismatch");
-  }
+const mcpSkillGate = gates.find((gate) => gate.id === "mcpSkills");
+const pluginCapabilityGate = gates.find((gate) => gate.id === "pluginCapabilities");
+if (mcpSkillGate?.sourceFingerprint && pluginCapabilityGate?.sourceFingerprint && mcpSkillGate.sourceFingerprint !== pluginCapabilityGate.sourceFingerprint) {
+  addSemanticFailure("mcpSkills", "mcp_skills_source_snapshot_mismatch");
+  addSemanticFailure("pluginCapabilities", "plugin_capabilities_source_snapshot_mismatch");
 }
 const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);

@@ -55,6 +55,33 @@ function Copy-AntiCodexRuntimeTree {
     Copy-Item -Path (Join-Path $Source "*") -Destination $Destination -Recurse -Force -ErrorAction Stop
 }
 
+function Copy-AntiCodexPublicDocs {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot
+    )
+
+    $publicDocFiles = @(
+        "README.md",
+        "README_EN.md",
+        "docs\ADAPTIVE_ONE_API_STACK.md",
+        "docs\chat-to-responses-compat.md",
+        "docs\marketing\legacy\deepcodex-video-script.md",
+        "docs\marketing\launch-post.md",
+        "docs\marketing\video-script.md",
+        "docs\marketing\wechat-article.md"
+    )
+    foreach ($relative in $publicDocFiles) {
+        $source = Join-Path $SourceRoot $relative
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Anti-Codex public documentation source missing: $relative"
+        }
+        $destination = Join-Path $DestinationRoot $relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+        Copy-Item -LiteralPath $source -Destination $destination -Force
+    }
+}
+
 function Get-AntiCodexTranslatorProcesses {
     $needle = [regex]::Escape((Join-Path $targetRuntimeFull "translator\adaptive-server.mjs"))
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
@@ -172,6 +199,7 @@ Test-AntiCodexJavaScriptSyntax `
 foreach ($dir in @("scripts", "translator", "assets", "codex-home-deepseek-app")) {
     Copy-AntiCodexRuntimeTree (Join-Path $sourceRootFull $dir) (Join-Path $targetRuntimeFull $dir)
 }
+Copy-AntiCodexPublicDocs -SourceRoot $sourceRootFull -DestinationRoot $targetRuntimeFull
 Remove-AntiCodexLegacyRuntimeFiles
 
 foreach ($relative in $requiredSourceFiles) {

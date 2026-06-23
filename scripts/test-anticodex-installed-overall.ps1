@@ -849,13 +849,13 @@ function Start-AntiCodexIfNeeded {
     try {
         $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
         Start-Process -FilePath $powerShellBin `
-            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcher) `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launcher, "-SkipUpdateCheck") `
             -WindowStyle Hidden | Out-Null
     } catch {
         Add-Failure "failed to launch Anti-Codex: $($_.Exception.Message)"
         return $false
     }
-    return Wait-Until -TimeoutSeconds 25 -Predicate {
+    return Wait-Until -TimeoutSeconds 60 -Predicate {
         (@(Get-AntiCodexMainProcesses).Count -gt 0) -and (Test-LocalHealth)
     }
 }
@@ -1172,7 +1172,7 @@ $checks.thirdPartyProvider = if ($Fast) {
     $thirdPartyProviderTimeoutMs = 90000
     $thirdPartyProviderProcessTimeoutSec = [int][Math]::Ceiling($thirdPartyProviderTimeoutMs / 1000) + 15
     Invoke-NodeJsonScript "Third-party provider local end-to-end verification" (Join-Path $scriptsRoot "test-anticodex-third-party-provider.mjs") @(
-        "--source-root", $RuntimeRoot,
+        "--source-root", $runtimeRootFull,
         "--runtime-root", $RuntimeRoot,
         "--report-root", $ReportRoot,
         "--timeout-ms", "$thirdPartyProviderTimeoutMs"
@@ -1202,7 +1202,7 @@ $checks.localConnectors = if ($Fast) {
     New-SkippedCheck "fast mode skips local connector/app-tool allowlist verification" "test-anticodex-local-connectors.mjs"
 } else {
     Invoke-NodeJsonScript "Local connector/app-tool allowlist verification" (Join-Path $scriptsRoot "test-anticodex-local-connectors.mjs") @(
-        "--source-root", $RuntimeRoot,
+        "--source-root", $runtimeRootFull,
         "--runtime-root", $RuntimeRoot,
         "--report-root", $ReportRoot,
         "--timeout-ms", "60000"

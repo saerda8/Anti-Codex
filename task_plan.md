@@ -1336,3 +1336,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: source preflight now runs `protect-anticodex-log-db.mjs --self-test`, so install/sync gates prove the trigger, backup, TRACE-drop, and WAL truncation behavior at source level.
 - Completed: installed overall now checks `diagnostics.logDbGuard` directly, requiring protected, trigger-present, no-real-traffic, and WAL evidence even in fast mode.
 - Verification: focused launcher contracts passed `124/124`; PowerShell parser checks passed for the changed scripts; `protect-anticodex-log-db.mjs --self-test` passed; `test-anticodex-source-preflight.ps1 -SkipFullRegression` passed and recorded `logDbGuardSelfTest`.
+
+## 2026-06-23 Installed Fast Verifier Stabilization
+- Completed: installed startup verification now invokes `start-anticodex.ps1 -SkipUpdateCheck` and waits up to 60 seconds for desktop/health readiness, avoiding accidental update/sync branches during verifier auto-start.
+- Completed: installed runtime sync and installer now copy the public README/docs/marketing files needed by source preflight, so installed source gates no longer lose public documentation evidence.
+- Completed: local connector verifier now isolates `CODEX_HOME`, UI-state verification accepts escaped long-task summary source text, and MCP/Skill verification compares `node_repl` env keys while allowing Anti-Codex-owned isolated path values.
+- Completed: passive release gates now compare MCP/Skill and plugin-capability inherited-source fingerprints to each other instead of requiring them to match the older refresh-feature report fingerprint; refresh-feature remains its own release-required semantic gate.
+- Verification: local connector verifier passed with no upstream calls; source preflight passed; runtime sync passed; installed source preflight passed; UI-state and MCP/Skill focused checks passed; installed fast overall passed with `ok:true`, `elapsedMs:153673`, `failures:0`; release-gate self-test passed; launcher contracts passed `124/124`; strict passive release gate passed with `releaseReady:true`, `shortReady:true`, and `missingRequired:[]`.

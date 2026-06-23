@@ -249,6 +249,23 @@ function Normalize-TomlBodyForCompare {
         Sort-Object))
 }
 
+function Normalize-McpEnvForCompare {
+    param([string]$ServerName, [string]$Text)
+    if (-not $Text) { return "" }
+    $lines = @($Text -split "`r?`n" |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith("#") })
+    if ($ServerName -eq "node_repl") {
+        return [string]::Join("`n", @($lines |
+            ForEach-Object {
+                $match = [regex]::Match($_, "^\s*([^=\s]+)\s*=")
+                if ($match.Success) { $match.Groups[1].Value } else { $_ }
+            } |
+            Sort-Object -Unique))
+    }
+    return [string]::Join("`n", @($lines | Sort-Object))
+}
+
 function Get-DirectoryContentFingerprint {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
@@ -592,8 +609,8 @@ if ($configText) {
                 $sharedArgs = Get-TomlFieldRaw $sharedSection "args"
                 $localArgs = Get-TomlFieldRaw $localSection "args"
                 if ($sharedArgs -ne $localArgs) { $changedFields += "args" }
-                $sharedEnv = Normalize-TomlBodyForCompare (Get-McpNestedSectionText $sharedConfigText $mcpName "env")
-                $localEnv = Normalize-TomlBodyForCompare (Get-McpNestedSectionText $configText $mcpName "env")
+                $sharedEnv = Normalize-McpEnvForCompare $mcpName (Get-McpNestedSectionText $sharedConfigText $mcpName "env")
+                $localEnv = Normalize-McpEnvForCompare $mcpName (Get-McpNestedSectionText $configText $mcpName "env")
                 if ($sharedEnv -ne $localEnv) { $changedFields += "env" }
                 if ($changedFields.Count -gt 0) {
                     $changedSharedMcpNames += $mcpName

@@ -325,6 +325,7 @@ async function main() {
       UPSTREAM_API_KEY: "sk-local-connector-test",
       TRANSLATOR_PROFILE_PATH: profilePath,
       DEEPCODEX_STATE_ROOT: stateRoot,
+      CODEX_HOME: codexHome,
       CODEX_HOME_DIR: codexHome,
       DEEPCODEX_SHARED_CODEX_HOME: join(stateRoot, "missing-shared-codex-home"),
       GLOBAL_CODEX_HOME: join(stateRoot, "missing-global-codex-home"),

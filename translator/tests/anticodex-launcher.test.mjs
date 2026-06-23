@@ -4110,6 +4110,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /function Get-McpSectionText/);
   assert.match(mcpSkills, /function Get-McpNestedSectionText/);
   assert.match(mcpSkills, /function Normalize-McpCommandCompareValue/);
+  assert.match(mcpSkills, /function Normalize-McpEnvForCompare/);
+  assert.match(mcpSkills, /\$ServerName -eq "node_repl"/);
   assert.match(mcpSkills, /changedSharedMcpNames/);
   assert.match(mcpSkills, /changedSharedMcpDetails/);
   assert.match(mcpSkills, /shared MCP server '\$mcpName' config differs in Anti-Codex local config/);
@@ -4351,7 +4353,7 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
     assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
     assert.deepEqual(report.mcp.changedShared, ["node_repl"]);
-    assert.deepEqual(report.mcp.changedSharedDetails[0].fields, ["args", "env"]);
+    assert.deepEqual(report.mcp.changedSharedDetails[0].fields, ["args"]);
     assert.deepEqual(report.skills.missingShared, ["missing-skill"]);
     assert.deepEqual(report.skills.duplicateNames, ["headroom"]);
     assert.deepEqual(report.skills.conflictingDuplicateNames, ["headroom"]);
@@ -4779,6 +4781,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$checks\.localConnectors = if \(\$Fast\)/);
   assert.match(overall, /fast mode skips local connector\/app-tool allowlist verification/);
   assert.match(overall, /latest-local-connectors\.json/);
+  assert.match(overall, /"--source-root", \$runtimeRootFull/);
   assert.match(overall, /"--runtime-root", \$RuntimeRoot/);
   assert.match(overall, /"--report-root", \$ReportRoot/);
   assert.match(overall, /test-anticodex-codex-responses\.ps1/);
@@ -4791,6 +4794,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /EnsureRunning/);
   assert.match(overall, /function Start-AntiCodexIfNeeded/);
   assert.match(overall, /start-anticodex\.ps1/);
+  assert.match(overall, /"-SkipUpdateCheck"/);
+  assert.match(overall, /Wait-Until -TimeoutSeconds 60/);
   assert.match(overall, /Anti-Codex did not become healthy after launch request/);
   assert.match(overall, /Anti-Codex is not running; rerun with -EnsureRunning or start Anti-Codex first/);
   assert.match(overall, /noTraffic/);
@@ -6420,10 +6425,18 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
 test("Anti-Codex source preflight executes upstream profile assertions as part of its contract", () => {
   const preflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
   const profileTest = readFileSync(resolve(root, "scripts", "test-anticodex-upstream-profile.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const installer = readFileSync(resolve(root, "scripts", "install-deepcodex.ps1"), "utf8");
+  const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
   assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
+  assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
+  assert.match(runtimeSync, /README_EN\.md/);
+  assert.match(runtimeSync, /docs\\ADAPTIVE_ONE_API_STACK\.md/);
+  assert.match(installer, /Copy-DeepCodexPublicDocs/);
+  assert.match(localConnectors, /CODEX_HOME: codexHome/);
 
   assert.match(profileTest, /unreadable existing third-party key must fail closed/);
   assert.match(profileTest, /corrupt third-party key can still restore Antigravity/);

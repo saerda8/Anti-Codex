@@ -1,4 +1,9 @@
 #Requires -Version 5.1
+[CmdletBinding()]
+param(
+    [switch]$SkipUpdateCheck
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -120,7 +125,7 @@ if ($runningMain -and (Test-AntiCodexTranslatorMatchesConfiguredUpstream $transl
 }
 
 $updateChecker = Join-Path $PSScriptRoot "check-anticodex-update.ps1"
-if (Test-Path -LiteralPath $updateChecker -PathType Leaf) {
+if ((-not $SkipUpdateCheck) -and (Test-Path -LiteralPath $updateChecker -PathType Leaf)) {
     try {
         $updateStatus = & $updateChecker -InstallRoot $installRoot -StateRoot $env:DEEPCODEX_STATE_ROOT -Prompt | ConvertFrom-Json
         if ($updateStatus.sync.launched -eq $true) {

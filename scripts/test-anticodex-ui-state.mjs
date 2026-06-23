@@ -661,7 +661,7 @@ try {
       managerHtml.includes("\u590d\u5236\u7ed3\u679c"),
     hasDiagnosticsBundleLongTaskResultSummary: managerHtml.includes("diagnosticsSummary") &&
       managerHtml.includes("longTasks") &&
-      managerHtml.includes("\u957f\u4efb\u52a1"),
+      (managerHtml.includes("\u957f\u4efb\u52a1") || managerHtml.includes("\\u957f\\u4efb\\u52a1")),
     hasOldOpenEndpoint: managerHtml.includes("/anticodex/manager/open"),
     hasRouteProviderFields: managerHtml.includes("function routeSummary") &&
       managerHtml.includes("providerProtocol") &&

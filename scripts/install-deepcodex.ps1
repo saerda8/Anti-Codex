@@ -185,6 +185,33 @@ function Copy-DirectoryWithRobocopy {
     }
 }
 
+function Copy-DeepCodexPublicDocs {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot
+    )
+
+    $publicDocFiles = @(
+        "README.md",
+        "README_EN.md",
+        "docs\ADAPTIVE_ONE_API_STACK.md",
+        "docs\chat-to-responses-compat.md",
+        "docs\marketing\legacy\deepcodex-video-script.md",
+        "docs\marketing\launch-post.md",
+        "docs\marketing\video-script.md",
+        "docs\marketing\wechat-article.md"
+    )
+    foreach ($relative in $publicDocFiles) {
+        $source = Join-Path $SourceRoot $relative
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Anti-Codex public documentation source missing: $relative"
+        }
+        $destination = Join-Path $DestinationRoot $relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+        Copy-Item -LiteralPath $source -Destination $destination -Force
+    }
+}
+
 function Copy-CodexAppForPatch {
     param([string]$CodexBin, [string]$InstallRoot)
     $sourceAppRoot = Split-Path -Parent $CodexBin
@@ -291,6 +318,7 @@ foreach ($dir in @("scripts", "translator", "assets")) {
         Copy-Item -Path (Join-Path $src "*") -Destination $dst -Recurse -Force
     }
 }
+Copy-DeepCodexPublicDocs -SourceRoot $ROOT -DestinationRoot $runtimeDir
 
 $codexHomeSrc = Join-Path $ROOT "codex-home-deepseek-app"
 $codexHomeDst = Join-Path $runtimeDir "codex-home-deepseek-app"
