@@ -1848,6 +1848,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /stabilitySoak:\s*\{[\s\S]*?singletonProcessPattern:\s*"test-anticodex-stability-soak\\\\\.ps1"/);
   assert.match(server, /coldRelaunch/);
   assert.match(server, /test-anticodex-cold-relaunch\.ps1/);
+  assert.match(server, /coldRelaunch:\s*\{[\s\S]*?args:\s*\["-ConfirmRelaunch"\]/);
   assert.match(server, /coldRelaunch:\s*\{[\s\S]*?background:\s*true/);
   assert.match(server, /coldRelaunch:\s*\{[\s\S]*?singletonProcessPattern:\s*"test-anticodex-cold-relaunch\\\\\.ps1"/);
   assert.match(server, /syncHost/);
@@ -4778,6 +4779,9 @@ test("Anti-Codex ships a cold relaunch verification script", () => {
   const relaunch = readFileSync(resolve(root, "scripts", "test-anticodex-cold-relaunch.ps1"), "utf8");
 
   assert.match(relaunch, /start-anticodex\.ps1/);
+  assert.match(relaunch, /\[switch\]\$ConfirmRelaunch/);
+  assert.match(relaunch, /requires -ConfirmRelaunch because it stops and restarts Anti-Codex/);
+  assert.match(relaunch, /exit 2/);
   assert.match(relaunch, /codex-patched-app/);
   assert.match(relaunch, /Get-AntiCodexHostProcesses/);
   assert.match(relaunch, /Get-AntiCodexMainProcesses/);
@@ -4824,6 +4828,27 @@ test("Anti-Codex ships a cold relaunch verification script", () => {
   assert.doesNotMatch(relaunch, /Antigravity\.exe/);
   assert.doesNotMatch(relaunch, /chatgpt\.com/);
   assert.doesNotMatch(relaunch, /auth\/login/);
+});
+
+test("cold relaunch verifier refuses to restart without explicit confirmation", () => {
+  const script = resolve(root, "scripts", "test-anticodex-cold-relaunch.ps1");
+  const result = spawnSync("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    script,
+    "-BaseUrl",
+    "http://127.0.0.1:1",
+  ], { encoding: "utf8" });
+
+  assert.notEqual(result.status, 0);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.reportName, "cold-relaunch");
+  assert.equal(payload.ok, false);
+  assert.equal(payload.skipped, true);
+  assert.equal(payload.requiresConfirmation, true);
+  assert.match(payload.reason, /requires -ConfirmRelaunch/);
 });
 
 test("Anti-Codex ships a read-only installed overall verification script", () => {
@@ -5074,6 +5099,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /"-ReportRoot", \$ReportRoot/);
   assert.match(overall, /test-anticodex-cold-relaunch\.ps1/);
   assert.match(overall, /HealthPollTimeoutSec/);
+  assert.match(overall, /"-ConfirmRelaunch"/);
   assert.doesNotMatch(overall, /"-TimeoutSec", "90"/);
   assert.match(overall, /IdleStabilityDurationSec = 10/);
   assert.match(overall, /\$IdleStabilityDurationSec/);

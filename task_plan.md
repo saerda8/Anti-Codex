@@ -1361,3 +1361,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: strict passive release gates were rechecked after fast verifier hardening; latest evidence remains `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`.
 - Completed: cold relaunch code paths were rechecked non-disruptively through focused launcher contracts and release-gate self-test. The real cold relaunch report is still optional because generating it stops and restarts Anti-Codex.
 - Verification: focused cold/release launcher contracts passed `9/9`; release-gate `--self-test` passed; current worktree was clean at the start of the recheck.
+
+## 2026-06-24 Cold Relaunch Explicit Confirmation
+- Completed: `test-anticodex-cold-relaunch.ps1` now refuses to stop/restart Anti-Codex unless `-ConfirmRelaunch` is provided, returning structured JSON without writing a latest cold-relaunch report.
+- Completed: the Manager `coldRelaunch` background action and installed-overall `-IncludeColdRelaunch` path now pass `-ConfirmRelaunch`, preserving the intentional operator-approved path.
+- Verification: cold-relaunch and installed-overall parser checks passed; adaptive server syntax passed; focused launcher contracts passed including the no-confirm refusal test; runtime sync completed without restart; strict passive release gates remained `releaseReady:true`, `shortReady:true`, and `missingRequired:[]`.

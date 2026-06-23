@@ -2143,7 +2143,7 @@ const MANAGER_ACTIONS = Object.freeze({
     coldRelaunch: {
         label: "\u51b7\u542f\u52a8\u9a8c\u8bc1\uff08\u91cd\u542f Anti-Codex\uff09",
         script: "test-anticodex-cold-relaunch.ps1",
-        args: [],
+        args: ["-ConfirmRelaunch"],
         timeoutMs: 10_000,
         background: true,
         singletonProcessPattern: "test-anticodex-cold-relaunch\\.ps1",

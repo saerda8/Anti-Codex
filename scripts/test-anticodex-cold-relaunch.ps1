@@ -7,11 +7,27 @@ param(
     [int]$HealthPollTimeoutSec = 0,
     [int]$PollIntervalMs = 500,
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
-    [string]$ProgressPath = $(Join-Path $env:TEMP "anticodex-cold-relaunch-progress.json")
+    [string]$ProgressPath = $(Join-Path $env:TEMP "anticodex-cold-relaunch-progress.json"),
+    [switch]$ConfirmRelaunch
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+
+if (-not $ConfirmRelaunch) {
+    $result = [pscustomobject]@{
+        reportName = "cold-relaunch"
+        ok = $false
+        skipped = $true
+        requiresConfirmation = $true
+        reason = "cold relaunch verification requires -ConfirmRelaunch because it stops and restarts Anti-Codex"
+        failures = @("missing -ConfirmRelaunch")
+        usedRealTraffic = $false
+        behaviorCovered = $false
+    }
+    $result | ConvertTo-Json -Depth 6 -Compress
+    exit 2
+}
 
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")

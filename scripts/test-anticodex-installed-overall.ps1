@@ -1556,7 +1556,8 @@ if ($IncludeColdRelaunch) {
         "-RuntimeRoot", $runtimeRootFull,
         "-TimeoutSec", "18",
         "-StopTimeoutSec", "5",
-        "-HealthPollTimeoutSec", "18"
+        "-HealthPollTimeoutSec", "18",
+        "-ConfirmRelaunch"
     )
 }
 
