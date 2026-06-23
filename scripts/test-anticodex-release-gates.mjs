@@ -88,6 +88,14 @@ function validToolEvidence(evidence, protocol) {
     && evidence.protocolShapeClean === true;
 }
 
+function validOrderedHistoryEvidence(evidence, minChecked) {
+  return !!evidence
+    && evidence.ok === true
+    && Number(evidence.checked || 0) >= minChecked
+    && Array.isArray(evidence.matched)
+    && evidence.matched.length >= minChecked;
+}
+
 function summarizeGate(definition) {
   const filePath = join(reportRoot, definition.file);
   const present = existsSync(filePath);
@@ -417,6 +425,9 @@ function summarizeGate(definition) {
       if (!validToolEvidence(structuralEvidence.ninthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_reverse_openai_structural_tool_evidence");
       if (!validToolEvidence(structuralEvidence.fifthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_save_structural_tool_evidence");
       if (!validToolEvidence(structuralEvidence.sixthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_restart_structural_tool_evidence");
+      if (!validOrderedHistoryEvidence(structuralEvidence.seventhOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn7_ordered_history");
+      if (!validOrderedHistoryEvidence(structuralEvidence.eighthOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn8_ordered_history");
+      if (!validOrderedHistoryEvidence(structuralEvidence.ninthOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn9_ordered_history");
       if (!history.savedContinuationPreviousResponseId) semanticFailures.push("third_party_provider_save_previous_response_id_missing");
       if (!history.restartContinuationPreviousResponseId) semanticFailures.push("third_party_provider_restart_previous_response_id_missing");
       if (history.fifthAfterSavePreservesHistory !== true) semanticFailures.push("third_party_provider_save_marker_coverage");
@@ -1043,6 +1054,9 @@ if (args.has("--self-test")) {
       "third_party_provider_restart_openai_tool_pair_lost",
       "third_party_provider_save_structural_tool_evidence",
       "third_party_provider_restart_structural_tool_evidence",
+      "third_party_provider_turn7_ordered_history",
+      "third_party_provider_turn8_ordered_history",
+      "third_party_provider_turn9_ordered_history",
       "third_party_provider_save_previous_response_id_missing",
       "third_party_provider_restart_previous_response_id_missing",
       "third_party_provider_save_marker_coverage",

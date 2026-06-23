@@ -124,6 +124,14 @@ function structuralEvidenceClean(evidence) {
     && evidence.protocolShapeClean === true;
 }
 
+function orderedHistoryClean(evidence) {
+  return !!evidence
+    && evidence.ok === true
+    && Number(evidence.checked || 0) > 0
+    && Array.isArray(evidence.matched)
+    && evidence.matched.length === Number(evidence.checked || 0);
+}
+
 function emptyArrayField(object, key) {
   return object && Array.isArray(object[key]) ? object[key].length === 0 : null;
 }
@@ -374,6 +382,14 @@ const summary = {
       structuralEvidence.eighthAnthropicToolEvidence,
       structuralEvidence.ninthOpenAiToolEvidence,
     ].every(structuralEvidenceClean) : null,
+    orderedHistoryClean: structuralEvidence ? [
+      structuralEvidence.seventhOrderedHistory,
+      structuralEvidence.eighthOrderedHistory,
+      structuralEvidence.ninthOrderedHistory,
+    ].every(orderedHistoryClean) : null,
+    seventhOrderedHistoryCount: has(structuralEvidence?.seventhOrderedHistory || {}, "checked") ? structuralEvidence.seventhOrderedHistory.checked : null,
+    eighthOrderedHistoryCount: has(structuralEvidence?.eighthOrderedHistory || {}, "checked") ? structuralEvidence.eighthOrderedHistory.checked : null,
+    ninthOrderedHistoryCount: has(structuralEvidence?.ninthOrderedHistory || {}, "checked") ? structuralEvidence.ninthOrderedHistory.checked : null,
     fourthTurnContextIncludesPriorTurns: boolField(multiTurnHistory, "fourthTurnContextIncludesPriorTurns"),
     fifthAfterSavePreservesHistory: boolField(multiTurnHistory, "fifthAfterSavePreservesHistory"),
     seventhAfterProviderSwitchPreservesHistory: boolField(multiTurnHistory, "seventhAfterProviderSwitchPreservesHistory"),

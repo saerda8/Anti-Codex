@@ -2043,6 +2043,10 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /realTrafficSkippedChecks/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
+  assert.match(reportSummarizer, /orderedHistoryClean/);
+  assert.match(reportSummarizer, /seventhOrderedHistoryCount/);
+  assert.match(reportSummarizer, /eighthOrderedHistoryCount/);
+  assert.match(reportSummarizer, /ninthOrderedHistoryCount/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
   assert.match(reportSummarizer, /seventhAfterProviderSwitchAllHistoryMarkerCount/);
   assert.match(reportSummarizer, /eighthAfterProtocolSwitchAllHistoryMarkerCount/);
@@ -4745,6 +4749,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /providerContinuity/);
   assert.match(diagnostics, /crossProtocolWithoutHistoryLoss/);
   assert.match(diagnostics, /structuralEvidenceClean/);
+  assert.match(diagnostics, /orderedHistoryClean/);
+  assert.match(diagnostics, /third-party provider summary missing ordered role history evidence/);
+  assert.match(diagnostics, /seventhOrderedHistoryCount/);
+  assert.match(diagnostics, /eighthOrderedHistoryCount/);
+  assert.match(diagnostics, /ninthOrderedHistoryCount/);
   assert.match(diagnostics, /seventhAfterProviderSwitchAllHistoryMarkerCount/);
   assert.match(diagnostics, /eighthAfterProtocolSwitchAllHistoryMarkerCount/);
   assert.match(diagnostics, /ninthAfterReverseProtocolSwitchAllHistoryMarkerCount/);
@@ -4980,6 +4989,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.equal(summary.selfTest, true);
   assert.ok(Array.isArray(summary.semanticFailures.thirdPartyProvider));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_marker_coverage"));
+  assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_ordered_history"));
   assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
 });
 
@@ -5312,6 +5322,10 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /Anthropic tool_result appears before its tool_use entry/);
   assert.match(verifier, /protocolShapeClean/);
   assert.match(verifier, /structuralEvidence/);
+  assert.match(verifier, /function assertOrderedRoleMarkers/);
+  assert.match(verifier, /seventhOrderedHistory/);
+  assert.match(verifier, /eighthOrderedHistory/);
+  assert.match(verifier, /ninthOrderedHistory/);
   assert.match(verifier, /await stopTranslator\(\)/);
   assert.match(verifier, /turn-6 user asks zeta after provider restart/);
   assert.match(verifier, /restartedProviderWithoutHistoryLoss/);

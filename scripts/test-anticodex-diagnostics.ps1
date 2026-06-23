@@ -304,6 +304,10 @@ function Test-DiagnosticBundle {
                 if ($continuity.protocolSwitchPreservesAnthropicToolPair -ne $true) { Add-Failure "third-party provider summary missing Anthropic tool pair after protocol switch" }
                 if ($continuity.reverseProtocolSwitchPreservesOpenAiToolPair -ne $true) { Add-Failure "third-party provider summary missing OpenAI tool pair after reverse protocol switch" }
                 if ($continuity.structuralEvidenceClean -ne $true) { Add-Failure "third-party provider summary missing clean structured tool-pair evidence" }
+                if ($continuity.orderedHistoryClean -ne $true) { Add-Failure "third-party provider summary missing ordered role history evidence" }
+                if ([int]$continuity.seventhOrderedHistoryCount -lt 7) { Add-Failure "third-party provider summary missing turn-7 ordered role history evidence" }
+                if ([int]$continuity.eighthOrderedHistoryCount -lt 7) { Add-Failure "third-party provider summary missing turn-8 ordered role history evidence" }
+                if ([int]$continuity.ninthOrderedHistoryCount -lt 7) { Add-Failure "third-party provider summary missing turn-9 ordered role history evidence" }
                 if ($continuity.seventhAfterProviderSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.seventhAfterProviderSwitchAllHistoryMarkerCount -lt 16) { Add-Failure "third-party provider summary missing turn-7 full-history marker coverage" }
                 if ($continuity.eighthAfterProtocolSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.eighthAfterProtocolSwitchAllHistoryMarkerCount -lt 18) { Add-Failure "third-party provider summary missing turn-8 full-history marker coverage" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount -lt 20) { Add-Failure "third-party provider summary missing turn-9 full-history marker coverage" }

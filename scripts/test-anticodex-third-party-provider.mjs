@@ -121,6 +121,29 @@ function assertAllHistoryMarkers(body, markers, label) {
   return { ok: true, checked: markers.length, missing };
 }
 
+function messageText(message) {
+  const content = message?.content;
+  if (typeof content === "string") return content;
+  return JSON.stringify(content || "");
+}
+
+function assertOrderedRoleMarkers(body, expected, label) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  let cursor = -1;
+  const matched = [];
+  for (const item of expected) {
+    const index = messages.findIndex((message, messageIndex) =>
+      messageIndex > cursor
+      && message?.role === item.role
+      && item.pattern.test(messageText(message))
+    );
+    assert.ok(index > cursor, `${label} is missing ordered ${item.role} marker: ${item.name}`);
+    cursor = index;
+    matched.push({ name: item.name, role: item.role, index });
+  }
+  return { ok: true, checked: expected.length, matched };
+}
+
 function latestUserText(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const latest = messages.filter((message) => message?.role === "user").at(-1);
@@ -807,6 +830,15 @@ async function main() {
   assert.match(requestText(seventhChat.body), /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/);
   assert.match(requestText(seventhChat.body), /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/);
   const seventhAllHistoryMarkers = assertAllHistoryMarkers(seventhChat.body, providerAHistoryThroughSix, "provider switch turn 7");
+  const seventhOrderedHistory = assertOrderedRoleMarkers(seventhChat.body, [
+    { name: "turn1-user", role: "user", pattern: /turn-1 user asks alpha/ },
+    { name: "turn1-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
+    { name: "turn5-user", role: "user", pattern: /turn-5 user asks epsilon after provider save/ },
+    { name: "turn5-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_5/ },
+    { name: "turn6-user", role: "user", pattern: /turn-6 user asks zeta after provider restart/ },
+    { name: "turn6-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_6/ },
+    { name: "turn7-user", role: "user", pattern: /turn-7 user asks eta after provider switch/ },
+  ], "provider switch turn 7");
   const seventhOpenAiToolEvidence = assertOpenAiToolHistory(seventhChat.body);
   const responseHistoryAfterProviderSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterProviderSwitchContinuation, new RegExp(seventhAfterProviderSwitch.id));
@@ -889,6 +921,15 @@ async function main() {
     { name: "turn7-assistant", pattern: /PROVIDER_B_HISTORY_TURN_7/ },
   ];
   const eighthAllHistoryMarkers = assertAllHistoryMarkers(eighthAnthropic.body, providerBHistoryThroughSeven, "protocol switch turn 8");
+  const eighthOrderedHistory = assertOrderedRoleMarkers(eighthAnthropic.body, [
+    { name: "turn1-user", role: "user", pattern: /turn-1 user asks alpha/ },
+    { name: "turn1-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
+    { name: "turn6-user", role: "user", pattern: /turn-6 user asks zeta after provider restart/ },
+    { name: "turn6-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_6/ },
+    { name: "turn7-user", role: "user", pattern: /turn-7 user asks eta after provider switch/ },
+    { name: "turn7-assistant", role: "assistant", pattern: /PROVIDER_B_HISTORY_TURN_7/ },
+    { name: "turn8-user", role: "user", pattern: /turn-8 user asks theta after protocol switch/ },
+  ], "protocol switch turn 8");
   const eighthAnthropicToolEvidence = assertAnthropicToolHistory(eighthAnthropic.body);
   const responseHistoryAfterProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterProtocolSwitchContinuation, new RegExp(eighthAfterProtocolSwitch.id));
@@ -969,6 +1010,15 @@ async function main() {
     { name: "turn8-assistant", pattern: /PROVIDER_C_HISTORY_TURN_8/ },
   ];
   const ninthAllHistoryMarkers = assertAllHistoryMarkers(ninthChat.body, providerCHistoryThroughEight, "reverse protocol switch turn 9");
+  const ninthOrderedHistory = assertOrderedRoleMarkers(ninthChat.body, [
+    { name: "turn1-user", role: "user", pattern: /turn-1 user asks alpha/ },
+    { name: "turn1-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
+    { name: "turn7-user", role: "user", pattern: /turn-7 user asks eta after provider switch/ },
+    { name: "turn7-assistant", role: "assistant", pattern: /PROVIDER_B_HISTORY_TURN_7/ },
+    { name: "turn8-user", role: "user", pattern: /turn-8 user asks theta after protocol switch/ },
+    { name: "turn8-assistant", role: "assistant", pattern: /PROVIDER_C_HISTORY_TURN_8/ },
+    { name: "turn9-user", role: "user", pattern: /turn-9 user asks iota after reverse protocol switch/ },
+  ], "reverse protocol switch turn 9");
   const ninthOpenAiToolEvidence = assertOpenAiToolHistory(ninthChat.body);
   const responseHistoryAfterReverseProtocolSwitchContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterReverseProtocolSwitchContinuation, new RegExp(ninthAfterReverseProtocolSwitch.id));
@@ -1123,6 +1173,9 @@ async function main() {
           seventhOpenAiToolEvidence,
           eighthAnthropicToolEvidence,
           ninthOpenAiToolEvidence,
+          seventhOrderedHistory,
+          eighthOrderedHistory,
+          ninthOrderedHistory,
         },
       },
       providerSwitch: {
