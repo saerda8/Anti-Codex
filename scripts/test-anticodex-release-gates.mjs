@@ -465,6 +465,12 @@ function summarizeGate(definition) {
       if (!validOrderedHistoryEvidence(structuralEvidence.ninthOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn9_ordered_history");
       if (!history.savedContinuationPreviousResponseId) semanticFailures.push("third_party_provider_save_previous_response_id_missing");
       if (!history.restartContinuationPreviousResponseId) semanticFailures.push("third_party_provider_restart_previous_response_id_missing");
+      if (!history.providerSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_switch_previous_response_id_missing");
+      if (!history.protocolSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_protocol_previous_response_id_missing");
+      if (!history.reverseProtocolSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_reverse_protocol_previous_response_id_missing");
+      if (history.providerSwitchContinuationPreviousResponseId && providerSwitch.continuationPreviousResponseId && history.providerSwitchContinuationPreviousResponseId !== providerSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_switch_previous_response_id_mismatch");
+      if (history.protocolSwitchContinuationPreviousResponseId && protocolSwitch.continuationPreviousResponseId && history.protocolSwitchContinuationPreviousResponseId !== protocolSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_protocol_previous_response_id_mismatch");
+      if (history.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch.continuationPreviousResponseId && history.reverseProtocolSwitchContinuationPreviousResponseId !== reverseProtocolSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_reverse_protocol_previous_response_id_mismatch");
       if (history.fifthAfterSavePreservesHistory !== true) semanticFailures.push("third_party_provider_save_marker_coverage");
       if (history.sixthAfterRestartPreservesHistory !== true) semanticFailures.push("third_party_provider_restart_marker_coverage");
       if (history.sixthAfterRestartPreservesAllHistoryMarkers !== true || Number(history.sixthAfterRestartAllHistoryMarkerCount) < 15) semanticFailures.push("third_party_provider_turn6_marker_coverage");
@@ -1121,6 +1127,7 @@ if (args.has("--self-test")) {
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_secrets_not_redacted",
       "third_party_provider_turn_count",
+      "third_party_provider_restore_history_loss",
       "third_party_provider_switch_history_loss",
       "third_party_provider_cross_protocol_history_loss",
       "third_party_provider_reverse_protocol_history_loss",
@@ -1137,6 +1144,9 @@ if (args.has("--self-test")) {
       "third_party_provider_turn9_ordered_history",
       "third_party_provider_save_previous_response_id_missing",
       "third_party_provider_restart_previous_response_id_missing",
+      "third_party_provider_switch_previous_response_id_missing",
+      "third_party_provider_protocol_previous_response_id_missing",
+      "third_party_provider_reverse_protocol_previous_response_id_missing",
       "third_party_provider_save_marker_coverage",
       "third_party_provider_restart_marker_coverage",
       "third_party_provider_turn6_marker_coverage",

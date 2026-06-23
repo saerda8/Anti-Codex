@@ -2304,6 +2304,7 @@ function latestManagerReportItem(label, fileName) {
         providerContinuity: multiTurnHistory ? {
             turns: Number.isFinite(Number(multiTurnHistory.turns)) ? Number(multiTurnHistory.turns) : null,
             providerModelUsedForEveryTurn: multiTurnHistory.providerModelUsedForEveryTurn === true,
+            restartPreservesOpenAiToolPair: toolHistory?.restartPreservesOpenAiToolPair === true,
             providerSwitchPreservesOpenAiToolPair: toolHistory?.providerSwitchPreservesOpenAiToolPair === true,
             protocolSwitchPreservesAnthropicToolPair: toolHistory?.protocolSwitchPreservesAnthropicToolPair === true,
             reverseProtocolSwitchPreservesOpenAiToolPair: toolHistory?.reverseProtocolSwitchPreservesOpenAiToolPair === true,
@@ -2311,6 +2312,7 @@ function latestManagerReportItem(label, fileName) {
             seventhMarkerCount: Number.isFinite(Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount) : null,
             eighthMarkerCount: Number.isFinite(Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount) : null,
             ninthMarkerCount: Number.isFinite(Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) : null,
+            markerThresholdsOk: Number(multiTurnHistory.sixthAfterRestartAllHistoryMarkerCount) >= 15 && Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount) >= 16 && Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount) >= 18 && Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) >= 20,
             orderedHistoryClean: structuralEvidence?.sixthOrderedHistory?.ok === true && structuralEvidence?.seventhOrderedHistory?.ok === true && structuralEvidence?.eighthOrderedHistory?.ok === true && structuralEvidence?.ninthOrderedHistory?.ok === true,
             sixthOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.sixthOrderedHistory?.checked)) ? Number(structuralEvidence.sixthOrderedHistory.checked) : null,
             seventhOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.seventhOrderedHistory?.checked)) ? Number(structuralEvidence.seventhOrderedHistory.checked) : null,
@@ -2955,7 +2957,7 @@ function latestReportsSummary(result){
       const mcpClean=evidence.mcpMissingSharedCount===0&&evidence.mcpExtraLocalCount===0&&evidence.mcpChangedSharedCount===0&&evidence.hasNodeRepl===true;
       const skillClean=evidence.missingSharedSkillCount===0&&evidence.conflictingDuplicateSkillCount===0&&evidence.skillSmokeReadable===true;
       lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5"));
-      lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
+      lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / real "+(evidence.mcpRealCallPassed?"ok":"?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
       if(Array.isArray(evidence.mcpChangedSharedSample)&&evidence.mcpChangedSharedSample.length) lines.push("  MCP changed: "+evidence.mcpChangedSharedSample.join(", "));
       if(Array.isArray(evidence.conflictingDuplicateSkillSample)&&evidence.conflictingDuplicateSkillSample.length) lines.push("  skill duplicate conflicts: "+evidence.conflictingDuplicateSkillSample.join(", "));
     }
@@ -2997,7 +2999,7 @@ function latestReportsSummary(result){
       const continuity=item.providerContinuity;
       const markerCounts=[continuity.sixthMarkerCount,continuity.seventhMarkerCount,continuity.eighthMarkerCount,continuity.ninthMarkerCount].filter((value)=>value!==null&&value!==undefined).join("/");
       lines.push("  providerContinuity: turns="+(continuity.turns??"unknown")+" / markers="+(markerCounts||"unknown"));
-      lines.push("  toolPairs: openai="+(continuity.providerSwitchPreservesOpenAiToolPair?"true":"false")+" / anthropic="+(continuity.protocolSwitchPreservesAnthropicToolPair?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitchPreservesOpenAiToolPair?"true":"false"));
+      lines.push("  toolPairs: restart="+(continuity.restartPreservesOpenAiToolPair?"true":"false")+" / openai="+(continuity.providerSwitchPreservesOpenAiToolPair?"true":"false")+" / anthropic="+(continuity.protocolSwitchPreservesAnthropicToolPair?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitchPreservesOpenAiToolPair?"true":"false")+" / markerThresholds="+(continuity.markerThresholdsOk?"true":"false"));
     }
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);
   }

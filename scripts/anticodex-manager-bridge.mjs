@@ -327,6 +327,13 @@ function latestReportsSummary(result) {
       }
       lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
     }
+    if (item.providerContinuity) {
+      const continuity = item.providerContinuity;
+      const markerCounts = [continuity.sixthMarkerCount, continuity.seventhMarkerCount, continuity.eighthMarkerCount, continuity.ninthMarkerCount].filter((value) => value !== null && value !== undefined).join("/");
+      lines.push(`  providerContinuity: turns=${continuity.turns ?? "unknown"} / markers=${markerCounts || "unknown"}`);
+      lines.push(`  toolPairs: restart=${continuity.restartPreservesOpenAiToolPair ? "true" : "false"} / openai=${continuity.providerSwitchPreservesOpenAiToolPair ? "true" : "false"} / anthropic=${continuity.protocolSwitchPreservesAnthropicToolPair ? "true" : "false"} / reverse=${continuity.reverseProtocolSwitchPreservesOpenAiToolPair ? "true" : "false"} / markerThresholds=${continuity.markerThresholdsOk ? "true" : "false"}`);
+      lines.push(`  orderedHistory: clean=${continuity.orderedHistoryClean ? "true" : "false"} / counts=${[continuity.sixthOrderedHistoryCount, continuity.seventhOrderedHistoryCount, continuity.eighthOrderedHistoryCount, continuity.ninthOrderedHistoryCount].filter((value) => value !== null && value !== undefined).join("/") || "unknown"}`);
+    }
     if (item.optionalRealProviderEvidence) {
       const evidence = item.optionalRealProviderEvidence;
       lines.push(`  realProvider: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
@@ -512,6 +519,11 @@ if (args.has("--self-test")) {
       ok: true,
       mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true },
     }, {
+      label: "\u7b2c\u4e09\u65b9 provider \u8fde\u7eed\u6027",
+      exists: true,
+      ok: true,
+      providerContinuity: { turns: 9, restartPreservesOpenAiToolPair: true, providerSwitchPreservesOpenAiToolPair: true, protocolSwitchPreservesAnthropicToolPair: true, reverseProtocolSwitchPreservesOpenAiToolPair: true, sixthMarkerCount: 15, seventhMarkerCount: 16, eighthMarkerCount: 18, ninthMarkerCount: 20, markerThresholdsOk: true, orderedHistoryClean: true, sixthOrderedHistoryCount: 7, seventhOrderedHistoryCount: 8, eighthOrderedHistoryCount: 9, ninthOrderedHistoryCount: 10 },
+    }, {
       label: "\u51b7\u542f\u52a8",
       exists: true,
       ok: true,
@@ -545,6 +557,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
+  assert.match(evidenceSummary, /providerContinuity: turns=9 \/ markers=15\/16\/18\/20/);
+  assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);
   assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ skill ok/);
   assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ real-model \/ success/);
   assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);

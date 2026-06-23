@@ -662,6 +662,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /pluginCapabilityEvidence/);
   assert.match(managerBridge, /parity drift: connectorMissing=/);
   assert.match(managerInject, /parity drift: connectorMissing=/);
+  assert.match(managerBridge, /providerContinuity/);
+  assert.match(managerInject, /providerContinuity/);
+  assert.match(managerBridge, /toolPairs: restart=/);
+  assert.match(managerInject, /toolPairs: restart=/);
+  assert.match(managerBridge, /markerThresholds=/);
+  assert.match(managerInject, /markerThresholds=/);
+  assert.match(managerBridge, /orderedHistory: clean=/);
+  assert.match(managerInject, /orderedHistory: clean=/);
   assert.match(managerBridge, /optionalRealProviderEvidence/);
   assert.match(managerInject, /optionalRealProviderEvidence/);
   assert.match(managerBridge, /antigravityReturnEvidence/);
@@ -1911,7 +1919,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /mcpChangedSharedCount/);
   assert.match(server, /conflictingDuplicateSkillCount/);
   assert.match(server, /expectedSharedSkillCount/);
+  assert.match(server, /mcpRealCallPassed/);
   assert.match(server, /MCP\/Skill parity/);
+  assert.match(server, /\/ real /);
   assert.match(server, /MCP changed:/);
   assert.match(server, /skill duplicate conflicts:/);
   assert.match(server, /refreshFeatureEvidence/);
@@ -1935,6 +1945,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /coverageKind/);
   assert.match(server, /skipped: /);
   assert.match(server, /providerContinuity/);
+  assert.match(server, /restartPreservesOpenAiToolPair/);
+  assert.match(server, /markerThresholdsOk/);
   assert.match(server, /sixthMarkerCount/);
   assert.match(server, /sixthOrderedHistoryCount/);
   assert.match(server, /providerContinuity: turns=/);
@@ -2154,6 +2166,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /orderedHistoryClean/);
+  assert.match(reportSummarizer, /previousResponseContinuity/);
+  assert.match(reportSummarizer, /providerSwitchMatchesNested/);
   assert.match(reportSummarizer, /sixthOrderedHistoryCount/);
   assert.match(reportSummarizer, /seventhOrderedHistoryCount/);
   assert.match(reportSummarizer, /eighthOrderedHistoryCount/);
@@ -5040,6 +5054,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /crossProtocolWithoutHistoryLoss/);
   assert.match(diagnostics, /structuralEvidenceClean/);
   assert.match(diagnostics, /orderedHistoryClean/);
+  assert.match(diagnostics, /previousResponseContinuity/);
+  assert.match(diagnostics, /provider-switch previous_response_id continuity/);
   assert.match(diagnostics, /third-party provider summary missing ordered role history evidence/);
   assert.match(diagnostics, /sixthOrderedHistoryCount/);
   assert.match(diagnostics, /seventhOrderedHistoryCount/);
@@ -5241,6 +5257,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /third_party_provider_openai_tool_pair_lost/);
   assert.match(releaseGates, /third_party_provider_anthropic_tool_pair_lost/);
   assert.match(releaseGates, /third_party_provider_turn9_marker_coverage/);
+  assert.match(releaseGates, /third_party_provider_switch_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_protocol_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_reverse_protocol_previous_response_id_missing/);
   assert.match(releaseGates, /manager_action_missing_real_click/);
   assert.match(releaseGates, /local_connector_report_name/);
   assert.match(releaseGates, /local_connector_used_real_traffic/);

@@ -212,6 +212,8 @@ function Read-JsonSummary {
             reverseCrossProtocolWithoutHistoryLoss = $json.reverseCrossProtocolWithoutHistoryLoss
             secretsRedacted = $json.secretsRedacted
             localConnectorEvidence = $json.localConnectorEvidence
+            sourceSnapshotEvidence = $json.sourceSnapshotEvidence
+            refreshFeatureEvidence = $json.refreshFeatureEvidence
             mcpSkillEvidence = $json.mcpSkillEvidence
             pluginCapabilityEvidence = $json.pluginCapabilityEvidence
             optionalRealProviderEvidence = $json.optionalRealProviderEvidence

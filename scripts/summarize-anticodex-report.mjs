@@ -429,6 +429,16 @@ const summary = {
     ninthAfterReverseProtocolSwitchPreservesHistory: boolField(multiTurnHistory, "ninthAfterReverseProtocolSwitchPreservesHistory"),
     ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers: boolField(multiTurnHistory, "ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers"),
     ninthAfterReverseProtocolSwitchAllHistoryMarkerCount: has(multiTurnHistory, "ninthAfterReverseProtocolSwitchAllHistoryMarkerCount") ? multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount : null,
+    previousResponseContinuity: {
+      savePresent: Boolean(multiTurnHistory.savedContinuationPreviousResponseId),
+      restartPresent: Boolean(multiTurnHistory.restartContinuationPreviousResponseId),
+      providerSwitchPresent: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId),
+      protocolSwitchPresent: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId),
+      reverseProtocolSwitchPresent: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId),
+      providerSwitchMatchesNested: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId && providerSwitch?.continuationPreviousResponseId && multiTurnHistory.providerSwitchContinuationPreviousResponseId === providerSwitch.continuationPreviousResponseId),
+      protocolSwitchMatchesNested: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId && protocolSwitch?.continuationPreviousResponseId && multiTurnHistory.protocolSwitchContinuationPreviousResponseId === protocolSwitch.continuationPreviousResponseId),
+      reverseProtocolSwitchMatchesNested: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch?.continuationPreviousResponseId && multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId === reverseProtocolSwitch.continuationPreviousResponseId),
+    },
     providerSwitch: providerSwitch ? {
       from: asString(providerSwitch.from),
       to: asString(providerSwitch.to),

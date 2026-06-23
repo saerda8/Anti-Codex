@@ -313,6 +313,12 @@ Branch: main
 - Next-channel note: use narrow verifier reruns or `refresh-anticodex-local-features.ps1 -VerifyOnly` for routine evidence refresh. Run full local feature refresh only when connector/app-tool/skill parity drift is detected, because the current inherited surface is roughly 15.6k files.
 - Follow-up: external Manager bridge and injected Manager summaries now display the same source snapshot line as the in-app Manager. Bridge/inject syntax checks passed, bridge `--self-test` asserts the rendered line, and focused launcher Manager/MCP/plugin contracts passed `4/4`.
 
+## 2026-06-23 Provider Continuity Visibility and ID Follow-Up
+
+- Passive release gates now require all five local fake-provider `previous_response_id` continuity segments: save, restart, provider switch, OpenAI-to-Anthropic protocol switch, and Anthropic-to-OpenAI reverse switch.
+- Summaries and diagnostics now expose/verify `previousResponseContinuity`, including nested switch-field consistency. Manager summaries now show restart tool-pair evidence and marker threshold status alongside provider/protocol switch evidence.
+- Fresh evidence: syntax/parser checks passed; release-gate `--self-test` passed with the new continuation failures; focused launcher contracts passed `13/13`; strict passive release gates remain `shortReady:true`, `releaseReady:true`, and the third-party provider gate reports no semantic failures.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

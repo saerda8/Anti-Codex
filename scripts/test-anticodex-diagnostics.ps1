@@ -316,6 +316,19 @@ function Test-DiagnosticBundle {
                 if ($continuity.eighthAfterProtocolSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.eighthAfterProtocolSwitchAllHistoryMarkerCount -lt 18) { Add-Failure "third-party provider summary missing turn-8 full-history marker coverage" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount -lt 20) { Add-Failure "third-party provider summary missing turn-9 full-history marker coverage" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesHistory -ne $true) { Add-Failure "third-party provider summary missing final reverse-switch history evidence" }
+                $previousIds = $continuity.previousResponseContinuity
+                if (-not $previousIds) {
+                    Add-Failure "third-party provider summary missing previous_response_id continuity evidence"
+                } else {
+                    if ($previousIds.savePresent -ne $true) { Add-Failure "third-party provider summary missing save previous_response_id continuity" }
+                    if ($previousIds.restartPresent -ne $true) { Add-Failure "third-party provider summary missing restart previous_response_id continuity" }
+                    if ($previousIds.providerSwitchPresent -ne $true) { Add-Failure "third-party provider summary missing provider-switch previous_response_id continuity" }
+                    if ($previousIds.protocolSwitchPresent -ne $true) { Add-Failure "third-party provider summary missing protocol-switch previous_response_id continuity" }
+                    if ($previousIds.reverseProtocolSwitchPresent -ne $true) { Add-Failure "third-party provider summary missing reverse-protocol previous_response_id continuity" }
+                    if ($previousIds.providerSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary provider-switch previous_response_id mismatch" }
+                    if ($previousIds.protocolSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary protocol-switch previous_response_id mismatch" }
+                    if ($previousIds.reverseProtocolSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary reverse-protocol previous_response_id mismatch" }
+                }
             }
         }
         $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
