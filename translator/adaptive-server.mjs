@@ -2077,6 +2077,9 @@ function latestManagerReportItem(label, fileName) {
         firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
         releaseReady: typeof report?.releaseReady === "boolean" ? report.releaseReady : null,
         shortReady: typeof report?.shortReady === "boolean" ? report.shortReady : null,
+        strictOptionalRealTraffic: typeof report?.strictOptionalRealTraffic === "boolean" ? report.strictOptionalRealTraffic : null,
+        optionalRealTrafficReady: typeof report?.optionalRealTrafficReady === "boolean" ? report.optionalRealTrafficReady : null,
+        optionalRealTrafficFailures: Array.isArray(report?.optionalRealTrafficFailures) ? report.optionalRealTrafficFailures.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         missingRequired: Array.isArray(report?.missingRequired) ? report.missingRequired.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         missingShort: Array.isArray(report?.missingShort) ? report.missingShort.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         damagedReports: Array.isArray(report?.damagedReports) ? report.damagedReports.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
@@ -2887,6 +2890,8 @@ function latestReportsSummary(result){
     }
     if(item.releaseReady!==null&&item.releaseReady!==undefined){
       lines.push("  Release Gate: short="+(item.shortReady?"true":"false")+" / release="+(item.releaseReady?"true":"false"));
+      if(item.strictOptionalRealTraffic!==null&&item.strictOptionalRealTraffic!==undefined) lines.push("  optionalRealTraffic: strict="+(item.strictOptionalRealTraffic?"true":"false")+" / ready="+(item.optionalRealTrafficReady?"true":"false"));
+      if(Array.isArray(item.optionalRealTrafficFailures)&&item.optionalRealTrafficFailures.length) lines.push("  optionalRealTrafficFailures: "+item.optionalRealTrafficFailures.slice(0,6).join(", "));
       if(Array.isArray(item.missingRequired)&&item.missingRequired.length) lines.push("  missingRequired: "+item.missingRequired.slice(0,6).join(", "));
       if(Array.isArray(item.missingShort)&&item.missingShort.length) lines.push("  missingShort: "+item.missingShort.slice(0,6).join(", "));
       if(Array.isArray(item.damagedReports)&&item.damagedReports.length) lines.push("  damagedReports: "+item.damagedReports.slice(0,6).join(", "));

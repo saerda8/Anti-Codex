@@ -20,6 +20,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
 let reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || ".", "anticodex", "reports"));
 const maxAgeHours = Number(args.get("--max-age-hours") || 48);
 const strict = args.has("--strict");
+const strictOptionalRealTraffic = args.has("--strict-optional-real-traffic");
 const startedAt = Date.now();
 
 const gateDefinitions = [
@@ -135,7 +136,10 @@ function summarizeGate(definition) {
     gate.failureCount = Array.isArray(report.failures) ? report.failures.length : 0;
     gate.fast = report.fast === true;
     gate.noTraffic = report.noTraffic === true;
-    gate.behaviorCovered = report.behaviorCovered === false ? false : null;
+    gate.skipped = report.skipped === true;
+    gate.requestedRealTraffic = report.requestedRealTraffic === true ? true : report.requestedRealTraffic === false ? false : null;
+    gate.usedRealTraffic = report.usedRealTraffic === true ? true : report.usedRealTraffic === false ? false : null;
+    gate.behaviorCovered = report.behaviorCovered === true ? true : report.behaviorCovered === false ? false : null;
     gate.coverageKind = typeof report.coverageKind === "string" ? report.coverageKind : "";
     const semanticFailures = [];
     if (definition.requireFastNoTraffic && (report.fast !== true || report.noTraffic !== true)) {
@@ -1179,6 +1183,11 @@ const requiredShort = gates.filter((gate) => gate.requiredForShort);
 const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const missingShort = requiredShort.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const damagedReports = gates.filter((gate) => gate.present && (!gate.parseable || gate.hashValid !== true)).map((gate) => gate.id);
+const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
+const optionalRealTrafficFailures = optionalRealTrafficGates
+  .filter((gate) => !gate.satisfied || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
+  .map((gate) => gate.id);
+const optionalRealTrafficReady = optionalRealTrafficFailures.length === 0;
 const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].map((group) => {
   const groupGates = gates.filter((gate) => gate.group === group);
   return [group, {
@@ -1192,13 +1201,16 @@ const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].
   }];
 }));
 
-const releaseReady = missingRequired.length === 0;
+const releaseReady = missingRequired.length === 0 && (!strictOptionalRealTraffic || optionalRealTrafficReady);
 const shortReady = missingShort.length === 0;
 const payload = {
   ok: strict ? releaseReady && damagedReports.length === 0 : true,
   releaseReady,
   shortReady,
   strict,
+  strictOptionalRealTraffic,
+  optionalRealTrafficReady,
+  optionalRealTrafficFailures,
   reportName: "release-gates",
   elapsedMs: Date.now() - startedAt,
   reportRoot,

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import os from "node:os";
@@ -2119,6 +2120,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /effectiveOk/);
   assert.match(reportSummarizer, /releaseGateEffectiveOk/);
   assert.match(reportSummarizer, /shortReady/);
+  assert.match(reportSummarizer, /strictOptionalRealTraffic/);
+  assert.match(reportSummarizer, /optionalRealTrafficReady/);
+  assert.match(reportSummarizer, /optionalRealTrafficFailures/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
   assert.match(reportSummarizer, /releaseGateFailures/);
@@ -2831,6 +2835,9 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       reportName: "release-gates",
       shortReady: true,
       releaseReady: false,
+      strictOptionalRealTraffic: true,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: ["realThirdPartyProviderOptional"],
       missingRequired: ["latest-real-work.json"],
       missingShort: [],
       damagedReports: [],
@@ -2841,7 +2848,57 @@ test("report summarizer treats releaseReady false as not effectively passing", (
     assert.equal(summary.ok, true);
     assert.equal(summary.effectiveOk, false);
     assert.equal(summary.releaseReady, false);
+    assert.equal(summary.strictOptionalRealTraffic, true);
+    assert.equal(summary.optionalRealTrafficReady, false);
+    assert.deepEqual(summary.optionalRealTrafficFailures, ["realThirdPartyProviderOptional"]);
     assert.deepEqual(summary.missingRequired, ["latest-real-work.json"]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("strict optional real-traffic gate rejects skipped optional reports", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-strict-optional-real-"));
+  const writeSignedReport = (name, payload) => {
+    const text = JSON.stringify(payload);
+    const reportPath = resolve(tempRoot, name);
+    writeFileSync(reportPath, text, "utf8");
+    writeFileSync(`${reportPath}.sha256`, `sha256:${createHash("sha256").update(text).digest("hex")}`, "ascii");
+  };
+  try {
+    mkdirSync(tempRoot, { recursive: true });
+    writeSignedReport("latest-real-third-party-provider.json", {
+      ok: true,
+      reportName: "real-third-party-provider",
+      skipped: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      behaviorCovered: false,
+      coverageKind: "skipped",
+    });
+    writeSignedReport("latest-provider-antigravity-return.json", {
+      ok: true,
+      reportName: "provider-antigravity-return",
+      skipped: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      behaviorCovered: false,
+      coverageKind: "skipped",
+    });
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-release-gates.mjs"),
+      "--report-root", tempRoot,
+      "--strict",
+      "--strict-optional-real-traffic",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.strictOptionalRealTraffic, true);
+    assert.equal(summary.optionalRealTrafficReady, false);
+    assert.ok(summary.optionalRealTrafficFailures.includes("realThirdPartyProviderOptional"));
+    assert.ok(summary.optionalRealTrafficFailures.includes("providerAntigravityReturnOptional"));
+    assert.equal(summary.releaseReady, false);
+    assert.equal(summary.ok, false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4954,6 +5011,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /shortReady/);
   assert.match(diagnostics, /release-gates summary releaseReady is not true/);
   assert.match(diagnostics, /release-gates summary effectiveOk is not true/);
+  assert.match(diagnostics, /strictOptionalRealTraffic/);
+  assert.match(diagnostics, /optionalRealTrafficReady/);
+  assert.match(diagnostics, /optionalRealTrafficFailures/);
   assert.match(diagnostics, /missingRequired/);
   assert.match(diagnostics, /missingShort/);
   assert.match(diagnostics, /damagedReports/);
@@ -5185,6 +5245,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /plugin_capabilities_local_app_tool_parity_missing_shared/);
   assert.match(releaseGates, /releaseReady/);
   assert.match(releaseGates, /shortReady/);
+  assert.match(releaseGates, /--strict-optional-real-traffic/);
+  assert.match(releaseGates, /strictOptionalRealTraffic/);
+  assert.match(releaseGates, /optionalRealTrafficReady/);
+  assert.match(releaseGates, /optionalRealTrafficFailures/);
   assert.match(releaseGates, /missingRequired/);
   assert.match(releaseGates, /missingShort/);
   assert.match(releaseGates, /damagedReports/);

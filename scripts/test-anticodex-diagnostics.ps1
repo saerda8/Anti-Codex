@@ -430,6 +430,9 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
             elseif ($releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
             if ((Has-Property $releaseGatesSummary "effectiveOk") -and $releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
+            if (-not (Has-Property $releaseGatesSummary "strictOptionalRealTraffic")) { Add-Failure "release-gates summary missing strict optional real-traffic flag" }
+            if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficReady")) { Add-Failure "release-gates summary missing optional real-traffic readiness" }
+            if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficFailures")) { Add-Failure "release-gates summary missing optional real-traffic failures" }
             if (-not (Has-Property $releaseGatesSummary "missingRequired")) { Add-Failure "release-gates summary missing missingRequired" }
             if (-not (Has-Property $releaseGatesSummary "missingShort")) { Add-Failure "release-gates summary missing missingShort" }
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
@@ -574,6 +577,9 @@ function Test-DiagnosticBundle {
                 ok = $releaseGatesSummary.ok
                 shortReady = $releaseGatesSummary.shortReady
                 releaseReady = $releaseGatesSummary.releaseReady
+                strictOptionalRealTraffic = $releaseGatesSummary.strictOptionalRealTraffic
+                optionalRealTrafficReady = $releaseGatesSummary.optionalRealTrafficReady
+                optionalRealTrafficFailures = @($releaseGatesSummary.optionalRealTrafficFailures)
                 missingRequired = @($releaseGatesSummary.missingRequired)
                 missingShort = @($releaseGatesSummary.missingShort)
                 damagedReports = @($releaseGatesSummary.damagedReports)
