@@ -465,6 +465,7 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficFailures")) { Add-Failure "release-gates summary missing optional real-traffic failures" }
             if (-not (Has-Property $releaseGatesSummary "missingRequired")) { Add-Failure "release-gates summary missing missingRequired" }
             if (-not (Has-Property $releaseGatesSummary "missingShort")) { Add-Failure "release-gates summary missing missingShort" }
+            if (-not (Has-Property $releaseGatesSummary "missingOptional")) { Add-Failure "release-gates summary missing missingOptional" }
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
         }
@@ -612,6 +613,7 @@ function Test-DiagnosticBundle {
                 optionalRealTrafficFailures = @($releaseGatesSummary.optionalRealTrafficFailures)
                 missingRequired = @($releaseGatesSummary.missingRequired)
                 missingShort = @($releaseGatesSummary.missingShort)
+                missingOptional = @($releaseGatesSummary.missingOptional)
                 damagedReports = @($releaseGatesSummary.damagedReports)
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
             }

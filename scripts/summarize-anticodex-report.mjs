@@ -292,6 +292,7 @@ const summary = {
   optionalRealTrafficFailures: has(report, "optionalRealTrafficFailures") ? asStringArray(report.optionalRealTrafficFailures) : [],
   missingRequired: has(report, "missingRequired") ? asStringArray(report.missingRequired) : [],
   missingShort: has(report, "missingShort") ? asStringArray(report.missingShort) : [],
+  missingOptional: has(report, "missingOptional") ? asStringArray(report.missingOptional) : [],
   damagedReports: has(report, "damagedReports") ? asStringArray(report.damagedReports) : [],
   releaseGateFailures,
   releaseGateGroups,

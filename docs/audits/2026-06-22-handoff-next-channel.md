@@ -326,6 +326,12 @@ Branch: main
 - Passive release gates now require skipped optional real-traffic reports to carry `reason` and `coveredBy`, and the self-test has separate skipped-report negative coverage for provider-to-Antigravity return.
 - Fresh evidence: syntax checks passed, diagnostics parser checks passed, Manager bridge self-test passed, release-gate `--self-test` passed with skipped metadata failures, focused launcher contracts passed, and strict passive gates remain `shortReady:true` / `releaseReady:true`; optional real-traffic readiness remains false because real external traffic has not been requested.
 
+## 2026-06-23 Optional Release Gap Visibility Follow-Up
+
+- Release-gate output now includes `missingOptional` at the top level and in group summaries; diagnostics and Manager summaries preserve it so optional cold/soak/real-traffic gaps are visible without becoming blockers.
+- Added diagnostics verification for `missingOptional` and a Manager source regression guard against known mojibake tokens.
+- Fresh evidence: JS syntax checks passed, diagnostics parser checks passed, Manager bridge `--self-test` passed, release-gate `--self-test` passed, focused launcher contracts passed `21/21`, and strict passive release gates are `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, `damagedReports:[]`.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

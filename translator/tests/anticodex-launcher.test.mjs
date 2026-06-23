@@ -618,6 +618,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /optionalRealTrafficFailures/);
   assert.match(managerBridge, /missingShort/);
   assert.match(managerInject, /missingShort/);
+  assert.match(managerBridge, /missingOptional/);
+  assert.match(managerInject, /missingOptional/);
   assert.match(managerBridge, /damagedReports/);
   assert.match(managerInject, /damagedReports/);
   assert.match(managerBridge, /releaseGateFailures/);
@@ -2010,6 +2012,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /integrity_hash/);
   assert.match(server, /hash_mismatch/);
   assert.match(server, /missingCount/);
+  assert.match(server, /missingOptional/);
   assert.match(server, /invalidCount/);
   assert.match(server, /parseable/);
   assert.match(server, /parseError/);
@@ -2133,6 +2136,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /\.sha256/);
   assert.match(collector, /Get-FileHash -LiteralPath \$Path -Algorithm SHA256/);
   assert.match(collector, /report hash validation failed/);
+  assert.match(collector, /missingOptional/);
   assert.match(collector, /damagedReports/);
   assert.match(collector, /releaseGateGroups/);
   assert.match(collector, /function Resolve-NodeForJsonSummary/);
@@ -2158,6 +2162,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /sourceSnapshotEvidence/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
+  assert.match(reportSummarizer, /missingOptional/);
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
   assert.match(reportSummarizer, /requiredSatisfied/);
@@ -4995,6 +5000,15 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.doesNotMatch(uiWrapper, /Stop-Process|Start-Process|auth\/login/);
 });
 
+test("Anti-Codex Manager source does not carry known mojibake text", () => {
+  const adaptiveServer = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const knownMojibake = /闇€|楠岃|宸插|娑堣|浠ｇ悊|杩愯|妫€|鍚庡/;
+
+  assert.doesNotMatch(adaptiveServer, knownMojibake);
+  assert.doesNotMatch(managerInject, knownMojibake);
+});
+
 test("Anti-Codex ships a read-only UI idle stability verifier", () => {
   const idle = readFileSync(resolve(root, "scripts", "test-anticodex-ui-idle-stability.ps1"), "utf8");
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
@@ -5062,6 +5076,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /source snapshot evidence/);
   assert.match(diagnostics, /missingRequired/);
   assert.match(diagnostics, /missingShort/);
+  assert.match(diagnostics, /missingOptional/);
   assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /releaseGateFailures/);
   assert.match(diagnostics, /latest-third-party-provider\.json/);
@@ -5315,6 +5330,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_mismatch/);
   assert.match(releaseGates, /missingRequired/);
   assert.match(releaseGates, /missingShort/);
+  assert.match(releaseGates, /missingOptional/);
   assert.match(releaseGates, /damagedReports/);
   assert.match(releaseGates, /requiredSatisfied/);
   assert.match(releaseGates, /optionalSatisfied/);

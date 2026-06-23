@@ -1236,6 +1236,7 @@ const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);
 const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const missingShort = requiredShort.filter((gate) => !gate.satisfied).map((gate) => gate.id);
+const missingOptional = gates.filter((gate) => !gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id);
 const damagedReports = gates.filter((gate) => gate.present && (!gate.parseable || gate.hashValid !== true)).map((gate) => gate.id);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
@@ -1252,6 +1253,7 @@ const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].
     optional: groupGates.filter((gate) => !gate.requiredForRelease).length,
     optionalSatisfied: groupGates.filter((gate) => !gate.requiredForRelease && gate.satisfied).length,
     missingRequired: groupGates.filter((gate) => gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id),
+    missingOptional: groupGates.filter((gate) => !gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id),
   }];
 }));
 
@@ -1271,6 +1273,7 @@ const payload = {
   maxAgeHours,
   missingRequired,
   missingShort,
+  missingOptional,
   damagedReports,
   groups,
   gates,

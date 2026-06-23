@@ -199,6 +199,7 @@ function Read-JsonSummary {
             shortReady = $json.shortReady
             missingRequired = @($json.missingRequired | ForEach-Object { [string]$_ })
             missingShort = @($json.missingShort | ForEach-Object { [string]$_ })
+            missingOptional = @($json.missingOptional | ForEach-Object { [string]$_ })
             damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
             releaseGateFailures = @($json.releaseGateFailures)
             releaseGateGroups = @($json.releaseGateGroups)

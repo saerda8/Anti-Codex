@@ -1099,3 +1099,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release-gate self-test now includes a separate forged skipped provider-to-Antigravity return report, so both optional real-traffic report classes have skipped-report negative coverage.
 - Completed follow-up: passive release gates now require skipped optional real-traffic reports to carry skip metadata (`reason` and `coveredBy`), matching diagnostic bundle verification.
 - Verification: JS syntax checks passed; diagnostics parser checks passed; Manager bridge self-test passed; release-gate `--self-test` passed with `optionalAntigravitySkipped` and `optional_skipped_metadata_missing` failures; focused launcher contracts passed; strict passive gates remain `shortReady:true`, `releaseReady:true`, while `optionalRealTrafficReady:false` correctly reflects that real optional traffic was not requested.
+
+## 2026-06-23 Optional Release Gap Visibility Follow-Up
+- Completed: passive release-gate payloads and summaries now surface non-blocking optional gaps as `missingOptional`, so `releaseReady:true` no longer hides an absent optional report such as cold relaunch.
+- Completed: diagnostic collection and verification preserve `missingOptional`, and Manager summary paths already display it beside `missingRequired`, `missingShort`, and damaged reports.
+- Completed: added a static Manager source guard for known mojibake tokens after cleaning the post-verification action text path.
+- Verification: JS syntax checks passed; diagnostics parser checks passed; Manager bridge `--self-test` passed; release-gate `--self-test` passed; focused launcher contracts passed `21/21`; strict passive gates remain `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`, and `damagedReports:[]`.
