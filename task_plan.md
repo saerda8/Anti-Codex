@@ -1480,3 +1480,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics collector now also forwards release-gate `effectiveOk`, matching the verifier's support-bundle contract.
 - Completed: the surfaced evidence includes HTTP 410, `response_history_missing`, `retryable:false`, previous-response match, recovery guidance, stable route state, no-real-traffic coverage, and installed no-traffic coverage kind.
 - Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; focused launcher contracts passed `127/127`; real missing-history summarizer output included the new evidence; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
+
+## 2026-06-24 Manager Panel Version Rebootstrap
+- Completed: Manager injection, Manager-open injection, sync-readiness checks, UI-state expectations, and Manager launcher text now use `native-panel-v86`, so already-open Anti-Codex pages re-inject after the latest Manager behavior changes.
+- Completed: UI-state self-test now checks the high-impact confirmation gate against the current `managerPost("/anticodex/manager/action")` submission path instead of the old direct `getJson` anchor.
+- Verification: Manager inject/open syntax checks passed; PowerShell parser checks passed; focused launcher contracts passed `127/127`; UI-state syntax and self-test passed; runtime sync ran with `NoRestart`; sync-readiness returned `ok:true`; strict passive release gates returned `releaseReady:true` and `shortReady:true`.

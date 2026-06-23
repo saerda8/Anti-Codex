@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v85";
+  const VERSION = "native-panel-v86";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
