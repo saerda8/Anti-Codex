@@ -739,6 +739,33 @@ async function main() {
   const sixthOpenAiToolEvidence = assertOpenAiToolHistory(sixthChat.body);
   const responseHistoryAfterRestartContinuation = readFileSync(responseHistoryPath, "utf8");
   assert.match(responseHistoryAfterRestartContinuation, new RegExp(sixthAfterRestart.id));
+  const providerAHistoryThroughRestartRequest = [
+    { name: "turn1-user", pattern: /turn-1 user asks alpha/ },
+    { name: "turn1-assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
+    { name: "turn2-user", pattern: /turn-2 user asks beta/ },
+    { name: "turn2-assistant", pattern: /PROVIDER_HISTORY_TURN_2/ },
+    { name: "turn3-user", pattern: /turn-3 user asks gamma/ },
+    { name: "turn3-assistant", pattern: /PROVIDER_HISTORY_TURN_3/ },
+    { name: "turn4-user", pattern: /turn-4 user asks delta/ },
+    { name: "turn4-assistant", pattern: /PROVIDER_HISTORY_TURN_4/ },
+    { name: "tool-call-user", pattern: /turn-tool-call user asks provider tool marker/ },
+    { name: "tool-call-name", pattern: /provider_tool_marker/ },
+    { name: "tool-call-marker", pattern: /TOOL_HISTORY_MARKER_FROM_PROVIDER_A/ },
+    { name: "tool-output-marker", pattern: /TOOL_HISTORY_RESULT_FROM_PROVIDER_A/ },
+    { name: "turn5-user", pattern: /turn-5 user asks epsilon after provider save/ },
+    { name: "turn5-assistant", pattern: /PROVIDER_HISTORY_TURN_5/ },
+    { name: "turn6-user", pattern: /turn-6 user asks zeta after provider restart/ },
+  ];
+  const sixthAllHistoryMarkers = assertAllHistoryMarkers(sixthChat.body, providerAHistoryThroughRestartRequest, "provider restart turn 6");
+  const sixthOrderedHistory = assertOrderedRoleMarkers(sixthChat.body, [
+    { name: "turn1-user", role: "user", pattern: /turn-1 user asks alpha/ },
+    { name: "turn1-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
+    { name: "turn4-user", role: "user", pattern: /turn-4 user asks delta/ },
+    { name: "turn4-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_4/ },
+    { name: "turn5-user", role: "user", pattern: /turn-5 user asks epsilon after provider save/ },
+    { name: "turn5-assistant", role: "assistant", pattern: /PROVIDER_HISTORY_TURN_5/ },
+    { name: "turn6-user", role: "user", pattern: /turn-6 user asks zeta after provider restart/ },
+  ], "provider restart turn 6");
   const providerAHistoryThroughSix = [
     { name: "turn1-user", pattern: /turn-1 user asks alpha/ },
     { name: "turn1-assistant", pattern: /PROVIDER_HISTORY_TURN_1/ },
@@ -1173,6 +1200,7 @@ async function main() {
           seventhOpenAiToolEvidence,
           eighthAnthropicToolEvidence,
           ninthOpenAiToolEvidence,
+          sixthOrderedHistory,
           seventhOrderedHistory,
           eighthOrderedHistory,
           ninthOrderedHistory,
@@ -1210,6 +1238,13 @@ async function main() {
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(fifthChat.body))
         && /turn-4 user asks delta/.test(requestText(fifthChat.body))
         && /PROVIDER_HISTORY_TURN_4/.test(requestText(fifthChat.body)),
+      sixthAfterRestartPreservesHistory: /turn-1 user asks alpha/.test(requestText(sixthChat.body))
+        && /PROVIDER_HISTORY_TURN_1/.test(requestText(sixthChat.body))
+        && /turn-5 user asks epsilon after provider save/.test(requestText(sixthChat.body))
+        && /PROVIDER_HISTORY_TURN_5/.test(requestText(sixthChat.body))
+        && /turn-6 user asks zeta after provider restart/.test(requestText(sixthChat.body)),
+      sixthAfterRestartPreservesAllHistoryMarkers: sixthAllHistoryMarkers.ok,
+      sixthAfterRestartAllHistoryMarkerCount: sixthAllHistoryMarkers.checked,
       seventhAfterProviderSwitchPreservesHistory: /turn-1 user asks alpha/.test(requestText(seventhChat.body))
         && /PROVIDER_HISTORY_TURN_1/.test(requestText(seventhChat.body))
         && /turn-6 user asks zeta after provider restart/.test(requestText(seventhChat.body))

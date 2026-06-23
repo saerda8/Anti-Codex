@@ -1927,6 +1927,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /coverageKind/);
   assert.match(server, /skipped: /);
   assert.match(server, /providerContinuity/);
+  assert.match(server, /sixthMarkerCount/);
+  assert.match(server, /sixthOrderedHistoryCount/);
   assert.match(server, /providerContinuity: turns=/);
   assert.match(server, /latest-codex-responses\.json/);
   assert.match(server, /latest-real-work\.json/);
@@ -2139,10 +2141,12 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /orderedHistoryClean/);
+  assert.match(reportSummarizer, /sixthOrderedHistoryCount/);
   assert.match(reportSummarizer, /seventhOrderedHistoryCount/);
   assert.match(reportSummarizer, /eighthOrderedHistoryCount/);
   assert.match(reportSummarizer, /ninthOrderedHistoryCount/);
   assert.match(reportSummarizer, /reverseProtocolSwitchPreservesOpenAiToolPair/);
+  assert.match(reportSummarizer, /sixthAfterRestartAllHistoryMarkerCount/);
   assert.match(reportSummarizer, /seventhAfterProviderSwitchAllHistoryMarkerCount/);
   assert.match(reportSummarizer, /eighthAfterProtocolSwitchAllHistoryMarkerCount/);
   assert.match(reportSummarizer, /ninthAfterReverseProtocolSwitchAllHistoryMarkerCount/);
@@ -4952,9 +4956,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /structuralEvidenceClean/);
   assert.match(diagnostics, /orderedHistoryClean/);
   assert.match(diagnostics, /third-party provider summary missing ordered role history evidence/);
+  assert.match(diagnostics, /sixthOrderedHistoryCount/);
   assert.match(diagnostics, /seventhOrderedHistoryCount/);
   assert.match(diagnostics, /eighthOrderedHistoryCount/);
   assert.match(diagnostics, /ninthOrderedHistoryCount/);
+  assert.match(diagnostics, /sixthAfterRestartAllHistoryMarkerCount/);
   assert.match(diagnostics, /seventhAfterProviderSwitchAllHistoryMarkerCount/);
   assert.match(diagnostics, /eighthAfterProtocolSwitchAllHistoryMarkerCount/);
   assert.match(diagnostics, /ninthAfterReverseProtocolSwitchAllHistoryMarkerCount/);
@@ -5218,6 +5224,8 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(Array.isArray(summary.semanticFailures.thirdPartyProvider));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_marker_coverage"));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn9_ordered_history"));
+  assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_marker_coverage"));
+  assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_ordered_history"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_conflicting_duplicate_skills"));
   assert.ok(summary.semanticFailures.refreshFeatures.includes("refresh_features_connector_parity"));
@@ -5556,6 +5564,7 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /protocolShapeClean/);
   assert.match(verifier, /structuralEvidence/);
   assert.match(verifier, /function assertOrderedRoleMarkers/);
+  assert.match(verifier, /sixthOrderedHistory/);
   assert.match(verifier, /seventhOrderedHistory/);
   assert.match(verifier, /eighthOrderedHistory/);
   assert.match(verifier, /ninthOrderedHistory/);
@@ -5565,6 +5574,9 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /restartContinuationPreviousResponseId/);
   assert.match(verifier, /sixthOpenAiToolEvidence/);
   assert.match(verifier, /restartPreservesOpenAiToolPair/);
+  assert.match(verifier, /sixthAfterRestartPreservesHistory/);
+  assert.match(verifier, /sixthAfterRestartPreservesAllHistoryMarkers/);
+  assert.match(verifier, /sixthAfterRestartAllHistoryMarkerCount/);
   assert.match(verifier, /turn-7 user asks eta after provider switch/);
   assert.match(verifier, /switchedProviderWithoutHistoryLoss/);
   assert.match(verifier, /providerSwitchContinuationPreviousResponseId/);
@@ -5602,6 +5614,8 @@ test("release gates require structured provider save and restart continuity evid
   assert.match(releaseGates, /third_party_provider_restart_previous_response_id_missing/);
   assert.match(releaseGates, /third_party_provider_save_marker_coverage/);
   assert.match(releaseGates, /third_party_provider_restart_marker_coverage/);
+  assert.match(releaseGates, /third_party_provider_turn6_ordered_history/);
+  assert.match(releaseGates, /third_party_provider_turn6_marker_coverage/);
   assert.match(releaseGates, /restartPreservesOpenAiToolPair/);
   assert.match(releaseGates, /fifthOpenAiToolEvidence/);
   assert.match(releaseGates, /sixthOpenAiToolEvidence/);

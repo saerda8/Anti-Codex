@@ -2296,10 +2296,12 @@ function latestManagerReportItem(label, fileName) {
             providerSwitchPreservesOpenAiToolPair: toolHistory?.providerSwitchPreservesOpenAiToolPair === true,
             protocolSwitchPreservesAnthropicToolPair: toolHistory?.protocolSwitchPreservesAnthropicToolPair === true,
             reverseProtocolSwitchPreservesOpenAiToolPair: toolHistory?.reverseProtocolSwitchPreservesOpenAiToolPair === true,
+            sixthMarkerCount: Number.isFinite(Number(multiTurnHistory.sixthAfterRestartAllHistoryMarkerCount)) ? Number(multiTurnHistory.sixthAfterRestartAllHistoryMarkerCount) : null,
             seventhMarkerCount: Number.isFinite(Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount) : null,
             eighthMarkerCount: Number.isFinite(Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount) : null,
             ninthMarkerCount: Number.isFinite(Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) : null,
-            orderedHistoryClean: structuralEvidence?.seventhOrderedHistory?.ok === true && structuralEvidence?.eighthOrderedHistory?.ok === true && structuralEvidence?.ninthOrderedHistory?.ok === true,
+            orderedHistoryClean: structuralEvidence?.sixthOrderedHistory?.ok === true && structuralEvidence?.seventhOrderedHistory?.ok === true && structuralEvidence?.eighthOrderedHistory?.ok === true && structuralEvidence?.ninthOrderedHistory?.ok === true,
+            sixthOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.sixthOrderedHistory?.checked)) ? Number(structuralEvidence.sixthOrderedHistory.checked) : null,
             seventhOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.seventhOrderedHistory?.checked)) ? Number(structuralEvidence.seventhOrderedHistory.checked) : null,
             eighthOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.eighthOrderedHistory?.checked)) ? Number(structuralEvidence.eighthOrderedHistory.checked) : null,
             ninthOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.ninthOrderedHistory?.checked)) ? Number(structuralEvidence.ninthOrderedHistory.checked) : null,
@@ -2976,7 +2978,7 @@ function latestReportsSummary(result){
     }
     if(item.providerContinuity){
       const continuity=item.providerContinuity;
-      const markerCounts=[continuity.seventhMarkerCount,continuity.eighthMarkerCount,continuity.ninthMarkerCount].filter((value)=>value!==null&&value!==undefined).join("/");
+      const markerCounts=[continuity.sixthMarkerCount,continuity.seventhMarkerCount,continuity.eighthMarkerCount,continuity.ninthMarkerCount].filter((value)=>value!==null&&value!==undefined).join("/");
       lines.push("  providerContinuity: turns="+(continuity.turns??"unknown")+" / markers="+(markerCounts||"unknown"));
       lines.push("  toolPairs: openai="+(continuity.providerSwitchPreservesOpenAiToolPair?"true":"false")+" / anthropic="+(continuity.protocolSwitchPreservesAnthropicToolPair?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitchPreservesOpenAiToolPair?"true":"false"));
     }

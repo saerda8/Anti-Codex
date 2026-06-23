@@ -445,13 +445,15 @@ function summarizeGate(definition) {
       if (!validToolEvidence(structuralEvidence.ninthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_reverse_openai_structural_tool_evidence");
       if (!validToolEvidence(structuralEvidence.fifthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_save_structural_tool_evidence");
       if (!validToolEvidence(structuralEvidence.sixthOpenAiToolEvidence, "openai-compatible")) semanticFailures.push("third_party_provider_restart_structural_tool_evidence");
+      if (!validOrderedHistoryEvidence(structuralEvidence.sixthOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn6_ordered_history");
       if (!validOrderedHistoryEvidence(structuralEvidence.seventhOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn7_ordered_history");
       if (!validOrderedHistoryEvidence(structuralEvidence.eighthOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn8_ordered_history");
       if (!validOrderedHistoryEvidence(structuralEvidence.ninthOrderedHistory, 7)) semanticFailures.push("third_party_provider_turn9_ordered_history");
       if (!history.savedContinuationPreviousResponseId) semanticFailures.push("third_party_provider_save_previous_response_id_missing");
       if (!history.restartContinuationPreviousResponseId) semanticFailures.push("third_party_provider_restart_previous_response_id_missing");
       if (history.fifthAfterSavePreservesHistory !== true) semanticFailures.push("third_party_provider_save_marker_coverage");
-      if (history.seventhAfterProviderSwitchPreservesHistory !== true) semanticFailures.push("third_party_provider_restart_marker_coverage");
+      if (history.sixthAfterRestartPreservesHistory !== true) semanticFailures.push("third_party_provider_restart_marker_coverage");
+      if (history.sixthAfterRestartPreservesAllHistoryMarkers !== true || Number(history.sixthAfterRestartAllHistoryMarkerCount) < 15) semanticFailures.push("third_party_provider_turn6_marker_coverage");
       if (history.seventhAfterProviderSwitchPreservesAllHistoryMarkers !== true || Number(history.seventhAfterProviderSwitchAllHistoryMarkerCount) < 16) semanticFailures.push("third_party_provider_turn7_marker_coverage");
       if (history.eighthAfterProtocolSwitchPreservesAllHistoryMarkers !== true || Number(history.eighthAfterProtocolSwitchAllHistoryMarkerCount) < 18) semanticFailures.push("third_party_provider_turn8_marker_coverage");
       if (history.ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers !== true || Number(history.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount) < 20) semanticFailures.push("third_party_provider_turn9_marker_coverage");
@@ -813,11 +815,15 @@ if (args.has("--self-test")) {
             seventhOpenAiToolEvidence: { protocol: "openai-compatible", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
             eighthAnthropicToolEvidence: { protocol: "openai-compatible", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
             ninthOpenAiToolEvidence: { protocol: "anthropic", pairedByCallId: false, resultAfterToolCall: false, protocolShapeClean: false },
+            sixthOrderedHistory: { ok: false, checked: 1 },
           },
         },
         savedContinuationPreviousResponseId: "",
         restartContinuationPreviousResponseId: "",
         fifthAfterSavePreservesHistory: false,
+        sixthAfterRestartPreservesHistory: false,
+        sixthAfterRestartPreservesAllHistoryMarkers: false,
+        sixthAfterRestartAllHistoryMarkerCount: 1,
         seventhAfterProviderSwitchPreservesHistory: false,
         seventhAfterProviderSwitchPreservesAllHistoryMarkers: false,
         seventhAfterProviderSwitchAllHistoryMarkerCount: 1,
@@ -1105,6 +1111,7 @@ if (args.has("--self-test")) {
       "third_party_provider_restart_openai_tool_pair_lost",
       "third_party_provider_save_structural_tool_evidence",
       "third_party_provider_restart_structural_tool_evidence",
+      "third_party_provider_turn6_ordered_history",
       "third_party_provider_turn7_ordered_history",
       "third_party_provider_turn8_ordered_history",
       "third_party_provider_turn9_ordered_history",
@@ -1112,6 +1119,7 @@ if (args.has("--self-test")) {
       "third_party_provider_restart_previous_response_id_missing",
       "third_party_provider_save_marker_coverage",
       "third_party_provider_restart_marker_coverage",
+      "third_party_provider_turn6_marker_coverage",
       "third_party_provider_turn7_marker_coverage",
       "third_party_provider_turn8_marker_coverage",
       "third_party_provider_turn9_marker_coverage",
