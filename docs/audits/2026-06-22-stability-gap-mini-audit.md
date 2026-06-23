@@ -8,12 +8,12 @@ Format: ASCII only.
 
 1. Native continuation cleanup needs stronger proof.
    Risk: abandoned native tool continuations can hold state until cleanup paths run.
-   Next check: add or run a continuation-abandonment unit test that proves pending continuations are evicted after timeout/cancel.
+   Status: fixed by native bridge pending-call timeout plus upstream `NATIVE_CONTINUATIONS` TTL/failed-resume unit tests.
    Release blocking: no, but important for long sessions.
 
 2. Resumed native continuation retry is intentionally conservative.
    Risk: after tool output is submitted, transient Antigravity Desktop failures can drop the final assistant reply.
-   Next check: add a verifier for same-Cascade resume after one transient desktop failure that occurs before any Codex-visible event.
+   Status: fixed for pre-event transient failures. Upstream resume now retries without cancelling the Cascade between attempts, and agentapi exposes `cancelOnError:false` for that retry path.
    Release blocking: no, because current native real-tool verifiers pass.
 
 3. Stability soak evidence was not visible in Manager.
@@ -23,7 +23,7 @@ Format: ASCII only.
 
 4. Long-task status is summary-first, not log-live.
    Risk: for slow sync/post-verification actions, users may not know whether a task is still progressing or only stale.
-   Next check: expose latest log line and age for background tasks in diagnostics.
+   Status: fixed with structured diagnostics fields `latestLogLine`, `logUpdatedAt`, and `logAgeMs` on long-task entries.
    Release blocking: no.
 
 5. Worker review output remains unreliable.
@@ -39,4 +39,4 @@ Format: ASCII only.
 
 ## Next Practical Step
 
-Run a short installed stability soak from the synced runtime and verify that `latest-stability-soak.json` appears in Manager latest reports.
+Next practical installed check remains a short installed stability soak from the synced runtime, when the operator is ready to run longer installed/runtime evidence.
