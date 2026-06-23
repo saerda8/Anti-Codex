@@ -329,7 +329,9 @@ function latestReportsSummary(result) {
       const appToolOk = evidence.appToolSharedExists !== true || evidence.appToolContentMatches === true;
       const skillChanged = Array.isArray(evidence.changedExpectedSkills) ? evidence.changedExpectedSkills : [];
       const guidanceChanged = Array.isArray(evidence.guidanceChanged) ? evidence.guidanceChanged : [];
-      lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}`);
+      const elapsed = evidence.elapsedMs != null ? ` / elapsed=${evidence.elapsedMs} ms` : "";
+      const mode = evidence.verifyOnly === true ? " / verifyOnly=true" : "";
+      lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${mode}${elapsed}`);
       if (skillChanged.length || guidanceChanged.length) lines.push(`  refresh drift: skills=${skillChanged.length ? skillChanged.slice(0, 5).join(", ") : "ok"} / guidance=${guidanceChanged.length ? guidanceChanged.slice(0, 5).join(", ") : "ok"}`);
     }
     if (item.localConnectorEvidence) {

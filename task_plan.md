@@ -1348,3 +1348,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `refresh-anticodex-local-features.ps1` now uses the same .NET streaming SHA256 helper for directory fingerprints that the MCP/Skill verifier uses, replacing slow per-file `Get-FileHash` calls.
 - Completed: refresh-feature reports now include `startedAt` and `elapsedMs`, so future Manager/report summaries can show whether inherited-surface verification is getting expensive again.
 - Verification: PowerShell parser check passed; refresh-feature `-VerifyOnly` completed successfully instead of timing out, writing `ok:true` with MCP/Skill/plugin/refresh source fingerprint `49eb51da...`; installed runtime sync passed; strict passive release gate passed with `releaseReady:true`, `shortReady:true`, and `missingRequired:[]`.
+
+## 2026-06-23 Refresh Feature Timing Visibility
+- Completed: refresh-feature report summaries now lift `verifyOnly` and `elapsedMs` into `refreshFeatureEvidence`, diagnostics verification requires the timing field, and Manager/bridge/injected report renderers show refresh timing evidence next to parity status.
+- Completed: the refresh SHA256 helper now disposes the hash object even when file open fails, tightening the small resource-cleanup gap found during read-only review.
+- Verification: JS syntax checks passed for summarizer, Manager bridge/inject, and adaptive server; diagnostics PowerShell parser check passed; launcher contracts passed `124/124`; refresh-feature `-VerifyOnly` wrote `elapsedMs:70192`; summary extraction returned `verifyOnly:true`; installed runtime sync passed; strict passive release gate passed with `releaseReady:true` and `missingRequired:[]`.

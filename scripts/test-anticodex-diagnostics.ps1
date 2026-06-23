@@ -466,6 +466,7 @@ function Test-DiagnosticBundle {
             if (-not $refreshEvidence) {
                 Add-Failure "refresh-features summary missing refreshFeatureEvidence"
             } elseif ($refreshFeaturesSummary.ok -eq $true) {
+                if (-not ($refreshEvidence.PSObject.Properties.Name -contains "elapsedMs")) { Add-Failure "refresh-features summary missing elapsedMs evidence" }
                 if ($refreshEvidence.connectorSharedExists -eq $true -and $refreshEvidence.connectorContentMatches -ne $true) { Add-Failure "refresh-features summary connector parity not clean" }
                 if ($refreshEvidence.appToolSharedExists -eq $true -and $refreshEvidence.appToolContentMatches -ne $true) { Add-Failure "refresh-features summary app-tool parity not clean" }
                 if (@($refreshEvidence.changedExpectedSkills).Count -ne 0) { Add-Failure "refresh-features summary skill content parity not clean" }

@@ -151,11 +151,12 @@ function Get-FileSha256Hex {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [IO.File]::OpenRead($Path)
+    $stream = $null
     try {
+        $stream = [IO.File]::OpenRead($Path)
         return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
     } finally {
-        $stream.Dispose()
+        if ($stream) { $stream.Dispose() }
         $sha.Dispose()
     }
 }

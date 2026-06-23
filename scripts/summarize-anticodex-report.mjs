@@ -393,6 +393,8 @@ const summary = {
     appToolRegistryLocalFileCount: appToolRegistry && has(appToolRegistry, "localFileCount") ? appToolRegistry.localFileCount : null,
   } : null,
   refreshFeatureEvidence: refreshConnectorParity || refreshAppToolParity || refreshSkills || refreshGuidance ? {
+    verifyOnly: boolField(report, "verifyOnly"),
+    elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
     connectorSharedExists: refreshConnectorParity ? boolField(refreshConnectorParity, "sharedExists") : null,
     connectorLocalExists: refreshConnectorParity ? boolField(refreshConnectorParity, "localExists") : null,
     connectorContentMatches: refreshConnectorParity ? boolField(refreshConnectorParity, "contentMatches") : null,

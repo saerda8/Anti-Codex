@@ -687,6 +687,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /refreshFeatureEvidence/);
   assert.match(managerBridge, /refresh parity:/);
   assert.match(managerInject, /refresh parity:/);
+  assert.match(managerBridge, /elapsed=/);
+  assert.match(managerInject, /elapsed=/);
+  assert.match(managerBridge, /verifyOnly=true/);
+  assert.match(managerInject, /verifyOnly=true/);
   assert.match(managerBridge, /refresh drift:/);
   assert.match(managerInject, /refresh drift:/);
   assert.match(managerBridge, /localConnectorEvidence/);
@@ -2022,6 +2026,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /skill duplicate conflicts:/);
   assert.match(server, /refreshFeatureEvidence/);
   assert.match(server, /refresh parity:/);
+  assert.match(server, /refresh timing:/);
   assert.match(server, /refresh drift:/);
   assert.match(server, /optionalRealProviderEvidence/);
   assert.match(server, /realProviderToAntigravityReturnEvidence/);
@@ -2440,6 +2445,8 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
     writeFileSync(reportPath, JSON.stringify({
       ok: false,
       reportName: "refresh-features",
+      verifyOnly: true,
+      elapsedMs: 73000,
       failures: ["connector drift"],
       connectorParity: { sharedExists: true, localExists: true, contentMatches: false },
       appToolParity: { sharedExists: true, localExists: false, contentMatches: false },
@@ -2454,6 +2461,8 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
+    assert.equal(summary.refreshFeatureEvidence.verifyOnly, true);
+    assert.equal(summary.refreshFeatureEvidence.elapsedMs, 73000);
     assert.equal(summary.refreshFeatureEvidence.connectorSharedExists, true);
     assert.equal(summary.refreshFeatureEvidence.connectorLocalExists, true);
     assert.equal(summary.refreshFeatureEvidence.connectorContentMatches, false);
@@ -5452,6 +5461,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /MCP\/Skill summary has extra local skills/);
   assert.match(diagnostics, /MCP\/Skill summary has conflicting duplicate skills/);
   assert.match(diagnostics, /refreshFeatureEvidence/);
+  assert.match(diagnostics, /refresh-features summary missing elapsedMs evidence/);
   assert.match(diagnostics, /changedExpectedSkills/);
   assert.match(diagnostics, /guidanceChanged/);
   assert.match(diagnostics, /refresh-features summary missing refreshFeatureEvidence/);

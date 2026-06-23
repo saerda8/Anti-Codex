@@ -3330,6 +3330,7 @@ function latestReportsSummary(result){
       const skillChanged=Array.isArray(evidence.changedExpectedSkills)?evidence.changedExpectedSkills:[];
       const guidanceChanged=Array.isArray(evidence.guidanceChanged)?evidence.guidanceChanged:[];
       lines.push("  refresh parity: connector="+(connectorOk?"ok":"需处理")+" / appTool="+(appToolOk?"ok":"需处理"));
+      if(evidence.elapsedMs!=null||evidence.verifyOnly===true) lines.push("  refresh timing: verifyOnly="+(evidence.verifyOnly===true?"true":"false")+" / elapsed="+(evidence.elapsedMs??"unknown")+" ms");
       if(skillChanged.length||guidanceChanged.length) lines.push("  refresh drift: skills="+(skillChanged.length?skillChanged.slice(0,5).join(", "):"ok")+" / guidance="+(guidanceChanged.length?guidanceChanged.slice(0,5).join(", "):"ok"));
     }
     if(item.optionalRealProviderEvidence){

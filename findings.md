@@ -765,3 +765,4 @@
 - Anti-Codex `node_repl` MCP env values are intentionally rehomed into the isolated runtime. Parity checks should compare required env keys for `node_repl`, while still comparing non-rehomed MCP server env bodies strictly.
 - Installed verifier auto-start should skip update checks. Otherwise a source/install verification can enter the sync/update path, fail to launch the desktop within a short timeout, and look like a product startup failure.
 - `Get-FileHash` is too slow for refresh-feature inherited-surface verification on this Windows workspace. Use a streaming .NET SHA256 helper for per-file directory fingerprints and include `elapsedMs` in reports so future slowdowns are visible without rerunning noisy probes.
+- PowerShell `Get-Content -Tail` objects can carry provider metadata when embedded inside JSON objects, producing huge diagnostic output. Cast tails to plain strings or extract structured fields directly before `ConvertTo-Json`.
