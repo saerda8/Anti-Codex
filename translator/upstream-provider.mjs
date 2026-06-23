@@ -329,6 +329,8 @@ function convertChatBodyToAnthropic(chatBody) {
   if (chatBody.stream !== undefined) body.stream = chatBody.stream;
   if (chatBody.temperature !== undefined) body.temperature = chatBody.temperature;
   if (chatBody.top_p !== undefined) body.top_p = chatBody.top_p;
+  const thinking = normalizeAnthropicThinking(chatBody);
+  if (thinking) body.thinking = thinking;
 
   // stop sequences
   if (chatBody.stop) {
@@ -361,6 +363,24 @@ function convertChatBodyToAnthropic(chatBody) {
 }
 
 // ── Anthropic-internal converters ──────────────────────────────
+
+function normalizeAnthropicThinking(chatBody) {
+  const raw = chatBody?.thinking;
+  const hasBudget = chatBody?.thinking_budget !== undefined;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const thinking = { ...raw };
+    if (thinking.type === "enabled" && thinking.budget_tokens === undefined && hasBudget) {
+      thinking.budget_tokens = chatBody.thinking_budget;
+    }
+    return thinking;
+  }
+  if (raw === true || raw === "enabled") {
+    const thinking = { type: "enabled" };
+    if (hasBudget) thinking.budget_tokens = chatBody.thinking_budget;
+    return thinking;
+  }
+  return null;
+}
 
 function extractTextContent(content) {
   if (!content) return "";

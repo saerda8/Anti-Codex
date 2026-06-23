@@ -421,6 +421,27 @@ test("buildUpstreamChatRequest anthropic: passes max_tokens and stream", () => {
   assert.equal(body.stream, true);
 });
 
+test("buildUpstreamChatRequest anthropic: preserves thinking configuration", () => {
+  const direct = buildUpstreamChatRequest(
+    { protocol: "anthropic", apiKey: "sk-ant-test" },
+    {
+      messages: [{ role: "user", content: "hi" }],
+      thinking: { type: "enabled", budget_tokens: 1024 },
+    },
+  );
+  assert.deepEqual(direct.body.thinking, { type: "enabled", budget_tokens: 1024 });
+
+  const normalized = buildUpstreamChatRequest(
+    { protocol: "anthropic", apiKey: "sk-ant-test" },
+    {
+      messages: [{ role: "user", content: "hi" }],
+      thinking: "enabled",
+      thinking_budget: 2048,
+    },
+  );
+  assert.deepEqual(normalized.body.thinking, { type: "enabled", budget_tokens: 2048 });
+});
+
 test("buildUpstreamChatRequest anthropic: defaults max_tokens when not set", () => {
   const { body } = buildUpstreamChatRequest(
     { protocol: "anthropic", apiKey: "sk-ant-test" },

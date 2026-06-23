@@ -839,44 +839,7 @@ $expectedMcpToolNames = @{
     )
 }
 
-$mcpRealSmokeSkipReason = "MCP real stdio smoke skipped because verifier budget is too short"
-$mcpRealListSkipReason = "MCP real stdio tools/list skipped because verifier budget is too short"
-
-if ($script:shortBudgetMode) {
-    if ($mcpNames -contains "node_repl") {
-        $mcpRealSmoke = [pscustomobject]@{
-            checked = $true
-            passed = $false
-            skipped = $true
-            server = "node_repl"
-            tool = "js"
-            markerObserved = $false
-            toolCount = 0
-            elapsedMs = 0
-            timedOut = $false
-            error = $mcpRealSmokeSkipReason
-        }
-        Add-Failure $mcpRealSmokeSkipReason
-    }
-    foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
-        $mcpListSmokeChecks += [pscustomobject]@{
-            checked = $true
-            passed = $false
-            skipped = $true
-            server = $mcpName
-            toolCount = 0
-            toolNames = @()
-            expectedToolNames = if ($expectedMcpToolNames.ContainsKey($mcpName)) { @($expectedMcpToolNames[$mcpName]) } else { @() }
-            missingExpectedTools = @()
-            elapsedMs = 0
-            timedOut = $false
-            error = $mcpRealListSkipReason
-        }
-    }
-    if (@($mcpNames | Where-Object { $_ -ne "node_repl" }).Count -gt 0) {
-        Add-Failure $mcpRealListSkipReason
-    }
-} elseif ($mcpNames -contains "node_repl") {
+if ($mcpNames -contains "node_repl") {
     try {
         $realSmoke = Invoke-RealNodeReplMcpSmoke
         $mcpRealSmoke = [pscustomobject]@{
@@ -908,7 +871,6 @@ if ($script:shortBudgetMode) {
     }
 }
 
-if (-not $script:shortBudgetMode) {
 foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
     try {
         $listSmoke = Invoke-RealMcpListSmoke $mcpName
@@ -951,7 +913,6 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
         }
         Add-Failure "MCP '$mcpName' real stdio tools/list failed: $($_.Exception.Message)"
     }
-}
 }
 
 $headroomSkillFile = Join-Path (Join-Path $skillsPath "headroom") "SKILL.md"

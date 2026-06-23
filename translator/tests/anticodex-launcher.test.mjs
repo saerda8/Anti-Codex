@@ -4244,8 +4244,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /function New-SkippedSourceSnapshot/);
   assert.match(mcpSkills, /skill fingerprint skipped because verifier budget is exhausted/);
   assert.match(mcpSkills, /fingerprintSkipped = \$skillFingerprintSkipped/);
-  assert.match(mcpSkills, /MCP real stdio smoke skipped because verifier budget is too short/);
-  assert.match(mcpSkills, /MCP real stdio tools\/list skipped because verifier budget is too short/);
+  assert.doesNotMatch(mcpSkills, /MCP real stdio smoke skipped because verifier budget is too short/);
+  assert.doesNotMatch(mcpSkills, /MCP real stdio tools\/list skipped because verifier budget is too short/);
   assert.match(mcpSkills, /source snapshot skipped because verifier budget is exhausted/);
   assert.match(mcpSkills, /\(Get-RemainingVerifierBudgetMs\) -lt 5000/);
   assert.doesNotMatch(mcpSkills, /elseif \(Get-RemainingVerifierBudgetMs -lt 5000\)/);
