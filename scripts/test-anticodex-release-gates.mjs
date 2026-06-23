@@ -31,7 +31,7 @@ const gateDefinitions = [
   { id: "thirdPartyProvider", group: "short", file: "latest-third-party-provider.json", requiredForShort: true, requiredForRelease: true, requireThirdPartyProviderSemantics: true },
   { id: "missingHistory", group: "short", file: "latest-missing-history.json", requiredForShort: true, requiredForRelease: true, requireMissingHistorySemantics: true },
   { id: "managerRealButtons", group: "manager", file: "latest-manager-real-buttons.json", requiredForShort: true, requiredForRelease: true, requireManagerActions: true },
-  { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: false, requireRefreshFeatureSemantics: true },
+  { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: true, requireRefreshFeatureSemantics: true },
   { id: "realThirdPartyProviderOptional", group: "optional-real-traffic", file: "latest-real-third-party-provider.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
   { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
 

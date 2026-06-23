@@ -5262,6 +5262,7 @@ test("release-required latest reports stay visible in diagnostics, Manager, and 
   const hasReportReference = (source, report) => source.includes(report) || source.includes(report.replace(".json", "\\.json"));
 
   assert.ok(requiredReports.length > 20, "release gate required report inventory should be parsed");
+  assert.ok(requiredReports.includes("latest-refresh-features.json"), "refresh-features evidence must block release when stale or missing");
   for (const report of requiredReports) {
     assert.ok(collector.includes(report), `${report} missing from diagnostic bundle latestReports`);
     assert.ok(server.includes(report), `${report} missing from Manager latest reports`);
@@ -5286,7 +5287,6 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-cold-relaunch.json",
     "latest-provider-antigravity-return.json",
     "latest-real-third-party-provider.json",
-    "latest-refresh-features.json",
     "latest-stability-soak.json",
   ]);
   for (const report of [...optionalReports, ...specialReports]) {
