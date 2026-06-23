@@ -305,6 +305,10 @@ function latestReportsSummary(result) {
       lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
       lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
     }
+    if (item.logDbGuardEvidence) {
+      const evidence = item.logDbGuardEvidence;
+      lines.push(`  logDbGuard: protected=${evidence.protected ? "true" : "false"} / trigger=${evidence.triggerPresent ? "true" : "false"} / noTraffic=${evidence.noTraffic ? "true" : "false"} / wal=${evidence.walBytes ?? "unknown"}`);
+    }
     if (item.modelThinkingEvidence) {
       const evidence = item.modelThinkingEvidence;
       lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
@@ -572,6 +576,11 @@ if (args.has("--self-test")) {
       sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589 },
       sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
+      label: "\u65e5\u5fd7\u5e93\u9632\u62a4",
+      exists: true,
+      ok: true,
+      logDbGuardEvidence: { protected: true, triggerPresent: true, noTraffic: true, walBytes: 0 },
+    }, {
       label: "MCP/Skill",
       exists: true,
       ok: true,
@@ -617,6 +626,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345/);
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
+  assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
   assert.match(evidenceSummary, /providerContinuity: turns=9 \/ markers=15\/16\/18\/20/);

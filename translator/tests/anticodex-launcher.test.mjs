@@ -691,6 +691,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
   assert.match(managerInject, /pluginCapabilityEvidence/);
+  assert.match(managerBridge, /logDbGuardEvidence/);
+  assert.match(managerInject, /logDbGuardEvidence/);
+  assert.match(managerBridge, /logDbGuard: protected=/);
+  assert.match(managerInject, /logDbGuard: protected=/);
   assert.match(managerBridge, /parity drift: connectorMissing=/);
   assert.match(managerInject, /parity drift: connectorMissing=/);
   assert.match(managerBridge, /providerContinuity/);
@@ -2027,6 +2031,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /fakeProviderToAntigravityReturn: history=/);
   assert.match(server, /fakeProviderToAntigravityRoute:/);
   assert.match(server, /pluginCapabilityEvidence/);
+  assert.match(server, /logDbGuardEvidence/);
+  assert.match(server, /logDbGuard: protected=/);
   assert.match(server, /connectorParityMissingSharedSample/);
   assert.match(server, /connectorParityChangedSharedSample/);
   assert.match(server, /appToolGetPostMissingFromGetSample/);
@@ -2248,6 +2254,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /optionalRealTrafficReady/);
   assert.match(reportSummarizer, /optionalRealTrafficFailures/);
   assert.match(reportSummarizer, /sourceSnapshotEvidence/);
+  assert.match(reportSummarizer, /logDbGuardEvidence/);
   assert.match(reportSummarizer, /missingRequired/);
   assert.match(reportSummarizer, /missingShort/);
   assert.match(reportSummarizer, /missingOptional/);
@@ -5410,6 +5417,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /exposedToolsPost/);
   assert.match(diagnostics, /exposedToolsGet/);
   assert.match(diagnostics, /unauthorizedAppToolCount/);
+  assert.match(diagnostics, /connectorParityExtraLocal/);
+  assert.match(diagnostics, /connectorParityChangedShared/);
+  assert.match(diagnostics, /appToolParityExtraLocal/);
+  assert.match(diagnostics, /appToolParityChangedShared/);
   assert.match(diagnostics, /lastUiOnly/);
   assert.match(diagnostics, /shortcutRepair/);
   assert.match(diagnostics, /sourcePreflight/);
@@ -5604,6 +5615,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /local_connector_linked_connector_not_accessible/);
   assert.match(releaseGates, /local_connector_hidden_connector_accessible/);
   assert.match(releaseGates, /local_connector_get_post_tool_mismatch/);
+  assert.match(releaseGates, /local_connector_unexpected_exposed_tool/);
   assert.match(releaseGates, /local_connector_exposed_tool_names_mismatch/);
   assert.match(releaseGates, /plugin_capabilities_app_tool_get_post_mismatch/);
   assert.match(releaseGates, /plugin_capabilities_unauthorized_app_tools/);

@@ -2279,6 +2279,7 @@ function latestManagerReportItem(label, fileName) {
     const ageMs = updatedAt ? Math.max(0, Date.now() - Date.parse(updatedAt)) : null;
     const stale = Number.isFinite(ageMs) && ageMs > MANAGER_REPORT_STALE_MS;
     const isReleaseGateReport = fileName === "latest-release-gates.json" || report?.reportName === "release-gates";
+    const isLogDbGuardReport = fileName === "latest-log-db-guard.json" || report?.reportName === "log-db-guard" || typeof report?.triggerPresent !== "undefined" || typeof report?.protected !== "undefined";
     const rawOk = !invalid && report?.ok === true;
     const effectiveOk = isReleaseGateReport
         ? rawOk && report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -2309,6 +2310,19 @@ function latestManagerReportItem(label, fileName) {
             fingerprint: shortSafeText(report.sourceSnapshot.fingerprint || "", ""),
             sourceMtimeMax: shortSafeText(report.sourceSnapshot.sourceMtimeMax || "", ""),
             fileCount: Number.isFinite(Number(report.sourceSnapshot.fileCount)) ? Number(report.sourceSnapshot.fileCount) : null,
+        } : null,
+        logDbGuardEvidence: isLogDbGuardReport ? {
+            reportName: shortSafeText(report?.reportName || "", ""),
+            noTraffic: report?.noTraffic === true,
+            usedRealTraffic: report?.usedRealTraffic === true,
+            behaviorCovered: report?.behaviorCovered === true,
+            coverageKind: shortSafeText(report?.coverageKind || "", ""),
+            exists: report?.exists === true,
+            logsTable: report?.logsTable === true,
+            levelColumn: report?.levelColumn === true,
+            triggerPresent: report?.triggerPresent === true,
+            protected: report?.protected === true,
+            walBytes: Number.isFinite(Number(report?.walBytes)) ? Number(report.walBytes) : null,
         } : null,
         releaseReady: typeof report?.releaseReady === "boolean" ? report.releaseReady : null,
         shortReady: typeof report?.shortReady === "boolean" ? report.shortReady : null,
@@ -3237,6 +3251,10 @@ function latestReportsSummary(result){
     if(item.sourceSnapshotEvidence){
       const evidence=item.sourceSnapshotEvidence;
       lines.push("  sourceSnapshot: files="+(evidence.fileCount??"unknown")+" / fingerprint="+(evidence.fingerprint?evidence.fingerprint.slice(0,12):"missing"));
+    }
+    if(item.logDbGuardEvidence){
+      const evidence=item.logDbGuardEvidence;
+      lines.push("  logDbGuard: protected="+(evidence.protected?"true":"false")+" / trigger="+(evidence.triggerPresent?"true":"false")+" / noTraffic="+(evidence.noTraffic?"true":"false")+" / wal="+(evidence.walBytes??"unknown"));
     }
     if(item.skipped===true){
       lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));

@@ -159,6 +159,7 @@ function Test-DiagnosticBundle {
     $thirdPartyProviderSummary = $null
     $localConnectorsSummary = $null
     $pluginCapabilitiesSummary = $null
+    $logDbGuardSummary = $null
     $releaseGatesSummary = $null
     $coldRelaunchSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
@@ -404,7 +405,27 @@ function Test-DiagnosticBundle {
                 if ($pluginEvidence.appToolParityClean -ne $true) { Add-Failure "plugin capability summary missing app-tool parity evidence" }
                 if ($pluginEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "plugin capability summary missing GET/POST parity evidence" }
                 if (-not (Has-Property $pluginEvidence "connectorParityMissingShared")) { Add-Failure "plugin capability summary missing connector parity drift samples" }
+                if (-not (Has-Property $pluginEvidence "connectorParityExtraLocal")) { Add-Failure "plugin capability summary missing extra local connector drift samples" }
+                if (-not (Has-Property $pluginEvidence "connectorParityChangedShared")) { Add-Failure "plugin capability summary missing changed connector drift samples" }
+                if (-not (Has-Property $pluginEvidence "appToolParityExtraLocal")) { Add-Failure "plugin capability summary missing extra local app-tool drift samples" }
+                if (-not (Has-Property $pluginEvidence "appToolParityChangedShared")) { Add-Failure "plugin capability summary missing changed app-tool drift samples" }
                 if (-not (Has-Property $pluginEvidence "appToolGetPostMissingFromGet")) { Add-Failure "plugin capability summary missing GET/POST drift samples" }
+            }
+        }
+        $logDbGuardSummary = @($summary | Where-Object { $_.file -eq "latest-log-db-guard.json" } | Select-Object -First 1)[0]
+        if (-not $logDbGuardSummary) {
+            Add-Failure "diagnostic reports summary missing latest-log-db-guard.json"
+        } else {
+            if ($logDbGuardSummary.reportName -ne "log-db-guard") { Add-Failure "diagnostic log database guard summary reportName mismatch" }
+            $logEvidence = $logDbGuardSummary.logDbGuardEvidence
+            if (-not $logEvidence) {
+                Add-Failure "diagnostic log database guard summary missing logDbGuardEvidence"
+            } else {
+                if ($logEvidence.noTraffic -ne $true) { Add-Failure "diagnostic log database guard summary missing noTraffic" }
+                if ($logEvidence.usedRealTraffic -ne $false) { Add-Failure "diagnostic log database guard summary used real traffic" }
+                if ($logEvidence.protected -ne $true) { Add-Failure "diagnostic log database guard summary is not protected" }
+                if ($logEvidence.triggerPresent -ne $true) { Add-Failure "diagnostic log database guard summary trigger missing" }
+                if (-not (Has-Property $logEvidence "walBytes")) { Add-Failure "diagnostic log database guard summary missing wal size" }
             }
         }
         $mcpSkillsSummary = @($summary | Where-Object { $_.file -eq "latest-mcp-skills.json" } | Select-Object -First 1)[0]

@@ -272,6 +272,7 @@ function summarizeGate(definition) {
       if (evidence.hiddenConnectorAccessible !== false) semanticFailures.push("local_connector_hidden_connector_accessible");
       if (Number(evidence.exposedToolsPost) !== Number(evidence.exposedToolsGet)) semanticFailures.push("local_connector_get_post_tool_mismatch");
       if (!Array.isArray(evidence.exposedToolNames) || evidence.exposedToolNames.length !== Number(evidence.exposedToolsPost)) semanticFailures.push("local_connector_exposed_tool_names_mismatch");
+      if (!Array.isArray(evidence.exposedToolNames) || evidence.exposedToolNames.length !== 1 || evidence.exposedToolNames[0] !== "linked_tool") semanticFailures.push("local_connector_unexpected_exposed_tool");
     }
     if (definition.requirePluginCapabilitySemantics) {
       const capabilities = report.capabilities || {};
@@ -635,7 +636,7 @@ if (args.has("--self-test")) {
       endpointEvidence: {
         exposedToolsPost: 1,
         exposedToolsGet: 2,
-        exposedToolNames: [],
+        exposedToolNames: ["allowlisted_tool"],
         chatgptInstallUrlsScrubbed: false,
         linkEndpointsUnsupported: false,
         upstreamRequestsDuringLocalEndpoints: 1,
@@ -1305,7 +1306,7 @@ if (args.has("--self-test")) {
       "local_connector_allowlist_not_recorded",
       "local_connector_hidden_connector_accessible",
       "local_connector_get_post_tool_mismatch",
-      "local_connector_exposed_tool_names_mismatch",
+      "local_connector_unexpected_exposed_tool",
     ]);
     semanticFailures.logDbGuard = assertSemanticFailures("logDbGuard", "self-test failed: semantically invalid log-db guard report satisfied the gate", [
       "log_db_guard_trigger_missing",
@@ -1317,8 +1318,10 @@ if (args.has("--self-test")) {
       "plugin_capabilities_unauthorized_app_tools",
       "plugin_capabilities_app_tool_get_post_mismatch",
       "plugin_capabilities_local_connector_parity_missing_shared",
+      "plugin_capabilities_local_connector_parity_extra_local",
       "plugin_capabilities_local_connector_parity_changed_shared",
       "plugin_capabilities_local_app_tool_parity_missing_shared",
+      "plugin_capabilities_local_app_tool_parity_extra_local",
       "plugin_capabilities_local_app_tool_parity_changed_shared",
       "plugin_capabilities_source_snapshot_missing",
     ]);

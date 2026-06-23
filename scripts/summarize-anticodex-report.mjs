@@ -55,6 +55,7 @@ const failureCount = has(report, "failures")
 const wait = report && report.wait ? report.wait : null;
 const latestWait = wait && wait.latest ? wait.latest : null;
 const isReleaseGateReport = report?.reportName === "release-gates" || /latest-release-gates\.json$/i.test(path);
+const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-db-guard\.json$/i.test(path) || has(report, "triggerPresent") || has(report, "protected");
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
   : null;
@@ -289,6 +290,19 @@ const summary = {
     fingerprint: has(report.sourceSnapshot, "fingerprint") ? asString(report.sourceSnapshot.fingerprint) : null,
     sourceMtimeMax: has(report.sourceSnapshot, "sourceMtimeMax") ? asString(report.sourceSnapshot.sourceMtimeMax) : null,
     fileCount: has(report.sourceSnapshot, "fileCount") ? report.sourceSnapshot.fileCount : null,
+  } : null,
+  logDbGuardEvidence: isLogDbGuardReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    exists: boolField(report, "exists"),
+    logsTable: boolField(report, "logsTable"),
+    levelColumn: boolField(report, "levelColumn"),
+    triggerPresent: boolField(report, "triggerPresent"),
+    protected: boolField(report, "protected"),
+    walBytes: has(report, "walBytes") ? report.walBytes : null,
   } : null,
   releaseReady: boolField(report, "releaseReady"),
   shortReady: boolField(report, "shortReady"),
