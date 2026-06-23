@@ -904,6 +904,10 @@
         const evidence = item.logDbGuardEvidence;
         lines.push(`  logDbGuard: protected=${evidence.protected ? "true" : "false"} / trigger=${evidence.triggerPresent ? "true" : "false"} / noTraffic=${evidence.noTraffic ? "true" : "false"} / wal=${evidence.walBytes ?? "unknown"}`);
       }
+      if (item.missingHistoryEvidence) {
+        const evidence = item.missingHistoryEvidence;
+        lines.push(`  missingHistory: status=${evidence.status ?? "unknown"} / type=${evidence.errorType || "unknown"} / retryable=${evidence.retryable === false ? "false" : "true"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / routeStable=${evidence.noRouteChange ? "true" : "false"} / noTraffic=${evidence.usedRealTraffic === false ? "true" : "false"}`);
+      }
       if (item.modelThinkingEvidence) {
         const evidence = item.modelThinkingEvidence;
         lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);

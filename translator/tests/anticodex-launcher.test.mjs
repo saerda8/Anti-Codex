@@ -2362,6 +2362,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /providerContinuity/);
   assert.match(reportSummarizer, /releaseReady/);
   assert.match(reportSummarizer, /effectiveOk/);
+  assert.match(collector, /effectiveOk = \$json\.effectiveOk/);
   assert.match(reportSummarizer, /releaseGateEffectiveOk/);
   assert.match(reportSummarizer, /shortReady/);
   assert.match(reportSummarizer, /strictOptionalRealTraffic/);
@@ -6890,6 +6891,10 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const inject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const bridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   assert.match(verifier, /response_history_missing/);
@@ -6907,11 +6912,61 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
   assert.match(overall, /test-anticodex-missing-history\.mjs/);
   assert.match(overall, /latest-missing-history\.json/);
   assert.match(collector, /latest-missing-history\.json/);
+  assert.match(collector, /missingHistoryEvidence = \$json\.missingHistoryEvidence/);
   assert.match(server, /latest-missing-history\.json/);
+  assert.match(summarizer, /missingHistoryEvidence/);
+  assert.match(diagnostics, /missing-history summary missing missingHistoryEvidence/);
+  assert.match(diagnostics, /missing-history summary status is not 410/);
+  assert.match(diagnostics, /missing-history summary should be non-retryable/);
+  assert.match(diagnostics, /missing-history summary reports route change/);
+  assert.match(bridge, /missingHistory: status=/);
+  assert.match(inject, /missingHistory: status=/);
+  assert.match(server, /missingHistory: status=/);
   assert.match(releaseGates, /id:\s*"missingHistory"[\s\S]*?file:\s*"latest-missing-history\.json"[\s\S]*?requiredForShort:\s*true/);
   assert.match(releaseGates, /requireMissingHistorySemantics:\s*true/);
   assert.match(releaseGates, /missing_history_status_not_410/);
   assert.match(releaseGates, /response_history_missing/);
   assert.match(releaseGates, /missing_history_used_real_traffic/);
   assert.match(releaseGates, /missing_history_route_changed/);
+
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-missing-history-summary-"));
+  try {
+    const reportPath = join(tempRoot, "latest-missing-history.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "missing-history",
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      usedRealTraffic: false,
+      status: 410,
+      errorType: "response_history_missing",
+      retryable: false,
+      previousResponseIdMatched: true,
+      recoveryGuidancePresent: true,
+      noRouteChange: true,
+      model: "gemini-pro-agent",
+      routeBefore: { latestStatus: "success" },
+      routeAfter: { latestStatus: "success" },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.deepEqual(summary.missingHistoryEvidence, {
+      reportName: "missing-history",
+      status: 410,
+      errorType: "response_history_missing",
+      retryable: false,
+      previousResponseIdMatched: true,
+      recoveryGuidancePresent: true,
+      noRouteChange: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      model: "gemini-pro-agent",
+      routeBeforeStatus: "success",
+      routeAfterStatus: "success",
+    });
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });

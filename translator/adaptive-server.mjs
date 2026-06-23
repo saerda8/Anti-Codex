@@ -2333,6 +2333,7 @@ function latestManagerReportItem(label, fileName) {
     const stale = Number.isFinite(ageMs) && ageMs > MANAGER_REPORT_STALE_MS;
     const isReleaseGateReport = fileName === "latest-release-gates.json" || report?.reportName === "release-gates";
     const isLogDbGuardReport = fileName === "latest-log-db-guard.json" || report?.reportName === "log-db-guard" || typeof report?.triggerPresent !== "undefined" || typeof report?.protected !== "undefined";
+    const isMissingHistoryReport = fileName === "latest-missing-history.json" || report?.reportName === "missing-history";
     const rawOk = !invalid && report?.ok === true;
     const effectiveOk = isReleaseGateReport
         ? rawOk && report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -2378,6 +2379,21 @@ function latestManagerReportItem(label, fileName) {
             triggerPresent: report?.triggerPresent === true,
             protected: report?.protected === true,
             walBytes: Number.isFinite(Number(report?.walBytes)) ? Number(report.walBytes) : null,
+        } : null,
+        missingHistoryEvidence: isMissingHistoryReport ? {
+            reportName: shortSafeText(report?.reportName || "", ""),
+            status: Number.isFinite(Number(report?.status)) ? Number(report.status) : null,
+            errorType: shortSafeText(report?.errorType || "", ""),
+            retryable: typeof report?.retryable === "boolean" ? report.retryable : null,
+            previousResponseIdMatched: report?.previousResponseIdMatched === true,
+            recoveryGuidancePresent: report?.recoveryGuidancePresent === true,
+            noRouteChange: report?.noRouteChange === true,
+            usedRealTraffic: typeof report?.usedRealTraffic === "boolean" ? report.usedRealTraffic : null,
+            behaviorCovered: typeof report?.behaviorCovered === "boolean" ? report.behaviorCovered : null,
+            coverageKind: shortSafeText(report?.coverageKind || "", ""),
+            model: shortSafeText(report?.model || "", ""),
+            routeBeforeStatus: shortSafeText(report?.routeBefore?.latestStatus || "", ""),
+            routeAfterStatus: shortSafeText(report?.routeAfter?.latestStatus || "", ""),
         } : null,
         releaseReady: typeof report?.releaseReady === "boolean" ? report.releaseReady : null,
         shortReady: typeof report?.shortReady === "boolean" ? report.shortReady : null,
@@ -3357,6 +3373,10 @@ function latestReportsSummary(result){
     if(item.logDbGuardEvidence){
       const evidence=item.logDbGuardEvidence;
       lines.push("  logDbGuard: protected="+(evidence.protected?"true":"false")+" / trigger="+(evidence.triggerPresent?"true":"false")+" / noTraffic="+(evidence.noTraffic?"true":"false")+" / wal="+(evidence.walBytes??"unknown"));
+    }
+    if(item.missingHistoryEvidence){
+      const evidence=item.missingHistoryEvidence;
+      lines.push("  missingHistory: status="+(evidence.status??"unknown")+" / type="+(evidence.errorType||"unknown")+" / retryable="+(evidence.retryable===false?"false":"true")+" / previousId="+(evidence.previousResponseIdMatched?"true":"false")+" / routeStable="+(evidence.noRouteChange?"true":"false")+" / noTraffic="+(evidence.usedRealTraffic===false?"true":"false"));
     }
     if(item.skipped===true){
       lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));

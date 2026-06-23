@@ -331,6 +331,10 @@ function latestReportsSummary(result) {
       const evidence = item.logDbGuardEvidence;
       lines.push(`  logDbGuard: protected=${evidence.protected ? "true" : "false"} / trigger=${evidence.triggerPresent ? "true" : "false"} / noTraffic=${evidence.noTraffic ? "true" : "false"} / wal=${evidence.walBytes ?? "unknown"}`);
     }
+    if (item.missingHistoryEvidence) {
+      const evidence = item.missingHistoryEvidence;
+      lines.push(`  missingHistory: status=${evidence.status ?? "unknown"} / type=${evidence.errorType || "unknown"} / retryable=${evidence.retryable === false ? "false" : "true"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / routeStable=${evidence.noRouteChange ? "true" : "false"} / noTraffic=${evidence.usedRealTraffic === false ? "true" : "false"}`);
+    }
     if (item.modelThinkingEvidence) {
       const evidence = item.modelThinkingEvidence;
       lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
@@ -681,6 +685,22 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);
+  const missingHistorySummary = latestReportsSummary({
+    reports: [{
+      label: "\u5386\u53f2\u8fc7\u671f\u6062\u590d",
+      exists: true,
+      ok: true,
+      missingHistoryEvidence: {
+        status: 410,
+        errorType: "response_history_missing",
+        retryable: false,
+        previousResponseIdMatched: true,
+        noRouteChange: true,
+        usedRealTraffic: false,
+      },
+    }],
+  });
+  assert.match(missingHistorySummary, /missingHistory: status=410 \/ type=response_history_missing \/ retryable=false \/ previousId=true \/ routeStable=true \/ noTraffic=true/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
   assert.match(evidenceSummary, /hashCache=12000\/42/);

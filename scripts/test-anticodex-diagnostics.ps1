@@ -575,6 +575,22 @@ function Test-DiagnosticBundle {
                 }
             }
         }
+        $missingHistorySummary = @($summary | Where-Object { $_.file -eq "latest-missing-history.json" } | Select-Object -First 1)[0]
+        if ($missingHistorySummary) {
+            $missingEvidence = $missingHistorySummary.missingHistoryEvidence
+            if (-not $missingEvidence) {
+                Add-Failure "missing-history summary missing missingHistoryEvidence"
+            } elseif ($missingHistorySummary.ok -eq $true) {
+                if ([int]$missingEvidence.status -ne 410) { Add-Failure "missing-history summary status is not 410" }
+                if ([string]$missingEvidence.errorType -ne "response_history_missing") { Add-Failure "missing-history summary error type mismatch" }
+                if ($missingEvidence.retryable -ne $false) { Add-Failure "missing-history summary should be non-retryable" }
+                if ($missingEvidence.previousResponseIdMatched -ne $true) { Add-Failure "missing-history summary missing previous_response_id match" }
+                if ($missingEvidence.recoveryGuidancePresent -ne $true) { Add-Failure "missing-history summary missing recovery guidance" }
+                if ($missingEvidence.noRouteChange -ne $true) { Add-Failure "missing-history summary reports route change" }
+                if ($missingEvidence.usedRealTraffic -ne $false) { Add-Failure "missing-history summary used real traffic" }
+                if ([string]$missingEvidence.coverageKind -ne "installed-no-traffic") { Add-Failure "missing-history summary coverage kind mismatch" }
+            }
+        }
         $coldRelaunchSummary = @($summary | Where-Object { $_.file -eq "latest-cold-relaunch.json" } | Select-Object -First 1)[0]
         if ($coldRelaunchSummary) {
             $coldEvidence = $coldRelaunchSummary.coldRelaunchEvidence
@@ -722,6 +738,12 @@ function Test-DiagnosticBundle {
                 missingOptional = @($releaseGatesSummary.missingOptional)
                 damagedReports = @($releaseGatesSummary.damagedReports)
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
+            }
+        } else { $null }
+        missingHistory = if ($missingHistorySummary) {
+            [pscustomobject]@{
+                ok = $missingHistorySummary.ok
+                evidence = $missingHistorySummary.missingHistoryEvidence
             }
         } else { $null }
         coldRelaunch = if ($coldRelaunchSummary) {

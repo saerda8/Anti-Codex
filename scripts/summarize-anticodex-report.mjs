@@ -56,6 +56,7 @@ const wait = report && report.wait ? report.wait : null;
 const latestWait = wait && wait.latest ? wait.latest : null;
 const isReleaseGateReport = report?.reportName === "release-gates" || /latest-release-gates\.json$/i.test(path);
 const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-db-guard\.json$/i.test(path) || has(report, "triggerPresent") || has(report, "protected");
+const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
   : null;
@@ -322,6 +323,21 @@ const summary = {
     triggerPresent: boolField(report, "triggerPresent"),
     protected: boolField(report, "protected"),
     walBytes: has(report, "walBytes") ? report.walBytes : null,
+  } : null,
+  missingHistoryEvidence: isMissingHistoryReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    status: has(report, "status") ? report.status : null,
+    errorType: has(report, "errorType") ? asString(report.errorType) : null,
+    retryable: boolField(report, "retryable"),
+    previousResponseIdMatched: boolField(report, "previousResponseIdMatched"),
+    recoveryGuidancePresent: boolField(report, "recoveryGuidancePresent"),
+    noRouteChange: boolField(report, "noRouteChange"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    model: has(report, "model") ? asString(report.model) : null,
+    routeBeforeStatus: has(report.routeBefore || {}, "latestStatus") ? asString(report.routeBefore.latestStatus) : null,
+    routeAfterStatus: has(report.routeAfter || {}, "latestStatus") ? asString(report.routeAfter.latestStatus) : null,
   } : null,
   releaseReady: boolField(report, "releaseReady"),
   shortReady: boolField(report, "shortReady"),

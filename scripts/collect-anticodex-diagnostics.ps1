@@ -193,6 +193,7 @@ function Read-JsonSummary {
         return [pscustomobject]@{
             file = Split-Path -Leaf $Path
             ok = $json.ok
+            effectiveOk = $json.effectiveOk
             reportName = $json.reportName
             skipFullRegression = $json.skipFullRegression
             failureCount = $json.failureCount
@@ -257,6 +258,7 @@ function Read-JsonSummary {
             localConnectorEvidence = $json.localConnectorEvidence
             sourceSnapshotEvidence = $json.sourceSnapshotEvidence
             logDbGuardEvidence = $json.logDbGuardEvidence
+            missingHistoryEvidence = $json.missingHistoryEvidence
             refreshFeatureEvidence = $json.refreshFeatureEvidence
             mcpSkillEvidence = $json.mcpSkillEvidence
             pluginCapabilityEvidence = $json.pluginCapabilityEvidence

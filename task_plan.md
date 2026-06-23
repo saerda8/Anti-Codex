@@ -1474,3 +1474,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Release Gate EffectiveOk Diagnostics Guard
 - Completed: diagnostics verification now requires release-gate summaries to include `effectiveOk`, instead of only checking it when present, so `ok:true` with `releaseReady:false` cannot disappear from support-bundle validation.
 - Verification: PowerShell parser check passed after fixing the wrapper quoting; focused launcher contracts passed `127/127`; real diagnostics verifier returned `ok:true`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
+
+## 2026-06-24 Missing History Support Evidence
+- Completed: missing-history reports now expose `missingHistoryEvidence` through the report summarizer, diagnostics collector/bundle, external Manager bridge, injected Manager, and fallback Manager.
+- Completed: diagnostics collector now also forwards release-gate `effectiveOk`, matching the verifier's support-bundle contract.
+- Completed: the surfaced evidence includes HTTP 410, `response_history_missing`, `retryable:false`, previous-response match, recovery guidance, stable route state, no-real-traffic coverage, and installed no-traffic coverage kind.
+- Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; focused launcher contracts passed `127/127`; real missing-history summarizer output included the new evidence; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, and installed runtime `58/58`.
