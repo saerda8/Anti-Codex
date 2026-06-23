@@ -36,6 +36,7 @@ const runtimeSyncFiles = [
   "scripts/protect-anticodex-log-db.mjs",
   "scripts/resolve-anticodex-base-url.ps1",
   "scripts/test-anticodex-installed-overall.ps1",
+  "scripts/test-anticodex-mcp-skills.ps1",
   "scripts/test-anticodex-real-work.ps1",
   "scripts/test-anticodex-real-mini-tool.ps1",
   "scripts/test-anticodex-model-switch-history.ps1",

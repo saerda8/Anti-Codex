@@ -202,9 +202,12 @@ $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
 $directoryFingerprintCache = @{}
 $script:mcpSkillFileHashCachePath = Join-Path $StateRoot "cache\mcp-skill-file-hashes.json"
+$script:mcpSkillFileHashFallbackCachePath = Join-Path $StateRoot "cache\refresh-feature-file-hashes.json"
 $script:mcpSkillFileHashCache = @{}
+$script:mcpSkillFileHashFallbackCache = @{}
 $script:mcpSkillFileHashNewCache = [ordered]@{}
 $script:mcpSkillFileHashCacheHitCount = 0
+$script:mcpSkillFileHashFallbackHitCount = 0
 $script:mcpSkillFileHashCacheMissCount = 0
 if (Test-Path -LiteralPath $script:mcpSkillFileHashCachePath -PathType Leaf) {
     try {
@@ -216,6 +219,20 @@ if (Test-Path -LiteralPath $script:mcpSkillFileHashCachePath -PathType Leaf) {
         }
     } catch {
         $script:mcpSkillFileHashCache = @{}
+    }
+}
+if (Test-Path -LiteralPath $script:mcpSkillFileHashFallbackCachePath -PathType Leaf) {
+    try {
+        $loadedFallbackHashCache = Get-Content -LiteralPath $script:mcpSkillFileHashFallbackCachePath -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ($loadedFallbackHashCache.entries) {
+            foreach ($property in $loadedFallbackHashCache.entries.PSObject.Properties) {
+                if (-not $script:mcpSkillFileHashCache.ContainsKey($property.Name)) {
+                    $script:mcpSkillFileHashFallbackCache[$property.Name] = $property.Value
+                }
+            }
+        }
+    } catch {
+        $script:mcpSkillFileHashFallbackCache = @{}
     }
 }
 $mcpRealSmoke = [pscustomobject]@{
@@ -363,6 +380,13 @@ function Get-FileSha256Hex {
         $script:mcpSkillFileHashCacheHitCount += 1
         $script:mcpSkillFileHashNewCache[$cacheKey] = $cached
         return [string]$cached.hash
+    }
+    $fallbackCached = $script:mcpSkillFileHashFallbackCache[$cacheKey]
+    if ($fallbackCached -and [string]$fallbackCached.meta -eq $metaSignature -and [string]$fallbackCached.hash) {
+        $script:mcpSkillFileHashCacheHitCount += 1
+        $script:mcpSkillFileHashFallbackHitCount += 1
+        $script:mcpSkillFileHashNewCache[$cacheKey] = $fallbackCached
+        return [string]$fallbackCached.hash
     }
     $script:mcpSkillFileHashCacheMissCount += 1
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -974,7 +998,9 @@ $result = [pscustomobject]@{
     sourceSnapshot = $sourceSnapshot
     hashCache = [pscustomobject]@{
         path = $script:mcpSkillFileHashCachePath
+        fallbackPath = $script:mcpSkillFileHashFallbackCachePath
         hitCount = $script:mcpSkillFileHashCacheHitCount
+        fallbackHitCount = $script:mcpSkillFileHashFallbackHitCount
         missCount = $script:mcpSkillFileHashCacheMissCount
         entryCount = @($script:mcpSkillFileHashNewCache.Keys).Count
     }

@@ -4264,6 +4264,10 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /if \(\$failures\.Count -gt 0\) \{ exit 1 \}/);
   assert.match(mcpSkills, /exit 0/);
   assert.match(mcpSkills, /mcpSkillFileHashCachePath/);
+  assert.match(mcpSkills, /mcpSkillFileHashFallbackCachePath/);
+  assert.match(mcpSkills, /refresh-feature-file-hashes\.json/);
+  assert.match(mcpSkills, /mcpSkillFileHashFallbackHitCount/);
+  assert.match(mcpSkills, /fallbackHitCount = \$script:mcpSkillFileHashFallbackHitCount/);
   assert.match(mcpSkills, /hashCache = \[pscustomobject\]/);
   assert.match(mcpSkills, /\$script:shortBudgetMode = \(\$TimeoutSec -lt 8\)/);
   assert.match(mcpSkills, /function Get-PreviousSourceSnapshot/);
@@ -5820,6 +5824,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const syncRuntime = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
 
   assert.match(releaseGates, /latest-release-gates\.json/);
   assert.match(releaseGates, /group: "short"/);
@@ -5996,6 +6001,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(server, /Release groups:/);
   assert.match(releaseGates, /installedRuntimeSync/);
   assert.match(releaseGates, /runtimeSyncFiles/);
+  assert.match(releaseGates, /scripts\/test-anticodex-mcp-skills\.ps1/);
+  assert.match(syncRuntime, /scripts\\test-anticodex-mcp-skills\.ps1/);
   assert.match(releaseGates, /installed_runtime_hash_mismatch/);
   assert.match(releaseGates, /installed_runtime_fingerprint_mismatch/);
   assert.match(releaseGates, /targetRuntime/);
