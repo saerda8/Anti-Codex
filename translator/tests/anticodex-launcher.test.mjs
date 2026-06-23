@@ -2959,6 +2959,75 @@ test("strict optional real-traffic gate rejects skipped optional reports", () =>
   }
 });
 
+test("strict optional real-traffic gate rejects successful reports without requested flag", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-strict-optional-requested-"));
+  const writeSignedReport = (name, payload) => {
+    const text = JSON.stringify(payload);
+    const reportPath = resolve(tempRoot, name);
+    writeFileSync(reportPath, text, "utf8");
+    writeFileSync(`${reportPath}.sha256`, `sha256:${createHash("sha256").update(text).digest("hex")}`, "ascii");
+  };
+  try {
+    mkdirSync(tempRoot, { recursive: true });
+    writeSignedReport("latest-real-third-party-provider.json", {
+      ok: true,
+      reportName: "real-third-party-provider",
+      skipped: false,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      firstMarkerObserved: true,
+      secondMarkerObserved: true,
+      historyContinuationObserved: true,
+      secretsRedacted: true,
+      turns: 2,
+      routeEvidence: {
+        transport: "upstream-provider",
+        providerProtocol: "openai-compatible",
+        requestedModel: "real-model",
+        resolvedModel: "real-model",
+        status: "success",
+      },
+    });
+    writeSignedReport("latest-provider-antigravity-return.json", {
+      ok: true,
+      reportName: "provider-antigravity-return",
+      skipped: false,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      realAntigravityEvidence: {
+        requested: true,
+        realAntigravityTurnUsed: true,
+        returnedToAntigravityWithHistory: true,
+        previousResponseIdMatched: true,
+        markerCount: 6,
+        missingMarkerCount: 0,
+        routeTransport: "antigravity-native",
+        resolvedModel: "gemini-pro",
+      },
+    });
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-release-gates.mjs"),
+      "--report-root", tempRoot,
+      "--strict",
+      "--strict-optional-real-traffic",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.strictOptionalRealTraffic, true);
+    assert.equal(summary.optionalRealTrafficReady, false);
+    assert.ok(summary.optionalRealTrafficFailures.includes("realThirdPartyProviderOptional"));
+    assert.ok(summary.optionalRealTrafficFailures.includes("providerAntigravityReturnOptional"));
+    assert.ok(summary.gates.find((gate) => gate.id === "realThirdPartyProviderOptional")?.semanticFailures.includes("optional_real_traffic_not_requested"));
+    assert.ok(summary.gates.find((gate) => gate.id === "providerAntigravityReturnOptional")?.semanticFailures.includes("optional_real_traffic_not_requested"));
+    assert.equal(summary.releaseReady, false);
+    assert.equal(summary.ok, false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers", () => {
   const reportIo = readFileSync(resolve(root, "scripts", "anticodex-report-io.ps1"), "utf8");
   const reportScripts = [
@@ -5314,6 +5383,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_skipped_requested_real_traffic_not_false/);
   assert.match(releaseGates, /optional_skipped_used_real_traffic/);
   assert.match(releaseGates, /optional_skipped_metadata_missing/);
+  assert.match(releaseGates, /optional_real_traffic_not_requested/);
   assert.match(releaseGates, /optionalAntigravitySkipped/);
   assert.match(releaseGates, /optional_real_provider_report_name/);
   assert.match(releaseGates, /optional_real_provider_history_missing/);
@@ -5848,6 +5918,7 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /requestedRealTraffic/);
   assert.match(verifier, /failures:\s*ok \? \[\] : \[reason\]/);
   assert.match(verifier, /requestedRealTraffic:\s*true,\s*ok:\s*false/);
+  assert.match(verifier, /coverageKind:\s*"real-traffic"[\s\S]*?requestedRealTraffic:\s*true[\s\S]*?usedRealTraffic:\s*true/);
   assert.match(verifier, /usedRealTraffic:\s*true/);
   assert.match(verifier, /secretsRedacted/);
   assert.match(verifier, /latest-real-third-party-provider\.json/);

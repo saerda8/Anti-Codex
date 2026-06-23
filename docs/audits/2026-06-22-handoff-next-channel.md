@@ -360,6 +360,13 @@ Branch: main
 - Bridge/inject latest-report status now follows `effectiveOk` like the adaptive Manager, preventing `ok:true` plus `releaseReady:false` from being displayed as passing.
 - Fresh evidence: syntax checks passed for adaptive/bridge/inject/UI-state; Manager action PowerShell parser passed; bridge `--self-test` passed; focused Manager/release/cold tests passed; release-gate `--self-test` and strict passive gates passed. Current strict gate remains `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
 
+## 2026-06-23 Optional Real-Traffic Requested Flag Follow-Up
+
+- Optional real-provider and provider-to-Antigravity success reports now require `requestedRealTraffic:true` as well as `usedRealTraffic:true` before strict optional readiness can treat them as real optional evidence.
+- The real third-party provider verifier writes `requestedRealTraffic:true` on successful opt-in real traffic, while skipped/not-configured reports keep explicit no-real-traffic skip semantics.
+- Release-gate self-test and launcher contracts now include a forged success-without-requested fixture and expect `optional_real_traffic_not_requested`.
+- Fresh evidence: real-provider and release-gate syntax passed; release-gate `--self-test` passed; focused optional-real/release tests passed; strict passive gates remain `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

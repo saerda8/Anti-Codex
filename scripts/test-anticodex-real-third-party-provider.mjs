@@ -274,6 +274,7 @@ async function runRealVerification({ protocol, baseUrl, model, apiKey, apiKeyEnv
     installedProfileMutated: false,
     behaviorCovered: true,
     coverageKind: "real-traffic",
+    requestedRealTraffic: true,
     usedRealTraffic: true,
     firstMarkerObserved,
     secondMarkerObserved,

@@ -195,6 +195,7 @@ function summarizeGate(definition) {
         if (!report.reason || !report.coveredBy) semanticFailures.push("optional_skipped_metadata_missing");
         if (report.requestedRealTraffic === true && report.ok === true) semanticFailures.push("optional_requested_real_traffic_uncovered_but_ok");
       } else {
+        if (report.requestedRealTraffic !== true) semanticFailures.push("optional_real_traffic_not_requested");
         if (report.usedRealTraffic !== true) semanticFailures.push("optional_real_traffic_not_used");
         if (report.behaviorCovered !== true) semanticFailures.push("optional_real_traffic_behavior_not_covered");
         if (report.coverageKind !== "real-traffic") semanticFailures.push("optional_real_traffic_coverage_kind");
@@ -1062,6 +1063,7 @@ if (args.has("--self-test")) {
       turns: 1,
     });
     semanticFailures.optionalRealProvider = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid real provider optional report satisfied the gate", [
+      "optional_real_traffic_not_requested",
       "optional_real_provider_report_name",
       "optional_real_provider_first_marker_missing",
       "optional_real_provider_second_marker_missing",
@@ -1092,6 +1094,7 @@ if (args.has("--self-test")) {
       },
     });
     semanticFailures.optionalAntigravityReturn = assertSemanticFailures("providerAntigravityReturnOptional", "self-test failed: semantically invalid Antigravity return optional report satisfied the gate", [
+      "optional_real_traffic_not_requested",
       "optional_antigravity_return_report_name",
       "optional_antigravity_return_not_requested",
       "optional_antigravity_return_not_used",
@@ -1246,7 +1249,7 @@ const missingOptional = gates.filter((gate) => !gate.requiredForRelease && !gate
 const damagedReports = gates.filter((gate) => gate.present && (!gate.parseable || gate.hashValid !== true)).map((gate) => gate.id);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
-  .filter((gate) => !gate.satisfied || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
+  .filter((gate) => !gate.satisfied || gate.requestedRealTraffic !== true || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
   .map((gate) => gate.id);
 const optionalRealTrafficReady = optionalRealTrafficFailures.length === 0;
 const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].map((group) => {
