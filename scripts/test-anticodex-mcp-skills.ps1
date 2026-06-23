@@ -149,6 +149,8 @@ $conflictingDuplicateSkillNames = @()
 $sharedMcpNames = @()
 $missingSharedMcpNames = @()
 $extraLocalMcpNames = @()
+$changedSharedMcpNames = @()
+$changedSharedMcpDetails = @()
 $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
 $mcpRealSmoke = [pscustomobject]@{
@@ -185,6 +187,60 @@ function Get-McpServerNamesFromToml {
         ForEach-Object { $_.Groups[1].Value } |
         Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
         Sort-Object -Unique)
+}
+
+function Get-McpSectionText {
+    param([string]$Text, [string]$Name)
+    if (-not $Text -or -not $Name) { return "" }
+    $namePattern = [regex]::Escape($Name)
+    $match = [regex]::Match($Text, "(?ms)^\s*\[mcp_servers\.$namePattern\]\s*(.*?)(?=^\s*\[|\z)")
+    if ($match.Success) { return $match.Groups[1].Value }
+    return ""
+}
+
+function Get-McpNestedSectionText {
+    param([string]$Text, [string]$Name, [string]$Child)
+    if (-not $Text -or -not $Name -or -not $Child) { return "" }
+    $namePattern = [regex]::Escape($Name)
+    $childPattern = [regex]::Escape($Child)
+    $match = [regex]::Match($Text, "(?ms)^\s*\[mcp_servers\.$namePattern\.$childPattern\]\s*(.*?)(?=^\s*\[|\z)")
+    if ($match.Success) { return $match.Groups[1].Value }
+    return ""
+}
+
+function Get-TomlFieldRaw {
+    param([string]$Section, [string]$Field)
+    if (-not $Section -or -not $Field) { return "" }
+    $fieldPattern = [regex]::Escape($Field)
+    $match = [regex]::Match($Section, "(?m)^\s*$fieldPattern\s*=\s*(.+?)\s*$")
+    if ($match.Success) { return $match.Groups[1].Value.Trim() }
+    return ""
+}
+
+function Get-TomlQuotedFieldValue {
+    param([string]$Section, [string]$Field)
+    $raw = Get-TomlFieldRaw $Section $Field
+    $match = [regex]::Match($raw, "^\s*['""]([^'""]+)['""]\s*$")
+    if ($match.Success) { return $match.Groups[1].Value }
+    return $raw
+}
+
+function Normalize-McpCommandCompareValue {
+    param([string]$Command)
+    if (-not $Command) { return "" }
+    if ([IO.Path]::IsPathRooted($Command)) {
+        return (Split-Path -Leaf $Command).ToLowerInvariant()
+    }
+    return $Command.Trim().ToLowerInvariant()
+}
+
+function Normalize-TomlBodyForCompare {
+    param([string]$Text)
+    if (-not $Text) { return "" }
+    return [string]::Join("`n", @($Text -split "`r?`n" |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith("#") } |
+        Sort-Object))
 }
 
 function Get-DirectoryContentFingerprint {
@@ -467,6 +523,28 @@ if ($configText) {
             foreach ($mcpName in $missingSharedMcpNames) {
                 Add-Failure "shared MCP server '$mcpName' exists but Anti-Codex local config is missing it"
             }
+            foreach ($mcpName in @($sharedMcpNames | Where-Object { $mcpNames -contains $_ })) {
+                $sharedSection = Get-McpSectionText $sharedConfigText $mcpName
+                $localSection = Get-McpSectionText $configText $mcpName
+                $changedFields = @()
+                $sharedCommand = Normalize-McpCommandCompareValue (Get-TomlQuotedFieldValue $sharedSection "command")
+                $localCommand = Normalize-McpCommandCompareValue (Get-TomlQuotedFieldValue $localSection "command")
+                if ($sharedCommand -ne $localCommand) { $changedFields += "command" }
+                $sharedArgs = Get-TomlFieldRaw $sharedSection "args"
+                $localArgs = Get-TomlFieldRaw $localSection "args"
+                if ($sharedArgs -ne $localArgs) { $changedFields += "args" }
+                $sharedEnv = Normalize-TomlBodyForCompare (Get-McpNestedSectionText $sharedConfigText $mcpName "env")
+                $localEnv = Normalize-TomlBodyForCompare (Get-McpNestedSectionText $configText $mcpName "env")
+                if ($sharedEnv -ne $localEnv) { $changedFields += "env" }
+                if ($changedFields.Count -gt 0) {
+                    $changedSharedMcpNames += $mcpName
+                    $changedSharedMcpDetails += [pscustomobject]@{
+                        name = $mcpName
+                        fields = @($changedFields)
+                    }
+                    Add-Failure "shared MCP server '$mcpName' config differs in Anti-Codex local config: $([string]::Join(', ', $changedFields))"
+                }
+            }
         } catch {
             Add-Failure "shared config.toml read failed: $($_.Exception.Message)"
         }
@@ -654,6 +732,8 @@ $result = [pscustomobject]@{
         sharedNames = $sharedMcpNames
         missingShared = $missingSharedMcpNames
         extraLocal = $extraLocalMcpNames
+        changedShared = $changedSharedMcpNames
+        changedSharedDetails = @($changedSharedMcpDetails)
         hasNodeRepl = ($mcpNames -contains "node_repl")
         smoke = [pscustomobject]@{
             checked = ($mcpSmokeChecks.Count -gt 0)

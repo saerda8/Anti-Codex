@@ -3538,6 +3538,12 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /real stdio tools\/list failed/);
   assert.match(mcpSkills, /\$sharedConfigPath = Join-Path \$SharedCodexHome "config\.toml"/);
   assert.match(mcpSkills, /function Get-McpServerNamesFromToml/);
+  assert.match(mcpSkills, /function Get-McpSectionText/);
+  assert.match(mcpSkills, /function Get-McpNestedSectionText/);
+  assert.match(mcpSkills, /function Normalize-McpCommandCompareValue/);
+  assert.match(mcpSkills, /changedSharedMcpNames/);
+  assert.match(mcpSkills, /changedSharedMcpDetails/);
+  assert.match(mcpSkills, /shared MCP server '\$mcpName' config differs in Anti-Codex local config/);
   assert.match(mcpSkills, /\$sharedMcpNames = @\(Get-McpServerNamesFromToml \$sharedConfigText\)/);
   assert.match(mcpSkills, /\$missingSharedMcpNames = @\(\$sharedMcpNames \| Where-Object \{ \$mcpNames -notcontains \$_ \}\)/);
   assert.match(mcpSkills, /shared MCP server '\$mcpName' exists but Anti-Codex local config is missing it/);
@@ -3547,6 +3553,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
   assert.match(mcpSkills, /sharedCount = \$sharedMcpNames\.Count/);
   assert.match(mcpSkills, /missingShared = \$missingSharedMcpNames/);
+  assert.match(mcpSkills, /changedShared = \$changedSharedMcpNames/);
+  assert.match(mcpSkills, /changedSharedDetails = @\(\$changedSharedMcpDetails\)/);
   assert.match(mcpSkills, /sharedCount = \$sharedSkillNames\.Count/);
   assert.match(mcpSkills, /agentsCount = \$agentsSkillNames\.Count/);
   assert.match(mcpSkills, /expectedSharedCount = \$expectedSharedSkillNames\.Count/);
@@ -3664,6 +3672,8 @@ test("installed MCP/skills verifier fails on missing shared entries without coun
 [mcp_servers.node_repl]
 command = "node"
 args = ["${fakeMcpScript}"]
+[mcp_servers.node_repl.env]
+TOKEN = "local"
 [mcp_servers.local-only.tools.nope]
 description = "ignored"
 `);
@@ -3672,7 +3682,9 @@ description = "ignored"
 # [mcp_servers.commented-out]
 [mcp_servers.node_repl]
 command = "node"
-args = ["${fakeMcpScript}"]
+args = ["${fakeMcpScript}", "--shared"]
+[mcp_servers.node_repl.env]
+TOKEN = "shared"
 [mcp_servers.missing-worker]
 command = "node"
 args = ["${fakeMcpScript}"]
@@ -3734,10 +3746,13 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
 
     assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
     assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
+    assert.deepEqual(report.mcp.changedShared, ["node_repl"]);
+    assert.deepEqual(report.mcp.changedSharedDetails[0].fields, ["args", "env"]);
     assert.deepEqual(report.skills.missingShared, ["missing-skill"]);
     assert.deepEqual(report.skills.duplicateNames, ["headroom"]);
     assert.deepEqual(report.skills.conflictingDuplicateNames, ["headroom"]);
     assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'missing-worker'")));
+    assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'node_repl' config differs")));
     assert.ok(report.failures.some((failure) => failure.includes("shared or agent skill 'missing-skill'")));
     assert.ok(report.failures.some((failure) => failure.includes("duplicate skill 'headroom' differs")));
     assert.ok(!report.mcp.sharedNames.includes("commented-out"));
