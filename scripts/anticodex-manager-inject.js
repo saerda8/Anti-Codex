@@ -908,10 +908,11 @@
         const markerCounts = [continuity.sixthMarkerCount, continuity.seventhMarkerCount, continuity.eighthMarkerCount, continuity.ninthMarkerCount].filter((value) => value !== null && value !== undefined).join("/");
         lines.push(`  providerContinuity: turns=${continuity.turns ?? "unknown"} / markers=${markerCounts || "unknown"}`);
         lines.push(`  toolPairs: restart=${continuity.restartPreservesOpenAiToolPair ? "true" : "false"} / openai=${continuity.providerSwitchPreservesOpenAiToolPair ? "true" : "false"} / anthropic=${continuity.protocolSwitchPreservesAnthropicToolPair ? "true" : "false"} / reverse=${continuity.reverseProtocolSwitchPreservesOpenAiToolPair ? "true" : "false"} / markerThresholds=${continuity.markerThresholdsOk ? "true" : "false"}`);
-        if (continuity.previousResponseContinuity) {
-          const ids = continuity.previousResponseContinuity;
-          lines.push(`  previousIds: save=${ids.savePresent ? "true" : "false"} / restart=${ids.restartPresent ? "true" : "false"} / provider=${ids.providerSwitchPresent ? "true" : "false"} / protocol=${ids.protocolSwitchPresent ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchPresent ? "true" : "false"}`);
-        }
+      if (continuity.previousResponseContinuity) {
+        const ids = continuity.previousResponseContinuity;
+        lines.push(`  previousIds: save=${ids.savePresent ? "true" : "false"} / restart=${ids.restartPresent ? "true" : "false"} / provider=${ids.providerSwitchPresent ? "true" : "false"} / protocol=${ids.protocolSwitchPresent ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchPresent ? "true" : "false"}`);
+        lines.push(`  previousMatches: save=${ids.saveMatched ? "true" : "false"} / restart=${ids.restartMatched ? "true" : "false"} / provider=${ids.providerSwitchMatched ? "true" : "false"} / protocol=${ids.protocolSwitchMatched ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchMatched ? "true" : "false"}`);
+      }
         lines.push(`  orderedHistory: clean=${continuity.orderedHistoryClean ? "true" : "false"} / counts=${[continuity.sixthOrderedHistoryCount, continuity.seventhOrderedHistoryCount, continuity.eighthOrderedHistoryCount, continuity.ninthOrderedHistoryCount].filter((value) => value !== null && value !== undefined).join("/") || "unknown"}`);
       }
       if (item.optionalRealProviderEvidence) {

@@ -701,6 +701,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /markerThresholds=/);
   assert.match(managerBridge, /previousIds: save=/);
   assert.match(managerInject, /previousIds: save=/);
+  assert.match(managerBridge, /previousMatches: save=/);
+  assert.match(managerInject, /previousMatches: save=/);
   assert.match(managerBridge, /orderedHistory: clean=/);
   assert.match(managerInject, /orderedHistory: clean=/);
   assert.match(managerBridge, /optionalRealProviderEvidence/);
@@ -2043,6 +2045,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /markerThresholdsOk/);
   assert.match(server, /previousResponseContinuity/);
   assert.match(server, /previousIds: save=/);
+  assert.match(server, /previousMatches: save=/);
   assert.match(server, /sixthMarkerCount/);
   assert.match(server, /sixthOrderedHistoryCount/);
   assert.match(server, /providerContinuity: turns=/);
@@ -2273,6 +2276,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /orderedHistoryClean/);
   assert.match(reportSummarizer, /previousResponseContinuity/);
+  assert.match(reportSummarizer, /saveMatched/);
+  assert.match(reportSummarizer, /restartMatched/);
   assert.match(reportSummarizer, /providerSwitchMatchesNested/);
   assert.match(reportSummarizer, /sixthOrderedHistoryCount/);
   assert.match(reportSummarizer, /seventhOrderedHistoryCount/);
@@ -4243,6 +4248,10 @@ TOKEN = "ignored"
 [mcp_servers.ignored.tools.call]
 description = "ignored"
 `);
+    for (const guidanceName of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+      writeFileSync(resolve(sharedHome, guidanceName), `shared ${guidanceName}\n`);
+      writeFileSync(resolve(localHome, guidanceName), guidanceName === "RTK.md" ? "stale local RTK\n" : `shared ${guidanceName}\n`);
+    }
     writeFileSync(fakeServerScript, `
 import http from "node:http";
 const server = http.createServer((req, res) => {
@@ -4301,10 +4310,15 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     assert.deepEqual(report.skills.missingShared, ["missing-skill"]);
     assert.deepEqual(report.skills.duplicateNames, ["headroom"]);
     assert.deepEqual(report.skills.conflictingDuplicateNames, ["headroom"]);
+    const rtkGuidance = report.guidance.find((entry) => entry.name === "RTK.md");
+    assert.equal(rtkGuidance.sharedExists, true);
+    assert.equal(rtkGuidance.localExists, true);
+    assert.equal(rtkGuidance.contentMatches, false);
     assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'missing-worker'")));
     assert.ok(report.failures.some((failure) => failure.includes("shared MCP server 'node_repl' config differs")));
     assert.ok(report.failures.some((failure) => failure.includes("shared or agent skill 'missing-skill'")));
     assert.ok(report.failures.some((failure) => failure.includes("duplicate skill 'headroom' differs")));
+    assert.ok(report.failures.some((failure) => failure.includes("Anti-Codex guidance 'RTK.md' content differs from shared copy")));
     assert.ok(!report.mcp.sharedNames.includes("commented-out"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.env"));
     assert.ok(!report.mcp.sharedNames.includes("ignored.tools.call"));
@@ -5332,6 +5346,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /orderedHistoryClean/);
   assert.match(diagnostics, /previousResponseContinuity/);
   assert.match(diagnostics, /provider-switch previous_response_id continuity/);
+  assert.match(diagnostics, /save previous_response_id mismatch/);
+  assert.match(diagnostics, /restart previous_response_id mismatch/);
   assert.match(diagnostics, /third-party provider summary missing ordered role history evidence/);
   assert.match(diagnostics, /sixthOrderedHistoryCount/);
   assert.match(diagnostics, /seventhOrderedHistoryCount/);
@@ -5366,7 +5382,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /connectorParityMissingShared/);
   assert.match(diagnostics, /appToolGetPostMissingFromGet/);
   assert.match(diagnostics, /MCP\/Skill summary missing mcpSkillEvidence/);
+  assert.match(diagnostics, /MCP\/Skill summary has extra local MCP entries/);
   assert.match(diagnostics, /MCP\/Skill summary has changed shared MCP entries/);
+  assert.match(diagnostics, /MCP\/Skill summary has extra local skills/);
   assert.match(diagnostics, /MCP\/Skill summary has conflicting duplicate skills/);
   assert.match(diagnostics, /refreshFeatureEvidence/);
   assert.match(diagnostics, /changedExpectedSkills/);
@@ -5535,6 +5553,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /mcp_skills_missing_shared_mcp/);
   assert.match(releaseGates, /mcp_skills_changed_shared_mcp/);
   assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
+  assert.match(releaseGates, /mcp_skills_extra_local_skills/);
   assert.match(releaseGates, /mcp_skills_conflicting_duplicate_skills/);
   assert.match(releaseGates, /mcp_skills_real_call_not_passed/);
   assert.match(releaseGates, /mcp_skills_no_agents_skills/);
@@ -6047,6 +6066,12 @@ test("third-party provider verifier preserves history across save and restart", 
   assert.match(verifier, /openai-compatible",\s*to: "anthropic"/);
   assert.match(verifier, /turn-9 user asks iota after reverse protocol switch/);
   assert.match(verifier, /reverseProtocolSwitchContinuationPreviousResponseId/);
+  assert.match(verifier, /previousResponseContinuity/);
+  assert.match(verifier, /saveMatched/);
+  assert.match(verifier, /restartMatched/);
+  assert.match(verifier, /providerSwitchMatched/);
+  assert.match(verifier, /protocolSwitchMatched/);
+  assert.match(verifier, /reverseProtocolSwitchMatched/);
   assert.match(verifier, /ninthAfterReverseProtocolSwitchPreservesHistory/);
   assert.match(verifier, /ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers/);
   assert.match(verifier, /reverseCrossProtocolWithoutHistoryLoss/);
@@ -6065,8 +6090,14 @@ test("release gates require structured provider save and restart continuity evid
 
   assert.match(releaseGates, /third_party_provider_save_structural_tool_evidence/);
   assert.match(releaseGates, /third_party_provider_restart_structural_tool_evidence/);
+  assert.match(releaseGates, /third_party_provider_report_name/);
   assert.match(releaseGates, /third_party_provider_save_previous_response_id_missing/);
   assert.match(releaseGates, /third_party_provider_restart_previous_response_id_missing/);
+  assert.match(releaseGates, /third_party_provider_save_previous_response_id_mismatch/);
+  assert.match(releaseGates, /third_party_provider_restart_previous_response_id_mismatch/);
+  assert.match(releaseGates, /third_party_provider_switch_previous_response_id_mismatch/);
+  assert.match(releaseGates, /third_party_provider_protocol_previous_response_id_mismatch/);
+  assert.match(releaseGates, /third_party_provider_reverse_protocol_previous_response_id_mismatch/);
   assert.match(releaseGates, /third_party_provider_save_marker_coverage/);
   assert.match(releaseGates, /third_party_provider_restart_marker_coverage/);
   assert.match(releaseGates, /third_party_provider_turn6_ordered_history/);

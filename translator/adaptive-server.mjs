@@ -3355,6 +3355,7 @@ function latestReportsSummary(result){
       if(continuity.previousResponseContinuity){
         const ids=continuity.previousResponseContinuity;
         lines.push("  previousIds: save="+(ids.savePresent?"true":"false")+" / restart="+(ids.restartPresent?"true":"false")+" / provider="+(ids.providerSwitchPresent?"true":"false")+" / protocol="+(ids.protocolSwitchPresent?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchPresent?"true":"false"));
+        lines.push("  previousMatches: save="+(ids.saveMatched?"true":"false")+" / restart="+(ids.restartMatched?"true":"false")+" / provider="+(ids.providerSwitchMatched?"true":"false")+" / protocol="+(ids.protocolSwitchMatched?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchMatched?"true":"false"));
       }
     }
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);

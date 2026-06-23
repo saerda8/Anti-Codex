@@ -1286,3 +1286,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: read-only UI-state verifier now treats the diagnostic-bundle long-task result summary as a Manager page contract, checking both fallback Manager HTML and injected Manager source.
 - Completed: launcher coverage now requires `hasDiagnosticsBundleLongTaskResultSummary`, `diagnosticsSummary`, and the explicit failure text so future Manager result fields do not bypass UI verification.
 - Verification: UI-state verifier syntax passed; UI-state `--self-test` passed; focused launcher UI-state contracts passed `124/124`.
+
+## 2026-06-23 MCP/Skill Parity and Provider Continuity Gate Hardening
+- Completed: passive release gates now reject extra Anti-Codex-local skills through `mcp_skills_extra_local_skills`, matching the existing extra-local MCP and connector/app-tool parity boundaries.
+- Completed: diagnostics verification now fails when MCP/Skill report summaries expose extra local MCP entries or extra local skills, so support bundles cannot hide inherited-surface drift.
+- Completed: the MCP/Skill dynamic fixture now covers global guidance content drift by forcing a stale local `RTK.md` and requiring the verifier to report the mismatch.
+- Completed: third-party provider verifier reports `previousResponseContinuity` matched booleans for save, restart, provider switch, protocol switch, and reverse protocol switch. Release gates now require the third-party report name and all five previous-response matches, while Manager summaries show both previous-ID presence and match status.
+- Verification: JS syntax checks passed for changed verifier/summarizer/Manager files; diagnostics PowerShell parser check passed; release-gate `--self-test` passed; launcher contracts passed `123/124` with only the known linked-skill environment skip.

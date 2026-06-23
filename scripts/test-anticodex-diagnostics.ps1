@@ -356,6 +356,11 @@ function Test-DiagnosticBundle {
                     if ($previousIds.providerSwitchPresent -ne $true) { Add-Failure "third-party provider summary missing provider-switch previous_response_id continuity" }
                     if ($previousIds.protocolSwitchPresent -ne $true) { Add-Failure "third-party provider summary missing protocol-switch previous_response_id continuity" }
                     if ($previousIds.reverseProtocolSwitchPresent -ne $true) { Add-Failure "third-party provider summary missing reverse-protocol previous_response_id continuity" }
+                    if ($previousIds.saveMatched -ne $true) { Add-Failure "third-party provider summary save previous_response_id mismatch" }
+                    if ($previousIds.restartMatched -ne $true) { Add-Failure "third-party provider summary restart previous_response_id mismatch" }
+                    if ($previousIds.providerSwitchMatched -ne $true) { Add-Failure "third-party provider summary provider-switch previous_response_id mismatch" }
+                    if ($previousIds.protocolSwitchMatched -ne $true) { Add-Failure "third-party provider summary protocol-switch previous_response_id mismatch" }
+                    if ($previousIds.reverseProtocolSwitchMatched -ne $true) { Add-Failure "third-party provider summary reverse-protocol previous_response_id mismatch" }
                     if ($previousIds.providerSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary provider-switch previous_response_id mismatch" }
                     if ($previousIds.protocolSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary protocol-switch previous_response_id mismatch" }
                     if ($previousIds.reverseProtocolSwitchMatchesNested -ne $true) { Add-Failure "third-party provider summary reverse-protocol previous_response_id mismatch" }
@@ -413,6 +418,7 @@ function Test-DiagnosticBundle {
                 if ([int]$mcpSkillEvidence.mcpCount -lt 1) { Add-Failure "MCP/Skill summary has no MCP entries" }
                 if ([int]$mcpSkillEvidence.mcpSharedCount -lt 1) { Add-Failure "MCP/Skill summary has no shared MCP entries" }
                 if (@($mcpSkillEvidence.mcpMissingShared).Count -ne 0) { Add-Failure "MCP/Skill summary has missing shared MCP entries" }
+                if (@($mcpSkillEvidence.mcpExtraLocal).Count -ne 0) { Add-Failure "MCP/Skill summary has extra local MCP entries" }
                 if (@($mcpSkillEvidence.mcpChangedShared).Count -ne 0) { Add-Failure "MCP/Skill summary has changed shared MCP entries" }
                 if ($mcpSkillEvidence.hasNodeRepl -ne $true) { Add-Failure "MCP/Skill summary missing node_repl evidence" }
                 if ($mcpSkillEvidence.mcpSmokePassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP smoke evidence" }
@@ -421,6 +427,7 @@ function Test-DiagnosticBundle {
                 if ([int]$mcpSkillEvidence.expectedSharedSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing expected shared skill count" }
                 if ([int]$mcpSkillEvidence.agentsSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing .agents skill count" }
                 if (@($mcpSkillEvidence.missingSharedSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has missing shared skills" }
+                if (@($mcpSkillEvidence.extraLocalSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has extra local skills" }
                 if (@($mcpSkillEvidence.changedSharedSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has changed shared skills" }
                 if (@($mcpSkillEvidence.conflictingDuplicateSkillNames).Count -ne 0) { Add-Failure "MCP/Skill summary has conflicting duplicate skills" }
                 if ($mcpSkillEvidence.skillSmokeReadable -ne $true) { Add-Failure "MCP/Skill summary missing skill smoke evidence" }

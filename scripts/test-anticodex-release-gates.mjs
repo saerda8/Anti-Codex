@@ -308,6 +308,7 @@ function summarizeGate(definition) {
       if (Number(skills.agentsCount || 0) < 1) semanticFailures.push("mcp_skills_no_agents_skills");
       if (Number(skills.expectedSharedCount || 0) < Number(skills.sharedCount || 0) + Number(skills.agentsCount || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
       if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
+      if (!isEmptyArray(skills.extraLocal)) semanticFailures.push("mcp_skills_extra_local_skills");
       if (!isEmptyArray(skills.changedShared)) semanticFailures.push("mcp_skills_changed_shared_skills");
       if (!isEmptyArray(skills.conflictingDuplicateNames)) semanticFailures.push("mcp_skills_conflicting_duplicate_skills");
       if (!skills.smoke || skills.smoke.readable !== true) semanticFailures.push("mcp_skills_skill_smoke_not_readable");
@@ -473,6 +474,8 @@ function summarizeGate(definition) {
       const providerSwitch = history.providerSwitch || {};
       const protocolSwitch = history.protocolSwitch || {};
       const reverseProtocolSwitch = history.reverseProtocolSwitch || {};
+      const previousResponseContinuity = history.previousResponseContinuity || report.previousResponseContinuity || {};
+      if (report.reportName !== "third-party-provider") semanticFailures.push("third_party_provider_report_name");
       if (report.secretsRedacted !== true) semanticFailures.push("third_party_provider_secrets_not_redacted");
       if (history.turns !== 9) semanticFailures.push("third_party_provider_turn_count");
       if (report.savedWithoutHistoryLoss !== true) semanticFailures.push("third_party_provider_save_history_loss");
@@ -503,6 +506,11 @@ function summarizeGate(definition) {
       if (!history.providerSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_switch_previous_response_id_missing");
       if (!history.protocolSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_protocol_previous_response_id_missing");
       if (!history.reverseProtocolSwitchContinuationPreviousResponseId) semanticFailures.push("third_party_provider_reverse_protocol_previous_response_id_missing");
+      if (previousResponseContinuity.saveMatched !== true) semanticFailures.push("third_party_provider_save_previous_response_id_mismatch");
+      if (previousResponseContinuity.restartMatched !== true) semanticFailures.push("third_party_provider_restart_previous_response_id_mismatch");
+      if (previousResponseContinuity.providerSwitchMatched !== true) semanticFailures.push("third_party_provider_switch_previous_response_id_mismatch");
+      if (previousResponseContinuity.protocolSwitchMatched !== true) semanticFailures.push("third_party_provider_protocol_previous_response_id_mismatch");
+      if (previousResponseContinuity.reverseProtocolSwitchMatched !== true) semanticFailures.push("third_party_provider_reverse_protocol_previous_response_id_mismatch");
       if (history.providerSwitchContinuationPreviousResponseId && providerSwitch.continuationPreviousResponseId && history.providerSwitchContinuationPreviousResponseId !== providerSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_switch_previous_response_id_mismatch");
       if (history.protocolSwitchContinuationPreviousResponseId && protocolSwitch.continuationPreviousResponseId && history.protocolSwitchContinuationPreviousResponseId !== protocolSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_protocol_previous_response_id_mismatch");
       if (history.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch.continuationPreviousResponseId && history.reverseProtocolSwitchContinuationPreviousResponseId !== reverseProtocolSwitch.continuationPreviousResponseId) semanticFailures.push("third_party_provider_reverse_protocol_previous_response_id_mismatch");
@@ -716,6 +724,7 @@ if (args.has("--self-test")) {
         agentsCount: 0,
         expectedSharedCount: 1,
         missingShared: ["missing-skill"],
+        extraLocal: ["extra-skill"],
         changedShared: ["changed-skill"],
         smoke: { readable: false },
       },
@@ -864,7 +873,7 @@ if (args.has("--self-test")) {
 
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
-      reportName: "third-party-provider",
+      reportName: "wrong-third-party-provider",
       secretsRedacted: false,
       savedWithoutHistoryLoss: false,
       restoredAntigravityWithoutHistoryLoss: false,
@@ -894,6 +903,13 @@ if (args.has("--self-test")) {
         },
         savedContinuationPreviousResponseId: "",
         restartContinuationPreviousResponseId: "",
+        previousResponseContinuity: {
+          saveMatched: false,
+          restartMatched: false,
+          providerSwitchMatched: false,
+          protocolSwitchMatched: false,
+          reverseProtocolSwitchMatched: false,
+        },
         fifthAfterSavePreservesHistory: false,
         sixthAfterRestartPreservesHistory: false,
         sixthAfterRestartPreservesAllHistoryMarkers: false,
@@ -1180,6 +1196,7 @@ if (args.has("--self-test")) {
       "mcp_skills_real_call_not_passed",
       "mcp_skills_no_agents_skills",
       "mcp_skills_missing_shared_skills",
+      "mcp_skills_extra_local_skills",
       "mcp_skills_conflicting_duplicate_skills",
       "mcp_skills_skill_smoke_not_readable",
       "mcp_skills_source_snapshot_missing",
@@ -1231,6 +1248,7 @@ if (args.has("--self-test")) {
       "source_preflight_diff_whitespace",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
+      "third_party_provider_report_name",
       "third_party_provider_secrets_not_redacted",
       "third_party_provider_turn_count",
       "third_party_provider_restore_history_loss",
@@ -1253,6 +1271,11 @@ if (args.has("--self-test")) {
       "third_party_provider_switch_previous_response_id_missing",
       "third_party_provider_protocol_previous_response_id_missing",
       "third_party_provider_reverse_protocol_previous_response_id_missing",
+      "third_party_provider_save_previous_response_id_mismatch",
+      "third_party_provider_restart_previous_response_id_mismatch",
+      "third_party_provider_switch_previous_response_id_mismatch",
+      "third_party_provider_protocol_previous_response_id_mismatch",
+      "third_party_provider_reverse_protocol_previous_response_id_mismatch",
       "third_party_provider_save_marker_coverage",
       "third_party_provider_restart_marker_coverage",
       "third_party_provider_turn6_marker_coverage",

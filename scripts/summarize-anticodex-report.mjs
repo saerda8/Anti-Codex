@@ -64,6 +64,9 @@ const structuralEvidence = toolHistory && toolHistory.structuralEvidence ? toolH
 const providerSwitch = multiTurnHistory && multiTurnHistory.providerSwitch ? multiTurnHistory.providerSwitch : null;
 const protocolSwitch = multiTurnHistory && multiTurnHistory.protocolSwitch ? multiTurnHistory.protocolSwitch : null;
 const reverseProtocolSwitch = multiTurnHistory && multiTurnHistory.reverseProtocolSwitch ? multiTurnHistory.reverseProtocolSwitch : null;
+const previousResponseContinuity = multiTurnHistory && multiTurnHistory.previousResponseContinuity
+  ? multiTurnHistory.previousResponseContinuity
+  : (report && report.previousResponseContinuity ? report.previousResponseContinuity : null);
 const endpointEvidence = report && report.endpointEvidence ? report.endpointEvidence : null;
 const capabilities = report && report.capabilities ? report.capabilities : null;
 const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : null;
@@ -458,6 +461,11 @@ const summary = {
       providerSwitchPresent: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId),
       protocolSwitchPresent: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId),
       reverseProtocolSwitchPresent: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId),
+      saveMatched: boolField(previousResponseContinuity || {}, "saveMatched"),
+      restartMatched: boolField(previousResponseContinuity || {}, "restartMatched"),
+      providerSwitchMatched: boolField(previousResponseContinuity || {}, "providerSwitchMatched"),
+      protocolSwitchMatched: boolField(previousResponseContinuity || {}, "protocolSwitchMatched"),
+      reverseProtocolSwitchMatched: boolField(previousResponseContinuity || {}, "reverseProtocolSwitchMatched"),
       providerSwitchMatchesNested: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId && providerSwitch?.continuationPreviousResponseId && multiTurnHistory.providerSwitchContinuationPreviousResponseId === providerSwitch.continuationPreviousResponseId),
       protocolSwitchMatchesNested: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId && protocolSwitch?.continuationPreviousResponseId && multiTurnHistory.protocolSwitchContinuationPreviousResponseId === protocolSwitch.continuationPreviousResponseId),
       reverseProtocolSwitchMatchesNested: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId && reverseProtocolSwitch?.continuationPreviousResponseId && multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId === reverseProtocolSwitch.continuationPreviousResponseId),

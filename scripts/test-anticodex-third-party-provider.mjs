@@ -1180,6 +1180,14 @@ async function main() {
     };
   }
 
+  const previousResponseContinuity = {
+    saveMatched: fifthAfterSave.previous_response_id === toolOutputResponse.id,
+    restartMatched: sixthAfterRestart.previous_response_id === fifthAfterSave.id,
+    providerSwitchMatched: seventhAfterProviderSwitch.previous_response_id === sixthAfterRestart.id,
+    protocolSwitchMatched: eighthAfterProtocolSwitch.previous_response_id === seventhAfterProviderSwitch.id,
+    reverseProtocolSwitchMatched: ninthAfterReverseProtocolSwitch.previous_response_id === eighthAfterProtocolSwitch.id,
+  };
+
   return {
     ok: failures.length === 0,
     failures,
@@ -1199,6 +1207,7 @@ async function main() {
     coverageKind: allowRealAntigravityTurn ? "real-traffic" : "local-fake-provider",
     usedRealTraffic: realAntigravityEvidence.realAntigravityTurnUsed,
     realAntigravityEvidence,
+    previousResponseContinuity,
     secretsRedacted: true,
     multiTurnHistory: {
       turns: 9,
@@ -1291,6 +1300,7 @@ async function main() {
       providerSwitchContinuationPreviousResponseId: seventhAfterProviderSwitch.previous_response_id,
       protocolSwitchContinuationPreviousResponseId: eighthAfterProtocolSwitch.previous_response_id,
       reverseProtocolSwitchContinuationPreviousResponseId: ninthAfterReverseProtocolSwitch.previous_response_id,
+      previousResponseContinuity,
     },
     routeEvidence: routeAudit.latest,
     requestCount: requests.length,
