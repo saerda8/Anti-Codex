@@ -101,6 +101,32 @@ test("--skills-only merges shared skills into an existing local skills directory
   }
 });
 
+test("--skills-only imports dot-prefixed system skill directories", () => {
+  const tmp = tmpDir();
+  const codexHome = resolve(tmp, "codex");
+  const sharedHome = resolve(tmp, "shared");
+
+  mkdirSync(resolve(sharedHome, "skills", ".system", "imagegen"), { recursive: true });
+  writeFileSync(resolve(sharedHome, "skills", ".system", "imagegen", "SKILL.md"), "system image skill");
+
+  try {
+    const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--skills-only"], {
+      encoding: "utf8",
+    });
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+
+    const systemSkillPath = resolve(codexHome, "skills", ".system", "imagegen", "SKILL.md");
+    assert.strictEqual(readFileSync(systemSkillPath, "utf8"), "system image skill");
+    assert.ok(!lstatSync(resolve(codexHome, "skills", ".system")).isSymbolicLink());
+
+    const summary = JSON.parse(result.stdout);
+    assert.ok(summary.ok);
+    assert.strictEqual(summary.summary[0].mode, "copied");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test("--skills-only only processes skills, never links plugins", () => {
   const tmp = tmpDir();
   const codexHome = resolve(tmp, "codex");
