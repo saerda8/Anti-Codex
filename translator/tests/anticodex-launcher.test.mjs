@@ -4609,6 +4609,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$checks\.websocketFallback = if \(\$Fast\)/);
   assert.match(overall, /test-anticodex-third-party-provider\.mjs/);
   assert.match(overall, /Third-party provider local end-to-end verification/);
+  assert.match(overall, /\$thirdPartyProviderTimeoutMs = 90000/);
+  assert.match(overall, /\$thirdPartyProviderProcessTimeoutSec = \[int\]\[Math\]::Ceiling\(\$thirdPartyProviderTimeoutMs \/ 1000\) \+ 15/);
+  assert.match(overall, /"--timeout-ms", "\$thirdPartyProviderTimeoutMs"[\s\S]{0,120}\) \$thirdPartyProviderProcessTimeoutSec/);
   assert.match(overall, /\$checks\.thirdPartyProvider = if \(\$Fast\)/);
   assert.match(overall, /fast mode skips local third-party provider end-to-end verification/);
   assert.match(overall, /test-anticodex-local-connectors\.mjs/);

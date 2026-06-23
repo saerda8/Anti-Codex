@@ -431,3 +431,9 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Fallback Manager now shows the same local-feature snapshot freshness guidance as the injected panel, including a visible warning for stale/missing/invalid/source-changed snapshots.
 - This is display-only and points operators to the existing refresh-local-features action; it does not mutate shared/native Codex state.
 - Fresh evidence: adaptive/injected Manager syntax checks passed; focused Manager/local-feature launcher contracts passed `9/9`.
+
+## 2026-06-23 Installed Overall Third-Party Timeout Follow-Up
+
+- Installed overall now sets the third-party local verifier process timeout from its 90s `--timeout-ms` plus margin, instead of relying on the default 60s subcheck timeout.
+- This avoids false timeout failures in no-traffic fake-provider verification without running real traffic.
+- Fresh evidence: PowerShell parser check passed; focused installed overall/third-party/Manager launcher contracts passed `14/14`; diff whitespace check passed.

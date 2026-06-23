@@ -1102,12 +1102,14 @@ $checks.missingHistory = Invoke-NodeJsonScript "Missing response history verific
 $checks.thirdPartyProvider = if ($Fast) {
     New-SkippedCheck "fast mode skips local third-party provider end-to-end verification" "test-anticodex-third-party-provider.mjs"
 } else {
+    $thirdPartyProviderTimeoutMs = 90000
+    $thirdPartyProviderProcessTimeoutSec = [int][Math]::Ceiling($thirdPartyProviderTimeoutMs / 1000) + 15
     Invoke-NodeJsonScript "Third-party provider local end-to-end verification" (Join-Path $scriptsRoot "test-anticodex-third-party-provider.mjs") @(
         "--source-root", $RuntimeRoot,
         "--runtime-root", $RuntimeRoot,
         "--report-root", $ReportRoot,
-        "--timeout-ms", "90000"
-    )
+        "--timeout-ms", "$thirdPartyProviderTimeoutMs"
+    ) $thirdPartyProviderProcessTimeoutSec
 }
 $checks.realThirdPartyProviderOptional = if ($AllowRealTraffic -and (-not $NoTraffic)) {
     New-SkippedCheck "real third-party provider verification requires explicit provider protocol, URL, model, and API key environment variable" "test-anticodex-real-third-party-provider.mjs"

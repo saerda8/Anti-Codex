@@ -1179,3 +1179,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: fallback Manager now matches the injected panel by reading `localFeatures.snapshotStatus`, showing snapshot freshness/refresh guidance, and displaying a warning when snapshots are stale, missing, invalid, or `source_changed`.
 - Completed: this remains a display-only prompt to run the existing refresh action; it does not auto-repair, rewrite native Codex, or fake connector/app-tool authorization.
 - Verification: adaptive/injected Manager syntax checks passed; focused Manager/local-feature launcher contracts passed `9/9`.
+
+## 2026-06-23 Installed Overall Third-Party Verifier Timeout Alignment
+- Completed: installed overall now gives the local fake third-party provider verifier a process timeout derived from its `--timeout-ms` value, avoiding a 90s inner verifier being killed by the default 60s subcheck budget.
+- Completed: launcher contracts now require the explicit timeout variable and outer-process margin.
+- Verification: installed overall PowerShell parser check passed; focused installed overall/third-party/Manager launcher contracts passed `14/14`; diff whitespace check passed.
