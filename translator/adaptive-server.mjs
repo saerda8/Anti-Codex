@@ -2318,6 +2318,13 @@ function latestManagerReportItem(label, fileName) {
             seventhOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.seventhOrderedHistory?.checked)) ? Number(structuralEvidence.seventhOrderedHistory.checked) : null,
             eighthOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.eighthOrderedHistory?.checked)) ? Number(structuralEvidence.eighthOrderedHistory.checked) : null,
             ninthOrderedHistoryCount: Number.isFinite(Number(structuralEvidence?.ninthOrderedHistory?.checked)) ? Number(structuralEvidence.ninthOrderedHistory.checked) : null,
+            previousResponseContinuity: {
+                savePresent: Boolean(multiTurnHistory.savedContinuationPreviousResponseId),
+                restartPresent: Boolean(multiTurnHistory.restartContinuationPreviousResponseId),
+                providerSwitchPresent: Boolean(multiTurnHistory.providerSwitchContinuationPreviousResponseId),
+                protocolSwitchPresent: Boolean(multiTurnHistory.protocolSwitchContinuationPreviousResponseId),
+                reverseProtocolSwitchPresent: Boolean(multiTurnHistory.reverseProtocolSwitchContinuationPreviousResponseId),
+            },
         } : null,
         updatedAt,
         ageMs,
@@ -2970,7 +2977,7 @@ function latestReportsSummary(result){
     if(item.optionalRealProviderEvidence){
       const evidence=item.optionalRealProviderEvidence;
       lines.push("  realProvider: first="+(evidence.firstMarkerObserved?"true":"false")+" / second="+(evidence.secondMarkerObserved?"true":"false")+" / history="+(evidence.historyContinuationObserved?"true":"false")+" / turns="+(evidence.turns??"unknown"));
-      lines.push("  realProvider route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / "+(evidence.routeResolvedModel||"unknown")+" / "+(evidence.routeStatus||"unknown"));
+      lines.push("  realProvider route: "+(evidence.routeTransport||"unknown")+" / "+(evidence.routeProviderProtocol||"unknown")+" / requested="+(evidence.routeRequestedModel||"unknown")+" / resolved="+(evidence.routeResolvedModel||"unknown")+" / status="+(evidence.routeStatus||"unknown")+" / redaction="+(evidence.secretsRedacted?"true":"false"));
     }
     if(item.coldRelaunchEvidence){
       const evidence=item.coldRelaunchEvidence;
@@ -3000,6 +3007,10 @@ function latestReportsSummary(result){
       const markerCounts=[continuity.sixthMarkerCount,continuity.seventhMarkerCount,continuity.eighthMarkerCount,continuity.ninthMarkerCount].filter((value)=>value!==null&&value!==undefined).join("/");
       lines.push("  providerContinuity: turns="+(continuity.turns??"unknown")+" / markers="+(markerCounts||"unknown"));
       lines.push("  toolPairs: restart="+(continuity.restartPreservesOpenAiToolPair?"true":"false")+" / openai="+(continuity.providerSwitchPreservesOpenAiToolPair?"true":"false")+" / anthropic="+(continuity.protocolSwitchPreservesAnthropicToolPair?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitchPreservesOpenAiToolPair?"true":"false")+" / markerThresholds="+(continuity.markerThresholdsOk?"true":"false"));
+      if(continuity.previousResponseContinuity){
+        const ids=continuity.previousResponseContinuity;
+        lines.push("  previousIds: save="+(ids.savePresent?"true":"false")+" / restart="+(ids.restartPresent?"true":"false")+" / provider="+(ids.providerSwitchPresent?"true":"false")+" / protocol="+(ids.protocolSwitchPresent?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchPresent?"true":"false"));
+      }
     }
     if(item.exists&&item.latestPath) lines.push("  \\u6587\\u4ef6\\uff1a"+item.latestPath);
   }

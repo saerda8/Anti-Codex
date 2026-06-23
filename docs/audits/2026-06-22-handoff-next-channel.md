@@ -319,6 +319,13 @@ Branch: main
 - Summaries and diagnostics now expose/verify `previousResponseContinuity`, including nested switch-field consistency. Manager summaries now show restart tool-pair evidence and marker threshold status alongside provider/protocol switch evidence.
 - Fresh evidence: syntax/parser checks passed; release-gate `--self-test` passed with the new continuation failures; focused launcher contracts passed `13/13`; strict passive release gates remain `shortReady:true`, `releaseReady:true`, and the third-party provider gate reports no semantic failures.
 
+## 2026-06-23 Optional Real-Traffic Visibility Follow-Up
+
+- Manager latest-report summaries now expose optional real-provider requested/resolved model route evidence, redaction status, provider-to-Antigravity native route evidence, and provider continuity previous-ID status.
+- Diagnostics now validate skipped optional real-provider and provider-to-Antigravity reports as explicit no-traffic skip evidence instead of ignoring skipped reports.
+- Passive release-gate self-test now has separate skipped-report negative coverage for provider-to-Antigravity return.
+- Fresh evidence: syntax checks passed, diagnostics parser checks passed, Manager bridge self-test passed, release-gate `--self-test` passed, focused launcher contracts passed `11/11`, and strict passive gates remain `shortReady:true` / `releaseReady:true`; optional real-traffic readiness remains false because real external traffic has not been requested.
+
 ## 2026-06-23 Installed Missing-History Follow-Up
 
 Update: installed `native-panel-v85` `viewLatestReports` now passes, installed fast UI state is green, and release gates validate the missing-history 410/no-traffic/no-route-change semantics directly.

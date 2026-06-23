@@ -406,7 +406,14 @@ function Test-DiagnosticBundle {
             }
         }
         $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
-        if ($optionalRealProviderSummary -and $optionalRealProviderSummary.skipped -ne $true) {
+        if ($optionalRealProviderSummary -and $optionalRealProviderSummary.skipped -eq $true) {
+            if ($optionalRealProviderSummary.requestedRealTraffic -ne $false) { Add-Failure "optional real-provider skipped summary requested real traffic" }
+            if ($optionalRealProviderSummary.usedRealTraffic -ne $false) { Add-Failure "optional real-provider skipped summary used real traffic" }
+            if ($optionalRealProviderSummary.behaviorCovered -ne $false) { Add-Failure "optional real-provider skipped summary claims behavior coverage" }
+            if ([string]$optionalRealProviderSummary.coverageKind -ne "skipped") { Add-Failure "optional real-provider skipped summary coverage kind mismatch" }
+            if (-not [string]$optionalRealProviderSummary.reason) { Add-Failure "optional real-provider skipped summary missing reason" }
+            if (-not [string]$optionalRealProviderSummary.coveredBy) { Add-Failure "optional real-provider skipped summary missing coveredBy" }
+        } elseif ($optionalRealProviderSummary) {
             if ($optionalRealProviderSummary.reportName -ne "real-third-party-provider") { Add-Failure "optional real-provider summary reportName mismatch" }
             $optionalEvidence = $optionalRealProviderSummary.optionalRealProviderEvidence
             if (-not $optionalEvidence) {
@@ -424,7 +431,14 @@ function Test-DiagnosticBundle {
             }
         }
         $antigravityReturnSummary = @($summary | Where-Object { $_.file -eq "latest-provider-antigravity-return.json" } | Select-Object -First 1)[0]
-        if ($antigravityReturnSummary -and $antigravityReturnSummary.skipped -ne $true) {
+        if ($antigravityReturnSummary -and $antigravityReturnSummary.skipped -eq $true) {
+            if ($antigravityReturnSummary.requestedRealTraffic -ne $false) { Add-Failure "Antigravity return skipped summary requested real traffic" }
+            if ($antigravityReturnSummary.usedRealTraffic -ne $false) { Add-Failure "Antigravity return skipped summary used real traffic" }
+            if ($antigravityReturnSummary.behaviorCovered -ne $false) { Add-Failure "Antigravity return skipped summary claims behavior coverage" }
+            if ([string]$antigravityReturnSummary.coverageKind -ne "skipped") { Add-Failure "Antigravity return skipped summary coverage kind mismatch" }
+            if (-not [string]$antigravityReturnSummary.reason) { Add-Failure "Antigravity return skipped summary missing reason" }
+            if (-not [string]$antigravityReturnSummary.coveredBy) { Add-Failure "Antigravity return skipped summary missing coveredBy" }
+        } elseif ($antigravityReturnSummary) {
             if ($antigravityReturnSummary.reportName -ne "provider-antigravity-return") { Add-Failure "Antigravity return summary reportName mismatch" }
             $returnEvidence = $antigravityReturnSummary.antigravityReturnEvidence
             if (-not $returnEvidence) {
@@ -626,6 +640,12 @@ function Test-DiagnosticBundle {
             [pscustomobject]@{
                 ok = $optionalRealProviderSummary.ok
                 skipped = $optionalRealProviderSummary.skipped
+                requestedRealTraffic = $optionalRealProviderSummary.requestedRealTraffic
+                usedRealTraffic = $optionalRealProviderSummary.usedRealTraffic
+                behaviorCovered = $optionalRealProviderSummary.behaviorCovered
+                coverageKind = $optionalRealProviderSummary.coverageKind
+                reason = $optionalRealProviderSummary.reason
+                coveredBy = $optionalRealProviderSummary.coveredBy
                 evidence = $optionalRealProviderSummary.optionalRealProviderEvidence
             }
         } else { $null }
@@ -633,6 +653,12 @@ function Test-DiagnosticBundle {
             [pscustomobject]@{
                 ok = $antigravityReturnSummary.ok
                 skipped = $antigravityReturnSummary.skipped
+                requestedRealTraffic = $antigravityReturnSummary.requestedRealTraffic
+                usedRealTraffic = $antigravityReturnSummary.usedRealTraffic
+                behaviorCovered = $antigravityReturnSummary.behaviorCovered
+                coverageKind = $antigravityReturnSummary.coverageKind
+                reason = $antigravityReturnSummary.reason
+                coveredBy = $antigravityReturnSummary.coveredBy
                 evidence = $antigravityReturnSummary.antigravityReturnEvidence
             }
         } else { $null }

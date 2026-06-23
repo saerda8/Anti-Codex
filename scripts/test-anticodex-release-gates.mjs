@@ -1016,6 +1016,22 @@ if (args.has("--self-test")) {
       "optional_skipped_requested_real_traffic_not_false",
       "optional_requested_real_traffic_uncovered_but_ok",
     ]);
+    writeFakeLatestReport("latest-provider-antigravity-return.json", {
+      ok: true,
+      reportName: "provider-antigravity-return",
+      skipped: true,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+    });
+    semanticFailures.optionalAntigravitySkipped = assertSemanticFailures("providerAntigravityReturnOptional", "self-test failed: semantically invalid skipped Antigravity-return report satisfied the gate", [
+      "optional_skipped_requested_real_traffic_not_false",
+      "optional_skipped_used_real_traffic",
+      "optional_skipped_behavior_covered",
+      "optional_skipped_coverage_kind",
+      "optional_requested_real_traffic_uncovered_but_ok",
+    ]);
     writeFakeLatestReport("latest-real-third-party-provider.json", {
       ok: true,
       reportName: "wrong-real-third-party-provider",

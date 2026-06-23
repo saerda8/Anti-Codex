@@ -270,6 +270,7 @@ const summary = {
   state: has(report, "state") ? asString(report.state) : null,
   skipped: boolField(report, "skipped"),
   reason: has(report, "reason") ? asString(report.reason) : null,
+  coveredBy: has(report, "coveredBy") ? asString(report.coveredBy) : null,
   behaviorCovered: boolField(report, "behaviorCovered"),
   coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
   usedRealTraffic: boolField(report, "usedRealTraffic"),

@@ -269,6 +269,8 @@ function latestReportsSummary(result) {
     if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
     if (item.releaseReady !== null && item.releaseReady !== undefined) {
       lines.push(`  Release Gate: short=${item.shortReady ? "true" : "false"} / release=${item.releaseReady ? "true" : "false"}`);
+      if (item.strictOptionalRealTraffic !== null && item.strictOptionalRealTraffic !== undefined) lines.push(`  optionalRealTraffic: strict=${item.strictOptionalRealTraffic ? "true" : "false"} / ready=${item.optionalRealTrafficReady ? "true" : "false"}`);
+      if (Array.isArray(item.optionalRealTrafficFailures) && item.optionalRealTrafficFailures.length) lines.push(`  optionalRealTrafficFailures: ${item.optionalRealTrafficFailures.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.missingRequired) && item.missingRequired.length) lines.push(`  missingRequired: ${item.missingRequired.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
@@ -332,16 +334,21 @@ function latestReportsSummary(result) {
       const markerCounts = [continuity.sixthMarkerCount, continuity.seventhMarkerCount, continuity.eighthMarkerCount, continuity.ninthMarkerCount].filter((value) => value !== null && value !== undefined).join("/");
       lines.push(`  providerContinuity: turns=${continuity.turns ?? "unknown"} / markers=${markerCounts || "unknown"}`);
       lines.push(`  toolPairs: restart=${continuity.restartPreservesOpenAiToolPair ? "true" : "false"} / openai=${continuity.providerSwitchPreservesOpenAiToolPair ? "true" : "false"} / anthropic=${continuity.protocolSwitchPreservesAnthropicToolPair ? "true" : "false"} / reverse=${continuity.reverseProtocolSwitchPreservesOpenAiToolPair ? "true" : "false"} / markerThresholds=${continuity.markerThresholdsOk ? "true" : "false"}`);
+      if (continuity.previousResponseContinuity) {
+        const ids = continuity.previousResponseContinuity;
+        lines.push(`  previousIds: save=${ids.savePresent ? "true" : "false"} / restart=${ids.restartPresent ? "true" : "false"} / provider=${ids.providerSwitchPresent ? "true" : "false"} / protocol=${ids.protocolSwitchPresent ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchPresent ? "true" : "false"}`);
+      }
       lines.push(`  orderedHistory: clean=${continuity.orderedHistoryClean ? "true" : "false"} / counts=${[continuity.sixthOrderedHistoryCount, continuity.seventhOrderedHistoryCount, continuity.eighthOrderedHistoryCount, continuity.ninthOrderedHistoryCount].filter((value) => value !== null && value !== undefined).join("/") || "unknown"}`);
     }
     if (item.optionalRealProviderEvidence) {
       const evidence = item.optionalRealProviderEvidence;
       lines.push(`  realProvider: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
-      lines.push(`  realProvider route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / ${evidence.routeResolvedModel || "\u672a\u77e5"} / ${evidence.routeStatus || "\u672a\u77e5"}`);
+      lines.push(`  realProvider route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / requested=${evidence.routeRequestedModel || "\u672a\u77e5"} / resolved=${evidence.routeResolvedModel || "\u672a\u77e5"} / status=${evidence.routeStatus || "\u672a\u77e5"} / redaction=${evidence.secretsRedacted ? "true" : "false"}`);
     }
     if (item.antigravityReturnEvidence) {
       const evidence = item.antigravityReturnEvidence;
       lines.push(`  antigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
+      lines.push(`  antigravityRoute: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.resolvedModel || "\u672a\u77e5"}`);
     }
     if (item.coldRelaunchEvidence) {
       const evidence = item.coldRelaunchEvidence;
@@ -498,6 +505,9 @@ if (args.has("--self-test")) {
       ok: true,
       releaseReady: true,
       shortReady: true,
+      strictOptionalRealTraffic: true,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: ["realThirdPartyProviderOptional"],
       missingShort: ["latest-ui-idle.json"],
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
@@ -522,7 +532,7 @@ if (args.has("--self-test")) {
       label: "\u7b2c\u4e09\u65b9 provider \u8fde\u7eed\u6027",
       exists: true,
       ok: true,
-      providerContinuity: { turns: 9, restartPreservesOpenAiToolPair: true, providerSwitchPreservesOpenAiToolPair: true, protocolSwitchPreservesAnthropicToolPair: true, reverseProtocolSwitchPreservesOpenAiToolPair: true, sixthMarkerCount: 15, seventhMarkerCount: 16, eighthMarkerCount: 18, ninthMarkerCount: 20, markerThresholdsOk: true, orderedHistoryClean: true, sixthOrderedHistoryCount: 7, seventhOrderedHistoryCount: 8, eighthOrderedHistoryCount: 9, ninthOrderedHistoryCount: 10 },
+      providerContinuity: { turns: 9, restartPreservesOpenAiToolPair: true, providerSwitchPreservesOpenAiToolPair: true, protocolSwitchPreservesAnthropicToolPair: true, reverseProtocolSwitchPreservesOpenAiToolPair: true, sixthMarkerCount: 15, seventhMarkerCount: 16, eighthMarkerCount: 18, ninthMarkerCount: 20, markerThresholdsOk: true, orderedHistoryClean: true, sixthOrderedHistoryCount: 7, seventhOrderedHistoryCount: 8, eighthOrderedHistoryCount: 9, ninthOrderedHistoryCount: 10, previousResponseContinuity: { savePresent: true, restartPresent: true, providerSwitchPresent: true, protocolSwitchPresent: true, reverseProtocolSwitchPresent: true } },
     }, {
       label: "\u51b7\u542f\u52a8",
       exists: true,
@@ -537,15 +547,17 @@ if (args.has("--self-test")) {
       label: "\u53ef\u9009\u771f\u5b9e\u7b2c\u4e09\u65b9",
       exists: true,
       ok: true,
-      optionalRealProviderEvidence: { firstMarkerObserved: true, secondMarkerObserved: true, historyContinuationObserved: true, turns: 2, routeTransport: "upstream-provider", routeProviderProtocol: "openai-compatible", routeResolvedModel: "real-model", routeStatus: "success" },
+      optionalRealProviderEvidence: { firstMarkerObserved: true, secondMarkerObserved: true, historyContinuationObserved: true, turns: 2, routeTransport: "upstream-provider", routeProviderProtocol: "openai-compatible", routeRequestedModel: "real-model", routeResolvedModel: "real-model", routeStatus: "success", secretsRedacted: true },
     }, {
       label: "\u56de\u5230 Antigravity",
       exists: true,
       ok: true,
-      antigravityReturnEvidence: { returnedToAntigravityWithHistory: true, previousResponseIdMatched: true, markerCount: 6, missingMarkerCount: 0 },
+      antigravityReturnEvidence: { returnedToAntigravityWithHistory: true, previousResponseIdMatched: true, markerCount: 6, missingMarkerCount: 0, routeTransport: "antigravity-native", resolvedModel: "gemini-pro-agent" },
     }],
   });
   assert.match(evidenceSummary, /Release Gate: short=true \/ release=true/);
+  assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
+  assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1/);
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
@@ -558,10 +570,12 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
   assert.match(evidenceSummary, /providerContinuity: turns=9 \/ markers=15\/16\/18\/20/);
+  assert.match(evidenceSummary, /previousIds: save=true \/ restart=true \/ provider=true \/ protocol=true \/ reverse=true/);
   assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);
   assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ skill ok/);
-  assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ real-model \/ success/);
+  assert.match(evidenceSummary, /realProvider route: upstream-provider \/ openai-compatible \/ requested=real-model \/ resolved=real-model \/ status=success \/ redaction=true/);
   assert.match(evidenceSummary, /antigravityReturn: history=true \/ previousId=true/);
+  assert.match(evidenceSummary, /antigravityRoute: antigravity-native \/ gemini-pro-agent/);
   assert.match(evidenceSummary, /coldRelaunch: health=true \/ ready=true/);
   assert.match(evidenceSummary, /stabilitySoak: ready=true/);
   const pluginDriftSummary = latestReportsSummary({
