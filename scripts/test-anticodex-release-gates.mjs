@@ -191,6 +191,7 @@ function summarizeGate(definition) {
         if (report.coverageKind !== "real-traffic") semanticFailures.push("optional_real_traffic_coverage_kind");
         if (definition.id === "realThirdPartyProviderOptional") {
           const routeEvidence = report.routeEvidence && typeof report.routeEvidence === "object" ? report.routeEvidence : {};
+          if (report.reportName !== "real-third-party-provider") semanticFailures.push("optional_real_provider_report_name");
           if (report.firstMarkerObserved !== true) semanticFailures.push("optional_real_provider_first_marker_missing");
           if (report.secondMarkerObserved !== true) semanticFailures.push("optional_real_provider_second_marker_missing");
           if (report.historyContinuationObserved !== true) semanticFailures.push("optional_real_provider_history_missing");
@@ -203,6 +204,7 @@ function summarizeGate(definition) {
         }
         if (definition.id === "providerAntigravityReturnOptional") {
           const evidence = report.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : {};
+          if (report.reportName !== "provider-antigravity-return") semanticFailures.push("optional_antigravity_return_report_name");
           if (evidence.requested !== true) semanticFailures.push("optional_antigravity_return_not_requested");
           if (evidence.realAntigravityTurnUsed !== true) semanticFailures.push("optional_antigravity_return_not_used");
           if (evidence.returnedToAntigravityWithHistory !== true) semanticFailures.push("optional_antigravity_return_history_missing");
@@ -782,7 +784,7 @@ if (args.has("--self-test")) {
 
     writeFakeLatestReport("latest-real-third-party-provider.json", {
       ok: true,
-      reportName: "real-third-party-provider",
+      reportName: "wrong-real-third-party-provider",
       skipped: true,
       requestedRealTraffic: true,
       behaviorCovered: false,
@@ -999,7 +1001,7 @@ if (args.has("--self-test")) {
     ]);
     writeFakeLatestReport("latest-real-third-party-provider.json", {
       ok: true,
-      reportName: "real-third-party-provider",
+      reportName: "wrong-real-third-party-provider",
       skipped: false,
       behaviorCovered: true,
       coverageKind: "real-traffic",
@@ -1018,6 +1020,7 @@ if (args.has("--self-test")) {
       turns: 1,
     });
     semanticFailures.optionalRealProvider = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid real provider optional report satisfied the gate", [
+      "optional_real_provider_report_name",
       "optional_real_provider_first_marker_missing",
       "optional_real_provider_second_marker_missing",
       "optional_real_provider_history_missing",
@@ -1030,7 +1033,7 @@ if (args.has("--self-test")) {
     ]);
     writeFakeLatestReport("latest-provider-antigravity-return.json", {
       ok: true,
-      reportName: "provider-antigravity-return",
+      reportName: "wrong-provider-antigravity-return",
       skipped: false,
       behaviorCovered: true,
       coverageKind: "real-traffic",
@@ -1047,6 +1050,7 @@ if (args.has("--self-test")) {
       },
     });
     semanticFailures.optionalAntigravityReturn = assertSemanticFailures("providerAntigravityReturnOptional", "self-test failed: semantically invalid Antigravity return optional report satisfied the gate", [
+      "optional_antigravity_return_report_name",
       "optional_antigravity_return_not_requested",
       "optional_antigravity_return_not_used",
       "optional_antigravity_return_history_missing",

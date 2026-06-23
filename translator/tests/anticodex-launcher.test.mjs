@@ -5005,7 +5005,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /refresh-features summary app-tool parity not clean/);
   assert.match(diagnostics, /refreshFeatures = if \(\$refreshFeaturesSummary\)/);
   assert.match(diagnostics, /optional real-provider summary missing continuity evidence/);
+  assert.match(diagnostics, /optional real-provider summary reportName mismatch/);
   assert.match(diagnostics, /Antigravity return summary missing continuity evidence/);
+  assert.match(diagnostics, /Antigravity return summary reportName mismatch/);
   assert.match(diagnostics, /mcpSkills = if \(\$mcpSkillsSummary\)/);
   assert.match(diagnostics, /optionalRealProvider = if \(\$optionalRealProviderSummary\)/);
   assert.match(diagnostics, /antigravityReturn = if \(\$antigravityReturnSummary\)/);
@@ -5149,11 +5151,13 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
   assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);
   assert.match(releaseGates, /optional_skipped_requested_real_traffic_not_false/);
+  assert.match(releaseGates, /optional_real_provider_report_name/);
   assert.match(releaseGates, /optional_real_provider_history_missing/);
   assert.match(releaseGates, /optional_real_provider_route_transport/);
   assert.match(releaseGates, /optional_real_provider_route_protocol/);
   assert.match(releaseGates, /optional_real_provider_route_model/);
   assert.match(releaseGates, /optional_real_provider_route_status/);
+  assert.match(releaseGates, /optional_antigravity_return_report_name/);
   assert.match(releaseGates, /optional_antigravity_return_missing_markers/);
   assert.match(releaseGates, /optional_antigravity_return_route_transport/);
   assert.match(releaseGates, /requireThirdPartyProviderSemantics/);
@@ -5238,6 +5242,8 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_marker_coverage"));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_ordered_history"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_local_connector_verifier"));
+  assert.ok(summary.semanticFailures.optionalRealProvider.includes("optional_real_provider_report_name"));
+  assert.ok(summary.semanticFailures.optionalAntigravityReturn.includes("optional_antigravity_return_report_name"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_conflicting_duplicate_skills"));
   assert.ok(summary.semanticFailures.refreshFeatures.includes("refresh_features_connector_parity"));

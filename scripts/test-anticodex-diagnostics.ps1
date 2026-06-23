@@ -391,6 +391,7 @@ function Test-DiagnosticBundle {
         }
         $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
         if ($optionalRealProviderSummary -and $optionalRealProviderSummary.skipped -ne $true) {
+            if ($optionalRealProviderSummary.reportName -ne "real-third-party-provider") { Add-Failure "optional real-provider summary reportName mismatch" }
             $optionalEvidence = $optionalRealProviderSummary.optionalRealProviderEvidence
             if (-not $optionalEvidence) {
                 Add-Failure "optional real-provider summary missing continuity evidence"
@@ -408,6 +409,7 @@ function Test-DiagnosticBundle {
         }
         $antigravityReturnSummary = @($summary | Where-Object { $_.file -eq "latest-provider-antigravity-return.json" } | Select-Object -First 1)[0]
         if ($antigravityReturnSummary -and $antigravityReturnSummary.skipped -ne $true) {
+            if ($antigravityReturnSummary.reportName -ne "provider-antigravity-return") { Add-Failure "Antigravity return summary reportName mismatch" }
             $returnEvidence = $antigravityReturnSummary.antigravityReturnEvidence
             if (-not $returnEvidence) {
                 Add-Failure "Antigravity return summary missing continuity evidence"
