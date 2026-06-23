@@ -1446,3 +1446,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 UI-State Registry Evidence Coverage
 - Completed: the read-only UI-state self-test now asserts that both the injected Manager and fallback Manager source keep the MCP/Skill app-tool registry evidence line and fingerprint field visible.
 - Verification: UI-state JS syntax passed; UI-state self-test returned `ok:true`; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; strict passive release gate returned `releaseReady:true`, `shortReady:true`, `missingRequired:0`, `missingShort:0`, and `installedRuntimeSync.satisfied:true`.
+
+## 2026-06-24 Same-Cascade Visible-Event Retry Boundary
+- Completed: upstream tests now explicitly prove same-Cascade native resume retries stop after a Codex-visible event is emitted, while the pre-event transient retry path remains covered.
+- Verification: `antigravity-upstream.test.mjs` syntax passed; focused/native upstream test run passed `57/57`, including the new visible-event failure case.

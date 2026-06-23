@@ -1446,6 +1446,64 @@ test("streamAntigravityUpstream retries same-Cascade resume after pre-event tran
   assert.equal(events[0].completion.choices[0].message.content, "Retried same Cascade.");
 });
 
+test("streamAntigravityUpstream does not retry same-Cascade resume after a visible event", async () => {
+  const nativeToolBridge = {
+    tools: [{ name: "read_file" }],
+    customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9994" } },
+    close: async () => {},
+  };
+  const pendingCall = {
+    callId: "call_native_post_event_failure",
+    name: "read_file",
+    arguments: { path: "README.md" },
+    interaction: { trajectoryId: "trajectory-post-event-failure", stepIndex: 3 },
+  };
+  for await (const _event of streamAntigravityUpstream({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "Read README.md" }],
+    tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+  }, {
+    nativeToolBridge,
+    runTurnStreamed: async function* () {
+      yield {
+        type: "tool_call",
+        calls: [pendingCall],
+        continuation: {
+          connection: { lsAddress: "127.0.0.1:1", csrfToken: "token" },
+          cascadeId: "cascade-post-event-failure",
+          nativeToolBridge,
+          pendingCalls: [pendingCall],
+        },
+      };
+    },
+  })) {}
+
+  const resumedCascadeIds = [];
+  const retries = [];
+  const visibleEvents = [];
+  await assert.rejects(async () => {
+    for await (const event of streamAntigravityUpstream({
+      model: "gemini-pro-agent",
+      messages: [
+        { role: "tool", tool_call_id: "call_native_post_event_failure", content: "README contents" },
+      ],
+      tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
+    }, {
+      retryDelayMs: 1,
+      onRetry: (retry) => retries.push(retry),
+      resumeTurnStreamed: async function* (session) {
+        resumedCascadeIds.push(session.cascadeId);
+        yield { type: "text_delta", delta: "partial visible text" };
+        throw new Error("ECONNRESET after visible event");
+      },
+    })) visibleEvents.push(event);
+  }, /ECONNRESET after visible event/);
+
+  assert.deepEqual(resumedCascadeIds, ["cascade-post-event-failure"]);
+  assert.deepEqual(retries, []);
+  assert.deepEqual(visibleEvents, [{ type: "text_delta", delta: "partial visible text" }]);
+});
+
 test("streamAntigravityUpstream forwards user text after a native tool result into the same Cascade", async () => {
   const nativeToolBridge = {
     tools: [{ name: "marker_tool" }],
