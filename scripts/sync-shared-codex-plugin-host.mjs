@@ -189,7 +189,15 @@ function computeSourceFingerprint(manifest) {
 function topLevelDirectoryNames(dirPath) {
   if (!fs.existsSync(dirPath)) return [];
   return fs.readdirSync(dirPath, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => {
+      if (entry.isDirectory()) return true;
+      if (!entry.isSymbolicLink()) return false;
+      try {
+        return fs.statSync(path.join(dirPath, entry.name)).isDirectory();
+      } catch {
+        return false;
+      }
+    })
     .map((entry) => entry.name)
     .sort((a, b) => a.localeCompare(b));
 }

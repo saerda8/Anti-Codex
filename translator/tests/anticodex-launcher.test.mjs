@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import os from "node:os";
 import { spawn, spawnSync } from "node:child_process";
@@ -1294,6 +1294,46 @@ test("Anti-Codex refuses conflicting duplicate skill names across shared roots",
     assert.deepEqual(skillsSummary.conflictingDuplicateSkillNames, ["dupe-skill"]);
     assert.match(skillsSummary.error, /conflicting duplicate skill names across shared skill roots/);
     assert.equal(existsSync(resolve(currentHome, "skills", "dupe-skill")), false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Anti-Codex refuses conflicting duplicate skill names through linked skill directories", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-skills-linked-duplicate-"));
+  const currentHome = resolve(tempRoot, "current");
+  const sharedHome = resolve(tempRoot, "shared");
+  const agentsSkills = resolve(tempRoot, "agents-skills");
+  const codexSkill = resolve(sharedHome, "skills", "dupe-skill");
+  const linkedSkillSource = resolve(tempRoot, "linked-dupe-skill");
+  const linkedSkill = resolve(agentsSkills, "dupe-skill");
+  mkdirSync(codexSkill, { recursive: true });
+  mkdirSync(linkedSkillSource, { recursive: true });
+  mkdirSync(agentsSkills, { recursive: true });
+  writeFileSync(resolve(codexSkill, "SKILL.md"), "# Codex Dupe\n");
+  writeFileSync(resolve(linkedSkillSource, "SKILL.md"), "# Linked Agent Dupe\n");
+  symlinkSync(linkedSkillSource, linkedSkill, process.platform === "win32" ? "junction" : "dir");
+
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"),
+      currentHome,
+      sharedHome,
+      "--skills-only",
+    ], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ANTICODEX_EXTRA_SKILLS_ROOTS: agentsSkills,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    const skillsSummary = summary.summary.find((item) => item.relPath === "skills");
+    assert.equal(summary.ok, false);
+    assert.deepEqual(skillsSummary.conflictingDuplicateSkillNames, ["dupe-skill"]);
+    assert.match(skillsSummary.error, /conflicting duplicate skill names across shared skill roots/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

@@ -291,6 +291,7 @@ Branch: main
 - Focused launcher tests now run the passive release-gate `--self-test` for real, proving forged-report semantic checks still execute.
 - Third-party provider continuity evidence now includes ordered role/history checks for turns 7/8/9. Release gates and diagnostics require this ordered evidence in addition to marker coverage and protocol-specific tool-pair shape.
 - Startup snapshot refresh now compares manifest fingerprints before keeping an existing local snapshot, so changed shared skill content refreshes instead of being marked fresh.
+- Duplicate skill detection now includes linked skill directories, including Windows junction entries, before deciding whether `.codex\skills` and `.agents\skills` conflict.
 - Fresh evidence: bridge/inject/adaptive/summarizer syntax passed; refresh-feature, MCP/Skill, and plugin-capability parser checks passed; bridge `--self-test` passed; release-gate `--self-test` and strict passive release gates passed; focused Manager/MCP/Skill/plugin contracts passed. The stricter plugin verifier first caught stale connector cache drift, then `refresh-anticodex-local-features.ps1` refreshed snapshots and the rerun passed with connector parity `5760/5760`, app-tool parity `58/58`, and no missing/extra/changed shared entries.
 
 ## 2026-06-23 Installed Missing-History Follow-Up
