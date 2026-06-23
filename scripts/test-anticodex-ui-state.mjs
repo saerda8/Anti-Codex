@@ -80,6 +80,12 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/data-anticodex-close/.test(injectSource) || !/min-height:44px/.test(injectSource)) {
     failures.push("in-app manager close button lacks a full-size hit target");
   }
+  if (!/copyTextToClipboard/.test(injectSource) || !/anticodex-copy-result/.test(injectSource)) {
+    failures.push("in-app manager is missing copy result controls");
+  }
+  if (!/function snapshotStalenessNotice/.test(injectSource) || !/snapshotStatus/.test(injectSource) || !/source_changed/.test(injectSource)) {
+    failures.push("in-app manager is missing local feature snapshot staleness notice");
+  }
 
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
@@ -636,12 +642,20 @@ try {
       managerHtml.includes("\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528"),
     hasPostVerificationStatusCard: managerHtml.includes("<h2>\u5b8c\u6574\u68c0\u67e5</h2>") && managerHtml.includes('id="postVerification"'),
     hasLongTasksStatusCard: managerHtml.includes("<h2>\u540e\u53f0\u4efb\u52a1</h2>") && managerHtml.includes('id="longTasks"'),
+    hasLongTaskFreshLogFields: managerHtml.includes("latestLogLine") && managerHtml.includes("logAgeMs"),
+    hasSnapshotAlert: managerHtml.includes("snapshotAlert") &&
+      managerHtml.includes("snapshotStatus") &&
+      managerHtml.includes("source_changed") &&
+      managerHtml.includes("\u5237\u65b0\u672c\u5730\u529f\u80fd"),
     hasSyncVersionFields: managerHtml.includes("\u539f\u751f Codex \u7248\u672c") && managerHtml.includes("Anti-Codex \u7248\u672c"),
     hasSyncSafetyText: managerHtml.includes("\u6784\u5efa\u5019\u9009\u7248") && managerHtml.includes("\u5931\u8d25\u4e0d\u4f1a\u8986\u76d6\u5f53\u524d Anti-Codex"),
     hasRollbackStatus: managerHtml.includes("\u56de\u6eda\u70b9"),
     hasManagerActionEndpoint: managerHtml.includes("/anticodex/manager/action"),
     hasManagerActionToken: managerHtml.includes("managerActionToken") && managerHtml.includes("x-anticodex-manager-token"),
     hasActionResult: managerHtml.includes("\u68c0\u67e5\u7ed3\u679c"),
+    hasCopyActionResult: managerHtml.includes("copyActionResult") &&
+      managerHtml.includes("copyTextToClipboard") &&
+      managerHtml.includes("\u590d\u5236\u7ed3\u679c"),
     hasOldOpenEndpoint: managerHtml.includes("/anticodex/manager/open"),
     hasRouteProviderFields: managerHtml.includes("function routeSummary") &&
       managerHtml.includes("providerProtocol") &&
@@ -684,12 +698,15 @@ try {
   if (!managerPage.hasConnectorAllowlistBoundaryText) failures.push("manager page missing local connector non-authorization warning");
   if (!managerPage.hasPostVerificationStatusCard) failures.push("manager page missing post-verification status card");
   if (!managerPage.hasLongTasksStatusCard) failures.push("manager page missing long-task status card");
+  if (!managerPage.hasLongTaskFreshLogFields) failures.push("manager page missing long-task latest log freshness fields");
+  if (!managerPage.hasSnapshotAlert) failures.push("manager page missing local feature snapshot staleness alert");
   if (!managerPage.hasSyncVersionFields) failures.push("manager page missing Codex/Anti-Codex sync version fields");
   if (!managerPage.hasSyncSafetyText) failures.push("manager page missing safe sync replacement explanation");
   if (!managerPage.hasRollbackStatus) failures.push("manager page missing rollback status");
   if (!managerPage.hasManagerActionEndpoint) failures.push("manager page missing manager action endpoint");
   if (!managerPage.hasManagerActionToken) failures.push("manager page missing manager action token header");
   if (!managerPage.hasActionResult) failures.push("manager page missing action result area");
+  if (!managerPage.hasCopyActionResult) failures.push("manager page missing copy action result control");
   if (managerPage.hasOldOpenEndpoint) failures.push("manager page still references old /anticodex/manager/open endpoint");
   if (!managerPage.hasRouteProviderFields) failures.push("manager page route summary is missing third-party provider/protocol/transport fields");
   if (!sameActionIds(managerPage.dailyActionIds, expectedDailyActionIds)) failures.push(`manager page daily action group is incorrect: ${JSON.stringify(managerPage.dailyActionIds)}`);

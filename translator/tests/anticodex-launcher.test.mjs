@@ -2238,6 +2238,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /refreshFeatureEvidence/);
   assert.match(reportSummarizer, /connectorContentMatches/);
   assert.match(reportSummarizer, /appToolContentMatches/);
+  assert.match(reportSummarizer, /changedExpectedSkills/);
+  assert.match(reportSummarizer, /guidanceChanged/);
   assert.match(reportSummarizer, /optionalRealProviderEvidence/);
   assert.match(reportSummarizer, /realProviderToAntigravityReturnEvidence/);
   assert.match(reportSummarizer, /returnUpstream/);
@@ -2346,6 +2348,13 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
       failures: ["connector drift"],
       connectorParity: { sharedExists: true, localExists: true, contentMatches: false },
       appToolParity: { sharedExists: true, localExists: false, contentMatches: false },
+      skills: {
+        changedExpected: ["changed-skill"],
+        changedExpectedDetails: [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }],
+      },
+      guidance: {
+        "RTK.md": { sharedExists: true, localExists: true, contentMatches: false },
+      },
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -2356,6 +2365,9 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
     assert.equal(summary.refreshFeatureEvidence.appToolSharedExists, true);
     assert.equal(summary.refreshFeatureEvidence.appToolLocalExists, false);
     assert.equal(summary.refreshFeatureEvidence.appToolContentMatches, false);
+    assert.deepEqual(summary.refreshFeatureEvidence.changedExpectedSkills, ["changed-skill"]);
+    assert.deepEqual(summary.refreshFeatureEvidence.changedExpectedSkillDetails, [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }]);
+    assert.deepEqual(summary.refreshFeatureEvidence.guidanceChanged, ["RTK.md"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -4038,7 +4050,10 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /Get-McpServerNamesFromToml \$configText/);
   assert.match(refreshLocalFeatures, /-notmatch "\\.tools\\."/);
   assert.match(refreshLocalFeatures, /missingExpectedSkillNames/);
+  assert.match(refreshLocalFeatures, /changedExpectedSkillNames/);
+  assert.match(refreshLocalFeatures, /changedExpectedSkillDetails/);
   assert.match(refreshLocalFeatures, /shared or agent skill '\$skillName' exists but Anti-Codex local skills copy is missing it/);
+  assert.match(refreshLocalFeatures, /shared or agent skill '\$skillName' content differs from Anti-Codex local skills copy/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-config\.mjs/);
   assert.match(refreshLocalFeatures, /sync-shared-codex-sidecars\.mjs/);
   assert.match(refreshLocalFeatures, /shared config refresh failed/);
@@ -4073,6 +4088,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /RTK\.md/);
   assert.match(refreshLocalFeatures, /MCP_WORKER_USAGE_GUIDE\.md/);
   assert.match(refreshLocalFeatures, /shared guidance '\$name' exists but Anti-Codex local copy is missing/);
+  assert.match(refreshLocalFeatures, /shared guidance '\$name' content differs from Anti-Codex local copy/);
+  assert.match(refreshLocalFeatures, /contentMatches/);
   assert.match(refreshLocalFeatures, /function Get-LinkTargetValue/);
   assert.doesNotMatch(refreshLocalFeatures, /target = if \(\$item\) \{ \$item\.Target \}/);
   assert.match(refreshLocalFeatures, /ConvertTo-Json/);

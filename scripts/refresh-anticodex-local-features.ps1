@@ -20,6 +20,7 @@ $sharedConfigSync = Join-Path $scriptRoot "sync-shared-codex-config.mjs"
 $pluginHostSync = Join-Path $scriptRoot "sync-shared-codex-plugin-host.mjs"
 $sidecarsSync = Join-Path $scriptRoot "sync-shared-codex-sidecars.mjs"
 $failures = New-Object System.Collections.Generic.List[string]
+$directoryFingerprintCache = @{}
 
 function Add-Failure {
     param([string]$Message)
@@ -96,6 +97,7 @@ function Get-DirectoryContentFingerprint {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
     $rootPath = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
+    if ($directoryFingerprintCache.ContainsKey($rootPath)) { return $directoryFingerprintCache[$rootPath] }
     $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
         Where-Object { $_.Name -ne ".anticodex-source-manifest.json" } |
         Sort-Object FullName |
@@ -108,7 +110,9 @@ function Get-DirectoryContentFingerprint {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
-        return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+        $fingerprint = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+        $directoryFingerprintCache[$rootPath] = $fingerprint
+        return $fingerprint
     } finally {
         $sha.Dispose()
     }
@@ -139,6 +143,12 @@ function Get-FileInfo {
         linkType = if ($item) { $item.LinkType } else { $null }
         length = if ($item) { [long]$item.Length } else { 0 }
     }
+}
+
+function Get-FileSha256Hex {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
 function Set-FeatureFlag {
@@ -269,8 +279,33 @@ if (Test-Path -LiteralPath (Join-Path $CodexHome "skills") -PathType Container) 
     $localSkillNames = @(Get-ChildItem -LiteralPath (Join-Path $CodexHome "skills") -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object -Unique)
 }
 $missingExpectedSkillNames = @($expectedSkillNames | Where-Object { $localSkillNames -notcontains $_ })
+$changedExpectedSkillNames = @()
+$changedExpectedSkillDetails = @()
 foreach ($skillName in $missingExpectedSkillNames) {
     Add-Failure "shared or agent skill '$skillName' exists but Anti-Codex local skills copy is missing it"
+}
+foreach ($skillName in $expectedSkillNames) {
+    $sharedSkillPath = Join-Path $sharedSkillsPath $skillName
+    $agentSkillPath = Join-Path $AgentsSkillsPath $skillName
+    $localSkillPath = Join-Path (Join-Path $CodexHome "skills") $skillName
+    $sharedExists = Test-Path -LiteralPath $sharedSkillPath -PathType Container
+    $agentExists = Test-Path -LiteralPath $agentSkillPath -PathType Container
+    $localExists = Test-Path -LiteralPath $localSkillPath -PathType Container
+    $sharedFingerprint = if ($sharedExists) { Get-DirectoryContentFingerprint $sharedSkillPath } else { "" }
+    $agentFingerprint = if ($agentExists) { Get-DirectoryContentFingerprint $agentSkillPath } else { "" }
+    $localFingerprint = if ($localExists) { Get-DirectoryContentFingerprint $localSkillPath } else { "" }
+    $sourceFingerprints = @($sharedFingerprint, $agentFingerprint) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+    $contentMatches = $localExists -and -not [string]::IsNullOrWhiteSpace($localFingerprint) -and ($sourceFingerprints -contains $localFingerprint)
+    if ($localExists -and $sourceFingerprints.Count -gt 0 -and -not $contentMatches) {
+        $changedExpectedSkillNames += $skillName
+        $changedExpectedSkillDetails += [pscustomobject]@{
+            name = $skillName
+            sharedFingerprint = $sharedFingerprint
+            agentsFingerprint = $agentFingerprint
+            localFingerprint = $localFingerprint
+        }
+        Add-Failure "shared or agent skill '$skillName' content differs from Anti-Codex local skills copy"
+    }
 }
 $connectors = Get-DirectoryInfo (Join-Path $CodexHome "cache\codex_app_directory")
 $appTools = Get-DirectoryInfo (Join-Path $CodexHome "cache\codex_apps_tools")
@@ -315,12 +350,24 @@ if ($appToolParity.sharedExists) {
 $guidance = [ordered]@{}
 foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md")) {
     $info = Get-FileInfo (Join-Path $CodexHome $name)
-    $guidance[$name] = $info
     $sharedPath = Join-Path $SharedCodexHome $name
+    $localPath = Join-Path $CodexHome $name
+    $sharedExists = Test-Path -LiteralPath $sharedPath -PathType Leaf
+    $sharedHash = Get-FileSha256Hex $sharedPath
+    $localHash = Get-FileSha256Hex $localPath
+    $contentMatches = ($sharedExists -and $info.exists -and $sharedHash -eq $localHash)
+    $info | Add-Member -NotePropertyName localExists -NotePropertyValue $info.exists
+    $info | Add-Member -NotePropertyName sharedExists -NotePropertyValue $sharedExists
+    $info | Add-Member -NotePropertyName sharedHash -NotePropertyValue $sharedHash
+    $info | Add-Member -NotePropertyName localHash -NotePropertyValue $localHash
+    $info | Add-Member -NotePropertyName contentMatches -NotePropertyValue $contentMatches
+    $guidance[$name] = $info
     if ((Test-Path -LiteralPath $sharedPath -PathType Leaf) -and -not $info.exists) {
         Add-Failure "shared guidance '$name' exists but Anti-Codex local copy is missing"
     } elseif ($info.linkType) {
         Add-Failure "Anti-Codex guidance '$name' is a link, expected local copy"
+    } elseif ($sharedExists -and $info.exists -and -not $contentMatches) {
+        Add-Failure "shared guidance '$name' content differs from Anti-Codex local copy"
     }
 }
 if (-not $skills.exists -or $skills.count -lt 1) { Add-Failure "skills local copy is empty or missing" }
@@ -358,6 +405,8 @@ $result = [pscustomobject]@{
         agentsCount = $agentsSkillNames.Count
         expectedCount = $expectedSkillNames.Count
         missingExpected = $missingExpectedSkillNames
+        changedExpected = $changedExpectedSkillNames
+        changedExpectedDetails = @($changedExpectedSkillDetails)
     }
     guidance = $guidance
     connectors = $connectors

@@ -70,6 +70,8 @@ const connectorParity = capabilities && capabilities.connectorParity ? capabilit
 const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : null;
 const refreshConnectorParity = report && report.connectorParity ? report.connectorParity : null;
 const refreshAppToolParity = report && report.appToolParity ? report.appToolParity : null;
+const refreshSkills = report && report.skills ? report.skills : null;
+const refreshGuidance = report && report.guidance && typeof report.guidance === "object" ? report.guidance : null;
 const appToolGetPostParity = capabilities && capabilities.appToolGetPostParity ? capabilities.appToolGetPostParity : null;
 const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
@@ -364,13 +366,18 @@ const summary = {
     conflictingDuplicateSkillNames: skills && has(skills, "conflictingDuplicateNames") ? asStringArray(skills.conflictingDuplicateNames) : [],
     skillSmokeReadable: skills && skills.smoke ? boolField(skills.smoke, "readable") : null,
   } : null,
-  refreshFeatureEvidence: refreshConnectorParity || refreshAppToolParity ? {
+  refreshFeatureEvidence: refreshConnectorParity || refreshAppToolParity || refreshSkills || refreshGuidance ? {
     connectorSharedExists: refreshConnectorParity ? boolField(refreshConnectorParity, "sharedExists") : null,
     connectorLocalExists: refreshConnectorParity ? boolField(refreshConnectorParity, "localExists") : null,
     connectorContentMatches: refreshConnectorParity ? boolField(refreshConnectorParity, "contentMatches") : null,
     appToolSharedExists: refreshAppToolParity ? boolField(refreshAppToolParity, "sharedExists") : null,
     appToolLocalExists: refreshAppToolParity ? boolField(refreshAppToolParity, "localExists") : null,
     appToolContentMatches: refreshAppToolParity ? boolField(refreshAppToolParity, "contentMatches") : null,
+    changedExpectedSkills: refreshSkills && has(refreshSkills, "changedExpected") ? asStringArray(refreshSkills.changedExpected) : [],
+    changedExpectedSkillDetails: refreshSkills && Array.isArray(refreshSkills.changedExpectedDetails) ? refreshSkills.changedExpectedDetails : [],
+    guidanceChanged: refreshGuidance ? Object.entries(refreshGuidance)
+      .filter(([, entry]) => entry && entry.sharedExists === true && entry.localExists === true && entry.contentMatches !== true)
+      .map(([name]) => name) : [],
   } : null,
   optionalRealProviderEvidence: has(report, "firstMarkerObserved") || has(report, "secondMarkerObserved") || has(report, "historyContinuationObserved") ? {
     firstMarkerObserved: boolField(report, "firstMarkerObserved"),

@@ -302,12 +302,16 @@ function summarizeGate(definition) {
     if (definition.requireRefreshFeatureSemantics) {
       const connectorParity = report.connectorParity || {};
       const appToolParity = report.appToolParity || {};
+      const skills = report.skills || {};
+      const guidance = report.guidance && typeof report.guidance === "object" ? report.guidance : {};
       if (report.reportName !== "refresh-features") semanticFailures.push("refresh_features_report_name");
       if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("refresh_features_failures");
       if (connectorParity.sharedExists === true && connectorParity.localExists !== true) semanticFailures.push("refresh_features_connector_local_missing");
       if (connectorParity.sharedExists === true && connectorParity.contentMatches !== true) semanticFailures.push("refresh_features_connector_parity");
       if (appToolParity.sharedExists === true && appToolParity.localExists !== true) semanticFailures.push("refresh_features_app_tool_local_missing");
       if (appToolParity.sharedExists === true && appToolParity.contentMatches !== true) semanticFailures.push("refresh_features_app_tool_parity");
+      if (!isEmptyArray(skills.changedExpected)) semanticFailures.push("refresh_features_skill_parity");
+      if (Object.values(guidance).some((entry) => entry && entry.sharedExists === true && entry.localExists === true && entry.contentMatches !== true)) semanticFailures.push("refresh_features_guidance_parity");
       if (!gate.sourceFingerprint) semanticFailures.push("refresh_features_source_snapshot_missing");
     }
     if (definition.requireSourcePreflightSemantics) {
@@ -1165,12 +1169,24 @@ if (args.has("--self-test")) {
         localExists: true,
         contentMatches: false,
       },
+      skills: {
+        changedExpected: ["changed-skill"],
+      },
+      guidance: {
+        "RTK.md": {
+          sharedExists: true,
+          localExists: true,
+          contentMatches: false,
+        },
+      },
     });
     semanticFailures.refreshFeatures = assertSemanticFailures("refreshFeatures", "self-test failed: semantically invalid refresh-features report satisfied the gate", [
       "refresh_features_failures",
       "refresh_features_connector_local_missing",
       "refresh_features_connector_parity",
       "refresh_features_app_tool_parity",
+      "refresh_features_skill_parity",
+      "refresh_features_guidance_parity",
       "refresh_features_source_snapshot_missing",
     ]);
     semanticFailures.sourcePreflight = assertSemanticFailures("sourcePreflight", "self-test failed: semantically invalid source-preflight report satisfied the gate", [
