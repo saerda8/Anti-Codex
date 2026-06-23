@@ -101,8 +101,8 @@ function maskSecret(s) {
  * Classify an upstream connection error into a stable category string.
  *
  * Categories: invalid_url | network | tls | auth | not_found |
- *             rate_limit | model_not_found | protocol_mismatch |
- *             timeout | unknown
+ *             rate_limit | quota_or_billing | model_not_found |
+ *             protocol_mismatch | timeout | unknown
  *
  * The returned string never contains the original error message,
  * so API keys can never leak.
@@ -171,6 +171,18 @@ export function classifyUpstreamConnectionError(error) {
     status >= 500
   ) {
     return "network";
+  }
+
+  if (
+    status === 402 ||
+    msg.includes("insufficient quota") ||
+    msg.includes("quota exceeded") ||
+    msg.includes("billing") ||
+    msg.includes("payment") ||
+    msg.includes("required balance") ||
+    msg.includes("balance is too low")
+  ) {
+    return "quota_or_billing";
   }
 
   // ── rate_limit ──

@@ -1159,3 +1159,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: in-app Manager and injected Manager background-task cards now display the latest structured task status line plus status age from diagnostics.
 - Completed: the in-app Manager key/value renderer now escapes HTML before insertion, so structured status text remains text.
 - Verification: adaptive/injected Manager syntax checks passed; diff whitespace check passed; focused Manager launcher contracts passed `8/8`.
+
+## 2026-06-23 Third-Party API Manager Error Summaries
+- Completed: third-party connection tests now return a stable `summary` with human-readable title, suggested action, retryability, failed stage, and machine type.
+- Completed: Manager connection-test output displays the summary before stage details, covering auth, quota/billing, model-not-found, rate-limit, network, timeout, URL, TLS, not-found, and protocol mismatch failures.
+- Verification: syntax checks passed; focused upstream classification tests passed `12/12`; focused Manager third-party contract passed; local fake third-party provider verifier passed with `usedRealTraffic:false`.

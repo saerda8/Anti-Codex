@@ -5829,6 +5829,8 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(inject, /showUpstreamConfig/);
   assert.match(inject, /safeJson\("\/anticodex\/upstream-profile"\)/);
   assert.match(inject, /upstreamCapabilitySummary/);
+  assert.match(inject, /upstreamConnectionSummaryText/);
+  assert.match(inject, /summary\.suggestedAction/);
   assert.match(inject, /\\u80fd\\u529b\\u8bc1\\u636e/);
   assert.match(inject, /Antigravity/);
   assert.match(inject, /\p{Script=Han}/u);
@@ -5839,6 +5841,10 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(server, /buildUpstreamChatRequest/);
   assert.match(server, /convertUpstreamChatResponse/);
   assert.match(server, /testUpstreamConnection/);
+  assert.match(server, /function upstreamConnectionSummary/);
+  assert.match(server, /summary:\s*upstreamConnectionSummary/);
+  assert.match(server, /quota_or_billing/);
+  assert.match(server, /model_not_found/);
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-test"/);
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-test"[\s\S]*?validateManagerActionRequest\(req\)/);
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-profile"/);

@@ -3858,6 +3858,61 @@ function providerModelIdsFromConnectionStages(stages = [], configuredModel = "")
     return ids.slice(0, 200);
 }
 
+function upstreamConnectionFailureType(stage = {}) {
+    const detail = String(stage?.detail || "").toLowerCase();
+    if (/auth/.test(detail)) return "auth";
+    if (/quota_or_billing|insufficient quota|quota|billing|payment|required balance/.test(detail)) return "quota_or_billing";
+    if (/model_not_found/.test(detail)) return "model_not_found";
+    if (/rate_limit/.test(detail)) return "rate_limit";
+    if (/timeout/.test(detail)) return "timeout";
+    if (/invalid_url/.test(detail)) return "invalid_url";
+    if (/tls/.test(detail)) return "tls";
+    if (/network/.test(detail)) return "network";
+    if (/protocol_mismatch|protocol_or_translation_error/.test(detail)) return "protocol_mismatch";
+    if (/not_found/.test(detail)) return "not_found";
+    return "unknown";
+}
+
+function upstreamConnectionGuidance(type) {
+    return ({
+        auth: { title: "认证失败", suggestedAction: "检查 API key、组织/项目权限，重新测试后再保存。", retryable: false },
+        quota_or_billing: { title: "余额或额度不足", suggestedAction: "检查第三方 API 账号的余额、计费或额度；恢复后再测试。", retryable: false },
+        model_not_found: { title: "模型不可用", suggestedAction: "确认模型名是否拼写正确，以及该 key 是否有权限使用这个模型。", retryable: false },
+        rate_limit: { title: "请求被限速", suggestedAction: "稍后重试，或调整第三方 API 的限速/套餐配置。", retryable: true },
+        timeout: { title: "连接超时", suggestedAction: "检查地址、代理和网络，然后重新测试。", retryable: true },
+        invalid_url: { title: "地址格式不对", suggestedAction: "使用 provider 的根地址或完整 /chat/completions、/v1/messages 地址。", retryable: false },
+        tls: { title: "证书或 TLS 错误", suggestedAction: "检查 HTTPS 证书、代理或本地网络拦截配置。", retryable: false },
+        network: { title: "网络连不上", suggestedAction: "检查 provider 地址、代理、DNS 和防火墙，然后重试。", retryable: true },
+        protocol_mismatch: { title: "接口协议不匹配", suggestedAction: "确认选的协议和 provider 实际接口一致：OpenAI 兼容或 Anthropic。", retryable: false },
+        not_found: { title: "接口路径不存在", suggestedAction: "检查 base URL 是否多写或少写 /v1、/chat/completions 或 /v1/messages。", retryable: false },
+    })[type] || { title: "连接测试失败", suggestedAction: "检查 provider 地址、key、模型名和协议后重新测试。", retryable: false };
+}
+
+function upstreamConnectionSummary(stages = []) {
+    const sanitized = sanitizedConnectionStages(stages);
+    const failed = sanitized.find((stage) => stage.status === "fail");
+    if (!failed) {
+        return {
+            status: "ok",
+            type: "ready",
+            title: "连接可用",
+            suggestedAction: "可以保存并切换；这不会走 ChatGPT 登录，也不会清空聊天记录。",
+            retryable: false,
+            failedStage: "",
+        };
+    }
+    const type = upstreamConnectionFailureType(failed);
+    const guidance = upstreamConnectionGuidance(type);
+    return {
+        status: failed.status,
+        type,
+        title: guidance.title,
+        suggestedAction: guidance.suggestedAction,
+        retryable: guidance.retryable,
+        failedStage: failed.stage || "",
+    };
+}
+
 function hasPseudoToolMarkup(content) {
     const text = String(content || "");
     return /<[\s｜|]*DSML[\s｜|]*(tool_calls|invoke|parameter)\b/i.test(text)
@@ -6918,10 +6973,12 @@ const server = http.createServer(async (req, res) => {
             });
             const stages = await testUpstreamConnection(profile, { timeoutMs: Number(body.timeoutMs || 10_000) });
             const ok = stages.length > 0 && stages.every((stage) => stage.status !== "fail");
-            return jsonResponse(res, 200, { ok, stages: sanitizedConnectionStages(stages) });
+            const sanitizedStages = sanitizedConnectionStages(stages);
+            return jsonResponse(res, 200, { ok, stages: sanitizedStages, summary: upstreamConnectionSummary(sanitizedStages) });
         } catch (error) {
             return jsonResponse(res, 200, {
                 ok: false,
+                summary: upstreamConnectionSummary([{ stage: "配置验证", status: "fail", detail: error.message || "配置无效" }]),
                 stages: [{ stage: "配置验证", status: "fail", detail: error.message || "配置无效" }],
             });
         }

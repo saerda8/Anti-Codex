@@ -1563,7 +1563,21 @@
         field.addEventListener("input", invalidateConnectionTest);
         field.addEventListener("change", invalidateConnectionTest);
       }
-      const stageText = (payload) => (payload.stages || []).map((item) => String(item.stage || "") + "：" + String(item.status || "") + "\n" + String(item.detail || "")).join("\n\n") || "没有返回测试结果";
+      const upstreamConnectionSummaryText = (payload) => {
+        const summary = payload?.summary;
+        if (!summary?.title && !summary?.suggestedAction) return "";
+        return [
+          `结论：${summary.title || (payload?.ok ? "连接可用" : "连接测试失败")}`,
+          summary.failedStage ? `阶段：${summary.failedStage}` : "",
+          `建议：${summary.suggestedAction || "检查 provider 地址、key、模型名和协议后重新测试。"}`,
+          summary.retryable ? "可重试：是" : "可重试：否",
+          summary.type ? `分类：${summary.type}` : "",
+        ].filter(Boolean).join("\n");
+      };
+      const stageText = (payload) => [
+        upstreamConnectionSummaryText(payload),
+        (payload.stages || []).map((item) => String(item.stage || "") + "：" + String(item.status || "") + "\n" + String(item.detail || "")).join("\n\n"),
+      ].filter(Boolean).join("\n\n") || "没有返回测试结果";
       const applyAndWait = async (expectedMode) => {
         await getJson("/anticodex/upstream-apply", {
           method: "POST",

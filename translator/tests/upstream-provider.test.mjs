@@ -673,6 +673,12 @@ test("classifyUpstreamConnectionError returns rate_limit for 429", () => {
   assert.equal(classifyUpstreamConnectionError(new Error("rate limit exceeded")), "rate_limit");
 });
 
+test("classifyUpstreamConnectionError returns quota_or_billing for balance failures", () => {
+  assert.equal(classifyUpstreamConnectionError({ status: 402, message: "payment required" }), "quota_or_billing");
+  assert.equal(classifyUpstreamConnectionError(new Error("insufficient quota")), "quota_or_billing");
+  assert.equal(classifyUpstreamConnectionError(new Error("required balance is too low")), "quota_or_billing");
+});
+
 test("classifyUpstreamConnectionError returns model_not_found for model errors", () => {
   assert.equal(classifyUpstreamConnectionError(new Error("model not found: gpt-5")), "model_not_found");
   assert.equal(classifyUpstreamConnectionError(new Error("Model not found")), "model_not_found");

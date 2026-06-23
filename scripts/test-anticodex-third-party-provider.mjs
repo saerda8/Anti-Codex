@@ -656,6 +656,8 @@ async function main() {
     }),
   });
   assert.equal(connection.ok, true);
+  assert.equal(connection.summary?.type, "ready");
+  assert.match(connection.summary?.suggestedAction || "", /ChatGPT/);
   assert.ok(connection.stages.length >= 3);
 
   const savedResponse = await fetch(`${translatorUrl}/anticodex/upstream-profile`, {
@@ -1095,6 +1097,26 @@ async function main() {
   assert.ok(anthropicMessageRequests.every((request) => request.body.model === "fake-claude-4.1"));
 
   forceAuthFailure = true;
+  const failureBootstrap = await getJson(`${translatorUrl}/anticodex/manager/bootstrap`, { headers: managerHeaders });
+  const failureHeaders = {
+    ...authedHeaders,
+    "x-anticodex-manager-token": failureBootstrap.token,
+  };
+  const failedConnection = await getJson(`${translatorUrl}/anticodex/upstream-test`, {
+    method: "POST",
+    headers: failureHeaders,
+    body: JSON.stringify({
+      protocol: "openai-compatible",
+      baseUrl: upstreamFullUrl,
+      model: "fake-gpt-4.1",
+      apiKey: "sk-save-secret",
+      timeoutMs: 10_000,
+    }),
+  });
+  assert.equal(failedConnection.ok, false);
+  assert.equal(failedConnection.summary?.type, "auth");
+  assert.doesNotMatch(JSON.stringify(failedConnection), secretPattern);
+
   const responseHistoryBeforeAuthFailure = readFileSync(responseHistoryPath, "utf8");
   const failedResponse = await fetch(`${translatorUrl}/v1/responses`, {
     method: "POST",
