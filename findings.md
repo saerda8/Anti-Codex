@@ -906,3 +906,4 @@
 - In PowerShell, casting `$null` to `[int]` can silently become `0`. For report integrity fields, validate non-null non-negative integers before comparing counts.
 - JavaScript has the same trap through `Number(null) === 0`. Manager/report summary code should use a helper that rejects null and requires a non-negative integer before displaying count fields.
 - Plugin offline snapshot evidence is only useful support context when it is tied to a satisfied refresh-feature gate. Require both `refreshGateSatisfied:true` and a non-empty selected refresh report name before diagnostics accepts it as clean offline evidence.
+- Manager support text should not hide approval metadata behind release failure details. Display top-level next actions and approval plans even when `releaseGateFailureReasons` is empty, and merge gate-level ordered actions so stale top-level lists do not drop blocked work.

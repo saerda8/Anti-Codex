@@ -1702,3 +1702,4 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Follow-up: offline reports-summary diagnostics now rejects null or invalid `approvalPlan` counts instead of letting PowerShell coerce them to zero.
 - Follow-up: runtime Manager report summaries now use explicit non-negative integer parsing for approval-plan counts, so null approval metadata is shown as unknown instead of zero.
 - Follow-up: offline reports-summary diagnostics now rejects `approvalPlan:null` and weak plugin offline snapshot evidence where the refresh-feature gate is not satisfied or no selected refresh report is named.
+- Follow-up: Manager latest-report text now merges top-level `nextActions` with gate-level `orderedActions`, preserves approval/gateway/real-traffic/high-impact flags in action labels, and shows `approvalPlan` even when failure reason details are absent.

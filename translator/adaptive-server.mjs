@@ -3723,6 +3723,32 @@ function latestReportsSummary(result){
       if(Array.isArray(item.missingShort)&&item.missingShort.length) lines.push("  missingShort: "+item.missingShort.slice(0,6).join(", "));
       if(Array.isArray(item.missingOptional)&&item.missingOptional.length) lines.push("  missingOptional: "+item.missingOptional.slice(0,6).join(", "));
       if(Array.isArray(item.damagedReports)&&item.damagedReports.length) lines.push("  damagedReports: "+item.damagedReports.slice(0,6).join(", "));
+      function actionDisplayLabel(action,fallbackGateId=""){
+        const id=action?.id||"";
+        const gateId=action?.gateId||fallbackGateId||id;
+        const flags=[];
+        if(action?.blockedUntilExplicitUserApproval===true) flags.push("approval");
+        if(action?.requiresGatewayStart===true) flags.push("gateway");
+        if(action?.requiresRealTraffic===true) flags.push("realTraffic");
+        if(action?.highImpact===true) flags.push("highImpact");
+        return gateId+":"+id+(flags.length?"["+flags.join(",")+"]":"");
+      }
+      function mergedNextActions(){
+        const seen=new Set();
+        const actions=[];
+        const add=(action,fallbackGateId="")=>{
+          if(!action?.id) return;
+          const key=(action.gateId||fallbackGateId||action.id)+":"+action.id;
+          if(seen.has(key)) return;
+          seen.add(key);
+          actions.push(actionDisplayLabel(action,fallbackGateId));
+        };
+        if(Array.isArray(item.nextActions)) item.nextActions.forEach((action)=>add(action,action?.gateId||""));
+        if(Array.isArray(item.releaseGateFailureReasons)) item.releaseGateFailureReasons.forEach((gate)=>{
+          if(Array.isArray(gate?.orderedActions)) gate.orderedActions.forEach((action)=>add(action,gate.id));
+        });
+        return actions;
+      }
       if(Array.isArray(item.releaseGateFailureReasons)&&item.releaseGateFailureReasons.length){
         const failureReasons=item.releaseGateFailureReasons.slice(0,6).map((gate)=>gate.id+":"+(gate.failureReason||(Array.isArray(gate.failureReasons)?gate.failureReasons[0]:"unsatisfied"))).join(", ");
         lines.push("  failureReasons: "+failureReasons);
@@ -3740,21 +3766,19 @@ function latestReportsSummary(result){
           .slice(0,4)
           .map((gate)=>gate.id+":"+gate.guidance);
         if(guidanceDetails.length) lines.push("  guidance: "+guidanceDetails.join("; "));
-        const allNextActions=(Array.isArray(item.nextActions)&&item.nextActions.length
-          ? item.nextActions.map((action)=>(action.gateId||action.id)+":"+action.id)
-          : item.releaseGateFailureReasons.flatMap((gate)=>Array.isArray(gate?.orderedActions)?gate.orderedActions.map((action)=>gate.id+":"+action.id):[]));
-        const nextActions=allNextActions.slice(0,8);
-        const hiddenNextActions=Math.max(0,allNextActions.length-nextActions.length);
-        if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> ")+(hiddenNextActions?" (+"+hiddenNextActions+" more)":""));
-        if(item.approvalPlan){
-          const plan=item.approvalPlan;
-          lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / first="+(plan.firstBlockedAction||"none"));
-        }
         const realTrafficEvidenceGates=item.releaseGateFailureReasons
           .filter((gate)=>gate?.group==="real-traffic"&&(["stale_report","missing_report"].includes(gate.failureReason)||(Array.isArray(gate.failureReasons)&&gate.failureReasons.some((reason)=>["stale_report","missing_report"].includes(reason)))))
           .map((gate)=>gate.id)
           .filter(Boolean);
         if(realTrafficEvidenceGates.length) lines.push("  真实流量验收证据需更新/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（"+realTrafficEvidenceGates.slice(0,6).join(", ")+"）");
+      }
+      const allNextActions=mergedNextActions();
+      const nextActions=allNextActions.slice(0,8);
+      const hiddenNextActions=Math.max(0,allNextActions.length-nextActions.length);
+      if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> ")+(hiddenNextActions?" (+"+hiddenNextActions+" more)":""));
+      if(item.approvalPlan){
+        const plan=item.approvalPlan;
+        lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / first="+(plan.firstBlockedAction||"none"));
       }
       if(Array.isArray(item.releaseGateSelectedReports)&&item.releaseGateSelectedReports.length){
         const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile).join(", ");
