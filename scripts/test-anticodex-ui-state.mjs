@@ -104,6 +104,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/syncReadiness versions: codex=/.test(injectSource) || !/managerBridge=\$\{evidence\.managerBridgeReady/.test(injectSource) || !/processes=\$\{evidence\.managerBridgeProcessCount/.test(injectSource)) {
     failures.push("in-app manager is missing sync-readiness version and Manager bridge process evidence");
   }
+  if (!/selectedHistory:/.test(injectSource) || !/releaseGateSelectedReports/.test(injectSource)) {
+    failures.push("in-app manager is missing release-gate selected history evidence");
+  }
 
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
@@ -170,6 +173,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/syncReadiness versions: codex=/.test(managerHtml) || !/managerBridge="\+\(evidence\.managerBridgeReady/.test(managerHtml) || !/processes="\+\(evidence\.managerBridgeProcessCount/.test(managerHtml)) {
     failures.push("manager page is missing sync-readiness version and Manager bridge process evidence");
+  }
+  if (!/selectedHistory:/.test(managerHtml) || !/releaseGateSelectedReports/.test(managerHtml)) {
+    failures.push("manager page is missing release-gate selected history evidence");
   }
   if (/routes\.latest\?JSON\.stringify\(routeSummary/.test(managerHtml)) {
     failures.push("manager page route empty state collapses provider fields");
