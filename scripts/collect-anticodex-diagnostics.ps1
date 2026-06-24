@@ -245,6 +245,7 @@ function Read-JsonSummary {
             missingOptional = @($json.missingOptional | ForEach-Object { [string]$_ })
             damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
             releaseGateFailures = @($json.releaseGateFailures)
+            releaseGateFailureReasons = @($json.releaseGateFailureReasons)
             releaseGateGroups = @($json.releaseGateGroups)
             releaseGateSelectedReports = @($json.releaseGateSelectedReports)
             installedRuntimeEvidence = $json.installedRuntimeEvidence

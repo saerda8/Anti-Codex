@@ -1550,3 +1550,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: release-gate selected-history evidence now flows through the report summarizer, diagnostics collector, diagnostics verifier summary, external Manager bridge, injected Manager, and adaptive Manager.
 - Completed: Manager latest-report text now shows `selectedHistory: syncReadiness:<report>` when a fast latest report falls back to a full signed history report.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; focused launcher contracts passed `129/129`; release-gate self-test passed; strict passive gate returned `shortReady:true`, installed runtime fingerprints matched `59/59`, and `syncReadiness.selectedFromHistory:true`.
+
+## 2026-06-24 Release Gate Failure Reasons
+- Completed: passive release gates now attach `failureReasons` to unsatisfied gates and surface a compact `releaseGateFailureReasons` list through reports, diagnostics, and all Manager views.
+- Completed: support views now distinguish stale evidence from missing or damaged reports, so stale real-traffic reports no longer look like absent files.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; release-gate self-test passed; focused launcher contracts passed `129/129`; strict passive gate returned `shortReady:true`, installed runtime fingerprints matched `59/59`, and required real-traffic misses were classified as `stale_report`.

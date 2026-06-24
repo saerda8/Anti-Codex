@@ -2328,12 +2328,33 @@ function latestManagerReportItem(label, fileName) {
                 id: shortSafeText(gate.id, ""),
                 group: shortSafeText(gate.group, ""),
                 error: shortSafeText(gate.error, ""),
+                failureReason: shortSafeText(gate.failureReason || "", ""),
+                failureReasons: Array.isArray(gate.failureReasons)
+                    ? gate.failureReasons.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
+                    : [],
                 semanticFailures: Array.isArray(gate.semanticFailures)
                     ? gate.semanticFailures.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
                     : [],
             }))
             .slice(0, 12)
         : [];
+    const rawReleaseGateFailureReasons = Array.isArray(report?.releaseGateFailureReasons)
+        ? report.releaseGateFailureReasons
+        : (Array.isArray(report?.gates) ? report.gates.filter((gate) => gate && gate.satisfied !== true) : []);
+    const releaseGateFailureReasons = rawReleaseGateFailureReasons
+        .map((gate) => ({
+            id: shortSafeText(gate.id || "", ""),
+            group: shortSafeText(gate.group || "", ""),
+            requiredForRelease: gate.requiredForRelease === true,
+            requiredForShort: gate.requiredForShort === true,
+            failureReason: shortSafeText(gate.failureReason || "", ""),
+            failureReasons: Array.isArray(gate.failureReasons) ? gate.failureReasons.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+            ageHours: Number.isFinite(Number(gate.ageHours)) ? Number(gate.ageHours) : null,
+            fresh: typeof gate.fresh === "boolean" ? gate.fresh : null,
+            selectedFromHistory: gate.selectedFromHistory === true,
+            selectedFile: shortSafeText(gate.selectedFile || "", ""),
+        })).filter((entry) => entry.id).slice(0, 24)
+        ;
     const releaseGateGroups = report?.groups && typeof report.groups === "object"
         ? Object.entries(report.groups).map(([group, value]) => ({
             group: shortSafeText(group, ""),
@@ -2488,6 +2509,7 @@ function latestManagerReportItem(label, fileName) {
         missingOptional: Array.isArray(report?.missingOptional) ? report.missingOptional.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         damagedReports: Array.isArray(report?.damagedReports) ? report.damagedReports.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         releaseGateFailures,
+        releaseGateFailureReasons,
         releaseGateGroups,
         releaseGateSelectedReports,
         installedRuntimeEvidence,
@@ -3599,6 +3621,10 @@ function latestReportsSummary(result){
       if(Array.isArray(item.missingShort)&&item.missingShort.length) lines.push("  missingShort: "+item.missingShort.slice(0,6).join(", "));
       if(Array.isArray(item.missingOptional)&&item.missingOptional.length) lines.push("  missingOptional: "+item.missingOptional.slice(0,6).join(", "));
       if(Array.isArray(item.damagedReports)&&item.damagedReports.length) lines.push("  damagedReports: "+item.damagedReports.slice(0,6).join(", "));
+      if(Array.isArray(item.releaseGateFailureReasons)&&item.releaseGateFailureReasons.length){
+        const failureReasons=item.releaseGateFailureReasons.slice(0,6).map((gate)=>gate.id+":"+(gate.failureReason||(Array.isArray(gate.failureReasons)?gate.failureReasons[0]:"unsatisfied"))).join(", ");
+        lines.push("  failureReasons: "+failureReasons);
+      }
       if(Array.isArray(item.releaseGateSelectedReports)&&item.releaseGateSelectedReports.length){
         const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile).join(", ");
         lines.push("  selectedHistory: "+selectedReports);

@@ -301,6 +301,10 @@ function latestReportsSummary(result) {
       if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.missingOptional) && item.missingOptional.length) lines.push(`  missingOptional: ${item.missingOptional.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
+      if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
+        const failureReasons = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`).join(", ");
+        lines.push(`  failureReasons: ${failureReasons}`);
+      }
       if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
         const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
         lines.push(`  selectedHistory: ${selectedReports}`);
@@ -677,6 +681,7 @@ if (args.has("--self-test")) {
       missingShort: ["latest-ui-idle.json"],
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
+      releaseGateFailureReasons: [{ id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1 }],
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
       releaseGateFailures: [{ id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] }],
@@ -739,6 +744,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
+  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);

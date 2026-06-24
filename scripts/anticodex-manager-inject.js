@@ -910,6 +910,10 @@
         if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
         if (Array.isArray(item.missingOptional) && item.missingOptional.length) lines.push(`  missingOptional: ${item.missingOptional.slice(0, 6).join(", ")}`);
         if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
+        if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
+          const failureReasons = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`).join(", ");
+          lines.push(`  failureReasons: ${failureReasons}`);
+        }
         if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
           const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
           lines.push(`  selectedHistory: ${selectedReports}`);

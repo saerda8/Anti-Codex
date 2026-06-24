@@ -107,6 +107,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/selectedHistory:/.test(injectSource) || !/releaseGateSelectedReports/.test(injectSource)) {
     failures.push("in-app manager is missing release-gate selected history evidence");
   }
+  if (!/failureReasons:/.test(injectSource) || !/releaseGateFailureReasons/.test(injectSource)) {
+    failures.push("in-app manager is missing release-gate failure reason evidence");
+  }
 
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
@@ -176,6 +179,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/selectedHistory:/.test(managerHtml) || !/releaseGateSelectedReports/.test(managerHtml)) {
     failures.push("manager page is missing release-gate selected history evidence");
+  }
+  if (!/failureReasons:/.test(managerHtml) || !/releaseGateFailureReasons/.test(managerHtml)) {
+    failures.push("manager page is missing release-gate failure reason evidence");
   }
   if (/routes\.latest\?JSON\.stringify\(routeSummary/.test(managerHtml)) {
     failures.push("manager page route empty state collapses provider fields");

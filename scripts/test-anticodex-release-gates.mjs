@@ -1763,10 +1763,43 @@ if (mcpSkillGate?.sourceFingerprint && pluginCapabilityGate?.sourceFingerprint &
 }
 const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);
+
+function gateFailureReasons(gate) {
+  const reasons = [];
+  if (!gate.present) reasons.push("missing_report");
+  if (gate.present && gate.parseable !== true) reasons.push("unparseable_report");
+  if (gate.present && gate.signed !== true) reasons.push("unsigned_report");
+  if (gate.present && gate.hashValid !== true) reasons.push(gate.error || "hash_invalid");
+  if (gate.present && gate.parseable === true && gate.okField !== true) reasons.push("ok_false");
+  if (gate.present && gate.parseable === true && gate.fresh !== true) reasons.push("stale_report");
+  if (Array.isArray(gate.semanticFailures) && gate.semanticFailures.length) reasons.push("semantic_failures");
+  if (gate.error && !reasons.includes(gate.error)) reasons.push(gate.error);
+  return reasons.length ? reasons : (gate.satisfied ? [] : ["unsatisfied"]);
+}
+
+for (const gate of gates) {
+  gate.failureReasons = gate.satisfied ? [] : gateFailureReasons(gate);
+  gate.failureReason = gate.failureReasons[0] || "";
+}
+
 const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const missingShort = requiredShort.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const missingOptional = gates.filter((gate) => !gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id);
 const damagedReports = gates.filter((gate) => gate.present && (!gate.parseable || gate.hashValid !== true)).map((gate) => gate.id);
+const releaseGateFailureReasons = gates
+  .filter((gate) => !gate.satisfied)
+  .map((gate) => ({
+    id: gate.id,
+    group: gate.group,
+    requiredForRelease: gate.requiredForRelease === true,
+    requiredForShort: gate.requiredForShort === true,
+    failureReason: gate.failureReason || "",
+    failureReasons: Array.isArray(gate.failureReasons) ? gate.failureReasons : [],
+    ageHours: gate.ageHours,
+    fresh: gate.fresh === true,
+    selectedFromHistory: gate.selectedFromHistory === true,
+    selectedFile: gate.selectedFile || "",
+  }));
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
   .filter((gate) => !gate.satisfied || gate.requestedRealTraffic !== true || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
@@ -1804,6 +1837,7 @@ const payload = {
   missingShort,
   missingOptional,
   damagedReports,
+  releaseGateFailureReasons,
   groups,
   gates,
 };
