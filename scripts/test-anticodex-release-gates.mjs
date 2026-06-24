@@ -858,6 +858,9 @@ function gateGuidance(gate) {
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
   }
+  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report")) {
+    return "real_traffic_evidence_stale: requires explicit user approval to start/verify Anti-Codex and refresh release-grade real-traffic reports.";
+  }
   return "";
 }
 
@@ -1902,6 +1905,8 @@ if (args.has("--self-test")) {
     assertFailureReason("postVerification", "missing_report");
     assertFailureReason("fastOverallNoTraffic", "semantic_failures");
     assertFailureReason("installedRuntimeSync", "semantic_failures");
+    const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");
+    if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");
     if (failedLatestGate.selectedFile !== "latest-cold-relaunch.json") throw new Error("self-test failed: latest report selectedFile was not preserved");

@@ -1673,3 +1673,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: launcher regression now runs an isolated fake endpoint with exactly one unauthorized app tool and another with POST/GET app-tool mismatch; both fail closed without connector authorization or real traffic.
 - Completed: diagnostics output now carries `installedRuntimeEvidence` inside the final `releaseGates` support object, matching the verifier checks and Manager/report summaries.
 - Verification: focused launcher contracts for plugin capability verifier passed `132/133` with one environment link-directory skip; PowerShell parser check passed after fixing command wrapping; `git diff --check` passed.
+
+## 2026-06-24 Real Evidence Guidance
+- Completed: passive release gates now attach stable `real_traffic_evidence_stale` guidance to required real-traffic reports that are missing or stale, making it clear that refresh requires explicit user approval instead of silently running expensive verifiers.
+- Current plugin evidence path: once the local Anti-Codex gateway is explicitly approved to run, refresh plugin capability proof with the normal gateway-backed verifier, not short-budget mode or hand-edited reports.
+- Current real-traffic refresh order: low-state checks first (`codexResponses`, compatibility/custom/native/MCP tool loops, `webTools`), then session-state checks (`compactionResume`, `cancellation`), then high-impact final proof (`realMiniTool`, `realWork`, `postVerification`).
+- Verification: release-gate self-test passed; focused launcher contracts passed `132/133` with one environment link-directory skip; JS syntax check passed; `git diff --check` passed. No gateway startup or real traffic was used.

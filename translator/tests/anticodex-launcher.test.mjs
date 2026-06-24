@@ -7205,7 +7205,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /selectedMtime/);
   assert.match(releaseGates, /reportFailureSamples/);
   assert.match(releaseGates, /local_gateway_offline/);
+  assert.match(releaseGates, /real_traffic_evidence_stale/);
+  assert.match(releaseGates, /requires explicit user approval/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_reused/);
+  assert.match(releaseGates, /real-traffic stale guidance was not attached/);
   assert.match(releaseGates, /latest report failure samples were not preserved/);
   assert.match(releaseGates, /requiredSatisfied/);
   assert.match(releaseGates, /optionalSatisfied/);
