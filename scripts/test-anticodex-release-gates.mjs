@@ -281,6 +281,22 @@ function summarizeInstalledRuntimeSyncGate() {
   return gate;
 }
 
+function installedRuntimeEvidenceFromGate(gate) {
+  if (!gate || typeof gate !== "object") return null;
+  return {
+    satisfied: gate.satisfied === true,
+    sourceFingerprint: typeof gate.sourceFingerprint === "string" ? gate.sourceFingerprint : "",
+    installedRuntimeFingerprint: typeof gate.installedRuntimeFingerprint === "string" ? gate.installedRuntimeFingerprint : "",
+    sourceFileCount: Number.isFinite(Number(gate.sourceFileCount)) ? Number(gate.sourceFileCount) : null,
+    installedRuntimeFileCount: Number.isFinite(Number(gate.installedRuntimeFileCount)) ? Number(gate.installedRuntimeFileCount) : null,
+    sourceMtimeMax: typeof gate.sourceMtimeMax === "string" ? gate.sourceMtimeMax : "",
+    installedRuntimeMtimeMax: typeof gate.installedRuntimeMtimeMax === "string" ? gate.installedRuntimeMtimeMax : "",
+    missingSourceFiles: Array.isArray(gate.missingSourceFiles) ? gate.missingSourceFiles.slice(0, 8) : [],
+    missingInstalledRuntimeFiles: Array.isArray(gate.missingInstalledRuntimeFiles) ? gate.missingInstalledRuntimeFiles.slice(0, 8) : [],
+    mismatchedRuntimeFiles: Array.isArray(gate.mismatchedRuntimeFiles) ? gate.mismatchedRuntimeFiles.slice(0, 8) : [],
+  };
+}
+
 function isEmptyArray(value) {
   return Array.isArray(value) && value.length === 0;
 }
@@ -919,7 +935,7 @@ const realTrafficRefreshOrder = [
 
 const optionalEvidenceRefreshOrder = [
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
-  ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { highImpact: true }],
+  ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
 
 const managerEvidenceRefreshOrder = [
@@ -2092,6 +2108,10 @@ if (args.has("--self-test")) {
     semanticFailures.installedRuntimeSync = runtimeGate.semanticFailures || [];
     if (!semanticFailures.installedRuntimeSync.includes("installed_runtime_hash_mismatch")) throw new Error("self-test failed: installed runtime hash mismatch was not detected");
     if (!semanticFailures.installedRuntimeSync.includes("installed_runtime_fingerprint_mismatch")) throw new Error("self-test failed: installed runtime fingerprint mismatch was not detected");
+    const runtimeEvidence = installedRuntimeEvidenceFromGate(runtimeGate);
+    if (!runtimeEvidence || runtimeEvidence.satisfied !== false || runtimeEvidence.sourceFileCount !== runtimeSyncFiles.length || runtimeEvidence.installedRuntimeFileCount !== runtimeSyncFiles.length || runtimeEvidence.mismatchedRuntimeFiles.length < 1) {
+      throw new Error("self-test failed: installed runtime evidence was not surfaced from runtime gate");
+    }
 
     const reasonGates = attachGateFailureReasons([
       ...gateDefinitions.map(summarizeGate),
@@ -2142,7 +2162,7 @@ if (args.has("--self-test")) {
       throw new Error("self-test failed: latest report failure samples were not preserved");
     }
     const coldActions = gateOrderedActions(failedLatestGate);
-    if (!coldActions.some((item) => item.id === "coldRelaunch" && item.highImpact === true && item.command.includes("-ConfirmRelaunch"))) throw new Error("self-test failed: optional cold-relaunch action was not attached");
+    if (!coldActions.some((item) => item.id === "coldRelaunch" && item.requiresGatewayStart === true && item.highImpact === true && item.command.includes("-ConfirmRelaunch"))) throw new Error("self-test failed: optional cold-relaunch action was not marked gateway/high-impact");
     const soakGate = reasonGates.find((item) => item.id === "stabilitySoak");
     const soakActions = gateOrderedActions(soakGate);
     if (!soakActions.some((item) => item.id === "stabilitySoak" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: optional stability-soak action was not marked gateway and real-traffic");
@@ -2156,6 +2176,7 @@ if (args.has("--self-test")) {
 }
 
 const gates = [...gateDefinitions.map(summarizeGate), summarizeInstalledRuntimeSyncGate()];
+const installedRuntimeEvidence = installedRuntimeEvidenceFromGate(gates.find((gate) => gate.id === "installedRuntimeSync"));
 function addSemanticFailure(gateId, failure) {
   const gate = gates.find((item) => item.id === gateId);
   if (!gate) return;
@@ -2243,6 +2264,7 @@ const payload = {
   releaseGateFailureReasons,
   nextActions,
   approvalPlan,
+  installedRuntimeEvidence,
   groups,
   gates,
 };

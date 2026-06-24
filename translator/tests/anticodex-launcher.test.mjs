@@ -775,6 +775,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /nextActions/);
   assert.match(managerInject, /nextActions/);
   assert.match(managerServerSource, /nextActions/);
+  assert.match(managerBridge, /hiddenNextActions/);
+  assert.match(managerInject, /hiddenNextActions/);
+  assert.match(managerServerSource, /hiddenNextActions/);
   assert.match(managerBridge, /approvalPlan: actions=/);
   assert.match(managerInject, /approvalPlan: actions=/);
   assert.match(managerServerSource, /approvalPlan: actions=/);
@@ -3803,6 +3806,22 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
 test("report summarizer treats releaseReady false as not effectively passing", () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-release-summary-"));
   const reportPath = resolve(tempRoot, "latest-release-gates.json");
+  const nextActions = [{
+    id: "postVerification",
+    gateId: "postVerification",
+    phase: "real-traffic-final",
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+    requiresRealTraffic: true,
+    highImpact: true,
+    blockedUntilExplicitUserApproval: true,
+  }, ...Array.from({ length: 9 }, (_, index) => ({
+    id: `action${index + 2}`,
+    gateId: `gate${index + 2}`,
+    phase: "real-traffic-low-state",
+    command: `command-${index + 2}`,
+    requiresGatewayStart: true,
+    blockedUntilExplicitUserApproval: true,
+  }))];
   try {
     writeFileSync(reportPath, JSON.stringify({
       ok: true,
@@ -3875,15 +3894,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
         missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       }],
-      nextActions: [{
-        id: "postVerification",
-        gateId: "postVerification",
-        phase: "real-traffic-final",
-        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
-        requiresRealTraffic: true,
-        highImpact: true,
-        blockedUntilExplicitUserApproval: true,
-      }],
+      nextActions,
       approvalPlan: {
         actionCount: 1,
         blockedCount: 1,
@@ -3955,7 +3966,8 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       guidance: "",
       orderedActions: [],
     }]);
-    assert.deepEqual(summary.nextActions, [{
+    assert.equal(summary.nextActions.length, 10);
+    assert.deepEqual(summary.nextActions[0], {
       id: "postVerification",
       gateId: "postVerification",
       phase: "real-traffic-final",
@@ -3964,7 +3976,8 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       requiresRealTraffic: true,
       highImpact: true,
       blockedUntilExplicitUserApproval: true,
-    }]);
+    });
+    assert.equal(summary.nextActions[9].id, "action10");
     assert.equal(summary.approvalPlan.actionCount, 1);
     assert.equal(summary.approvalPlan.requiresRealTrafficCount, 1);
     assert.equal(summary.approvalPlan.firstBlockedAction, "postVerification");
@@ -7349,7 +7362,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optionalEvidenceRefreshOrder/);
   assert.match(releaseGates, /test-anticodex-stability-soak\.ps1 -DurationSec 180/);
   assert.match(releaseGates, /test-anticodex-cold-relaunch\.ps1 -ConfirmRelaunch/);
-  assert.match(releaseGates, /optional cold-relaunch action was not attached/);
+  assert.match(releaseGates, /optional cold-relaunch action was not marked gateway\/high-impact/);
   assert.match(releaseGates, /optional stability-soak action was not marked gateway and real-traffic/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_reused/);
   assert.match(releaseGates, /real-traffic stale guidance was not attached/);
@@ -7403,6 +7416,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(server, /nextActions/);
   assert.match(server, /Release groups:/);
   assert.match(releaseGates, /installedRuntimeSync/);
+  assert.match(releaseGates, /installedRuntimeEvidenceFromGate/);
+  assert.match(releaseGates, /installedRuntimeEvidence/);
   assert.match(releaseGates, /runtimeSyncFiles/);
   assert.match(releaseGates, /scripts\/anticodex-manager-inject\.js/);
   assert.match(releaseGates, /scripts\/anticodex-manager-open-inject\.js/);

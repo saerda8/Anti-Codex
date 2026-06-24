@@ -31,7 +31,7 @@ function asOrderedActions(value) {
     requiresRealTraffic: item?.requiresRealTraffic === true,
     highImpact: item?.highImpact === true,
     blockedUntilExplicitUserApproval: item?.blockedUntilExplicitUserApproval === true,
-  })).filter((item) => item.id).slice(0, 8);
+  })).filter((item) => item.id).slice(0, 32);
 }
 
 function asOfflineSnapshotEvidence(value) {

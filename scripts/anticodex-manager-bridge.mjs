@@ -327,11 +327,12 @@ function latestReportsSummary(result) {
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
         if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
-        const nextActions = (Array.isArray(item.nextActions) && item.nextActions.length
+        const allNextActions = (Array.isArray(item.nextActions) && item.nextActions.length
           ? item.nextActions.map((action) => `${action.gateId || action.id}:${action.id}`)
-          : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []))
-          .slice(0, 8);
-        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
+          : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []));
+        const nextActions = allNextActions.slice(0, 8);
+        const hiddenNextActions = Math.max(0, allNextActions.length - nextActions.length);
+        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} more)` : ""}`);
         if (item.approvalPlan) {
           const plan = item.approvalPlan;
           lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / first=${plan.firstBlockedAction || "none"}`);
@@ -766,7 +767,11 @@ if (args.has("--self-test")) {
         { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
         { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork" }] },
       ],
-      nextActions: [{ id: "realWork", gateId: "realWork" }, { id: "postVerification", gateId: "postVerification" }],
+      nextActions: [
+        { id: "realWork", gateId: "realWork" },
+        { id: "postVerification", gateId: "postVerification" },
+        ...Array.from({ length: 8 }, (_, index) => ({ id: `action${index + 3}`, gateId: `gate${index + 3}` })),
+      ],
       approvalPlan: { actionCount: 2, requiresGatewayStartCount: 2, requiresRealTrafficCount: 2, highImpactCount: 1, firstBlockedAction: "realWork" },
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0, missingOptional: ["coldRelaunch"] }],
@@ -838,6 +843,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report/);
   assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ codes local_gateway_offline \/ sample gateway offline \| health timeout/);
   assert.match(evidenceSummary, /nextActions: realWork:realWork -> postVerification:postVerification/);
+  assert.match(evidenceSummary, /nextActions: .*\(\+2 more\)/);
   assert.match(evidenceSummary, /approvalPlan: actions=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ first=realWork/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);

@@ -936,11 +936,12 @@
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
         if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
-        const nextActions = (Array.isArray(item.nextActions) && item.nextActions.length
+        const allNextActions = (Array.isArray(item.nextActions) && item.nextActions.length
           ? item.nextActions.map((action) => `${action.gateId || action.id}:${action.id}`)
-          : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []))
-          .slice(0, 8);
-        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
+          : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []));
+        const nextActions = allNextActions.slice(0, 8);
+        const hiddenNextActions = Math.max(0, allNextActions.length - nextActions.length);
+        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} more)` : ""}`);
         if (item.approvalPlan) {
           const plan = item.approvalPlan;
           lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / first=${plan.firstBlockedAction || "none"}`);
