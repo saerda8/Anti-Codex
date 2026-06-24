@@ -96,6 +96,17 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "plugin capability failure missing sample codes"
         }
     }
+    foreach ($gateFailure in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons)) {
+        $gateFailureId = [string]$gateFailure.id
+        if ([string]::IsNullOrWhiteSpace($gateFailureId)) {
+            $gateFailureId = "unknown"
+        }
+        $gateFailureSamples = @(As-FlatArray $gateFailure.reportFailureSamples | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $gateFailureCodes = @(As-FlatArray $gateFailure.reportFailureSampleCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        if ($gateFailureSamples.Count -gt 0 -and $gateFailureCodes.Count -lt 1) {
+            Add-Failure "release-gates failure $gateFailureId missing sample codes"
+        }
+    }
     if (-not (Has-Property $ReleaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
     if (-not (Has-Property $ReleaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
     $nextActions = @(As-FlatArray $ReleaseGatesSummary.nextActions)

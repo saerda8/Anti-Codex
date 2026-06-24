@@ -7039,6 +7039,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /plugin capability failure offline refresh gate is not satisfied/);
   assert.match(diagnostics, /plugin capability failure offline refresh selected file missing/);
   assert.match(diagnostics, /plugin capability failure missing sample codes/);
+  assert.match(diagnostics, /release-gates failure \$gateFailureId missing sample codes/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
   assert.match(diagnostics, /release-gates approval plan is not an object/);
@@ -7323,6 +7324,74 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.diagnostics, null);
     assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects non-plugin failure samples without codes", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-gate-sample-codes-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["postVerification"],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["postVerification"],
+      releaseGateFailureReasons: [{
+        id: "postVerification",
+        reportFailureSamples: ["gateway offline", "/health timeout"],
+        reportFailureSampleCodes: [],
+      }],
+      nextActions: [{
+        id: "postVerification",
+        requiresGatewayStart: true,
+        requiresRealTraffic: true,
+        highImpact: true,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 1,
+        requiresRealTrafficCount: 1,
+        highImpactCount: 1,
+        firstBlockedAction: "postVerification",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates failure postVerification missing sample codes"));
+    assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
