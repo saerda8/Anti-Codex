@@ -372,6 +372,9 @@ function Test-DiagnosticBundle {
                 if ($continuity.eighthAfterProtocolSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.eighthAfterProtocolSwitchAllHistoryMarkerCount -lt 18) { Add-Failure "third-party provider summary missing turn-8 full-history marker coverage" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesAllHistoryMarkers -ne $true -or [int]$continuity.ninthAfterReverseProtocolSwitchAllHistoryMarkerCount -lt 20) { Add-Failure "third-party provider summary missing turn-9 full-history marker coverage" }
                 if ($continuity.ninthAfterReverseProtocolSwitchPreservesHistory -ne $true) { Add-Failure "third-party provider summary missing final reverse-switch history evidence" }
+                if (-not $continuity.providerSwitch -or $continuity.providerSwitch.requestReachedSecondProvider -ne $true) { Add-Failure "third-party provider summary missing provider-switch route evidence" }
+                if (-not $continuity.protocolSwitch -or $continuity.protocolSwitch.requestReachedAnthropicProvider -ne $true) { Add-Failure "third-party provider summary missing protocol-switch route evidence" }
+                if (-not $continuity.reverseProtocolSwitch -or $continuity.reverseProtocolSwitch.requestReachedOpenAiCompatibleProvider -ne $true) { Add-Failure "third-party provider summary missing reverse-protocol route evidence" }
                 $previousIds = $continuity.previousResponseContinuity
                 if (-not $previousIds) {
                     Add-Failure "third-party provider summary missing previous_response_id continuity evidence"

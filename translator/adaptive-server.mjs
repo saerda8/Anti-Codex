@@ -1391,6 +1391,13 @@ function pathWithin(child, parent) {
     return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
 }
 
+function providerToolEvidenceClean(evidence) {
+    return !!evidence
+        && evidence.argumentMarkerMatched === true
+        && evidence.resultMarkerMatched === true
+        && evidence.protocolShapeClean === true;
+}
+
 function installedCheckSummary(report, expectedFast) {
     if (!report || typeof report !== "object") {
         return {
@@ -2773,11 +2780,19 @@ function latestManagerReportItem(label, fileName) {
         } : null,
         providerContinuity: multiTurnHistory ? {
             turns: Number.isFinite(Number(multiTurnHistory.turns)) ? Number(multiTurnHistory.turns) : null,
+            toolHistoryTurns: Number.isFinite(Number(multiTurnHistory.toolHistoryTurns)) ? Number(multiTurnHistory.toolHistoryTurns) : null,
             providerModelUsedForEveryTurn: multiTurnHistory.providerModelUsedForEveryTurn === true,
             restartPreservesOpenAiToolPair: toolHistory?.restartPreservesOpenAiToolPair === true,
             providerSwitchPreservesOpenAiToolPair: toolHistory?.providerSwitchPreservesOpenAiToolPair === true,
             protocolSwitchPreservesAnthropicToolPair: toolHistory?.protocolSwitchPreservesAnthropicToolPair === true,
             reverseProtocolSwitchPreservesOpenAiToolPair: toolHistory?.reverseProtocolSwitchPreservesOpenAiToolPair === true,
+            structuralEvidenceClean: [
+                structuralEvidence?.fifthOpenAiToolEvidence,
+                structuralEvidence?.sixthOpenAiToolEvidence,
+                structuralEvidence?.seventhOpenAiToolEvidence,
+                structuralEvidence?.eighthAnthropicToolEvidence,
+                structuralEvidence?.ninthOpenAiToolEvidence,
+            ].every(providerToolEvidenceClean),
             sixthMarkerCount: Number.isFinite(Number(multiTurnHistory.sixthAfterRestartAllHistoryMarkerCount)) ? Number(multiTurnHistory.sixthAfterRestartAllHistoryMarkerCount) : null,
             seventhMarkerCount: Number.isFinite(Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.seventhAfterProviderSwitchAllHistoryMarkerCount) : null,
             eighthMarkerCount: Number.isFinite(Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount)) ? Number(multiTurnHistory.eighthAfterProtocolSwitchAllHistoryMarkerCount) : null,
@@ -2813,6 +2828,25 @@ function latestManagerReportItem(label, fileName) {
                 protocolSwitchNested: shortSafeText(protocolSwitch?.continuationPreviousResponseId || "", ""),
                 reverseProtocolSwitchNested: shortSafeText(reverseProtocolSwitch?.continuationPreviousResponseId || "", ""),
             },
+            providerSwitch: providerSwitch ? {
+                from: shortSafeText(providerSwitch.from || "", ""),
+                to: shortSafeText(providerSwitch.to || "", ""),
+                requestReachedSecondProvider: providerSwitch.requestReachedSecondProvider === true,
+            } : null,
+            protocolSwitch: protocolSwitch ? {
+                from: shortSafeText(protocolSwitch.from || "", ""),
+                to: shortSafeText(protocolSwitch.to || "", ""),
+                provider: shortSafeText(protocolSwitch.provider || "", ""),
+                model: shortSafeText(protocolSwitch.model || "", ""),
+                requestReachedAnthropicProvider: protocolSwitch.requestReachedAnthropicProvider === true,
+            } : null,
+            reverseProtocolSwitch: reverseProtocolSwitch ? {
+                from: shortSafeText(reverseProtocolSwitch.from || "", ""),
+                to: shortSafeText(reverseProtocolSwitch.to || "", ""),
+                provider: shortSafeText(reverseProtocolSwitch.provider || "", ""),
+                model: shortSafeText(reverseProtocolSwitch.model || "", ""),
+                requestReachedOpenAiCompatibleProvider: reverseProtocolSwitch.requestReachedOpenAiCompatibleProvider === true,
+            } : null,
         } : null,
         updatedAt,
         ageMs,
@@ -3690,6 +3724,7 @@ function latestReportsSummary(result){
       const markerCounts=[continuity.sixthMarkerCount,continuity.seventhMarkerCount,continuity.eighthMarkerCount,continuity.ninthMarkerCount].filter((value)=>value!==null&&value!==undefined).join("/");
       lines.push("  providerContinuity: turns="+(continuity.turns??"unknown")+" / markers="+(markerCounts||"unknown"));
       lines.push("  toolPairs: restart="+(continuity.restartPreservesOpenAiToolPair?"true":"false")+" / openai="+(continuity.providerSwitchPreservesOpenAiToolPair?"true":"false")+" / anthropic="+(continuity.protocolSwitchPreservesAnthropicToolPair?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitchPreservesOpenAiToolPair?"true":"false")+" / markerThresholds="+(continuity.markerThresholdsOk?"true":"false"));
+      lines.push("  providerRoutes: provider="+(continuity.providerSwitch?.from||"unknown")+"->"+(continuity.providerSwitch?.to||"unknown")+" reached="+(continuity.providerSwitch?.requestReachedSecondProvider?"true":"false")+" / protocol="+(continuity.protocolSwitch?.from||"unknown")+"->"+(continuity.protocolSwitch?.to||"unknown")+" "+(continuity.protocolSwitch?.provider||"unknown")+"/"+(continuity.protocolSwitch?.model||"unknown")+" reached="+(continuity.protocolSwitch?.requestReachedAnthropicProvider?"true":"false")+" / reverse="+(continuity.reverseProtocolSwitch?.from||"unknown")+"->"+(continuity.reverseProtocolSwitch?.to||"unknown")+" "+(continuity.reverseProtocolSwitch?.provider||"unknown")+"/"+(continuity.reverseProtocolSwitch?.model||"unknown")+" reached="+(continuity.reverseProtocolSwitch?.requestReachedOpenAiCompatibleProvider?"true":"false")+" / structural="+(continuity.structuralEvidenceClean?"true":"false")+" / toolTurns="+(continuity.toolHistoryTurns??"unknown"));
       if(continuity.previousResponseContinuity){
         const ids=continuity.previousResponseContinuity;
         lines.push("  previousIds: save="+(ids.savePresent?"true":"false")+" / restart="+(ids.restartPresent?"true":"false")+" / provider="+(ids.providerSwitchPresent?"true":"false")+" / protocol="+(ids.protocolSwitchPresent?"true":"false")+" / reverse="+(ids.reverseProtocolSwitchPresent?"true":"false"));

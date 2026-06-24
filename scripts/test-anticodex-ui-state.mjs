@@ -125,6 +125,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/function routeSummaryRows/.test(injectSource) || !/\/anticodex\/model-routes/.test(injectSource) || !/providerProtocol/.test(injectSource) || !/transport/.test(injectSource)) {
     failures.push("in-app manager route summary is missing third-party provider/protocol/transport fields");
   }
+  if (!/providerRoutes: provider=/.test(injectSource) || !/requestReachedSecondProvider/.test(injectSource) || !/requestReachedAnthropicProvider/.test(injectSource) || !/requestReachedOpenAiCompatibleProvider/.test(injectSource)) {
+    failures.push("in-app manager is missing provider continuity route switch evidence");
+  }
   if (/return \[\["\\u72b6\\u6001", "\\u6682\\u65e0\\u8def\\u7531\\u8bb0\\u5f55"\]\]/.test(injectSource)) {
     failures.push("in-app manager route empty state collapses provider fields");
   }
@@ -149,6 +152,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/function routeSummary/.test(managerHtml) || !/providerProtocol/.test(managerHtml) || !/transport/.test(managerHtml) || !/Provider/.test(managerHtml)) {
     failures.push("manager page route summary is missing third-party provider/protocol/transport fields");
+  }
+  if (!/providerRoutes: provider=/.test(managerHtml) || !/requestReachedSecondProvider/.test(managerHtml) || !/requestReachedAnthropicProvider/.test(managerHtml) || !/requestReachedOpenAiCompatibleProvider/.test(managerHtml)) {
+    failures.push("manager page is missing provider continuity route switch evidence");
   }
   if (!/app-tool registry:/.test(managerHtml) || !/appToolRegistryFingerprintMatches/.test(managerHtml)) {
     failures.push("manager page is missing MCP/Skill app-tool registry evidence");
