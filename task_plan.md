@@ -1620,3 +1620,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager latest-report summaries now explain stale or missing real-traffic release evidence as an explicit-verification gap, not a normal feature absence.
 - Completed: external Manager bridge, injected Manager, and fallback Manager share the same real-traffic stale/missing guidance, and the bridge self-test covers both `stale_report` and `missing_report`.
 - Verification: Manager bridge self-test passed; UI-state self-test passed; focused launcher contract passed `131/131`; `git diff --check` passed.
+
+## 2026-06-24 Log DB Guard Negative Evidence
+- Completed: release-gate self-test now covers log DB guard failures for no-traffic attestation, accidental real traffic, wrong coverage kind, missing trigger, unprotected state, and invalid WAL size.
+- Completed: diagnostics verification now rejects log DB guard summaries whose `walBytes` is missing, non-numeric, NaN, infinite, or negative.
+- Verification: release-gate self-test passed; PowerShell parser check passed; focused launcher contract passed `131/131`; `git diff --check` passed.

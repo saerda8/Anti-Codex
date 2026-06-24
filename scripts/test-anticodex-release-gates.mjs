@@ -893,16 +893,16 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-log-db-guard.json", {
       ok: true,
       reportName: "log-db-guard",
-      noTraffic: true,
-      usedRealTraffic: false,
+      noTraffic: false,
+      usedRealTraffic: true,
       behaviorCovered: true,
-      coverageKind: "installed-no-traffic",
+      coverageKind: "real-traffic",
       exists: true,
       logsTable: true,
       levelColumn: true,
       triggerPresent: false,
       protected: false,
-      walBytes: 0,
+      walBytes: -1,
     });
 
     writeFakeLatestReport("latest-plugin-capabilities.json", {
@@ -1672,8 +1672,12 @@ if (args.has("--self-test")) {
       "local_connector_unexpected_exposed_tool",
     ]);
     semanticFailures.logDbGuard = assertSemanticFailures("logDbGuard", "self-test failed: semantically invalid log-db guard report satisfied the gate", [
+      "log_db_guard_no_traffic",
+      "log_db_guard_used_real_traffic",
+      "log_db_guard_coverage_kind",
       "log_db_guard_trigger_missing",
       "log_db_guard_not_protected",
+      "log_db_guard_wal_bytes_invalid",
     ]);
     semanticFailures.pluginCapabilities = assertSemanticFailures("pluginCapabilities", "self-test failed: semantically invalid plugin-capability report satisfied the gate", [
       "plugin_capabilities_short_budget_report",

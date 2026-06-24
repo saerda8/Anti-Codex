@@ -497,6 +497,17 @@ function Test-DiagnosticBundle {
                 if ($logEvidence.protected -ne $true) { Add-Failure "diagnostic log database guard summary is not protected" }
                 if ($logEvidence.triggerPresent -ne $true) { Add-Failure "diagnostic log database guard summary trigger missing" }
                 if (-not (Has-Property $logEvidence "walBytes")) { Add-Failure "diagnostic log database guard summary missing wal size" }
+                else {
+                    [double]$walBytes = 0
+                    if (
+                        -not [double]::TryParse([string]$logEvidence.walBytes, [ref]$walBytes) -or
+                        [double]::IsNaN($walBytes) -or
+                        [double]::IsInfinity($walBytes) -or
+                        $walBytes -lt 0
+                    ) {
+                        Add-Failure "diagnostic log database guard summary invalid wal size"
+                    }
+                }
             }
         }
         $mcpSkillsSummary = @($summary | Where-Object { $_.file -eq "latest-mcp-skills.json" } | Select-Object -First 1)[0]

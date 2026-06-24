@@ -6592,6 +6592,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /logDbGuard/);
   assert.match(diagnostics, /diagnostics missing log database guard status/);
   assert.match(diagnostics, /diagnostics log database guard is not protected/);
+  assert.match(diagnostics, /diagnostic log database guard summary invalid wal size/);
   assert.match(diagnostics, /source preflight status/);
   assert.match(diagnostics, /source-preflight summary/);
   assert.match(diagnostics, /javascriptSyntaxOk/);
@@ -6850,7 +6851,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid plugin-capability report satisfied the gate/);
   assert.match(releaseGates, /latest-log-db-guard\.json/);
   assert.match(releaseGates, /requireLogDbGuardSemantics/);
+  assert.match(releaseGates, /log_db_guard_no_traffic/);
+  assert.match(releaseGates, /log_db_guard_used_real_traffic/);
+  assert.match(releaseGates, /log_db_guard_coverage_kind/);
   assert.match(releaseGates, /log_db_guard_trigger_missing/);
+  assert.match(releaseGates, /log_db_guard_wal_bytes_invalid/);
   assert.match(releaseGates, /requireRefreshFeatureSemantics/);
   assert.match(releaseGates, /refresh_features_connector_parity/);
   assert.match(releaseGates, /refresh_features_app_tool_parity/);
