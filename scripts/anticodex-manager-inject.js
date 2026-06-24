@@ -927,7 +927,8 @@
             .slice(0, 4)
             .map((gate) => {
               const sample = Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.length ? ` / sample ${gate.reportFailureSamples.slice(0, 2).join(" | ")}` : "";
-              return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${sample}`;
+              const codes = Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? ` / codes ${gate.reportFailureSampleCodes.slice(0, 3).join(",")}` : "";
+              return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${codes}${sample}`;
           });
         if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}`);
         const guidanceDetails = item.releaseGateFailureReasons
@@ -940,6 +941,10 @@
           : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []))
           .slice(0, 8);
         if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
+        if (item.approvalPlan) {
+          const plan = item.approvalPlan;
+          lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+        }
         const realTrafficEvidenceGates = item.releaseGateFailureReasons
           .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
             .map((gate) => gate.id)
@@ -953,7 +958,10 @@
           lines.push(`  selectedHistory: ${selectedReports}`);
         }
         if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
-          const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
+          const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => {
+            const missingOptional = Array.isArray(group.missingOptional) && group.missingOptional.length ? ` missingOpt=${group.missingOptional.slice(0, 3).join(",")}` : "";
+            return `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}${missingOptional}`;
+          }).join(" | ");
           lines.push(`  Release groups: ${groupSummary}`);
         }
         if (item.installedRuntimeEvidence) {

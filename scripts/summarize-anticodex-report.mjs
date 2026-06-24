@@ -48,6 +48,28 @@ function asOfflineSnapshotEvidence(value) {
   };
 }
 
+function asApprovalPlan(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    actionCount: has(value, "actionCount") ? value.actionCount : null,
+    blockedCount: has(value, "blockedCount") ? value.blockedCount : null,
+    requiresGatewayStartCount: has(value, "requiresGatewayStartCount") ? value.requiresGatewayStartCount : null,
+    requiresRealTrafficCount: has(value, "requiresRealTrafficCount") ? value.requiresRealTrafficCount : null,
+    highImpactCount: has(value, "highImpactCount") ? value.highImpactCount : null,
+    requiredForShortCount: has(value, "requiredForShortCount") ? value.requiredForShortCount : null,
+    requiredForReleaseCount: has(value, "requiredForReleaseCount") ? value.requiredForReleaseCount : null,
+    firstBlockedAction: asString(value.firstBlockedAction || ""),
+    phases: Array.isArray(value.phases) ? value.phases.map((phase) => ({
+      phase: asString(phase?.phase || ""),
+      count: has(phase || {}, "count") ? phase.count : null,
+      requiresGatewayStart: phase?.requiresGatewayStart === true,
+      requiresRealTraffic: phase?.requiresRealTraffic === true,
+      highImpact: phase?.highImpact === true,
+      blockedUntilExplicitUserApproval: phase?.blockedUntilExplicitUserApproval === true,
+    })).filter((phase) => phase.phase).slice(0, 12) : [],
+  };
+}
+
 function boolField(object, key) {
   return has(object, key) ? !!object[key] : null;
 }
@@ -181,6 +203,7 @@ const releaseGateFailures = Array.isArray(report?.gates)
       selectedFile: asString(gate.selectedFile || ""),
       selectedMtime: asString(gate.selectedMtime || ""),
       reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
+      ...(has(gate, "reportFailureSampleCodes") && asStringArray(gate.reportFailureSampleCodes).length ? { reportFailureSampleCodes: asStringArray(gate.reportFailureSampleCodes).slice(0, 6) } : {}),
       guidance: asString(gate.guidance || ""),
       orderedActions: asOrderedActions(gate.orderedActions),
       ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
@@ -204,11 +227,13 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     selectedFile: asString(gate.selectedFile || ""),
     selectedMtime: asString(gate.selectedMtime || ""),
     reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
+    ...(has(gate, "reportFailureSampleCodes") && asStringArray(gate.reportFailureSampleCodes).length ? { reportFailureSampleCodes: asStringArray(gate.reportFailureSampleCodes).slice(0, 6) } : {}),
     guidance: asString(gate.guidance || ""),
     orderedActions: asOrderedActions(gate.orderedActions),
     ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
   })).filter((entry) => entry.id).slice(0, 24)
 const nextActions = asOrderedActions(report?.nextActions);
+const approvalPlan = asApprovalPlan(report?.approvalPlan);
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"
   ? Object.entries(report.groups).map(([group, value]) => ({
     group: asString(group),
@@ -219,6 +244,7 @@ const releaseGateGroups = report && report.groups && typeof report.groups === "o
     optional: value && has(value, "optional") ? value.optional : null,
     optionalSatisfied: value && has(value, "optionalSatisfied") ? value.optionalSatisfied : null,
     missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
+    missingOptional: value && has(value, "missingOptional") ? asStringArray(value.missingOptional) : [],
   })).filter((entry) => entry.group).slice(0, 16)
   : [];
 const releaseGateSelectedReports = Array.isArray(report?.gates)
@@ -497,6 +523,7 @@ const summary = {
   releaseGateFailures,
   releaseGateFailureReasons,
   nextActions,
+  approvalPlan,
   releaseGateGroups,
   releaseGateSelectedReports,
   installedRuntimeEvidence,

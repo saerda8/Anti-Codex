@@ -346,6 +346,7 @@ function summarizeGate(definition) {
     gate.reportName = typeof report.reportName === "string" ? report.reportName : "";
     gate.failureCount = Array.isArray(report.failures) ? report.failures.length : 0;
     gate.reportFailureSamples = Array.isArray(report.failures) ? report.failures.map((item) => String(item)).filter(Boolean).slice(0, 3) : [];
+    gate.reportFailureSampleCodes = reportFailureSampleCodes(gate.reportFailureSamples);
     gate.fast = report.fast === true;
     gate.noTraffic = report.noTraffic === true;
     gate.skipped = report.skipped === true;
@@ -879,6 +880,17 @@ function isLocalGatewayFailureSample(value) {
     || text.includes("无法连接");
 }
 
+function reportFailureSampleCodes(samples) {
+  const codes = new Set();
+  for (const sample of Array.isArray(samples) ? samples : []) {
+    const text = String(sample || "").toLowerCase();
+    if (!text) continue;
+    if (text.includes("endpoint failed") || text.includes("/backend-api/") || text.includes("/health")) codes.add("gateway_endpoint_unreachable");
+    if (isLocalGatewayFailureSample(text)) codes.add("local_gateway_offline");
+  }
+  return [...codes].sort();
+}
+
 function gateGuidance(gate) {
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
@@ -983,6 +995,35 @@ function orderedNextActions(failureReasons) {
     })
     .map(({ order, ...item }) => item)
     .slice(0, 32);
+}
+
+function summarizeApprovalPlan(actions) {
+  const items = Array.isArray(actions) ? actions : [];
+  const phases = actionPhaseOrder
+    .map((phase) => {
+      const phaseActions = items.filter((item) => item.phase === phase);
+      if (!phaseActions.length) return null;
+      return {
+        phase,
+        count: phaseActions.length,
+        requiresGatewayStart: phaseActions.some((item) => item.requiresGatewayStart === true),
+        requiresRealTraffic: phaseActions.some((item) => item.requiresRealTraffic === true),
+        highImpact: phaseActions.some((item) => item.highImpact === true),
+        blockedUntilExplicitUserApproval: phaseActions.some((item) => item.blockedUntilExplicitUserApproval === true),
+      };
+    })
+    .filter(Boolean);
+  return {
+    actionCount: items.length,
+    blockedCount: items.filter((item) => item.blockedUntilExplicitUserApproval === true).length,
+    requiresGatewayStartCount: items.filter((item) => item.requiresGatewayStart === true).length,
+    requiresRealTrafficCount: items.filter((item) => item.requiresRealTraffic === true).length,
+    highImpactCount: items.filter((item) => item.highImpact === true).length,
+    requiredForShortCount: items.filter((item) => item.requiredForShort === true).length,
+    requiredForReleaseCount: items.filter((item) => item.requiredForRelease === true).length,
+    firstBlockedAction: items.find((item) => item.blockedUntilExplicitUserApproval === true)?.id || "",
+    phases,
+  };
 }
 
 function attachGateFailureReasons(gates) {
@@ -2088,6 +2129,10 @@ if (args.has("--self-test")) {
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
     const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
+    const approvalPlan = summarizeApprovalPlan(orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))));
+    if (approvalPlan.requiresGatewayStartCount < 1 || approvalPlan.requiresRealTrafficCount < 1 || approvalPlan.highImpactCount < 1 || approvalPlan.firstBlockedAction !== "startGatewayTranslatorOnly") {
+      throw new Error("self-test failed: approval plan did not summarize gateway, real-traffic, and high-impact actions");
+    }
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");
     if (failedLatestGate.selectedFile !== "latest-cold-relaunch.json") throw new Error("self-test failed: latest report selectedFile was not preserved");
@@ -2151,11 +2196,13 @@ const releaseGateFailureReasons = gates
     selectedFile: gate.selectedFile || "",
     selectedMtime: gate.selectedMtime || "",
     reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
+    reportFailureSampleCodes: reportFailureSampleCodes(gate.reportFailureSamples),
     guidance: gateGuidance(gate),
     orderedActions: gateOrderedActions(gate),
     offlineSnapshotEvidence: gate.offlineSnapshotEvidence || null,
   }));
 const nextActions = orderedNextActions(releaseGateFailureReasons);
+const approvalPlan = summarizeApprovalPlan(nextActions);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
   .filter((gate) => !gate.satisfied || gate.requestedRealTraffic !== true || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
@@ -2195,6 +2242,7 @@ const payload = {
   damagedReports,
   releaseGateFailureReasons,
   nextActions,
+  approvalPlan,
   groups,
   gates,
 };

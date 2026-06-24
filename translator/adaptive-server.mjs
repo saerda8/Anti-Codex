@@ -2342,6 +2342,24 @@ function latestManagerReportItem(label, fileName) {
         sourceMtimeMax: shortSafeText(value.sourceMtimeMax || "", ""),
         note: shortSafeText(value.note || "", ""),
     } : null;
+    const approvalPlan = report?.approvalPlan && typeof report.approvalPlan === "object" ? {
+        actionCount: Number.isFinite(Number(report.approvalPlan.actionCount)) ? Number(report.approvalPlan.actionCount) : null,
+        blockedCount: Number.isFinite(Number(report.approvalPlan.blockedCount)) ? Number(report.approvalPlan.blockedCount) : null,
+        requiresGatewayStartCount: Number.isFinite(Number(report.approvalPlan.requiresGatewayStartCount)) ? Number(report.approvalPlan.requiresGatewayStartCount) : null,
+        requiresRealTrafficCount: Number.isFinite(Number(report.approvalPlan.requiresRealTrafficCount)) ? Number(report.approvalPlan.requiresRealTrafficCount) : null,
+        highImpactCount: Number.isFinite(Number(report.approvalPlan.highImpactCount)) ? Number(report.approvalPlan.highImpactCount) : null,
+        requiredForShortCount: Number.isFinite(Number(report.approvalPlan.requiredForShortCount)) ? Number(report.approvalPlan.requiredForShortCount) : null,
+        requiredForReleaseCount: Number.isFinite(Number(report.approvalPlan.requiredForReleaseCount)) ? Number(report.approvalPlan.requiredForReleaseCount) : null,
+        firstBlockedAction: shortSafeText(report.approvalPlan.firstBlockedAction || "", ""),
+        phases: Array.isArray(report.approvalPlan.phases) ? report.approvalPlan.phases.map((phase) => ({
+            phase: shortSafeText(phase?.phase || "", ""),
+            count: Number.isFinite(Number(phase?.count)) ? Number(phase.count) : null,
+            requiresGatewayStart: phase?.requiresGatewayStart === true,
+            requiresRealTraffic: phase?.requiresRealTraffic === true,
+            highImpact: phase?.highImpact === true,
+            blockedUntilExplicitUserApproval: phase?.blockedUntilExplicitUserApproval === true,
+        })).filter((phase) => phase.phase).slice(0, 12) : [],
+    } : null;
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2367,6 +2385,7 @@ function latestManagerReportItem(label, fileName) {
                 reportFailureSamples: Array.isArray(gate.reportFailureSamples)
                     ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3)
                     : [],
+                ...(Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? { reportFailureSampleCodes: gate.reportFailureSampleCodes.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 6) } : {}),
                 guidance: shortSafeText(gate.guidance || "", ""),
                 orderedActions: orderedActions(gate.orderedActions),
                 ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
@@ -2391,6 +2410,7 @@ function latestManagerReportItem(label, fileName) {
             selectedFile: shortSafeText(gate.selectedFile || "", ""),
             selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
             reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
+            ...(Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? { reportFailureSampleCodes: gate.reportFailureSampleCodes.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 6) } : {}),
             guidance: shortSafeText(gate.guidance || "", ""),
             orderedActions: orderedActions(gate.orderedActions),
             ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
@@ -2407,6 +2427,7 @@ function latestManagerReportItem(label, fileName) {
             optional: Number.isFinite(Number(value?.optional)) ? Number(value.optional) : null,
             optionalSatisfied: Number.isFinite(Number(value?.optionalSatisfied)) ? Number(value.optionalSatisfied) : null,
             missingRequired: Array.isArray(value?.missingRequired) ? value.missingRequired.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+            missingOptional: Array.isArray(value?.missingOptional) ? value.missingOptional.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
         })).filter((entry) => entry.group).slice(0, 16)
         : [];
     const releaseGateSelectedReports = Array.isArray(report?.gates)
@@ -2556,6 +2577,7 @@ function latestManagerReportItem(label, fileName) {
         releaseGateFailures,
         releaseGateFailureReasons,
         nextActions,
+        approvalPlan,
         releaseGateGroups,
         releaseGateSelectedReports,
         installedRuntimeEvidence,
@@ -3704,7 +3726,8 @@ function latestReportsSummary(result){
           .slice(0,4)
           .map((gate)=>{
             const sample=Array.isArray(gate.reportFailureSamples)&&gate.reportFailureSamples.length?(" / sample "+gate.reportFailureSamples.slice(0,2).join(" | ")):"";
-            return gate.id+":"+(gate.selectedFile||"no-file")+(gate.selectedMtime?(" @ "+gate.selectedMtime):"")+sample;
+            const codes=Array.isArray(gate.reportFailureSampleCodes)&&gate.reportFailureSampleCodes.length?(" / codes "+gate.reportFailureSampleCodes.slice(0,3).join(",")):"";
+            return gate.id+":"+(gate.selectedFile||"no-file")+(gate.selectedMtime?(" @ "+gate.selectedMtime):"")+codes+sample;
           });
         if(reportFailureDetails.length) lines.push("  reportFailures: "+reportFailureDetails.join("; "));
         const guidanceDetails=item.releaseGateFailureReasons
@@ -3717,6 +3740,10 @@ function latestReportsSummary(result){
           : item.releaseGateFailureReasons.flatMap((gate)=>Array.isArray(gate?.orderedActions)?gate.orderedActions.map((action)=>gate.id+":"+action.id):[]))
           .slice(0,8);
         if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> "));
+        if(item.approvalPlan){
+          const plan=item.approvalPlan;
+          lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / first="+(plan.firstBlockedAction||"none"));
+        }
         const realTrafficEvidenceGates=item.releaseGateFailureReasons
           .filter((gate)=>gate?.group==="real-traffic"&&(["stale_report","missing_report"].includes(gate.failureReason)||(Array.isArray(gate.failureReasons)&&gate.failureReasons.some((reason)=>["stale_report","missing_report"].includes(reason)))))
           .map((gate)=>gate.id)
@@ -3728,7 +3755,10 @@ function latestReportsSummary(result){
         lines.push("  selectedHistory: "+selectedReports);
       }
       if(Array.isArray(item.releaseGateGroups)&&item.releaseGateGroups.length){
-        const groupSummary=item.releaseGateGroups.slice(0,8).map((group)=>group.group+" req "+(group.requiredSatisfied??0)+"/"+(group.required??0)+" opt "+(group.optionalSatisfied??0)+"/"+(group.optional??0)).join(" | ");
+        const groupSummary=item.releaseGateGroups.slice(0,8).map((group)=>{
+          const missingOptional=Array.isArray(group.missingOptional)&&group.missingOptional.length?" missingOpt="+group.missingOptional.slice(0,3).join(","):"";
+          return group.group+" req "+(group.requiredSatisfied??0)+"/"+(group.required??0)+" opt "+(group.optionalSatisfied??0)+"/"+(group.optional??0)+missingOptional;
+        }).join(" | ");
         lines.push("  Release groups: "+groupSummary);
       }
       if(item.installedRuntimeEvidence){

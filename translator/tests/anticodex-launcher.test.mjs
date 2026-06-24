@@ -775,6 +775,15 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /nextActions/);
   assert.match(managerInject, /nextActions/);
   assert.match(managerServerSource, /nextActions/);
+  assert.match(managerBridge, /approvalPlan: actions=/);
+  assert.match(managerInject, /approvalPlan: actions=/);
+  assert.match(managerServerSource, /approvalPlan: actions=/);
+  assert.match(managerBridge, /missingOpt=/);
+  assert.match(managerInject, /missingOpt=/);
+  assert.match(managerServerSource, /missingOpt=/);
+  assert.match(managerBridge, /reportFailureSampleCodes/);
+  assert.match(managerInject, /reportFailureSampleCodes/);
+  assert.match(managerServerSource, /reportFailureSampleCodes/);
   assert.match(managerBridge, /真实流量验收证据需更新\/未生成/);
   assert.match(managerInject, /真实流量验收证据需更新\/未生成/);
   assert.match(managerServerSource, /真实流量验收证据需更新\/未生成/);
@@ -2550,6 +2559,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /releaseGateGroups/);
   assert.match(collector, /releaseGateFailureReasons = @\(\$json\.releaseGateFailureReasons\)/);
   assert.match(collector, /nextActions = @\(\$json\.nextActions\)/);
+  assert.match(collector, /approvalPlan = \$json\.approvalPlan/);
   assert.match(collector, /releaseGateSelectedReports = @\(\$json\.releaseGateSelectedReports\)/);
   assert.match(collector, /installedRuntimeEvidence = \$json\.installedRuntimeEvidence/);
   assert.match(collector, /function Resolve-NodeForJsonSummary/);
@@ -2603,6 +2613,10 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
   assert.match(reportSummarizer, /releaseGateFailureReasons/);
+  assert.match(reportSummarizer, /approvalPlan/);
+  assert.match(reportSummarizer, /asApprovalPlan/);
+  assert.match(reportSummarizer, /missingOptional/);
+  assert.match(reportSummarizer, /reportFailureSampleCodes/);
   assert.match(reportSummarizer, /offlineSnapshotEvidence/);
   assert.match(reportSummarizer, /asOfflineSnapshotEvidence/);
   assert.match(reportSummarizer, /selectedKind/);
@@ -3800,7 +3814,20 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       optionalRealTrafficFailures: ["realThirdPartyProviderOptional"],
       missingRequired: ["latest-real-work.json"],
       missingShort: [],
+      missingOptional: ["coldRelaunch"],
       damagedReports: [],
+      groups: {
+        cold: {
+          total: 1,
+          satisfied: 0,
+          required: 0,
+          requiredSatisfied: 0,
+          optional: 1,
+          optionalSatisfied: 0,
+          missingRequired: [],
+          missingOptional: ["coldRelaunch"],
+        },
+      },
       gates: [{
         id: "postVerification",
         group: "real-traffic",
@@ -3857,6 +3884,24 @@ test("report summarizer treats releaseReady false as not effectively passing", (
         highImpact: true,
         blockedUntilExplicitUserApproval: true,
       }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 1,
+        highImpactCount: 1,
+        requiredForShortCount: 0,
+        requiredForReleaseCount: 1,
+        firstBlockedAction: "postVerification",
+        phases: [{
+          phase: "real-traffic-final",
+          count: 1,
+          requiresGatewayStart: false,
+          requiresRealTraffic: true,
+          highImpact: true,
+          blockedUntilExplicitUserApproval: true,
+        }],
+      },
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -3868,6 +3913,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
     assert.equal(summary.optionalRealTrafficReady, false);
     assert.deepEqual(summary.optionalRealTrafficFailures, ["realThirdPartyProviderOptional"]);
     assert.deepEqual(summary.missingRequired, ["latest-real-work.json"]);
+    assert.deepEqual(summary.missingOptional, ["coldRelaunch"]);
     assert.deepEqual(summary.releaseGateFailureReasons, [{
       id: "postVerification",
       group: "real-traffic",
@@ -3918,6 +3964,20 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       requiresRealTraffic: true,
       highImpact: true,
       blockedUntilExplicitUserApproval: true,
+    }]);
+    assert.equal(summary.approvalPlan.actionCount, 1);
+    assert.equal(summary.approvalPlan.requiresRealTrafficCount, 1);
+    assert.equal(summary.approvalPlan.firstBlockedAction, "postVerification");
+    assert.deepEqual(summary.releaseGateGroups, [{
+      group: "cold",
+      total: 1,
+      satisfied: 0,
+      required: 0,
+      requiredSatisfied: 0,
+      optional: 1,
+      optionalSatisfied: 0,
+      missingRequired: [],
+      missingOptional: ["coldRelaunch"],
     }]);
     assert.deepEqual(summary.releaseGateSelectedReports, [{
       id: "syncReadiness",
@@ -6907,6 +6967,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
   assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);
+  assert.match(diagnostics, /approvalPlan = \$releaseGatesSummary\.approvalPlan/);
   assert.match(diagnostics, /installed runtime source fingerprint/);
   assert.match(diagnostics, /latest-third-party-provider\.json/);
   assert.match(diagnostics, /third-party provider summary/);
@@ -7260,6 +7321,12 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requires explicit user approval/);
   assert.match(releaseGates, /orderedActions/);
   assert.match(releaseGates, /nextActions/);
+  assert.match(releaseGates, /approvalPlan/);
+  assert.match(releaseGates, /summarizeApprovalPlan/);
+  assert.match(releaseGates, /approval plan did not summarize gateway, real-traffic, and high-impact actions/);
+  assert.match(releaseGates, /reportFailureSampleCodes/);
+  assert.match(releaseGates, /gateway_endpoint_unreachable/);
+  assert.match(releaseGates, /local_gateway_offline/);
   assert.match(releaseGates, /blockedUntilExplicitUserApproval/);
   assert.match(releaseGates, /offlineSnapshotEvidence/);
   assert.match(releaseGates, /plugin offline snapshot evidence was not attached from refresh-features/);

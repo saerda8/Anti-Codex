@@ -318,7 +318,8 @@ function latestReportsSummary(result) {
           .slice(0, 4)
           .map((gate) => {
             const sample = Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.length ? ` / sample ${gate.reportFailureSamples.slice(0, 2).join(" | ")}` : "";
-            return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${sample}`;
+            const codes = Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? ` / codes ${gate.reportFailureSampleCodes.slice(0, 3).join(",")}` : "";
+            return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${codes}${sample}`;
         });
         if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}`);
         const guidanceDetails = item.releaseGateFailureReasons
@@ -331,6 +332,10 @@ function latestReportsSummary(result) {
           : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []))
           .slice(0, 8);
         if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
+        if (item.approvalPlan) {
+          const plan = item.approvalPlan;
+          lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+        }
         const realTrafficEvidenceGates = item.releaseGateFailureReasons
           .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
           .map((gate) => gate.id)
@@ -344,7 +349,10 @@ function latestReportsSummary(result) {
         lines.push(`  selectedHistory: ${selectedReports}`);
       }
       if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
-        const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
+        const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => {
+          const missingOptional = Array.isArray(group.missingOptional) && group.missingOptional.length ? ` missingOpt=${group.missingOptional.slice(0, 3).join(",")}` : "";
+          return `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}${missingOptional}`;
+        }).join(" | ");
         lines.push(`  Release groups: ${groupSummary}`);
       }
       if (item.installedRuntimeEvidence) {
@@ -755,12 +763,13 @@ if (args.has("--self-test")) {
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateFailureReasons: [
-        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
+        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
         { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork" }] },
       ],
       nextActions: [{ id: "realWork", gateId: "realWork" }, { id: "postVerification", gateId: "postVerification" }],
+      approvalPlan: { actionCount: 2, requiresGatewayStartCount: 2, requiresRealTrafficCount: 2, highImpactCount: 1, firstBlockedAction: "realWork" },
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
-      releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
+      releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0, missingOptional: ["coldRelaunch"] }],
       releaseGateFailures: [
         { id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] },
         { id: "mcpSkills", semanticFailures: ["mcp_skills_source_snapshot_mismatch"] },
@@ -819,7 +828,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /Release Gate: short=true \/ release=true/);
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
-  assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1/);
+  assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1 missingOpt=coldRelaunch/);
   assert.match(evidenceSummary, /installedRuntime: files=58\/58 \/ fingerprint=match \/ mismatches=1/);
   assert.match(evidenceSummary, /installedRuntime drift: missingSource:scripts\/a\.ps1, missingInstalled:scripts\/b\.ps1, mismatch:scripts\/c\.ps1/);
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
@@ -827,8 +836,9 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report/);
-  assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ sample gateway offline \| health timeout/);
+  assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ codes local_gateway_offline \/ sample gateway offline \| health timeout/);
   assert.match(evidenceSummary, /nextActions: realWork:realWork -> postVerification:postVerification/);
+  assert.match(evidenceSummary, /approvalPlan: actions=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ first=realWork/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
