@@ -2,13 +2,16 @@
 param(
     [string]$BaseUrl = "",
     [int]$TimeoutSec = 20,
-    [switch]$VerifyBundle
+    [switch]$VerifyBundle,
+    [string]$VerifyReportsSummary = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not $BaseUrl) {
-    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+    if (-not $VerifyReportsSummary) {
+        $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+    }
 }
 $failures = New-Object System.Collections.Generic.List[string]
 
@@ -29,6 +32,94 @@ function As-FlatArray {
         return @($items[0])
     }
     return $items
+}
+
+function Test-ReportsSummary {
+    param(
+        [Parameter(Mandatory = $true)][string]$SummaryPath,
+        [bool]$RequireReleaseReady = $true
+    )
+    if (-not (Test-Path -LiteralPath $SummaryPath -PathType Leaf)) {
+        Add-Failure "reports summary file missing: $SummaryPath"
+        return $null
+    }
+
+    $summary = As-FlatArray (Get-Content -LiteralPath $SummaryPath -Raw | ConvertFrom-Json)
+    $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
+    if (-not $releaseGatesSummary) {
+        Add-Failure "reports summary missing latest-release-gates.json"
+    } else {
+        if (-not (Has-Property $releaseGatesSummary "ok")) { Add-Failure "release-gates summary missing ok" }
+        elseif ($RequireReleaseReady -and $releaseGatesSummary.ok -ne $true) { Add-Failure "release-gates summary ok=false" }
+        if (-not (Has-Property $releaseGatesSummary "shortReady")) { Add-Failure "release-gates summary missing shortReady" }
+        elseif ($RequireReleaseReady -and $releaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates summary shortReady is not true" }
+        if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
+        elseif ($RequireReleaseReady -and $releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
+        if (-not (Has-Property $releaseGatesSummary "effectiveOk")) { Add-Failure "release-gates summary missing effectiveOk" }
+        elseif ($RequireReleaseReady -and $releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
+        if (-not (Has-Property $releaseGatesSummary "strictOptionalRealTraffic")) { Add-Failure "release-gates summary missing strict optional real-traffic flag" }
+        if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficReady")) { Add-Failure "release-gates summary missing optional real-traffic readiness" }
+        if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficFailures")) { Add-Failure "release-gates summary missing optional real-traffic failures" }
+        if (-not (Has-Property $releaseGatesSummary "missingRequired")) { Add-Failure "release-gates summary missing missingRequired" }
+        if (-not (Has-Property $releaseGatesSummary "missingShort")) { Add-Failure "release-gates summary missing missingShort" }
+        if (-not (Has-Property $releaseGatesSummary "missingOptional")) { Add-Failure "release-gates summary missing missingOptional" }
+        if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
+        if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
+        if (-not (Has-Property $releaseGatesSummary "releaseGateFailureReasons")) { Add-Failure "release-gates summary missing failure reason details" }
+        $pluginCapabilityFailure = @($releaseGatesSummary.releaseGateFailureReasons | Where-Object { $_.id -eq "pluginCapabilities" } | Select-Object -First 1)[0]
+        if ($pluginCapabilityFailure) {
+            $offlineSnapshotEvidence = $pluginCapabilityFailure.offlineSnapshotEvidence
+            if (-not $offlineSnapshotEvidence) {
+                Add-Failure "plugin capability failure missing offline snapshot evidence"
+            } elseif ($offlineSnapshotEvidence.connectorContentMatches -ne $true -or $offlineSnapshotEvidence.appToolContentMatches -ne $true) {
+                Add-Failure "plugin capability failure offline snapshot evidence is not clean"
+            }
+            $pluginFailureSamples = @(As-FlatArray $pluginCapabilityFailure.reportFailureSamples | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+            $pluginFailureCodes = @(As-FlatArray $pluginCapabilityFailure.reportFailureSampleCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+            if ($pluginFailureSamples.Count -gt 0 -and $pluginFailureCodes.Count -lt 1) {
+                Add-Failure "plugin capability failure missing sample codes"
+            }
+        }
+        if (-not (Has-Property $releaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
+        if (-not (Has-Property $releaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
+        if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
+        if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
+            Add-Failure "release-gates summary missing sync-readiness selected history report"
+        }
+        $installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
+        if (-not $installedRuntimeEvidence) {
+            Add-Failure "release-gates summary missing installed runtime drift evidence"
+        } else {
+            if ([int]$installedRuntimeEvidence.sourceFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime source file count" }
+            if ([int]$installedRuntimeEvidence.installedRuntimeFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime target file count" }
+            if (-not [string]$installedRuntimeEvidence.sourceFingerprint) { Add-Failure "release-gates summary missing installed runtime source fingerprint" }
+            if (-not [string]$installedRuntimeEvidence.installedRuntimeFingerprint) { Add-Failure "release-gates summary missing installed runtime target fingerprint" }
+            if ($installedRuntimeEvidence.satisfied -eq $true -and [string]$installedRuntimeEvidence.sourceFingerprint -ne [string]$installedRuntimeEvidence.installedRuntimeFingerprint) {
+                Add-Failure "release-gates summary reports installed runtime satisfied with mismatched fingerprints"
+            }
+            if ($installedRuntimeEvidence.satisfied -eq $true -and @($installedRuntimeEvidence.mismatchedRuntimeFiles).Count -ne 0) {
+                Add-Failure "release-gates summary reports installed runtime satisfied with mismatched files"
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        summaryPath = $SummaryPath
+        reportCount = @($summary).Count
+        releaseGates = if ($releaseGatesSummary) {
+            [pscustomobject]@{
+                ok = $releaseGatesSummary.ok
+                shortReady = $releaseGatesSummary.shortReady
+                releaseReady = $releaseGatesSummary.releaseReady
+                effectiveOk = $releaseGatesSummary.effectiveOk
+                missingRequired = @($releaseGatesSummary.missingRequired)
+                missingShort = @($releaseGatesSummary.missingShort)
+                missingOptional = @($releaseGatesSummary.missingOptional)
+                releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
+                installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
+            }
+        } else { $null }
+    }
 }
 
 function Invoke-LocalJson {
@@ -923,10 +1014,19 @@ $diagnostics = $null
 $diagnosticMode = "unknown"
 $diagnosticProtocol = $null
 $diagnosticModel = $null
-try {
-    $diagnostics = Invoke-LocalJson "/anticodex/diagnostics"
-} catch {
-    Add-Failure "diagnostics request failed: $($_.Exception.Message)"
+$reportsSummaryCheck = $null
+if ($VerifyReportsSummary) {
+    try {
+        $reportsSummaryCheck = Test-ReportsSummary -SummaryPath $VerifyReportsSummary -RequireReleaseReady:$false
+    } catch {
+        Add-Failure "reports summary verification failed: $($_.Exception.Message)"
+    }
+} else {
+    try {
+        $diagnostics = Invoke-LocalJson "/anticodex/diagnostics"
+    } catch {
+        Add-Failure "diagnostics request failed: $($_.Exception.Message)"
+    }
 }
 
 if ($diagnostics) {
@@ -1192,7 +1292,7 @@ if ($diagnostics) {
 }
 
 $bundleCheck = $null
-if ($VerifyBundle) {
+if ($VerifyBundle -and -not $VerifyReportsSummary) {
     try {
         $bundleCheck = Test-DiagnosticBundle
     } catch {
@@ -1204,6 +1304,7 @@ $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
+    reportsSummary = $reportsSummaryCheck
     diagnostics = if ($diagnostics) {
         [pscustomobject]@{
             object = $diagnostics.object

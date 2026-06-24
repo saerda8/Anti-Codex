@@ -6930,6 +6930,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
 
   assert.match(diagnostics, /\/anticodex\/diagnostics/);
   assert.match(diagnostics, /\[switch\]\$VerifyBundle/);
+  assert.match(diagnostics, /\[string\]\$VerifyReportsSummary/);
+  assert.match(diagnostics, /function Test-ReportsSummary/);
+  assert.match(diagnostics, /reports summary file missing/);
   assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
   assert.match(diagnostics, /"-BaseUrl", \$BaseUrl, "-NoPopup"/);
   assert.match(diagnostics, /model-routing-refresh\.json/);
@@ -7180,6 +7183,67 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /exceeds its configured limit/);
   assert.match(diagnostics, /tool output\|messages\|input_items\|Return exactly this/);
   assert.doesNotMatch(diagnostics, /Stop-Process|Start-Process|auth\/login/);
+});
+
+test("diagnostics verifier validates reports-summary fixtures without contacting the gateway", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["pluginCapabilities"],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: ["coldRelaunch"],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities"],
+      releaseGateFailureReasons: [{
+        id: "pluginCapabilities",
+        reportFailureSamples: ["health request failed"],
+        reportFailureSampleCodes: ["local_gateway_offline"],
+        offlineSnapshotEvidence: {
+          connectorContentMatches: true,
+          appToolContentMatches: true,
+        },
+      }],
+      nextActions: [{ id: "pluginCapabilities", requiresGatewayStart: true }],
+      approvalPlan: { actionCount: 1, requiresGatewayStartCount: 1 },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.baseUrl, "");
+    assert.equal(payload.diagnostics, null);
+    assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
+    assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex ships a passive release gate summary verifier", () => {
