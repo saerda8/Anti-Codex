@@ -231,6 +231,7 @@ function Read-JsonSummary {
             requestedRealTraffic = $json.requestedRealTraffic
             latestDiagnosis = $json.latestDiagnosis
             latestDiagnosisDetail = $json.latestDiagnosisDetail
+            accountProxyEvidence = $json.accountProxyEvidence
             attempts = $json.attempts
             repairedCount = $json.repairedCount
             repairedAt = $json.repairedAt

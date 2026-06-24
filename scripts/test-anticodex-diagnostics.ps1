@@ -304,6 +304,25 @@ function Test-DiagnosticBundle {
             if (-not [string]$postVerificationSummary.latestDiagnosis) { Add-Failure "post-verification summary is missing latestDiagnosis" }
             if (-not (Has-Property $postVerificationSummary "latestDiagnosisDetail")) { Add-Failure "post-verification summary is missing latestDiagnosisDetail" }
         }
+        $accountProxySummary = @($summary | Where-Object { $_.file -eq "latest-account-proxy-readiness.json" } | Select-Object -First 1)[0]
+        if ($antigravityReportsRequired -and -not $accountProxySummary) {
+            Add-Failure "diagnostic reports summary missing latest-account-proxy-readiness.json"
+        } elseif ($antigravityReportsRequired -and $accountProxySummary) {
+            $accountProxyEvidence = $accountProxySummary.accountProxyEvidence
+            if (-not $accountProxyEvidence) {
+                Add-Failure "account-proxy summary missing accountProxyEvidence"
+            } else {
+                if (-not [string]$accountProxyEvidence.diagnosisDetail) { Add-Failure "account-proxy summary missing diagnosisDetail" }
+                if (-not [string]$accountProxyEvidence.suggestedAction) { Add-Failure "account-proxy summary missing suggestedAction" }
+                if ($null -eq $accountProxyEvidence.localProxyBypassed) { Add-Failure "account-proxy summary missing localProxyBypassed" }
+                if (-not $accountProxyEvidence.phaseSummary) { Add-Failure "account-proxy summary missing phaseSummary" }
+                if ($null -eq $accountProxyEvidence.phaseSummary.modelCount) { Add-Failure "account-proxy summary missing phase model count" }
+                if (-not $accountProxyEvidence.antigravityLogSignals) { Add-Failure "account-proxy summary missing antigravityLogSignals" }
+                if ($null -eq $accountProxyEvidence.antigravityLogSignals.tailLinesScanned) { Add-Failure "account-proxy summary missing log scan count" }
+                $accountProxyEvidenceText = $accountProxyEvidence | ConvertTo-Json -Depth 8 -Compress
+                if ($accountProxyEvidenceText -match "fingerprint|sha256:") { Add-Failure "account-proxy summary exposes an account fingerprint" }
+            }
+        }
         $sourcePreflightSummary = @($summary | Where-Object { $_.file -eq "latest-source-preflight.json" } | Select-Object -First 1)[0]
         if (-not $sourcePreflightSummary) {
             Add-Failure "diagnostic reports summary missing latest-source-preflight.json"

@@ -2267,6 +2267,8 @@ function latestManagerReportItem(label, fileName) {
     const managerBridge = sync?.managerBridge && typeof sync.managerBridge === "object" ? sync.managerBridge : null;
     const updateStatus = sync?.updateStatus && typeof sync.updateStatus === "object" ? sync.updateStatus : null;
     const updateGuardrails = updateStatus?.guardrails && typeof updateStatus.guardrails === "object" ? updateStatus.guardrails : null;
+    const phaseSummary = report?.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : null;
+    const antigravityLogSignals = report?.antigravityLogSignals && typeof report.antigravityLogSignals === "object" ? report.antigravityLogSignals : null;
     const checkEntries = checks && typeof checks === "object"
         ? Object.entries(checks).map(([id, value]) => ({ id, value: value && typeof value === "object" ? value : {} }))
         : [];
@@ -2334,6 +2336,7 @@ function latestManagerReportItem(label, fileName) {
     const isReleaseGateReport = fileName === "latest-release-gates.json" || report?.reportName === "release-gates";
     const isLogDbGuardReport = fileName === "latest-log-db-guard.json" || report?.reportName === "log-db-guard" || typeof report?.triggerPresent !== "undefined" || typeof report?.protected !== "undefined";
     const isMissingHistoryReport = fileName === "latest-missing-history.json" || report?.reportName === "missing-history";
+    const isAccountProxyReport = fileName === "latest-account-proxy-readiness.json" || report?.reportName === "account-proxy-readiness";
     const rawOk = !invalid && report?.ok === true;
     const effectiveOk = isReleaseGateReport
         ? rawOk && report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -2394,6 +2397,30 @@ function latestManagerReportItem(label, fileName) {
             model: shortSafeText(report?.model || "", ""),
             routeBeforeStatus: shortSafeText(report?.routeBefore?.latestStatus || "", ""),
             routeAfterStatus: shortSafeText(report?.routeAfter?.latestStatus || "", ""),
+        } : null,
+        accountProxyEvidence: isAccountProxyReport ? {
+            diagnosisDetail: shortSafeText(report?.diagnosisDetail || "", ""),
+            suggestedAction: shortSafeText(report?.suggestedAction || "", ""),
+            localProxyBypassed: report?.localProxyBypassed === true,
+            phaseSummary: phaseSummary ? {
+                accountOk: phaseSummary.accountOk === true,
+                refreshOk: phaseSummary.refreshOk === true,
+                modelCount: Number.isFinite(Number(phaseSummary.modelCount)) ? Number(phaseSummary.modelCount) : null,
+                realRequestAttempted: phaseSummary.realRequestAttempted === true,
+                realRequestOk: phaseSummary.realRequestOk === true,
+                accountError: shortSafeText(phaseSummary.accountError || "", ""),
+                refreshError: shortSafeText(phaseSummary.refreshError || "", ""),
+                realRequestError: shortSafeText(phaseSummary.realRequestError || "", ""),
+            } : null,
+            antigravityLogSignals: antigravityLogSignals ? {
+                sourcePresent: antigravityLogSignals.sourcePresent === true,
+                sourceFresh: antigravityLogSignals.sourceFresh === true,
+                tailLinesScanned: Number.isFinite(Number(antigravityLogSignals.tailLinesScanned)) ? Number(antigravityLogSignals.tailLinesScanned) : null,
+                verificationRequiredCount: Number.isFinite(Number(antigravityLogSignals.verificationRequiredCount)) ? Number(antigravityLogSignals.verificationRequiredCount) : null,
+                tokenRefreshMissingCount: Number.isFinite(Number(antigravityLogSignals.tokenRefreshMissingCount)) ? Number(antigravityLogSignals.tokenRefreshMissingCount) : null,
+                oauthNetworkFailureCount: Number.isFinite(Number(antigravityLogSignals.oauthNetworkFailureCount)) ? Number(antigravityLogSignals.oauthNetworkFailureCount) : null,
+                generalNetworkFailureCount: Number.isFinite(Number(antigravityLogSignals.generalNetworkFailureCount)) ? Number(antigravityLogSignals.generalNetworkFailureCount) : null,
+            } : null,
         } : null,
         releaseReady: typeof report?.releaseReady === "boolean" ? report.releaseReady : null,
         shortReady: typeof report?.shortReady === "boolean" ? report.shortReady : null,
@@ -3387,6 +3414,14 @@ function latestReportsSummary(result){
     if(item.missingHistoryEvidence){
       const evidence=item.missingHistoryEvidence;
       lines.push("  missingHistory: status="+(evidence.status??"unknown")+" / type="+(evidence.errorType||"unknown")+" / retryable="+(evidence.retryable===false?"false":"true")+" / previousId="+(evidence.previousResponseIdMatched?"true":"false")+" / routeStable="+(evidence.noRouteChange?"true":"false")+" / noTraffic="+(evidence.usedRealTraffic===false?"true":"false"));
+    }
+    if(item.accountProxyEvidence){
+      const evidence=item.accountProxyEvidence;
+      const phase=evidence.phaseSummary||{};
+      const signals=evidence.antigravityLogSignals||{};
+      lines.push("  accountProxy: detail="+(evidence.diagnosisDetail||"unknown")+" / action="+(evidence.suggestedAction||"none")+" / localProxyBypassed="+(evidence.localProxyBypassed?"true":"false"));
+      lines.push("  accountProxy phase: account="+(phase.accountOk?"ok":"check")+" / refresh="+(phase.refreshOk?"ok":"check")+" / models="+(phase.modelCount??"unknown")+" / real="+(phase.realRequestAttempted?(phase.realRequestOk?"ok":"check"):"not-attempted"));
+      lines.push("  accountProxy logs: source="+(signals.sourcePresent?"present":"missing")+" / fresh="+(signals.sourceFresh?"true":"false")+" / scanned="+(signals.tailLinesScanned??"unknown")+" / verify="+(signals.verificationRequiredCount??0)+" / network="+(signals.generalNetworkFailureCount??0));
     }
     if(item.skipped===true){
       lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));

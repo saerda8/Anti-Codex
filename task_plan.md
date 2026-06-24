@@ -1503,3 +1503,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager panel version advanced to `native-panel-v90` so already-open pages rebootstrap the updated native MCP evidence display.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `126/126` with one environment-only linked-directory skip; runtime source-vs-installed fingerprint gate showed installed runtime `59/59`.
 - Note: `sync-anticodex-runtime.ps1 -NoRestart` copied the runtime but returned `ok:false` because the local health endpoint was not reachable; no restart was requested and no native Codex process was touched.
+
+## 2026-06-24 Account Proxy Support Evidence
+- Completed: account/proxy readiness summaries now preserve the safe evidence fields `diagnosisDetail`, `suggestedAction`, `localProxyBypassed`, `phaseSummary`, and `antigravityLogSignals` through the report summarizer, diagnostics summary, fallback Manager, external Manager bridge, and injected Manager.
+- Completed: account identity material remains blocked from summaries; the new summarizer regression fixture intentionally includes `account.fingerprint` and asserts it does not appear in output.
+- Completed: Manager panel version advanced to `native-panel-v91` so the updated account/proxy latest-report display reboots in already-open pages.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `127/128` with one environment-only linked-directory skip.
+- Note: runtime sync with `NoRestart` still returned `ok:false` because the local health endpoint was offline; no restart was requested.

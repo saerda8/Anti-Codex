@@ -414,9 +414,15 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /toolBridge nativeMcp: envelope=/);
     assert.match(source, /externalToolDefinitionsField/);
     assert.match(source, /nativeMcpToolCallStatus/);
+    assert.match(source, /accountProxyEvidence/);
+    assert.match(source, /accountProxy: detail=/);
+    assert.match(source, /accountProxy phase: account=/);
+    assert.match(source, /accountProxy logs: source=/);
   }
-  assert.match(managerInject, /native-panel-v90/);
-  assert.match(syncReadiness, /native-panel-v90/);
+  assert.match(managerInject, /native-panel-v91/);
+  assert.match(syncReadiness, /native-panel-v91/);
+  assert.doesNotMatch(managerInject, /native-panel-v90/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v90/);
   assert.doesNotMatch(managerInject, /native-panel-v89/);
   assert.doesNotMatch(syncReadiness, /native-panel-v89/);
   assert.doesNotMatch(managerInject, /native-panel-v88/);
@@ -640,8 +646,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v90["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v90"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v91["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v91"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -874,7 +880,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v90/);
+  assert.match(managerOpenInject, /native-panel-v91/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v89/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v88/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v87/);
@@ -1798,8 +1805,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v90 manager script/);
-  assert.doesNotMatch(manager, /native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
+  assert.match(manager, /latest native-panel-v91 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
   assert.match(manager, /PassThru/);
@@ -2150,6 +2157,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /hashCacheHitCount/);
   assert.match(server, /hashCacheMissCount/);
   assert.match(server, /hashCacheEntryCount/);
+  assert.match(server, /accountProxyEvidence/);
+  assert.match(server, /accountProxy: detail=/);
+  assert.match(server, /accountProxy phase: account=/);
+  assert.match(server, /accountProxy logs: source=/);
   assert.match(server, /refresh parity:/);
   assert.match(server, /refresh timing:/);
   assert.match(server, /refresh drift:/);
@@ -2368,6 +2379,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /usedRealTraffic/);
   assert.match(collector, /latestDiagnosis/);
   assert.match(collector, /latestDiagnosisDetail/);
+  assert.match(collector, /accountProxyEvidence/);
   assert.match(collector, /repairedCount/);
   assert.match(collector, /repairedAt/);
   assert.match(collector, /failureCount/);
@@ -2438,6 +2450,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /modelRoutingEvidence/);
   assert.match(reportSummarizer, /modelThinkingEvidence/);
   assert.match(reportSummarizer, /supportsThinkingCount/);
+  assert.match(reportSummarizer, /accountProxyEvidence/);
+  assert.match(reportSummarizer, /localProxyBypassed/);
+  assert.match(reportSummarizer, /antigravityLogSignals/);
   assert.match(reportSummarizer, /toolBridgeEvidence/);
   assert.match(reportSummarizer, /requestEnvelope/);
   assert.match(reportSummarizer, /externalToolDefinitionsField/);
@@ -2972,6 +2987,57 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
     assert.equal(summary.syncReadinessEvidence.shortcutReadyCount, 1);
     assert.equal(summary.syncReadinessEvidence.managerBridgeReady, true);
     assert.equal(summary.syncReadinessEvidence.cleanSyncState, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces account proxy readiness evidence without identity fingerprints", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-account-proxy-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-account-proxy-readiness.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "account-proxy-readiness",
+      diagnosisDetail: "ready",
+      suggestedAction: "No action needed.",
+      localProxyBypassed: true,
+      phaseSummary: {
+        accountOk: true,
+        refreshOk: true,
+        modelCount: 8,
+        realRequestAttempted: true,
+        realRequestOk: true,
+        accountError: "",
+        refreshError: "",
+        realRequestError: "",
+      },
+      antigravityLogSignals: {
+        sourcePresent: true,
+        sourceFresh: true,
+        tailLinesScanned: 340,
+        verificationRequiredCount: 0,
+        tokenRefreshMissingCount: 0,
+        oauthNetworkFailureCount: 0,
+        generalNetworkFailureCount: 2,
+      },
+      account: {
+        ok: true,
+        fingerprint: "sha256:should-not-leak",
+        planName: "Pro",
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.accountProxyEvidence.diagnosisDetail, "ready");
+    assert.equal(summary.accountProxyEvidence.suggestedAction, "No action needed.");
+    assert.equal(summary.accountProxyEvidence.localProxyBypassed, true);
+    assert.equal(summary.accountProxyEvidence.phaseSummary.modelCount, 8);
+    assert.equal(summary.accountProxyEvidence.phaseSummary.realRequestOk, true);
+    assert.equal(summary.accountProxyEvidence.antigravityLogSignals.tailLinesScanned, 340);
+    assert.equal(summary.accountProxyEvidence.antigravityLogSignals.generalNetworkFailureCount, 2);
+    assert.doesNotMatch(JSON.stringify(summary), /should-not-leak|fingerprint/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5941,6 +6007,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /postVerification/);
   assert.match(diagnostics, /lifecycleLogs/);
   assert.match(diagnostics, /latestDiagnosisDetail/);
+  assert.match(diagnostics, /accountProxyEvidence/);
+  assert.match(diagnostics, /account-proxy summary missing diagnosisDetail/);
+  assert.match(diagnostics, /account-proxy summary missing suggestedAction/);
+  assert.match(diagnostics, /account-proxy summary missing localProxyBypassed/);
+  assert.match(diagnostics, /account-proxy summary missing phaseSummary/);
+  assert.match(diagnostics, /account-proxy summary missing antigravityLogSignals/);
+  assert.match(diagnostics, /account-proxy summary exposes an account fingerprint/);
   assert.match(diagnostics, /longTasks/);
   assert.match(diagnostics, /diagnostics-summary\.json/);
   assert.match(diagnostics, /\$diagnosticsSummaryPath/);

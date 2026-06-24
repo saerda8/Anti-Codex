@@ -57,6 +57,7 @@ const latestWait = wait && wait.latest ? wait.latest : null;
 const isReleaseGateReport = report?.reportName === "release-gates" || /latest-release-gates\.json$/i.test(path);
 const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-db-guard\.json$/i.test(path) || has(report, "triggerPresent") || has(report, "protected");
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
+const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
   : null;
@@ -91,6 +92,8 @@ const thinkingModels = Array.isArray(report?.models) && (has(report, "expectedMo
 const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
 const sync = report && report.sync ? report.sync : null;
 const activeHost = report && report.activeHost ? report.activeHost : null;
+const phaseSummary = report && report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : null;
+const antigravityLogSignals = report && report.antigravityLogSignals && typeof report.antigravityLogSignals === "object" ? report.antigravityLogSignals : null;
 const shortcutVerification = sync && Array.isArray(sync.shortcutVerification) ? sync.shortcutVerification : [];
 const managerBridge = sync && sync.managerBridge ? sync.managerBridge : null;
 const updateStatus = sync && sync.updateStatus ? sync.updateStatus : null;
@@ -306,6 +309,30 @@ const summary = {
   requestedRealTraffic: boolField(report, "requestedRealTraffic"),
   latestDiagnosis: wait && has(wait, "latestDiagnosis") ? asString(wait.latestDiagnosis) : null,
   latestDiagnosisDetail: latestWait && has(latestWait, "diagnosisDetail") ? asString(latestWait.diagnosisDetail) : null,
+  accountProxyEvidence: isAccountProxyReport ? {
+    diagnosisDetail: has(report, "diagnosisDetail") ? asString(report.diagnosisDetail) : null,
+    suggestedAction: has(report, "suggestedAction") ? asString(report.suggestedAction) : null,
+    localProxyBypassed: boolField(report, "localProxyBypassed"),
+    phaseSummary: phaseSummary ? {
+      accountOk: boolField(phaseSummary, "accountOk"),
+      refreshOk: boolField(phaseSummary, "refreshOk"),
+      modelCount: has(phaseSummary, "modelCount") ? phaseSummary.modelCount : null,
+      realRequestAttempted: boolField(phaseSummary, "realRequestAttempted"),
+      realRequestOk: boolField(phaseSummary, "realRequestOk"),
+      accountError: has(phaseSummary, "accountError") ? asString(phaseSummary.accountError) : null,
+      refreshError: has(phaseSummary, "refreshError") ? asString(phaseSummary.refreshError) : null,
+      realRequestError: has(phaseSummary, "realRequestError") ? asString(phaseSummary.realRequestError) : null,
+    } : null,
+    antigravityLogSignals: antigravityLogSignals ? {
+      sourcePresent: boolField(antigravityLogSignals, "sourcePresent"),
+      sourceFresh: boolField(antigravityLogSignals, "sourceFresh"),
+      tailLinesScanned: has(antigravityLogSignals, "tailLinesScanned") ? antigravityLogSignals.tailLinesScanned : null,
+      verificationRequiredCount: has(antigravityLogSignals, "verificationRequiredCount") ? antigravityLogSignals.verificationRequiredCount : null,
+      tokenRefreshMissingCount: has(antigravityLogSignals, "tokenRefreshMissingCount") ? antigravityLogSignals.tokenRefreshMissingCount : null,
+      oauthNetworkFailureCount: has(antigravityLogSignals, "oauthNetworkFailureCount") ? antigravityLogSignals.oauthNetworkFailureCount : null,
+      generalNetworkFailureCount: has(antigravityLogSignals, "generalNetworkFailureCount") ? antigravityLogSignals.generalNetworkFailureCount : null,
+    } : null,
+  } : null,
   attempts: wait && has(wait, "attempts") ? wait.attempts : null,
   repairedCount: has(report, "repairedCount") ? report.repairedCount : null,
   repairedAt: has(report, "repairedAt") ? asString(report.repairedAt) : null,
