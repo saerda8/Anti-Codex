@@ -629,6 +629,10 @@ function Test-DiagnosticBundle {
         } else {
             if ($sourcePreflightSummary.ok -ne $true) { Add-Failure "source-preflight summary ok=false" }
             if ($sourcePreflightSummary.reportName -ne "source-preflight") { Add-Failure "source-preflight summary missing reportName" }
+            if ($sourcePreflightSummary.noTraffic -ne $true) { Add-Failure "source-preflight summary missing noTraffic" }
+            if ($sourcePreflightSummary.usedRealTraffic -ne $false) { Add-Failure "source-preflight summary used real traffic" }
+            if ($sourcePreflightSummary.behaviorCovered -ne $true) { Add-Failure "source-preflight summary behavior not covered" }
+            if ($sourcePreflightSummary.coverageKind -ne "source-no-traffic") { Add-Failure "source-preflight summary coverageKind mismatch" }
             if ($sourcePreflightSummary.javascriptSyntaxOk -ne $true) { Add-Failure "source-preflight summary missing JavaScript syntax success" }
             if ($sourcePreflightSummary.powershellSyntaxOk -ne $true) { Add-Failure "source-preflight summary missing PowerShell syntax success" }
             if ($sourcePreflightSummary.uiStateSelfTestOk -ne $true) { Add-Failure "source-preflight summary missing UI state self-test success" }

@@ -3011,6 +3011,10 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     writeFileSync(reportPath, JSON.stringify({
       ok: true,
       reportName: "source-preflight",
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "source-no-traffic",
       skipFullRegression: true,
       failures: [],
       checks: {
@@ -3034,6 +3038,10 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
+    assert.equal(summary.noTraffic, true);
+    assert.equal(summary.usedRealTraffic, false);
+    assert.equal(summary.behaviorCovered, true);
+    assert.equal(summary.coverageKind, "source-no-traffic");
     assert.equal(summary.javascriptSyntaxOk, true);
     assert.equal(summary.powershellSyntaxOk, true);
     assert.equal(summary.uiStateSelfTestOk, true);
@@ -6632,6 +6640,10 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
 
   assert.match(preflight, /latest-\$Name\.json/);
   assert.match(preflight, /Save-JsonReport "source-preflight"/);
+  assert.match(preflight, /noTraffic = \$true/);
+  assert.match(preflight, /usedRealTraffic = \$false/);
+  assert.match(preflight, /behaviorCovered = \(\$failures\.Count -eq 0\)/);
+  assert.match(preflight, /coverageKind = "source-no-traffic"/);
   assert.match(preflight, /node --check/);
   assert.match(preflight, /Test-LogDbGuardSelfTest/);
   assert.match(preflight, /protect-anticodex-log-db\.mjs/);
@@ -7154,6 +7166,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic log database guard summary invalid wal size/);
   assert.match(diagnostics, /source preflight status/);
   assert.match(diagnostics, /source-preflight summary/);
+  assert.match(diagnostics, /source-preflight summary missing noTraffic/);
+  assert.match(diagnostics, /source-preflight summary used real traffic/);
+  assert.match(diagnostics, /source-preflight summary behavior not covered/);
+  assert.match(diagnostics, /source-preflight summary coverageKind mismatch/);
   assert.match(diagnostics, /javascriptSyntaxOk/);
   assert.match(diagnostics, /powershellSyntaxOk/);
   assert.match(diagnostics, /uiStateSelfTestOk/);

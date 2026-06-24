@@ -600,6 +600,10 @@ function summarizeGate(definition) {
     if (definition.requireSourcePreflightSemantics) {
       const checks = report.checks || {};
       if (report.reportName !== "source-preflight") semanticFailures.push("source_preflight_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("source_preflight_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("source_preflight_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("source_preflight_behavior_not_covered");
+      if (report.coverageKind !== "source-no-traffic") semanticFailures.push("source_preflight_coverage_kind");
       if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("source_preflight_failures");
       if (!checks.javascriptSyntax || checks.javascriptSyntax.ok !== true) semanticFailures.push("source_preflight_javascript_syntax");
       if (!checks.powershellSyntax || checks.powershellSyntax.ok !== true) semanticFailures.push("source_preflight_powershell_syntax");
@@ -1871,6 +1875,31 @@ if (args.has("--self-test")) {
       "source_preflight_public_documentation",
       "source_preflight_translator_regression",
       "source_preflight_diff_whitespace",
+    ]);
+    writeFakeLatestReport("latest-source-preflight.json", {
+      ok: true,
+      reportName: "source-preflight",
+      noTraffic: false,
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      failures: [],
+      checks: {
+        javascriptSyntax: { ok: true },
+        powershellSyntax: { ok: true },
+        uiStateSelfTest: { ok: true },
+        upstreamProfileStorage: { ok: true },
+        localConnectorVerifier: { ok: true },
+        publicDocumentation: { ok: true },
+        translatorRegression: { ok: true },
+        diffWhitespace: { ok: true },
+      },
+    });
+    semanticFailures.sourcePreflightNoTraffic = assertSemanticFailures("sourcePreflight", "self-test failed: source-preflight real-traffic attestation was not rejected", [
+      "source_preflight_no_traffic",
+      "source_preflight_used_real_traffic",
+      "source_preflight_behavior_not_covered",
+      "source_preflight_coverage_kind",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_report_name",
