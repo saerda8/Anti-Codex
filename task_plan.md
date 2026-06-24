@@ -1588,3 +1588,11 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: release gates and installed-overall reuse now reject plugin-capability short-budget/degraded/unchecked reports so degraded local evidence cannot be promoted to readiness.
 - Completed: launcher contracts now include a real temp-report `-TimeoutSec 3` run, not only static strings, and assert the short-budget report fail-closed fields.
 - Verification: PowerShell parser check passed; release-gate self-test passed; focused launcher contract passed `130/130`; temp-report `-TimeoutSec 3` run returned exit `1` and wrote `ok:false`, `shortBudgetMode:true`, `degraded_short_budget`, `skipped_short_budget`, and `contentMatches:false`.
+
+## 2026-06-24 Plugin Capability Short-Budget Visibility
+- Completed: plugin/app summaries now carry `smokeChecked`, `endpointProjectionReadable`, `connectorParityChecked`, `appToolParityChecked`, and GET/POST checked/content-match evidence; parity clean is false unless the corresponding checked flag is true.
+- Completed: external Manager bridge, injected Manager, and fallback Manager now show checked-state evidence plus sourceSnapshot `reused=true` and skip reason, so short-budget reused snapshots are not mistaken for fresh scans.
+- Completed: plugin action summaries no longer default app-tool callable state to `ready` unless smoke was checked and the callable state is explicit.
+- Completed: Manager panel version advanced to `native-panel-v94`.
+- Completed: diagnostics verifier output now includes a `pluginCapabilities` block with plugin evidence and source snapshot, matching MCP/Skill and refresh-feature support summaries.
+- Verification: JS syntax checks passed for updated Manager/report scripts; PowerShell parser check passed; Manager bridge self-test, UI-state self-test, and focused launcher contracts passed `130/130`. Runtime sync copied files with `-NoRestart`; local health remained offline, while strict passive runtime fingerprint gate showed installed runtime satisfied with `0` mismatches.

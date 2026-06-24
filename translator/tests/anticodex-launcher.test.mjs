@@ -429,9 +429,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v93/);
-  assert.match(syncReadiness, /native-panel-v93/);
-  assert.match(uiState, /native-panel-v93/);
+  assert.match(managerInject, /native-panel-v94/);
+  assert.match(syncReadiness, /native-panel-v94/);
+  assert.match(uiState, /native-panel-v94/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -672,9 +672,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v93["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v93"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v93"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v94["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v94"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v94"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -931,7 +931,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v93/);
+  assert.match(managerOpenInject, /native-panel-v94/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -1858,7 +1858,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v93 manager script/);
+  assert.match(manager, /latest native-panel-v94 manager script/);
   assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -3538,10 +3538,12 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
         appToolGetCount: 0,
         unattributedAppToolCount: 0,
         unauthorizedAppToolCount: 0,
-        appToolsNote: "expected 0: no accessible connectors linked",
-        smoke: {
-          callableState: "skipped_no_accessible_connectors",
-          connectorCache: {
+          appToolsNote: "expected 0: no accessible connectors linked",
+          smoke: {
+            checked: true,
+            endpointProjectionReadable: true,
+            callableState: "skipped_no_accessible_connectors",
+            connectorCache: {
             checked: true,
             cacheExists: true,
             fileCount: 1,
@@ -3565,6 +3567,7 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
           changedShared: ["changed-connector"],
         },
         appToolParity: {
+          checked: true,
           missingShared: ["missing-tool"],
           extraLocal: ["extra-tool"],
           changedShared: ["changed-tool"],
@@ -3589,6 +3592,8 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.equal(summary.pluginCapabilityEvidence.appToolCount, 0);
     assert.equal(summary.pluginCapabilityEvidence.appToolGetCount, 0);
     assert.equal(summary.pluginCapabilityEvidence.appToolsNote, "expected 0: no accessible connectors linked");
+    assert.equal(summary.pluginCapabilityEvidence.smokeChecked, true);
+    assert.equal(summary.pluginCapabilityEvidence.endpointProjectionReadable, true);
     assert.equal(summary.pluginCapabilityEvidence.callableState, "skipped_no_accessible_connectors");
     assert.equal(summary.pluginCapabilityEvidence.connectorParityChecked, true);
     assert.equal(summary.pluginCapabilityEvidence.connectorParitySharedCount, 4);
@@ -3609,6 +3614,7 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityChangedShared, ["changed-connector"]);
     assert.equal(summary.pluginCapabilityEvidence.connectorParityClean, false);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityMissingShared, ["missing-tool"]);
+    assert.equal(summary.pluginCapabilityEvidence.appToolParityChecked, true);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityExtraLocal, ["extra-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolParityChangedShared, ["changed-tool"]);
     assert.equal(summary.pluginCapabilityEvidence.appToolParityClean, false);
@@ -3616,6 +3622,28 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostExtraFromGet, ["get-only-tool"]);
     assert.equal(summary.pluginCapabilityEvidence.appToolGetPostParityContentMatches, false);
     assert.equal(summary.pluginCapabilityEvidence.appToolGetPostParityClean, false);
+
+    const uncheckedReportPath = resolve(tempRoot, "latest-plugin-unchecked.json");
+    writeFileSync(uncheckedReportPath, JSON.stringify({
+      ok: false,
+      reportName: "plugin-capabilities",
+      capabilities: {
+        smoke: { checked: false, endpointProjectionReadable: false, callableState: "skipped_short_budget" },
+        connectorParity: { checked: false, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolParity: { checked: false, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolGetPostParity: { checked: false, contentMatches: false, missingFromGet: [], extraFromGet: [] },
+      },
+    }), "utf8");
+    const uncheckedResult = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), uncheckedReportPath], { encoding: "utf8" });
+    assert.equal(uncheckedResult.status, 0, uncheckedResult.stderr || uncheckedResult.stdout);
+    const uncheckedSummary = JSON.parse(uncheckedResult.stdout);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.smokeChecked, false);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.endpointProjectionReadable, false);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.connectorParityChecked, false);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.connectorParityClean, false);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.appToolParityChecked, false);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.appToolParityClean, false);
+    assert.equal(uncheckedSummary.pluginCapabilityEvidence.appToolGetPostParityChecked, false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -6319,6 +6347,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /Antigravity return skipped summary requested real traffic/);
   assert.match(diagnostics, /Antigravity return skipped summary coverage kind mismatch/);
   assert.match(diagnostics, /mcpSkills = if \(\$mcpSkillsSummary\)/);
+  assert.match(diagnostics, /pluginCapabilities = if \(\$pluginCapabilitiesSummary\)/);
+  assert.match(diagnostics, /evidence = \$pluginCapabilitiesSummary\.pluginCapabilityEvidence/);
+  assert.match(diagnostics, /sourceSnapshot = \$pluginCapabilitiesSummary\.sourceSnapshotEvidence/);
   assert.match(diagnostics, /optionalRealProvider = if \(\$optionalRealProviderSummary\)/);
   assert.match(diagnostics, /antigravityReturn = if \(\$antigravityReturnSummary\)/);
   assert.match(diagnostics, /upstreamRequestsDuringLocalEndpoints/);

@@ -92,7 +92,7 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/app-tool registry:/.test(injectSource) || !/appToolRegistryFingerprintMatches/.test(injectSource)) {
     failures.push("in-app manager is missing MCP/Skill app-tool registry evidence");
   }
-  if (!/app capability: state=/.test(injectSource) || !/callable=\$\{evidence\.callableState/.test(injectSource) || !/nativeWriteback=\$\{evidence\.nativeCodexWriteback/.test(injectSource)) {
+  if (!/app capability: state=/.test(injectSource) || !/smokeChecked=\$\{evidence\.smokeChecked/.test(injectSource) || !/endpointReadable=\$\{evidence\.endpointProjectionReadable/.test(injectSource) || !/callable=\$\{evidence\.callableState/.test(injectSource) || !/nativeWriteback=\$\{evidence\.nativeCodexWriteback/.test(injectSource)) {
     failures.push("in-app manager is missing plugin/app callable state evidence");
   }
   if (!/const callableSummary = appTools > 0/.test(injectSource) || !/metadata-only/.test(injectSource) || !/accessibleConnectors > 0/.test(injectSource)) {
@@ -101,7 +101,10 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/local connector upstream: before=/.test(injectSource) || !/local connector isolation: sharedHomeUsed=/.test(injectSource) || !/local cache fingerprints: connector=/.test(injectSource)) {
     failures.push("in-app manager is missing local connector upstream/isolation/cache evidence");
   }
-  if (!/app cache smoke: connector=/.test(injectSource) || !/appTools=\$\{evidence\.appToolsCacheChecked/.test(injectSource) || !/getPostChecked=\$\{evidence\.appToolGetPostParityChecked/.test(injectSource)) {
+  if (!/sourceSnapshot: files=/.test(injectSource) || !/reusedFromPreviousReport/.test(injectSource) || !/refreshSkippedReason/.test(injectSource)) {
+    failures.push("in-app manager is missing source snapshot reuse evidence");
+  }
+  if (!/app cache smoke: connector=/.test(injectSource) || !/appTools=\$\{evidence\.appToolsCacheChecked/.test(injectSource) || !/connectorChecked=\$\{evidence\.connectorParityChecked/.test(injectSource) || !/appToolChecked=\$\{evidence\.appToolParityChecked/.test(injectSource) || !/getPostChecked=\$\{evidence\.appToolGetPostParityChecked/.test(injectSource)) {
     failures.push("in-app manager is missing plugin/app cache smoke evidence");
   }
   if (!/syncReadiness versions: codex=/.test(injectSource) || !/managerBridge=\$\{evidence\.managerBridgeReady/.test(injectSource) || !/processes=\$\{evidence\.managerBridgeProcessCount/.test(injectSource)) {
@@ -174,7 +177,7 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/app-tool registry:/.test(managerHtml) || !/appToolRegistryFingerprintMatches/.test(managerHtml)) {
     failures.push("manager page is missing MCP/Skill app-tool registry evidence");
   }
-  if (!/app capability: state=/.test(managerHtml) || !/callable="\+\(evidence\.callableState/.test(managerHtml) || !/nativeWriteback="\+\(evidence\.nativeCodexWriteback/.test(managerHtml)) {
+  if (!/app capability: state=/.test(managerHtml) || !/smokeChecked="\+\(evidence\.smokeChecked/.test(managerHtml) || !/endpointReadable="\+\(evidence\.endpointProjectionReadable/.test(managerHtml) || !/callable="\+\(evidence\.callableState/.test(managerHtml) || !/nativeWriteback="\+\(evidence\.nativeCodexWriteback/.test(managerHtml)) {
     failures.push("manager page is missing plugin/app callable state evidence");
   }
   if (!/localAllowlisted/.test(injectSource) || !/callableAppToolCount/.test(injectSource) || !/accessibleConnectors > 0/.test(injectSource)) {
@@ -183,7 +186,10 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/local connector upstream: before=/.test(managerHtml) || !/local connector isolation: sharedHomeUsed=/.test(managerHtml) || !/local cache fingerprints: connector=/.test(managerHtml)) {
     failures.push("manager page is missing local connector upstream/isolation/cache evidence");
   }
-  if (!/app cache smoke: connector=/.test(managerHtml) || !/appTools="\+\(evidence\.appToolsCacheChecked/.test(managerHtml) || !/getPostChecked="\+\(evidence\.appToolGetPostParityChecked/.test(managerHtml)) {
+  if (!/sourceSnapshot: files=/.test(managerHtml) || !/reusedFromPreviousReport/.test(managerHtml) || !/refreshSkippedReason/.test(managerHtml)) {
+    failures.push("manager page is missing source snapshot reuse evidence");
+  }
+  if (!/app cache smoke: connector=/.test(managerHtml) || !/appTools="\+\(evidence\.appToolsCacheChecked/.test(managerHtml) || !/connectorChecked="\+\(evidence\.connectorParityChecked/.test(managerHtml) || !/appToolChecked="\+\(evidence\.appToolParityChecked/.test(managerHtml) || !/getPostChecked="\+\(evidence\.appToolGetPostParityChecked/.test(managerHtml)) {
     failures.push("manager page is missing plugin/app cache smoke evidence");
   }
   if (!/syncReadiness versions: codex=/.test(managerHtml) || !/managerBridge="\+\(evidence\.managerBridgeReady/.test(managerHtml) || !/processes="\+\(evidence\.managerBridgeProcessCount/.test(managerHtml)) {
@@ -849,7 +855,7 @@ try {
   }), managerProbeTimeoutMs);
   for (let attempt = 0; attempt < 40; attempt++) {
     const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v93"
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v94"
       )`, {
       returnByValue: true,
       awaitPromise: false,
@@ -908,13 +914,13 @@ try {
       skippedDeepProbe: true,
       hasFunction: selectedContextProbe?.hasOpen === true,
       version: selectedContextProbe?.version || "",
-      installed: selectedContextProbe?.version === "native-panel-v93",
+      installed: selectedContextProbe?.version === "native-panel-v94",
       hasButton: selectedContextProbe?.hasButton === true,
       buttonText: selectedContextProbe?.buttonText || "",
       coveredBy: "fast-ui-state",
     };
     if (!managerOverlay.hasFunction) failures.push("in-app manager function is not injected");
-    if (managerOverlay.version !== "native-panel-v93") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v93`);
+    if (managerOverlay.version !== "native-panel-v94") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v94`);
     if (managerOverlay.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
@@ -1288,13 +1294,13 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (selectedContextProbe?.version === "native-panel-v93") {
+    if (selectedContextProbe?.version === "native-panel-v94") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",
         hasFunction: selectedContextProbe?.hasOpen === true,
         version: selectedContextProbe?.version || "",
-        installed: selectedContextProbe?.version === "native-panel-v93",
+        installed: selectedContextProbe?.version === "native-panel-v94",
         hasButton: selectedContextProbe?.hasButton === true,
         buttonText: selectedContextProbe?.buttonText || "",
         coveredBy: "context-probe-and-manager-page",
@@ -1317,7 +1323,7 @@ try {
     failures.push(`manager opened a separate page target: ${managerPageTargets.map((item) => item.url).join(", ")}`);
   }
   if (!managerOverlay?.hasFunction) failures.push("in-app manager function is not injected");
-  if (managerOverlay?.version !== "native-panel-v93") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v93`);
+  if (managerOverlay?.version !== "native-panel-v94") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v94`);
   if (!managerOverlay?.installed) failures.push("in-app manager install flag is not set");
   const managerOverlayDynamicUnavailable = managerOverlay?.dynamicProbeUnavailable === true;
   if (managerOverlayDynamicUnavailable) {

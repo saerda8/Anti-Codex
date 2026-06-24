@@ -460,9 +460,12 @@ function Test-DiagnosticBundle {
                 if ([int]$pluginEvidence.accessibleConnectorCount -ne 0) { Add-Failure "plugin capability summary reports accessible connectors" }
                 if ([int]$pluginEvidence.appToolCount -ne [int]$pluginEvidence.appToolGetCount) { Add-Failure "plugin capability summary GET/POST app tool counts differ" }
                 if ([int]$pluginEvidence.unauthorizedAppToolCount -ne 0) { Add-Failure "plugin capability summary reports unauthorized app tools" }
+                if ($pluginEvidence.smokeChecked -ne $true) { Add-Failure "plugin capability summary missing smoke checked proof" }
+                if ($pluginEvidence.endpointProjectionReadable -ne $true) { Add-Failure "plugin capability summary missing endpoint projection proof" }
                 if ($pluginEvidence.callableState -ne "skipped_no_accessible_connectors") { Add-Failure "plugin capability summary missing no-access callable state" }
                 if (-not [string]$pluginEvidence.appToolsNote) { Add-Failure "plugin capability summary missing app tools no-access note" }
                 if ($pluginEvidence.connectorParityChecked -ne $true) { Add-Failure "plugin capability summary missing connector parity checked proof" }
+                if ($pluginEvidence.appToolParityChecked -ne $true) { Add-Failure "plugin capability summary missing app-tool parity checked proof" }
                 if ($pluginEvidence.appToolGetPostParityChecked -ne $true) { Add-Failure "plugin capability summary missing GET/POST checked proof" }
                 if ($pluginEvidence.appToolGetPostParityContentMatches -ne $true) { Add-Failure "plugin capability summary missing GET/POST content match proof" }
                 if ($pluginEvidence.connectorCacheChecked -ne $true -or $pluginEvidence.connectorCacheExists -ne $true -or $pluginEvidence.connectorCacheSampleReadable -ne $true) { Add-Failure "plugin capability summary missing connector cache smoke proof" }
@@ -827,6 +830,13 @@ function Test-DiagnosticBundle {
                 ok = $mcpSkillsSummary.ok
                 evidence = $mcpSkillsSummary.mcpSkillEvidence
                 sourceSnapshot = $mcpSkillsSummary.sourceSnapshotEvidence
+            }
+        } else { $null }
+        pluginCapabilities = if ($pluginCapabilitiesSummary) {
+            [pscustomobject]@{
+                ok = $pluginCapabilitiesSummary.ok
+                evidence = $pluginCapabilitiesSummary.pluginCapabilityEvidence
+                sourceSnapshot = $pluginCapabilitiesSummary.sourceSnapshotEvidence
             }
         } else { $null }
         refreshFeatures = if ($refreshFeaturesSummary) {

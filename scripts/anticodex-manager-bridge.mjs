@@ -256,7 +256,9 @@ function sourceSnapshotLine(result) {
   const fileCount = evidence.fileCount ?? "\u672a\u77e5";
   const fingerprint = evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931";
   const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
-  return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}${cache}`;
+  const reused = evidence.reusedFromPreviousReport === true ? " / reused=true" : "";
+  const skipped = evidence.refreshSkippedReason ? ` / reason=${evidence.refreshSkippedReason}` : "";
+  return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}${cache}${reused}${skipped}`;
 }
 
 function formatReportAge(ageMs) {
@@ -335,7 +337,9 @@ function latestReportsSummary(result) {
     if (item.sourceSnapshotEvidence) {
       const evidence = item.sourceSnapshotEvidence;
       const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
-      lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}`);
+      const reused = evidence.reusedFromPreviousReport === true ? " / reused=true" : "";
+      const skipped = evidence.refreshSkippedReason ? ` / reason=${evidence.refreshSkippedReason}` : "";
+      lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}${reused}${skipped}`);
     }
     if (item.sourcePreflightEvidence) {
       const evidence = item.sourcePreflightEvidence;
@@ -444,8 +448,8 @@ function latestReportsSummary(result) {
       const evidence = item.pluginCapabilityEvidence;
       const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
       lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
-      lines.push(`  app capability: state=${evidence.capabilityState || "unknown"} / degraded=${evidence.degraded ? "true" : "false"} / connectors=${evidence.accessibleConnectorCount ?? "\u672a\u77e5"}/${evidence.enabledConnectorCount ?? "\u672a\u77e5"}/${evidence.connectorCount ?? "\u672a\u77e5"} / tools=${evidence.appToolCount ?? "\u672a\u77e5"}/${evidence.appToolGetCount ?? "\u672a\u77e5"} / callable=${evidence.callableState || "unknown"} / nativeWriteback=${evidence.nativeCodexWriteback ? "true" : "false"}`);
-      lines.push(`  app cache smoke: connector=${evidence.connectorCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.connectorCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.connectorCacheFileCount ?? "\u672a\u77e5"} / appTools=${evidence.appToolsCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.appToolsCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.appToolsCacheFileCount ?? "\u672a\u77e5"} / getPostChecked=${evidence.appToolGetPostParityChecked ? "true" : "false"}`);
+      lines.push(`  app capability: state=${evidence.capabilityState || "unknown"} / degraded=${evidence.degraded ? "true" : "false"} / smokeChecked=${evidence.smokeChecked ? "true" : "false"} / endpointReadable=${evidence.endpointProjectionReadable ? "true" : "false"} / connectors=${evidence.accessibleConnectorCount ?? "\u672a\u77e5"}/${evidence.enabledConnectorCount ?? "\u672a\u77e5"}/${evidence.connectorCount ?? "\u672a\u77e5"} / tools=${evidence.appToolCount ?? "\u672a\u77e5"}/${evidence.appToolGetCount ?? "\u672a\u77e5"} / callable=${evidence.callableState || "unknown"} / nativeWriteback=${evidence.nativeCodexWriteback ? "true" : "false"}`);
+      lines.push(`  app cache smoke: connector=${evidence.connectorCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.connectorCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.connectorCacheFileCount ?? "\u672a\u77e5"} / appTools=${evidence.appToolsCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.appToolsCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.appToolsCacheFileCount ?? "\u672a\u77e5"} / connectorChecked=${evidence.connectorParityChecked ? "true" : "false"} / appToolChecked=${evidence.appToolParityChecked ? "true" : "false"} / getPostChecked=${evidence.appToolGetPostParityChecked ? "true" : "false"}`);
       if (evidence.appToolsNote) lines.push(`  app capability note: ${evidence.appToolsNote}`);
       if (!parityClean) {
         const samples = [...(evidence.connectorParityMissingSharedSample || []), ...(evidence.connectorParityExtraLocalSample || []), ...(evidence.connectorParityChangedSharedSample || []), ...(evidence.appToolParityMissingSharedSample || []), ...(evidence.appToolParityExtraLocalSample || []), ...(evidence.appToolParityChangedSharedSample || []), ...(evidence.appToolGetPostMissingFromGetSample || []), ...(evidence.appToolGetPostExtraFromGetSample || [])].slice(0, 5);
@@ -534,9 +538,10 @@ function managerSummary(action, payload) {
     const appTools = capabilities.appToolCount ?? 0;
     const accessibleConnectors = capabilities.accessibleConnectorCount ?? 0;
     const callableState = capabilities.smoke?.callableState || capabilities.callableState || "";
+    const smokeChecked = capabilities.smoke?.checked === true;
     const capabilityState = capabilities.capabilityState || "";
     const callableSummary = appTools > 0
-      ? `\u5e94\u7528\u5de5\u5177 ${appTools} / callable=${callableState || "ready"}`
+      ? `\u5e94\u7528\u5de5\u5177 ${appTools} / callable=${smokeChecked && callableState ? callableState : "unknown"}`
       : accessibleConnectors > 0
         ? `\u5df2\u6388\u6743\u8fde\u63a5\u5668 ${accessibleConnectors} \u4f46\u672a\u53d1\u73b0\u53ef\u8c03\u7528\u5e94\u7528\u5de5\u5177 / callable=${callableState || "unknown"}`
         : `\u65e0\u6388\u6743\u8fde\u63a5\u5668\uff0cmetadata-only \u4e0d\u4f2a\u88c5\u53ef\u8c03\u7528 / state=${capabilityState || "unknown"} / callable=${callableState || "unknown"}`;
@@ -705,7 +710,7 @@ if (args.has("--self-test")) {
       label: "\u6e90\u7801\u9884\u68c0",
       exists: true,
       ok: true,
-      sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589, cacheHitCount: 12000, cacheMissCount: 42 },
+      sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589, cacheHitCount: 12000, cacheMissCount: 42, reusedFromPreviousReport: true, refreshSkippedReason: "short_budget_reused_previous_snapshot" },
       sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
       label: "\u65e5\u5fd7\u5e93\u9632\u62a4",
@@ -759,7 +764,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
-  assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42/);
+  assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42 \/ reused=true \/ reason=short_budget_reused_previous_snapshot/);
   assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);
@@ -816,6 +821,11 @@ if (args.has("--self-test")) {
         unauthorizedAppToolCount: 0,
         unattributedAppToolCount: 0,
         nativeCodexWriteback: false,
+        smokeChecked: false,
+        endpointProjectionReadable: false,
+        connectorParityChecked: false,
+        appToolParityChecked: false,
+        appToolGetPostParityChecked: false,
         connectorParityClean: false,
         appToolParityClean: false,
         appToolGetPostParityClean: false,
@@ -838,6 +848,8 @@ if (args.has("--self-test")) {
       },
     }],
   });
+  assert.match(pluginDriftSummary, /smokeChecked=false \/ endpointReadable=false/);
+  assert.match(pluginDriftSummary, /connectorChecked=false \/ appToolChecked=false \/ getPostChecked=false/);
   assert.match(pluginDriftSummary, /parity drift: connectorMissing=1 \/ connectorExtra=1 \/ connectorChanged=1 \/ appToolMissing=1 \/ appToolExtra=1 \/ appToolChanged=1 \/ getPostMissing=1 \/ getPostExtra=1 \/ sample missing-connector, extra-connector, changed-connector, missing-tool, extra-tool/);
   console.log(JSON.stringify({ ok: true, selfTest: true }));
   process.exit(0);

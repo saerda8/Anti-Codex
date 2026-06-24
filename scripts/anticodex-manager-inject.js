@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v93";
+  const VERSION = "native-panel-v94";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -860,7 +860,9 @@
     const fileCount = evidence.fileCount ?? "\u672a\u77e5";
     const fingerprint = evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931";
     const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
-    return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}${cache}`;
+    const reused = evidence.reusedFromPreviousReport === true ? " / reused=true" : "";
+    const skipped = evidence.refreshSkippedReason ? ` / reason=${evidence.refreshSkippedReason}` : "";
+    return `sourceSnapshot: files=${fileCount} / fingerprint=${fingerprint}${cache}${reused}${skipped}`;
   }
 
   function formatReportAge(ageMs) {
@@ -944,7 +946,9 @@
       if (item.sourceSnapshotEvidence) {
         const evidence = item.sourceSnapshotEvidence;
         const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
-        lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}`);
+        const reused = evidence.reusedFromPreviousReport === true ? " / reused=true" : "";
+        const skipped = evidence.refreshSkippedReason ? ` / reason=${evidence.refreshSkippedReason}` : "";
+        lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}${reused}${skipped}`);
       }
       if (item.sourcePreflightEvidence) {
         const evidence = item.sourcePreflightEvidence;
@@ -1052,8 +1056,8 @@
         const evidence = item.pluginCapabilityEvidence;
         const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
         lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
-        lines.push(`  app capability: state=${evidence.capabilityState || "unknown"} / degraded=${evidence.degraded ? "true" : "false"} / connectors=${evidence.accessibleConnectorCount ?? "\u672a\u77e5"}/${evidence.enabledConnectorCount ?? "\u672a\u77e5"}/${evidence.connectorCount ?? "\u672a\u77e5"} / tools=${evidence.appToolCount ?? "\u672a\u77e5"}/${evidence.appToolGetCount ?? "\u672a\u77e5"} / callable=${evidence.callableState || "unknown"} / nativeWriteback=${evidence.nativeCodexWriteback ? "true" : "false"}`);
-        lines.push(`  app cache smoke: connector=${evidence.connectorCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.connectorCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.connectorCacheFileCount ?? "\u672a\u77e5"} / appTools=${evidence.appToolsCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.appToolsCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.appToolsCacheFileCount ?? "\u672a\u77e5"} / getPostChecked=${evidence.appToolGetPostParityChecked ? "true" : "false"}`);
+        lines.push(`  app capability: state=${evidence.capabilityState || "unknown"} / degraded=${evidence.degraded ? "true" : "false"} / smokeChecked=${evidence.smokeChecked ? "true" : "false"} / endpointReadable=${evidence.endpointProjectionReadable ? "true" : "false"} / connectors=${evidence.accessibleConnectorCount ?? "\u672a\u77e5"}/${evidence.enabledConnectorCount ?? "\u672a\u77e5"}/${evidence.connectorCount ?? "\u672a\u77e5"} / tools=${evidence.appToolCount ?? "\u672a\u77e5"}/${evidence.appToolGetCount ?? "\u672a\u77e5"} / callable=${evidence.callableState || "unknown"} / nativeWriteback=${evidence.nativeCodexWriteback ? "true" : "false"}`);
+        lines.push(`  app cache smoke: connector=${evidence.connectorCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.connectorCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.connectorCacheFileCount ?? "\u672a\u77e5"} / appTools=${evidence.appToolsCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.appToolsCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.appToolsCacheFileCount ?? "\u672a\u77e5"} / connectorChecked=${evidence.connectorParityChecked ? "true" : "false"} / appToolChecked=${evidence.appToolParityChecked ? "true" : "false"} / getPostChecked=${evidence.appToolGetPostParityChecked ? "true" : "false"}`);
         if (evidence.appToolsNote) lines.push(`  app capability note: ${evidence.appToolsNote}`);
         if (!parityClean) {
           const samples = [...(evidence.connectorParityMissingSharedSample || []), ...(evidence.connectorParityExtraLocalSample || []), ...(evidence.connectorParityChangedSharedSample || []), ...(evidence.appToolParityMissingSharedSample || []), ...(evidence.appToolParityExtraLocalSample || []), ...(evidence.appToolParityChangedSharedSample || []), ...(evidence.appToolGetPostMissingFromGetSample || []), ...(evidence.appToolGetPostExtraFromGetSample || [])].slice(0, 5);
@@ -1187,9 +1191,10 @@
       const appTools = c.appToolCount ?? 0;
       const accessibleConnectors = c.accessibleConnectorCount ?? 0;
       const callableState = c.smoke?.callableState || c.callableState || "";
+      const smokeChecked = c.smoke?.checked === true;
       const capabilityState = c.capabilityState || "";
       const callableSummary = appTools > 0
-        ? `\u5e94\u7528\u5de5\u5177 ${appTools} / callable=${callableState || "ready"}`
+        ? `\u5e94\u7528\u5de5\u5177 ${appTools} / callable=${smokeChecked && callableState ? callableState : "unknown"}`
         : accessibleConnectors > 0
           ? `\u5df2\u6388\u6743\u8fde\u63a5\u5668 ${accessibleConnectors} \u4f46\u672a\u53d1\u73b0\u53ef\u8c03\u7528\u5e94\u7528\u5de5\u5177 / callable=${callableState || "unknown"}`
           : `\u65e0\u6388\u6743\u8fde\u63a5\u5668\uff0cmetadata-only \u4e0d\u4f2a\u88c5\u53ef\u8c03\u7528 / state=${capabilityState || "unknown"} / callable=${callableState || "unknown"}`;
