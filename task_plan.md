@@ -1640,7 +1640,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Installed Snapshot Refresh Follow-Up
 - Completed: after the interrupted refresh run left `latest-refresh-features.json` failing on connector snapshot parity, the local snapshot sync was rerun without starting Anti-Codex or touching native Codex.
 - Completed: `refresh-anticodex-local-features.ps1 -VerifyOnly` then passed with connector and app-tool fingerprints matching shared Codex (`7a4ff287...` and `889e4807...`), source fingerprint `c68ad593...`, and no failures.
-- Current blocker: normal MCP/Skill and plugin capability reports still cannot become release-grade while the Anti-Codex local gateway is offline; release-required real-traffic reports remain stale and require explicit approval before running.
+- Current blocker: plugin capability, Manager real-button, account-proxy, and release-required real-traffic reports still cannot become release-grade while the Anti-Codex local gateway is offline or explicit real-traffic approval is absent; MCP/Skill evidence is no longer part of this blocker.
 
 ## 2026-06-24 Refresh Snapshot Drift Samples
 - Completed: refresh-feature reports now include connector/app-tool missing, extra, and changed sample fields when directory fingerprints differ, so interrupted or stale local snapshot copies identify the specific JSON files instead of only reporting a hash mismatch.
