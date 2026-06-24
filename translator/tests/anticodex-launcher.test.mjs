@@ -6975,6 +6975,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /missingOptional/);
   assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /releaseGateFailures/);
+  assert.match(diagnostics, /plugin capability failure missing offline snapshot evidence/);
+  assert.match(diagnostics, /plugin capability failure missing sample codes/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
   assert.match(diagnostics, /installedRuntimeEvidence/);

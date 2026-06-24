@@ -632,6 +632,20 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailureReasons")) { Add-Failure "release-gates summary missing failure reason details" }
+            $pluginCapabilityFailure = @($releaseGatesSummary.releaseGateFailureReasons | Where-Object { $_.id -eq "pluginCapabilities" } | Select-Object -First 1)[0]
+            if ($pluginCapabilityFailure) {
+                $offlineSnapshotEvidence = $pluginCapabilityFailure.offlineSnapshotEvidence
+                if (-not $offlineSnapshotEvidence) {
+                    Add-Failure "plugin capability failure missing offline snapshot evidence"
+                } elseif ($offlineSnapshotEvidence.connectorContentMatches -ne $true -or $offlineSnapshotEvidence.appToolContentMatches -ne $true) {
+                    Add-Failure "plugin capability failure offline snapshot evidence is not clean"
+                }
+                $pluginFailureSamples = @(As-FlatArray $pluginCapabilityFailure.reportFailureSamples | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+                $pluginFailureCodes = @(As-FlatArray $pluginCapabilityFailure.reportFailureSampleCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+                if ($pluginFailureSamples.Count -gt 0 -and $pluginFailureCodes.Count -lt 1) {
+                    Add-Failure "plugin capability failure missing sample codes"
+                }
+            }
             if (-not (Has-Property $releaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
             if (-not (Has-Property $releaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
