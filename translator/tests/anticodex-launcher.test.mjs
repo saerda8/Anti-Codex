@@ -6975,6 +6975,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /\[switch\]\$VerifyBundle/);
   assert.match(diagnostics, /\[string\]\$VerifyReportsSummary/);
   assert.match(diagnostics, /function Test-ReportsSummary/);
+  assert.match(diagnostics, /function Test-ReleaseGateApprovalAndOfflineEvidence/);
+  assert.ok((diagnostics.match(/Test-ReleaseGateApprovalAndOfflineEvidence \$releaseGatesSummary/g) || []).length >= 2);
   assert.match(diagnostics, /reports summary file missing/);
   assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
   assert.match(diagnostics, /"-BaseUrl", \$BaseUrl, "-NoPopup"/);
@@ -7022,13 +7024,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /releaseGateFailures/);
   assert.match(diagnostics, /plugin capability failure missing offline snapshot evidence/);
-  assert.ok((diagnostics.match(/plugin capability failure offline refresh gate is not satisfied/g) || []).length >= 2);
-  assert.ok((diagnostics.match(/plugin capability failure offline refresh selected file missing/g) || []).length >= 2);
+  assert.match(diagnostics, /plugin capability failure offline refresh gate is not satisfied/);
+  assert.match(diagnostics, /plugin capability failure offline refresh selected file missing/);
   assert.match(diagnostics, /plugin capability failure missing sample codes/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
-  assert.ok((diagnostics.match(/release-gates approval plan is not an object/g) || []).length >= 2);
-  assert.ok((diagnostics.match(/release-gates approval plan invalid real-traffic count/g) || []).length >= 2);
+  assert.match(diagnostics, /release-gates approval plan is not an object/);
+  assert.match(diagnostics, /release-gates approval plan invalid real-traffic count/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
   assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);
