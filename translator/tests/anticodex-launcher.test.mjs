@@ -7241,6 +7241,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         offlineSnapshotEvidence: {
           connectorContentMatches: true,
           appToolContentMatches: true,
+          refreshGateSatisfied: true,
+          refreshSelectedFile: "latest-refresh-features.json",
         },
       }],
       nextActions: [{
@@ -7285,6 +7287,132 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.diagnostics, null);
     assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects null approval plan object", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-null-plan-object-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["pluginCapabilities"],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities"],
+      releaseGateFailureReasons: [],
+      nextActions: [{
+        id: "pluginCapabilities",
+        requiresGatewayStart: true,
+        requiresRealTraffic: false,
+        highImpact: false,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      approvalPlan: null,
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates approval plan is not an object"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects weak plugin offline snapshot evidence", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-plugin-offline-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["pluginCapabilities"],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities"],
+      releaseGateFailureReasons: [{
+        id: "pluginCapabilities",
+        reportFailureSamples: ["health request failed"],
+        reportFailureSampleCodes: ["local_gateway_offline"],
+        offlineSnapshotEvidence: {
+          connectorContentMatches: true,
+          appToolContentMatches: true,
+          refreshGateSatisfied: false,
+          refreshSelectedFile: "",
+        },
+      }],
+      nextActions: [],
+      approvalPlan: {
+        actionCount: 0,
+        blockedCount: 0,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        firstBlockedAction: "",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("plugin capability failure offline refresh gate is not satisfied"));
+    assert.ok(payload.failures.includes("plugin capability failure offline refresh selected file missing"));
+    assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

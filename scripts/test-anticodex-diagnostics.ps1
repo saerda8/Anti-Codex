@@ -99,6 +99,13 @@ function Test-ReportsSummary {
                 Add-Failure "plugin capability failure missing offline snapshot evidence"
             } elseif ($offlineSnapshotEvidence.connectorContentMatches -ne $true -or $offlineSnapshotEvidence.appToolContentMatches -ne $true) {
                 Add-Failure "plugin capability failure offline snapshot evidence is not clean"
+            } else {
+                if ($offlineSnapshotEvidence.refreshGateSatisfied -ne $true) {
+                    Add-Failure "plugin capability failure offline refresh gate is not satisfied"
+                }
+                if ([string]::IsNullOrWhiteSpace([string]$offlineSnapshotEvidence.refreshSelectedFile)) {
+                    Add-Failure "plugin capability failure offline refresh selected file missing"
+                }
             }
             $pluginFailureSamples = @(As-FlatArray $pluginCapabilityFailure.reportFailureSamples | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
             $pluginFailureCodes = @(As-FlatArray $pluginCapabilityFailure.reportFailureSampleCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
@@ -134,7 +141,9 @@ function Test-ReportsSummary {
             }
         }
         $approvalPlan = $releaseGatesSummary.approvalPlan
-        if ($approvalPlan) {
+        if (-not $approvalPlan -or $approvalPlan -isnot [pscustomobject]) {
+            Add-Failure "release-gates approval plan is not an object"
+        } else {
             $approvalActionCount = Get-NonNegativeIntProperty $approvalPlan "actionCount" "release-gates approval plan missing action count" "release-gates approval plan invalid action count"
             if ($null -ne $approvalActionCount -and $approvalActionCount -ne $nextActions.Count) {
                 Add-Failure "release-gates approval plan action count mismatch"
