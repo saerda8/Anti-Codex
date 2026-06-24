@@ -2274,6 +2274,10 @@ function latestManagerReportItem(label, fileName) {
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
     const appTools = report?.appTools && typeof report.appTools === "object" ? report.appTools : null;
     const appToolRegistry = appTools?.registry && typeof appTools.registry === "object" ? appTools.registry : null;
+    const mcpRealList = Array.isArray(mcp?.smoke?.realList) ? mcp.smoke.realList : null;
+    const mcpRealListPassed = mcpRealList ? mcpRealList.filter((entry) => entry && entry.passed === true).length : null;
+    const mcpRealListToolCount = mcpRealList ? mcpRealList.reduce((total, entry) => total + (Number.isFinite(Number(entry?.toolCount)) ? Number(entry.toolCount) : 0), 0) : null;
+    const mcpRealListServers = mcpRealList ? mcpRealList.map((entry) => shortSafeText(entry?.server || "", "")).filter(Boolean) : [];
     const realAntigravityEvidence = report?.realAntigravityEvidence && typeof report.realAntigravityEvidence === "object" ? report.realAntigravityEvidence : null;
     const toolBridge = report?.toolBridge && typeof report.toolBridge === "object" ? report.toolBridge : null;
     const compatibilityTools = report?.compatibilityTools && typeof report.compatibilityTools === "object" ? report.compatibilityTools : null;
@@ -2440,12 +2444,15 @@ function latestManagerReportItem(label, fileName) {
         firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
         managerButtonOk: managerButton ? managerButton.ok === true : null,
         managerButtonResults,
+        shortBudgetMode: typeof report?.shortBudgetMode === "boolean" ? report.shortBudgetMode : null,
         sourceSnapshotEvidence: report?.sourceSnapshot && typeof report.sourceSnapshot === "object" ? {
             fingerprint: shortSafeText(report.sourceSnapshot.fingerprint || "", ""),
             sourceMtimeMax: shortSafeText(report.sourceSnapshot.sourceMtimeMax || "", ""),
             fileCount: Number.isFinite(Number(report.sourceSnapshot.fileCount)) ? Number(report.sourceSnapshot.fileCount) : null,
             cacheHitCount: Number.isFinite(Number(report.sourceSnapshot.cacheHitCount)) ? Number(report.sourceSnapshot.cacheHitCount) : null,
             cacheMissCount: Number.isFinite(Number(report.sourceSnapshot.cacheMissCount)) ? Number(report.sourceSnapshot.cacheMissCount) : null,
+            reusedFromPreviousReport: typeof report.sourceSnapshot.reusedFromPreviousReport === "boolean" ? report.sourceSnapshot.reusedFromPreviousReport : null,
+            refreshSkippedReason: shortSafeText(report.sourceSnapshot.refreshSkippedReason || "", ""),
         } : null,
         logDbGuardEvidence: isLogDbGuardReport ? {
             reportName: shortSafeText(report?.reportName || "", ""),
@@ -2673,6 +2680,10 @@ function latestManagerReportItem(label, fileName) {
             hasNodeRepl: mcp?.hasNodeRepl === true,
             mcpSmokePassed: mcp?.smoke?.passed === true,
             mcpRealCallPassed: mcp?.smoke?.realCall?.passed === true,
+            mcpRealListCount: mcpRealList ? mcpRealList.length : null,
+            mcpRealListPassed,
+            mcpRealListToolCount,
+            mcpRealListServers,
             skillCount: Number.isFinite(Number(skills?.count)) ? Number(skills.count) : null,
             skillSharedCount: Number.isFinite(Number(skills?.sharedCount)) ? Number(skills.sharedCount) : null,
             agentsSkillCount: Number.isFinite(Number(skills?.agentsCount)) ? Number(skills.agentsCount) : null,
@@ -2686,10 +2697,11 @@ function latestManagerReportItem(label, fileName) {
             duplicateSkillCount: Array.isArray(skills?.duplicateNames) ? skills.duplicateNames.length : null,
             conflictingDuplicateSkillCount: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.length : null,
             conflictingDuplicateSkillSample: Array.isArray(skills?.conflictingDuplicateNames) ? skills.conflictingDuplicateNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            skillFingerprintSkipped: typeof skills?.fingerprintSkipped === "boolean" ? skills.fingerprintSkipped : null,
             skillSmokeReadable: skills?.smoke?.readable === true,
             appToolRegistryExists: appToolRegistry ? appToolRegistry.exists === true : null,
             appToolRegistryContentMatches: appToolRegistry ? appToolRegistry.contentMatches === true : null,
-            appToolRegistryFingerprintMatches: appToolRegistry ? shortSafeText(appToolRegistry.sharedFingerprint || "", "") === shortSafeText(appToolRegistry.localFingerprint || "", "") : null,
+            appToolRegistryFingerprintMatches: appToolRegistry ? !!shortSafeText(appToolRegistry.sharedFingerprint || "", "") && !!shortSafeText(appToolRegistry.localFingerprint || "", "") && shortSafeText(appToolRegistry.sharedFingerprint || "", "") === shortSafeText(appToolRegistry.localFingerprint || "", "") : null,
             appToolRegistrySharedFileCount: Number.isFinite(Number(appToolRegistry?.sharedFileCount)) ? Number(appToolRegistry.sharedFileCount) : null,
             appToolRegistryLocalFileCount: Number.isFinite(Number(appToolRegistry?.localFileCount)) ? Number(appToolRegistry.localFileCount) : null,
         } : null,
@@ -3698,12 +3710,14 @@ function latestReportsSummary(result){
     if(item.mcpSkillEvidence){
       const evidence=item.mcpSkillEvidence;
       const mcpClean=evidence.mcpMissingSharedCount===0&&evidence.mcpExtraLocalCount===0&&evidence.mcpChangedSharedCount===0&&evidence.hasNodeRepl===true;
-      const skillClean=evidence.missingSharedSkillCount===0&&(evidence.changedSharedSkillCount??0)===0&&evidence.conflictingDuplicateSkillCount===0&&evidence.skillSmokeReadable===true;
+      const realListClean=evidence.mcpRealListCount==null||(evidence.mcpRealListCount>=2&&evidence.mcpRealListPassed===evidence.mcpRealListCount);
+      const skillClean=evidence.missingSharedSkillCount===0&&(evidence.changedSharedSkillCount??0)===0&&evidence.conflictingDuplicateSkillCount===0&&evidence.skillSmokeReadable===true&&realListClean;
       const hashCache=(evidence.hashCacheHitCount!=null||evidence.hashCacheMissCount!=null)?(" / hashCache="+(evidence.hashCacheHitCount??"unknown")+"/"+(evidence.hashCacheMissCount??"unknown")):"";
+      const realList=(evidence.mcpRealListCount!=null||evidence.mcpRealListPassed!=null)?(" / list "+(evidence.mcpRealListPassed??"\\u672a\\u77e5")+"/"+(evidence.mcpRealListCount??"\\u672a\\u77e5")+" tools="+(evidence.mcpRealListToolCount??"\\u672a\\u77e5")):"";
       lines.push("  MCP/Skill \\u8bc1\\u636e\\uff1aMCP "+(evidence.mcpCount??"\\u672a\\u77e5")+"/"+(evidence.mcpSharedCount??"\\u672a\\u77e5")+" / skills "+(evidence.skillCount??"\\u672a\\u77e5")+"/"+(evidence.expectedSharedSkillCount??"\\u672a\\u77e5")+" / agents "+(evidence.agentsSkillCount??"\\u672a\\u77e5")+hashCache);
-      lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / real "+(evidence.mcpRealCallPassed?"ok":"?")+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
+      lines.push("  MCP/Skill parity: "+(mcpClean&&skillClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406")+" / smoke "+(evidence.mcpSmokePassed?"MCP ok":"MCP ?")+" / real "+(evidence.mcpRealCallPassed?"ok":"?")+realList+" / skill "+(evidence.skillSmokeReadable?"ok":"?"));
       if(evidence.appToolRegistryExists!==null&&evidence.appToolRegistryExists!==undefined){
-        const registryClean=evidence.appToolRegistryExists===true&&evidence.appToolRegistryContentMatches===true&&evidence.appToolRegistryFingerprintMatches===true&&(evidence.appToolRegistrySharedFileCount==null||evidence.appToolRegistryLocalFileCount==null||evidence.appToolRegistrySharedFileCount===evidence.appToolRegistryLocalFileCount);
+        const registryClean=evidence.appToolRegistryExists===true&&evidence.appToolRegistryContentMatches===true&&evidence.appToolRegistryFingerprintMatches===true&&evidence.appToolRegistrySharedFileCount!=null&&evidence.appToolRegistryLocalFileCount!=null&&evidence.appToolRegistrySharedFileCount===evidence.appToolRegistryLocalFileCount;
         lines.push("  app-tool registry: "+(registryClean?"ok":"\\u9700\\u5904\\u7406")+" / files="+(evidence.appToolRegistrySharedFileCount??"\\u672a\\u77e5")+"/"+(evidence.appToolRegistryLocalFileCount??"\\u672a\\u77e5")+" / content="+(evidence.appToolRegistryContentMatches?"match":"mismatch")+" / fingerprint="+(evidence.appToolRegistryFingerprintMatches?"match":"mismatch"));
       }
       if(Array.isArray(evidence.mcpMissingSharedSample)&&evidence.mcpMissingSharedSample.length) lines.push("  MCP missing: "+evidence.mcpMissingSharedSample.join(", "));

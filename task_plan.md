@@ -1566,3 +1566,11 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: static Manager contracts now guard the provider-continuity marker-count display, not only the `markerThresholds` boolean.
 - Completed: UI-state self-test now checks both injected Manager and fallback Manager for `providerContinuity: turns=... / markers=...` evidence.
 - Verification: UI-state syntax/self-test passed; focused provider/Manager launcher contracts passed `129/129`; `git diff --check` passed; no real traffic or restart was used.
+
+## 2026-06-24 MCP/Skill Real List Evidence Visibility
+- Completed: MCP/Skill summaries now preserve real worker `tools/list` count, passed count, total tool count, server names, short-budget source snapshot reuse, and `skills.fingerprintSkipped` evidence.
+- Completed: diagnostics now rejects MCP/Skill summaries that lose real `tools/list` evidence, short-budget reuse proof, short-budget fingerprint-skip proof, or complete app-tool registry file-count evidence.
+- Completed: external Manager bridge, injected Manager, fallback Manager support summaries, and UI static guards now display real MCP list evidence and require app-tool registry fingerprints/file counts to be present before showing registry parity as clean.
+- Completed: plugin/app action summaries now distinguish callable tools, accessible connectors with no tools, and metadata-only/no-access connector state, so local allowlist metadata is not presented as authorization.
+- Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `129/129`; real current MCP/Skill summary showed `realList 2/2`, `tools=12`, servers `antigravity-code-worker` and `deepseek-code-worker`; strict passive release gate returned `shortReady:true` and installed runtime `59/59`.
+- Note: direct diagnostics verifier could not contact `http://127.0.0.1:8484`, so no live diagnostics bundle was refreshed; this was not treated as a product failure.

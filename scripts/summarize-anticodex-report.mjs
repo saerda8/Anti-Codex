@@ -108,6 +108,12 @@ const mcp = report && report.mcp ? report.mcp : null;
 const skills = report && report.skills ? report.skills : null;
 const appTools = report && report.appTools ? report.appTools : null;
 const appToolRegistry = appTools && appTools.registry ? appTools.registry : null;
+const mcpRealList = mcp && mcp.smoke && Array.isArray(mcp.smoke.realList) ? mcp.smoke.realList : null;
+const mcpRealListPassed = mcpRealList ? mcpRealList.filter((entry) => entry && entry.passed === true).length : null;
+const mcpRealListToolCount = mcpRealList
+  ? mcpRealList.reduce((total, entry) => total + (Number.isFinite(Number(entry?.toolCount)) ? Number(entry.toolCount) : 0), 0)
+  : null;
+const mcpRealListServers = mcpRealList ? mcpRealList.map((entry) => asString(entry?.server)).filter(Boolean) : [];
 const realAntigravityEvidence = report && report.realAntigravityEvidence ? report.realAntigravityEvidence : null;
 const toolBridge = report && report.toolBridge ? report.toolBridge : null;
 const compatibilityTools = report && report.compatibilityTools ? report.compatibilityTools : null;
@@ -223,6 +229,7 @@ const summary = {
   ok: has(report, "ok") ? report.ok : null,
   effectiveOk: isReleaseGateReport ? releaseGateEffectiveOk : (has(report, "ok") ? report.ok : null),
   reportName: has(report, "reportName") ? asString(report.reportName) : null,
+  shortBudgetMode: boolField(report, "shortBudgetMode"),
   skipFullRegression: boolField(report, "skipFullRegression"),
   failureCount,
   elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
@@ -405,6 +412,8 @@ const summary = {
     fileCount: has(report.sourceSnapshot, "fileCount") ? report.sourceSnapshot.fileCount : null,
     cacheHitCount: has(report.sourceSnapshot, "cacheHitCount") ? report.sourceSnapshot.cacheHitCount : null,
     cacheMissCount: has(report.sourceSnapshot, "cacheMissCount") ? report.sourceSnapshot.cacheMissCount : null,
+    reusedFromPreviousReport: has(report.sourceSnapshot, "reusedFromPreviousReport") ? !!report.sourceSnapshot.reusedFromPreviousReport : null,
+    refreshSkippedReason: has(report.sourceSnapshot, "refreshSkippedReason") ? asString(report.sourceSnapshot.refreshSkippedReason) : null,
   } : null,
   logDbGuardEvidence: isLogDbGuardReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,
@@ -543,27 +552,39 @@ const summary = {
     mcpCount: mcp && has(mcp, "count") ? mcp.count : null,
     mcpSharedCount: mcp && has(mcp, "sharedCount") ? mcp.sharedCount : null,
     mcpMissingShared: mcp && has(mcp, "missingShared") ? asStringArray(mcp.missingShared) : [],
+    mcpMissingSharedCount: mcp && has(mcp, "missingShared") ? asStringArray(mcp.missingShared).length : null,
     mcpExtraLocal: mcp && has(mcp, "extraLocal") ? asStringArray(mcp.extraLocal) : [],
+    mcpExtraLocalCount: mcp && has(mcp, "extraLocal") ? asStringArray(mcp.extraLocal).length : null,
     mcpChangedShared: mcp && has(mcp, "changedShared") ? asStringArray(mcp.changedShared) : [],
+    mcpChangedSharedCount: mcp && has(mcp, "changedShared") ? asStringArray(mcp.changedShared).length : null,
     mcpChangedSharedDetails: mcp && Array.isArray(mcp.changedSharedDetails) ? mcp.changedSharedDetails : [],
     hasNodeRepl: mcp ? boolField(mcp, "hasNodeRepl") : null,
     mcpSmokePassed: mcp && mcp.smoke ? boolField(mcp.smoke, "passed") : null,
     mcpRealCallPassed: mcp && mcp.smoke && mcp.smoke.realCall ? boolField(mcp.smoke.realCall, "passed") : null,
+    mcpRealListCount: mcpRealList ? mcpRealList.length : null,
+    mcpRealListPassed,
+    mcpRealListToolCount,
+    mcpRealListServers,
     skillCount: skills && has(skills, "count") ? skills.count : null,
     skillSharedCount: skills && has(skills, "sharedCount") ? skills.sharedCount : null,
     agentsSkillCount: skills && has(skills, "agentsCount") ? skills.agentsCount : null,
     expectedSharedSkillCount: skills && has(skills, "expectedSharedCount") ? skills.expectedSharedCount : null,
     missingSharedSkills: skills && has(skills, "missingShared") ? asStringArray(skills.missingShared) : [],
+    missingSharedSkillCount: skills && has(skills, "missingShared") ? asStringArray(skills.missingShared).length : null,
     extraLocalSkills: skills && has(skills, "extraLocal") ? asStringArray(skills.extraLocal) : [],
+    extraLocalSkillCount: skills && has(skills, "extraLocal") ? asStringArray(skills.extraLocal).length : null,
     changedSharedSkills: skills && has(skills, "changedShared") ? asStringArray(skills.changedShared) : [],
+    changedSharedSkillCount: skills && has(skills, "changedShared") ? asStringArray(skills.changedShared).length : null,
     changedSharedSkillDetails: skills && Array.isArray(skills.changedSharedDetails) ? skills.changedSharedDetails : [],
     duplicateSkillNames: skills && has(skills, "duplicateNames") ? asStringArray(skills.duplicateNames) : [],
     conflictingDuplicateSkillNames: skills && has(skills, "conflictingDuplicateNames") ? asStringArray(skills.conflictingDuplicateNames) : [],
+    conflictingDuplicateSkillCount: skills && has(skills, "conflictingDuplicateNames") ? asStringArray(skills.conflictingDuplicateNames).length : null,
+    skillFingerprintSkipped: skills && has(skills, "fingerprintSkipped") ? !!skills.fingerprintSkipped : null,
     skillSmokeReadable: skills && skills.smoke ? boolField(skills.smoke, "readable") : null,
     appToolRegistryExists: appToolRegistry ? boolField(appToolRegistry, "exists") : null,
     appToolRegistryContentMatches: appToolRegistry ? boolField(appToolRegistry, "contentMatches") : null,
     appToolRegistryFingerprintMatches: appToolRegistry
-      ? asString(appToolRegistry.sharedFingerprint) === asString(appToolRegistry.localFingerprint)
+      ? !!asString(appToolRegistry.sharedFingerprint) && !!asString(appToolRegistry.localFingerprint) && asString(appToolRegistry.sharedFingerprint) === asString(appToolRegistry.localFingerprint)
       : null,
     appToolRegistrySharedFileCount: appToolRegistry && has(appToolRegistry, "sharedFileCount") ? appToolRegistry.sharedFileCount : null,
     appToolRegistryLocalFileCount: appToolRegistry && has(appToolRegistry, "localFileCount") ? appToolRegistry.localFileCount : null,

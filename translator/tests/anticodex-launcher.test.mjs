@@ -759,6 +759,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /mcpSmokePassed/);
   assert.match(managerBridge, /mcpRealCallPassed/);
   assert.match(managerInject, /mcpRealCallPassed/);
+  assert.match(managerBridge, /mcpRealListCount/);
+  assert.match(managerInject, /mcpRealListCount/);
+  assert.match(managerBridge, /mcpRealListPassed/);
+  assert.match(managerInject, /mcpRealListPassed/);
+  assert.match(managerBridge, /mcpRealListToolCount/);
+  assert.match(managerInject, /mcpRealListToolCount/);
+  assert.match(managerBridge, /list \$\{evidence\.mcpRealListPassed/);
+  assert.match(managerInject, /list \$\{evidence\.mcpRealListPassed/);
   assert.match(managerBridge, /agentsSkillCount/);
   assert.match(managerInject, /agentsSkillCount/);
   assert.match(managerBridge, /hashCacheHitCount/);
@@ -771,6 +779,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /appToolRegistryFingerprintMatches/);
   assert.match(managerBridge, /app-tool registry:/);
   assert.match(managerInject, /app-tool registry:/);
+  assert.match(managerBridge, /const callableSummary = appTools > 0/);
+  assert.match(managerInject, /const callableSummary = appTools > 0/);
+  assert.match(managerBridge, /metadata-only/);
+  assert.match(managerInject, /metadata-only/);
   assert.match(managerBridge, /mcpMissingSharedSample/);
   assert.match(managerInject, /mcpMissingSharedSample/);
   assert.match(managerBridge, /mcpExtraLocalSample/);
@@ -2180,6 +2192,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /conflictingDuplicateSkillCount/);
   assert.match(server, /expectedSharedSkillCount/);
   assert.match(server, /mcpRealCallPassed/);
+  assert.match(server, /mcpRealListCount/);
+  assert.match(server, /mcpRealListPassed/);
+  assert.match(server, /mcpRealListToolCount/);
+  assert.match(server, /list "\+\(evidence\.mcpRealListPassed/);
   assert.match(server, /appToolRegistryExists/);
   assert.match(server, /appToolRegistryContentMatches/);
   assert.match(server, /appToolRegistryFingerprintMatches/);
@@ -2552,6 +2568,12 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /appToolGetPostMissingFromGet/);
   assert.match(reportSummarizer, /mcpSkillEvidence/);
   assert.match(reportSummarizer, /mcpRealCallPassed/);
+  assert.match(reportSummarizer, /mcpRealListCount/);
+  assert.match(reportSummarizer, /mcpRealListPassed/);
+  assert.match(reportSummarizer, /mcpRealListToolCount/);
+  assert.match(reportSummarizer, /mcpRealListServers/);
+  assert.match(reportSummarizer, /reusedFromPreviousReport/);
+  assert.match(reportSummarizer, /skillFingerprintSkipped/);
   assert.match(reportSummarizer, /expectedSharedSkillCount/);
   assert.match(reportSummarizer, /appToolRegistryContentMatches/);
   assert.match(reportSummarizer, /appToolRegistryFingerprintMatches/);
@@ -2601,9 +2623,19 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     writeFileSync(reportPath, JSON.stringify({
       ok: true,
       reportName: "mcp-skills",
+      shortBudgetMode: true,
       failures: [],
       baseUrl: "http://127.0.0.1:8484",
       hashCache: { hitCount: 12000, missCount: 42, entryCount: 12042 },
+      sourceSnapshot: {
+        fingerprint: "source-fp",
+        sourceMtimeMax: "2026-06-24T00:00:00.000Z",
+        fileCount: 15589,
+        cacheHitCount: 12000,
+        cacheMissCount: 42,
+        reusedFromPreviousReport: true,
+        refreshSkippedReason: "short_budget_reused_previous_snapshot",
+      },
       mcp: {
         count: 3,
         sharedCount: 3,
@@ -2615,6 +2647,10 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         smoke: {
           passed: true,
           realCall: { passed: true },
+          realList: [
+            { server: "antigravity-code-worker", passed: true, toolCount: 6 },
+            { server: "deepseek-code-worker", passed: true, toolCount: 6 },
+          ],
         },
       },
       skills: {
@@ -2628,6 +2664,7 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         changedSharedDetails: [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }],
         duplicateNames: ["dupe-skill"],
         conflictingDuplicateNames: ["dupe-skill"],
+        fingerprintSkipped: true,
         smoke: { readable: true },
       },
       appTools: {
@@ -2656,6 +2693,10 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(summary.mcpSkillEvidence.hasNodeRepl, true);
     assert.equal(summary.mcpSkillEvidence.mcpSmokePassed, true);
     assert.equal(summary.mcpSkillEvidence.mcpRealCallPassed, true);
+    assert.equal(summary.mcpSkillEvidence.mcpRealListCount, 2);
+    assert.equal(summary.mcpSkillEvidence.mcpRealListPassed, 2);
+    assert.equal(summary.mcpSkillEvidence.mcpRealListToolCount, 12);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpRealListServers, ["antigravity-code-worker", "deepseek-code-worker"]);
     assert.equal(summary.mcpSkillEvidence.skillCount, 126);
     assert.equal(summary.mcpSkillEvidence.skillSharedCount, 100);
     assert.equal(summary.mcpSkillEvidence.agentsSkillCount, 26);
@@ -2666,12 +2707,16 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.deepEqual(summary.mcpSkillEvidence.changedSharedSkillDetails, [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }]);
     assert.deepEqual(summary.mcpSkillEvidence.duplicateSkillNames, ["dupe-skill"]);
     assert.deepEqual(summary.mcpSkillEvidence.conflictingDuplicateSkillNames, ["dupe-skill"]);
+    assert.equal(summary.mcpSkillEvidence.skillFingerprintSkipped, true);
     assert.equal(summary.mcpSkillEvidence.skillSmokeReadable, true);
     assert.equal(summary.mcpSkillEvidence.appToolRegistryExists, true);
     assert.equal(summary.mcpSkillEvidence.appToolRegistryContentMatches, true);
     assert.equal(summary.mcpSkillEvidence.appToolRegistryFingerprintMatches, true);
     assert.equal(summary.mcpSkillEvidence.appToolRegistrySharedFileCount, 36);
     assert.equal(summary.mcpSkillEvidence.appToolRegistryLocalFileCount, 36);
+    assert.equal(summary.shortBudgetMode, true);
+    assert.equal(summary.sourceSnapshotEvidence.reusedFromPreviousReport, true);
+    assert.equal(summary.sourceSnapshotEvidence.refreshSkippedReason, "short_budget_reused_previous_snapshot");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5873,6 +5918,7 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /manager page source contains mojibake text/);
   assert.match(uiScript, /in-app manager is missing MCP\/Skill app-tool registry evidence/);
   assert.match(uiScript, /manager page is missing MCP\/Skill app-tool registry evidence/);
+  assert.match(uiScript, /plugin\/app action summary can hide metadata-only/);
   assert.match(uiScript, /managerProbeAttempt/);
   assert.match(uiScript, /exceptionDetails/);
   assert.match(uiScript, /manager overlay probe did not return a value/);
@@ -6182,7 +6228,12 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /appToolGetPostMissingFromGet/);
   assert.match(diagnostics, /appToolRegistryContentMatches/);
   assert.match(diagnostics, /appToolRegistryFingerprintMatches/);
+  assert.match(diagnostics, /mcpRealListCount/);
+  assert.match(diagnostics, /MCP\/Skill summary missing MCP real tools\/list count evidence/);
+  assert.match(diagnostics, /MCP\/Skill short-budget summary missing reused source snapshot proof/);
+  assert.match(diagnostics, /MCP\/Skill short-budget summary missing skill fingerprint skipped proof/);
   assert.match(diagnostics, /MCP\/Skill summary app-tool registry content mismatch/);
+  assert.match(diagnostics, /MCP\/Skill summary app-tool registry missing shared file count/);
   assert.match(diagnostics, /MCP\/Skill summary missing mcpSkillEvidence/);
   assert.match(diagnostics, /MCP\/Skill summary has extra local MCP entries/);
   assert.match(diagnostics, /MCP\/Skill summary has changed shared MCP entries/);

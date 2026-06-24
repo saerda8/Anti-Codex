@@ -398,12 +398,14 @@ function latestReportsSummary(result) {
     }
     if (item.mcpSkillEvidence) {
       const evidence = item.mcpSkillEvidence;
-      const clean = evidence.mcpMissingSharedCount === 0 && evidence.mcpExtraLocalCount === 0 && evidence.mcpChangedSharedCount === 0 && evidence.missingSharedSkillCount === 0 && (evidence.changedSharedSkillCount ?? 0) === 0 && evidence.conflictingDuplicateSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true;
+      const realListClean = evidence.mcpRealListCount == null || (evidence.mcpRealListCount >= 2 && evidence.mcpRealListPassed === evidence.mcpRealListCount);
+      const clean = evidence.mcpMissingSharedCount === 0 && evidence.mcpExtraLocalCount === 0 && evidence.mcpChangedSharedCount === 0 && evidence.missingSharedSkillCount === 0 && (evidence.changedSharedSkillCount ?? 0) === 0 && evidence.conflictingDuplicateSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true && realListClean;
       const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
+      const realList = evidence.mcpRealListCount != null || evidence.mcpRealListPassed != null ? ` / list ${evidence.mcpRealListPassed ?? "\u672a\u77e5"}/${evidence.mcpRealListCount ?? "\u672a\u77e5"} tools=${evidence.mcpRealListToolCount ?? "\u672a\u77e5"}` : "";
       lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}${hashCache}`);
-      lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
+      lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"}${realList} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
       if (evidence.appToolRegistryExists !== null && evidence.appToolRegistryExists !== undefined) {
-        const registryClean = evidence.appToolRegistryExists === true && evidence.appToolRegistryContentMatches === true && evidence.appToolRegistryFingerprintMatches === true && (evidence.appToolRegistrySharedFileCount == null || evidence.appToolRegistryLocalFileCount == null || evidence.appToolRegistrySharedFileCount === evidence.appToolRegistryLocalFileCount);
+        const registryClean = evidence.appToolRegistryExists === true && evidence.appToolRegistryContentMatches === true && evidence.appToolRegistryFingerprintMatches === true && evidence.appToolRegistrySharedFileCount != null && evidence.appToolRegistryLocalFileCount != null && evidence.appToolRegistrySharedFileCount === evidence.appToolRegistryLocalFileCount;
         lines.push(`  app-tool registry: ${registryClean ? "ok" : "\u9700\u5904\u7406"} / files=${evidence.appToolRegistrySharedFileCount ?? "\u672a\u77e5"}/${evidence.appToolRegistryLocalFileCount ?? "\u672a\u77e5"} / content=${evidence.appToolRegistryContentMatches ? "match" : "mismatch"} / fingerprint=${evidence.appToolRegistryFingerprintMatches ? "match" : "mismatch"}`);
       }
       if (Array.isArray(evidence.mcpMissingSharedSample) && evidence.mcpMissingSharedSample.length) lines.push(`  MCP missing: ${evidence.mcpMissingSharedSample.join(", ")}`);
@@ -525,16 +527,24 @@ function managerSummary(action, payload) {
   if (action === "mcpSkills") return [
     `MCP/Skill \u6e05\u5355\u53ef\u89c1\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
     `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
-    `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${result.mcp?.smoke?.realCall?.passed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cSkill \u6587\u4ef6 ${result.skills?.smoke?.readable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
+    `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${result.mcp?.smoke?.realCall?.passed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cworker list ${Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList.filter((entry) => entry && entry.passed === true).length : "\u672a\u77e5"}/${Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList.length : "\u672a\u77e5"}\uff0cSkill \u6587\u4ef6 ${result.skills?.smoke?.readable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
   ].join("\n");
   if (action === "pluginCapabilities") {
     const capabilities = result.capabilities || {};
     const appTools = capabilities.appToolCount ?? 0;
+    const accessibleConnectors = capabilities.accessibleConnectorCount ?? 0;
+    const callableState = capabilities.smoke?.callableState || capabilities.callableState || "";
+    const capabilityState = capabilities.capabilityState || "";
+    const callableSummary = appTools > 0
+      ? `\u5e94\u7528\u5de5\u5177 ${appTools} / callable=${callableState || "ready"}`
+      : accessibleConnectors > 0
+        ? `\u5df2\u6388\u6743\u8fde\u63a5\u5668 ${accessibleConnectors} \u4f46\u672a\u53d1\u73b0\u53ef\u8c03\u7528\u5e94\u7528\u5de5\u5177 / callable=${callableState || "unknown"}`
+        : `\u65e0\u6388\u6743\u8fde\u63a5\u5668\uff0cmetadata-only \u4e0d\u4f2a\u88c5\u53ef\u8c03\u7528 / state=${capabilityState || "unknown"} / callable=${callableState || "unknown"}`;
     return [
       `\u63d2\u4ef6/\u5e94\u7528\u6e05\u5355\u53ef\u89c1\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
       `\u5df2\u5b89\u88c5\u63d2\u4ef6 ${capabilities.installedPluginCount ?? "\u672a\u77e5"} / \u8fde\u63a5\u5668 ${capabilities.connectorCount ?? "\u672a\u77e5"}`,
       `\u6295\u5f71 smoke\uff1a${capabilities.smoke?.endpointProjectionReadable ? "\u7aef\u70b9\u53ef\u8bfb" : "\u7aef\u70b9\u672a\u8bfb\u5230"}\uff0c\u7f13\u5b58 ${capabilities.smoke?.connectorCache?.sampleReadable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
-      `\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a${appTools > 0 ? `\u5e94\u7528\u5de5\u5177 ${appTools}` : "\u672a\u6388\u6743\u8fde\u63a5\u5668\uff0c\u4e0d\u4f2a\u88c5\u53ef\u8c03\u7528\uff08\u6b63\u5e38\uff09"}`,
+      `\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a${callableSummary}`,
       capabilities.appToolsNote ? `\u8bf4\u660e\uff1a${capabilities.appToolsNote}` : "",
     ].filter(Boolean).join("\n");
   }
@@ -706,7 +716,7 @@ if (args.has("--self-test")) {
       label: "MCP/Skill",
       exists: true,
       ok: true,
-      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, hashCacheHitCount: 12000, hashCacheMissCount: 42, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, skillSmokeReadable: true, appToolRegistryExists: true, appToolRegistryContentMatches: true, appToolRegistryFingerprintMatches: true, appToolRegistrySharedFileCount: 36, appToolRegistryLocalFileCount: 36 },
+      mcpSkillEvidence: { mcpCount: 3, mcpSharedCount: 3, skillCount: 126, expectedSharedSkillCount: 126, agentsSkillCount: 26, hashCacheHitCount: 12000, hashCacheMissCount: 42, mcpMissingSharedCount: 0, mcpExtraLocalCount: 0, mcpChangedSharedCount: 0, missingSharedSkillCount: 0, conflictingDuplicateSkillCount: 0, hasNodeRepl: true, mcpSmokePassed: true, mcpRealCallPassed: true, mcpRealListCount: 2, mcpRealListPassed: 2, mcpRealListToolCount: 12, skillSmokeReadable: true, appToolRegistryExists: true, appToolRegistryContentMatches: true, appToolRegistryFingerprintMatches: true, appToolRegistrySharedFileCount: 36, appToolRegistryLocalFileCount: 36 },
     }, {
       label: "\u7b2c\u4e09\u65b9 provider \u8fde\u7eed\u6027",
       exists: true,
@@ -788,7 +798,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /providerContinuity: turns=9 \/ markers=15\/16\/18\/20/);
   assert.match(evidenceSummary, /previousIds: save=true \/ restart=true \/ provider=true \/ protocol=true \/ reverse=true/);
   assert.match(evidenceSummary, /orderedHistory: clean=true \/ counts=7\/8\/9\/10/);
-  assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ skill ok/);
+  assert.match(evidenceSummary, /MCP\/Skill parity: .+ \/ smoke MCP ok \/ real ok \/ list 2\/2 tools=12 \/ skill ok/);
   assert.match(evidenceSummary, /realProviderSmoke route: upstream-provider \/ openai-compatible \/ requested=real-model \/ resolved=real-model \/ status=success \/ redaction=true/);
   assert.match(evidenceSummary, /realProviderToAntigravityReturn: requested=true \/ used=true \/ history=true \/ previousId=true \/ markers=3 missing=0/);
   assert.match(evidenceSummary, /realProviderToAntigravityRoute: antigravity-desktop \/ antigravity-native \/ requested=gemini-pro-agent \/ resolved=gemini-pro-agent/);

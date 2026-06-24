@@ -499,6 +499,10 @@ function Test-DiagnosticBundle {
         if ($mcpSkillsSummary) {
             if ($mcpSkillsSummary.ok -ne $true) { Add-Failure "MCP/Skill summary ok=false" }
             if (-not $mcpSkillsSummary.sourceSnapshotEvidence) { Add-Failure "MCP/Skill summary missing source snapshot evidence" }
+            if ($mcpSkillsSummary.shortBudgetMode -eq $true) {
+                if ($mcpSkillsSummary.sourceSnapshotEvidence.reusedFromPreviousReport -ne $true) { Add-Failure "MCP/Skill short-budget summary missing reused source snapshot proof" }
+                if (-not [string]$mcpSkillsSummary.sourceSnapshotEvidence.refreshSkippedReason) { Add-Failure "MCP/Skill short-budget summary missing refresh skipped reason" }
+            }
             $mcpSkillEvidence = $mcpSkillsSummary.mcpSkillEvidence
             if (-not $mcpSkillEvidence) {
                 Add-Failure "MCP/Skill summary missing mcpSkillEvidence"
@@ -511,6 +515,9 @@ function Test-DiagnosticBundle {
                 if ($mcpSkillEvidence.hasNodeRepl -ne $true) { Add-Failure "MCP/Skill summary missing node_repl evidence" }
                 if ($mcpSkillEvidence.mcpSmokePassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP smoke evidence" }
                 if ($mcpSkillEvidence.mcpRealCallPassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP real-call evidence" }
+                if ([int]$mcpSkillEvidence.mcpRealListCount -lt 2) { Add-Failure "MCP/Skill summary missing MCP real tools/list count evidence" }
+                if ([int]$mcpSkillEvidence.mcpRealListPassed -lt 2) { Add-Failure "MCP/Skill summary missing MCP real tools/list passed evidence" }
+                if ([int]$mcpSkillEvidence.mcpRealListToolCount -lt 2) { Add-Failure "MCP/Skill summary missing MCP real tools/list tool count evidence" }
                 if ([int]$mcpSkillEvidence.skillCount -lt 1) { Add-Failure "MCP/Skill summary has no skills" }
                 if ([int]$mcpSkillEvidence.expectedSharedSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing expected shared skill count" }
                 if ([int]$mcpSkillEvidence.agentsSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing .agents skill count" }
@@ -518,10 +525,13 @@ function Test-DiagnosticBundle {
                 if (@($mcpSkillEvidence.extraLocalSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has extra local skills" }
                 if (@($mcpSkillEvidence.changedSharedSkills).Count -ne 0) { Add-Failure "MCP/Skill summary has changed shared skills" }
                 if (@($mcpSkillEvidence.conflictingDuplicateSkillNames).Count -ne 0) { Add-Failure "MCP/Skill summary has conflicting duplicate skills" }
+                if ($mcpSkillsSummary.shortBudgetMode -eq $true -and $mcpSkillEvidence.skillFingerprintSkipped -ne $true) { Add-Failure "MCP/Skill short-budget summary missing skill fingerprint skipped proof" }
                 if ($mcpSkillEvidence.skillSmokeReadable -ne $true) { Add-Failure "MCP/Skill summary missing skill smoke evidence" }
                 if ($mcpSkillEvidence.appToolRegistryExists -eq $true) {
                     if ($mcpSkillEvidence.appToolRegistryContentMatches -ne $true) { Add-Failure "MCP/Skill summary app-tool registry content mismatch" }
                     if ($mcpSkillEvidence.appToolRegistryFingerprintMatches -ne $true) { Add-Failure "MCP/Skill summary app-tool registry fingerprint mismatch" }
+                    if (-not (Has-Property $mcpSkillEvidence "appToolRegistrySharedFileCount") -or $null -eq $mcpSkillEvidence.appToolRegistrySharedFileCount) { Add-Failure "MCP/Skill summary app-tool registry missing shared file count" }
+                    if (-not (Has-Property $mcpSkillEvidence "appToolRegistryLocalFileCount") -or $null -eq $mcpSkillEvidence.appToolRegistryLocalFileCount) { Add-Failure "MCP/Skill summary app-tool registry missing local file count" }
                     if ([int]$mcpSkillEvidence.appToolRegistrySharedFileCount -ne [int]$mcpSkillEvidence.appToolRegistryLocalFileCount) { Add-Failure "MCP/Skill summary app-tool registry file counts differ" }
                 }
             }
