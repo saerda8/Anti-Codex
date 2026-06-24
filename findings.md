@@ -888,3 +888,4 @@
 - `rtk proxy` runs executables, not PowerShell built-in cmdlets. For `Get-Content` or similar cmdlets, invoke `powershell.exe -NoProfile -Command ...` through `rtk proxy` instead of passing the cmdlet name directly.
 - `apply_patch` resolves relative paths from the current thread workspace, not necessarily the repo subdirectory. In nested projects, use the full repo path or verify the working directory before patching project notes.
 - Real-traffic release-gate failures need explicit approval guidance, not just `stale_report` or `missing_report`. A passive gate may explain that the next proof requires starting/verifying Anti-Codex and refreshing real-traffic reports, but it must not run those verifiers by itself.
+- Keep git staging and commit as separate commands in this project. Chaining them with shell separators may succeed, but it weakens the review point between staged diff inspection and commit creation.
