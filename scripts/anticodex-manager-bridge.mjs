@@ -314,6 +314,7 @@ function latestReportsSummary(result) {
         const id = action?.id || "";
         const gateId = action?.gateId || fallbackGateId || id;
         const flags = [];
+        if (action?.reportOnly === true) flags.push("reportOnly");
         if (action?.blockedUntilExplicitUserApproval === true) flags.push("approval");
         if (action?.requiresGatewayStart === true) flags.push("gateway");
         if (action?.requiresRealTraffic === true) flags.push("realTraffic");
@@ -383,7 +384,7 @@ function latestReportsSummary(result) {
       if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} more)` : ""}`);
       if (item.approvalPlan) {
         const plan = item.approvalPlan;
-        lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+        lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
       }
       if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
         const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
@@ -822,12 +823,14 @@ if (args.has("--self-test")) {
         { id: "syncReadiness", group: "no-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], selectedFile: "latest-sync-readiness.json", reportFailureSampleCodes: ["stale_report"], reportFailureSamples: ["stale sync"], guidance: "rerun sync readiness", orderedActions: [{ id: "syncReadiness" }] },
       ],
       nextActions: [
+        { id: "releaseGateReportOnlyCheck", gateId: "postVerification", reportOnly: true },
         { id: "realWork", gateId: "realWork" },
         { id: "postVerification", gateId: "postVerification" },
         ...Array.from({ length: 8 }, (_, index) => ({ id: `action${index + 3}`, gateId: `gate${index + 3}` })),
       ],
       approvalPlan: {
-        actionCount: 2,
+        actionCount: 3,
+        reportOnlyCount: 1,
         blockedCount: 2,
         requiresGatewayStartCount: 2,
         requiresRealTrafficCount: 2,
@@ -910,10 +913,10 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ codes local_gateway_offline \/ sample gateway offline \| health timeout/);
   assert.match(evidenceSummary, /reportFailures: .*\(\+2 more\)/);
   assert.match(evidenceSummary, /guidance: .*\(\+1 more\)/);
-  assert.match(evidenceSummary, /nextActions: realWork:realWork -> postVerification:postVerification/);
-  assert.match(evidenceSummary, /nextActions: .*\(\+7 more\)/);
-  assert.match(evidenceSummary, /approvalPlan: actions=2 \/ blocked=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ required=1\/2 \/ phases=2 \/ first=realWork/);
-  assert.match(evidenceSummary, /approvalPlan: .*blocked=2 .*required=1\/2 .*phases=2/);
+  assert.match(evidenceSummary, /nextActions: postVerification:releaseGateReportOnlyCheck\[reportOnly\] -> realWork:realWork -> postVerification:postVerification/);
+  assert.match(evidenceSummary, /nextActions: .*\(\+8 more\)/);
+  assert.match(evidenceSummary, /approvalPlan: actions=3 \/ reportOnly=1 \/ blocked=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ required=1\/2 \/ phases=2 \/ first=realWork/);
+  assert.match(evidenceSummary, /approvalPlan: .*reportOnly=1 .*blocked=2 .*required=1\/2 .*phases=2/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);

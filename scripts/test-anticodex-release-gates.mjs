@@ -1138,6 +1138,7 @@ function action(id, phase, command, options = {}) {
     id,
     phase,
     command,
+    reportOnly: options.reportOnly === true,
     requiresGatewayStart: options.requiresGatewayStart === true,
     requiresRealTraffic: options.requiresRealTraffic === true,
     highImpact: options.highImpact === true,
@@ -1145,16 +1146,22 @@ function action(id, phase, command, options = {}) {
   };
 }
 
+function semanticReportOnlyAction(gate) {
+  if (!Array.isArray(gate?.failureReasons) || !gate.failureReasons.includes("semantic_failures")) return [];
+  return [action("releaseGateReportOnlyCheck", "report-only", "node scripts/test-anticodex-release-gates.mjs --strict", { reportOnly: true })];
+}
+
 function gateOrderedActions(gate) {
   if (gate?.group === "short" && !gate.satisfied && gate.id !== "pluginCapabilities") {
     const index = shortEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index >= 0) {
       const [id, phase, command, options] = shortEvidenceRefreshOrder[index];
-      return [action(id, phase, command, options || {})];
+      return [...semanticReportOnlyAction(gate), action(id, phase, command, options || {})];
     }
   }
   if (gate?.id === "pluginCapabilities" && !gate.satisfied) {
     return [
+      ...semanticReportOnlyAction(gate),
       action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }),
       action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45", { requiresGatewayStart: true }),
     ];
@@ -1163,30 +1170,31 @@ function gateOrderedActions(gate) {
     const index = managerEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command, options] = managerEvidenceRefreshOrder[index];
-    return [action(id, phase, command, options)];
+    return [...semanticReportOnlyAction(gate), action(id, phase, command, options)];
   }
   if (gate?.group === "no-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = noTrafficEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command, options] = noTrafficEvidenceRefreshOrder[index];
-    return [action(id, phase, command, options || {})];
+    return [...semanticReportOnlyAction(gate), action(id, phase, command, options || {})];
   }
   if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command] = realTrafficRefreshOrder[index];
-    return [action(id, phase, command, { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "postVerification"].includes(id) })];
+    return [...semanticReportOnlyAction(gate), action(id, phase, command, { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "postVerification"].includes(id) })];
   }
   if ((gate?.group === "soak" || gate?.group === "cold") && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = optionalEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command, options] = optionalEvidenceRefreshOrder[index];
-    return [action(id, phase, command, options)];
+    return [...semanticReportOnlyAction(gate), action(id, phase, command, options)];
   }
   return [];
 }
 
 const actionPhaseOrder = [
+  "report-only",
   "gateway-start",
   "short-local",
   "short-gateway",
@@ -1212,6 +1220,10 @@ function orderedNextActions(failureReasons) {
       requiredForShort: gate.requiredForShort === true,
       order: gateIndex * 100 + actionIndex,
     })))
+    .filter((item, index, array) => {
+      const key = item.reportOnly === true ? `${item.phase}:${item.id}` : `${item.gateId}:${item.id}`;
+      return array.findIndex((other) => (other.reportOnly === true ? `${other.phase}:${other.id}` : `${other.gateId}:${other.id}`) === key) === index;
+    })
     .sort((left, right) => {
       const leftPhase = actionPhaseOrder.indexOf(left.phase);
       const rightPhase = actionPhaseOrder.indexOf(right.phase);
@@ -1249,6 +1261,7 @@ function summarizeApprovalPlan(actions) {
     requiresGatewayStartCount: items.filter((item) => item.requiresGatewayStart === true).length,
     requiresRealTrafficCount: items.filter((item) => item.requiresRealTraffic === true).length,
     highImpactCount: items.filter((item) => item.highImpact === true).length,
+    reportOnlyCount: items.filter((item) => item.reportOnly === true).length,
     requiredForShortCount: items.filter((item) => item.requiredForShort === true).length,
     requiredForReleaseCount: items.filter((item) => item.requiredForRelease === true).length,
     firstBlockedAction: items.find((item) => item.blockedUntilExplicitUserApproval === true)?.id || "",
@@ -2608,6 +2621,7 @@ if (args.has("--self-test")) {
     const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");
     if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
     const postVerificationActions = gateOrderedActions(postVerificationGate);
+    if (!postVerificationActions.some((item) => item.reportOnly === true && item.requiresGatewayStart === false && item.requiresRealTraffic === false && item.blockedUntilExplicitUserApproval === false)) throw new Error("self-test failed: semantic failure report-only action was not attached before real traffic");
     if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not marked gateway and real-traffic");
     const realMiniActions = gateOrderedActions(reasonGates.find((item) => item.id === "realMiniTool"));
     if (!realMiniActions.some((item) => item.id === "realMiniTool" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realMiniTool ordered action was not marked gateway/high-impact");
@@ -2626,6 +2640,7 @@ if (args.has("--self-test")) {
     if (orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const approvalPlan = summarizeApprovalPlan(orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))));
+    if (approvalPlan.reportOnlyCount < 1) throw new Error("self-test failed: approval plan did not count report-only actions");
     if (approvalPlan.requiresGatewayStartCount < 1 || approvalPlan.requiresRealTrafficCount < 1 || approvalPlan.highImpactCount < 1 || approvalPlan.firstBlockedAction !== "startGatewayTranslatorOnly") {
       throw new Error("self-test failed: approval plan did not summarize gateway, real-traffic, and high-impact actions");
     }

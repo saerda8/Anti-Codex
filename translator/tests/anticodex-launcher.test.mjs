@@ -789,7 +789,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /blockedUntilExplicitUserApproval/);
   assert.match(managerInject, /blockedUntilExplicitUserApproval/);
   assert.match(managerServerSource, /blockedUntilExplicitUserApproval/);
-  for (const marker of ["approval", "gateway", "realTraffic", "highImpact"]) {
+  for (const marker of ["reportOnly", "approval", "gateway", "realTraffic", "highImpact"]) {
     assert.match(managerBridge, new RegExp(`flags\\.push\\("${marker}"\\)`));
     assert.match(managerInject, new RegExp(`flags\\.push\\("${marker}"\\)`));
     assert.match(managerServerSource, new RegExp(`flags\\.push\\("${marker}"\\)`));
@@ -808,6 +808,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /approvalPlan: actions=/);
   assert.match(managerInject, /approvalPlan: actions=/);
   assert.match(managerServerSource, /approvalPlan: actions=/);
+  assert.match(managerBridge, /reportOnly=\$\{plan\.reportOnlyCount/);
+  assert.match(managerInject, /reportOnly=\$\{plan\.reportOnlyCount/);
+  assert.match(managerServerSource, /reportOnly="\+\(plan\.reportOnlyCount/);
   assert.match(managerBridge, /approvalPlan: actions=.*blocked=/);
   assert.match(managerInject, /approvalPlan: actions=.*blocked=/);
   assert.match(managerServerSource, /approvalPlan: actions=.*blocked=/);
@@ -2671,6 +2674,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseGateFailureReasons/);
   assert.match(reportSummarizer, /approvalPlan/);
   assert.match(reportSummarizer, /asApprovalPlan/);
+  assert.match(reportSummarizer, /reportOnly/);
+  assert.match(reportSummarizer, /reportOnlyCount/);
   assert.match(reportSummarizer, /missingOptional/);
   assert.match(reportSummarizer, /reportFailureSampleCodes/);
   assert.match(reportSummarizer, /offlineSnapshotEvidence/);
@@ -8128,6 +8133,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /gateway_endpoint_unreachable/);
   assert.match(releaseGates, /local_gateway_offline/);
   assert.match(releaseGates, /blockedUntilExplicitUserApproval/);
+  assert.match(releaseGates, /reportOnly/);
+  assert.match(releaseGates, /reportOnlyCount/);
+  assert.match(releaseGates, /report-only/);
+  assert.match(releaseGates, /semantic failure report-only action was not attached before real traffic/);
+  assert.match(releaseGates, /approval plan did not count report-only actions/);
   assert.match(releaseGates, /offlineSnapshotEvidence/);
   assert.match(releaseGates, /plugin offline snapshot evidence was not attached from refresh-features/);
   assert.match(releaseGates, /pluginCapabilities still needs the local gateway for runtime endpoint evidence/);

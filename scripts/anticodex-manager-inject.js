@@ -923,6 +923,7 @@
           const id = action?.id || "";
           const gateId = action?.gateId || fallbackGateId || id;
           const flags = [];
+          if (action?.reportOnly === true) flags.push("reportOnly");
           if (action?.blockedUntilExplicitUserApproval === true) flags.push("approval");
           if (action?.requiresGatewayStart === true) flags.push("gateway");
           if (action?.requiresRealTraffic === true) flags.push("realTraffic");
@@ -992,7 +993,7 @@
         if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} more)` : ""}`);
         if (item.approvalPlan) {
           const plan = item.approvalPlan;
-          lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+          lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
         }
         if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
           const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");

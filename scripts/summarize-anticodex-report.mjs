@@ -27,6 +27,7 @@ function asOrderedActions(value) {
     ...(item?.gateId ? { gateId: asString(item.gateId) } : {}),
     phase: asString(item?.phase),
     command: asString(item?.command),
+    ...(item?.reportOnly === true ? { reportOnly: true } : {}),
     requiresGatewayStart: item?.requiresGatewayStart === true,
     requiresRealTraffic: item?.requiresRealTraffic === true,
     highImpact: item?.highImpact === true,
@@ -56,6 +57,7 @@ function asApprovalPlan(value) {
     requiresGatewayStartCount: has(value, "requiresGatewayStartCount") ? value.requiresGatewayStartCount : null,
     requiresRealTrafficCount: has(value, "requiresRealTrafficCount") ? value.requiresRealTrafficCount : null,
     highImpactCount: has(value, "highImpactCount") ? value.highImpactCount : null,
+    reportOnlyCount: has(value, "reportOnlyCount") ? value.reportOnlyCount : null,
     requiredForShortCount: has(value, "requiredForShortCount") ? value.requiredForShortCount : null,
     requiredForReleaseCount: has(value, "requiredForReleaseCount") ? value.requiredForReleaseCount : null,
     firstBlockedAction: asString(value.firstBlockedAction || ""),
@@ -65,6 +67,7 @@ function asApprovalPlan(value) {
       requiresGatewayStart: phase?.requiresGatewayStart === true,
       requiresRealTraffic: phase?.requiresRealTraffic === true,
       highImpact: phase?.highImpact === true,
+      reportOnly: phase?.reportOnly === true,
       blockedUntilExplicitUserApproval: phase?.blockedUntilExplicitUserApproval === true,
     })).filter((phase) => phase.phase).slice(0, 12) : [],
   };

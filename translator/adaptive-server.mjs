@@ -2326,6 +2326,7 @@ function latestManagerReportItem(label, fileName) {
             ...(action?.gateId ? { gateId: shortSafeText(action.gateId, "") } : {}),
             phase: shortSafeText(action?.phase || "", ""),
             command: shortSafeText(action?.command || "", ""),
+            ...(action?.reportOnly === true ? { reportOnly: true } : {}),
             requiresGatewayStart: action?.requiresGatewayStart === true,
             requiresRealTraffic: action?.requiresRealTraffic === true,
             highImpact: action?.highImpact === true,
@@ -2353,6 +2354,7 @@ function latestManagerReportItem(label, fileName) {
         requiresGatewayStartCount: reportNonNegativeInt(report.approvalPlan.requiresGatewayStartCount),
         requiresRealTrafficCount: reportNonNegativeInt(report.approvalPlan.requiresRealTrafficCount),
         highImpactCount: reportNonNegativeInt(report.approvalPlan.highImpactCount),
+        reportOnlyCount: reportNonNegativeInt(report.approvalPlan.reportOnlyCount),
         requiredForShortCount: reportNonNegativeInt(report.approvalPlan.requiredForShortCount),
         requiredForReleaseCount: reportNonNegativeInt(report.approvalPlan.requiredForReleaseCount),
         firstBlockedAction: shortSafeText(report.approvalPlan.firstBlockedAction || "", ""),
@@ -2362,6 +2364,7 @@ function latestManagerReportItem(label, fileName) {
             requiresGatewayStart: phase?.requiresGatewayStart === true,
             requiresRealTraffic: phase?.requiresRealTraffic === true,
             highImpact: phase?.highImpact === true,
+            reportOnly: phase?.reportOnly === true,
             blockedUntilExplicitUserApproval: phase?.blockedUntilExplicitUserApproval === true,
         })).filter((phase) => phase.phase).slice(0, 12) : [],
     } : null;
@@ -3727,6 +3730,7 @@ function latestReportsSummary(result){
         const id=action?.id||"";
         const gateId=action?.gateId||fallbackGateId||id;
         const flags=[];
+        if(action?.reportOnly===true) flags.push("reportOnly");
         if(action?.blockedUntilExplicitUserApproval===true) flags.push("approval");
         if(action?.requiresGatewayStart===true) flags.push("gateway");
         if(action?.requiresRealTraffic===true) flags.push("realTraffic");
@@ -3792,7 +3796,7 @@ function latestReportsSummary(result){
       if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> ")+(hiddenNextActions?" (+"+hiddenNextActions+" more)":""));
       if(item.approvalPlan){
         const plan=item.approvalPlan;
-        lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / blocked="+(plan.blockedCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / required="+(plan.requiredForShortCount??"unknown")+"/"+(plan.requiredForReleaseCount??"unknown")+" / phases="+(Array.isArray(plan.phases)?plan.phases.length:"unknown")+" / first="+(plan.firstBlockedAction||"none"));
+        lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / reportOnly="+(plan.reportOnlyCount??"unknown")+" / blocked="+(plan.blockedCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / required="+(plan.requiredForShortCount??"unknown")+"/"+(plan.requiredForReleaseCount??"unknown")+" / phases="+(Array.isArray(plan.phases)?plan.phases.length:"unknown")+" / first="+(plan.firstBlockedAction||"none"));
       }
       if(Array.isArray(item.releaseGateSelectedReports)&&item.releaseGateSelectedReports.length){
         const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile).join(", ");
