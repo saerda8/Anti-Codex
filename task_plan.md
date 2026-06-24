@@ -1646,3 +1646,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: refresh-feature reports now include connector/app-tool missing, extra, and changed sample fields when directory fingerprints differ, so interrupted or stale local snapshot copies identify the specific JSON files instead of only reporting a hash mismatch.
 - Completed: report summarizer, Manager latest-report summaries, and launcher contracts now surface those refresh drift counts and samples.
 - Verification: PowerShell parser check passed; JS syntax checks passed; focused launcher contract passed `132/132`; a temporary `-VerifyOnly` fixture produced the expected connector missing/extra/changed samples.
+
+## 2026-06-24 Release Gate Failed Report Details
+- Completed: passive release gates now preserve the selected report kind, selected filename, selected mtime, and bounded failure samples for failed latest reports, not only history fallbacks.
+- Completed: report summarizer, adaptive Manager summaries, external Manager bridge, injected Manager, and launcher contracts now surface `reportFailures` so operators can see which report is stale or semantically bad without opening raw JSON.
+- Verification: release-gate self-test passed; Manager bridge self-test passed with real `reportFailures` formatting; JS syntax checks passed; UI-state self-test passed; focused launcher contracts passed `132/132`; `git diff --check` passed.

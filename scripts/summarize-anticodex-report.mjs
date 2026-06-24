@@ -149,6 +149,10 @@ const releaseGateFailures = Array.isArray(report?.gates)
       failureReason: asString(gate.failureReason),
       failureReasons: has(gate, "failureReasons") ? asStringArray(gate.failureReasons) : [],
       semanticFailures: has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [],
+      selectedKind: asString(gate.selectedKind || ""),
+      selectedFile: asString(gate.selectedFile || ""),
+      selectedMtime: asString(gate.selectedMtime || ""),
+      reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
     }))
   : [];
 const rawReleaseGateFailureReasons = has(report, "releaseGateFailureReasons") && Array.isArray(report.releaseGateFailureReasons)
@@ -165,7 +169,10 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     ageHours: has(gate, "ageHours") ? gate.ageHours : null,
     fresh: boolField(gate, "fresh"),
     selectedFromHistory: gate.selectedFromHistory === true,
+    selectedKind: asString(gate.selectedKind || ""),
     selectedFile: asString(gate.selectedFile || ""),
+    selectedMtime: asString(gate.selectedMtime || ""),
+    reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
   })).filter((entry) => entry.id).slice(0, 24)
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"
   ? Object.entries(report.groups).map(([group, value]) => ({

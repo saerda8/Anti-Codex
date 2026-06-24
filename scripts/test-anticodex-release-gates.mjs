@@ -318,15 +318,19 @@ function summarizeGate(definition) {
     okField: null,
     fresh: false,
     ageHours: null,
+    selectedKind: selection.selectedFromHistory ? "history" : "latest",
+    selectedMtime: "",
     satisfied: false,
     note: definition.note || "",
     error: present ? "" : "missing_report",
     selectedFromHistory: selection.selectedFromHistory === true,
-    selectedFile: selection.selectedFromHistory ? filePath.split(/[\\/]/).pop() : "",
+    selectedFile: filePath.split(/[\\/]/).pop(),
+    reportFailureSamples: [],
   };
   if (!present) return gate;
 
   const stat = statSync(filePath);
+  gate.selectedMtime = stat.mtime.toISOString();
   const ageHours = (Date.now() - stat.mtimeMs) / 3_600_000;
   gate.ageHours = Math.max(0, Number(ageHours.toFixed(3)));
   gate.fresh = Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? ageHours <= maxAgeHours : true;
@@ -341,6 +345,7 @@ function summarizeGate(definition) {
     gate.okField = report.ok === true;
     gate.reportName = typeof report.reportName === "string" ? report.reportName : "";
     gate.failureCount = Array.isArray(report.failures) ? report.failures.length : 0;
+    gate.reportFailureSamples = Array.isArray(report.failures) ? report.failures.map((item) => String(item)).filter(Boolean).slice(0, 3) : [];
     gate.fast = report.fast === true;
     gate.noTraffic = report.noTraffic === true;
     gate.skipped = report.skipped === true;
@@ -1413,6 +1418,9 @@ if (args.has("--self-test")) {
     if (syncReadinessFallbackGate.satisfied !== true || syncReadinessFallbackGate.selectedFromHistory !== true) {
       throw new Error("self-test failed: sync-readiness did not use the latest full history report when latest is fast/invalid");
     }
+    if (syncReadinessFallbackGate.selectedKind !== "history") throw new Error("self-test failed: history fallback selectedKind was not preserved");
+    if (syncReadinessFallbackGate.selectedFile !== "20260624-000000-sync-readiness.json") throw new Error("self-test failed: history fallback selectedFile was not preserved");
+    if (!syncReadinessFallbackGate.selectedMtime) throw new Error("self-test failed: history fallback selectedMtime was not preserved");
     semanticFailures.coldRelaunch = assertSemanticFailures("coldRelaunch", "self-test failed: semantically invalid cold-relaunch report satisfied the gate", [
       "cold_relaunch_report_name",
       "cold_relaunch_skipped",
@@ -1801,6 +1809,14 @@ if (args.has("--self-test")) {
     assertFailureReason("postVerification", "missing_report");
     assertFailureReason("fastOverallNoTraffic", "semantic_failures");
     assertFailureReason("installedRuntimeSync", "semantic_failures");
+    const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
+    if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");
+    if (failedLatestGate.selectedFile !== "latest-cold-relaunch.json") throw new Error("self-test failed: latest report selectedFile was not preserved");
+    if (failedLatestGate.selectedKind !== "latest") throw new Error("self-test failed: latest report selectedKind was not preserved");
+    if (!failedLatestGate.selectedMtime) throw new Error("self-test failed: latest report selectedMtime was not preserved");
+    if (!Array.isArray(failedLatestGate.reportFailureSamples) || !failedLatestGate.reportFailureSamples.includes("original Codex main process set changed")) {
+      throw new Error("self-test failed: latest report failure samples were not preserved");
+    }
 
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
@@ -1846,7 +1862,10 @@ const releaseGateFailureReasons = gates
     ageHours: gate.ageHours,
     fresh: gate.fresh === true,
     selectedFromHistory: gate.selectedFromHistory === true,
+    selectedKind: gate.selectedKind || "",
     selectedFile: gate.selectedFile || "",
+    selectedMtime: gate.selectedMtime || "",
+    reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
   }));
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates

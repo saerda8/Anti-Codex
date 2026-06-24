@@ -2339,6 +2339,12 @@ function latestManagerReportItem(label, fileName) {
                 semanticFailures: Array.isArray(gate.semanticFailures)
                     ? gate.semanticFailures.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
                     : [],
+                selectedKind: shortSafeText(gate.selectedKind || "", ""),
+                selectedFile: shortSafeText(gate.selectedFile || "", ""),
+                selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
+                reportFailureSamples: Array.isArray(gate.reportFailureSamples)
+                    ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3)
+                    : [],
             }))
             .slice(0, 12)
         : [];
@@ -2356,7 +2362,10 @@ function latestManagerReportItem(label, fileName) {
             ageHours: Number.isFinite(Number(gate.ageHours)) ? Number(gate.ageHours) : null,
             fresh: typeof gate.fresh === "boolean" ? gate.fresh : null,
             selectedFromHistory: gate.selectedFromHistory === true,
+            selectedKind: shortSafeText(gate.selectedKind || "", ""),
             selectedFile: shortSafeText(gate.selectedFile || "", ""),
+            selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
+            reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
         })).filter((entry) => entry.id).slice(0, 24)
         ;
     const releaseGateGroups = report?.groups && typeof report.groups === "object"
@@ -3654,6 +3663,14 @@ function latestReportsSummary(result){
       if(Array.isArray(item.releaseGateFailureReasons)&&item.releaseGateFailureReasons.length){
         const failureReasons=item.releaseGateFailureReasons.slice(0,6).map((gate)=>gate.id+":"+(gate.failureReason||(Array.isArray(gate.failureReasons)?gate.failureReasons[0]:"unsatisfied"))).join(", ");
         lines.push("  failureReasons: "+failureReasons);
+        const reportFailureDetails=item.releaseGateFailureReasons
+          .filter((gate)=>gate?.selectedFile||(Array.isArray(gate?.reportFailureSamples)&&gate.reportFailureSamples.length))
+          .slice(0,4)
+          .map((gate)=>{
+            const sample=Array.isArray(gate.reportFailureSamples)&&gate.reportFailureSamples.length?(" / sample "+gate.reportFailureSamples.slice(0,2).join(" | ")):"";
+            return gate.id+":"+(gate.selectedFile||"no-file")+(gate.selectedMtime?(" @ "+gate.selectedMtime):"")+sample;
+          });
+        if(reportFailureDetails.length) lines.push("  reportFailures: "+reportFailureDetails.join("; "));
         const realTrafficEvidenceGates=item.releaseGateFailureReasons
           .filter((gate)=>gate?.group==="real-traffic"&&(["stale_report","missing_report"].includes(gate.failureReason)||(Array.isArray(gate.failureReasons)&&gate.failureReasons.some((reason)=>["stale_report","missing_report"].includes(reason)))))
           .map((gate)=>gate.id)
