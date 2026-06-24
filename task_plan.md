@@ -1561,3 +1561,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: UI-state static checks now guard the injected Manager against confusing local connector allowlist metadata with truly callable app tools.
 - Completed: verified the current local connector summary still proves ChatGPT install URLs are scrubbed, link endpoints are metadata-only, upstream request delta is zero, and only the truly accessible connector exposes a tool.
 - Verification: UI-state syntax/self-test passed; focused launcher contracts passed `129/129`; no real traffic or restart was used.
+
+## 2026-06-24 Provider Continuity Marker Visibility
+- Completed: static Manager contracts now guard the provider-continuity marker-count display, not only the `markerThresholds` boolean.
+- Completed: UI-state self-test now checks both injected Manager and fallback Manager for `providerContinuity: turns=... / markers=...` evidence.
+- Verification: UI-state syntax/self-test passed; focused provider/Manager launcher contracts passed `129/129`; `git diff --check` passed; no real traffic or restart was used.

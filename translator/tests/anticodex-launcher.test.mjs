@@ -835,6 +835,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /getPostExtra=/);
   assert.match(managerBridge, /providerContinuity/);
   assert.match(managerInject, /providerContinuity/);
+  assert.match(managerBridge, /providerContinuity: turns=/);
+  assert.match(managerInject, /providerContinuity: turns=/);
+  assert.match(managerBridge, /markers=/);
+  assert.match(managerInject, /markers=/);
   assert.match(managerBridge, /toolPairs: restart=/);
   assert.match(managerInject, /toolPairs: restart=/);
   assert.match(managerBridge, /markerThresholds=/);
