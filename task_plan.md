@@ -1540,3 +1540,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager latest-report payloads now preserve provider-switch, OpenAI-to-Anthropic protocol-switch, and Anthropic-to-OpenAI reverse-switch route evidence, including from/to values, target provider/model, reached booleans, structural tool evidence, and tool-history turn count.
 - Completed: external Manager bridge, injected Manager, fallback Manager, diagnostics verifier, and UI-state static checks now guard the provider route evidence alongside previous-response ID chain and nested match evidence.
 - Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip; real local fake third-party provider verifier passed in about `8.5s` with `usedRealTraffic:false`, 9 turns, all previous-response matches, route reaches true, and clean OpenAI/Anthropic/OpenAI tool-history structure.
+
+## 2026-06-24 Sync Readiness Gate History Fallback
+- Completed: the passive release gate now falls back from a fast/offline `latest-sync-readiness.json` to a fresh signed full sync-readiness history report when the latest file is not full release evidence.
+- Completed: release-gate output shows when sync-readiness was selected from history and names the selected full report file, so support views can tell why the gate passed.
+- Verification: release-gate syntax passed; self-test passed the stale-latest/full-history scenario; strict passive release gate returned `shortReady:true`, no short misses, `syncReadiness.satisfied:true`, and `selectedFromHistory:true` for `20260624-071841-sync-readiness.json`.

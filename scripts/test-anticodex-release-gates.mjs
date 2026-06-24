@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -148,6 +148,54 @@ function integrityFor(filePath) {
   return { signed: true, valid: actual === expected, hash: actual, expected, error: actual === expected ? "" : "hash_mismatch" };
 }
 
+function loadSignedJson(filePath) {
+  if (!existsSync(filePath)) return null;
+  const integrity = integrityFor(filePath);
+  if (integrity.signed !== true || integrity.valid !== true) return null;
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return null;
+  }
+}
+
+function syncReadinessFullEnough(report) {
+  return !!report
+    && report.reportName === "sync-readiness"
+    && report.ok === true
+    && report.fast === false
+    && report.skipIconPaletteProbe === false
+    && report.noTraffic === true
+    && report.usedRealTraffic === false
+    && report.behaviorCovered === true
+    && report.coverageKind === "installed-no-traffic"
+    && report.sync?.managerBridge?.processCount === 1
+    && report.sync?.managerBridge?.staleProcessCount === 0
+    && report.sync?.managerBridge?.expectedBaseUrl === "http://127.0.0.1:8484";
+}
+
+function selectReportPath(definition) {
+  const latestPath = join(reportRoot, definition.file);
+  if (definition.id !== "syncReadiness") return { path: latestPath, selectedFromHistory: false };
+  const latestReport = loadSignedJson(latestPath);
+  if (syncReadinessFullEnough(latestReport)) return { path: latestPath, selectedFromHistory: false };
+  if (!existsSync(reportRoot)) return { path: latestPath, selectedFromHistory: false };
+  const candidates = readdirSync(reportRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^\d{8}-\d{6}-sync-readiness\.json$/i.test(entry.name))
+    .map((entry) => join(reportRoot, entry.name))
+    .filter((filePath) => {
+      const ageHours = (Date.now() - statSync(filePath).mtimeMs) / 3_600_000;
+      return Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? ageHours <= maxAgeHours : true;
+    })
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+  for (const candidate of candidates) {
+    if (syncReadinessFullEnough(loadSignedJson(candidate))) {
+      return { path: candidate, selectedFromHistory: true };
+    }
+  }
+  return { path: latestPath, selectedFromHistory: false };
+}
+
 function normalizedRuntimePath(relativePath) {
   return relativePath.split("/").join("\\");
 }
@@ -254,7 +302,8 @@ function validOrderedHistoryEvidence(evidence, minChecked) {
 }
 
 function summarizeGate(definition) {
-  const filePath = join(reportRoot, definition.file);
+  const selection = selectReportPath(definition);
+  const filePath = selection.path;
   const present = existsSync(filePath);
   const gate = {
     id: definition.id,
@@ -272,6 +321,8 @@ function summarizeGate(definition) {
     satisfied: false,
     note: definition.note || "",
     error: present ? "" : "missing_report",
+    selectedFromHistory: selection.selectedFromHistory === true,
+    selectedFile: selection.selectedFromHistory ? filePath.split(/[\\/]/).pop() : "",
   };
   if (!present) return gate;
 
@@ -1238,6 +1289,97 @@ if (args.has("--self-test")) {
       "sync_readiness_rollback_swap_stale",
       "sync_readiness_clean_state",
     ]);
+    writeFakeLatestReport("20260624-000000-sync-readiness.json", {
+      ok: true,
+      reportName: "sync-readiness",
+      fast: false,
+      skipIconPaletteProbe: false,
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      activeHost: {
+        exists: true,
+        markerExists: true,
+        manifestValid: true,
+        exeExists: true,
+        productName: "Anti-Codex",
+        fileDescription: "Anti-Codex",
+        originalFilename: "Anti-Codex.exe",
+        hostIconExists: true,
+        trayIconExists: true,
+        appRootIconExists: true,
+        hostIconPalette: { ok: true },
+        trayIconPalette: { ok: true },
+        appRootIconPalette: { ok: true },
+      },
+      sync: {
+        scriptExists: true,
+        launcherExists: true,
+        rollbackScriptExists: true,
+        rollbackLauncherExists: true,
+        updateCheckExists: true,
+        validatorExists: true,
+        failureSafetyVerifierExists: true,
+        installerExists: true,
+        startScriptExists: true,
+        desktopShortcutIconPalette: { ok: true },
+        updateStatus: {
+          ok: true,
+          updateNeeded: false,
+          drift: { state: "synced" },
+          source: { hostHash: "host", cliHash: "cli" },
+          active: { hostHash: "host", cliHash: "cli" },
+          operation: { state: "succeeded" },
+          guardrails: { brandPreserved: true, iconPreserved: true, activeHostValid: true, failures: [] },
+        },
+        shortcutVerification: Array.from({ length: 5 }, () => ({
+          ok: true,
+          exists: true,
+          displayNameMatches: true,
+          targetMatches: true,
+          launcherTargetMatches: true,
+          scriptMatches: true,
+          iconMatches: true,
+          forbiddenCodexBranding: false,
+        })),
+        startMenuMainShortcutExists: true,
+        startMenuSyncShortcutExists: true,
+        startMenuRollbackShortcutExists: true,
+        startMenuManagerShortcutExists: true,
+        desktopMainShortcutExists: true,
+        desktopAntiCodexShortcuts: ["Anti-Codex.lnk"],
+        forbiddenDesktopHelperShortcuts: [],
+        managerBridge: {
+          expectedBaseUrl: "http://127.0.0.1:8484",
+          processCount: 1,
+          staleProcessCount: 0,
+          processes: [{ hasExpectedBaseUrl: true }],
+        },
+        rollbackHostExists: true,
+        rollbackMarkerExists: true,
+        rollbackHost: {
+          exists: true,
+          markerExists: true,
+          manifestValid: true,
+          exeExists: true,
+          productName: "Anti-Codex",
+          fileDescription: "Anti-Codex",
+          originalFilename: "Anti-Codex.exe",
+          hostIconPalette: { ok: true },
+          trayIconPalette: { ok: true },
+          appRootIconPalette: { ok: true },
+        },
+        rollbackSwapHostExists: false,
+        rollbackSwapMarkerExists: false,
+        hostSyncMarkerExists: false,
+        staleCandidateExists: false,
+      },
+    });
+    const syncReadinessFallbackGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "syncReadiness"));
+    if (syncReadinessFallbackGate.satisfied !== true || syncReadinessFallbackGate.selectedFromHistory !== true) {
+      throw new Error("self-test failed: sync-readiness did not use the latest full history report when latest is fast/invalid");
+    }
     semanticFailures.coldRelaunch = assertSemanticFailures("coldRelaunch", "self-test failed: semantically invalid cold-relaunch report satisfied the gate", [
       "cold_relaunch_report_name",
       "cold_relaunch_skipped",
