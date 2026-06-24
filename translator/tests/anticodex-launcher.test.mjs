@@ -7022,9 +7022,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /releaseGateFailures/);
   assert.match(diagnostics, /plugin capability failure missing offline snapshot evidence/);
+  assert.ok((diagnostics.match(/plugin capability failure offline refresh gate is not satisfied/g) || []).length >= 2);
+  assert.ok((diagnostics.match(/plugin capability failure offline refresh selected file missing/g) || []).length >= 2);
   assert.match(diagnostics, /plugin capability failure missing sample codes/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
+  assert.ok((diagnostics.match(/release-gates approval plan is not an object/g) || []).length >= 2);
+  assert.ok((diagnostics.match(/release-gates approval plan invalid real-traffic count/g) || []).length >= 2);
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
   assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);

@@ -862,6 +862,13 @@ function Test-DiagnosticBundle {
                     Add-Failure "plugin capability failure missing offline snapshot evidence"
                 } elseif ($offlineSnapshotEvidence.connectorContentMatches -ne $true -or $offlineSnapshotEvidence.appToolContentMatches -ne $true) {
                     Add-Failure "plugin capability failure offline snapshot evidence is not clean"
+                } else {
+                    if ($offlineSnapshotEvidence.refreshGateSatisfied -ne $true) {
+                        Add-Failure "plugin capability failure offline refresh gate is not satisfied"
+                    }
+                    if ([string]::IsNullOrWhiteSpace([string]$offlineSnapshotEvidence.refreshSelectedFile)) {
+                        Add-Failure "plugin capability failure offline refresh selected file missing"
+                    }
                 }
                 $pluginFailureSamples = @(As-FlatArray $pluginCapabilityFailure.reportFailureSamples | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
                 $pluginFailureCodes = @(As-FlatArray $pluginCapabilityFailure.reportFailureSampleCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
@@ -871,6 +878,51 @@ function Test-DiagnosticBundle {
             }
             if (-not (Has-Property $releaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
             if (-not (Has-Property $releaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
+            $nextActions = @(As-FlatArray $releaseGatesSummary.nextActions)
+            $gatewayActionCount = 0
+            $realTrafficActionCount = 0
+            $highImpactActionCount = 0
+            $blockedActionCount = 0
+            $approvalBlockedRiskActionCount = 0
+            foreach ($nextAction in $nextActions) {
+                $actionId = [string]$nextAction.id
+                if ([string]::IsNullOrWhiteSpace($actionId)) {
+                    Add-Failure "release-gates next action missing id"
+                    $actionId = "unknown"
+                }
+                $requiresGateway = $nextAction.requiresGatewayStart -eq $true
+                $requiresRealTraffic = $nextAction.requiresRealTraffic -eq $true
+                $highImpact = $nextAction.highImpact -eq $true
+                $blocked = $nextAction.blockedUntilExplicitUserApproval -eq $true
+                if ($requiresGateway) { $gatewayActionCount++ }
+                if ($requiresRealTraffic) { $realTrafficActionCount++ }
+                if ($highImpact) { $highImpactActionCount++ }
+                if ($blocked) { $blockedActionCount++ }
+                if ($requiresGateway -or $requiresRealTraffic -or $highImpact) { $approvalBlockedRiskActionCount++ }
+                if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
+                    Add-Failure "release-gates next action $actionId missing explicit approval block"
+                }
+            }
+            $approvalPlan = $releaseGatesSummary.approvalPlan
+            if (-not $approvalPlan -or $approvalPlan -isnot [pscustomobject]) {
+                Add-Failure "release-gates approval plan is not an object"
+            } else {
+                $approvalActionCount = Get-NonNegativeIntProperty $approvalPlan "actionCount" "release-gates approval plan missing action count" "release-gates approval plan invalid action count"
+                if ($null -ne $approvalActionCount -and $approvalActionCount -ne $nextActions.Count) {
+                    Add-Failure "release-gates approval plan action count mismatch"
+                }
+                $approvalBlockedCount = Get-NonNegativeIntProperty $approvalPlan "blockedCount" "release-gates approval plan missing blocked count" "release-gates approval plan invalid blocked count"
+                if ($null -ne $approvalBlockedCount -and $approvalBlockedCount -lt $blockedActionCount) { Add-Failure "release-gates approval plan undercounts blocked actions" }
+                $approvalGatewayCount = Get-NonNegativeIntProperty $approvalPlan "requiresGatewayStartCount" "release-gates approval plan missing gateway count" "release-gates approval plan invalid gateway count"
+                if ($null -ne $approvalGatewayCount -and $approvalGatewayCount -lt $gatewayActionCount) { Add-Failure "release-gates approval plan undercounts gateway actions" }
+                $approvalRealTrafficCount = Get-NonNegativeIntProperty $approvalPlan "requiresRealTrafficCount" "release-gates approval plan missing real-traffic count" "release-gates approval plan invalid real-traffic count"
+                if ($null -ne $approvalRealTrafficCount -and $approvalRealTrafficCount -lt $realTrafficActionCount) { Add-Failure "release-gates approval plan undercounts real-traffic actions" }
+                $approvalHighImpactCount = Get-NonNegativeIntProperty $approvalPlan "highImpactCount" "release-gates approval plan missing high-impact count" "release-gates approval plan invalid high-impact count"
+                if ($null -ne $approvalHighImpactCount -and $approvalHighImpactCount -lt $highImpactActionCount) { Add-Failure "release-gates approval plan undercounts high-impact actions" }
+                if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
+                    Add-Failure "release-gates approval plan missing first blocked action"
+                }
+            }
             if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
             if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
                 Add-Failure "release-gates summary missing sync-readiness selected history report"
