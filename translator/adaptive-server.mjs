@@ -2267,6 +2267,29 @@ function latestManagerReportItem(label, fileName) {
     const managerBridge = sync?.managerBridge && typeof sync.managerBridge === "object" ? sync.managerBridge : null;
     const updateStatus = sync?.updateStatus && typeof sync.updateStatus === "object" ? sync.updateStatus : null;
     const updateGuardrails = updateStatus?.guardrails && typeof updateStatus.guardrails === "object" ? updateStatus.guardrails : null;
+    const managerButton = report?.managerButton && typeof report.managerButton === "object" ? report.managerButton : null;
+    const managerButtonResults = managerButton?.results && typeof managerButton.results === "object"
+        ? Object.entries(managerButton.results).map(([action, entry]) => {
+            const value = entry && typeof entry === "object" ? entry : {};
+            const payload = value.payload && typeof value.payload === "object" ? value.payload : null;
+            const result = payload?.result && typeof payload.result === "object"
+                ? payload.result
+                : (value.result && typeof value.result === "object" ? value.result : null);
+            const initial = result?.initial && typeof result.initial === "object" ? result.initial : null;
+            return {
+                action: shortSafeText(action, ""),
+                ok: value.ok === true,
+                lastUiOnly: typeof result?.lastUiOnly === "boolean" ? result.lastUiOnly : null,
+                bridgeReady: typeof initial?.bridgeReady === "boolean" ? initial.bridgeReady : (typeof result?.bridgeReady === "boolean" ? result.bridgeReady : null),
+                overlayPresent: typeof result?.overlayPresent === "boolean" ? result.overlayPresent : (typeof initial?.overlayPresent === "boolean" ? initial.overlayPresent : null),
+                actionCenterHitsButton: typeof initial?.actionCenterHitsButton === "boolean" ? initial.actionCenterHitsButton : null,
+                closeHitAreaOk: typeof initial?.closeHitAreaOk === "boolean" ? initial.closeHitAreaOk : null,
+                managerOpenedNewPage: typeof result?.managerOpenedNewPage === "boolean" ? result.managerOpenedNewPage : null,
+                pageTargetCountBeforeManagerOpen: Number.isFinite(Number(result?.pageTargetCountBeforeManagerOpen)) ? Number(result.pageTargetCountBeforeManagerOpen) : null,
+                pageTargetCountAfterManagerOpen: Number.isFinite(Number(result?.pageTargetCountAfterManagerOpen)) ? Number(result.pageTargetCountAfterManagerOpen) : null,
+            };
+        })
+        : [];
     const phaseSummary = report?.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : null;
     const antigravityLogSignals = report?.antigravityLogSignals && typeof report.antigravityLogSignals === "object" ? report.antigravityLogSignals : null;
     const checkEntries = checks && typeof checks === "object"
@@ -2363,6 +2386,8 @@ function latestManagerReportItem(label, fileName) {
         elapsedMs: Number.isFinite(Number(report?.elapsedMs)) ? Number(report.elapsedMs) : null,
         failureCount: invalid ? 1 : failures.length,
         firstFailure: invalid ? shortSafeText(integrityInvalid ? `report hash validation failed: ${integrity.error}` : `report parse failed: ${read.error}`, "report validation failed") : shortSafeText(failures[0] || "", ""),
+        managerButtonOk: managerButton ? managerButton.ok === true : null,
+        managerButtonResults,
         sourceSnapshotEvidence: report?.sourceSnapshot && typeof report.sourceSnapshot === "object" ? {
             fingerprint: shortSafeText(report.sourceSnapshot.fingerprint || "", ""),
             sourceMtimeMax: shortSafeText(report.sourceSnapshot.sourceMtimeMax || "", ""),
@@ -3422,6 +3447,10 @@ function latestReportsSummary(result){
       lines.push("  accountProxy: detail="+(evidence.diagnosisDetail||"unknown")+" / action="+(evidence.suggestedAction||"none")+" / localProxyBypassed="+(evidence.localProxyBypassed?"true":"false"));
       lines.push("  accountProxy phase: account="+(phase.accountOk?"ok":"check")+" / refresh="+(phase.refreshOk?"ok":"check")+" / models="+(phase.modelCount??"unknown")+" / real="+(phase.realRequestAttempted?(phase.realRequestOk?"ok":"check"):"not-attempted"));
       lines.push("  accountProxy logs: source="+(signals.sourcePresent?"present":"missing")+" / fresh="+(signals.sourceFresh?"true":"false")+" / scanned="+(signals.tailLinesScanned??"unknown")+" / verify="+(signals.verificationRequiredCount??0)+" / network="+(signals.generalNetworkFailureCount??0));
+    }
+    if(Array.isArray(item.managerButtonResults)&&item.managerButtonResults.length){
+      const actions=item.managerButtonResults.slice(0,4).map((entry)=>(entry.action||"unknown")+":"+(entry.ok?"ok":"fail")+"/bridge="+(entry.bridgeReady?"true":"false")+"/overlay="+(entry.overlayPresent?"true":"false")+"/hit="+(entry.actionCenterHitsButton?"true":"false")+"/close="+(entry.closeHitAreaOk?"true":"false")+"/newPage="+(entry.managerOpenedNewPage?"true":"false")+"/targets="+(entry.pageTargetCountBeforeManagerOpen??"?")+"->"+(entry.pageTargetCountAfterManagerOpen??"?"));
+      lines.push("  managerButtons: "+actions.join(" | "));
     }
     if(item.skipped===true){
       lines.push("  skipped: "+(item.reason||"no reason")+" / requestedRealTraffic="+(item.requestedRealTraffic?"true":"false")+" / coverage="+(item.coverageKind||"unknown"));

@@ -42,10 +42,23 @@ const managerButtonResults = Object.entries(managerResults).map(([action, entry]
   if (!result && payload && payload.results && payload.results[action] && payload.results[action].result) {
     result = payload.results[action].result;
   }
+  const initial = result && result.initial && typeof result.initial === "object" ? result.initial : null;
   return {
     action,
     ok: boolField(value, "ok"),
     lastUiOnly: result && has(result, "lastUiOnly") ? !!result.lastUiOnly : null,
+    bridgeReady: initial && has(initial, "bridgeReady") ? !!initial.bridgeReady : (result && has(result, "bridgeReady") ? !!result.bridgeReady : null),
+    overlayPresent: result && has(result, "overlayPresent") ? !!result.overlayPresent : (initial && has(initial, "overlayPresent") ? !!initial.overlayPresent : null),
+    actionCenterHitsButton: initial && has(initial, "actionCenterHitsButton") ? !!initial.actionCenterHitsButton : null,
+    closeHitAreaOk: initial && has(initial, "closeHitAreaOk") ? !!initial.closeHitAreaOk : null,
+    closeHitResults: initial && Array.isArray(initial.closeHitResults) ? initial.closeHitResults.slice(0, 8).map((item) => ({
+      name: asString(item?.name),
+      hit: item?.hit === true,
+      target: asString(item?.target),
+    })) : [],
+    managerOpenedNewPage: result && has(result, "managerOpenedNewPage") ? !!result.managerOpenedNewPage : null,
+    pageTargetCountBeforeManagerOpen: result && has(result, "pageTargetCountBeforeManagerOpen") ? result.pageTargetCountBeforeManagerOpen : null,
+    pageTargetCountAfterManagerOpen: result && has(result, "pageTargetCountAfterManagerOpen") ? result.pageTargetCountAfterManagerOpen : null,
   };
 });
 

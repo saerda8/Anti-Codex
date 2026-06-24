@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v91";
+  const VERSION = "native-panel-v92";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -921,6 +921,10 @@
         lines.push(`  accountProxy: detail=${evidence.diagnosisDetail || "unknown"} / action=${evidence.suggestedAction || "none"} / localProxyBypassed=${evidence.localProxyBypassed ? "true" : "false"}`);
         lines.push(`  accountProxy phase: account=${phase.accountOk ? "ok" : "check"} / refresh=${phase.refreshOk ? "ok" : "check"} / models=${phase.modelCount ?? "unknown"} / real=${phase.realRequestAttempted ? (phase.realRequestOk ? "ok" : "check") : "not-attempted"}`);
         lines.push(`  accountProxy logs: source=${signals.sourcePresent ? "present" : "missing"} / fresh=${signals.sourceFresh ? "true" : "false"} / scanned=${signals.tailLinesScanned ?? "unknown"} / verify=${signals.verificationRequiredCount ?? 0} / network=${signals.generalNetworkFailureCount ?? 0}`);
+      }
+      if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
+        const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
+        lines.push(`  managerButtons: ${actions.join(" | ")}`);
       }
       if (item.skipped === true) {
         lines.push(`  skipped: ${item.reason || "no reason"} / requestedRealTraffic=${item.requestedRealTraffic ? "true" : "false"} / coverage=${item.coverageKind || "unknown"}`);

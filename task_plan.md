@@ -1510,3 +1510,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager panel version advanced to `native-panel-v91` so the updated account/proxy latest-report display reboots in already-open pages.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `127/128` with one environment-only linked-directory skip.
 - Note: runtime sync with `NoRestart` still returned `ok:false` because the local health endpoint was offline; no restart was requested.
+
+## 2026-06-24 Manager Real Button Support Evidence
+- Completed: manager-real-buttons summaries now preserve per-action bridge readiness, overlay presence, center-hit evidence, close-hit-area evidence, new-page prevention, and page target counts through the report summarizer, diagnostics verifier, fallback Manager, external Manager bridge, and injected Manager.
+- Completed: Manager panel version advanced to `native-panel-v92` so the updated real-button latest-report display reboots in already-open pages.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip.
+- Note: PowerShell `ConvertFrom-Json` can fail on the old raw manager-real-buttons artifact due mojibake text in nested output, while Node `JSON.parse` reads it successfully; the support path now uses the Node summarizer.

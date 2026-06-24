@@ -660,6 +660,13 @@ function Test-DiagnosticBundle {
                     if ($actionResult.ok -ne $true) { Add-Failure "manager-real-buttons action not ok: $requiredAction" }
                     if ($null -eq $actionResult.lastUiOnly) { Add-Failure "manager-real-buttons action missing lastUiOnly evidence: $requiredAction" }
                     if ($actionResult.lastUiOnly -eq $true) { Add-Failure "manager-real-buttons action used ui-only smoke: $requiredAction" }
+                    if ($actionResult.bridgeReady -ne $true) { Add-Failure "manager-real-buttons action missing bridge ready evidence: $requiredAction" }
+                    if ($actionResult.overlayPresent -ne $true) { Add-Failure "manager-real-buttons action missing overlay evidence: $requiredAction" }
+                    if ($actionResult.actionCenterHitsButton -ne $true) { Add-Failure "manager-real-buttons action center did not hit button: $requiredAction" }
+                    if ($actionResult.closeHitAreaOk -ne $true) { Add-Failure "manager-real-buttons action close hit area failed: $requiredAction" }
+                    if ($actionResult.managerOpenedNewPage -ne $false) { Add-Failure "manager-real-buttons action opened a new page: $requiredAction" }
+                    if ($null -eq $actionResult.pageTargetCountBeforeManagerOpen -or $null -eq $actionResult.pageTargetCountAfterManagerOpen) { Add-Failure "manager-real-buttons action missing page target counts: $requiredAction" }
+                    if ([int]$actionResult.pageTargetCountAfterManagerOpen -gt [int]$actionResult.pageTargetCountBeforeManagerOpen) { Add-Failure "manager-real-buttons action increased page target count: $requiredAction" }
                 }
             }
         }

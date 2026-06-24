@@ -418,9 +418,15 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /accountProxy: detail=/);
     assert.match(source, /accountProxy phase: account=/);
     assert.match(source, /accountProxy logs: source=/);
+    assert.match(source, /managerButtonResults/);
+    assert.match(source, /managerButtons: /);
+    assert.match(source, /actionCenterHitsButton/);
+    assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v91/);
-  assert.match(syncReadiness, /native-panel-v91/);
+  assert.match(managerInject, /native-panel-v92/);
+  assert.match(syncReadiness, /native-panel-v92/);
+  assert.doesNotMatch(managerInject, /native-panel-v91/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v91/);
   assert.doesNotMatch(managerInject, /native-panel-v90/);
   assert.doesNotMatch(syncReadiness, /native-panel-v90/);
   assert.doesNotMatch(managerInject, /native-panel-v89/);
@@ -646,8 +652,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v91["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v91"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v92["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v92"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -880,7 +886,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v91/);
+  assert.match(managerOpenInject, /native-panel-v92/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v89/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v88/);
@@ -1805,8 +1812,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v91 manager script/);
-  assert.doesNotMatch(manager, /native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
+  assert.match(manager, /latest native-panel-v92 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
   assert.match(manager, /PassThru/);
@@ -2417,6 +2424,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   const reportSummarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   assert.match(reportSummarizer, /JSON\.parse\(readFileSync\(path, "utf8"\)\)/);
   assert.match(reportSummarizer, /managerButtonResults/);
+  assert.match(reportSummarizer, /actionCenterHitsButton/);
+  assert.match(reportSummarizer, /closeHitAreaOk/);
+  assert.match(reportSummarizer, /managerOpenedNewPage/);
+  assert.match(reportSummarizer, /pageTargetCountBeforeManagerOpen/);
+  assert.match(reportSummarizer, /pageTargetCountAfterManagerOpen/);
   assert.match(reportSummarizer, /payload\.results/);
   assert.match(reportSummarizer, /providerContinuity/);
   assert.match(reportSummarizer, /releaseReady/);
@@ -3038,6 +3050,66 @@ test("report summarizer surfaces account proxy readiness evidence without identi
     assert.equal(summary.accountProxyEvidence.antigravityLogSignals.tailLinesScanned, 340);
     assert.equal(summary.accountProxyEvidence.antigravityLogSignals.generalNetworkFailureCount, 2);
     assert.doesNotMatch(JSON.stringify(summary), /should-not-leak|fingerprint/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces real Manager button evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-manager-buttons-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-manager-real-buttons.json");
+  const actionPayload = (action) => ({
+    ok: true,
+    payload: {
+      result: {
+        bridgeReady: true,
+        overlayPresent: true,
+        lastUiOnly: false,
+        initial: {
+          bridgeReady: true,
+          actionCenterHitsButton: true,
+          closeHitAreaOk: true,
+          closeHitResults: [
+            { name: "center", hit: true, target: "BUTTON" },
+            { name: "top-left", hit: true, target: "BUTTON" },
+          ],
+        },
+        managerOpenedNewPage: false,
+        pageTargetCountBeforeManagerOpen: 1,
+        pageTargetCountAfterManagerOpen: 1,
+        action,
+      },
+    },
+  });
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "manager-real-buttons",
+      managerButton: {
+        ok: true,
+        results: {
+          mcpSkills: actionPayload("mcpSkills"),
+          pluginCapabilities: actionPayload("pluginCapabilities"),
+        },
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.managerButtonOk, true);
+    assert.equal(summary.managerButtonResults.length, 2);
+    for (const item of summary.managerButtonResults) {
+      assert.equal(item.ok, true);
+      assert.equal(item.lastUiOnly, false);
+      assert.equal(item.bridgeReady, true);
+      assert.equal(item.overlayPresent, true);
+      assert.equal(item.actionCenterHitsButton, true);
+      assert.equal(item.closeHitAreaOk, true);
+      assert.equal(item.managerOpenedNewPage, false);
+      assert.equal(item.pageTargetCountBeforeManagerOpen, 1);
+      assert.equal(item.pageTargetCountAfterManagerOpen, 1);
+      assert.equal(item.closeHitResults.length, 2);
+    }
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5986,6 +6058,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /appToolParityChangedShared/);
   assert.match(diagnostics, /appToolGetPostExtraFromGet/);
   assert.match(diagnostics, /lastUiOnly/);
+  assert.match(diagnostics, /manager-real-buttons action missing bridge ready evidence/);
+  assert.match(diagnostics, /manager-real-buttons action missing overlay evidence/);
+  assert.match(diagnostics, /manager-real-buttons action center did not hit button/);
+  assert.match(diagnostics, /manager-real-buttons action close hit area failed/);
+  assert.match(diagnostics, /manager-real-buttons action opened a new page/);
+  assert.match(diagnostics, /manager-real-buttons action missing page target counts/);
+  assert.match(diagnostics, /manager-real-buttons action increased page target count/);
   assert.match(diagnostics, /shortcutRepair/);
   assert.match(diagnostics, /sourcePreflight/);
   assert.match(diagnostics, /logDbGuard/);
