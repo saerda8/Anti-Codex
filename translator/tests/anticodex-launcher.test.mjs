@@ -825,8 +825,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerServerSource, /missing_report/);
   assert.match(managerBridge, /installedRuntimeEvidence/);
   assert.match(managerInject, /installedRuntimeEvidence/);
-  assert.match(managerBridge, /installedRuntime: files=/);
-  assert.match(managerInject, /installedRuntime: files=/);
+  assert.match(managerBridge, /installedRuntime: satisfied=/);
+  assert.match(managerInject, /installedRuntime: satisfied=/);
+  assert.match(managerBridge, /files=/);
+  assert.match(managerInject, /files=/);
+  assert.match(managerBridge, /sourceMtime=/);
+  assert.match(managerInject, /sourceMtime=/);
   assert.match(managerBridge, /installedRuntime drift:/);
   assert.match(managerInject, /installedRuntime drift:/);
   assert.match(managerBridge, /optionalRealTraffic: strict=/);
@@ -2393,7 +2397,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /installedRuntimeEvidence/);
   assert.match(server, /releaseGateSelectedReports/);
   assert.match(server, /releaseGateFailureReasons/);
-  assert.match(server, /installedRuntime: files=/);
+  assert.match(server, /installedRuntime: satisfied=/);
+  assert.match(server, /files=/);
+  assert.match(server, /sourceMtime=/);
   assert.match(server, /installedRuntime drift:/);
   assert.match(server, /semanticFailures/);
   assert.match(server, /requestedRealTraffic/);

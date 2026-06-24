@@ -1721,3 +1721,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Verification: release-gate self-test passed with the new post-verification and Codex Responses negative fixtures.
 - Follow-up: Manager release-gate summaries now show approval-plan blocked count, required short/release action counts, and phase count in addition to action/gateway/real-traffic/high-impact totals.
 - Verification: Manager bridge self-test passed with expanded approval-plan display assertions.
+- Follow-up: Manager release-gate summaries now show installed-runtime `satisfied`, source max mtime, and installed-runtime max mtime alongside file counts, fingerprint match, and drift samples.
+- Verification: Manager bridge self-test passed with installed-runtime drift detail assertions; focused launcher Manager contracts passed `141/142` with one environment link-directory skip.
