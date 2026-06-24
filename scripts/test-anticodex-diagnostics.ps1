@@ -59,6 +59,19 @@ function Get-NonNegativeIntProperty {
     return $parsed
 }
 
+function Find-TextHint {
+    param(
+        [string]$Text,
+        [string[]]$Hints
+    )
+    foreach ($hint in $Hints) {
+        if ($Text.Contains($hint)) {
+            return $hint
+        }
+    }
+    return ""
+}
+
 function Test-ReleaseGateApprovalAndOfflineEvidence {
     param($ReleaseGatesSummary)
 
@@ -91,6 +104,52 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     $highImpactActionCount = 0
     $blockedActionCount = 0
     $approvalBlockedRiskActionCount = 0
+    $gatewayCommandHints = @(
+        "start-deepcodex.ps1",
+        "test-anticodex-plugin-capabilities.ps1",
+        "test-anticodex-manager-real-buttons.ps1",
+        "test-anticodex-codex-responses.ps1",
+        "test-anticodex-tool-loop.ps1",
+        "test-anticodex-native-tool-loop.ps1",
+        "test-anticodex-native-multi-tool-loop.ps1",
+        "test-anticodex-mcp-tool-loop.ps1",
+        "test-anticodex-custom-tool-loop.ps1",
+        "test-anticodex-compaction-resume.ps1",
+        "test-anticodex-cancellation.ps1",
+        "test-anticodex-web-tools.ps1",
+        "test-anticodex-real-mini-tool.ps1",
+        "test-anticodex-real-work.ps1",
+        "test-anticodex-post-verification.ps1",
+        "test-anticodex-account-proxy-readiness.ps1",
+        "test-anticodex-stability-soak.ps1",
+        "test-anticodex-cold-relaunch.ps1"
+    )
+    $realTrafficCommandHints = @(
+        "-allowrealtraffic",
+        "test-anticodex-codex-responses.ps1",
+        "test-anticodex-tool-loop.ps1",
+        "test-anticodex-native-tool-loop.ps1",
+        "test-anticodex-native-multi-tool-loop.ps1",
+        "test-anticodex-mcp-tool-loop.ps1",
+        "test-anticodex-custom-tool-loop.ps1",
+        "test-anticodex-compaction-resume.ps1",
+        "test-anticodex-cancellation.ps1",
+        "test-anticodex-web-tools.ps1",
+        "test-anticodex-real-mini-tool.ps1",
+        "test-anticodex-real-work.ps1",
+        "test-anticodex-post-verification.ps1",
+        "test-anticodex-account-proxy-readiness.ps1",
+        "test-anticodex-stability-soak.ps1"
+    )
+    $highImpactCommandHints = @(
+        "-allowrealtraffic",
+        "-confirmrelaunch",
+        "test-anticodex-real-mini-tool.ps1",
+        "test-anticodex-real-work.ps1",
+        "test-anticodex-post-verification.ps1",
+        "test-anticodex-stability-soak.ps1",
+        "test-anticodex-cold-relaunch.ps1"
+    )
     foreach ($nextAction in $nextActions) {
         $actionId = [string]$nextAction.id
         if ([string]::IsNullOrWhiteSpace($actionId)) {
@@ -105,6 +164,24 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($requiresRealTraffic) { $realTrafficActionCount++ }
         if ($highImpact) { $highImpactActionCount++ }
         if ($blocked) { $blockedActionCount++ }
+        $commandText = ([string]$nextAction.command).ToLowerInvariant()
+        if (-not [string]::IsNullOrWhiteSpace($commandText)) {
+            $gatewayHint = Find-TextHint $commandText $gatewayCommandHints
+            $realTrafficHint = Find-TextHint $commandText $realTrafficCommandHints
+            $highImpactHint = Find-TextHint $commandText $highImpactCommandHints
+            if (-not [string]::IsNullOrWhiteSpace($gatewayHint) -and -not $requiresGateway) {
+                Add-Failure "release-gates next action $actionId command requires gateway metadata"
+            }
+            if (-not [string]::IsNullOrWhiteSpace($realTrafficHint) -and -not $requiresRealTraffic) {
+                Add-Failure "release-gates next action $actionId command requires real-traffic metadata"
+            }
+            if (-not [string]::IsNullOrWhiteSpace($highImpactHint) -and -not $highImpact) {
+                Add-Failure "release-gates next action $actionId command requires high-impact metadata"
+            }
+            if ((-not [string]::IsNullOrWhiteSpace($gatewayHint) -or -not [string]::IsNullOrWhiteSpace($realTrafficHint) -or -not [string]::IsNullOrWhiteSpace($highImpactHint)) -and -not $blocked) {
+                Add-Failure "release-gates next action $actionId command risk missing explicit approval block"
+            }
+        }
         if ($requiresGateway -or $requiresRealTraffic -or $highImpact) { $approvalBlockedRiskActionCount++ }
         if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
             Add-Failure "release-gates next action $actionId missing explicit approval block"
