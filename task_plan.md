@@ -1596,3 +1596,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager panel version advanced to `native-panel-v94`.
 - Completed: diagnostics verifier output now includes a `pluginCapabilities` block with plugin evidence and source snapshot, matching MCP/Skill and refresh-feature support summaries.
 - Verification: JS syntax checks passed for updated Manager/report scripts; PowerShell parser check passed; Manager bridge self-test, UI-state self-test, and focused launcher contracts passed `130/130`. Runtime sync copied files with `-NoRestart`; local health remained offline, while strict passive runtime fingerprint gate showed installed runtime satisfied with `0` mismatches.
+
+## 2026-06-24 MCP/Skill Short-Budget Offline Guard
+- Completed: `test-anticodex-mcp-skills.ps1 -TimeoutSec 5` now skips local HTTP health/plugin/connector/app-tool endpoint probes in short-budget mode, while still running real MCP `node_repl` smoke, worker `tools/list`, local skill/guidance checks, and local app-tool registry parity.
+- Completed: launcher contracts now guard the short-budget HTTP skip branch so offline local gateway retries cannot reintroduce long degraded runs.
+- Verification: PowerShell parser check passed; focused launcher contracts passed `130/130`; real offline `-TimeoutSec 5` run returned exit `0`, `ok:true`, `shortBudgetMode:true`, `capabilityState:"ready"`, real list count `2`, and elapsed about `5.9s`.

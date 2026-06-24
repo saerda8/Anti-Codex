@@ -4733,6 +4733,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
 
   // Must include health check and MCP/skills endpoints
   assert.match(mcpSkills, /Invoke-AntiCodexHealth/);
+  assert.match(mcpSkills, /if \(\$script:shortBudgetMode\) \{\s*\$healthMode = "skipped_short_budget"/);
+  assert.match(mcpSkills, /if \(-not \$script:shortBudgetMode\) \{[\s\S]*\/backend-api\/ps\/plugins\/installed[\s\S]*\/backend-api\/wham\/apps[\s\S]*\n\}/);
   assert.match(mcpSkills, /\/backend-api\/ps\/plugins\/installed/);
   assert.match(mcpSkills, /\/backend-api\/plugins\/list/);
   assert.match(mcpSkills, /\/backend-api\/aip\/connectors/);

@@ -542,28 +542,32 @@ function Invoke-RealMcpListSmoke {
     return $parsed
 }
 
-try {
-    $health = Invoke-AntiCodexHealth
-    if (-not $health.ok) { Add-Failure "health ok=false" }
-    $hasUpstreamProfile = $health.PSObject.Properties.Name -contains "upstreamProfile" -and $null -ne $health.upstreamProfile
-    if ($hasUpstreamProfile) {
-        $healthMode = if ($health.upstreamProfile.PSObject.Properties.Name -contains "mode") { [string]$health.upstreamProfile.mode } else { "unknown" }
-        $healthProtocol = if ($health.upstreamProfile.PSObject.Properties.Name -contains "protocol") { [string]$health.upstreamProfile.protocol } else { $null }
-        $healthModel = if ($health.upstreamProfile.PSObject.Properties.Name -contains "model") { [string]$health.upstreamProfile.model } else { $null }
-    } elseif ($health.upstream -eq "antigravity-desktop") {
-        $healthMode = "antigravity"
+if ($script:shortBudgetMode) {
+    $healthMode = "skipped_short_budget"
+} else {
+    try {
+        $health = Invoke-AntiCodexHealth
+        if (-not $health.ok) { Add-Failure "health ok=false" }
+        $hasUpstreamProfile = $health.PSObject.Properties.Name -contains "upstreamProfile" -and $null -ne $health.upstreamProfile
+        if ($hasUpstreamProfile) {
+            $healthMode = if ($health.upstreamProfile.PSObject.Properties.Name -contains "mode") { [string]$health.upstreamProfile.mode } else { "unknown" }
+            $healthProtocol = if ($health.upstreamProfile.PSObject.Properties.Name -contains "protocol") { [string]$health.upstreamProfile.protocol } else { $null }
+            $healthModel = if ($health.upstreamProfile.PSObject.Properties.Name -contains "model") { [string]$health.upstreamProfile.model } else { $null }
+        } elseif ($health.upstream -eq "antigravity-desktop") {
+            $healthMode = "antigravity"
+        }
+        if ($healthMode -eq "third-party") {
+            if (-not $healthProtocol) { Add-Failure "third-party upstream missing protocol" }
+            if (-not $healthModel) { Add-Failure "third-party upstream missing model" }
+        } elseif ($healthMode -eq "antigravity") {
+            if ($health.upstream -ne "antigravity-desktop") { Add-Failure "Antigravity mode but upstream is not antigravity-desktop: $($health.upstream)" }
+            if ([int]$health.modelCount -lt 1) { Add-Failure "Antigravity model catalog is not ready: $($health.accountMessage)" }
+        } else {
+            Add-Failure "unknown upstream mode (upstream=$($health.upstream), upstreamProfile.mode=$healthMode)"
+        }
+    } catch {
+        Add-Failure "health request failed: $($_.Exception.Message)"
     }
-    if ($healthMode -eq "third-party") {
-        if (-not $healthProtocol) { Add-Failure "third-party upstream missing protocol" }
-        if (-not $healthModel) { Add-Failure "third-party upstream missing model" }
-    } elseif ($healthMode -eq "antigravity") {
-        if ($health.upstream -ne "antigravity-desktop") { Add-Failure "Antigravity mode but upstream is not antigravity-desktop: $($health.upstream)" }
-        if ([int]$health.modelCount -lt 1) { Add-Failure "Antigravity model catalog is not ready: $($health.accountMessage)" }
-    } else {
-        Add-Failure "unknown upstream mode (upstream=$($health.upstream), upstreamProfile.mode=$healthMode)"
-    }
-} catch {
-    Add-Failure "health request failed: $($_.Exception.Message)"
 }
 
 if (-not (Test-Path -LiteralPath $CodexHome -PathType Container)) {
@@ -709,28 +713,30 @@ foreach ($guidanceName in $guidanceNames) {
 }
 Save-McpSkillFileHashCache
 
-try {
-    $pluginsInstalled = Invoke-LocalJson "/backend-api/ps/plugins/installed"
-} catch {
-    Add-Failure "installed plugins endpoint failed: $($_.Exception.Message)"
-}
+if (-not $script:shortBudgetMode) {
+    try {
+        $pluginsInstalled = Invoke-LocalJson "/backend-api/ps/plugins/installed"
+    } catch {
+        Add-Failure "installed plugins endpoint failed: $($_.Exception.Message)"
+    }
 
-try {
-    $pluginsList = Invoke-LocalJson "/backend-api/plugins/list"
-} catch {
-    Add-Failure "plugin list endpoint failed: $($_.Exception.Message)"
-}
+    try {
+        $pluginsList = Invoke-LocalJson "/backend-api/plugins/list"
+    } catch {
+        Add-Failure "plugin list endpoint failed: $($_.Exception.Message)"
+    }
 
-try {
-    $connectors = Invoke-LocalJson "/backend-api/aip/connectors"
-} catch {
-    Add-Failure "connectors endpoint failed: $($_.Exception.Message)"
-}
+    try {
+        $connectors = Invoke-LocalJson "/backend-api/aip/connectors"
+    } catch {
+        Add-Failure "connectors endpoint failed: $($_.Exception.Message)"
+    }
 
-try {
-    $apps = Invoke-LocalJsonPost "/backend-api/wham/apps"
-} catch {
-    Add-Failure "app tools endpoint failed: $($_.Exception.Message)"
+    try {
+        $apps = Invoke-LocalJsonPost "/backend-api/wham/apps"
+    } catch {
+        Add-Failure "app tools endpoint failed: $($_.Exception.Message)"
+    }
 }
 
 $connectorCount = Get-ObjectCount $connectors "connectors"
