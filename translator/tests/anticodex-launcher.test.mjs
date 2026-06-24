@@ -91,6 +91,19 @@ function runChildProcess(command, args, { timeoutMs = 20000 } = {}) {
   });
 }
 
+function listWindowsProcesses() {
+  if (process.platform !== "win32") return [];
+  const result = spawnSync("powershell.exe", [
+    "-NoProfile",
+    "-Command",
+    "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress -Depth 3",
+  ], { encoding: "utf8", windowsHide: true, timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  if (!result.stdout.trim()) return [];
+  const parsed = JSON.parse(result.stdout);
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
 test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
 
@@ -5139,8 +5152,20 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
       "-AgentsSkillsPath",
       resolve(tempRoot, "agents-skills"),
       "-TimeoutSec",
-      "3",
+      "5",
     ], { encoding: "utf8", windowsHide: true });
+    const fakeMcpNeedle = fakeMcpScript.toLowerCase();
+    const tempRootNeedle = tempRoot.replace(/\\/g, "/").toLowerCase();
+    const leftoverProcesses = listWindowsProcesses().filter((item) => {
+      const commandLine = String(item.CommandLine || "").replace(/\\/g, "/").toLowerCase();
+      return commandLine.includes(fakeMcpNeedle)
+        || (commandLine.includes("test-anticodex-mcp-skills.ps1") && commandLine.includes(tempRootNeedle));
+    });
+    assert.deepEqual(
+      leftoverProcesses.map((item) => ({ processId: item.ProcessId, commandLine: item.CommandLine })),
+      [],
+      "MCP/skills short-budget verifier must not leave its fake MCP or exact verifier child process running",
+    );
     const processOutput = [result.stdout, result.stderr]
       .filter((value) => typeof value === "string" && value.trim())
       .join("\n");
@@ -5149,6 +5174,7 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     const report = JSON.parse(output);
 
     assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
+    assert.equal(report.shortBudgetMode, true);
     assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
     assert.deepEqual(report.mcp.changedShared, ["node_repl"]);
     assert.deepEqual(report.mcp.changedSharedDetails[0].fields, ["args"]);

@@ -1611,3 +1611,7 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: launcher regression tests now run `test-anticodex-plugin-capabilities.ps1` against an isolated loopback fake endpoint with temp local/shared connector and app-tool caches, so plugin capability evidence can be verified without starting the real Anti-Codex gateway.
 - Completed: the fake endpoint keeps all connectors inaccessible and exposes zero app tools, proving health/plugin/connector/GET+POST app-tool paths, cache parity, source snapshots, and summaries while preserving the no-fake-authorization rule.
 - Verification: focused launcher contract passed `131/131`; PowerShell parser check, release-gate self-test, and `git diff --check` passed.
+
+## 2026-06-24 MCP/Skill Short-Budget Process Cleanup Contract
+- Completed: the MCP/Skill launcher regression now checks that the `-TimeoutSec 5` short-budget verifier keeps `shortBudgetMode:true` and does not leave its temp fake MCP process or exact `test-anticodex-mcp-skills.ps1` child process running after exit.
+- Verification: focused launcher contract passed `131/131`; PowerShell parser check passed; `git diff --check` passed.
