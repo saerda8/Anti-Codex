@@ -124,8 +124,8 @@ const gateDefinitions = [
   { id: "compactionResume", group: "real-traffic", file: "latest-compaction-resume.json", requiredForRelease: true, requireCompactionResumeSemantics: true },
   { id: "cancellation", group: "real-traffic", file: "latest-cancellation.json", requiredForRelease: true, requireCancellationSemantics: true },
   { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true, requireWebToolsSemantics: true },
-  { id: "realMiniTool", group: "real-traffic", file: "latest-real-mini-tool.json", requiredForRelease: true },
-  { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true },
+  { id: "realMiniTool", group: "real-traffic", file: "latest-real-mini-tool.json", requiredForRelease: true, requireRealMiniToolSemantics: true },
+  { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true, requireRealWorkSemantics: true },
   { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true, requireAccountProxySemantics: true },
 
   { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false, requireStabilitySoakSemantics: true },
@@ -552,6 +552,48 @@ function summarizeGate(definition) {
       if (report.providerReady !== true || report.preHealthReady !== true || report.postHealthReady !== true) semanticFailures.push("cancellation_provider_not_ready");
       if (!report.mode) semanticFailures.push("cancellation_mode_missing");
       if (!report.model) semanticFailures.push("cancellation_model_missing");
+    }
+    if (definition.requireRealMiniToolSemantics) {
+      const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+      const executor = report.executor && typeof report.executor === "object" ? report.executor : {};
+      const finalText = String(report.final_text || "");
+      if (report.reportName !== "real-mini-tool") semanticFailures.push("real_mini_tool_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("real_mini_tool_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("real_mini_tool_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("real_mini_tool_behavior_not_covered");
+      if (report.coverageKind !== "real-traffic") semanticFailures.push("real_mini_tool_coverage_kind");
+      if (!report.first_response_id) semanticFailures.push("real_mini_tool_first_response_missing");
+      if (!report.call_id) semanticFailures.push("real_mini_tool_call_id_missing");
+      if (artifact.exists !== true) semanticFailures.push("real_mini_tool_artifact_missing");
+      if (artifact.ran !== true) semanticFailures.push("real_mini_tool_artifact_not_run");
+      if (artifact.markerMatched !== true) semanticFailures.push("real_mini_tool_marker_mismatch");
+      if (executor.tool !== "create_mini_tool") semanticFailures.push("real_mini_tool_executor_mismatch");
+      if (executor.realFileWrite !== true) semanticFailures.push("real_mini_tool_file_write_missing");
+      if (!finalText.includes("CLI_OK")) semanticFailures.push("real_mini_tool_final_confirmation_missing");
+      if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("real_mini_tool_chinese_missing");
+      if (/DeepCodex|Deep Codex/.test(finalText)) semanticFailures.push("real_mini_tool_legacy_brand_leak");
+    }
+    if (definition.requireRealWorkSemantics) {
+      const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+      const executor = report.executor && typeof report.executor === "object" ? report.executor : {};
+      const realMcp = executor.realMcp && typeof executor.realMcp === "object" ? executor.realMcp : {};
+      const finalText = String(report.final_text || "");
+      if (report.reportName !== "real-work") semanticFailures.push("real_work_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("real_work_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("real_work_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("real_work_behavior_not_covered");
+      if (report.coverageKind !== "real-traffic") semanticFailures.push("real_work_coverage_kind");
+      if (!report.first_response_id) semanticFailures.push("real_work_first_response_missing");
+      if (!report.call_id) semanticFailures.push("real_work_call_id_missing");
+      if (artifact.exists !== true) semanticFailures.push("real_work_artifact_missing");
+      if (artifact.ran !== true) semanticFailures.push("real_work_artifact_not_run");
+      if (artifact.markerMatched !== true) semanticFailures.push("real_work_marker_mismatch");
+      if (executor.tool !== "create_probe_file") semanticFailures.push("real_work_executor_mismatch");
+      if (executor.realFileWrite !== true) semanticFailures.push("real_work_file_write_missing");
+      if (realMcp.ok !== true || realMcp.markerObserved !== true) semanticFailures.push("real_work_mcp_missing");
+      if (!finalText.includes("FILE_OK")) semanticFailures.push("real_work_final_confirmation_missing");
+      if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("real_work_chinese_missing");
+      if (/DeepCodex|Deep Codex/.test(finalText)) semanticFailures.push("real_work_legacy_brand_leak");
     }
     if (definition.requireAccountProxySemantics) {
       const phaseSummary = report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : {};
@@ -1668,6 +1710,34 @@ if (args.has("--self-test")) {
       postHealthReady: false,
     });
 
+    writeFakeLatestReport("latest-real-mini-tool.json", {
+      ok: true,
+      reportName: "real-mini-tool",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      first_response_id: "",
+      call_id: "",
+      artifact: { exists: false, ran: false, markerMatched: false },
+      executor: { tool: "wrong", realFileWrite: false },
+      final_text: "CLI failed",
+    });
+
+    writeFakeLatestReport("latest-real-work.json", {
+      ok: true,
+      reportName: "real-work",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      first_response_id: "",
+      call_id: "",
+      artifact: { exists: false, ran: false, markerMatched: false },
+      executor: { tool: "wrong", realFileWrite: false, realMcp: { ok: false, markerObserved: false } },
+      final_text: "FILE failed",
+    });
+
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
       reportName: "wrong-third-party-provider",
@@ -2249,6 +2319,29 @@ if (args.has("--self-test")) {
       "cancellation_provider_not_ready",
       "cancellation_mode_missing",
       "cancellation_model_missing",
+    ]);
+    semanticFailures.realMiniTool = assertSemanticFailures("realMiniTool", "self-test failed: semantically invalid real-mini-tool report satisfied the gate", [
+      "real_mini_tool_first_response_missing",
+      "real_mini_tool_call_id_missing",
+      "real_mini_tool_artifact_missing",
+      "real_mini_tool_artifact_not_run",
+      "real_mini_tool_marker_mismatch",
+      "real_mini_tool_executor_mismatch",
+      "real_mini_tool_file_write_missing",
+      "real_mini_tool_final_confirmation_missing",
+      "real_mini_tool_chinese_missing",
+    ]);
+    semanticFailures.realWork = assertSemanticFailures("realWork", "self-test failed: semantically invalid real-work report satisfied the gate", [
+      "real_work_first_response_missing",
+      "real_work_call_id_missing",
+      "real_work_artifact_missing",
+      "real_work_artifact_not_run",
+      "real_work_marker_mismatch",
+      "real_work_executor_mismatch",
+      "real_work_file_write_missing",
+      "real_work_mcp_missing",
+      "real_work_final_confirmation_missing",
+      "real_work_chinese_missing",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_report_name",

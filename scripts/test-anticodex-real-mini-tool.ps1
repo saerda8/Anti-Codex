@@ -240,6 +240,11 @@ console.log(JSON.stringify({ lines, words, chars: input.length, marker: "$marker
 
     $result = [pscustomobject]@{
         ok = ($failures.Count -eq 0)
+        reportName = "real-mini-tool"
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        behaviorCovered = ($failures.Count -eq 0)
+        coverageKind = "real-traffic"
         failures = $failures.ToArray()
         model = $model
         elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds

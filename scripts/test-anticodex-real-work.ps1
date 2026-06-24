@@ -248,6 +248,11 @@ try {
 
     $result = [pscustomobject]@{
         ok = ($failures.Count -eq 0)
+        reportName = "real-work"
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        behaviorCovered = ($failures.Count -eq 0)
+        coverageKind = "real-traffic"
         failures = $failures.ToArray()
         model = $model
         elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
