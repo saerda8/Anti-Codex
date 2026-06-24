@@ -805,6 +805,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /sourceSnapshotEvidence/);
   assert.match(managerBridge, /sourceSnapshot: files=/);
   assert.match(managerInject, /sourceSnapshot: files=/);
+  assert.match(managerBridge, /source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers/);
+  assert.match(managerInject, /source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers/);
+  assert.match(managerServerSource, /source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers/);
+  assert.match(managerBridge, /do not edit latest report JSON by hand/);
+  assert.match(managerInject, /do not edit latest report JSON by hand/);
+  assert.match(managerServerSource, /do not edit latest report JSON by hand/);
   assert.match(managerBridge, /cacheHitCount/);
   assert.match(managerInject, /cacheHitCount/);
   assert.match(managerBridge, /sourcePreflightEvidence/);

@@ -346,6 +346,7 @@ function latestReportsSummary(result) {
         .filter(Boolean);
       if (sourceSnapshotMismatchGates.length) {
         lines.push(`  source snapshot mismatch: stale reports for ${sourceSnapshotMismatchGates.join(", ")}; refresh MCP/Skill and plugin capability reports`);
+        lines.push("  source snapshot refresh: refresh local features first, then run normal MCP/Skill and plugin capability verifiers; do not edit latest report JSON by hand");
       }
     }
     if (item.sourceSnapshotEvidence) {
@@ -786,6 +787,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /source snapshot mismatch: stale reports for mcpSkills, pluginCapabilities; refresh MCP\/Skill and plugin capability reports/);
+  assert.match(evidenceSummary, /source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers; do not edit latest report JSON by hand/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
   assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42 \/ reused=true \/ reason=short_budget_reused_previous_snapshot/);

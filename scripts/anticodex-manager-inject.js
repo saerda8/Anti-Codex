@@ -955,6 +955,7 @@
           .filter(Boolean);
         if (sourceSnapshotMismatchGates.length) {
           lines.push(`  source snapshot mismatch: stale reports for ${sourceSnapshotMismatchGates.join(", ")}; refresh MCP/Skill and plugin capability reports`);
+          lines.push("  source snapshot refresh: refresh local features first, then run normal MCP/Skill and plugin capability verifiers; do not edit latest report JSON by hand");
         }
       }
       if (item.sourceSnapshotEvidence) {

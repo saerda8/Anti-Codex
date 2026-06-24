@@ -116,6 +116,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/source snapshot mismatch: stale reports/.test(injectSource) || !/_source_snapshot_mismatch/.test(injectSource)) {
     failures.push("in-app manager is missing stale source snapshot guidance");
   }
+  if (!/source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers/.test(injectSource) || !/do not edit latest report JSON by hand/.test(injectSource)) {
+    failures.push("in-app manager is missing source snapshot refresh guidance");
+  }
   if (!/failureReasons:/.test(injectSource) || !/releaseGateFailureReasons/.test(injectSource)) {
     failures.push("in-app manager is missing release-gate failure reason evidence");
   }
@@ -206,6 +209,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/source snapshot mismatch: stale reports/.test(managerHtml) || !/_source_snapshot_mismatch/.test(managerHtml)) {
     failures.push("manager page is missing stale source snapshot guidance");
+  }
+  if (!/source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers/.test(managerHtml) || !/do not edit latest report JSON by hand/.test(managerHtml)) {
+    failures.push("manager page is missing source snapshot refresh guidance");
   }
   if (!/failureReasons:/.test(managerHtml) || !/releaseGateFailureReasons/.test(managerHtml)) {
     failures.push("manager page is missing release-gate failure reason evidence");
