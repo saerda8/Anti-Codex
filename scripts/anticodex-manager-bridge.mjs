@@ -373,6 +373,11 @@ function latestReportsSummary(result) {
         lines.push(`  source snapshot mismatch: stale reports for ${sourceSnapshotMismatchGates.join(", ")}; refresh MCP/Skill and plugin capability reports`);
         lines.push("  source snapshot refresh: refresh local features first, then run normal MCP/Skill and plugin capability verifiers; do not edit latest report JSON by hand");
       }
+      const pluginOfflineSnapshot = item.releaseGateFailures.find((gate) => gate.id === "pluginCapabilities" && gate.offlineSnapshotEvidence);
+      if (pluginOfflineSnapshot) {
+        const evidence = pluginOfflineSnapshot.offlineSnapshotEvidence;
+        lines.push(`  plugin offline snapshot: connector=${evidence.connectorContentMatches ? "ok" : "needs-refresh"} / appTool=${evidence.appToolContentMatches ? "ok" : "needs-refresh"} / refreshGate=${evidence.refreshGateSatisfied ? "ok" : "needs-refresh"} / runtimeGateway=required`);
+      }
     }
     if (item.sourceSnapshotEvidence) {
       const evidence = item.sourceSnapshotEvidence;

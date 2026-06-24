@@ -2332,6 +2332,16 @@ function latestManagerReportItem(label, fileName) {
             blockedUntilExplicitUserApproval: action?.blockedUntilExplicitUserApproval === true,
         })).filter((action) => action.id).slice(0, 8)
         : [];
+    const offlineSnapshotEvidence = (value) => value && typeof value === "object" ? {
+        connectorContentMatches: value.connectorContentMatches === true,
+        appToolContentMatches: value.appToolContentMatches === true,
+        refreshGateSatisfied: value.refreshGateSatisfied === true,
+        refreshSelectedFile: shortSafeText(value.refreshSelectedFile || "", ""),
+        sourceFingerprint: shortSafeText(value.sourceFingerprint || "", ""),
+        sourceFileCount: Number.isFinite(Number(value.sourceFileCount)) ? Number(value.sourceFileCount) : null,
+        sourceMtimeMax: shortSafeText(value.sourceMtimeMax || "", ""),
+        note: shortSafeText(value.note || "", ""),
+    } : null;
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2359,6 +2369,7 @@ function latestManagerReportItem(label, fileName) {
                     : [],
                 guidance: shortSafeText(gate.guidance || "", ""),
                 orderedActions: orderedActions(gate.orderedActions),
+                ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
             }))
             .slice(0, 12)
         : [];
@@ -2382,6 +2393,7 @@ function latestManagerReportItem(label, fileName) {
             reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
             guidance: shortSafeText(gate.guidance || "", ""),
             orderedActions: orderedActions(gate.orderedActions),
+            ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
         })).filter((entry) => entry.id).slice(0, 24)
         ;
     const nextActions = orderedActions(report?.nextActions);
@@ -3744,6 +3756,11 @@ function latestReportsSummary(result){
       if(sourceSnapshotMismatchGates.length){
         lines.push("  source snapshot mismatch: stale reports for "+sourceSnapshotMismatchGates.join(", ")+"; refresh MCP/Skill and plugin capability reports");
         lines.push("  source snapshot refresh: refresh local features first, then run normal MCP/Skill and plugin capability verifiers; do not edit latest report JSON by hand");
+      }
+      const pluginOfflineSnapshot=item.releaseGateFailures.find((gate)=>gate.id==="pluginCapabilities"&&gate.offlineSnapshotEvidence);
+      if(pluginOfflineSnapshot){
+        const evidence=pluginOfflineSnapshot.offlineSnapshotEvidence;
+        lines.push("  plugin offline snapshot: connector="+(evidence.connectorContentMatches?"ok":"needs-refresh")+" / appTool="+(evidence.appToolContentMatches?"ok":"needs-refresh")+" / refreshGate="+(evidence.refreshGateSatisfied?"ok":"needs-refresh")+" / runtimeGateway=required");
       }
     }
     if(item.localConnectorEvidence){

@@ -34,6 +34,20 @@ function asOrderedActions(value) {
   })).filter((item) => item.id).slice(0, 8);
 }
 
+function asOfflineSnapshotEvidence(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    connectorContentMatches: boolField(value, "connectorContentMatches"),
+    appToolContentMatches: boolField(value, "appToolContentMatches"),
+    refreshGateSatisfied: boolField(value, "refreshGateSatisfied"),
+    refreshSelectedFile: asString(value.refreshSelectedFile || ""),
+    sourceFingerprint: asString(value.sourceFingerprint || ""),
+    sourceFileCount: has(value, "sourceFileCount") ? value.sourceFileCount : null,
+    sourceMtimeMax: asString(value.sourceMtimeMax || ""),
+    note: asString(value.note || ""),
+  };
+}
+
 function boolField(object, key) {
   return has(object, key) ? !!object[key] : null;
 }
@@ -169,6 +183,7 @@ const releaseGateFailures = Array.isArray(report?.gates)
       reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
       guidance: asString(gate.guidance || ""),
       orderedActions: asOrderedActions(gate.orderedActions),
+      ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
     }))
   : [];
 const rawReleaseGateFailureReasons = has(report, "releaseGateFailureReasons") && Array.isArray(report.releaseGateFailureReasons)
@@ -191,6 +206,7 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
     guidance: asString(gate.guidance || ""),
     orderedActions: asOrderedActions(gate.orderedActions),
+    ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
   })).filter((entry) => entry.id).slice(0, 24)
 const nextActions = asOrderedActions(report?.nextActions);
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"

@@ -559,6 +559,17 @@ function summarizeGate(definition) {
       const appToolParity = report.appToolParity || {};
       const skills = report.skills || {};
       const guidance = report.guidance && typeof report.guidance === "object" ? report.guidance : {};
+      gate.refreshFeatureSnapshotEvidence = {
+        connectorSharedExists: connectorParity.sharedExists === true,
+        connectorLocalExists: connectorParity.localExists === true,
+        connectorContentMatches: connectorParity.contentMatches === true,
+        appToolSharedExists: appToolParity.sharedExists === true,
+        appToolLocalExists: appToolParity.localExists === true,
+        appToolContentMatches: appToolParity.contentMatches === true,
+        sourceFingerprint: gate.sourceFingerprint || "",
+        sourceFileCount: gate.sourceFileCount,
+        sourceMtimeMax: gate.sourceMtimeMax || "",
+      };
       if (report.reportName !== "refresh-features") semanticFailures.push("refresh_features_report_name");
       if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("refresh_features_failures");
       if (connectorParity.sharedExists === true && connectorParity.localExists !== true) semanticFailures.push("refresh_features_connector_local_missing");
@@ -979,6 +990,19 @@ function attachGateFailureReasons(gates) {
     gate.failureReasons = gate.satisfied ? [] : gateFailureReasons(gate);
     gate.failureReason = gate.failureReasons[0] || "";
   }
+  return gates;
+}
+
+function attachPluginOfflineSnapshotEvidence(gates) {
+  const pluginGate = gates.find((gate) => gate.id === "pluginCapabilities");
+  const refreshGate = gates.find((gate) => gate.id === "refreshFeatures");
+  if (!pluginGate || !refreshGate?.refreshFeatureSnapshotEvidence) return gates;
+  pluginGate.offlineSnapshotEvidence = {
+    ...refreshGate.refreshFeatureSnapshotEvidence,
+    refreshGateSatisfied: refreshGate.satisfied === true,
+    refreshSelectedFile: refreshGate.selectedFile || "",
+    note: "Local connector/app-tool metadata parity is proven by refreshFeatures; pluginCapabilities still needs the local gateway for runtime endpoint evidence.",
+  };
   return gates;
 }
 
@@ -1991,6 +2015,10 @@ if (args.has("--self-test")) {
     const offlinePluginGates = gateDefinitions.map(summarizeGate);
     const offlineMcpGate = offlinePluginGates.find((gate) => gate.id === "mcpSkills");
     const offlinePluginGate = offlinePluginGates.find((gate) => gate.id === "pluginCapabilities");
+    attachPluginOfflineSnapshotEvidence(offlinePluginGates);
+    if (offlinePluginGate?.offlineSnapshotEvidence?.connectorContentMatches !== true || offlinePluginGate?.offlineSnapshotEvidence?.appToolContentMatches !== true || offlinePluginGate?.offlineSnapshotEvidence?.refreshGateSatisfied !== true) {
+      throw new Error("self-test failed: plugin offline snapshot evidence was not attached from refresh-features");
+    }
     if (gateSatisfiedBeforeCrossSnapshotCheck(offlineMcpGate) && gateSatisfiedBeforeCrossSnapshotCheck(offlinePluginGate) && offlineMcpGate.sourceFingerprint && offlinePluginGate.sourceFingerprint && offlineMcpGate.sourceFingerprint !== offlinePluginGate.sourceFingerprint) {
       for (const [gate, failure] of [
         [offlineMcpGate, "mcp_skills_source_snapshot_mismatch"],
@@ -2101,6 +2129,7 @@ const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);
 
 attachGateFailureReasons(gates);
+attachPluginOfflineSnapshotEvidence(gates);
 
 const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const missingShort = requiredShort.filter((gate) => !gate.satisfied).map((gate) => gate.id);
@@ -2124,6 +2153,7 @@ const releaseGateFailureReasons = gates
     reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
     guidance: gateGuidance(gate),
     orderedActions: gateOrderedActions(gate),
+    offlineSnapshotEvidence: gate.offlineSnapshotEvidence || null,
   }));
 const nextActions = orderedNextActions(releaseGateFailureReasons);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");

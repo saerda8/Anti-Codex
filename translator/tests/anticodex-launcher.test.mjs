@@ -804,6 +804,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /releaseGateFailures/);
   assert.match(managerBridge, /semanticFailures/);
   assert.match(managerInject, /semanticFailures/);
+  assert.match(managerBridge, /plugin offline snapshot:/);
+  assert.match(managerInject, /plugin offline snapshot:/);
+  assert.match(managerServerSource, /plugin offline snapshot:/);
+  assert.match(managerBridge, /runtimeGateway=required/);
+  assert.match(managerInject, /runtimeGateway=required/);
+  assert.match(managerServerSource, /runtimeGateway=required/);
   assert.match(managerBridge, /sourceSnapshotEvidence/);
   assert.match(managerInject, /sourceSnapshotEvidence/);
   assert.match(managerBridge, /sourceSnapshot: files=/);
@@ -2597,6 +2603,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
   assert.match(reportSummarizer, /releaseGateFailureReasons/);
+  assert.match(reportSummarizer, /offlineSnapshotEvidence/);
+  assert.match(reportSummarizer, /asOfflineSnapshotEvidence/);
   assert.match(reportSummarizer, /selectedKind/);
   assert.match(reportSummarizer, /selectedMtime/);
   assert.match(reportSummarizer, /reportFailureSamples/);
@@ -7253,6 +7261,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /orderedActions/);
   assert.match(releaseGates, /nextActions/);
   assert.match(releaseGates, /blockedUntilExplicitUserApproval/);
+  assert.match(releaseGates, /offlineSnapshotEvidence/);
+  assert.match(releaseGates, /plugin offline snapshot evidence was not attached from refresh-features/);
+  assert.match(releaseGates, /pluginCapabilities still needs the local gateway for runtime endpoint evidence/);
   assert.match(releaseGates, /real-traffic ordered action was not attached/);
   assert.match(releaseGates, /realTrafficRefreshOrder/);
   assert.match(releaseGates, /managerEvidenceRefreshOrder/);
