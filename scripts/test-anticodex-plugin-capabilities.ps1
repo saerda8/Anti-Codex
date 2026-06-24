@@ -559,6 +559,7 @@ $result = [pscustomobject]@{
         appToolGetCount = $whamToolsGet.Count
         appToolGetPostParity = [pscustomobject]@{
             checked = $true
+            contentMatches = (@($missingFromWhamGet).Count -eq 0 -and @($extraFromWhamGet).Count -eq 0)
             missingFromGet = $missingFromWhamGet
             extraFromGet = $extraFromWhamGet
         }

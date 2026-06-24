@@ -1574,3 +1574,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: plugin/app action summaries now distinguish callable tools, accessible connectors with no tools, and metadata-only/no-access connector state, so local allowlist metadata is not presented as authorization.
 - Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `129/129`; real current MCP/Skill summary showed `realList 2/2`, `tools=12`, servers `antigravity-code-worker` and `deepseek-code-worker`; strict passive release gate returned `shortReady:true` and installed runtime `59/59`.
 - Note: direct diagnostics verifier could not contact `http://127.0.0.1:8484`, so no live diagnostics bundle was refreshed; this was not treated as a product failure.
+
+## 2026-06-24 Plugin GET/POST Explicit Parity Evidence
+- Completed: plugin capability verifier now writes explicit `appToolGetPostParity.contentMatches`, and report summaries/diagnostics/adaptive Manager support treat GET/POST parity as clean only when that field is `true`.
+- Completed: installed-overall reuse and passive release gates now require the explicit GET/POST content-match proof, not only empty missing/extra arrays.
+- Completed: launcher regression fixtures and release-gate self-test now cover the `contentMatches:false` case, including a negative release-gate semantic failure.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; release-gate self-test passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `129/129`; `git diff --check` passed.
+- Current evidence note: installed runtime is synced, but strict passive gate now reports `shortReady:false` only because the existing `latest-plugin-capabilities.json` predates the new `contentMatches` field. Refreshing that local plugin report requires the Anti-Codex gateway or a longer verifier budget; no fake report was written.

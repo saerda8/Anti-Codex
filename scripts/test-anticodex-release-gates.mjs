@@ -488,7 +488,7 @@ function summarizeGate(definition) {
       if (capabilities.nativeCodexWriteback !== false) semanticFailures.push("plugin_capabilities_native_codex_writeback");
       if (capabilities.accessibleConnectorCount !== 0) semanticFailures.push("plugin_capabilities_accessible_connector_count");
       if (capabilities.unauthorizedAppToolCount !== 0) semanticFailures.push("plugin_capabilities_unauthorized_app_tools");
-      if (!isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
+      if (appToolGetPostParity.contentMatches !== true || !isEmptyArray(appToolGetPostParity.missingFromGet) || !isEmptyArray(appToolGetPostParity.extraFromGet)) semanticFailures.push("plugin_capabilities_app_tool_get_post_mismatch");
       if (!isEmptyArray(connectorParity.missingShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_missing_shared");
       if (!isEmptyArray(connectorParity.extraLocal)) semanticFailures.push("plugin_capabilities_local_connector_parity_extra_local");
       if (!isEmptyArray(connectorParity.changedShared)) semanticFailures.push("plugin_capabilities_local_connector_parity_changed_shared");
@@ -908,6 +908,7 @@ if (args.has("--self-test")) {
         accessibleConnectorCount: 1,
         unauthorizedAppToolCount: 1,
         appToolGetPostParity: {
+          contentMatches: false,
           missingFromGet: ["unsafe-tool"],
           extraFromGet: [],
         },
@@ -1717,7 +1718,7 @@ if (args.has("--self-test")) {
         unauthorizedAppToolCount: 0,
         connectorParity: { missingShared: [], extraLocal: [], changedShared: [] },
         appToolParity: { missingShared: [], extraLocal: [], changedShared: [] },
-        appToolGetPostParity: { missingFromGet: [], extraFromGet: [] },
+        appToolGetPostParity: { contentMatches: true, missingFromGet: [], extraFromGet: [] },
       },
       sourceSnapshot: { fingerprint: "stale-plugin-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
     });

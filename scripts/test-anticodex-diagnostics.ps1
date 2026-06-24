@@ -464,6 +464,7 @@ function Test-DiagnosticBundle {
                 if (-not [string]$pluginEvidence.appToolsNote) { Add-Failure "plugin capability summary missing app tools no-access note" }
                 if ($pluginEvidence.connectorParityChecked -ne $true) { Add-Failure "plugin capability summary missing connector parity checked proof" }
                 if ($pluginEvidence.appToolGetPostParityChecked -ne $true) { Add-Failure "plugin capability summary missing GET/POST checked proof" }
+                if ($pluginEvidence.appToolGetPostParityContentMatches -ne $true) { Add-Failure "plugin capability summary missing GET/POST content match proof" }
                 if ($pluginEvidence.connectorCacheChecked -ne $true -or $pluginEvidence.connectorCacheExists -ne $true -or $pluginEvidence.connectorCacheSampleReadable -ne $true) { Add-Failure "plugin capability summary missing connector cache smoke proof" }
                 if ($pluginEvidence.appToolsCacheChecked -ne $true -or $pluginEvidence.appToolsCacheExists -ne $true -or $pluginEvidence.appToolsCacheSampleReadable -ne $true) { Add-Failure "plugin capability summary missing app-tools cache smoke proof" }
                 if ($pluginEvidence.connectorParityClean -ne $true) { Add-Failure "plugin capability summary missing connector parity evidence" }

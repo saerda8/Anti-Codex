@@ -202,6 +202,7 @@ function Get-FreshPluginCapabilitiesReportCheck {
             $extraAppTools.Count -eq 0 -and
             $changedAppTools.Count -eq 0 -and
             $appToolGetPostParity.checked -eq $true -and
+            $appToolGetPostParity.contentMatches -eq $true -and
             $missingAppToolsFromGet.Count -eq 0 -and
             $extraAppToolsFromGet.Count -eq 0 -and
             [int]$capabilities.unauthorizedAppToolCount -eq 0 -and

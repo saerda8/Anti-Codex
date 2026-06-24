@@ -493,6 +493,7 @@ const summary = {
       ? asString(appToolParity.sharedFingerprint) === asString(appToolParity.localFingerprint)
       : null,
     appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
+    appToolGetPostParityContentMatches: appToolGetPostParity ? boolField(appToolGetPostParity, "contentMatches") : null,
     appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
     appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],
     tempSharedHomeUsed: tempIsolation ? boolField(tempIsolation, "sharedHomeUsed") : null,
@@ -528,9 +529,8 @@ const summary = {
     appToolParityMissingShared: appToolParity && has(appToolParity, "missingShared") ? asStringArray(appToolParity.missingShared) : [],
     appToolParityExtraLocal: appToolParity && has(appToolParity, "extraLocal") ? asStringArray(appToolParity.extraLocal) : [],
     appToolParityChangedShared: appToolParity && has(appToolParity, "changedShared") ? asStringArray(appToolParity.changedShared) : [],
-    appToolGetPostParityClean: appToolGetPostParity
-      ? emptyArrayField(appToolGetPostParity, "missingFromGet") === true && emptyArrayField(appToolGetPostParity, "extraFromGet") === true
-      : null,
+    appToolGetPostParityClean: appToolGetPostParity ? boolField(appToolGetPostParity, "contentMatches") === true : null,
+    appToolGetPostParityContentMatches: appToolGetPostParity ? boolField(appToolGetPostParity, "contentMatches") : null,
     appToolGetPostParityChecked: appToolGetPostParity ? boolField(appToolGetPostParity, "checked") : null,
     appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
     appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],

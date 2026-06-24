@@ -2805,9 +2805,8 @@ function latestManagerReportItem(label, fileName) {
             appToolParityExtraLocalSample: Array.isArray(appToolParity?.extraLocal) ? appToolParity.extraLocal.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             appToolParityChangedSharedCount: Array.isArray(appToolParity?.changedShared) ? appToolParity.changedShared.length : null,
             appToolParityChangedSharedSample: Array.isArray(appToolParity?.changedShared) ? appToolParity.changedShared.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
-            appToolGetPostParityClean: appToolGetPostParity && Array.isArray(appToolGetPostParity.missingFromGet) && Array.isArray(appToolGetPostParity.extraFromGet)
-                ? appToolGetPostParity.missingFromGet.length === 0 && appToolGetPostParity.extraFromGet.length === 0
-                : null,
+            appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
+            appToolGetPostParityContentMatches: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
             appToolGetPostParityChecked: appToolGetPostParity ? appToolGetPostParity.checked === true : null,
             appToolGetPostMissingFromGetCount: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.length : null,
             appToolGetPostMissingFromGetSample: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],

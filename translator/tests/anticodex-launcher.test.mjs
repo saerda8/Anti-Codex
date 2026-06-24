@@ -2249,6 +2249,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /appToolGetPostExtraFromGet/);
   assert.match(server, /unauthorizedAppToolCount/);
   assert.match(server, /appToolGetPostParityClean/);
+  assert.match(server, /appToolGetPostParityContentMatches/);
   assert.match(server, /releaseGateFailures/);
   assert.match(server, /installedRuntimeEvidence/);
   assert.match(server, /releaseGateSelectedReports/);
@@ -2592,6 +2593,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /unattributedAppToolCount/);
   assert.match(reportSummarizer, /appToolGetCount/);
   assert.match(reportSummarizer, /appToolGetPostParityClean/);
+  assert.match(reportSummarizer, /appToolGetPostParityContentMatches/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.doesNotMatch(collector, /failures = if \(\$result\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.match(collector, /\$resultFailures = if \(\$result\.PSObject\.Properties\.Name -contains "failures"\)/);
@@ -3569,6 +3571,7 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
         },
         appToolGetPostParity: {
           checked: true,
+          contentMatches: false,
           missingFromGet: ["post-only-tool"],
           extraFromGet: ["get-only-tool"],
         },
@@ -3611,6 +3614,8 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.equal(summary.pluginCapabilityEvidence.appToolParityClean, false);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostMissingFromGet, ["post-only-tool"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.appToolGetPostExtraFromGet, ["get-only-tool"]);
+    assert.equal(summary.pluginCapabilityEvidence.appToolGetPostParityContentMatches, false);
+    assert.equal(summary.pluginCapabilityEvidence.appToolGetPostParityClean, false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5191,6 +5196,7 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /appToolCount/);
   assert.match(capabilities, /appToolGetCount/);
   assert.match(capabilities, /appToolGetPostParity/);
+  assert.match(capabilities, /contentMatches = \(@\(\$missingFromWhamGet\)\.Count -eq 0 -and @\(\$extraFromWhamGet\)\.Count -eq 0\)/);
   assert.match(capabilities, /GET \/backend-api\/wham\/apps does not match POST tool projection/);
   assert.match(capabilities, /appToolParity/);
   assert.match(capabilities, /shared app tool '\$toolKey' exists but Anti-Codex local app-tools cache is missing it/);
@@ -5443,6 +5449,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /connectorParityClean = \$true/);
   assert.match(overall, /appToolParityClean = \$true/);
   assert.match(overall, /appToolGetPostParityClean = \$true/);
+  assert.match(overall, /\$appToolGetPostParity\.contentMatches -eq \$true/);
   assert.match(overall, /\$appToolGetPostParity\.checked -eq \$true/);
   assert.match(overall, /\$missingAppToolsFromGet\.Count -eq 0/);
   assert.match(overall, /\$extraAppToolsFromGet\.Count -eq 0/);
@@ -6270,6 +6277,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /appToolParityExtraLocal/);
   assert.match(diagnostics, /appToolParityChangedShared/);
   assert.match(diagnostics, /appToolGetPostExtraFromGet/);
+  assert.match(diagnostics, /appToolGetPostParityContentMatches/);
+  assert.match(diagnostics, /plugin capability summary missing GET\/POST content match proof/);
   assert.match(diagnostics, /lastUiOnly/);
   assert.match(diagnostics, /manager-real-buttons action missing bridge ready evidence/);
   assert.match(diagnostics, /manager-real-buttons action missing overlay evidence/);
@@ -6481,6 +6490,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /local_connector_coverage_kind/);
   assert.match(releaseGates, /local_connector_chatgpt_urls_not_scrubbed/);
   assert.match(releaseGates, /local_connector_link_endpoints_not_metadata_only/);
+  assert.match(releaseGates, /appToolGetPostParity\.contentMatches !== true/);
   assert.match(releaseGates, /local_connector_upstream_requests_during_local_endpoints/);
   assert.match(releaseGates, /local_connector_linked_connector_not_accessible/);
   assert.match(releaseGates, /local_connector_hidden_connector_accessible/);
