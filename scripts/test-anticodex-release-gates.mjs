@@ -806,6 +806,27 @@ function writeJsonReportAtomic(payload) {
   return { latest, history };
 }
 
+function gateFailureReasons(gate) {
+  const reasons = [];
+  if (!gate.present) reasons.push("missing_report");
+  if (gate.present && gate.parseable !== true) reasons.push("unparseable_report");
+  if (gate.present && gate.signed !== true) reasons.push("unsigned_report");
+  if (gate.present && gate.hashValid !== true) reasons.push(gate.error || "hash_invalid");
+  if (gate.present && gate.parseable === true && gate.okField !== true) reasons.push("ok_false");
+  if (gate.present && gate.parseable === true && gate.fresh !== true) reasons.push("stale_report");
+  if (Array.isArray(gate.semanticFailures) && gate.semanticFailures.length) reasons.push("semantic_failures");
+  if (gate.error && !reasons.includes(gate.error)) reasons.push(gate.error);
+  return reasons.length ? reasons : (gate.satisfied ? [] : ["unsatisfied"]);
+}
+
+function attachGateFailureReasons(gates) {
+  for (const gate of gates) {
+    gate.failureReasons = gate.satisfied ? [] : gateFailureReasons(gate);
+    gate.failureReason = gate.failureReasons[0] || "";
+  }
+  return gates;
+}
+
 if (args.has("--self-test")) {
   const originalReportRoot = reportRoot;
   const tempRoot = mkdtempSync(join(tmpdir(), "anticodex-release-gates-"));
@@ -1738,6 +1759,29 @@ if (args.has("--self-test")) {
     semanticFailures.installedRuntimeSync = runtimeGate.semanticFailures || [];
     if (!semanticFailures.installedRuntimeSync.includes("installed_runtime_hash_mismatch")) throw new Error("self-test failed: installed runtime hash mismatch was not detected");
     if (!semanticFailures.installedRuntimeSync.includes("installed_runtime_fingerprint_mismatch")) throw new Error("self-test failed: installed runtime fingerprint mismatch was not detected");
+
+    const reasonGates = attachGateFailureReasons([
+      ...gateDefinitions.map(summarizeGate),
+      runtimeGate,
+    ]);
+    function assertFailureReason(gateId, expectedReason) {
+      const gate = reasonGates.find((item) => item.id === gateId);
+      if (!gate) throw new Error(`self-test failed: ${gateId} gate missing while checking failure reason`);
+      if (!Array.isArray(gate.failureReasons) || !gate.failureReasons.includes(expectedReason)) {
+        throw new Error(`self-test failed: ${gateId} missing failure reason ${expectedReason}`);
+      }
+      if (!gate.failureReason) throw new Error(`self-test failed: ${gateId} missing primary failureReason`);
+    }
+    for (const gate of reasonGates.filter((item) => !item.satisfied)) {
+      if (!Array.isArray(gate.failureReasons) || gate.failureReasons.length === 0) {
+        throw new Error(`self-test failed: ${gate.id} has no failureReasons`);
+      }
+      if (!gate.failureReason) throw new Error(`self-test failed: ${gate.id} has no failureReason`);
+    }
+    assertFailureReason("postVerification", "missing_report");
+    assertFailureReason("fastOverallNoTraffic", "semantic_failures");
+    assertFailureReason("installedRuntimeSync", "semantic_failures");
+
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
     reportRoot = originalReportRoot;
@@ -1764,23 +1808,7 @@ if (mcpSkillGate?.sourceFingerprint && pluginCapabilityGate?.sourceFingerprint &
 const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);
 
-function gateFailureReasons(gate) {
-  const reasons = [];
-  if (!gate.present) reasons.push("missing_report");
-  if (gate.present && gate.parseable !== true) reasons.push("unparseable_report");
-  if (gate.present && gate.signed !== true) reasons.push("unsigned_report");
-  if (gate.present && gate.hashValid !== true) reasons.push(gate.error || "hash_invalid");
-  if (gate.present && gate.parseable === true && gate.okField !== true) reasons.push("ok_false");
-  if (gate.present && gate.parseable === true && gate.fresh !== true) reasons.push("stale_report");
-  if (Array.isArray(gate.semanticFailures) && gate.semanticFailures.length) reasons.push("semantic_failures");
-  if (gate.error && !reasons.includes(gate.error)) reasons.push(gate.error);
-  return reasons.length ? reasons : (gate.satisfied ? [] : ["unsatisfied"]);
-}
-
-for (const gate of gates) {
-  gate.failureReasons = gate.satisfied ? [] : gateFailureReasons(gate);
-  gate.failureReason = gate.failureReasons[0] || "";
-}
+attachGateFailureReasons(gates);
 
 const missingRequired = requiredRelease.filter((gate) => !gate.satisfied).map((gate) => gate.id);
 const missingShort = requiredShort.filter((gate) => !gate.satisfied).map((gate) => gate.id);

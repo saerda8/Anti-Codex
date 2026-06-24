@@ -1554,4 +1554,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 Release Gate Failure Reasons
 - Completed: passive release gates now attach `failureReasons` to unsatisfied gates and surface a compact `releaseGateFailureReasons` list through reports, diagnostics, and all Manager views.
 - Completed: support views now distinguish stale evidence from missing or damaged reports, so stale real-traffic reports no longer look like absent files.
+- Completed: release-gate self-test now directly asserts that missing, semantic-failure, and installed-runtime mismatch gates all carry non-empty `failureReasons[]` plus a primary `failureReason`.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; release-gate self-test passed; focused launcher contracts passed `129/129`; strict passive gate returned `shortReady:true`, installed runtime fingerprints matched `59/59`, and required real-traffic misses were classified as `stale_report`.
