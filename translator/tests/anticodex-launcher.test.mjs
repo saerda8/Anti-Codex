@@ -3399,11 +3399,20 @@ test("report summarizer surfaces local connector no-traffic evidence values", ()
         hiddenConnectorAccessible: false,
         chatgptInstallUrlsScrubbed: true,
         linkEndpointsUnsupported: true,
+        upstreamRequestsBeforeLocalEndpoints: 1,
+        upstreamRequestsAfterLocalEndpoints: 1,
         upstreamRequestsDuringLocalEndpoints: 0,
       },
-      connectorParity: { contentMatches: true },
-      appToolParity: { contentMatches: true },
+      connectorParity: { contentMatches: true, sharedExists: true, localExists: true, sharedFingerprint: "abc", localFingerprint: "abc" },
+      appToolParity: { contentMatches: true, sharedExists: true, localExists: true, sharedFingerprint: "def", localFingerprint: "def" },
       appToolGetPostParity: { contentMatches: true, missingFromGet: [], extraFromGet: [] },
+      tempIsolation: {
+        codexHome: "C:/Temp/anticodex-local/codex-home",
+        stateRoot: "C:/Temp/anticodex-local",
+        sharedCodexHome: "C:/Temp/anticodex-local/shared-codex-home",
+        sharedHomeUsed: false,
+      },
+      disclaimer: "This verifies only local metadata projection.",
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -3419,14 +3428,27 @@ test("report summarizer surfaces local connector no-traffic evidence values", ()
     assert.equal(summary.localConnectorEvidence.allowlistedConnectorAccessible, false);
     assert.equal(summary.localConnectorEvidence.allowlistedConnectorLocallyAllowlisted, true);
     assert.equal(summary.localConnectorEvidence.hiddenConnectorAccessible, false);
+    assert.equal(summary.localConnectorEvidence.upstreamRequestsBeforeLocalEndpoints, 1);
+    assert.equal(summary.localConnectorEvidence.upstreamRequestsAfterLocalEndpoints, 1);
     assert.equal(summary.localConnectorEvidence.upstreamRequestsDuringLocalEndpoints, 0);
     assert.equal(summary.localConnectorEvidence.chatgptInstallUrlsScrubbed, true);
     assert.equal(summary.localConnectorEvidence.linkEndpointsUnsupported, true);
     assert.equal(summary.localConnectorEvidence.connectorParityClean, true);
+    assert.equal(summary.localConnectorEvidence.connectorSharedExists, true);
+    assert.equal(summary.localConnectorEvidence.connectorLocalExists, true);
+    assert.equal(summary.localConnectorEvidence.connectorFingerprintMatches, true);
     assert.equal(summary.localConnectorEvidence.appToolParityClean, true);
+    assert.equal(summary.localConnectorEvidence.appToolSharedExists, true);
+    assert.equal(summary.localConnectorEvidence.appToolLocalExists, true);
+    assert.equal(summary.localConnectorEvidence.appToolFingerprintMatches, true);
     assert.equal(summary.localConnectorEvidence.appToolGetPostParityClean, true);
     assert.deepEqual(summary.localConnectorEvidence.appToolGetPostMissingFromGet, []);
     assert.deepEqual(summary.localConnectorEvidence.appToolGetPostExtraFromGet, []);
+    assert.equal(summary.localConnectorEvidence.tempSharedHomeUsed, false);
+    assert.equal(summary.localConnectorEvidence.tempCodexHomeUnderStateRoot, true);
+    assert.equal(summary.localConnectorEvidence.tempSharedCodexHomeUnderStateRoot, true);
+    assert.equal(summary.localConnectorEvidence.tempCodexHomeDistinctFromShared, true);
+    assert.equal(summary.localConnectorEvidence.disclaimer, "This verifies only local metadata projection.");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -3454,8 +3476,25 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
         appToolsNote: "expected 0: no accessible connectors linked",
         smoke: {
           callableState: "skipped_no_accessible_connectors",
+          connectorCache: {
+            checked: true,
+            cacheExists: true,
+            fileCount: 1,
+            sampleReadable: true,
+            sampleConnectorCount: 3,
+          },
+          appToolsCache: {
+            checked: true,
+            cacheExists: true,
+            fileCount: 1,
+            sampleReadable: true,
+            sampleToolCount: 0,
+          },
         },
         connectorParity: {
+          checked: true,
+          sharedCount: 4,
+          localCount: 4,
           missingShared: ["missing-connector"],
           extraLocal: ["extra-connector"],
           changedShared: ["changed-connector"],
@@ -3466,6 +3505,7 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
           changedShared: ["changed-tool"],
         },
         appToolGetPostParity: {
+          checked: true,
           missingFromGet: ["post-only-tool"],
           extraFromGet: ["get-only-tool"],
         },
@@ -3484,6 +3524,20 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     assert.equal(summary.pluginCapabilityEvidence.appToolGetCount, 0);
     assert.equal(summary.pluginCapabilityEvidence.appToolsNote, "expected 0: no accessible connectors linked");
     assert.equal(summary.pluginCapabilityEvidence.callableState, "skipped_no_accessible_connectors");
+    assert.equal(summary.pluginCapabilityEvidence.connectorParityChecked, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorParitySharedCount, 4);
+    assert.equal(summary.pluginCapabilityEvidence.connectorParityLocalCount, 4);
+    assert.equal(summary.pluginCapabilityEvidence.appToolGetPostParityChecked, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorCacheChecked, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorCacheExists, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorCacheFileCount, 1);
+    assert.equal(summary.pluginCapabilityEvidence.connectorCacheSampleReadable, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorCacheSampleConnectorCount, 3);
+    assert.equal(summary.pluginCapabilityEvidence.appToolsCacheChecked, true);
+    assert.equal(summary.pluginCapabilityEvidence.appToolsCacheExists, true);
+    assert.equal(summary.pluginCapabilityEvidence.appToolsCacheFileCount, 1);
+    assert.equal(summary.pluginCapabilityEvidence.appToolsCacheSampleReadable, true);
+    assert.equal(summary.pluginCapabilityEvidence.appToolsCacheSampleToolCount, 0);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityMissingShared, ["missing-connector"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityExtraLocal, ["extra-connector"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityChangedShared, ["changed-connector"]);

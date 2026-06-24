@@ -95,6 +95,12 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/app capability: state=/.test(injectSource) || !/callable=\$\{evidence\.callableState/.test(injectSource) || !/nativeWriteback=\$\{evidence\.nativeCodexWriteback/.test(injectSource)) {
     failures.push("in-app manager is missing plugin/app callable state evidence");
   }
+  if (!/local connector upstream: before=/.test(injectSource) || !/local connector isolation: sharedHomeUsed=/.test(injectSource) || !/local cache fingerprints: connector=/.test(injectSource)) {
+    failures.push("in-app manager is missing local connector upstream/isolation/cache evidence");
+  }
+  if (!/app cache smoke: connector=/.test(injectSource) || !/appTools=\$\{evidence\.appToolsCacheChecked/.test(injectSource) || !/getPostChecked=\$\{evidence\.appToolGetPostParityChecked/.test(injectSource)) {
+    failures.push("in-app manager is missing plugin/app cache smoke evidence");
+  }
   if (!/syncReadiness versions: codex=/.test(injectSource) || !/managerBridge=\$\{evidence\.managerBridgeReady/.test(injectSource) || !/processes=\$\{evidence\.managerBridgeProcessCount/.test(injectSource)) {
     failures.push("in-app manager is missing sync-readiness version and Manager bridge process evidence");
   }
@@ -149,6 +155,12 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/app capability: state=/.test(managerHtml) || !/callable="\+\(evidence\.callableState/.test(managerHtml) || !/nativeWriteback="\+\(evidence\.nativeCodexWriteback/.test(managerHtml)) {
     failures.push("manager page is missing plugin/app callable state evidence");
+  }
+  if (!/local connector upstream: before=/.test(managerHtml) || !/local connector isolation: sharedHomeUsed=/.test(managerHtml) || !/local cache fingerprints: connector=/.test(managerHtml)) {
+    failures.push("manager page is missing local connector upstream/isolation/cache evidence");
+  }
+  if (!/app cache smoke: connector=/.test(managerHtml) || !/appTools="\+\(evidence\.appToolsCacheChecked/.test(managerHtml) || !/getPostChecked="\+\(evidence\.appToolGetPostParityChecked/.test(managerHtml)) {
+    failures.push("manager page is missing plugin/app cache smoke evidence");
   }
   if (!/syncReadiness versions: codex=/.test(managerHtml) || !/managerBridge="\+\(evidence\.managerBridgeReady/.test(managerHtml) || !/processes="\+\(evidence\.managerBridgeProcessCount/.test(managerHtml)) {
     failures.push("manager page is missing sync-readiness version and Manager bridge process evidence");

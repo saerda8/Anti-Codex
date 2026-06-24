@@ -420,14 +420,21 @@ function Test-DiagnosticBundle {
                 if ($localEvidence.chatgptInstallUrlsScrubbed -ne $true) { Add-Failure "local connector summary missing ChatGPT URL scrub evidence" }
                 if ($localEvidence.linkEndpointsUnsupported -ne $true) { Add-Failure "local connector summary missing metadata-only link endpoint evidence" }
                 if ([int]$localEvidence.upstreamRequestsDuringLocalEndpoints -ne 0) { Add-Failure "local connector summary recorded upstream requests during local endpoints" }
+                if ([int]$localEvidence.upstreamRequestsBeforeLocalEndpoints -ne [int]$localEvidence.upstreamRequestsAfterLocalEndpoints) { Add-Failure "local connector summary before/after upstream request counts differ" }
                 if ($localEvidence.allowlistedConnectorAccessible -ne $false) { Add-Failure "local connector summary treats allowlist as access" }
                 if ($localEvidence.allowlistedConnectorLocallyAllowlisted -ne $true) { Add-Failure "local connector summary missing local allowlist evidence" }
                 if ($localEvidence.hiddenConnectorAccessible -ne $false) { Add-Failure "local connector summary exposes hidden connector" }
                 if ([int]$localEvidence.exposedToolsPost -ne [int]$localEvidence.exposedToolsGet) { Add-Failure "local connector summary GET/POST tool counts differ" }
                 if (@($localEvidence.exposedToolNames).Count -ne [int]$localEvidence.exposedToolsPost) { Add-Failure "local connector summary exposed tool names mismatch" }
                 if ($localEvidence.connectorParityClean -ne $true) { Add-Failure "local connector summary missing connector parity proof" }
+                if ($localEvidence.connectorFingerprintMatches -ne $true) { Add-Failure "local connector summary missing connector fingerprint match proof" }
                 if ($localEvidence.appToolParityClean -ne $true) { Add-Failure "local connector summary missing app-tool parity proof" }
+                if ($localEvidence.appToolFingerprintMatches -ne $true) { Add-Failure "local connector summary missing app-tool fingerprint match proof" }
                 if ($localEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "local connector summary missing GET/POST app-tool parity proof" }
+                if ($localEvidence.tempSharedHomeUsed -ne $false) { Add-Failure "local connector summary used shared home during temp isolation" }
+                if ($localEvidence.tempCodexHomeUnderStateRoot -ne $true) { Add-Failure "local connector summary missing temp CODEX_HOME isolation proof" }
+                if ($localEvidence.tempSharedCodexHomeUnderStateRoot -ne $true) { Add-Failure "local connector summary missing temp shared home isolation proof" }
+                if ($localEvidence.tempCodexHomeDistinctFromShared -ne $true) { Add-Failure "local connector summary CODEX_HOME is not distinct from shared home" }
                 $exposedToolNames = @(As-FlatArray $localEvidence.exposedToolNames)
                 if ($exposedToolNames.Count -ne 1 -or $exposedToolNames[0] -ne "linked_tool") {
                     Add-Failure "local connector summary exposed tool names is not exactly one 'linked_tool'"
@@ -452,6 +459,10 @@ function Test-DiagnosticBundle {
                 if ([int]$pluginEvidence.unauthorizedAppToolCount -ne 0) { Add-Failure "plugin capability summary reports unauthorized app tools" }
                 if ($pluginEvidence.callableState -ne "skipped_no_accessible_connectors") { Add-Failure "plugin capability summary missing no-access callable state" }
                 if (-not [string]$pluginEvidence.appToolsNote) { Add-Failure "plugin capability summary missing app tools no-access note" }
+                if ($pluginEvidence.connectorParityChecked -ne $true) { Add-Failure "plugin capability summary missing connector parity checked proof" }
+                if ($pluginEvidence.appToolGetPostParityChecked -ne $true) { Add-Failure "plugin capability summary missing GET/POST checked proof" }
+                if ($pluginEvidence.connectorCacheChecked -ne $true -or $pluginEvidence.connectorCacheExists -ne $true -or $pluginEvidence.connectorCacheSampleReadable -ne $true) { Add-Failure "plugin capability summary missing connector cache smoke proof" }
+                if ($pluginEvidence.appToolsCacheChecked -ne $true -or $pluginEvidence.appToolsCacheExists -ne $true -or $pluginEvidence.appToolsCacheSampleReadable -ne $true) { Add-Failure "plugin capability summary missing app-tools cache smoke proof" }
                 if ($pluginEvidence.connectorParityClean -ne $true) { Add-Failure "plugin capability summary missing connector parity evidence" }
                 if ($pluginEvidence.appToolParityClean -ne $true) { Add-Failure "plugin capability summary missing app-tool parity evidence" }
                 if ($pluginEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "plugin capability summary missing GET/POST parity evidence" }

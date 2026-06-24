@@ -1382,6 +1382,15 @@ function shortSafeText(value, fallback = "") {
     return String(value).replace(/[\r\n]+/g, " ").slice(0, 240) || fallback;
 }
 
+function pathWithin(child, parent) {
+    const childText = shortSafeText(child, "");
+    const parentText = shortSafeText(parent, "");
+    if (!childText || !parentText) return null;
+    const normalizedChild = childText.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
+    const normalizedParent = parentText.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
+    return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
+}
+
 function installedCheckSummary(report, expectedFast) {
     if (!report || typeof report !== "object") {
         return {
@@ -2251,6 +2260,9 @@ function latestManagerReportItem(label, fileName) {
     const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object"
         ? capabilities.appToolGetPostParity
         : (report?.appToolGetPostParity && typeof report.appToolGetPostParity === "object" ? report.appToolGetPostParity : null);
+    const tempIsolation = report?.tempIsolation && typeof report.tempIsolation === "object" ? report.tempIsolation : null;
+    const connectorCacheSmoke = capabilities?.smoke?.connectorCache && typeof capabilities.smoke.connectorCache === "object" ? capabilities.smoke.connectorCache : null;
+    const appToolsCacheSmoke = capabilities?.smoke?.appToolsCache && typeof capabilities.smoke.appToolsCache === "object" ? capabilities.smoke.appToolsCache : null;
     const mcp = report?.mcp && typeof report.mcp === "object" ? report.mcp : null;
     const skills = report?.skills && typeof report.skills === "object" ? report.skills : null;
     const appTools = report?.appTools && typeof report.appTools === "object" ? report.appTools : null;
@@ -2537,6 +2549,7 @@ function latestManagerReportItem(label, fileName) {
         } : null,
         publicDocumentationFailureCount: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation && Array.isArray(publicDocumentation.failed) ? publicDocumentation.failed.length : null,
         localConnectorEvidence: endpointEvidence ? {
+            connectors: Number.isFinite(Number(endpointEvidence.connectors)) ? Number(endpointEvidence.connectors) : null,
             exposedToolsPost: Number.isFinite(Number(endpointEvidence.exposedToolsPost)) ? Number(endpointEvidence.exposedToolsPost) : null,
             exposedToolsGet: Number.isFinite(Number(endpointEvidence.exposedToolsGet)) ? Number(endpointEvidence.exposedToolsGet) : null,
             chatgptInstallUrlsScrubbed: endpointEvidence.chatgptInstallUrlsScrubbed === true,
@@ -2544,14 +2557,33 @@ function latestManagerReportItem(label, fileName) {
             linkedConnectorAccessible: endpointEvidence.linkedConnectorAccessible === true,
             allowlistedConnectorAccessible: endpointEvidence.allowlistedConnectorAccessible === true,
             allowlistedConnectorLocallyAllowlisted: endpointEvidence.allowlistedConnectorLocallyAllowlisted === true,
+            upstreamRequestsBeforeLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsBeforeLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsBeforeLocalEndpoints) : null,
+            upstreamRequestsAfterLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsAfterLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsAfterLocalEndpoints) : null,
             upstreamRequestsDuringLocalEndpoints: Number.isFinite(Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints)) ? Number(endpointEvidence.upstreamRequestsDuringLocalEndpoints) : null,
             hiddenConnectorAccessible: endpointEvidence.hiddenConnectorAccessible === true,
             exposedToolNames: Array.isArray(endpointEvidence.exposedToolNames) ? endpointEvidence.exposedToolNames.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
             connectorParityClean: connectorParity ? connectorParity.contentMatches === true : null,
+            connectorSharedExists: connectorParity ? connectorParity.sharedExists === true : null,
+            connectorLocalExists: connectorParity ? connectorParity.localExists === true : null,
+            connectorFingerprintMatches: connectorParity && typeof connectorParity.sharedFingerprint !== "undefined" && typeof connectorParity.localFingerprint !== "undefined"
+                ? shortSafeText(connectorParity.sharedFingerprint || "", "") === shortSafeText(connectorParity.localFingerprint || "", "")
+                : null,
             appToolParityClean: appToolParity ? appToolParity.contentMatches === true : null,
+            appToolSharedExists: appToolParity ? appToolParity.sharedExists === true : null,
+            appToolLocalExists: appToolParity ? appToolParity.localExists === true : null,
+            appToolFingerprintMatches: appToolParity && typeof appToolParity.sharedFingerprint !== "undefined" && typeof appToolParity.localFingerprint !== "undefined"
+                ? shortSafeText(appToolParity.sharedFingerprint || "", "") === shortSafeText(appToolParity.localFingerprint || "", "")
+                : null,
             appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
             appToolGetPostMissingFromGet: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
             appToolGetPostExtraFromGet: Array.isArray(appToolGetPostParity?.extraFromGet) ? appToolGetPostParity.extraFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
+            tempSharedHomeUsed: tempIsolation ? tempIsolation.sharedHomeUsed === true : null,
+            tempCodexHomeUnderStateRoot: tempIsolation ? pathWithin(tempIsolation.codexHome, tempIsolation.stateRoot) : null,
+            tempSharedCodexHomeUnderStateRoot: tempIsolation ? pathWithin(tempIsolation.sharedCodexHome, tempIsolation.stateRoot) : null,
+            tempCodexHomeDistinctFromShared: tempIsolation?.codexHome && tempIsolation?.sharedCodexHome
+                ? shortSafeText(tempIsolation.codexHome, "").replace(/\\/g, "/").toLowerCase() !== shortSafeText(tempIsolation.sharedCodexHome, "").replace(/\\/g, "/").toLowerCase()
+                : null,
+            disclaimer: shortSafeText(report?.disclaimer || "", ""),
         } : null,
         modelRoutingEvidence: (typeof report?.skipRequests === "boolean" || modelRoutingResults.length) ? {
             mode: shortSafeText(report?.mode || "", ""),
@@ -2703,6 +2735,9 @@ function latestManagerReportItem(label, fileName) {
             unauthorizedAppToolCount: Number.isFinite(Number(capabilities.unauthorizedAppToolCount)) ? Number(capabilities.unauthorizedAppToolCount) : null,
             appToolsNote: shortSafeText(capabilities.appToolsNote || "", ""),
             callableState: shortSafeText(capabilities.smoke?.callableState || "", ""),
+            connectorParityChecked: connectorParity ? connectorParity.checked === true : null,
+            connectorParitySharedCount: Number.isFinite(Number(connectorParity?.sharedCount)) ? Number(connectorParity.sharedCount) : null,
+            connectorParityLocalCount: Number.isFinite(Number(connectorParity?.localCount)) ? Number(connectorParity.localCount) : null,
             connectorParityClean: connectorParity && Array.isArray(connectorParity.missingShared) ? connectorParity.missingShared.length === 0 && (!Array.isArray(connectorParity.extraLocal) || connectorParity.extraLocal.length === 0) && (!Array.isArray(connectorParity.changedShared) || connectorParity.changedShared.length === 0) : null,
             connectorParityMissingSharedCount: Array.isArray(connectorParity?.missingShared) ? connectorParity.missingShared.length : null,
             connectorParityMissingSharedSample: Array.isArray(connectorParity?.missingShared) ? connectorParity.missingShared.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
@@ -2720,10 +2755,21 @@ function latestManagerReportItem(label, fileName) {
             appToolGetPostParityClean: appToolGetPostParity && Array.isArray(appToolGetPostParity.missingFromGet) && Array.isArray(appToolGetPostParity.extraFromGet)
                 ? appToolGetPostParity.missingFromGet.length === 0 && appToolGetPostParity.extraFromGet.length === 0
                 : null,
+            appToolGetPostParityChecked: appToolGetPostParity ? appToolGetPostParity.checked === true : null,
             appToolGetPostMissingFromGetCount: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.length : null,
             appToolGetPostMissingFromGetSample: Array.isArray(appToolGetPostParity?.missingFromGet) ? appToolGetPostParity.missingFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             appToolGetPostExtraFromGetCount: Array.isArray(appToolGetPostParity?.extraFromGet) ? appToolGetPostParity.extraFromGet.length : null,
             appToolGetPostExtraFromGetSample: Array.isArray(appToolGetPostParity?.extraFromGet) ? appToolGetPostParity.extraFromGet.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            connectorCacheChecked: connectorCacheSmoke ? connectorCacheSmoke.checked === true : null,
+            connectorCacheExists: connectorCacheSmoke ? connectorCacheSmoke.cacheExists === true : null,
+            connectorCacheFileCount: Number.isFinite(Number(connectorCacheSmoke?.fileCount)) ? Number(connectorCacheSmoke.fileCount) : null,
+            connectorCacheSampleReadable: connectorCacheSmoke ? connectorCacheSmoke.sampleReadable === true : null,
+            connectorCacheSampleConnectorCount: Number.isFinite(Number(connectorCacheSmoke?.sampleConnectorCount)) ? Number(connectorCacheSmoke.sampleConnectorCount) : null,
+            appToolsCacheChecked: appToolsCacheSmoke ? appToolsCacheSmoke.checked === true : null,
+            appToolsCacheExists: appToolsCacheSmoke ? appToolsCacheSmoke.cacheExists === true : null,
+            appToolsCacheFileCount: Number.isFinite(Number(appToolsCacheSmoke?.fileCount)) ? Number(appToolsCacheSmoke.fileCount) : null,
+            appToolsCacheSampleReadable: appToolsCacheSmoke ? appToolsCacheSmoke.sampleReadable === true : null,
+            appToolsCacheSampleToolCount: Number.isFinite(Number(appToolsCacheSmoke?.sampleToolCount)) ? Number(appToolsCacheSmoke.sampleToolCount) : null,
         } : null,
         providerContinuity: multiTurnHistory ? {
             turns: Number.isFinite(Number(multiTurnHistory.turns)) ? Number(multiTurnHistory.turns) : null,
@@ -3536,7 +3582,10 @@ function latestReportsSummary(result){
       const getPostMissing=Array.isArray(evidence.appToolGetPostMissingFromGet)?evidence.appToolGetPostMissingFromGet:[];
       const getPostExtra=Array.isArray(evidence.appToolGetPostExtraFromGet)?evidence.appToolGetPostExtraFromGet:[];
       const getPostSamples=[...getPostMissing,...getPostExtra].slice(0,5);
+      lines.push("  local connector upstream: before="+(evidence.upstreamRequestsBeforeLocalEndpoints??"\\u672a\\u77e5")+" / after="+(evidence.upstreamRequestsAfterLocalEndpoints??"\\u672a\\u77e5")+" / delta="+(evidence.upstreamRequestsDuringLocalEndpoints??"\\u672a\\u77e5"));
+      lines.push("  local connector isolation: sharedHomeUsed="+(evidence.tempSharedHomeUsed?"true":"false")+" / codexHomeUnderState="+(evidence.tempCodexHomeUnderStateRoot?"true":"false")+" / sharedUnderState="+(evidence.tempSharedCodexHomeUnderStateRoot?"true":"false")+" / distinct="+(evidence.tempCodexHomeDistinctFromShared?"true":"false"));
       lines.push("  local connector parity: connector="+(evidence.connectorParityClean?"ok":"\\u9700\\u5904\\u7406")+" / appTool="+(evidence.appToolParityClean?"ok":"\\u9700\\u5904\\u7406")+" / getPost="+(evidence.appToolGetPostParityClean?"ok":"\\u9700\\u5904\\u7406")+" / getPostMissing="+getPostMissing.length+" / getPostExtra="+getPostExtra.length+(getPostSamples.length?" / sample "+getPostSamples.join(", "):""));
+      lines.push("  local cache fingerprints: connector="+(evidence.connectorFingerprintMatches?"match":"\\u672a\\u77e5")+" / appTool="+(evidence.appToolFingerprintMatches?"match":"\\u672a\\u77e5")+" / connectorFiles="+(evidence.connectorSharedExists&&evidence.connectorLocalExists?"present":"\\u9700\\u5904\\u7406")+" / appToolFiles="+(evidence.appToolSharedExists&&evidence.appToolLocalExists?"present":"\\u9700\\u5904\\u7406"));
       if(Array.isArray(evidence.exposedToolNames)&&evidence.exposedToolNames.length) lines.push("  \\u53ef\\u89c1\\u5de5\\u5177\\uff1a"+evidence.exposedToolNames.join(", "));
     }
     if(item.modelRoutingEvidence){
@@ -3628,6 +3677,7 @@ function latestReportsSummary(result){
       const parityClean=evidence.connectorParityClean===true&&evidence.appToolParityClean===true&&evidence.appToolGetPostParityClean===true;
       lines.push("  \\u5e94\\u7528\\u5de5\\u5177\\u8bc1\\u636e\\uff1a\\u672a\\u6388\\u6743\\u5de5\\u5177 "+(evidence.unauthorizedAppToolCount??"\\u672a\\u77e5")+" / \\u65e0 connector_id "+(evidence.unattributedAppToolCount??"\\u672a\\u77e5")+" / parity "+(parityClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406"));
       lines.push("  app capability: state="+(evidence.capabilityState||"unknown")+" / degraded="+(evidence.degraded?"true":"false")+" / connectors="+(evidence.accessibleConnectorCount??"\\u672a\\u77e5")+"/"+(evidence.enabledConnectorCount??"\\u672a\\u77e5")+"/"+(evidence.connectorCount??"\\u672a\\u77e5")+" / tools="+(evidence.appToolCount??"\\u672a\\u77e5")+"/"+(evidence.appToolGetCount??"\\u672a\\u77e5")+" / callable="+(evidence.callableState||"unknown")+" / nativeWriteback="+(evidence.nativeCodexWriteback?"true":"false"));
+      lines.push("  app cache smoke: connector="+(evidence.connectorCacheChecked?"checked":"\\u672a\\u77e5")+"/"+(evidence.connectorCacheSampleReadable?"readable":"\\u672a\\u77e5")+"/"+(evidence.connectorCacheFileCount??"\\u672a\\u77e5")+" / appTools="+(evidence.appToolsCacheChecked?"checked":"\\u672a\\u77e5")+"/"+(evidence.appToolsCacheSampleReadable?"readable":"\\u672a\\u77e5")+"/"+(evidence.appToolsCacheFileCount??"\\u672a\\u77e5")+" / getPostChecked="+(evidence.appToolGetPostParityChecked?"true":"false"));
       if(evidence.appToolsNote) lines.push("  app capability note: "+evidence.appToolsNote);
       if(!parityClean){
         const samples=[...(evidence.connectorParityMissingSharedSample||[]),...(evidence.connectorParityExtraLocalSample||[]),...(evidence.connectorParityChangedSharedSample||[]),...(evidence.appToolParityMissingSharedSample||[]),...(evidence.appToolParityExtraLocalSample||[]),...(evidence.appToolParityChangedSharedSample||[]),...(evidence.appToolGetPostMissingFromGetSample||[]),...(evidence.appToolGetPostExtraFromGetSample||[])].slice(0,5);

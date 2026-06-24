@@ -24,6 +24,15 @@ function boolField(object, key) {
   return has(object, key) ? !!object[key] : null;
 }
 
+function pathWithin(child, parent) {
+  const childText = asString(child);
+  const parentText = asString(parent);
+  if (!childText || !parentText) return null;
+  const normalizedChild = childText.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
+  const normalizedParent = parentText.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
+  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
+}
+
 const report = JSON.parse(readFileSync(path, "utf8"));
 const checks = report && report.checks ? report.checks : {};
 function checkOk(name) {
@@ -87,6 +96,9 @@ const endpointEvidence = report && report.endpointEvidence ? report.endpointEvid
 const capabilities = report && report.capabilities ? report.capabilities : null;
 const connectorParity = capabilities && capabilities.connectorParity ? capabilities.connectorParity : (report && report.connectorParity ? report.connectorParity : null);
 const appToolParity = capabilities && capabilities.appToolParity ? capabilities.appToolParity : (report && report.appToolParity ? report.appToolParity : null);
+const tempIsolation = report && report.tempIsolation ? report.tempIsolation : null;
+const connectorCacheSmoke = capabilities && capabilities.smoke ? capabilities.smoke.connectorCache : null;
+const appToolsCacheSmoke = capabilities && capabilities.smoke ? capabilities.smoke.appToolsCache : null;
 const refreshConnectorParity = report && report.connectorParity ? report.connectorParity : null;
 const refreshAppToolParity = report && report.appToolParity ? report.appToolParity : null;
 const refreshSkills = report && report.skills ? report.skills : null;
@@ -423,14 +435,33 @@ const summary = {
     allowlistedConnectorLocallyAllowlisted: boolField(endpointEvidence, "allowlistedConnectorLocallyAllowlisted"),
     chatgptInstallUrlsScrubbed: boolField(endpointEvidence, "chatgptInstallUrlsScrubbed"),
     linkEndpointsUnsupported: boolField(endpointEvidence, "linkEndpointsUnsupported"),
+    upstreamRequestsBeforeLocalEndpoints: has(endpointEvidence, "upstreamRequestsBeforeLocalEndpoints") ? endpointEvidence.upstreamRequestsBeforeLocalEndpoints : null,
+    upstreamRequestsAfterLocalEndpoints: has(endpointEvidence, "upstreamRequestsAfterLocalEndpoints") ? endpointEvidence.upstreamRequestsAfterLocalEndpoints : null,
     upstreamRequestsDuringLocalEndpoints: has(endpointEvidence, "upstreamRequestsDuringLocalEndpoints") ? endpointEvidence.upstreamRequestsDuringLocalEndpoints : null,
     hiddenConnectorAccessible: boolField(endpointEvidence, "hiddenConnectorAccessible"),
     exposedToolNames: has(endpointEvidence, "exposedToolNames") ? asStringArray(endpointEvidence.exposedToolNames) : [],
     connectorParityClean: connectorParity ? connectorParity.contentMatches === true : null,
+    connectorSharedExists: connectorParity ? boolField(connectorParity, "sharedExists") : null,
+    connectorLocalExists: connectorParity ? boolField(connectorParity, "localExists") : null,
+    connectorFingerprintMatches: connectorParity && has(connectorParity, "sharedFingerprint") && has(connectorParity, "localFingerprint")
+      ? asString(connectorParity.sharedFingerprint) === asString(connectorParity.localFingerprint)
+      : null,
     appToolParityClean: appToolParity ? appToolParity.contentMatches === true : null,
+    appToolSharedExists: appToolParity ? boolField(appToolParity, "sharedExists") : null,
+    appToolLocalExists: appToolParity ? boolField(appToolParity, "localExists") : null,
+    appToolFingerprintMatches: appToolParity && has(appToolParity, "sharedFingerprint") && has(appToolParity, "localFingerprint")
+      ? asString(appToolParity.sharedFingerprint) === asString(appToolParity.localFingerprint)
+      : null,
     appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
     appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
     appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],
+    tempSharedHomeUsed: tempIsolation ? boolField(tempIsolation, "sharedHomeUsed") : null,
+    tempCodexHomeUnderStateRoot: tempIsolation ? pathWithin(tempIsolation.codexHome, tempIsolation.stateRoot) : null,
+    tempSharedCodexHomeUnderStateRoot: tempIsolation ? pathWithin(tempIsolation.sharedCodexHome, tempIsolation.stateRoot) : null,
+    tempCodexHomeDistinctFromShared: tempIsolation && tempIsolation.codexHome && tempIsolation.sharedCodexHome
+      ? asString(tempIsolation.codexHome).replace(/\\/g, "/").toLowerCase() !== asString(tempIsolation.sharedCodexHome).replace(/\\/g, "/").toLowerCase()
+      : null,
+    disclaimer: asString(report.disclaimer),
   } : null,
   pluginCapabilityEvidence: capabilities ? {
     snapshotSource: asString(capabilities.snapshotSource),
@@ -446,6 +477,9 @@ const summary = {
     unauthorizedAppToolCount: has(capabilities, "unauthorizedAppToolCount") ? capabilities.unauthorizedAppToolCount : null,
     appToolsNote: asString(capabilities.appToolsNote),
     callableState: asString(capabilities.smoke?.callableState),
+    connectorParityChecked: connectorParity ? boolField(connectorParity, "checked") : null,
+    connectorParitySharedCount: connectorParity && has(connectorParity, "sharedCount") ? connectorParity.sharedCount : null,
+    connectorParityLocalCount: connectorParity && has(connectorParity, "localCount") ? connectorParity.localCount : null,
     connectorParityClean: connectorParity ? emptyArrayField(connectorParity, "missingShared") && emptyArrayField(connectorParity, "extraLocal") && emptyArrayField(connectorParity, "changedShared") : null,
     connectorParityMissingShared: connectorParity && has(connectorParity, "missingShared") ? asStringArray(connectorParity.missingShared) : [],
     connectorParityExtraLocal: connectorParity && has(connectorParity, "extraLocal") ? asStringArray(connectorParity.extraLocal) : [],
@@ -457,8 +491,19 @@ const summary = {
     appToolGetPostParityClean: appToolGetPostParity
       ? emptyArrayField(appToolGetPostParity, "missingFromGet") === true && emptyArrayField(appToolGetPostParity, "extraFromGet") === true
       : null,
+    appToolGetPostParityChecked: appToolGetPostParity ? boolField(appToolGetPostParity, "checked") : null,
     appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
     appToolGetPostExtraFromGet: appToolGetPostParity && has(appToolGetPostParity, "extraFromGet") ? asStringArray(appToolGetPostParity.extraFromGet) : [],
+    connectorCacheChecked: connectorCacheSmoke ? boolField(connectorCacheSmoke, "checked") : null,
+    connectorCacheExists: connectorCacheSmoke ? boolField(connectorCacheSmoke, "cacheExists") : null,
+    connectorCacheFileCount: connectorCacheSmoke && has(connectorCacheSmoke, "fileCount") ? connectorCacheSmoke.fileCount : null,
+    connectorCacheSampleReadable: connectorCacheSmoke ? boolField(connectorCacheSmoke, "sampleReadable") : null,
+    connectorCacheSampleConnectorCount: connectorCacheSmoke && has(connectorCacheSmoke, "sampleConnectorCount") ? connectorCacheSmoke.sampleConnectorCount : null,
+    appToolsCacheChecked: appToolsCacheSmoke ? boolField(appToolsCacheSmoke, "checked") : null,
+    appToolsCacheExists: appToolsCacheSmoke ? boolField(appToolsCacheSmoke, "cacheExists") : null,
+    appToolsCacheFileCount: appToolsCacheSmoke && has(appToolsCacheSmoke, "fileCount") ? appToolsCacheSmoke.fileCount : null,
+    appToolsCacheSampleReadable: appToolsCacheSmoke ? boolField(appToolsCacheSmoke, "sampleReadable") : null,
+    appToolsCacheSampleToolCount: appToolsCacheSmoke && has(appToolsCacheSmoke, "sampleToolCount") ? appToolsCacheSmoke.sampleToolCount : null,
   } : null,
   mcpSkillEvidence: (mcp || skills) ? {
     hashCacheHitCount: has(report.hashCache || {}, "hitCount") ? report.hashCache.hitCount : null,

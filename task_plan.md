@@ -1529,3 +1529,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics now rejects plugin/app summaries that lose metadata-only/no-access callable evidence or confuse enabled connectors with accessible connectors.
 - Completed: UI-state static checks now guard the injected Manager and fallback Manager callable-state evidence line.
 - Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip; `git diff --check` passed.
+
+## 2026-06-24 Local Connector Fine-Grained Evidence
+- Completed: local connector summaries now preserve upstream request before/after/delta counts, temp isolation booleans, connector/app-tool fingerprint match evidence, and metadata-only disclaimer.
+- Completed: plugin/app capability summaries now preserve connector parity checked/count fields plus connector/app-tools cache smoke evidence.
+- Completed: external Manager bridge, injected Manager, fallback Manager, diagnostics verifier, UI-state static checks, and launcher summarizer fixtures all guard the new support evidence.
+- Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip; real `test-anticodex-local-connectors.mjs --timeout-ms 30000` returned `ok:true`, no real traffic, upstream request delta `0`, and local/shared cache fingerprints matched.
