@@ -24,11 +24,13 @@ function asOrderedActions(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => ({
     id: asString(item?.id),
+    ...(item?.gateId ? { gateId: asString(item.gateId) } : {}),
     phase: asString(item?.phase),
     command: asString(item?.command),
     requiresGatewayStart: item?.requiresGatewayStart === true,
     requiresRealTraffic: item?.requiresRealTraffic === true,
     highImpact: item?.highImpact === true,
+    blockedUntilExplicitUserApproval: item?.blockedUntilExplicitUserApproval === true,
   })).filter((item) => item.id).slice(0, 8);
 }
 
@@ -190,6 +192,7 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     guidance: asString(gate.guidance || ""),
     orderedActions: asOrderedActions(gate.orderedActions),
   })).filter((entry) => entry.id).slice(0, 24)
+const nextActions = asOrderedActions(report?.nextActions);
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"
   ? Object.entries(report.groups).map(([group, value]) => ({
     group: asString(group),
@@ -477,6 +480,7 @@ const summary = {
   damagedReports: has(report, "damagedReports") ? asStringArray(report.damagedReports) : [],
   releaseGateFailures,
   releaseGateFailureReasons,
+  nextActions,
   releaseGateGroups,
   releaseGateSelectedReports,
   installedRuntimeEvidence,

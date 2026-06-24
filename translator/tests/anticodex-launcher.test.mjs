@@ -3811,6 +3811,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
           command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
           requiresRealTraffic: true,
           highImpact: true,
+          blockedUntilExplicitUserApproval: true,
         }],
       }, {
         id: "modelRouting",
@@ -3837,6 +3838,15 @@ test("report summarizer treats releaseReady false as not effectively passing", (
         missingSourceFiles: [],
         missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
+      }],
+      nextActions: [{
+        id: "postVerification",
+        gateId: "postVerification",
+        phase: "real-traffic-final",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+        requiresRealTraffic: true,
+        highImpact: true,
+        blockedUntilExplicitUserApproval: true,
       }],
     }), "utf8");
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
@@ -3871,6 +3881,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
         requiresGatewayStart: false,
         requiresRealTraffic: true,
         highImpact: true,
+        blockedUntilExplicitUserApproval: true,
       }],
     }, {
       id: "modelRouting",
@@ -3888,6 +3899,16 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       reportFailureSamples: [],
       guidance: "",
       orderedActions: [],
+    }]);
+    assert.deepEqual(summary.nextActions, [{
+      id: "postVerification",
+      gateId: "postVerification",
+      phase: "real-traffic-final",
+      command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+      requiresGatewayStart: false,
+      requiresRealTraffic: true,
+      highImpact: true,
+      blockedUntilExplicitUserApproval: true,
     }]);
     assert.deepEqual(summary.releaseGateSelectedReports, [{
       id: "syncReadiness",
@@ -7227,8 +7248,23 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /real_traffic_evidence_stale/);
   assert.match(releaseGates, /requires explicit user approval/);
   assert.match(releaseGates, /orderedActions/);
+  assert.match(releaseGates, /nextActions/);
+  assert.match(releaseGates, /blockedUntilExplicitUserApproval/);
   assert.match(releaseGates, /real-traffic ordered action was not attached/);
   assert.match(releaseGates, /realTrafficRefreshOrder/);
+  assert.match(releaseGates, /test-anticodex-account-proxy-readiness\.ps1 -TimeoutSec 120/);
+  assert.match(releaseGates, /requireAccountProxySemantics/);
+  assert.match(releaseGates, /account_proxy_real_request_not_ok/);
+  assert.match(releaseGates, /semantically invalid account-proxy report satisfied the gate/);
+  assert.match(releaseGates, /actionPhaseOrder/);
+  assert.match(releaseGates, /top-level nextActions did not keep post-verification last/);
+  assert.match(releaseGates, /realMiniTool ordered action was not marked high-impact/);
+  assert.match(releaseGates, /realWork ordered action was not marked high-impact/);
+  assert.match(releaseGates, /optionalEvidenceRefreshOrder/);
+  assert.match(releaseGates, /test-anticodex-stability-soak\.ps1 -DurationSec 180/);
+  assert.match(releaseGates, /test-anticodex-cold-relaunch\.ps1 -ConfirmRelaunch/);
+  assert.match(releaseGates, /optional cold-relaunch action was not attached/);
+  assert.match(releaseGates, /optional stability-soak action was not attached/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_reused/);
   assert.match(releaseGates, /real-traffic stale guidance was not attached/);
   assert.match(releaseGates, /latest report failure samples were not preserved/);

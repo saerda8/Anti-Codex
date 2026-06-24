@@ -2323,11 +2323,13 @@ function latestManagerReportItem(label, fileName) {
     const orderedActions = (actions) => Array.isArray(actions)
         ? actions.map((action) => ({
             id: shortSafeText(action?.id || "", ""),
+            ...(action?.gateId ? { gateId: shortSafeText(action.gateId, "") } : {}),
             phase: shortSafeText(action?.phase || "", ""),
             command: shortSafeText(action?.command || "", ""),
             requiresGatewayStart: action?.requiresGatewayStart === true,
             requiresRealTraffic: action?.requiresRealTraffic === true,
             highImpact: action?.highImpact === true,
+            blockedUntilExplicitUserApproval: action?.blockedUntilExplicitUserApproval === true,
         })).filter((action) => action.id).slice(0, 8)
         : [];
     const releaseGateFailures = Array.isArray(report?.gates)
@@ -2382,6 +2384,7 @@ function latestManagerReportItem(label, fileName) {
             orderedActions: orderedActions(gate.orderedActions),
         })).filter((entry) => entry.id).slice(0, 24)
         ;
+    const nextActions = orderedActions(report?.nextActions);
     const releaseGateGroups = report?.groups && typeof report.groups === "object"
         ? Object.entries(report.groups).map(([group, value]) => ({
             group: shortSafeText(group, ""),
@@ -2540,6 +2543,7 @@ function latestManagerReportItem(label, fileName) {
         damagedReports: Array.isArray(report?.damagedReports) ? report.damagedReports.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
         releaseGateFailures,
         releaseGateFailureReasons,
+        nextActions,
         releaseGateGroups,
         releaseGateSelectedReports,
         installedRuntimeEvidence,
@@ -3696,8 +3700,9 @@ function latestReportsSummary(result){
           .slice(0,4)
           .map((gate)=>gate.id+":"+gate.guidance);
         if(guidanceDetails.length) lines.push("  guidance: "+guidanceDetails.join("; "));
-        const nextActions=item.releaseGateFailureReasons
-          .flatMap((gate)=>Array.isArray(gate?.orderedActions)?gate.orderedActions.map((action)=>gate.id+":"+action.id):[])
+        const nextActions=(Array.isArray(item.nextActions)&&item.nextActions.length
+          ? item.nextActions.map((action)=>(action.gateId||action.id)+":"+action.id)
+          : item.releaseGateFailureReasons.flatMap((gate)=>Array.isArray(gate?.orderedActions)?gate.orderedActions.map((action)=>gate.id+":"+action.id):[]))
           .slice(0,8);
         if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> "));
         const realTrafficEvidenceGates=item.releaseGateFailureReasons

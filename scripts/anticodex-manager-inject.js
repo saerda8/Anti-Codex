@@ -935,8 +935,9 @@
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
         if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
-        const nextActions = item.releaseGateFailureReasons
-          .flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : [])
+        const nextActions = (Array.isArray(item.nextActions) && item.nextActions.length
+          ? item.nextActions.map((action) => `${action.gateId || action.id}:${action.id}`)
+          : item.releaseGateFailureReasons.flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : []))
           .slice(0, 8);
         if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
         const realTrafficEvidenceGates = item.releaseGateFailureReasons

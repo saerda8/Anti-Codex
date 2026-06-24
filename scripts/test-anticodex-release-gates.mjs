@@ -126,7 +126,7 @@ const gateDefinitions = [
   { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true },
   { id: "realMiniTool", group: "real-traffic", file: "latest-real-mini-tool.json", requiredForRelease: true },
   { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true },
-  { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true },
+  { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true, requireAccountProxySemantics: true },
 
   { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false, requireStabilitySoakSemantics: true },
   { id: "coldRelaunch", group: "cold", file: "latest-cold-relaunch.json", requiredForRelease: false, requireColdRelaunchSemantics: true, note: "Manual/isolated restart evidence; optional for passive release readiness." },
@@ -411,6 +411,20 @@ function summarizeGate(definition) {
     }
     if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
       semanticFailures.push("expected_usedRealTraffic_true");
+    }
+    if (definition.requireAccountProxySemantics) {
+      const phaseSummary = report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : {};
+      const antigravityLogSignals = report.antigravityLogSignals && typeof report.antigravityLogSignals === "object" ? report.antigravityLogSignals : {};
+      if (!report.diagnosisDetail) semanticFailures.push("account_proxy_diagnosis_detail_missing");
+      if (!report.suggestedAction) semanticFailures.push("account_proxy_suggested_action_missing");
+      if (report.localProxyBypassed !== true) semanticFailures.push("account_proxy_local_proxy_not_bypassed");
+      if (phaseSummary.accountOk !== true) semanticFailures.push("account_proxy_account_not_ok");
+      if (phaseSummary.refreshOk !== true) semanticFailures.push("account_proxy_refresh_not_ok");
+      if (Number(phaseSummary.modelCount || 0) < 1) semanticFailures.push("account_proxy_model_count");
+      if (phaseSummary.realRequestAttempted !== true) semanticFailures.push("account_proxy_real_request_not_attempted");
+      if (phaseSummary.realRequestOk !== true) semanticFailures.push("account_proxy_real_request_not_ok");
+      if (antigravityLogSignals.sourcePresent !== true) semanticFailures.push("account_proxy_log_source_missing");
+      if (typeof antigravityLogSignals.tailLinesScanned !== "number" || !Number.isFinite(antigravityLogSignals.tailLinesScanned) || antigravityLogSignals.tailLinesScanned < 0) semanticFailures.push("account_proxy_log_scan_missing");
     }
     if (definition.requireOptionalRealTrafficSemantics && present) {
       if (report.skipped === true) {
@@ -858,13 +872,14 @@ function gateGuidance(gate) {
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
   }
-  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report")) {
+  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "real_traffic_evidence_stale: requires explicit user approval to start/verify Anti-Codex and refresh release-grade real-traffic reports.";
   }
   return "";
 }
 
 const realTrafficRefreshOrder = [
+  ["accountProxyReadiness", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-account-proxy-readiness.ps1 -TimeoutSec 120"],
   ["codexResponses", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-codex-responses.ps1 -TimeoutSec 90"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
   ["customToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-custom-tool-loop.ps1 -TimeoutSec 90"],
@@ -879,6 +894,11 @@ const realTrafficRefreshOrder = [
   ["postVerification", "real-traffic-final", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10"],
 ];
 
+const optionalEvidenceRefreshOrder = [
+  ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresRealTraffic: true, highImpact: true }],
+  ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { highImpact: true }],
+];
+
 function action(id, phase, command, options = {}) {
   return {
     id,
@@ -887,6 +907,7 @@ function action(id, phase, command, options = {}) {
     requiresGatewayStart: options.requiresGatewayStart === true,
     requiresRealTraffic: options.requiresRealTraffic === true,
     highImpact: options.highImpact === true,
+    blockedUntilExplicitUserApproval: options.requiresGatewayStart === true || options.requiresRealTraffic === true || options.highImpact === true,
   };
 }
 
@@ -897,13 +918,49 @@ function gateOrderedActions(gate) {
       action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45"),
     ];
   }
-  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report")) {
+  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command] = realTrafficRefreshOrder[index];
-    return [action(id, phase, command, { requiresRealTraffic: true, highImpact: id === "postVerification" })];
+    return [action(id, phase, command, { requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "postVerification"].includes(id) })];
+  }
+  if ((gate?.group === "soak" || gate?.group === "cold") && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    const index = optionalEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
+    if (index < 0) return [];
+    const [id, phase, command, options] = optionalEvidenceRefreshOrder[index];
+    return [action(id, phase, command, options)];
   }
   return [];
+}
+
+const actionPhaseOrder = [
+  "plugin-capabilities",
+  "real-traffic-low-state",
+  "real-traffic-session-state",
+  "real-traffic-high-impact",
+  "real-traffic-final",
+  "optional-stability-soak",
+  "optional-cold-relaunch",
+];
+
+function orderedNextActions(failureReasons) {
+  return failureReasons
+    .flatMap((gate, gateIndex) => (Array.isArray(gate.orderedActions) ? gate.orderedActions : []).map((item, actionIndex) => ({
+      ...item,
+      gateId: gate.id,
+      requiredForRelease: gate.requiredForRelease === true,
+      requiredForShort: gate.requiredForShort === true,
+      order: gateIndex * 100 + actionIndex,
+    })))
+    .sort((left, right) => {
+      const leftPhase = actionPhaseOrder.indexOf(left.phase);
+      const rightPhase = actionPhaseOrder.indexOf(right.phase);
+      const leftRank = leftPhase < 0 ? actionPhaseOrder.length : leftPhase;
+      const rightRank = rightPhase < 0 ? actionPhaseOrder.length : rightPhase;
+      return leftRank - rightRank || left.order - right.order;
+    })
+    .map(({ order, ...item }) => item)
+    .slice(0, 32);
 }
 
 function attachGateFailureReasons(gates) {
@@ -1216,6 +1273,24 @@ if (args.has("--self-test")) {
       usedRealTraffic: false,
     });
 
+    writeFakeLatestReport("latest-account-proxy-readiness.json", {
+      ok: true,
+      diagnosisDetail: "",
+      suggestedAction: "",
+      localProxyBypassed: false,
+      phaseSummary: {
+        accountOk: false,
+        refreshOk: false,
+        modelCount: 0,
+        realRequestAttempted: false,
+        realRequestOk: false,
+      },
+      antigravityLogSignals: {
+        sourcePresent: false,
+        tailLinesScanned: null,
+      },
+    });
+
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
       reportName: "wrong-third-party-provider",
@@ -1523,6 +1598,18 @@ if (args.has("--self-test")) {
       "stability_soak_elapsed_too_short",
       "stability_soak_turn_not_ok",
       "stability_soak_model_count",
+    ]);
+    semanticFailures.accountProxyReadiness = assertSemanticFailures("accountProxyReadiness", "self-test failed: semantically invalid account-proxy report satisfied the gate", [
+      "account_proxy_diagnosis_detail_missing",
+      "account_proxy_suggested_action_missing",
+      "account_proxy_local_proxy_not_bypassed",
+      "account_proxy_account_not_ok",
+      "account_proxy_refresh_not_ok",
+      "account_proxy_model_count",
+      "account_proxy_real_request_not_attempted",
+      "account_proxy_real_request_not_ok",
+      "account_proxy_log_source_missing",
+      "account_proxy_log_scan_missing",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_skipped_requested_real_traffic_not_false",
@@ -1951,6 +2038,15 @@ if (args.has("--self-test")) {
     if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
     const postVerificationActions = gateOrderedActions(postVerificationGate);
     if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not attached");
+    const realMiniActions = gateOrderedActions(reasonGates.find((item) => item.id === "realMiniTool"));
+    if (!realMiniActions.some((item) => item.id === "realMiniTool" && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realMiniTool ordered action was not marked high-impact");
+    const realWorkActions = gateOrderedActions(reasonGates.find((item) => item.id === "realWork"));
+    if (!realWorkActions.some((item) => item.id === "realWork" && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realWork ordered action was not marked high-impact");
+    const accountProxyGate = reasonGates.find((item) => item.id === "accountProxyReadiness");
+    const accountProxyActions = gateOrderedActions(accountProxyGate);
+    if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not attached");
+    const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
+    if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");
     if (failedLatestGate.selectedFile !== "latest-cold-relaunch.json") throw new Error("self-test failed: latest report selectedFile was not preserved");
@@ -1959,6 +2055,11 @@ if (args.has("--self-test")) {
     if (!Array.isArray(failedLatestGate.reportFailureSamples) || !failedLatestGate.reportFailureSamples.includes("original Codex main process set changed")) {
       throw new Error("self-test failed: latest report failure samples were not preserved");
     }
+    const coldActions = gateOrderedActions(failedLatestGate);
+    if (!coldActions.some((item) => item.id === "coldRelaunch" && item.highImpact === true && item.command.includes("-ConfirmRelaunch"))) throw new Error("self-test failed: optional cold-relaunch action was not attached");
+    const soakGate = reasonGates.find((item) => item.id === "stabilitySoak");
+    const soakActions = gateOrderedActions(soakGate);
+    if (!soakActions.some((item) => item.id === "stabilitySoak" && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: optional stability-soak action was not attached");
 
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
@@ -2011,6 +2112,7 @@ const releaseGateFailureReasons = gates
     guidance: gateGuidance(gate),
     orderedActions: gateOrderedActions(gate),
   }));
+const nextActions = orderedNextActions(releaseGateFailureReasons);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
   .filter((gate) => !gate.satisfied || gate.requestedRealTraffic !== true || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
@@ -2049,6 +2151,7 @@ const payload = {
   missingOptional,
   damagedReports,
   releaseGateFailureReasons,
+  nextActions,
   groups,
   gates,
 };
