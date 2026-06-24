@@ -1630,3 +1630,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager latest-report summaries now tell operators to refresh source snapshot mismatches by refreshing local features first, then running normal MCP/Skill and plugin capability verifiers, and explicitly warn not to edit latest report JSON by hand.
 - Completed: external Manager bridge, injected Manager, and fallback Manager share the same source snapshot refresh guidance.
 - Verification: Manager bridge self-test passed; UI-state self-test passed; focused launcher contract passed `131/131`; `git diff --check` passed.
+
+## 2026-06-24 Plugin Capability Fail-Closed Hardening
+- Completed: plugin capability verifier now has an isolated negative fake-endpoint regression where inaccessible connectors expose app tools and the verifier exits failed with unauthorized tool evidence instead of accepting fake callable capability.
+- Completed: diagnostics verification explicitly rejects plugin capability reports from short-budget mode or `degraded_short_budget`, instead of relying only on indirect `ok:false` or smoke failures.
+- Completed: Manager plugin/app action summaries now show short-budget mode and source snapshot status immediately, not only inside latest-report details.
+- Verification: PowerShell parser checks passed; UI-state self-test passed; focused launcher contract passed `132/132`; Manager bridge self-test passed; release-gate self-test passed; `git diff --check` passed.

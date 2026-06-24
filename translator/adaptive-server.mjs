@@ -3905,6 +3905,8 @@ function actionText(payload){
     return [
       "插件/应用检查："+(r.ok?"通过":"需要处理"),
       "已安装插件："+(c.installedPluginCount??"未知")+"    插件列表："+(c.pluginListCount??"未知")+"    Skill 插件："+(c.pluginsWithSkills??"未知")+"    MCP 插件："+(c.pluginsWithMcpServers??"未知"),
+      "短预算："+(r.shortBudgetMode?"是":"否")+"    state="+(c.capabilityState||"unknown"),
+      sourceSnapshotLine(r),
       "连接器："+(c.connectorCount??"未知")+"    已授权连接器："+(c.accessibleConnectorCount??"未知")+"    应用工具："+(c.appToolCount??"未知"),
       c.appToolsNote?("说明："+c.appToolsNote):"",
       r.failures?.length?("失败："+r.failures.join("\\n")):""

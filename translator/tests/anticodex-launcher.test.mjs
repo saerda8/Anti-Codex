@@ -958,6 +958,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /upstreamRequestsDuringLocalEndpoints/);
   assert.match(managerBridge, /unauthorizedAppToolCount/);
   assert.match(managerBridge, /appToolGetPostParityClean/);
+  assert.match(managerBridge, /sourceSnapshotLine\(result\)/);
+  assert.match(managerInject, /sourceSnapshotLine\(r\)/);
+  assert.match(managerBridge, /result\.shortBudgetMode \?/);
+  assert.match(managerInject, /r\.shortBudgetMode \?/);
   assert.match(managerBridge, /viewLatestReports/);
   assert.match(managerBridge, /if \(action === "syncReadiness"\) return \[[\s\S]{0,220}failureSummaryLine\(result\)/);
   assert.match(managerBridge, /\\u6700\\u65b0\\u62a5\\u544a/);
@@ -968,6 +972,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /action === "resetAntigravitySessionLock"/);
   assert.match(managerBridge, /action === "resetAntigravitySessionLock"/);
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  assert.match(server, /sourceSnapshotLine\(r\)/);
+  assert.match(server, /r\.shortBudgetMode\?/);
   assert.match(server, /access-control-allow-private-network/);
   assert.match(server, /x-anticodex-manager-token/);
   assert.match(server, /function isTrustedManagerOriginValue[\s\S]*?if \(!value\) return false/);
@@ -5540,6 +5546,117 @@ test("plugin capability verifier accepts isolated fake endpoints without connect
   }
 });
 
+test("plugin capability verifier rejects fake app tools for inaccessible connectors", async () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-fake-negative-"));
+  const stateRoot = resolve(tempRoot, "state");
+  const reportRoot = resolve(tempRoot, "reports");
+  const codexHome = resolve(stateRoot, "codex-home-deepseek-app");
+  const sharedCodexHome = resolve(stateRoot, "shared-codex-home");
+  const agentsSkillsPath = resolve(stateRoot, "agents-skills");
+  const connectors = [
+    { id: "metadata-demo", name: "Metadata Demo", isEnabled: true, isAccessible: false },
+    { id: "metadata-second", name: "Metadata Second", isEnabled: true, isAccessible: false },
+  ];
+  const tools = [
+    { server_name: "apps", tool_namespace: "demo", tool_name: "unauthorized_tool", connector_id: "metadata-demo" },
+    { server_name: "apps", tool_namespace: "demo", tool_name: "second_unauthorized_tool", connector_id: "metadata-second" },
+  ];
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const { pathname } = new URL(req.url || "/", "http://127.0.0.1");
+    requests.push(`${req.method} ${pathname}`);
+    const send = (status, payload) => {
+      res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(payload));
+    };
+    if (pathname === "/health") {
+      send(200, { ok: true, upstream: "antigravity-desktop", accountReady: false, accountState: "metadata-only", modelCount: 1 });
+      return;
+    }
+    if (pathname === "/backend-api/ps/plugins/installed") {
+      send(200, [
+        { id: "metadata-plugin", apps: [{ id: "metadata-demo" }] },
+        { id: "metadata-second-plugin", apps: [{ id: "metadata-second" }] },
+      ]);
+      return;
+    }
+    if (pathname === "/backend-api/plugins/list") {
+      send(200, {
+        plugins: [
+          { summary: { name: "metadata-plugin", skills: ["demo-skill"], mcpServers: ["demo-mcp"] } },
+          { summary: { name: "metadata-second-plugin", skills: ["demo-skill"], mcpServers: ["demo-mcp"] } },
+        ],
+      });
+      return;
+    }
+    if (pathname === "/backend-api/aip/connectors") {
+      send(200, { connectors });
+      return;
+    }
+    if (pathname === "/backend-api/wham/apps" && (req.method === "GET" || req.method === "POST")) {
+      if (req.method === "POST") {
+        req.resume();
+        req.on("end", () => send(200, { tools }));
+      } else {
+        send(200, { tools });
+      }
+      return;
+    }
+    send(404, { error: "not_found" });
+  });
+
+  try {
+    for (const home of [codexHome, sharedCodexHome]) {
+      const connectorDir = resolve(home, "cache", "codex_app_directory");
+      const toolsDir = resolve(home, "cache", "codex_apps_tools");
+      mkdirSync(connectorDir, { recursive: true });
+      mkdirSync(toolsDir, { recursive: true });
+      mkdirSync(resolve(home, "skills", "metadata-demo"), { recursive: true });
+      writeFileSync(resolve(home, "config.toml"), "model = \"metadata-only\"\n", "utf8");
+      writeFileSync(resolve(home, "skills", "metadata-demo", "SKILL.md"), "# Metadata Demo\n", "utf8");
+      writeFileSync(resolve(connectorDir, "directory.json"), JSON.stringify({ schema_version: 1, connectors }), "utf8");
+      writeFileSync(resolve(toolsDir, "tools.json"), JSON.stringify({ schema_version: 2, tools }), "utf8");
+    }
+    mkdirSync(resolve(agentsSkillsPath, "agent-demo"), { recursive: true });
+    writeFileSync(resolve(agentsSkillsPath, "agent-demo", "SKILL.md"), "# Agent Demo\n", "utf8");
+
+    const baseUrl = await listenOnLoopback(server);
+    const result = await runChildProcess("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-plugin-capabilities.ps1"),
+      "-TimeoutSec", "8",
+      "-BaseUrl", baseUrl,
+      "-StateRoot", stateRoot,
+      "-ReportRoot", reportRoot,
+      "-CodexHome", codexHome,
+      "-SharedCodexHome", sharedCodexHome,
+      "-AgentsSkillsPath", agentsSkillsPath,
+    ], { timeoutMs: 20000 });
+    assert.equal(result.status, 1, [
+      result.error?.message,
+      result.signal ? `signal=${result.signal}` : "",
+      `requests=${requests.join(",")}`,
+      result.stdout,
+      result.stderr,
+    ].filter(Boolean).join("\n"));
+
+    const reportPath = resolve(reportRoot, "latest-plugin-capabilities.json");
+    const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    assert.equal(report.ok, false);
+    assert.equal(report.capabilities.capabilityState, "degraded_verification_failed");
+    assert.equal(report.capabilities.accessibleConnectorCount, 0);
+    assert.equal(report.capabilities.appToolCount, 2);
+    assert.equal(report.capabilities.appToolGetCount, 2);
+    assert.equal(report.capabilities.unauthorizedAppToolCount, 2);
+    assert.match(report.failures.join("\n"), /app tools exposed without any accessible connector; refusing fake callable capability/);
+    assert.match(report.failures.join("\n"), /app tools exposed for connector_id outside accessible connectors; refusing fake callable capability/);
+  } finally {
+    await closeServer(server);
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("Anti-Codex ships a script-level local connector and app-tool verifier", () => {
   const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
 
@@ -6529,6 +6646,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /local connector summary missing GET\/POST app-tool parity proof/);
   assert.match(diagnostics, /local connector summary exposed tool names is not exactly one 'linked_tool'/);
   assert.match(diagnostics, /plugin capability summary/);
+  assert.match(diagnostics, /plugin capability summary is short-budget and not release-grade/);
+  assert.match(diagnostics, /plugin capability summary is degraded by short budget/);
   assert.match(diagnostics, /localConnectorEvidence/);
   assert.match(diagnostics, /mcpSkillEvidence/);
   assert.match(diagnostics, /pluginCapabilityEvidence/);

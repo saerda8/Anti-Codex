@@ -98,6 +98,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/const callableSummary = appTools > 0/.test(injectSource) || !/metadata-only/.test(injectSource) || !/accessibleConnectors > 0/.test(injectSource)) {
     failures.push("in-app manager plugin/app action summary can hide metadata-only or accessible-without-tools state");
   }
+  if (!/sourceSnapshotLine\(r\)/.test(injectSource) || !/r\.shortBudgetMode \?/.test(injectSource)) {
+    failures.push("in-app manager plugin/app action summary is missing source snapshot or short-budget status");
+  }
   if (!/local connector upstream: before=/.test(injectSource) || !/local connector isolation: sharedHomeUsed=/.test(injectSource) || !/local cache fingerprints: connector=/.test(injectSource)) {
     failures.push("in-app manager is missing local connector upstream/isolation/cache evidence");
   }
@@ -188,6 +191,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/app capability: state=/.test(managerHtml) || !/smokeChecked="\+\(evidence\.smokeChecked/.test(managerHtml) || !/endpointReadable="\+\(evidence\.endpointProjectionReadable/.test(managerHtml) || !/callable="\+\(evidence\.callableState/.test(managerHtml) || !/nativeWriteback="\+\(evidence\.nativeCodexWriteback/.test(managerHtml)) {
     failures.push("manager page is missing plugin/app callable state evidence");
+  }
+  if (!/sourceSnapshotLine\(r\)/.test(managerHtml) || !/r\.shortBudgetMode\?/.test(managerHtml)) {
+    failures.push("manager page plugin/app action summary is missing source snapshot or short-budget status");
   }
   if (!/localAllowlisted/.test(injectSource) || !/callableAppToolCount/.test(injectSource) || !/accessibleConnectors > 0/.test(injectSource)) {
     failures.push("in-app manager can confuse local connector allowlist metadata with callable app tools");

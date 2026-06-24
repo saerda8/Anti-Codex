@@ -447,6 +447,7 @@ function Test-DiagnosticBundle {
         $pluginCapabilitiesSummary = @($summary | Where-Object { $_.file -eq "latest-plugin-capabilities.json" } | Select-Object -First 1)[0]
         if ($pluginCapabilitiesSummary) {
             if ($pluginCapabilitiesSummary.ok -ne $true) { Add-Failure "plugin capability summary ok=false" }
+            if ($pluginCapabilitiesSummary.shortBudgetMode -eq $true) { Add-Failure "plugin capability summary is short-budget and not release-grade" }
             if (-not $pluginCapabilitiesSummary.sourceSnapshotEvidence) { Add-Failure "plugin capability summary missing source snapshot evidence" }
             $pluginEvidence = $pluginCapabilitiesSummary.pluginCapabilityEvidence
             if (-not $pluginEvidence) {
@@ -454,6 +455,7 @@ function Test-DiagnosticBundle {
             } else {
                 if ($pluginEvidence.nativeCodexWriteback -ne $false) { Add-Failure "plugin capability summary allows native Codex writeback" }
                 if (-not [string]$pluginEvidence.capabilityState) { Add-Failure "plugin capability summary missing capability state" }
+                if ($pluginEvidence.capabilityState -eq "degraded_short_budget") { Add-Failure "plugin capability summary is degraded by short budget" }
                 if ($pluginEvidence.degraded -ne $true) { Add-Failure "plugin capability summary missing degraded metadata-only state" }
                 if ([int]$pluginEvidence.connectorCount -lt [int]$pluginEvidence.enabledConnectorCount) { Add-Failure "plugin capability summary connector counts are inconsistent" }
                 if ([int]$pluginEvidence.enabledConnectorCount -lt [int]$pluginEvidence.accessibleConnectorCount) { Add-Failure "plugin capability summary enabled/access connector counts are inconsistent" }
