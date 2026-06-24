@@ -2342,18 +2342,23 @@ function latestManagerReportItem(label, fileName) {
         sourceMtimeMax: shortSafeText(value.sourceMtimeMax || "", ""),
         note: shortSafeText(value.note || "", ""),
     } : null;
+    function reportNonNegativeInt(value) {
+        if (value === null || value === undefined || value === "") return null;
+        const number = Number(value);
+        return Number.isInteger(number) && number >= 0 ? number : null;
+    }
     const approvalPlan = report?.approvalPlan && typeof report.approvalPlan === "object" ? {
-        actionCount: Number.isFinite(Number(report.approvalPlan.actionCount)) ? Number(report.approvalPlan.actionCount) : null,
-        blockedCount: Number.isFinite(Number(report.approvalPlan.blockedCount)) ? Number(report.approvalPlan.blockedCount) : null,
-        requiresGatewayStartCount: Number.isFinite(Number(report.approvalPlan.requiresGatewayStartCount)) ? Number(report.approvalPlan.requiresGatewayStartCount) : null,
-        requiresRealTrafficCount: Number.isFinite(Number(report.approvalPlan.requiresRealTrafficCount)) ? Number(report.approvalPlan.requiresRealTrafficCount) : null,
-        highImpactCount: Number.isFinite(Number(report.approvalPlan.highImpactCount)) ? Number(report.approvalPlan.highImpactCount) : null,
-        requiredForShortCount: Number.isFinite(Number(report.approvalPlan.requiredForShortCount)) ? Number(report.approvalPlan.requiredForShortCount) : null,
-        requiredForReleaseCount: Number.isFinite(Number(report.approvalPlan.requiredForReleaseCount)) ? Number(report.approvalPlan.requiredForReleaseCount) : null,
+        actionCount: reportNonNegativeInt(report.approvalPlan.actionCount),
+        blockedCount: reportNonNegativeInt(report.approvalPlan.blockedCount),
+        requiresGatewayStartCount: reportNonNegativeInt(report.approvalPlan.requiresGatewayStartCount),
+        requiresRealTrafficCount: reportNonNegativeInt(report.approvalPlan.requiresRealTrafficCount),
+        highImpactCount: reportNonNegativeInt(report.approvalPlan.highImpactCount),
+        requiredForShortCount: reportNonNegativeInt(report.approvalPlan.requiredForShortCount),
+        requiredForReleaseCount: reportNonNegativeInt(report.approvalPlan.requiredForReleaseCount),
         firstBlockedAction: shortSafeText(report.approvalPlan.firstBlockedAction || "", ""),
         phases: Array.isArray(report.approvalPlan.phases) ? report.approvalPlan.phases.map((phase) => ({
             phase: shortSafeText(phase?.phase || "", ""),
-            count: Number.isFinite(Number(phase?.count)) ? Number(phase.count) : null,
+            count: reportNonNegativeInt(phase?.count),
             requiresGatewayStart: phase?.requiresGatewayStart === true,
             requiresRealTraffic: phase?.requiresRealTraffic === true,
             highImpact: phase?.highImpact === true,

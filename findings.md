@@ -904,3 +904,4 @@
 - Offline support verifiers must validate guidance semantics, not just field presence. For `nextActions` and `approvalPlan`, require explicit approval blocking for gateway, real-traffic, and high-impact actions, and make sure summary counts cannot understate those risks.
 - Missing approval-plan count fields are as risky as low counts. Reject absent `blockedCount`, `requiresGatewayStartCount`, `requiresRealTrafficCount`, and `highImpactCount` instead of treating missing fields as unknown-but-acceptable.
 - In PowerShell, casting `$null` to `[int]` can silently become `0`. For report integrity fields, validate non-null non-negative integers before comparing counts.
+- JavaScript has the same trap through `Number(null) === 0`. Manager/report summary code should use a helper that rejects null and requires a non-negative integer before displaying count fields.

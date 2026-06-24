@@ -781,6 +781,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /approvalPlan: actions=/);
   assert.match(managerInject, /approvalPlan: actions=/);
   assert.match(managerServerSource, /approvalPlan: actions=/);
+  assert.match(managerServerSource, /function reportNonNegativeInt/);
+  assert.doesNotMatch(managerServerSource, /Number\.isFinite\(Number\(report\.approvalPlan\./);
   assert.match(managerBridge, /missingOpt=/);
   assert.match(managerInject, /missingOpt=/);
   assert.match(managerServerSource, /missingOpt=/);
