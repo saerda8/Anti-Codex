@@ -779,6 +779,16 @@ function summarizeGate(definition) {
   return gate;
 }
 
+function gateSatisfiedBeforeCrossSnapshotCheck(gate) {
+  return !!gate
+    && gate.present === true
+    && gate.parseable === true
+    && gate.hashValid === true
+    && gate.okField === true
+    && gate.fresh === true
+    && (!Array.isArray(gate.semanticFailures) || gate.semanticFailures.length === 0);
+}
+
 function writeTextAtomic(filePath, text) {
   const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   try {
@@ -1731,9 +1741,20 @@ if (args.has("--self-test")) {
         agentsCount: 1,
         expectedSharedCount: 2,
         missingShared: [],
+        extraLocal: [],
         changedShared: [],
         conflictingDuplicateNames: [],
         smoke: { readable: true },
+      },
+      appTools: {
+        registry: {
+          exists: true,
+          contentMatches: true,
+          sharedFingerprint: "app-tool-registry",
+          localFingerprint: "app-tool-registry",
+          sharedFileCount: 2,
+          localFileCount: 2,
+        },
       },
       sourceSnapshot: { fingerprint: "stale-mcp-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
     });
@@ -1743,16 +1764,17 @@ if (args.has("--self-test")) {
         nativeCodexWriteback: false,
         accessibleConnectorCount: 0,
         unauthorizedAppToolCount: 0,
-        connectorParity: { missingShared: [], extraLocal: [], changedShared: [] },
-        appToolParity: { missingShared: [], extraLocal: [], changedShared: [] },
-        appToolGetPostParity: { contentMatches: true, missingFromGet: [], extraFromGet: [] },
+        connectorParity: { checked: true, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolParity: { checked: true, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolGetPostParity: { checked: true, contentMatches: true, missingFromGet: [], extraFromGet: [] },
+        smoke: { checked: true },
       },
       sourceSnapshot: { fingerprint: "stale-plugin-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
     });
     const crossSourceGates = gateDefinitions.map(summarizeGate);
     const crossMcpGate = crossSourceGates.find((gate) => gate.id === "mcpSkills");
     const crossPluginGate = crossSourceGates.find((gate) => gate.id === "pluginCapabilities");
-    if (crossMcpGate?.sourceFingerprint && crossPluginGate?.sourceFingerprint && crossMcpGate.sourceFingerprint !== crossPluginGate.sourceFingerprint) {
+    if (gateSatisfiedBeforeCrossSnapshotCheck(crossMcpGate) && gateSatisfiedBeforeCrossSnapshotCheck(crossPluginGate) && crossMcpGate.sourceFingerprint && crossPluginGate.sourceFingerprint && crossMcpGate.sourceFingerprint !== crossPluginGate.sourceFingerprint) {
       for (const [gate, failure] of [
         [crossMcpGate, "mcp_skills_source_snapshot_mismatch"],
         [crossPluginGate, "plugin_capabilities_source_snapshot_mismatch"],
@@ -1767,6 +1789,35 @@ if (args.has("--self-test")) {
     };
     if (!semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch")) throw new Error("self-test failed: MCP/Skill source snapshot mismatch was not detected");
     if (!semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch")) throw new Error("self-test failed: plugin-capability source snapshot mismatch was not detected");
+    writeFakeLatestReport("latest-plugin-capabilities.json", {
+      ok: false,
+      failures: ["gateway offline"],
+      capabilities: {
+        nativeCodexWriteback: false,
+        accessibleConnectorCount: 0,
+        unauthorizedAppToolCount: 0,
+        connectorParity: { checked: false, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolParity: { checked: false, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolGetPostParity: { checked: false, contentMatches: false, missingFromGet: [], extraFromGet: [] },
+        smoke: { checked: false },
+      },
+      sourceSnapshot: { fingerprint: "offline-plugin-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
+    });
+    const offlinePluginGates = gateDefinitions.map(summarizeGate);
+    const offlineMcpGate = offlinePluginGates.find((gate) => gate.id === "mcpSkills");
+    const offlinePluginGate = offlinePluginGates.find((gate) => gate.id === "pluginCapabilities");
+    if (gateSatisfiedBeforeCrossSnapshotCheck(offlineMcpGate) && gateSatisfiedBeforeCrossSnapshotCheck(offlinePluginGate) && offlineMcpGate.sourceFingerprint && offlinePluginGate.sourceFingerprint && offlineMcpGate.sourceFingerprint !== offlinePluginGate.sourceFingerprint) {
+      for (const [gate, failure] of [
+        [offlineMcpGate, "mcp_skills_source_snapshot_mismatch"],
+        [offlinePluginGate, "plugin_capabilities_source_snapshot_mismatch"],
+      ]) {
+        if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
+        gate.semanticFailures.push(failure);
+      }
+    }
+    if ((offlineMcpGate.semanticFailures || []).includes("mcp_skills_source_snapshot_mismatch")) {
+      throw new Error("self-test failed: unsatisfied plugin report should not add source snapshot mismatch to MCP/Skill gate");
+    }
     const fakeSourceRoot = join(tempRoot, "source");
     const fakeTargetRuntime = join(tempRoot, "runtime");
     for (const relativePath of runtimeSyncFiles) {
@@ -1837,7 +1888,7 @@ function addSemanticFailure(gateId, failure) {
 
 const mcpSkillGate = gates.find((gate) => gate.id === "mcpSkills");
 const pluginCapabilityGate = gates.find((gate) => gate.id === "pluginCapabilities");
-if (mcpSkillGate?.sourceFingerprint && pluginCapabilityGate?.sourceFingerprint && mcpSkillGate.sourceFingerprint !== pluginCapabilityGate.sourceFingerprint) {
+if (gateSatisfiedBeforeCrossSnapshotCheck(mcpSkillGate) && gateSatisfiedBeforeCrossSnapshotCheck(pluginCapabilityGate) && mcpSkillGate.sourceFingerprint && pluginCapabilityGate.sourceFingerprint && mcpSkillGate.sourceFingerprint !== pluginCapabilityGate.sourceFingerprint) {
   addSemanticFailure("mcpSkills", "mcp_skills_source_snapshot_mismatch");
   addSemanticFailure("pluginCapabilities", "plugin_capabilities_source_snapshot_mismatch");
 }

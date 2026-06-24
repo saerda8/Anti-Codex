@@ -1656,3 +1656,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-mcp-skills.ps1 -TimeoutSec 5` now searches latest plus recent MCP/Skill and refresh-feature history reports for a complete reusable source snapshot, so a degraded latest report cannot poison future short-budget runs.
 - Completed: console summaries now include `reusedFromPreviousReportPath`, making short-budget provenance visible without opening the full JSON report.
 - Verification: PowerShell parser check passed; focused MCP/Skill launcher contracts passed `132/132`; real `test-anticodex-mcp-skills.ps1 -TimeoutSec 5` returned `ok:true`, `capabilityState:"ready"`, MCP real list `2`, and reused `20260624-213911-mcp-skills.json`.
+
+## 2026-06-24 Release Gate Source Snapshot Attribution
+- Completed: passive release gates now add cross-report source snapshot mismatch only when both MCP/Skill and plugin-capability reports are otherwise release-satisfied, so an offline or degraded plugin report no longer incorrectly marks a good MCP/Skill report as failed.
+- Completed: release-gate self-test now covers both the positive mismatch case and the negative `MCP ok + plugin ok:false` case.
+- Verification: release-gate self-test passed; JS syntax check passed; focused launcher contracts passed `132/132`; current strict gate removed `mcpSkills` from missing required reports, leaving plugin/gateway and explicit real-traffic evidence gaps.
