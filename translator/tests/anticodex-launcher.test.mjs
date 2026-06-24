@@ -903,6 +903,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /connectorParityExtraLocalSample/);
   assert.match(managerBridge, /appToolParityExtraLocalSample/);
   assert.match(managerInject, /appToolParityExtraLocalSample/);
+  assert.match(managerBridge, /refreshDrift/);
+  assert.match(managerInject, /refreshDrift/);
   assert.match(managerBridge, /appToolGetPostExtraFromGetSample/);
   assert.match(managerInject, /appToolGetPostExtraFromGetSample/);
   assert.match(managerBridge, /logDbGuardEvidence/);
@@ -2813,8 +2815,28 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
       elapsedMs: 73000,
       hashCache: { hitCount: 12000, missCount: 42, entryCount: 12042 },
       failures: ["connector drift"],
-      connectorParity: { sharedExists: true, localExists: true, contentMatches: false },
-      appToolParity: { sharedExists: true, localExists: false, contentMatches: false },
+      connectorParity: {
+        sharedExists: true,
+        localExists: true,
+        contentMatches: false,
+        missingSharedCount: 1,
+        missingSharedSample: ["missing-connector.json"],
+        extraLocalCount: 2,
+        extraLocalSample: ["extra-connector.json"],
+        changedSharedCount: 3,
+        changedSharedSample: ["changed-connector.json"],
+      },
+      appToolParity: {
+        sharedExists: true,
+        localExists: false,
+        contentMatches: false,
+        missingSharedCount: 4,
+        missingSharedSample: ["missing-tool.json"],
+        extraLocalCount: 5,
+        extraLocalSample: ["extra-tool.json"],
+        changedSharedCount: 6,
+        changedSharedSample: ["changed-tool.json"],
+      },
       skills: {
         changedExpected: ["changed-skill"],
         changedExpectedDetails: [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }],
@@ -2834,9 +2856,21 @@ test("report summarizer surfaces refresh feature parity evidence", () => {
     assert.equal(summary.refreshFeatureEvidence.connectorSharedExists, true);
     assert.equal(summary.refreshFeatureEvidence.connectorLocalExists, true);
     assert.equal(summary.refreshFeatureEvidence.connectorContentMatches, false);
+    assert.equal(summary.refreshFeatureEvidence.connectorMissingSharedCount, 1);
+    assert.deepEqual(summary.refreshFeatureEvidence.connectorMissingSharedSample, ["missing-connector.json"]);
+    assert.equal(summary.refreshFeatureEvidence.connectorExtraLocalCount, 2);
+    assert.deepEqual(summary.refreshFeatureEvidence.connectorExtraLocalSample, ["extra-connector.json"]);
+    assert.equal(summary.refreshFeatureEvidence.connectorChangedSharedCount, 3);
+    assert.deepEqual(summary.refreshFeatureEvidence.connectorChangedSharedSample, ["changed-connector.json"]);
     assert.equal(summary.refreshFeatureEvidence.appToolSharedExists, true);
     assert.equal(summary.refreshFeatureEvidence.appToolLocalExists, false);
     assert.equal(summary.refreshFeatureEvidence.appToolContentMatches, false);
+    assert.equal(summary.refreshFeatureEvidence.appToolMissingSharedCount, 4);
+    assert.deepEqual(summary.refreshFeatureEvidence.appToolMissingSharedSample, ["missing-tool.json"]);
+    assert.equal(summary.refreshFeatureEvidence.appToolExtraLocalCount, 5);
+    assert.deepEqual(summary.refreshFeatureEvidence.appToolExtraLocalSample, ["extra-tool.json"]);
+    assert.equal(summary.refreshFeatureEvidence.appToolChangedSharedCount, 6);
+    assert.deepEqual(summary.refreshFeatureEvidence.appToolChangedSharedSample, ["changed-tool.json"]);
     assert.deepEqual(summary.refreshFeatureEvidence.changedExpectedSkills, ["changed-skill"]);
     assert.deepEqual(summary.refreshFeatureEvidence.changedExpectedSkillDetails, [{ name: "changed-skill", localFingerprint: "local", sharedFingerprint: "shared" }]);
     assert.deepEqual(summary.refreshFeatureEvidence.guidanceChanged, ["RTK.md"]);
@@ -5019,6 +5053,9 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /sourceSnapshot = \$sourceSnapshot/);
   assert.match(refreshLocalFeatures, /connectorParity/);
   assert.match(refreshLocalFeatures, /appToolParity/);
+  assert.match(refreshLocalFeatures, /New-DirectoryContentDiff/);
+  assert.match(refreshLocalFeatures, /missingSharedSample/);
+  assert.match(refreshLocalFeatures, /changedSharedSample/);
   assert.match(refreshLocalFeatures, /connector directory local snapshot differs from shared source after refresh/);
   assert.match(refreshLocalFeatures, /app-tools cache local snapshot differs from shared source after refresh/);
   assert.match(refreshLocalFeatures, /skills local copy is empty or missing/);

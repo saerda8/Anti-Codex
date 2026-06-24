@@ -2714,9 +2714,21 @@ function latestManagerReportItem(label, fileName) {
             connectorSharedExists: refreshConnectorParity?.sharedExists === true,
             connectorLocalExists: refreshConnectorParity?.localExists === true,
             connectorContentMatches: refreshConnectorParity?.contentMatches === true,
+            connectorMissingSharedCount: Number.isFinite(Number(refreshConnectorParity?.missingSharedCount)) ? Number(refreshConnectorParity.missingSharedCount) : null,
+            connectorMissingSharedSample: Array.isArray(refreshConnectorParity?.missingSharedSample) ? refreshConnectorParity.missingSharedSample.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            connectorExtraLocalCount: Number.isFinite(Number(refreshConnectorParity?.extraLocalCount)) ? Number(refreshConnectorParity.extraLocalCount) : null,
+            connectorExtraLocalSample: Array.isArray(refreshConnectorParity?.extraLocalSample) ? refreshConnectorParity.extraLocalSample.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            connectorChangedSharedCount: Number.isFinite(Number(refreshConnectorParity?.changedSharedCount)) ? Number(refreshConnectorParity.changedSharedCount) : null,
+            connectorChangedSharedSample: Array.isArray(refreshConnectorParity?.changedSharedSample) ? refreshConnectorParity.changedSharedSample.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             appToolSharedExists: refreshAppToolParity?.sharedExists === true,
             appToolLocalExists: refreshAppToolParity?.localExists === true,
             appToolContentMatches: refreshAppToolParity?.contentMatches === true,
+            appToolMissingSharedCount: Number.isFinite(Number(refreshAppToolParity?.missingSharedCount)) ? Number(refreshAppToolParity.missingSharedCount) : null,
+            appToolMissingSharedSample: Array.isArray(refreshAppToolParity?.missingSharedSample) ? refreshAppToolParity.missingSharedSample.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            appToolExtraLocalCount: Number.isFinite(Number(refreshAppToolParity?.extraLocalCount)) ? Number(refreshAppToolParity.extraLocalCount) : null,
+            appToolExtraLocalSample: Array.isArray(refreshAppToolParity?.extraLocalSample) ? refreshAppToolParity.extraLocalSample.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
+            appToolChangedSharedCount: Number.isFinite(Number(refreshAppToolParity?.changedSharedCount)) ? Number(refreshAppToolParity.changedSharedCount) : null,
+            appToolChangedSharedSample: Array.isArray(refreshAppToolParity?.changedSharedSample) ? refreshAppToolParity.changedSharedSample.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
             changedExpectedSkills: refreshReport && Array.isArray(skills?.changedExpected) ? skills.changedExpected.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
             changedExpectedSkillDetails: refreshReport && Array.isArray(skills?.changedExpectedDetails) ? skills.changedExpectedDetails.slice(0, 8) : [],
             guidanceChanged: refreshGuidance ? Object.entries(refreshGuidance)
@@ -3754,7 +3766,9 @@ function latestReportsSummary(result){
       const skillChanged=Array.isArray(evidence.changedExpectedSkills)?evidence.changedExpectedSkills:[];
       const guidanceChanged=Array.isArray(evidence.guidanceChanged)?evidence.guidanceChanged:[];
       const hashCache=(evidence.hashCacheHitCount!=null||evidence.hashCacheMissCount!=null)?(" / hashCache="+(evidence.hashCacheHitCount??"unknown")+"/"+(evidence.hashCacheMissCount??"unknown")):"";
-      lines.push("  refresh parity: connector="+(connectorOk?"ok":"需处理")+" / appTool="+(appToolOk?"ok":"需处理")+hashCache);
+      const refreshSamples=[...(evidence.connectorMissingSharedSample||[]),...(evidence.connectorExtraLocalSample||[]),...(evidence.connectorChangedSharedSample||[]),...(evidence.appToolMissingSharedSample||[]),...(evidence.appToolExtraLocalSample||[]),...(evidence.appToolChangedSharedSample||[])].slice(0,5);
+      const refreshDrift=" / connectorDrift="+(evidence.connectorMissingSharedCount??0)+"/"+(evidence.connectorExtraLocalCount??0)+"/"+(evidence.connectorChangedSharedCount??0)+" / appToolDrift="+(evidence.appToolMissingSharedCount??0)+"/"+(evidence.appToolExtraLocalCount??0)+"/"+(evidence.appToolChangedSharedCount??0)+(refreshSamples.length?" / sample "+refreshSamples.join(", "):"");
+      lines.push("  refresh parity: connector="+(connectorOk?"ok":"需处理")+" / appTool="+(appToolOk?"ok":"需处理")+refreshDrift+hashCache);
       if(evidence.elapsedMs!=null||evidence.verifyOnly===true) lines.push("  refresh timing: verifyOnly="+(evidence.verifyOnly===true?"true":"false")+" / elapsed="+(evidence.elapsedMs??"unknown")+" ms"+hashCache);
       if(skillChanged.length||guidanceChanged.length) lines.push("  refresh drift: skills="+(skillChanged.length?skillChanged.slice(0,5).join(", "):"ok")+" / guidance="+(guidanceChanged.length?guidanceChanged.slice(0,5).join(", "):"ok"));
     }

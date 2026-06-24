@@ -1053,7 +1053,16 @@
         const elapsed = evidence.elapsedMs != null ? ` / elapsed=${evidence.elapsedMs} ms` : "";
         const mode = evidence.verifyOnly === true ? " / verifyOnly=true" : "";
         const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
-        lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${mode}${elapsed}${hashCache}`);
+        const refreshSamples = [
+          ...(evidence.connectorMissingSharedSample || []),
+          ...(evidence.connectorExtraLocalSample || []),
+          ...(evidence.connectorChangedSharedSample || []),
+          ...(evidence.appToolMissingSharedSample || []),
+          ...(evidence.appToolExtraLocalSample || []),
+          ...(evidence.appToolChangedSharedSample || []),
+        ].slice(0, 5);
+        const refreshDrift = ` / connectorDrift=${evidence.connectorMissingSharedCount ?? 0}/${evidence.connectorExtraLocalCount ?? 0}/${evidence.connectorChangedSharedCount ?? 0} / appToolDrift=${evidence.appToolMissingSharedCount ?? 0}/${evidence.appToolExtraLocalCount ?? 0}/${evidence.appToolChangedSharedCount ?? 0}${refreshSamples.length ? ` / sample ${refreshSamples.join(", ")}` : ""}`;
+        lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${refreshDrift}${mode}${elapsed}${hashCache}`);
         if (skillChanged.length || guidanceChanged.length) lines.push(`  refresh drift: skills=${skillChanged.length ? skillChanged.slice(0, 5).join(", ") : "ok"} / guidance=${guidanceChanged.length ? guidanceChanged.slice(0, 5).join(", ") : "ok"}`);
       }
       if (item.localConnectorEvidence) {

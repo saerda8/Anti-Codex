@@ -137,6 +137,37 @@ function Get-DirectoryContentFingerprint {
     }
 }
 
+function Get-DirectoryContentHashMap {
+    param([string]$Path)
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return $map }
+    $rootPath = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
+        Where-Object { $_.Name -ne ".anticodex-source-manifest.json" -and $_.FullName -notmatch '(?i)[\\/]\.git(?:[\\/]|$)' } |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($rootPath.Length).TrimStart("\", "/").Replace("\", "/")
+            $map[$relative] = Get-FileSha256Hex $_.FullName
+        }
+    return $map
+}
+
+function New-DirectoryContentDiff {
+    param([string]$SharedPath, [string]$LocalPath)
+    $sharedMap = Get-DirectoryContentHashMap $SharedPath
+    $localMap = Get-DirectoryContentHashMap $LocalPath
+    $missingShared = @($sharedMap.Keys | Where-Object { -not $localMap.ContainsKey($_) } | Sort-Object)
+    $extraLocal = @($localMap.Keys | Where-Object { -not $sharedMap.ContainsKey($_) } | Sort-Object)
+    $changedShared = @($sharedMap.Keys | Where-Object { $localMap.ContainsKey($_) -and $localMap[$_] -ne $sharedMap[$_] } | Sort-Object)
+    return [pscustomobject]@{
+        missingSharedCount = @($missingShared).Count
+        missingSharedSample = @($missingShared | Select-Object -First 5)
+        extraLocalCount = @($extraLocal).Count
+        extraLocalSample = @($extraLocal | Select-Object -First 5)
+        changedSharedCount = @($changedShared).Count
+        changedSharedSample = @($changedShared | Select-Object -First 5)
+    }
+}
+
 function Get-DirectoryInfo {
     param([string]$Path)
     $exists = Test-Path -LiteralPath $Path -PathType Container
@@ -376,6 +407,12 @@ $connectorParity = [pscustomobject]@{
     sharedFingerprint = ""
     localFingerprint = ""
     contentMatches = $null
+    missingSharedCount = $null
+    missingSharedSample = @()
+    extraLocalCount = $null
+    extraLocalSample = @()
+    changedSharedCount = $null
+    changedSharedSample = @()
 }
 $appToolParity = [pscustomobject]@{
     sharedExists = Test-Path -LiteralPath $sharedAppToolsCachePath -PathType Container
@@ -383,13 +420,26 @@ $appToolParity = [pscustomobject]@{
     sharedFingerprint = ""
     localFingerprint = ""
     contentMatches = $null
+    missingSharedCount = $null
+    missingSharedSample = @()
+    extraLocalCount = $null
+    extraLocalSample = @()
+    changedSharedCount = $null
+    changedSharedSample = @()
 }
 if ($connectorParity.sharedExists) {
     $connectorParity.sharedFingerprint = Get-DirectoryContentFingerprint $sharedConnectorDirectoryPath
     if ($connectorParity.localExists) {
-        $connectorParity.localFingerprint = Get-DirectoryContentFingerprint (Join-Path $CodexHome "cache\codex_app_directory")
+        $localConnectorDirectoryPath = Join-Path $CodexHome "cache\codex_app_directory"
+        $connectorParity.localFingerprint = Get-DirectoryContentFingerprint $localConnectorDirectoryPath
         $connectorParity.contentMatches = ($connectorParity.sharedFingerprint -eq $connectorParity.localFingerprint)
-        if ($connectorParity.contentMatches -ne $true) { Add-Failure "connector directory local snapshot differs from shared source after refresh" }
+        if ($connectorParity.contentMatches -ne $true) {
+            $connectorDiff = New-DirectoryContentDiff -SharedPath $sharedConnectorDirectoryPath -LocalPath $localConnectorDirectoryPath
+            foreach ($property in $connectorDiff.PSObject.Properties) {
+                $connectorParity.PSObject.Properties[$property.Name].Value = $property.Value
+            }
+            Add-Failure "connector directory local snapshot differs from shared source after refresh"
+        }
     } else {
         $connectorParity.contentMatches = $false
         Add-Failure "connector directory shared source exists but local snapshot is missing after refresh"
@@ -398,9 +448,16 @@ if ($connectorParity.sharedExists) {
 if ($appToolParity.sharedExists) {
     $appToolParity.sharedFingerprint = Get-DirectoryContentFingerprint $sharedAppToolsCachePath
     if ($appToolParity.localExists) {
-        $appToolParity.localFingerprint = Get-DirectoryContentFingerprint (Join-Path $CodexHome "cache\codex_apps_tools")
+        $localAppToolsCachePath = Join-Path $CodexHome "cache\codex_apps_tools"
+        $appToolParity.localFingerprint = Get-DirectoryContentFingerprint $localAppToolsCachePath
         $appToolParity.contentMatches = ($appToolParity.sharedFingerprint -eq $appToolParity.localFingerprint)
-        if ($appToolParity.contentMatches -ne $true) { Add-Failure "app-tools cache local snapshot differs from shared source after refresh" }
+        if ($appToolParity.contentMatches -ne $true) {
+            $appToolDiff = New-DirectoryContentDiff -SharedPath $sharedAppToolsCachePath -LocalPath $localAppToolsCachePath
+            foreach ($property in $appToolDiff.PSObject.Properties) {
+                $appToolParity.PSObject.Properties[$property.Name].Value = $property.Value
+            }
+            Add-Failure "app-tools cache local snapshot differs from shared source after refresh"
+        }
     } else {
         $appToolParity.contentMatches = $false
         Add-Failure "app-tools cache shared source exists but local snapshot is missing after refresh"
