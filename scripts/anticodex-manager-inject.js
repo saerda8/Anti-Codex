@@ -935,6 +935,10 @@
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
         if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
+        const nextActions = item.releaseGateFailureReasons
+          .flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : [])
+          .slice(0, 8);
+        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
         const realTrafficEvidenceGates = item.releaseGateFailureReasons
           .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
             .map((gate) => gate.id)

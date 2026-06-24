@@ -772,6 +772,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /releaseGateFailureReasons/);
   assert.match(managerBridge, /failureReasons/);
   assert.match(managerInject, /failureReasons/);
+  assert.match(managerBridge, /nextActions/);
+  assert.match(managerInject, /nextActions/);
+  assert.match(managerServerSource, /nextActions/);
   assert.match(managerBridge, /真实流量验收证据需更新\/未生成/);
   assert.match(managerInject, /真实流量验收证据需更新\/未生成/);
   assert.match(managerServerSource, /真实流量验收证据需更新\/未生成/);
@@ -3802,6 +3805,13 @@ test("report summarizer treats releaseReady false as not effectively passing", (
         selectedFile: "latest-post-verification.json",
         selectedMtime: "2026-06-24T01:02:03.000Z",
         reportFailureSamples: ["gateway offline", "health timeout", "third sample", "hidden fourth"],
+        orderedActions: [{
+          id: "postVerification",
+          phase: "real-traffic-final",
+          command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+          requiresRealTraffic: true,
+          highImpact: true,
+        }],
       }, {
         id: "modelRouting",
         group: "no-traffic",
@@ -3854,6 +3864,14 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       selectedMtime: "2026-06-24T01:02:03.000Z",
       reportFailureSamples: ["gateway offline", "health timeout", "third sample"],
       guidance: "",
+      orderedActions: [{
+        id: "postVerification",
+        phase: "real-traffic-final",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+        requiresGatewayStart: false,
+        requiresRealTraffic: true,
+        highImpact: true,
+      }],
     }, {
       id: "modelRouting",
       group: "no-traffic",
@@ -3869,6 +3887,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       selectedMtime: "",
       reportFailureSamples: [],
       guidance: "",
+      orderedActions: [],
     }]);
     assert.deepEqual(summary.releaseGateSelectedReports, [{
       id: "syncReadiness",
@@ -7207,6 +7226,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /local_gateway_offline/);
   assert.match(releaseGates, /real_traffic_evidence_stale/);
   assert.match(releaseGates, /requires explicit user approval/);
+  assert.match(releaseGates, /orderedActions/);
+  assert.match(releaseGates, /real-traffic ordered action was not attached/);
+  assert.match(releaseGates, /realTrafficRefreshOrder/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_reused/);
   assert.match(releaseGates, /real-traffic stale guidance was not attached/);
   assert.match(releaseGates, /latest report failure samples were not preserved/);
@@ -7256,6 +7278,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(server, /releaseGateGroups/);
   assert.match(server, /selectedHistory/);
   assert.match(server, /failureReasons/);
+  assert.match(server, /nextActions/);
   assert.match(server, /Release groups:/);
   assert.match(releaseGates, /installedRuntimeSync/);
   assert.match(releaseGates, /runtimeSyncFiles/);

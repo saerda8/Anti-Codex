@@ -326,6 +326,10 @@ function latestReportsSummary(result) {
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
         if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
+        const nextActions = item.releaseGateFailureReasons
+          .flatMap((gate) => Array.isArray(gate?.orderedActions) ? gate.orderedActions.map((action) => `${gate.id}:${action.id}`) : [])
+          .slice(0, 8);
+        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}`);
         const realTrafficEvidenceGates = item.releaseGateFailureReasons
           .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
           .map((gate) => gate.id)
@@ -745,8 +749,8 @@ if (args.has("--self-test")) {
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateFailureReasons: [
-        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"] },
-        { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"] },
+        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
+        { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork" }] },
       ],
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
@@ -817,6 +821,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report/);
   assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ sample gateway offline \| health timeout/);
+  assert.match(evidenceSummary, /nextActions: postVerification:postVerification -> realWork:realWork/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);

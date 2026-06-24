@@ -864,6 +864,48 @@ function gateGuidance(gate) {
   return "";
 }
 
+const realTrafficRefreshOrder = [
+  ["codexResponses", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-codex-responses.ps1 -TimeoutSec 90"],
+  ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
+  ["customToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-custom-tool-loop.ps1 -TimeoutSec 90"],
+  ["nativeToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-native-tool-loop.ps1 -TimeoutSec 90"],
+  ["nativeMultiToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-native-multi-tool-loop.ps1 -TimeoutSec 90"],
+  ["mcpToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-mcp-tool-loop.ps1 -TimeoutSec 90"],
+  ["webTools", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-web-tools.ps1 -TimeoutSec 90"],
+  ["compactionResume", "real-traffic-session-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-compaction-resume.ps1 -TimeoutSec 90"],
+  ["cancellation", "real-traffic-session-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cancellation.ps1 -TimeoutSec 90"],
+  ["realMiniTool", "real-traffic-high-impact", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-real-mini-tool.ps1 -TimeoutSec 90 -AllowRealTraffic"],
+  ["realWork", "real-traffic-high-impact", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-real-work.ps1 -TimeoutSec 90 -AllowRealTraffic"],
+  ["postVerification", "real-traffic-final", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10"],
+];
+
+function action(id, phase, command, options = {}) {
+  return {
+    id,
+    phase,
+    command,
+    requiresGatewayStart: options.requiresGatewayStart === true,
+    requiresRealTraffic: options.requiresRealTraffic === true,
+    highImpact: options.highImpact === true,
+  };
+}
+
+function gateOrderedActions(gate) {
+  if (gate?.id === "pluginCapabilities" && !gate.satisfied) {
+    return [
+      action("startGatewayTranslatorOnly", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }),
+      action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45"),
+    ];
+  }
+  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report")) {
+    const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
+    if (index < 0) return [];
+    const [id, phase, command] = realTrafficRefreshOrder[index];
+    return [action(id, phase, command, { requiresRealTraffic: true, highImpact: id === "postVerification" })];
+  }
+  return [];
+}
+
 function attachGateFailureReasons(gates) {
   for (const gate of gates) {
     gate.failureReasons = gate.satisfied ? [] : gateFailureReasons(gate);
@@ -1907,6 +1949,8 @@ if (args.has("--self-test")) {
     assertFailureReason("installedRuntimeSync", "semantic_failures");
     const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");
     if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
+    const postVerificationActions = gateOrderedActions(postVerificationGate);
+    if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not attached");
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");
     if (failedLatestGate.selectedFile !== "latest-cold-relaunch.json") throw new Error("self-test failed: latest report selectedFile was not preserved");
@@ -1965,6 +2009,7 @@ const releaseGateFailureReasons = gates
     selectedMtime: gate.selectedMtime || "",
     reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
     guidance: gateGuidance(gate),
+    orderedActions: gateOrderedActions(gate),
   }));
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates

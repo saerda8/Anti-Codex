@@ -1679,3 +1679,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Current plugin evidence path: once the local Anti-Codex gateway is explicitly approved to run, refresh plugin capability proof with the normal gateway-backed verifier, not short-budget mode or hand-edited reports.
 - Current real-traffic refresh order: low-state checks first (`codexResponses`, compatibility/custom/native/MCP tool loops, `webTools`), then session-state checks (`compactionResume`, `cancellation`), then high-impact final proof (`realMiniTool`, `realWork`, `postVerification`).
 - Verification: release-gate self-test passed; focused launcher contracts passed `132/133` with one environment link-directory skip; JS syntax check passed; `git diff --check` passed. No gateway startup or real traffic was used.
+
+## 2026-06-24 Release Evidence Ordered Actions
+- Completed: release-gate failure details now include bounded `orderedActions`, so plugin/gateway and stale real-traffic blockers carry the exact safe refresh sequence in the report payload instead of only prose guidance.
+- Completed: report summarizer, external Manager bridge, injected Manager, and adaptive-server summaries preserve and display `nextActions` without executing them.
+- Safety: actions are report-only; no gateway startup, real traffic, cold relaunch, soak, or native Codex mutation is triggered by release-gate generation.
+- Verification: release-gate self-test passed; Manager bridge self-test passed; focused launcher contracts passed `132/133` with one environment link-directory skip; JS syntax checks passed; `git diff --check` passed.

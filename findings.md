@@ -889,3 +889,4 @@
 - `apply_patch` resolves relative paths from the current thread workspace, not necessarily the repo subdirectory. In nested projects, use the full repo path or verify the working directory before patching project notes.
 - Real-traffic release-gate failures need explicit approval guidance, not just `stale_report` or `missing_report`. A passive gate may explain that the next proof requires starting/verifying Anti-Codex and refreshing real-traffic reports, but it must not run those verifiers by itself.
 - Keep git staging and commit as separate commands in this project. Chaining them with shell separators may succeed, but it weakens the review point between staged diff inspection and commit creation.
+- Manager latest-report text has three maintained surfaces: external bridge, injected manager script, and adaptive-server embedded copy. When adding release-gate summary fields such as `nextActions`, update all three or the static launcher contract catches the drift.

@@ -2320,6 +2320,16 @@ function latestManagerReportItem(label, fileName) {
         ? Object.entries(checks).map(([id, value]) => ({ id, value: value && typeof value === "object" ? value : {} }))
         : [];
     const skippedCheckEntries = checkEntries.filter((entry) => entry.value.skipped === true);
+    const orderedActions = (actions) => Array.isArray(actions)
+        ? actions.map((action) => ({
+            id: shortSafeText(action?.id || "", ""),
+            phase: shortSafeText(action?.phase || "", ""),
+            command: shortSafeText(action?.command || "", ""),
+            requiresGatewayStart: action?.requiresGatewayStart === true,
+            requiresRealTraffic: action?.requiresRealTraffic === true,
+            highImpact: action?.highImpact === true,
+        })).filter((action) => action.id).slice(0, 8)
+        : [];
     const releaseGateFailures = Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => {
@@ -2346,6 +2356,7 @@ function latestManagerReportItem(label, fileName) {
                     ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3)
                     : [],
                 guidance: shortSafeText(gate.guidance || "", ""),
+                orderedActions: orderedActions(gate.orderedActions),
             }))
             .slice(0, 12)
         : [];
@@ -2368,6 +2379,7 @@ function latestManagerReportItem(label, fileName) {
             selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
             reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
             guidance: shortSafeText(gate.guidance || "", ""),
+            orderedActions: orderedActions(gate.orderedActions),
         })).filter((entry) => entry.id).slice(0, 24)
         ;
     const releaseGateGroups = report?.groups && typeof report.groups === "object"
@@ -3684,6 +3696,10 @@ function latestReportsSummary(result){
           .slice(0,4)
           .map((gate)=>gate.id+":"+gate.guidance);
         if(guidanceDetails.length) lines.push("  guidance: "+guidanceDetails.join("; "));
+        const nextActions=item.releaseGateFailureReasons
+          .flatMap((gate)=>Array.isArray(gate?.orderedActions)?gate.orderedActions.map((action)=>gate.id+":"+action.id):[])
+          .slice(0,8);
+        if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> "));
         const realTrafficEvidenceGates=item.releaseGateFailureReasons
           .filter((gate)=>gate?.group==="real-traffic"&&(["stale_report","missing_report"].includes(gate.failureReason)||(Array.isArray(gate.failureReasons)&&gate.failureReasons.some((reason)=>["stale_report","missing_report"].includes(reason)))))
           .map((gate)=>gate.id)

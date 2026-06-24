@@ -20,6 +20,18 @@ function asStringArray(value) {
   return [String(value)];
 }
 
+function asOrderedActions(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    id: asString(item?.id),
+    phase: asString(item?.phase),
+    command: asString(item?.command),
+    requiresGatewayStart: item?.requiresGatewayStart === true,
+    requiresRealTraffic: item?.requiresRealTraffic === true,
+    highImpact: item?.highImpact === true,
+  })).filter((item) => item.id).slice(0, 8);
+}
+
 function boolField(object, key) {
   return has(object, key) ? !!object[key] : null;
 }
@@ -154,6 +166,7 @@ const releaseGateFailures = Array.isArray(report?.gates)
       selectedMtime: asString(gate.selectedMtime || ""),
       reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
       guidance: asString(gate.guidance || ""),
+      orderedActions: asOrderedActions(gate.orderedActions),
     }))
   : [];
 const rawReleaseGateFailureReasons = has(report, "releaseGateFailureReasons") && Array.isArray(report.releaseGateFailureReasons)
@@ -175,6 +188,7 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     selectedMtime: asString(gate.selectedMtime || ""),
     reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
     guidance: asString(gate.guidance || ""),
+    orderedActions: asOrderedActions(gate.orderedActions),
   })).filter((entry) => entry.id).slice(0, 24)
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"
   ? Object.entries(report.groups).map(([group, value]) => ({
