@@ -1651,3 +1651,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now preserve the selected report kind, selected filename, selected mtime, and bounded failure samples for failed latest reports, not only history fallbacks.
 - Completed: report summarizer, adaptive Manager summaries, external Manager bridge, injected Manager, and launcher contracts now surface `reportFailures` so operators can see which report is stale or semantically bad without opening raw JSON.
 - Verification: release-gate self-test passed; Manager bridge self-test passed with real `reportFailures` formatting; JS syntax checks passed; UI-state self-test passed; focused launcher contracts passed `132/132`; `git diff --check` passed.
+
+## 2026-06-24 MCP/Skill Short-Budget Snapshot Fallback
+- Completed: `test-anticodex-mcp-skills.ps1 -TimeoutSec 5` now searches latest plus recent MCP/Skill and refresh-feature history reports for a complete reusable source snapshot, so a degraded latest report cannot poison future short-budget runs.
+- Completed: console summaries now include `reusedFromPreviousReportPath`, making short-budget provenance visible without opening the full JSON report.
+- Verification: PowerShell parser check passed; focused MCP/Skill launcher contracts passed `132/132`; real `test-anticodex-mcp-skills.ps1 -TimeoutSec 5` returned `ok:true`, `capabilityState:"ready"`, MCP real list `2`, and reused `20260624-213911-mcp-skills.json`.

@@ -4964,6 +4964,12 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /hashCache = \[pscustomobject\]/);
   assert.match(mcpSkills, /\$script:shortBudgetMode = \(\$TimeoutSec -lt 8\)/);
   assert.match(mcpSkills, /function Get-PreviousSourceSnapshot/);
+  assert.match(mcpSkills, /Get-ChildItem -LiteralPath \$ReportRoot -Filter \$historyPattern/);
+  assert.match(mcpSkills, /foreach \(\$historyPattern in @\("\*-mcp-skills\.json", "\*-refresh-features\.json"\)\)/);
+  assert.match(mcpSkills, /latest-refresh-features\.json/);
+  assert.match(mcpSkills, /\*-refresh-features\.json/);
+  assert.match(mcpSkills, /Sort-Object LastWriteTimeUtc -Descending/);
+  assert.match(mcpSkills, /reusedFromPreviousReportPath/);
   assert.match(mcpSkills, /reusedFromPreviousReport/);
   assert.match(mcpSkills, /function Get-McpSmokeTimeoutMs/);
   assert.match(mcpSkills, /\[Math\]::Min\(8000,/);
@@ -5202,6 +5208,23 @@ description = "ignored"
       shared_tools_fingerprint: "shared-fingerprint",
       local_tools_fingerprint: "local-fingerprint",
     }));
+    const reportRoot = resolve(stateRoot, "reports");
+    mkdirSync(reportRoot, { recursive: true });
+    writeFileSync(resolve(reportRoot, "latest-mcp-skills.json"), JSON.stringify({
+      ok: false,
+      shortBudgetMode: true,
+      sourceSnapshot: { skipped: true, fingerprint: "", fileCount: 0 },
+    }), "utf8");
+    writeFileSync(resolve(reportRoot, "20260624-000001-mcp-skills.json"), JSON.stringify({
+      ok: true,
+      shortBudgetMode: false,
+      sourceSnapshot: {
+        fingerprint: "history-source-fingerprint",
+        fileCount: 42,
+        cacheHitCount: 40,
+        cacheMissCount: 2,
+      },
+    }), "utf8");
     writeFileSync(fakeServerScript, `
 import http from "node:http";
 const server = http.createServer((req, res) => {
@@ -5225,7 +5248,7 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     fakeServer = spawn(process.execPath, [fakeServerScript], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     const baseUrl = await waitForServerUrl(fakeServer);
     const powershell = process.platform === "win32" ? "powershell.exe" : "pwsh";
-    const result = spawnSync(powershell, [
+    const verifierArgs = [
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
@@ -5245,7 +5268,8 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
       resolve(tempRoot, "agents-skills"),
       "-TimeoutSec",
       "5",
-    ], { encoding: "utf8", windowsHide: true });
+    ];
+    const result = spawnSync(powershell, verifierArgs, { encoding: "utf8", windowsHide: true });
     const fakeMcpNeedle = fakeMcpScript.toLowerCase();
     const tempRootNeedle = tempRoot.replace(/\\/g, "/").toLowerCase();
     const leftoverProcesses = listWindowsProcesses().filter((item) => {
@@ -5267,6 +5291,10 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
 
     assert.notEqual(result.status, 0, "intentional missing shared entries should fail the verifier");
     assert.equal(report.shortBudgetMode, true);
+    assert.equal(report.sourceSnapshot.fingerprint, "history-source-fingerprint");
+    assert.equal(report.sourceSnapshot.fileCount, 42);
+    assert.equal(report.sourceSnapshot.reusedFromPreviousReport, true);
+    assert.match(report.sourceSnapshot.reusedFromPreviousReportPath, /20260624-000001-mcp-skills\.json/);
     assert.deepEqual(report.mcp.missingShared, ["missing-worker"]);
     assert.deepEqual(report.mcp.changedShared, ["node_repl"]);
     assert.deepEqual(report.mcp.changedSharedDetails[0].fields, ["args"]);
@@ -5292,6 +5320,37 @@ server.listen(0, "127.0.0.1", () => console.log("http://127.0.0.1:" + server.add
     assert.ok(!report.mcp.sharedNames.includes("ignored.tools.call"));
     assert.ok(!report.mcp.names.includes("local-commented"));
     assert.ok(!report.mcp.names.includes("local-only.tools.nope"));
+
+    writeFileSync(resolve(reportRoot, "latest-mcp-skills.json"), JSON.stringify({
+      ok: false,
+      shortBudgetMode: true,
+      sourceSnapshot: { skipped: true, fingerprint: "", fileCount: 0 },
+    }), "utf8");
+    writeFileSync(resolve(reportRoot, "20260624-000001-mcp-skills.json"), JSON.stringify({
+      ok: false,
+      shortBudgetMode: true,
+      sourceSnapshot: { skipped: true, fingerprint: "", fileCount: 0 },
+    }), "utf8");
+    writeFileSync(resolve(reportRoot, "latest-refresh-features.json"), JSON.stringify({
+      ok: true,
+      reportName: "refresh-features",
+      sourceSnapshot: {
+        fingerprint: "refresh-source-fingerprint",
+        fileCount: 84,
+        cacheHitCount: 80,
+        cacheMissCount: 4,
+      },
+    }), "utf8");
+    const refreshFallbackResult = spawnSync(powershell, verifierArgs, { encoding: "utf8", windowsHide: true });
+    const refreshFallbackOutput = [refreshFallbackResult.stdout, refreshFallbackResult.stderr]
+      .filter((value) => typeof value === "string" && value.trim())
+      .join("\n");
+    assert.ok(refreshFallbackOutput, refreshFallbackResult.error?.message || "MCP/skills refresh fallback run produced no output");
+    const refreshFallbackReport = JSON.parse(refreshFallbackOutput.trim().split(/\r?\n/).at(-1));
+    assert.equal(refreshFallbackReport.sourceSnapshot.fingerprint, "refresh-source-fingerprint");
+    assert.equal(refreshFallbackReport.sourceSnapshot.fileCount, 84);
+    assert.equal(refreshFallbackReport.sourceSnapshot.reusedFromPreviousReport, true);
+    assert.match(refreshFallbackReport.sourceSnapshot.reusedFromPreviousReportPath, /latest-refresh-features\.json/);
   } finally {
     fakeServer?.kill();
     rmSync(tempRoot, { recursive: true, force: true });

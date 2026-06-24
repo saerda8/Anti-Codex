@@ -45,17 +45,40 @@ function New-SkippedSourceSnapshot {
 }
 
 function Get-PreviousSourceSnapshot {
-    $latestReport = Join-Path $ReportRoot "latest-mcp-skills.json"
-    if (-not (Test-Path -LiteralPath $latestReport -PathType Leaf)) { return $null }
-    try {
-        $previous = Get-Content -LiteralPath $latestReport -Raw | ConvertFrom-Json -ErrorAction Stop
-        if ($previous.sourceSnapshot -and -not $previous.sourceSnapshot.skipped -and $previous.sourceSnapshot.fingerprint) {
-            $snapshot = $previous.sourceSnapshot
-            $snapshot | Add-Member -NotePropertyName reusedFromPreviousReport -NotePropertyValue $true -Force
-            $snapshot | Add-Member -NotePropertyName refreshSkippedReason -NotePropertyValue "source snapshot refresh skipped in short-budget MCP smoke mode" -Force
-            return $snapshot
+    $latestReports = @(
+        (Join-Path $ReportRoot "latest-mcp-skills.json"),
+        (Join-Path $ReportRoot "latest-refresh-features.json")
+    )
+    $candidateReports = New-Object System.Collections.Generic.List[string]
+    foreach ($latestReport in $latestReports) {
+        if (Test-Path -LiteralPath $latestReport -PathType Leaf) {
+            $candidateReports.Add($latestReport) | Out-Null
         }
-    } catch {
+    }
+    if (Test-Path -LiteralPath $ReportRoot -PathType Container) {
+        foreach ($historyPattern in @("*-mcp-skills.json", "*-refresh-features.json")) {
+            Get-ChildItem -LiteralPath $ReportRoot -Filter $historyPattern -File -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTimeUtc -Descending |
+                Select-Object -First 20 |
+                ForEach-Object {
+                    if ($candidateReports -notcontains $_.FullName) {
+                        $candidateReports.Add($_.FullName) | Out-Null
+                    }
+                }
+        }
+    }
+    foreach ($candidateReport in $candidateReports) {
+        try {
+            $previous = Get-Content -LiteralPath $candidateReport -Raw | ConvertFrom-Json -ErrorAction Stop
+            if ($previous.sourceSnapshot -and -not $previous.sourceSnapshot.skipped -and $previous.sourceSnapshot.fingerprint) {
+                $snapshot = $previous.sourceSnapshot
+                $snapshot | Add-Member -NotePropertyName reusedFromPreviousReport -NotePropertyValue $true -Force
+                $snapshot | Add-Member -NotePropertyName reusedFromPreviousReportPath -NotePropertyValue $candidateReport -Force
+                $snapshot | Add-Member -NotePropertyName refreshSkippedReason -NotePropertyValue "source snapshot refresh skipped in short-budget MCP smoke mode" -Force
+                return $snapshot
+            }
+        } catch {
+        }
     }
     return $null
 }
@@ -1150,6 +1173,10 @@ $consoleResult = [pscustomobject]@{
         fileCount = $sourceSnapshot.fileCount
         cacheHitCount = $sourceSnapshot.cacheHitCount
         cacheMissCount = $sourceSnapshot.cacheMissCount
+        skipped = $sourceSnapshot.skipped
+        reusedFromPreviousReport = $sourceSnapshot.reusedFromPreviousReport
+        reusedFromPreviousReportPath = $sourceSnapshot.reusedFromPreviousReportPath
+        refreshSkippedReason = $sourceSnapshot.refreshSkippedReason
     }
 }
 $consoleResult | ConvertTo-Json -Depth 6 -Compress
