@@ -4775,6 +4775,11 @@ test("Anti-Codex ships a repeatable installed streaming cancellation verifier", 
   assert.match(cancellation, /response\.failed/);
   assert.match(cancellation, /latest-\$Name\.json/);
   assert.match(cancellation, /New-ReportPaths "cancellation"/);
+  assert.match(cancellation, /reportName\s*=\s*"cancellation"/);
+  assert.match(cancellation, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(cancellation, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(cancellation, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(cancellation, /coverageKind\s*=\s*"real-traffic"/);
 
   assert.doesNotMatch(cancellation, /Stop-Process/);
   assert.doesNotMatch(cancellation, /Codex\.exe/);
@@ -5008,6 +5013,7 @@ test("Anti-Codex ships a repeatable installed custom tool-loop verifier", () => 
 
 test("Anti-Codex ships a repeatable installed compaction and session resume verifier", () => {
   const compactionResume = readFileSync(resolve(root, "scripts", "test-anticodex-compaction-resume.ps1"), "utf8");
+  const webTools = readFileSync(resolve(root, "scripts", "test-anticodex-web-tools.ps1"), "utf8");
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
 
   assert.match(compactionResume, /\/v1\/responses\/compact/);
@@ -5025,8 +5031,20 @@ test("Anti-Codex ships a repeatable installed compaction and session resume veri
   assert.match(compactionResume, /\[Text\.Encoding\]::UTF8\.GetBytes/);
   assert.match(compactionResume, /latest-.*\.json/);
   assert.match(compactionResume, /compaction-resume/);
+  assert.match(compactionResume, /reportName\s*=\s*"compaction-resume"/);
+  assert.match(compactionResume, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(compactionResume, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(compactionResume, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(compactionResume, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(compactionResume, /ConvertTo-Json/);
   assert.match(compactionResume, /exit 1/);
+  assert.match(webTools, /web-tools/);
+  assert.match(webTools, /reportName\s*=\s*"web-tools"/);
+  assert.match(webTools, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(webTools, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(webTools, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(webTools, /coverageKind\s*=\s*"real-traffic"/);
+  assert.match(webTools, /Example Domain\|documentation examples\|Avoid use in operations/);
   assert.match(overall, /test-anticodex-compaction-resume\.ps1/);
   assert.match(overall, /Compaction and session resume verification/);
   assert.match(overall, /test-anticodex-cancellation\.ps1/);
@@ -8002,6 +8020,12 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /native_multi_tool_loop_native_call_ids_missing/);
   assert.match(releaseGates, /mcp_tool_loop_real_mcp_missing/);
   assert.match(releaseGates, /custom_tool_loop_input_not_preserved/);
+  assert.match(releaseGates, /requireWebToolsSemantics/);
+  assert.match(releaseGates, /requireCompactionResumeSemantics/);
+  assert.match(releaseGates, /requireCancellationSemantics/);
+  assert.match(releaseGates, /web_tools_evidence_missing/);
+  assert.match(releaseGates, /compaction_resume_summary_seed_missing/);
+  assert.match(releaseGates, /cancellation_cancelled_event_missing/);
   assert.match(releaseGates, /expected_no_real_traffic/);
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
   assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);

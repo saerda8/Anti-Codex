@@ -220,6 +220,11 @@ if (-not $postProviderReady) {
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    reportName = "cancellation"
+    requestedRealTraffic = $true
+    usedRealTraffic = $true
+    behaviorCovered = ($failures.Count -eq 0)
+    coverageKind = "real-traffic"
     model = $Model
     mode = $upstreamMode
     responseId = $responseId

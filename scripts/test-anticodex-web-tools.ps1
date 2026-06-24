@@ -72,6 +72,11 @@ try {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $result = [pscustomobject]@{
         ok = ($failures.Count -eq 0)
+        reportName = "web-tools"
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        behaviorCovered = ($failures.Count -eq 0)
+        coverageKind = "real-traffic"
         failures = $failures.ToArray()
         model = $model
         elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds

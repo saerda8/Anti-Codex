@@ -121,9 +121,9 @@ const gateDefinitions = [
   { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "native-multi" },
   { id: "mcpToolLoop", group: "real-traffic", file: "latest-mcp-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "mcp" },
   { id: "customToolLoop", group: "real-traffic", file: "latest-custom-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "custom" },
-  { id: "compactionResume", group: "real-traffic", file: "latest-compaction-resume.json", requiredForRelease: true },
-  { id: "cancellation", group: "real-traffic", file: "latest-cancellation.json", requiredForRelease: true },
-  { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true },
+  { id: "compactionResume", group: "real-traffic", file: "latest-compaction-resume.json", requiredForRelease: true, requireCompactionResumeSemantics: true },
+  { id: "cancellation", group: "real-traffic", file: "latest-cancellation.json", requiredForRelease: true, requireCancellationSemantics: true },
+  { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true, requireWebToolsSemantics: true },
   { id: "realMiniTool", group: "real-traffic", file: "latest-real-mini-tool.json", requiredForRelease: true },
   { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true },
   { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true, requireAccountProxySemantics: true },
@@ -505,6 +505,53 @@ function summarizeGate(definition) {
         if (tool.inputPreserved !== true) semanticFailures.push("custom_tool_loop_input_not_preserved");
         if (tool.marker !== "CUSTOM_PATCH_519" || !finalText.includes("CUSTOM_PATCH_519")) semanticFailures.push("custom_tool_loop_marker_missing");
       }
+    }
+    if (definition.requireWebToolsSemantics) {
+      const finalText = String(report.finalText || report.final_text || "");
+      if (report.reportName !== "web-tools") semanticFailures.push("web_tools_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("web_tools_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("web_tools_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("web_tools_behavior_not_covered");
+      if (report.coverageKind !== "real-traffic") semanticFailures.push("web_tools_coverage_kind");
+      if (!finalText || !/(Example Domain|documentation examples|Avoid use in operations)/i.test(finalText)) semanticFailures.push("web_tools_evidence_missing");
+      if (/<tool_calls>|<invoke|web_fetch.+\{/i.test(finalText)) semanticFailures.push("web_tools_protocol_leak");
+    }
+    if (definition.requireCompactionResumeSemantics) {
+      const seed = String(report.seed || "");
+      const compactSummary = String(report.compact_summary_preview || report.compact_summary || "");
+      const directResumeText = String(report.direct_resume_text || "");
+      const chainedResumeText = String(report.chained_resume_text || "");
+      const hasContinuationFacts = (text) => seed && text.includes(seed) && /verify/i.test(text) && /compaction/i.test(text) && /resume/i.test(text);
+      if (report.reportName !== "compaction-resume") semanticFailures.push("compaction_resume_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("compaction_resume_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("compaction_resume_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("compaction_resume_behavior_not_covered");
+      if (report.coverageKind !== "real-traffic") semanticFailures.push("compaction_resume_coverage_kind");
+      if (!seed) semanticFailures.push("compaction_resume_seed_missing");
+      if (!report.first_response_id) semanticFailures.push("compaction_resume_first_response_missing");
+      if (!report.compact_response_id) semanticFailures.push("compaction_resume_compact_response_missing");
+      if (Number(report.compact_summary_length || 0) < 20) semanticFailures.push("compaction_resume_summary_too_short");
+      if (!seed || !compactSummary.includes(seed)) semanticFailures.push("compaction_resume_summary_seed_missing");
+      if (!hasContinuationFacts(directResumeText)) semanticFailures.push("compaction_resume_direct_resume_missing");
+      if (!hasContinuationFacts(chainedResumeText)) semanticFailures.push("compaction_resume_chained_resume_missing");
+    }
+    if (definition.requireCancellationSemantics) {
+      const eventNames = Array.isArray(report.eventNames) ? report.eventNames.map((item) => String(item)) : [];
+      if (report.reportName !== "cancellation") semanticFailures.push("cancellation_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("cancellation_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("cancellation_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("cancellation_behavior_not_covered");
+      if (report.coverageKind !== "real-traffic") semanticFailures.push("cancellation_coverage_kind");
+      if (!report.responseId) semanticFailures.push("cancellation_response_id_missing");
+      if (report.cancelStatus !== "cancelled") semanticFailures.push("cancellation_status_not_cancelled");
+      if (report.cancelError !== null && report.cancelError !== undefined && report.cancelError !== "") semanticFailures.push("cancellation_error_present");
+      if (report.hasCancelled !== true) semanticFailures.push("cancellation_cancelled_event_missing");
+      if (report.hasCompleted === true) semanticFailures.push("cancellation_completed_unexpected");
+      if (report.hasFailed === true) semanticFailures.push("cancellation_failed_unexpected");
+      if (!eventNames.includes("response.created") || !eventNames.includes("response.cancelled")) semanticFailures.push("cancellation_event_names_missing");
+      if (report.providerReady !== true || report.preHealthReady !== true || report.postHealthReady !== true) semanticFailures.push("cancellation_provider_not_ready");
+      if (!report.mode) semanticFailures.push("cancellation_mode_missing");
+      if (!report.model) semanticFailures.push("cancellation_model_missing");
     }
     if (definition.requireAccountProxySemantics) {
       const phaseSummary = report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : {};
@@ -1574,6 +1621,53 @@ if (args.has("--self-test")) {
       final_text: "missing custom marker",
     });
 
+    writeFakeLatestReport("latest-web-tools.json", {
+      ok: true,
+      reportName: "web-tools",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      finalText: "fetched something with <tool_calls>",
+    });
+
+    writeFakeLatestReport("latest-compaction-resume.json", {
+      ok: true,
+      reportName: "compaction-resume",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      seed: "COMPACT_SEED_BAD",
+      first_response_id: "",
+      compact_response_id: "",
+      compact_summary_length: 0,
+      compact_summary_preview: "",
+      direct_resume_text: "",
+      chained_resume_text: "",
+    });
+
+    writeFakeLatestReport("latest-cancellation.json", {
+      ok: true,
+      reportName: "cancellation",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      model: "",
+      mode: "",
+      responseId: "",
+      cancelStatus: "cancelled",
+      cancelError: "late cancel",
+      hasCancelled: false,
+      hasCompleted: true,
+      hasFailed: true,
+      eventNames: ["response.created", "response.completed"],
+      providerReady: false,
+      preHealthReady: false,
+      postHealthReady: false,
+    });
+
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
       reportName: "wrong-third-party-provider",
@@ -2132,6 +2226,29 @@ if (args.has("--self-test")) {
       "custom_tool_loop_name_mismatch",
       "custom_tool_loop_input_not_preserved",
       "custom_tool_loop_marker_missing",
+    ]);
+    semanticFailures.webTools = assertSemanticFailures("webTools", "self-test failed: semantically invalid web-tools report satisfied the gate", [
+      "web_tools_evidence_missing",
+      "web_tools_protocol_leak",
+    ]);
+    semanticFailures.compactionResume = assertSemanticFailures("compactionResume", "self-test failed: semantically invalid compaction-resume report satisfied the gate", [
+      "compaction_resume_first_response_missing",
+      "compaction_resume_compact_response_missing",
+      "compaction_resume_summary_too_short",
+      "compaction_resume_summary_seed_missing",
+      "compaction_resume_direct_resume_missing",
+      "compaction_resume_chained_resume_missing",
+    ]);
+    semanticFailures.cancellation = assertSemanticFailures("cancellation", "self-test failed: semantically invalid cancellation report satisfied the gate", [
+      "cancellation_response_id_missing",
+      "cancellation_error_present",
+      "cancellation_cancelled_event_missing",
+      "cancellation_completed_unexpected",
+      "cancellation_failed_unexpected",
+      "cancellation_event_names_missing",
+      "cancellation_provider_not_ready",
+      "cancellation_mode_missing",
+      "cancellation_model_missing",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_report_name",
