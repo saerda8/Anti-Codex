@@ -942,6 +942,13 @@
           return `${gate.id}:${details}`;
         });
         lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
+        const sourceSnapshotMismatchGates = item.releaseGateFailures
+          .filter((gate) => Array.isArray(gate.semanticFailures) && gate.semanticFailures.some((failure) => /_source_snapshot_mismatch$/.test(String(failure))))
+          .map((gate) => gate.id)
+          .filter(Boolean);
+        if (sourceSnapshotMismatchGates.length) {
+          lines.push(`  source snapshot mismatch: stale reports for ${sourceSnapshotMismatchGates.join(", ")}; refresh MCP/Skill and plugin capability reports`);
+        }
       }
       if (item.sourceSnapshotEvidence) {
         const evidence = item.sourceSnapshotEvidence;

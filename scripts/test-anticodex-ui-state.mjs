@@ -113,6 +113,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/selectedHistory:/.test(injectSource) || !/releaseGateSelectedReports/.test(injectSource)) {
     failures.push("in-app manager is missing release-gate selected history evidence");
   }
+  if (!/source snapshot mismatch: stale reports/.test(injectSource) || !/_source_snapshot_mismatch/.test(injectSource)) {
+    failures.push("in-app manager is missing stale source snapshot guidance");
+  }
   if (!/failureReasons:/.test(injectSource) || !/releaseGateFailureReasons/.test(injectSource)) {
     failures.push("in-app manager is missing release-gate failure reason evidence");
   }
@@ -197,6 +200,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/selectedHistory:/.test(managerHtml) || !/releaseGateSelectedReports/.test(managerHtml)) {
     failures.push("manager page is missing release-gate selected history evidence");
+  }
+  if (!/source snapshot mismatch: stale reports/.test(managerHtml) || !/_source_snapshot_mismatch/.test(managerHtml)) {
+    failures.push("manager page is missing stale source snapshot guidance");
   }
   if (!/failureReasons:/.test(managerHtml) || !/releaseGateFailureReasons/.test(managerHtml)) {
     failures.push("manager page is missing release-gate failure reason evidence");

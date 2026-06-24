@@ -1601,3 +1601,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: `test-anticodex-mcp-skills.ps1 -TimeoutSec 5` now skips local HTTP health/plugin/connector/app-tool endpoint probes in short-budget mode, while still running real MCP `node_repl` smoke, worker `tools/list`, local skill/guidance checks, and local app-tool registry parity.
 - Completed: launcher contracts now guard the short-budget HTTP skip branch so offline local gateway retries cannot reintroduce long degraded runs.
 - Verification: PowerShell parser check passed; focused launcher contracts passed `130/130`; real offline `-TimeoutSec 5` run returned exit `0`, `ok:true`, `shortBudgetMode:true`, `capabilityState:"ready"`, real list count `2`, and elapsed about `5.9s`.
+
+## 2026-06-24 Source Snapshot Mismatch Manager Hint
+- Completed: Manager latest-report summaries now add a human-readable stale-report hint when release-gate semantic failures include `*_source_snapshot_mismatch`, while preserving the exact failure codes.
+- Completed: external Manager bridge, injected Manager, and fallback Manager share the same hint, and UI-state static checks guard it.
+- Verification: JS syntax checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `130/130`.

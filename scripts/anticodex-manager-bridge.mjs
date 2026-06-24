@@ -333,6 +333,13 @@ function latestReportsSummary(result) {
         return `${gate.id}:${details}`;
       });
       lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
+      const sourceSnapshotMismatchGates = item.releaseGateFailures
+        .filter((gate) => Array.isArray(gate.semanticFailures) && gate.semanticFailures.some((failure) => /_source_snapshot_mismatch$/.test(String(failure))))
+        .map((gate) => gate.id)
+        .filter(Boolean);
+      if (sourceSnapshotMismatchGates.length) {
+        lines.push(`  source snapshot mismatch: stale reports for ${sourceSnapshotMismatchGates.join(", ")}; refresh MCP/Skill and plugin capability reports`);
+      }
     }
     if (item.sourceSnapshotEvidence) {
       const evidence = item.sourceSnapshotEvidence;
@@ -699,7 +706,11 @@ if (args.has("--self-test")) {
       releaseGateFailureReasons: [{ id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1 }],
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
-      releaseGateFailures: [{ id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] }],
+      releaseGateFailures: [
+        { id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] },
+        { id: "mcpSkills", semanticFailures: ["mcp_skills_source_snapshot_mismatch"] },
+        { id: "pluginCapabilities", semanticFailures: ["plugin_capabilities_source_snapshot_mismatch"] },
+      ],
       installedRuntimeEvidence: { sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", missingSourceFiles: ["scripts/a.ps1"], missingInstalledRuntimeFiles: ["scripts/b.ps1"], mismatchedRuntimeFiles: ["scripts/c.ps1"] },
     }, {
       label: "\u6a21\u578b\u601d\u8003\u9884\u7b97",
@@ -762,6 +773,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
+  assert.match(evidenceSummary, /source snapshot mismatch: stale reports for mcpSkills, pluginCapabilities; refresh MCP\/Skill and plugin capability reports/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
   assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42 \/ reused=true \/ reason=short_budget_reused_previous_snapshot/);
