@@ -116,11 +116,11 @@ const gateDefinitions = [
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
-  { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true },
-  { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: true },
-  { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: true },
-  { id: "mcpToolLoop", group: "real-traffic", file: "latest-mcp-tool-loop.json", requiredForRelease: true },
-  { id: "customToolLoop", group: "real-traffic", file: "latest-custom-tool-loop.json", requiredForRelease: true },
+  { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
+  { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "native" },
+  { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "native-multi" },
+  { id: "mcpToolLoop", group: "real-traffic", file: "latest-mcp-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "mcp" },
+  { id: "customToolLoop", group: "real-traffic", file: "latest-custom-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "custom" },
   { id: "compactionResume", group: "real-traffic", file: "latest-compaction-resume.json", requiredForRelease: true },
   { id: "cancellation", group: "real-traffic", file: "latest-cancellation.json", requiredForRelease: true },
   { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true },
@@ -449,6 +449,62 @@ function summarizeGate(definition) {
       if (!marker || !finalText.includes(marker)) semanticFailures.push("codex_responses_marker_missing");
       if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("codex_responses_chinese_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("codex_responses_failures");
+    }
+    if (definition.requireToolLoopSemantics) {
+      const finalText = String(report.final_text || "");
+      const callId = String(report.call_id || "");
+      const tool = report.tool && typeof report.tool === "object" ? report.tool : {};
+      const containsNumber = (value, numberText) => new RegExp(`(^|\\D)${numberText}(\\D|$)`).test(value);
+      const expectedToolLoopReportNames = {
+        standard: "tool-loop",
+        native: "native-tool-loop",
+        "native-multi": "native-multi-tool-loop",
+        mcp: "mcp-tool-loop",
+        custom: "custom-tool-loop",
+      };
+      const expectedReportName = expectedToolLoopReportNames[definition.requireToolLoopSemantics];
+      if (report.reportName !== expectedReportName) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_report_name`);
+      if (report.requestedRealTraffic !== true) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_real_traffic_not_requested`);
+      if (report.usedRealTraffic !== true) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_real_traffic_missing`);
+      if (report.behaviorCovered !== true) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_behavior_not_covered`);
+      if (report.coverageKind !== "real-traffic") semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_coverage_kind`);
+      if (definition.requireToolLoopSemantics === "standard") {
+        if (!callId) semanticFailures.push("tool_loop_call_id_missing");
+        if (!finalText.includes("MARKER_731")) semanticFailures.push("tool_loop_marker_missing");
+        if (!containsNumber(finalText, "42")) semanticFailures.push("tool_loop_value_missing");
+      }
+      if (definition.requireToolLoopSemantics === "native") {
+        const argumentsObject = report.arguments && typeof report.arguments === "object" ? report.arguments : {};
+        if (!callId) semanticFailures.push("native_tool_loop_call_id_missing");
+        if (callId && /^pseudo_/.test(callId)) semanticFailures.push("native_tool_loop_pseudo_call_id");
+        if (report.native_call_id !== true) semanticFailures.push("native_tool_loop_native_call_id_missing");
+        if (String(argumentsObject.marker || "") !== "NATIVE_MARKER_8462") semanticFailures.push("native_tool_loop_marker_argument_missing");
+        if (!finalText.includes("NATIVE_MARKER_8462") || !finalText.includes("RECORDED")) semanticFailures.push("native_tool_loop_result_missing");
+      }
+      if (definition.requireToolLoopSemantics === "native-multi") {
+        const firstCall = report.first_call && typeof report.first_call === "object" ? report.first_call : {};
+        const secondCall = report.second_call && typeof report.second_call === "object" ? report.second_call : {};
+        if (firstCall.name !== "marker_tool" || !firstCall.call_id || /^pseudo_/.test(String(firstCall.call_id))) semanticFailures.push("native_multi_tool_loop_first_call_missing");
+        if (secondCall.name !== "echo_tool" || !secondCall.call_id || /^pseudo_/.test(String(secondCall.call_id))) semanticFailures.push("native_multi_tool_loop_second_call_missing");
+        if (report.native_call_ids !== true) semanticFailures.push("native_multi_tool_loop_native_call_ids_missing");
+        if (!finalText.includes("NATIVE_MULTI_MARKER_739") || !containsNumber(finalText, "99")) semanticFailures.push("native_multi_tool_loop_marker_result_missing");
+        if (!finalText.includes("NATIVE_MULTI_ECHO_284") || !finalText.includes("confirmed")) semanticFailures.push("native_multi_tool_loop_echo_result_missing");
+      }
+      if (definition.requireToolLoopSemantics === "mcp") {
+        const realMcp = tool.realMcp && typeof tool.realMcp === "object" ? tool.realMcp : {};
+        if (!callId) semanticFailures.push("mcp_tool_loop_call_id_missing");
+        if (tool.emittedName !== "js" || tool.expectedFlattenedName !== "mcp__node_repl__js") semanticFailures.push("mcp_tool_loop_expected_tool_missing");
+        if (realMcp.ok !== true || realMcp.markerObserved !== true || Number(realMcp.toolCount || 0) < 1) semanticFailures.push("mcp_tool_loop_real_mcp_missing");
+        if (!String(tool.code || "").includes("MCP_NODE_REPL_417") || !String(realMcp.output || "").includes("MCP_NODE_REPL_417") || !finalText.includes("MCP_NODE_REPL_417")) semanticFailures.push("mcp_tool_loop_marker_missing");
+        if (!String(tool.code || "").includes("42") || !String(realMcp.output || "").includes("42") || !containsNumber(finalText, "42")) semanticFailures.push("mcp_tool_loop_value_missing");
+      }
+      if (definition.requireToolLoopSemantics === "custom") {
+        if (!callId) semanticFailures.push("custom_tool_loop_call_id_missing");
+        if (tool.type !== "custom_tool_call") semanticFailures.push("custom_tool_loop_type_mismatch");
+        if (tool.name !== "apply_patch") semanticFailures.push("custom_tool_loop_name_mismatch");
+        if (tool.inputPreserved !== true) semanticFailures.push("custom_tool_loop_input_not_preserved");
+        if (tool.marker !== "CUSTOM_PATCH_519" || !finalText.includes("CUSTOM_PATCH_519")) semanticFailures.push("custom_tool_loop_marker_missing");
+      }
     }
     if (definition.requireAccountProxySemantics) {
       const phaseSummary = report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : {};
@@ -1472,6 +1528,52 @@ if (args.has("--self-test")) {
       failures: [],
     });
 
+    writeFakeLatestReport("latest-tool-loop.json", {
+      ok: true,
+      call_id: "",
+      final_text: "plain English without the marker value",
+    });
+
+    writeFakeLatestReport("latest-native-tool-loop.json", {
+      ok: true,
+      call_id: "pseudo_123",
+      native_call_id: false,
+      arguments: { marker: "WRONG_NATIVE_MARKER" },
+      final_text: "missing native result",
+    });
+
+    writeFakeLatestReport("latest-native-multi-tool-loop.json", {
+      ok: true,
+      first_call: { name: "marker_tool", call_id: "pseudo_1" },
+      second_call: { name: "echo_tool", call_id: "" },
+      native_call_ids: false,
+      final_text: "missing echo and result",
+    });
+
+    writeFakeLatestReport("latest-mcp-tool-loop.json", {
+      ok: true,
+      call_id: "",
+      tool: {
+        emittedName: "wrong",
+        expectedFlattenedName: "mcp__node_repl__js",
+        code: "nodeRepl.write('wrong=0')",
+        realMcp: { ok: false, markerObserved: false, toolCount: 0, output: "" },
+      },
+      final_text: "missing MCP marker",
+    });
+
+    writeFakeLatestReport("latest-custom-tool-loop.json", {
+      ok: true,
+      call_id: "",
+      tool: {
+        type: "function_call",
+        name: "wrong_tool",
+        inputPreserved: false,
+        marker: "CUSTOM_PATCH_519",
+      },
+      final_text: "missing custom marker",
+    });
+
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
       reportName: "wrong-third-party-provider",
@@ -1998,6 +2100,38 @@ if (args.has("--self-test")) {
       "source_preflight_used_real_traffic",
       "source_preflight_behavior_not_covered",
       "source_preflight_coverage_kind",
+    ]);
+    semanticFailures.toolLoop = assertSemanticFailures("toolLoop", "self-test failed: semantically invalid tool-loop report satisfied the gate", [
+      "tool_loop_call_id_missing",
+      "tool_loop_marker_missing",
+      "tool_loop_value_missing",
+    ]);
+    semanticFailures.nativeToolLoop = assertSemanticFailures("nativeToolLoop", "self-test failed: semantically invalid native tool-loop report satisfied the gate", [
+      "native_tool_loop_pseudo_call_id",
+      "native_tool_loop_native_call_id_missing",
+      "native_tool_loop_marker_argument_missing",
+      "native_tool_loop_result_missing",
+    ]);
+    semanticFailures.nativeMultiToolLoop = assertSemanticFailures("nativeMultiToolLoop", "self-test failed: semantically invalid native multi-tool-loop report satisfied the gate", [
+      "native_multi_tool_loop_first_call_missing",
+      "native_multi_tool_loop_second_call_missing",
+      "native_multi_tool_loop_native_call_ids_missing",
+      "native_multi_tool_loop_marker_result_missing",
+      "native_multi_tool_loop_echo_result_missing",
+    ]);
+    semanticFailures.mcpToolLoop = assertSemanticFailures("mcpToolLoop", "self-test failed: semantically invalid MCP tool-loop report satisfied the gate", [
+      "mcp_tool_loop_call_id_missing",
+      "mcp_tool_loop_expected_tool_missing",
+      "mcp_tool_loop_real_mcp_missing",
+      "mcp_tool_loop_marker_missing",
+      "mcp_tool_loop_value_missing",
+    ]);
+    semanticFailures.customToolLoop = assertSemanticFailures("customToolLoop", "self-test failed: semantically invalid custom tool-loop report satisfied the gate", [
+      "custom_tool_loop_call_id_missing",
+      "custom_tool_loop_type_mismatch",
+      "custom_tool_loop_name_mismatch",
+      "custom_tool_loop_input_not_preserved",
+      "custom_tool_loop_marker_missing",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_report_name",

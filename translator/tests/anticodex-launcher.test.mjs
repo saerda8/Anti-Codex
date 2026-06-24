@@ -4786,6 +4786,7 @@ test("Anti-Codex ships a repeatable installed streaming cancellation verifier", 
 test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   const toolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-tool-loop.ps1"), "utf8");
   const nativeToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-native-tool-loop.ps1"), "utf8");
+  const nativeMultiToolLoop = readFileSync(resolve(root, "scripts", "test-anticodex-native-multi-tool-loop.ps1"), "utf8");
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
 
   assert.match(toolLoop, /marker_tool/);
@@ -4795,6 +4796,11 @@ test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   assert.match(toolLoop, /\/anticodex\/model-routes/);
   assert.match(toolLoop, /latest-\$Name\.json/);
   assert.match(toolLoop, /tool-loop/);
+  assert.match(toolLoop, /reportName\s*=\s*"tool-loop"/);
+  assert.match(toolLoop, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(toolLoop, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(toolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(toolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(toolLoop, /internalModel/);
   assert.match(toolLoop, /Second response did not preserve/);
   assert.match(toolLoop, /Proxy\s+\$null/);
@@ -4815,6 +4821,16 @@ test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   assert.match(nativeToolLoop, /\\u8bf7\\u7528\\u4e2d\\u6587\\u4e00\\u53e5\\u8bdd/);
   assert.match(nativeToolLoop, /\\u4e00-\\u9fff/);
   assert.match(nativeToolLoop, /DeepCodex\|Deep Codex/);
+  assert.match(nativeToolLoop, /reportName\s*=\s*"native-tool-loop"/);
+  assert.match(nativeToolLoop, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(nativeToolLoop, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(nativeToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(nativeToolLoop, /coverageKind\s*=\s*"real-traffic"/);
+  assert.match(nativeMultiToolLoop, /reportName\s*=\s*"native-multi-tool-loop"/);
+  assert.match(nativeMultiToolLoop, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(nativeMultiToolLoop, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(nativeMultiToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(nativeMultiToolLoop, /coverageKind\s*=\s*"real-traffic"/);
 
   // Assert-Route must accept ResponseId and prefer entries/requestId over latest.
   assert.match(toolLoop, /\$ResponseId/);
@@ -4867,6 +4883,11 @@ test("Anti-Codex ships a repeatable installed MCP tool-loop verifier", () => {
   assert.match(mcpToolLoop, /\/anticodex\/model-routes/);
   assert.match(mcpToolLoop, /latest-\$Name\.json/);
   assert.match(mcpToolLoop, /mcp-tool-loop/);
+  assert.match(mcpToolLoop, /reportName\s*=\s*"mcp-tool-loop"/);
+  assert.match(mcpToolLoop, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(mcpToolLoop, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(mcpToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(mcpToolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(mcpToolLoop, /internalModel/);
   assert.match(mcpToolLoop, /Second response did not preserve the MCP marker/);
   assert.match(mcpToolLoop, /Proxy\s+\$null/);
@@ -4967,6 +4988,11 @@ test("Anti-Codex ships a repeatable installed custom tool-loop verifier", () => 
   assert.match(customToolLoop, /previous_response_id/);
   assert.match(customToolLoop, /inputPreserved/);
   assert.match(customToolLoop, /custom-tool-loop/);
+  assert.match(customToolLoop, /reportName\s*=\s*"custom-tool-loop"/);
+  assert.match(customToolLoop, /requestedRealTraffic\s*=\s*\$true/);
+  assert.match(customToolLoop, /usedRealTraffic\s*=\s*\$true/);
+  assert.match(customToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
+  assert.match(customToolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(customToolLoop, /\/anticodex\/model-routes/);
   assert.match(customToolLoop, /Proxy\s+\$null/);
   assert.match(customToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
@@ -7966,6 +7992,16 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /mcp_skills_no_agents_skills/);
   assert.match(releaseGates, /requireUsedRealTraffic/);
   assert.match(releaseGates, /expected_usedRealTraffic_true/);
+  assert.match(releaseGates, /requireToolLoopSemantics: "standard"/);
+  assert.match(releaseGates, /requireToolLoopSemantics: "native"/);
+  assert.match(releaseGates, /requireToolLoopSemantics: "native-multi"/);
+  assert.match(releaseGates, /requireToolLoopSemantics: "mcp"/);
+  assert.match(releaseGates, /requireToolLoopSemantics: "custom"/);
+  assert.match(releaseGates, /tool_loop_marker_missing/);
+  assert.match(releaseGates, /native_tool_loop_pseudo_call_id/);
+  assert.match(releaseGates, /native_multi_tool_loop_native_call_ids_missing/);
+  assert.match(releaseGates, /mcp_tool_loop_real_mcp_missing/);
+  assert.match(releaseGates, /custom_tool_loop_input_not_preserved/);
   assert.match(releaseGates, /expected_no_real_traffic/);
   assert.match(releaseGates, /expected_no_real_traffic_coverage_kind/);
   assert.match(releaseGates, /optional_requested_real_traffic_uncovered_but_ok/);

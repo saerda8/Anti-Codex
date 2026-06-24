@@ -275,6 +275,11 @@ try {
     $endedAt = [DateTime]::UtcNow
     $result = [pscustomobject]@{
         ok = ($failures.Count -eq 0)
+        reportName = "tool-loop"
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        behaviorCovered = ($failures.Count -eq 0)
+        coverageKind = "real-traffic"
         failures = $failures.ToArray()
         model = $model
         elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds

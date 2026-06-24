@@ -135,6 +135,7 @@ try {
 
     $result = [pscustomobject]@{
         ok = ($failures.Count -eq 0); failures = $failures.ToArray(); model = $model
+        reportName = "native-multi-tool-loop"; requestedRealTraffic = $true; usedRealTraffic = $true; behaviorCovered = ($failures.Count -eq 0); coverageKind = "real-traffic"
         elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
         first_call = if ($firstCall) { [pscustomobject]@{ name = $firstCall.name; call_id = $firstCall.call_id } } else { $null }
         second_call = if ($secondCall) { [pscustomobject]@{ name = $secondCall.name; call_id = $secondCall.call_id } } else { $null }
