@@ -3642,6 +3642,11 @@ function latestReportsSummary(result){
       if(Array.isArray(item.releaseGateFailureReasons)&&item.releaseGateFailureReasons.length){
         const failureReasons=item.releaseGateFailureReasons.slice(0,6).map((gate)=>gate.id+":"+(gate.failureReason||(Array.isArray(gate.failureReasons)?gate.failureReasons[0]:"unsatisfied"))).join(", ");
         lines.push("  failureReasons: "+failureReasons);
+        const realTrafficEvidenceGates=item.releaseGateFailureReasons
+          .filter((gate)=>gate?.group==="real-traffic"&&(["stale_report","missing_report"].includes(gate.failureReason)||(Array.isArray(gate.failureReasons)&&gate.failureReasons.some((reason)=>["stale_report","missing_report"].includes(reason)))))
+          .map((gate)=>gate.id)
+          .filter(Boolean);
+        if(realTrafficEvidenceGates.length) lines.push("  真实流量验收证据需更新/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（"+realTrafficEvidenceGates.slice(0,6).join(", ")+"）");
       }
       if(Array.isArray(item.releaseGateSelectedReports)&&item.releaseGateSelectedReports.length){
         const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile).join(", ");

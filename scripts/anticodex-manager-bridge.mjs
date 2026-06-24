@@ -306,6 +306,13 @@ function latestReportsSummary(result) {
       if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
         const failureReasons = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`).join(", ");
         lines.push(`  failureReasons: ${failureReasons}`);
+        const realTrafficEvidenceGates = item.releaseGateFailureReasons
+          .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
+          .map((gate) => gate.id)
+          .filter(Boolean);
+        if (realTrafficEvidenceGates.length) {
+          lines.push(`  真实流量验收证据需更新/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（${realTrafficEvidenceGates.slice(0, 6).join(", ")}）`);
+        }
       }
       if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
         const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
@@ -703,7 +710,10 @@ if (args.has("--self-test")) {
       missingShort: ["latest-ui-idle.json"],
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
-      releaseGateFailureReasons: [{ id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1 }],
+      releaseGateFailureReasons: [
+        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1 },
+        { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"] },
+      ],
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
       releaseGateFailures: [
@@ -771,6 +781,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
+  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report/);
+  assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /source snapshot mismatch: stale reports for mcpSkills, pluginCapabilities; refresh MCP\/Skill and plugin capability reports/);

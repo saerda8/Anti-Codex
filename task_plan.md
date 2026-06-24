@@ -1615,3 +1615,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 ## 2026-06-24 MCP/Skill Short-Budget Process Cleanup Contract
 - Completed: the MCP/Skill launcher regression now checks that the `-TimeoutSec 5` short-budget verifier keeps `shortBudgetMode:true` and does not leave its temp fake MCP process or exact `test-anticodex-mcp-skills.ps1` child process running after exit.
 - Verification: focused launcher contract passed `131/131`; PowerShell parser check passed; `git diff --check` passed.
+
+## 2026-06-24 Real-Traffic Evidence Guidance
+- Completed: Manager latest-report summaries now explain stale or missing real-traffic release evidence as an explicit-verification gap, not a normal feature absence.
+- Completed: external Manager bridge, injected Manager, and fallback Manager share the same real-traffic stale/missing guidance, and the bridge self-test covers both `stale_report` and `missing_report`.
+- Verification: Manager bridge self-test passed; UI-state self-test passed; focused launcher contract passed `131/131`; `git diff --check` passed.

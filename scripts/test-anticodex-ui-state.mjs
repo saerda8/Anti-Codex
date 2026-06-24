@@ -119,6 +119,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/failureReasons:/.test(injectSource) || !/releaseGateFailureReasons/.test(injectSource)) {
     failures.push("in-app manager is missing release-gate failure reason evidence");
   }
+  if (!/真实流量验收证据需更新\/未生成/.test(injectSource) || !/missing_report/.test(injectSource) || !/group === "real-traffic"/.test(injectSource)) {
+    failures.push("in-app manager is missing real-traffic stale/missing evidence guidance");
+  }
 
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
@@ -206,6 +209,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/failureReasons:/.test(managerHtml) || !/releaseGateFailureReasons/.test(managerHtml)) {
     failures.push("manager page is missing release-gate failure reason evidence");
+  }
+  if (!/真实流量验收证据需更新\/未生成/.test(managerHtml) || !/missing_report/.test(managerHtml) || !/group==="real-traffic"/.test(managerHtml)) {
+    failures.push("manager page is missing real-traffic stale/missing evidence guidance");
   }
   if (/routes\.latest\?JSON\.stringify\(routeSummary/.test(managerHtml)) {
     failures.push("manager page route empty state collapses provider fields");

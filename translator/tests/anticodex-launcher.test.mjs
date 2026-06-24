@@ -772,6 +772,15 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /releaseGateFailureReasons/);
   assert.match(managerBridge, /failureReasons/);
   assert.match(managerInject, /failureReasons/);
+  assert.match(managerBridge, /真实流量验收证据需更新\/未生成/);
+  assert.match(managerInject, /真实流量验收证据需更新\/未生成/);
+  assert.match(managerServerSource, /真实流量验收证据需更新\/未生成/);
+  assert.match(managerBridge, /group === "real-traffic"/);
+  assert.match(managerInject, /group === "real-traffic"/);
+  assert.match(managerServerSource, /group==="real-traffic"/);
+  assert.match(managerBridge, /missing_report/);
+  assert.match(managerInject, /missing_report/);
+  assert.match(managerServerSource, /missing_report/);
   assert.match(managerBridge, /installedRuntimeEvidence/);
   assert.match(managerInject, /installedRuntimeEvidence/);
   assert.match(managerBridge, /installedRuntime: files=/);

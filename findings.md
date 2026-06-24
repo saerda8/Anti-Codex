@@ -869,3 +869,4 @@
 - In-process fake HTTP servers cannot answer while a Node test is blocked in `spawnSync`. Use async child process execution when the child is expected to call back into the test's loopback server.
 - PowerShell may unwrap a single-element JSON array returned by `Invoke-RestMethod`, so `.Count` can become `$null` even when one object exists. Fake endpoint fixtures should use at least two records when they are testing array-count paths rather than scalar handling.
 - MCP/Skill short-budget cleanup tests should match the temp fake MCP script path or the exact verifier script plus temp root, not broad `node` or `powershell` command fragments. This proves no child leak without risking unrelated user or system processes.
+- Real-traffic release gates need user-facing guidance separate from ordinary missing reports. A stale or missing real-traffic report means explicit high-cost verification was not refreshed, not that the underlying feature is absent.
