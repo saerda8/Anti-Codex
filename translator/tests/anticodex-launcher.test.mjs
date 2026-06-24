@@ -7255,6 +7255,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /blockedUntilExplicitUserApproval/);
   assert.match(releaseGates, /real-traffic ordered action was not attached/);
   assert.match(releaseGates, /realTrafficRefreshOrder/);
+  assert.match(releaseGates, /managerEvidenceRefreshOrder/);
+  assert.match(releaseGates, /test-anticodex-manager-real-buttons\.ps1 -TimeoutSec 120/);
+  assert.match(releaseGates, /manager real-button ordered action was not attached/);
   assert.match(releaseGates, /test-anticodex-account-proxy-readiness\.ps1 -TimeoutSec 120/);
   assert.match(releaseGates, /requireAccountProxySemantics/);
   assert.match(releaseGates, /account_proxy_real_request_not_ok/);

@@ -899,6 +899,10 @@ const optionalEvidenceRefreshOrder = [
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { highImpact: true }],
 ];
 
+const managerEvidenceRefreshOrder = [
+  ["managerRealButtons", "manager-gateway-check", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-manager-real-buttons.ps1 -TimeoutSec 120", { requiresGatewayStart: true }],
+];
+
 function action(id, phase, command, options = {}) {
   return {
     id,
@@ -918,6 +922,12 @@ function gateOrderedActions(gate) {
       action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45"),
     ];
   }
+  if (gate?.group === "manager" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    const index = managerEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
+    if (index < 0) return [];
+    const [id, phase, command, options] = managerEvidenceRefreshOrder[index];
+    return [action(id, phase, command, options)];
+  }
   if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
@@ -935,6 +945,7 @@ function gateOrderedActions(gate) {
 
 const actionPhaseOrder = [
   "plugin-capabilities",
+  "manager-gateway-check",
   "real-traffic-low-state",
   "real-traffic-session-state",
   "real-traffic-high-impact",
@@ -2045,6 +2056,8 @@ if (args.has("--self-test")) {
     const accountProxyGate = reasonGates.find((item) => item.id === "accountProxyReadiness");
     const accountProxyActions = gateOrderedActions(accountProxyGate);
     if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not attached");
+    const managerRealButtonActions = gateOrderedActions(reasonGates.find((item) => item.id === "managerRealButtons"));
+    if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
     const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
