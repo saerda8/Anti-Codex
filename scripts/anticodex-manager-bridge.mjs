@@ -339,22 +339,27 @@ function latestReportsSummary(result) {
         return actions;
       }
       if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
-        const failureReasons = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`).join(", ");
-        lines.push(`  failureReasons: ${failureReasons}`);
-        const reportFailureDetails = item.releaseGateFailureReasons
+        const failureReasonItems = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`);
+        const hiddenFailureReasons = Math.max(0, item.releaseGateFailureReasons.length - failureReasonItems.length);
+        lines.push(`  failureReasons: ${failureReasonItems.join(", ")}${hiddenFailureReasons ? ` (+${hiddenFailureReasons} more)` : ""}`);
+        const reportFailureSource = item.releaseGateFailureReasons
           .filter((gate) => gate?.selectedFile || (Array.isArray(gate?.reportFailureSamples) && gate.reportFailureSamples.length))
+        const reportFailureDetails = reportFailureSource
           .slice(0, 4)
           .map((gate) => {
             const sample = Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.length ? ` / sample ${gate.reportFailureSamples.slice(0, 2).join(" | ")}` : "";
             const codes = Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? ` / codes ${gate.reportFailureSampleCodes.slice(0, 3).join(",")}` : "";
             return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${codes}${sample}`;
         });
-        if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}`);
-        const guidanceDetails = item.releaseGateFailureReasons
-          .filter((gate) => gate?.guidance)
+        const hiddenReportFailures = Math.max(0, reportFailureSource.length - reportFailureDetails.length);
+        if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}${hiddenReportFailures ? ` (+${hiddenReportFailures} more)` : ""}`);
+        const guidanceSource = item.releaseGateFailureReasons
+          .filter((gate) => gate?.guidance);
+        const guidanceDetails = guidanceSource
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
-        if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
+        const hiddenGuidance = Math.max(0, guidanceSource.length - guidanceDetails.length);
+        if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}${hiddenGuidance ? ` (+${hiddenGuidance} more)` : ""}`);
         const realTrafficEvidenceGates = item.releaseGateFailureReasons
           .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
           .map((gate) => gate.id)
@@ -399,7 +404,8 @@ function latestReportsSummary(result) {
         const details = Array.isArray(gate.semanticFailures) && gate.semanticFailures.length ? gate.semanticFailures.slice(0, 4).join(", ") : (gate.error || "unsatisfied");
         return `${gate.id}:${details}`;
       });
-      lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
+      const hiddenGateFailures = Math.max(0, item.releaseGateFailures.length - gateFailures.length);
+      lines.push(`  semanticFailures: ${gateFailures.join(" | ")}${hiddenGateFailures ? ` (+${hiddenGateFailures} more)` : ""}`);
       const sourceSnapshotMismatchGates = item.releaseGateFailures
         .filter((gate) => Array.isArray(gate.semanticFailures) && gate.semanticFailures.some((failure) => /_source_snapshot_mismatch$/.test(String(failure))))
         .map((gate) => gate.id)
@@ -800,6 +806,11 @@ if (args.has("--self-test")) {
       releaseGateFailureReasons: [
         { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
         { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork" }] },
+        { id: "sourcePreflight", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-source-preflight.json", reportFailureSampleCodes: ["source_preflight_no_traffic"], reportFailureSamples: ["noTraffic missing"], guidance: "rerun source preflight", orderedActions: [{ id: "sourcePreflight" }] },
+        { id: "mcpSkills", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-mcp-skills.json", reportFailureSampleCodes: ["mcp_skills_source_snapshot_mismatch"], reportFailureSamples: ["source mismatch"], guidance: "rerun MCP skills", orderedActions: [{ id: "mcpSkills" }] },
+        { id: "localConnectors", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-local-connectors.json", reportFailureSampleCodes: ["local_connector_parity"], reportFailureSamples: ["connector drift"], guidance: "rerun local connectors", orderedActions: [{ id: "localConnectors" }] },
+        { id: "modelRouting", group: "no-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], selectedFile: "latest-model-routing.json", reportFailureSampleCodes: ["missing_report"], reportFailureSamples: ["missing model routing"], guidance: "rerun model routing", orderedActions: [{ id: "modelRouting" }] },
+        { id: "syncReadiness", group: "no-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], selectedFile: "latest-sync-readiness.json", reportFailureSampleCodes: ["stale_report"], reportFailureSamples: ["stale sync"], guidance: "rerun sync readiness", orderedActions: [{ id: "syncReadiness" }] },
       ],
       nextActions: [
         { id: "realWork", gateId: "realWork" },
@@ -813,6 +824,8 @@ if (args.has("--self-test")) {
         { id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] },
         { id: "mcpSkills", semanticFailures: ["mcp_skills_source_snapshot_mismatch"] },
         { id: "pluginCapabilities", semanticFailures: ["plugin_capabilities_source_snapshot_mismatch"] },
+        { id: "sourcePreflight", semanticFailures: ["source_preflight_no_traffic"] },
+        { id: "syncReadiness", semanticFailures: ["sync_readiness_full_mode_required"] },
       ],
       installedRuntimeEvidence: { sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", missingSourceFiles: ["scripts/a.ps1"], missingInstalledRuntimeFiles: ["scripts/b.ps1"], mismatchedRuntimeFiles: ["scripts/c.ps1"] },
     }, {
@@ -874,15 +887,18 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
   assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
-  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report/);
+  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report.*\(\+1 more\)/);
   assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ codes local_gateway_offline \/ sample gateway offline \| health timeout/);
+  assert.match(evidenceSummary, /reportFailures: .*\(\+2 more\)/);
+  assert.match(evidenceSummary, /guidance: .*\(\+1 more\)/);
   assert.match(evidenceSummary, /nextActions: realWork:realWork -> postVerification:postVerification/);
-  assert.match(evidenceSummary, /nextActions: .*\(\+2 more\)/);
+  assert.match(evidenceSummary, /nextActions: .*\(\+7 more\)/);
   assert.match(evidenceSummary, /approvalPlan: actions=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ first=realWork/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
+  assert.match(evidenceSummary, /semanticFailures: .*\(\+1 more\)/);
   assert.match(evidenceSummary, /source snapshot mismatch: stale reports for mcpSkills, pluginCapabilities; refresh MCP\/Skill and plugin capability reports/);
   assert.match(evidenceSummary, /source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers; do not edit latest report JSON by hand/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);

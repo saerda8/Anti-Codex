@@ -942,8 +942,29 @@ const optionalEvidenceRefreshOrder = [
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
 
+const shortEvidenceRefreshOrder = [
+  ["fastOverallNoTraffic", "short-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-installed-overall.ps1 -Fast -SkipManagerActionProbe -SkipAccountProxyProbe -TimeoutSec 25", { requiresGatewayStart: true }],
+  ["sourcePreflight", "short-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-source-preflight.ps1 -SkipFullRegression"],
+  ["mcpSkills", "short-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-mcp-skills.ps1 -TimeoutSec 45"],
+  ["localConnectors", "short-local", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-local-connectors.mjs --report-root $env:APPDATA\\anticodex\\reports\""],
+  ["thirdPartyProvider", "short-local", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-third-party-provider.mjs --report-root $env:APPDATA\\anticodex\\reports\""],
+  ["missingHistory", "short-local", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-missing-history.mjs --report-root $env:APPDATA\\anticodex\\reports\""],
+  ["installedRuntimeSync", "short-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\sync-anticodex-runtime.ps1 -NoRestart -TimeoutSec 10"],
+];
+
 const managerEvidenceRefreshOrder = [
   ["managerRealButtons", "manager-gateway-check", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-manager-real-buttons.ps1 -TimeoutSec 120", { requiresGatewayStart: true }],
+  ["refreshFeatures", "manager-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\refresh-anticodex-local-features.ps1 -VerifyOnly"],
+];
+
+const noTrafficEvidenceRefreshOrder = [
+  ["installedOverallNoTraffic", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-installed-overall.ps1 -NoTraffic -SkipManagerActionProbe -SkipAccountProxyProbe -TimeoutSec 25", { requiresGatewayStart: true }],
+  ["modelRouting", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-model-routing.ps1 -SkipRequests -TimeoutSec 20", { requiresGatewayStart: true }],
+  ["logDbGuard", "no-traffic-local", "powershell.exe -NoProfile -Command \"& node scripts\\protect-anticodex-log-db.mjs --status --report-root $env:APPDATA\\anticodex\\reports\""],
+  ["toolBridgeMode", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-bridge-mode.ps1 -TimeoutSec 20", { requiresGatewayStart: true }],
+  ["uiIdleStability", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-ui-idle-stability.ps1 -DurationSec 20 -IntervalSec 5 -TimeoutSec 8 -SkipManagerActionProbe", { requiresGatewayStart: true }],
+  ["syncReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-sync-readiness.ps1"],
+  ["modelThinking", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-model-thinking.ps1 -TimeoutSec 8", { requiresGatewayStart: true }],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -959,9 +980,16 @@ function action(id, phase, command, options = {}) {
 }
 
 function gateOrderedActions(gate) {
+  if (gate?.group === "short" && !gate.satisfied && gate.id !== "pluginCapabilities") {
+    const index = shortEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
+    if (index >= 0) {
+      const [id, phase, command, options] = shortEvidenceRefreshOrder[index];
+      return [action(id, phase, command, options || {})];
+    }
+  }
   if (gate?.id === "pluginCapabilities" && !gate.satisfied) {
     return [
-      action("startGatewayTranslatorOnly", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }),
+      action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }),
       action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45", { requiresGatewayStart: true }),
     ];
   }
@@ -970,6 +998,12 @@ function gateOrderedActions(gate) {
     if (index < 0) return [];
     const [id, phase, command, options] = managerEvidenceRefreshOrder[index];
     return [action(id, phase, command, options)];
+  }
+  if (gate?.group === "no-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    const index = noTrafficEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
+    if (index < 0) return [];
+    const [id, phase, command, options] = noTrafficEvidenceRefreshOrder[index];
+    return [action(id, phase, command, options || {})];
   }
   if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
@@ -987,8 +1021,14 @@ function gateOrderedActions(gate) {
 }
 
 const actionPhaseOrder = [
+  "gateway-start",
+  "short-local",
+  "short-gateway",
   "plugin-capabilities",
+  "manager-local",
   "manager-gateway-check",
+  "no-traffic-local",
+  "no-traffic-gateway",
   "real-traffic-low-state",
   "real-traffic-session-state",
   "real-traffic-high-impact",
@@ -998,7 +1038,7 @@ const actionPhaseOrder = [
 ];
 
 function orderedNextActions(failureReasons) {
-  return failureReasons
+  const items = failureReasons
     .flatMap((gate, gateIndex) => (Array.isArray(gate.orderedActions) ? gate.orderedActions : []).map((item, actionIndex) => ({
       ...item,
       gateId: gate.id,
@@ -1015,6 +1055,10 @@ function orderedNextActions(failureReasons) {
     })
     .map(({ order, ...item }) => item)
     .slice(0, 32);
+  if (items.some((item) => item.requiresGatewayStart === true) && !items.some((item) => item.id === "startGatewayTranslatorOnly")) {
+    items.unshift(action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }));
+  }
+  return items.slice(0, 32);
 }
 
 function summarizeApprovalPlan(actions) {
@@ -2176,7 +2220,12 @@ if (args.has("--self-test")) {
     if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not marked gateway and real-traffic");
     const managerRealButtonActions = gateOrderedActions(reasonGates.find((item) => item.id === "managerRealButtons"));
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
+    const missingRequiredWithoutActions = reasonGates
+      .filter((item) => item.requiredForRelease === true && !item.satisfied && gateOrderedActions(item).length < 1)
+      .map((item) => item.id);
+    if (missingRequiredWithoutActions.length) throw new Error(`self-test failed: required failed gates missing ordered actions: ${missingRequiredWithoutActions.join(",")}`);
     const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
+    if (orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const approvalPlan = summarizeApprovalPlan(orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))));
     if (approvalPlan.requiresGatewayStartCount < 1 || approvalPlan.requiresRealTrafficCount < 1 || approvalPlan.highImpactCount < 1 || approvalPlan.firstBlockedAction !== "startGatewayTranslatorOnly") {

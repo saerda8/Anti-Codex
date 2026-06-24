@@ -948,22 +948,27 @@
           return actions;
         }
         if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
-          const failureReasons = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`).join(", ");
-          lines.push(`  failureReasons: ${failureReasons}`);
-          const reportFailureDetails = item.releaseGateFailureReasons
+          const failureReasonItems = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`);
+          const hiddenFailureReasons = Math.max(0, item.releaseGateFailureReasons.length - failureReasonItems.length);
+          lines.push(`  failureReasons: ${failureReasonItems.join(", ")}${hiddenFailureReasons ? ` (+${hiddenFailureReasons} more)` : ""}`);
+          const reportFailureSource = item.releaseGateFailureReasons
             .filter((gate) => gate?.selectedFile || (Array.isArray(gate?.reportFailureSamples) && gate.reportFailureSamples.length))
+          const reportFailureDetails = reportFailureSource
             .slice(0, 4)
             .map((gate) => {
               const sample = Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.length ? ` / sample ${gate.reportFailureSamples.slice(0, 2).join(" | ")}` : "";
               const codes = Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? ` / codes ${gate.reportFailureSampleCodes.slice(0, 3).join(",")}` : "";
               return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${codes}${sample}`;
           });
-        if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}`);
-        const guidanceDetails = item.releaseGateFailureReasons
-          .filter((gate) => gate?.guidance)
+        const hiddenReportFailures = Math.max(0, reportFailureSource.length - reportFailureDetails.length);
+        if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}${hiddenReportFailures ? ` (+${hiddenReportFailures} more)` : ""}`);
+        const guidanceSource = item.releaseGateFailureReasons
+          .filter((gate) => gate?.guidance);
+        const guidanceDetails = guidanceSource
           .slice(0, 4)
           .map((gate) => `${gate.id}:${gate.guidance}`);
-        if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
+        const hiddenGuidance = Math.max(0, guidanceSource.length - guidanceDetails.length);
+        if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}${hiddenGuidance ? ` (+${hiddenGuidance} more)` : ""}`);
         const realTrafficEvidenceGates = item.releaseGateFailureReasons
           .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
             .map((gate) => gate.id)
@@ -1008,7 +1013,8 @@
           const details = Array.isArray(gate.semanticFailures) && gate.semanticFailures.length ? gate.semanticFailures.slice(0, 4).join(", ") : (gate.error || "unsatisfied");
           return `${gate.id}:${details}`;
         });
-        lines.push(`  semanticFailures: ${gateFailures.join(" | ")}`);
+        const hiddenGateFailures = Math.max(0, item.releaseGateFailures.length - gateFailures.length);
+        lines.push(`  semanticFailures: ${gateFailures.join(" | ")}${hiddenGateFailures ? ` (+${hiddenGateFailures} more)` : ""}`);
         const sourceSnapshotMismatchGates = item.releaseGateFailures
           .filter((gate) => Array.isArray(gate.semanticFailures) && gate.semanticFailures.some((failure) => /_source_snapshot_mismatch$/.test(String(failure))))
           .map((gate) => gate.id)

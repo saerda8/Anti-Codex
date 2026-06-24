@@ -110,6 +110,13 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     if (-not (Has-Property $ReleaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
     if (-not (Has-Property $ReleaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
     $nextActions = @(As-FlatArray $ReleaseGatesSummary.nextActions)
+    $missingRequiredGates = @(As-FlatArray $ReleaseGatesSummary.missingRequired | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    foreach ($missingGateId in $missingRequiredGates) {
+        $matchingActions = @($nextActions | Where-Object { [string]$_.id -eq $missingGateId -or [string]$_.gateId -eq $missingGateId })
+        if ($matchingActions.Count -lt 1) {
+            Add-Failure "release-gates missing required gate $missingGateId has no next action"
+        }
+    }
     $gatewayActionCount = 0
     $realTrafficActionCount = 0
     $highImpactActionCount = 0
@@ -171,6 +178,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         $requiresRealTraffic = $nextAction.requiresRealTraffic -eq $true
         $highImpact = $nextAction.highImpact -eq $true
         $blocked = $nextAction.blockedUntilExplicitUserApproval -eq $true
+        if ([string]::IsNullOrWhiteSpace([string]$nextAction.command)) {
+            Add-Failure "release-gates next action $actionId missing command"
+        }
         if ($requiresGateway) { $gatewayActionCount++ }
         if ($requiresRealTraffic) { $realTrafficActionCount++ }
         if ($highImpact) { $highImpactActionCount++ }

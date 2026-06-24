@@ -792,6 +792,11 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /hiddenNextActions/);
   assert.match(managerInject, /hiddenNextActions/);
   assert.match(managerServerSource, /hiddenNextActions/);
+  for (const marker of ["hiddenFailureReasons", "hiddenReportFailures", "hiddenGuidance", "hiddenGateFailures"]) {
+    assert.match(managerBridge, new RegExp(marker));
+    assert.match(managerInject, new RegExp(marker));
+    assert.match(managerServerSource, new RegExp(marker));
+  }
   assert.match(managerBridge, /approvalPlan: actions=/);
   assert.match(managerInject, /approvalPlan: actions=/);
   assert.match(managerServerSource, /approvalPlan: actions=/);
@@ -7040,6 +7045,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /plugin capability failure offline refresh selected file missing/);
   assert.match(diagnostics, /plugin capability failure missing sample codes/);
   assert.match(diagnostics, /release-gates failure \$gateFailureId missing sample codes/);
+  assert.match(diagnostics, /release-gates missing required gate \$missingGateId has no next action/);
+  assert.match(diagnostics, /release-gates next action \$actionId missing command/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
   assert.match(diagnostics, /release-gates approval plan is not an object/);
@@ -7284,6 +7291,7 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       }],
       nextActions: [{
         id: "pluginCapabilities",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
         requiresGatewayStart: true,
         requiresRealTraffic: false,
         highImpact: false,
@@ -7354,6 +7362,7 @@ test("diagnostics reports-summary fixture rejects non-plugin failure samples wit
       }],
       nextActions: [{
         id: "postVerification",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
         requiresGatewayStart: true,
         requiresRealTraffic: true,
         highImpact: true,
@@ -7418,6 +7427,7 @@ test("diagnostics reports-summary fixture rejects null approval plan object", ()
       releaseGateFailureReasons: [],
       nextActions: [{
         id: "pluginCapabilities",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
         requiresGatewayStart: true,
         requiresRealTraffic: false,
         highImpact: false,
@@ -7626,6 +7636,7 @@ test("diagnostics reports-summary fixture rejects unsafe next action approval me
       releaseGateFailureReasons: [],
       nextActions: [{
         id: "postVerification",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
         requiresGatewayStart: true,
         requiresRealTraffic: true,
         highImpact: true,
@@ -7758,6 +7769,7 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
       releaseGateFailureReasons: [],
       nextActions: [{
         id: "pluginCapabilities",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
         requiresGatewayStart: true,
         requiresRealTraffic: false,
         highImpact: false,
@@ -8029,7 +8041,15 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /account-proxy ordered action was not marked gateway and real-traffic/);
   assert.match(releaseGates, /optional stability-soak action was not marked gateway and real-traffic/);
   assert.match(releaseGates, /realTrafficRefreshOrder/);
+  assert.match(releaseGates, /shortEvidenceRefreshOrder/);
+  assert.match(releaseGates, /noTrafficEvidenceRefreshOrder/);
   assert.match(releaseGates, /managerEvidenceRefreshOrder/);
+  assert.match(releaseGates, /test-anticodex-source-preflight\.ps1 -SkipFullRegression/);
+  assert.match(releaseGates, /test-anticodex-local-connectors\.mjs --report-root \$env:APPDATA/);
+  assert.match(releaseGates, /test-anticodex-model-routing\.ps1 -SkipRequests -TimeoutSec 20/);
+  assert.match(releaseGates, /sync-anticodex-runtime\.ps1 -NoRestart -TimeoutSec 10/);
+  assert.match(releaseGates, /required failed gates missing ordered actions/);
+  assert.match(releaseGates, /nextActions contained an action without a command/);
   assert.match(releaseGates, /test-anticodex-manager-real-buttons\.ps1 -TimeoutSec 120/);
   assert.match(releaseGates, /manager real-button ordered action was not attached/);
   assert.match(releaseGates, /test-anticodex-account-proxy-readiness\.ps1 -TimeoutSec 120/);
