@@ -114,8 +114,8 @@ const gateDefinitions = [
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true, requireSyncReadinessSemantics: true },
   { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true, requireModelThinkingSemantics: true },
 
-  { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true },
-  { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true },
+  { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
+  { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true },
   { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: true },
   { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: true },
@@ -428,6 +428,27 @@ function summarizeGate(definition) {
     }
     if (definition.requireUsedRealTraffic && report.usedRealTraffic !== true) {
       semanticFailures.push("expected_usedRealTraffic_true");
+    }
+    if (definition.requirePostVerificationSemantics) {
+      const wait = report.wait && typeof report.wait === "object" ? report.wait : {};
+      const overall = report.overall && typeof report.overall === "object" ? report.overall : {};
+      if (report.reportName !== "post-verification") semanticFailures.push("post_verification_report_name");
+      if (report.state !== "completed") semanticFailures.push("post_verification_state_not_completed");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("post_verification_failures");
+      if (wait.ready !== true) semanticFailures.push("post_verification_wait_not_ready");
+      if (overall.ok !== true) semanticFailures.push("post_verification_overall_not_ok");
+      if (overall.usedRealTraffic !== true) semanticFailures.push("post_verification_overall_real_traffic_missing");
+      if (overall.releaseReady !== true) semanticFailures.push("post_verification_overall_not_release_ready");
+    }
+    if (definition.requireCodexResponsesSemantics) {
+      const marker = String(report.marker || "");
+      const finalText = String(report.final_text || "");
+      if (report.reportName !== "codex-responses") semanticFailures.push("codex_responses_report_name");
+      if (report.usedRealTraffic !== true) semanticFailures.push("codex_responses_real_traffic_missing");
+      if (report.completed !== true) semanticFailures.push("codex_responses_not_completed");
+      if (!marker || !finalText.includes(marker)) semanticFailures.push("codex_responses_marker_missing");
+      if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("codex_responses_chinese_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("codex_responses_failures");
     }
     if (definition.requireAccountProxySemantics) {
       const phaseSummary = report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : {};
@@ -1431,6 +1452,26 @@ if (args.has("--self-test")) {
       },
     });
 
+    writeFakeLatestReport("latest-post-verification.json", {
+      ok: true,
+      reportName: "post-verification",
+      usedRealTraffic: true,
+      state: "verification_failed",
+      failures: ["installed overall failed"],
+      wait: { ready: false },
+      overall: { ok: false, usedRealTraffic: false, releaseReady: false },
+    });
+
+    writeFakeLatestReport("latest-codex-responses.json", {
+      ok: true,
+      reportName: "codex-responses",
+      usedRealTraffic: true,
+      marker: "CODEX_RESPONSES_MARKER",
+      completed: false,
+      final_text: "missing marker and English only",
+      failures: [],
+    });
+
     writeFakeLatestReport("latest-third-party-provider.json", {
       ok: true,
       reportName: "wrong-third-party-provider",
@@ -1750,6 +1791,19 @@ if (args.has("--self-test")) {
       "account_proxy_real_request_not_ok",
       "account_proxy_log_source_missing",
       "account_proxy_log_scan_missing",
+    ]);
+    semanticFailures.postVerification = assertSemanticFailures("postVerification", "self-test failed: semantically invalid post-verification report satisfied the gate", [
+      "post_verification_state_not_completed",
+      "post_verification_failures",
+      "post_verification_wait_not_ready",
+      "post_verification_overall_not_ok",
+      "post_verification_overall_real_traffic_missing",
+      "post_verification_overall_not_release_ready",
+    ]);
+    semanticFailures.codexResponses = assertSemanticFailures("codexResponses", "self-test failed: semantically invalid codex-responses report satisfied the gate", [
+      "codex_responses_not_completed",
+      "codex_responses_marker_missing",
+      "codex_responses_chinese_missing",
     ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_skipped_requested_real_traffic_not_false",
@@ -2204,7 +2258,7 @@ if (args.has("--self-test")) {
       }
       if (!gate.failureReason) throw new Error(`self-test failed: ${gate.id} has no failureReason`);
     }
-    assertFailureReason("postVerification", "missing_report");
+    assertFailureReason("postVerification", "semantic_failures");
     assertFailureReason("fastOverallNoTraffic", "semantic_failures");
     assertFailureReason("installedRuntimeSync", "semantic_failures");
     const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");

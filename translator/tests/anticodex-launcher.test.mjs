@@ -8056,6 +8056,12 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireAccountProxySemantics/);
   assert.match(releaseGates, /account_proxy_real_request_not_ok/);
   assert.match(releaseGates, /semantically invalid account-proxy report satisfied the gate/);
+  assert.match(releaseGates, /requirePostVerificationSemantics/);
+  assert.match(releaseGates, /post_verification_overall_not_release_ready/);
+  assert.match(releaseGates, /semantically invalid post-verification report satisfied the gate/);
+  assert.match(releaseGates, /requireCodexResponsesSemantics/);
+  assert.match(releaseGates, /codex_responses_marker_missing/);
+  assert.match(releaseGates, /semantically invalid codex-responses report satisfied the gate/);
   assert.match(releaseGates, /actionPhaseOrder/);
   assert.match(releaseGates, /top-level nextActions did not keep post-verification last/);
   assert.match(releaseGates, /realMiniTool ordered action was not marked gateway\/high-impact/);
