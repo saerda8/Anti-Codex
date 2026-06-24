@@ -604,6 +604,10 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "missingOptional")) { Add-Failure "release-gates summary missing missingOptional" }
             if (-not (Has-Property $releaseGatesSummary "damagedReports")) { Add-Failure "release-gates summary missing damagedReports" }
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailures")) { Add-Failure "release-gates summary missing semantic failure details" }
+            if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
+            if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
+                Add-Failure "release-gates summary missing sync-readiness selected history report"
+            }
             $installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
             if (-not $installedRuntimeEvidence) {
                 Add-Failure "release-gates summary missing installed runtime drift evidence"
@@ -790,6 +794,7 @@ function Test-DiagnosticBundle {
                 missingOptional = @($releaseGatesSummary.missingOptional)
                 damagedReports = @($releaseGatesSummary.damagedReports)
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
+                releaseGateSelectedReports = @($releaseGatesSummary.releaseGateSelectedReports)
             }
         } else { $null }
         missingHistory = if ($missingHistorySummary) {

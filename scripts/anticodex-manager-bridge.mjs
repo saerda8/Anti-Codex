@@ -301,6 +301,10 @@ function latestReportsSummary(result) {
       if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.missingOptional) && item.missingOptional.length) lines.push(`  missingOptional: ${item.missingOptional.slice(0, 6).join(", ")}`);
       if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
+      if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
+        const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
+        lines.push(`  selectedHistory: ${selectedReports}`);
+      }
       if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
         const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
         lines.push(`  Release groups: ${groupSummary}`);
@@ -673,6 +677,7 @@ if (args.has("--self-test")) {
       missingShort: ["latest-ui-idle.json"],
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
+      releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0 }],
       releaseGateFailures: [{ id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] }],
       installedRuntimeEvidence: { sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", missingSourceFiles: ["scripts/a.ps1"], missingInstalledRuntimeFiles: ["scripts/b.ps1"], mismatchedRuntimeFiles: ["scripts/c.ps1"] },
@@ -734,6 +739,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
+  assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);

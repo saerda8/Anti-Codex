@@ -707,6 +707,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /function latestReportsSummary/);
   assert.match(managerBridge, /releaseGateGroups/);
   assert.match(managerInject, /releaseGateGroups/);
+  assert.match(managerBridge, /releaseGateSelectedReports/);
+  assert.match(managerInject, /releaseGateSelectedReports/);
+  assert.match(managerBridge, /selectedHistory/);
+  assert.match(managerInject, /selectedHistory/);
   assert.match(managerBridge, /installedRuntimeEvidence/);
   assert.match(managerInject, /installedRuntimeEvidence/);
   assert.match(managerBridge, /installedRuntime: files=/);
@@ -2223,6 +2227,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /appToolGetPostParityClean/);
   assert.match(server, /releaseGateFailures/);
   assert.match(server, /installedRuntimeEvidence/);
+  assert.match(server, /releaseGateSelectedReports/);
   assert.match(server, /installedRuntime: files=/);
   assert.match(server, /installedRuntime drift:/);
   assert.match(server, /semanticFailures/);
@@ -2419,6 +2424,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /missingOptional/);
   assert.match(collector, /damagedReports/);
   assert.match(collector, /releaseGateGroups/);
+  assert.match(collector, /releaseGateSelectedReports = @\(\$json\.releaseGateSelectedReports\)/);
   assert.match(collector, /installedRuntimeEvidence = \$json\.installedRuntimeEvidence/);
   assert.match(collector, /function Resolve-NodeForJsonSummary/);
   assert.match(collector, /function Invoke-NodeJsonSummary/);
@@ -2470,6 +2476,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /missingOptional/);
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
+  assert.match(reportSummarizer, /releaseGateSelectedReports/);
   assert.match(reportSummarizer, /installedRuntimeEvidence/);
   assert.match(reportSummarizer, /installedRuntimeFingerprint/);
   assert.match(reportSummarizer, /mismatchedRuntimeFiles/);
@@ -3569,6 +3576,12 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       missingShort: [],
       damagedReports: [],
       gates: [{
+        id: "syncReadiness",
+        group: "no-traffic",
+        selectedFromHistory: true,
+        selectedFile: "20260624-071841-sync-readiness.json",
+        satisfied: true,
+      }, {
         id: "installedRuntimeSync",
         satisfied: true,
         sourceFingerprint: "source-runtime-fingerprint",
@@ -3592,6 +3605,11 @@ test("report summarizer treats releaseReady false as not effectively passing", (
     assert.equal(summary.optionalRealTrafficReady, false);
     assert.deepEqual(summary.optionalRealTrafficFailures, ["realThirdPartyProviderOptional"]);
     assert.deepEqual(summary.missingRequired, ["latest-real-work.json"]);
+    assert.deepEqual(summary.releaseGateSelectedReports, [{
+      id: "syncReadiness",
+      group: "no-traffic",
+      selectedFile: "20260624-071841-sync-readiness.json",
+    }]);
     assert.equal(summary.installedRuntimeEvidence.sourceFileCount, 58);
     assert.equal(summary.installedRuntimeEvidence.installedRuntimeFileCount, 58);
     assert.equal(summary.installedRuntimeEvidence.sourceFingerprint, "source-runtime-fingerprint");
@@ -6451,6 +6469,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(managerBridge, /const passed = item\.effectiveOk !== null && item\.effectiveOk !== undefined \? item\.effectiveOk : item\.ok/);
   assert.match(collector, /latest-release-gates\.json/);
   assert.match(server, /releaseGateGroups/);
+  assert.match(server, /selectedHistory/);
   assert.match(server, /Release groups:/);
   assert.match(releaseGates, /installedRuntimeSync/);
   assert.match(releaseGates, /runtimeSyncFiles/);

@@ -910,6 +910,10 @@
         if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
         if (Array.isArray(item.missingOptional) && item.missingOptional.length) lines.push(`  missingOptional: ${item.missingOptional.slice(0, 6).join(", ")}`);
         if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
+        if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
+          const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
+          lines.push(`  selectedHistory: ${selectedReports}`);
+        }
         if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
           const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}`).join(" | ");
           lines.push(`  Release groups: ${groupSummary}`);

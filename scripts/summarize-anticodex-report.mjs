@@ -155,6 +155,17 @@ const releaseGateGroups = report && report.groups && typeof report.groups === "o
     missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
   })).filter((entry) => entry.group).slice(0, 16)
   : [];
+const releaseGateSelectedReports = Array.isArray(report?.gates)
+  ? report.gates
+    .filter((gate) => gate && gate.selectedFromHistory === true)
+    .map((gate) => ({
+      id: asString(gate.id),
+      group: asString(gate.group),
+      selectedFile: asString(gate.selectedFile),
+    }))
+    .filter((entry) => entry.id && entry.selectedFile)
+    .slice(0, 12)
+  : [];
 const installedRuntimeGate = Array.isArray(report?.gates)
   ? report.gates.find((gate) => gate && gate.id === "installedRuntimeSync")
   : null;
@@ -416,6 +427,7 @@ const summary = {
   damagedReports: has(report, "damagedReports") ? asStringArray(report.damagedReports) : [],
   releaseGateFailures,
   releaseGateGroups,
+  releaseGateSelectedReports,
   installedRuntimeEvidence,
   upstreamFullUrlAccepted: boolField(report, "upstreamFullUrlAccepted"),
   unauthorizedManagerBlocked: boolField(report, "unauthorizedManagerBlocked"),

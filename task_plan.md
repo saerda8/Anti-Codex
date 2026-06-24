@@ -1545,3 +1545,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: the passive release gate now falls back from a fast/offline `latest-sync-readiness.json` to a fresh signed full sync-readiness history report when the latest file is not full release evidence.
 - Completed: release-gate output shows when sync-readiness was selected from history and names the selected full report file, so support views can tell why the gate passed.
 - Verification: release-gate syntax passed; self-test passed the stale-latest/full-history scenario; strict passive release gate returned `shortReady:true`, no short misses, `syncReadiness.satisfied:true`, and `selectedFromHistory:true` for `20260624-071841-sync-readiness.json`.
+
+## 2026-06-24 Sync Readiness Selected-History Visibility
+- Completed: release-gate selected-history evidence now flows through the report summarizer, diagnostics collector, diagnostics verifier summary, external Manager bridge, injected Manager, and adaptive Manager.
+- Completed: Manager latest-report text now shows `selectedHistory: syncReadiness:<report>` when a fast latest report falls back to a full signed history report.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; focused launcher contracts passed `129/129`; release-gate self-test passed; strict passive gate returned `shortReady:true`, installed runtime fingerprints matched `59/59`, and `syncReadiness.selectedFromHistory:true`.
