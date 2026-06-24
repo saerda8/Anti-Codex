@@ -817,6 +817,13 @@
     return `\u5931\u8d25\u9879\uff1a${failures.length}\n${failures.slice(0, 3).join("\n")}`;
   }
 
+  function localGatewayGuidanceLine(result) {
+    const failures = Array.isArray(result?.failures) ? result.failures.filter(Boolean) : [];
+    const text = failures.join("\n").toLowerCase();
+    if (!text.includes("/health") && !text.includes("endpoint failed") && !text.includes("gateway offline") && !text.includes("failed to fetch") && !text.includes("timeout") && !text.includes("connection refused") && !text.includes("econnrefused") && !text.includes("无法连接")) return "";
+    return "guidance: local Anti-Codex gateway is offline; start or restore the local gateway, then rerun plugin/app capability check.";
+  }
+
   function triStateText(value) {
     if (value === true) return "true";
     if (value === false) return "false";
@@ -921,10 +928,15 @@
             .map((gate) => {
               const sample = Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.length ? ` / sample ${gate.reportFailureSamples.slice(0, 2).join(" | ")}` : "";
               return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${sample}`;
-            });
-          if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}`);
-          const realTrafficEvidenceGates = item.releaseGateFailureReasons
-            .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
+          });
+        if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}`);
+        const guidanceDetails = item.releaseGateFailureReasons
+          .filter((gate) => gate?.guidance)
+          .slice(0, 4)
+          .map((gate) => `${gate.id}:${gate.guidance}`);
+        if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}`);
+        const realTrafficEvidenceGates = item.releaseGateFailureReasons
+          .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
             .map((gate) => gate.id)
             .filter(Boolean);
           if (realTrafficEvidenceGates.length) {
@@ -1238,6 +1250,8 @@
         `\u6295\u5f71 smoke\uff1a${c.smoke?.endpointProjectionReadable ? "\u7aef\u70b9\u53ef\u8bfb" : "\u7aef\u70b9\u672a\u8bfb\u5230"}\uff0c\u7f13\u5b58 ${c.smoke?.connectorCache?.sampleReadable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
         `\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a${callableSummary}`,
         c.appToolsNote ? `\u8bf4\u660e\uff1a${c.appToolsNote}` : "",
+        localGatewayGuidanceLine(r),
+        failureSummaryLine(r),
       ].filter(Boolean).join("\n");
     }
     if (action === "refreshFeatures" && payload?.background) return payload?.alreadyRunning ? "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u8bf7\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u6216 MCP/Skill\u3001\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002" : "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5f00\u59cb\u540e\u53f0\u6267\u884c\u3002\n\u754c\u9762\u4e0d\u4f1a\u7b49\u5f85\u957f\u65f6\u590d\u5236\uff1b\u5b8c\u6210\u540e\u7528 MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002";

@@ -907,6 +907,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /refreshDrift/);
   assert.match(managerBridge, /reportFailures/);
   assert.match(managerInject, /reportFailures/);
+  assert.match(managerBridge, /localGatewayGuidanceLine/);
+  assert.match(managerInject, /localGatewayGuidanceLine/);
+  assert.match(managerBridge, /local Anti-Codex gateway is offline/);
+  assert.match(managerInject, /local Anti-Codex gateway is offline/);
   assert.match(managerBridge, /appToolGetPostExtraFromGetSample/);
   assert.match(managerInject, /appToolGetPostExtraFromGetSample/);
   assert.match(managerBridge, /logDbGuardEvidence/);
@@ -2254,6 +2258,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /overallNoTraffic:[\s\S]{0,260}"-SkipUiStateProbe"/);
   assert.match(server, /function reportSummaryLines/);
   assert.match(server, /function failureSummaryLine/);
+  assert.match(server, /function localGatewayGuidanceLine/);
+  assert.match(server, /local Anti-Codex gateway is offline/);
   assert.match(server, /viewLatestReports/);
   assert.match(server, /function latestManagerReportsPayload/);
   assert.match(server, /publicDocumentationOk: fileName === "latest-source-preflight\.json"/);
@@ -2590,6 +2596,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /selectedKind/);
   assert.match(reportSummarizer, /selectedMtime/);
   assert.match(reportSummarizer, /reportFailureSamples/);
+  assert.match(reportSummarizer, /guidance: asString\(gate\.guidance/);
   assert.match(reportSummarizer, /releaseGateSelectedReports/);
   assert.match(reportSummarizer, /installedRuntimeEvidence/);
   assert.match(reportSummarizer, /installedRuntimeFingerprint/);
@@ -3846,6 +3853,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       selectedFile: "latest-post-verification.json",
       selectedMtime: "2026-06-24T01:02:03.000Z",
       reportFailureSamples: ["gateway offline", "health timeout", "third sample"],
+      guidance: "",
     }, {
       id: "modelRouting",
       group: "no-traffic",
@@ -3860,6 +3868,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       selectedFile: "",
       selectedMtime: "",
       reportFailureSamples: [],
+      guidance: "",
     }]);
     assert.deepEqual(summary.releaseGateSelectedReports, [{
       id: "syncReadiness",
@@ -7081,6 +7090,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /selectedKind/);
   assert.match(releaseGates, /selectedMtime/);
   assert.match(releaseGates, /reportFailureSamples/);
+  assert.match(releaseGates, /local_gateway_offline/);
+  assert.match(releaseGates, /plugin_capabilities_source_snapshot_reused/);
   assert.match(releaseGates, /latest report failure samples were not preserved/);
   assert.match(releaseGates, /requiredSatisfied/);
   assert.match(releaseGates, /optionalSatisfied/);

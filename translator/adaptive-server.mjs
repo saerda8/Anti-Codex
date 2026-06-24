@@ -2345,6 +2345,7 @@ function latestManagerReportItem(label, fileName) {
                 reportFailureSamples: Array.isArray(gate.reportFailureSamples)
                     ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3)
                     : [],
+                guidance: shortSafeText(gate.guidance || "", ""),
             }))
             .slice(0, 12)
         : [];
@@ -2366,6 +2367,7 @@ function latestManagerReportItem(label, fileName) {
             selectedFile: shortSafeText(gate.selectedFile || "", ""),
             selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
             reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
+            guidance: shortSafeText(gate.guidance || "", ""),
         })).filter((entry) => entry.id).slice(0, 24)
         ;
     const releaseGateGroups = report?.groups && typeof report.groups === "object"
@@ -3569,6 +3571,12 @@ function failureSummaryLine(result){
   if(!failures.length) return "";
   return "\\u5931\\u8d25\\u9879\\uff1a"+failures.length+"\\n"+failures.slice(0,3).join("\\n");
 }
+function localGatewayGuidanceLine(result){
+  const failures=Array.isArray(result?.failures)?result.failures.filter(Boolean):[];
+  const text=failures.join("\\n").toLowerCase();
+  if(!text.includes("/health")&&!text.includes("endpoint failed")&&!text.includes("gateway offline")&&!text.includes("failed to fetch")&&!text.includes("timeout")&&!text.includes("connection refused")&&!text.includes("econnrefused")&&!text.includes("无法连接")) return "";
+  return "guidance: local Anti-Codex gateway is offline; start or restore the local gateway, then rerun plugin/app capability check.";
+}
 function sourceSnapshotLine(result){
   const evidence=result?.sourceSnapshot&&typeof result.sourceSnapshot==="object"?result.sourceSnapshot:null;
   if(!evidence)return "";
@@ -3671,6 +3679,11 @@ function latestReportsSummary(result){
             return gate.id+":"+(gate.selectedFile||"no-file")+(gate.selectedMtime?(" @ "+gate.selectedMtime):"")+sample;
           });
         if(reportFailureDetails.length) lines.push("  reportFailures: "+reportFailureDetails.join("; "));
+        const guidanceDetails=item.releaseGateFailureReasons
+          .filter((gate)=>gate?.guidance)
+          .slice(0,4)
+          .map((gate)=>gate.id+":"+gate.guidance);
+        if(guidanceDetails.length) lines.push("  guidance: "+guidanceDetails.join("; "));
         const realTrafficEvidenceGates=item.releaseGateFailureReasons
           .filter((gate)=>gate?.group==="real-traffic"&&(["stale_report","missing_report"].includes(gate.failureReason)||(Array.isArray(gate.failureReasons)&&gate.failureReasons.some((reason)=>["stale_report","missing_report"].includes(reason)))))
           .map((gate)=>gate.id)
@@ -3940,6 +3953,7 @@ function actionText(payload){
       sourceSnapshotLine(r),
       "连接器："+(c.connectorCount??"未知")+"    已授权连接器："+(c.accessibleConnectorCount??"未知")+"    应用工具："+(c.appToolCount??"未知"),
       c.appToolsNote?("说明："+c.appToolsNote):"",
+      localGatewayGuidanceLine(r),
       r.failures?.length?("失败："+r.failures.join("\\n")):""
     ].filter(Boolean).join("\\n");
   }

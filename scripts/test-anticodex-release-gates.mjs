@@ -357,6 +357,7 @@ function summarizeGate(definition) {
     gate.sourceFingerprint = typeof sourceSnapshot.fingerprint === "string" ? sourceSnapshot.fingerprint : "";
     gate.sourceMtimeMax = typeof sourceSnapshot.sourceMtimeMax === "string" ? sourceSnapshot.sourceMtimeMax : "";
     gate.sourceFileCount = Number.isFinite(Number(sourceSnapshot.fileCount)) ? Number(sourceSnapshot.fileCount) : null;
+    gate.sourceSnapshotReused = sourceSnapshot.reusedFromPreviousReport === true;
     const semanticFailures = [];
     if (definition.requireFastNoTraffic && (report.fast !== true || report.noTraffic !== true)) {
       semanticFailures.push("expected_fast_no_traffic");
@@ -506,6 +507,8 @@ function summarizeGate(definition) {
       if (!isEmptyArray(appToolParity.extraLocal)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_extra_local");
       if (!isEmptyArray(appToolParity.changedShared)) semanticFailures.push("plugin_capabilities_local_app_tool_parity_changed_shared");
       if (!gate.sourceFingerprint) semanticFailures.push("plugin_capabilities_source_snapshot_missing");
+      if (!gate.sourceFingerprint || !Number.isFinite(gate.sourceFileCount) || gate.sourceFileCount <= 0 || !gate.sourceMtimeMax || Number.isNaN(Date.parse(gate.sourceMtimeMax))) semanticFailures.push("plugin_capabilities_source_snapshot_incomplete");
+      if (gate.sourceSnapshotReused === true) semanticFailures.push("plugin_capabilities_source_snapshot_reused");
     }
     if (definition.requireMcpSkillSemantics) {
       const mcp = report.mcp || {};
@@ -837,6 +840,25 @@ function gateFailureReasons(gate) {
   if (Array.isArray(gate.semanticFailures) && gate.semanticFailures.length) reasons.push("semantic_failures");
   if (gate.error && !reasons.includes(gate.error)) reasons.push(gate.error);
   return reasons.length ? reasons : (gate.satisfied ? [] : ["unsatisfied"]);
+}
+
+function isLocalGatewayFailureSample(value) {
+  const text = String(value || "").toLowerCase();
+  return text.includes("/health")
+    || text.includes("endpoint failed")
+    || text.includes("gateway offline")
+    || text.includes("failed to fetch")
+    || text.includes("timeout")
+    || text.includes("connection refused")
+    || text.includes("econnrefused")
+    || text.includes("无法连接");
+}
+
+function gateGuidance(gate) {
+  if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
+    return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
+  }
+  return "";
 }
 
 function attachGateFailureReasons(gates) {
@@ -1713,6 +1735,26 @@ if (args.has("--self-test")) {
       "plugin_capabilities_local_app_tool_parity_extra_local",
       "plugin_capabilities_local_app_tool_parity_changed_shared",
       "plugin_capabilities_source_snapshot_missing",
+      "plugin_capabilities_source_snapshot_incomplete",
+    ]);
+    writeFakeLatestReport("latest-plugin-capabilities.json", {
+      ok: true,
+      reportName: "plugin-capabilities",
+      capabilities: {
+        nativeCodexWriteback: false,
+        capabilityState: "ready",
+        accessibleConnectorCount: 0,
+        unauthorizedAppToolCount: 0,
+        connectorParity: { checked: true, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolParity: { checked: true, missingShared: [], extraLocal: [], changedShared: [] },
+        appToolGetPostParity: { checked: true, contentMatches: true, missingFromGet: [], extraFromGet: [] },
+        smoke: { checked: true },
+      },
+      sourceSnapshot: { fingerprint: "partial-plugin-source", reusedFromPreviousReport: true },
+    });
+    semanticFailures.pluginCapabilitiesReusedSnapshot = assertSemanticFailures("pluginCapabilities", "self-test failed: reused or incomplete plugin-capability source snapshot satisfied the gate", [
+      "plugin_capabilities_source_snapshot_incomplete",
+      "plugin_capabilities_source_snapshot_reused",
     ]);
     writeFakeLatestReport("latest-refresh-features.json", {
       ok: true,
@@ -1917,6 +1959,7 @@ const releaseGateFailureReasons = gates
     selectedFile: gate.selectedFile || "",
     selectedMtime: gate.selectedMtime || "",
     reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
+    guidance: gateGuidance(gate),
   }));
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates

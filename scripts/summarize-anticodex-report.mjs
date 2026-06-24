@@ -153,6 +153,7 @@ const releaseGateFailures = Array.isArray(report?.gates)
       selectedFile: asString(gate.selectedFile || ""),
       selectedMtime: asString(gate.selectedMtime || ""),
       reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
+      guidance: asString(gate.guidance || ""),
     }))
   : [];
 const rawReleaseGateFailureReasons = has(report, "releaseGateFailureReasons") && Array.isArray(report.releaseGateFailureReasons)
@@ -173,6 +174,7 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     selectedFile: asString(gate.selectedFile || ""),
     selectedMtime: asString(gate.selectedMtime || ""),
     reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
+    guidance: asString(gate.guidance || ""),
   })).filter((entry) => entry.id).slice(0, 24)
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"
   ? Object.entries(report.groups).map(([group, value]) => ({

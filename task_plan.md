@@ -1661,3 +1661,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now add cross-report source snapshot mismatch only when both MCP/Skill and plugin-capability reports are otherwise release-satisfied, so an offline or degraded plugin report no longer incorrectly marks a good MCP/Skill report as failed.
 - Completed: release-gate self-test now covers both the positive mismatch case and the negative `MCP ok + plugin ok:false` case.
 - Verification: release-gate self-test passed; JS syntax check passed; focused launcher contracts passed `132/132`; current strict gate removed `mcpSkills` from missing required reports, leaving plugin/gateway and explicit real-traffic evidence gaps.
+
+## 2026-06-24 Plugin Gateway Offline Guidance
+- Completed: plugin/app Manager action summaries now translate offline `/health`, endpoint, timeout, fetch, and connection-refused failures into explicit local Anti-Codex gateway guidance instead of a generic failure blob.
+- Completed: passive release gates now attach bounded `guidance` to plugin-capability failures when report samples show local gateway offline, and report summarizers/Manager summaries preserve that guidance.
+- Completed: plugin-capability release gates now require complete source snapshot evidence (`fingerprint`, positive `fileCount`, parseable `sourceMtimeMax`) and reject reused source snapshots so short-budget provenance cannot become release-grade proof.
+- Verification: JS syntax checks passed; release-gate self-test passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `132/132` with one environment link-directory skip; no Anti-Codex startup or real traffic was used.
