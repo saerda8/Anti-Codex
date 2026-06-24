@@ -1497,3 +1497,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager panel version advanced to `native-panel-v89` so already-open Anti-Codex pages rebootstrap the updated Manager script.
 - Completed: adaptive latest-report summaries now forward refresh-feature verify-only timing and hash-cache hit/miss/entry counts, matching the standalone report summarizer and existing Manager display.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; launcher contracts passed `127/127`; runtime sync ran with `NoRestart`; sync-readiness returned `ok:true`; passive strict release gate returned `releaseReady:true`, `shortReady:true`, installed runtime `59/59`, and only optional `coldRelaunch` missing.
+
+## 2026-06-24 Tool Bridge Native MCP Evidence
+- Completed: tool-bridge summaries now preserve request envelope, external tool-definition field, external-definition usability, native MCP initialize/tools/list acceptance, and native MCP tools/call status through the report summarizer, diagnostics verifier, fallback Manager, external Manager bridge, and injected Manager.
+- Completed: Manager panel version advanced to `native-panel-v90` so already-open pages rebootstrap the updated native MCP evidence display.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `126/126` with one environment-only linked-directory skip; runtime source-vs-installed fingerprint gate showed installed runtime `59/59`.
+- Note: `sync-anticodex-runtime.ps1 -NoRestart` copied the runtime but returned `ok:false` because the local health endpoint was not reachable; no restart was requested and no native Codex process was touched.

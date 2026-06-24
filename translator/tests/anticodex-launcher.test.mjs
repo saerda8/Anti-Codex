@@ -411,9 +411,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /installedOverall: noTraffic=/);
     assert.match(source, /toolBridgeEvidence/);
     assert.match(source, /toolBridge: mode=/);
+    assert.match(source, /toolBridge nativeMcp: envelope=/);
+    assert.match(source, /externalToolDefinitionsField/);
+    assert.match(source, /nativeMcpToolCallStatus/);
   }
-  assert.match(managerInject, /native-panel-v89/);
-  assert.match(syncReadiness, /native-panel-v89/);
+  assert.match(managerInject, /native-panel-v90/);
+  assert.match(syncReadiness, /native-panel-v90/);
+  assert.doesNotMatch(managerInject, /native-panel-v89/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v89/);
   assert.doesNotMatch(managerInject, /native-panel-v88/);
   assert.doesNotMatch(syncReadiness, /native-panel-v88/);
   assert.doesNotMatch(managerInject, /native-panel-v87/);
@@ -635,8 +640,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v89["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v89"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v90["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v90"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -869,7 +874,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v89/);
+  assert.match(managerOpenInject, /native-panel-v90/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v89/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v88/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v87/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v86/);
@@ -1792,8 +1798,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v89 manager script/);
-  assert.doesNotMatch(manager, /native-panel-v88|native-panel-v68|native-panel-v56/);
+  assert.match(manager, /latest native-panel-v90 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
   assert.match(manager, /PassThru/);
@@ -2433,6 +2439,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /modelThinkingEvidence/);
   assert.match(reportSummarizer, /supportsThinkingCount/);
   assert.match(reportSummarizer, /toolBridgeEvidence/);
+  assert.match(reportSummarizer, /requestEnvelope/);
+  assert.match(reportSummarizer, /externalToolDefinitionsField/);
+  assert.match(reportSummarizer, /externalToolDefinitionsUsable/);
+  assert.match(reportSummarizer, /schemaLikeRequestAcceptance/);
+  assert.match(reportSummarizer, /nativeMcpToolCallStatus/);
   assert.match(reportSummarizer, /nativeMcpApprovalProtocolVerified/);
   assert.match(reportSummarizer, /uiIdleEvidence/);
   assert.match(reportSummarizer, /healthySampleCount/);
@@ -2824,6 +2835,11 @@ test("report summarizer surfaces tool bridge no-traffic evidence", () => {
       },
       compatibilityTools: { bridge: "native_mcp_same_cascade" },
       nativeToolCapability: {
+        requestEnvelope: "StartCascade.customAgentSpec + SendUserCascadeMessage.cascadeConfig.plannerConfig",
+        externalToolDefinitionsField: "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl",
+        externalToolDefinitionsUsable: true,
+        schemaLikeRequestAcceptance: "verified-native-mcp-initialize-and-tools-list",
+        nativeMcpToolCallStatus: "verified-tools-call-after-automatic-permission",
         nativeMcpApprovalProtocolVerified: true,
         nativeMcpPermissionMode: "automatic-before-codex-execution",
         sameCascadeResumeProbeVerified: true,
@@ -2840,6 +2856,11 @@ test("report summarizer surfaces tool bridge no-traffic evidence", () => {
     assert.equal(summary.toolBridgeEvidence.transport, "desktop-cascade");
     assert.equal(summary.toolBridgeEvidence.localAdapter, "native-mcp-same-cascade-with-prompt-fallback");
     assert.equal(summary.toolBridgeEvidence.compatibilityBridge, "native_mcp_same_cascade");
+    assert.equal(summary.toolBridgeEvidence.requestEnvelope, "StartCascade.customAgentSpec + SendUserCascadeMessage.cascadeConfig.plannerConfig");
+    assert.equal(summary.toolBridgeEvidence.externalToolDefinitionsField, "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl");
+    assert.equal(summary.toolBridgeEvidence.externalToolDefinitionsUsable, true);
+    assert.equal(summary.toolBridgeEvidence.schemaLikeRequestAcceptance, "verified-native-mcp-initialize-and-tools-list");
+    assert.equal(summary.toolBridgeEvidence.nativeMcpToolCallStatus, "verified-tools-call-after-automatic-permission");
     assert.equal(summary.toolBridgeEvidence.nativeMcpApprovalProtocolVerified, true);
     assert.equal(summary.toolBridgeEvidence.nativeMcpPermissionMode, "automatic-before-codex-execution");
     assert.equal(summary.toolBridgeEvidence.sameCascadeResumeProbeVerified, true);
@@ -5773,6 +5794,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic model-thinking summary has missing budgets/);
   assert.match(diagnostics, /toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing toolBridgeEvidence/);
+  assert.match(diagnostics, /diagnostic tool-bridge summary missing request envelope/);
+  assert.match(diagnostics, /diagnostic tool-bridge summary missing external tool definitions field/);
+  assert.match(diagnostics, /diagnostic tool-bridge summary missing usable external tool definitions proof/);
+  assert.match(diagnostics, /diagnostic tool-bridge summary missing schema-like request acceptance proof/);
+  assert.match(diagnostics, /diagnostic tool-bridge summary missing native MCP tool call proof/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing same-Cascade resume proof/);
   assert.match(diagnostics, /uiIdleEvidence/);
   assert.match(diagnostics, /diagnostic ui-idle summary missing uiIdleEvidence/);

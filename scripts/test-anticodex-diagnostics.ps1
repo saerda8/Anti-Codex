@@ -214,6 +214,11 @@ function Test-DiagnosticBundle {
                 if ($bridgeEvidence.nativeBridgeDefaultEnabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing default native bridge proof" }
                 if ($bridgeEvidence.acceptsExternalToolDefinitions -ne $true) { Add-Failure "diagnostic tool-bridge summary missing external tool definition proof" }
                 if ($bridgeEvidence.compatibilityBridge -ne "native_mcp_same_cascade") { Add-Failure "diagnostic tool-bridge summary missing compatibility bridge proof" }
+                if (-not $bridgeEvidence.requestEnvelope) { Add-Failure "diagnostic tool-bridge summary missing request envelope" }
+                if ($bridgeEvidence.externalToolDefinitionsField -ne "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl") { Add-Failure "diagnostic tool-bridge summary missing external tool definitions field" }
+                if ($bridgeEvidence.externalToolDefinitionsUsable -ne $true) { Add-Failure "diagnostic tool-bridge summary missing usable external tool definitions proof" }
+                if ($bridgeEvidence.schemaLikeRequestAcceptance -ne "verified-native-mcp-initialize-and-tools-list") { Add-Failure "diagnostic tool-bridge summary missing schema-like request acceptance proof" }
+                if ($bridgeEvidence.nativeMcpToolCallStatus -ne "verified-tools-call-after-automatic-permission") { Add-Failure "diagnostic tool-bridge summary missing native MCP tool call proof" }
                 if ($bridgeEvidence.nativeMcpApprovalProtocolVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing approval protocol proof" }
                 if ($bridgeEvidence.nativeMcpPermissionMode -ne "automatic-before-codex-execution") { Add-Failure "diagnostic tool-bridge summary missing automatic permission mode" }
                 if ($bridgeEvidence.sameCascadeResumeProbeVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing same-Cascade resume proof" }

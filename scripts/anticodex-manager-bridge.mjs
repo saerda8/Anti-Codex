@@ -372,6 +372,7 @@ function latestReportsSummary(result) {
       const evidence = item.toolBridgeEvidence;
       lines.push(`  toolBridge: mode=${evidence.mode || "unknown"} / transport=${evidence.transport || "unknown"} / adapter=${evidence.localAdapter || "unknown"}`);
       lines.push(`  toolBridge native: events=${evidence.nativeAntigravityToolEvents ? "true" : "false"} / discovery=${evidence.nativeMcpDiscoveryVerified ? "true" : "false"} / approval=${evidence.nativeMcpApprovalProtocolVerified ? "true" : "false"} / resume=${evidence.sameCascadeResumeProbeVerified ? "true" : "false"}`);
+      lines.push(`  toolBridge nativeMcp: envelope=${evidence.requestEnvelope || "unknown"} / field=${evidence.externalToolDefinitionsField || "unknown"} / usable=${evidence.externalToolDefinitionsUsable ? "true" : "false"} / schema=${evidence.schemaLikeRequestAcceptance || "unknown"} / call=${evidence.nativeMcpToolCallStatus || "unknown"}`);
     }
     if (item.mcpSkillEvidence) {
       const evidence = item.mcpSkillEvidence;

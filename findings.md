@@ -830,3 +830,5 @@
 - `Select-Object -Index 320..380` can be parsed as a single string argument in nested command execution. Use `-Skip N -First M` for short source windows to avoid range-binding failures.
 - On Windows PowerShell, `head` is not available by default. Use `Select-Object -First N` or `rg -m` for bounded command output.
 - `--strict-optional-real-traffic` is not a passive release gate. If optional real-provider reports are intentionally `skipped:true`, that mode can return `releaseReady:false`; use the normal strict passive gate unless the operator explicitly approves refreshing optional real traffic.
+- Do not search for stale verifier filenames such as `scripts/verify-anticodex-diagnostics.ps1`; the active diagnostics verifier is `scripts/test-anticodex-diagnostics.ps1`.
+- `sync-anticodex-runtime.ps1 -NoRestart` may still copy runtime files and satisfy the source-vs-installed fingerprint gate while returning `ok:false` if the local Anti-Codex health endpoint is down. Treat the sync copy and the live health check as separate evidence.
