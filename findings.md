@@ -903,3 +903,4 @@
 - In this launcher test file, `node --test --test-name-pattern` may still execute unrelated top-level tests and surface transient failures outside the intended focus. Treat the printed named subtests and a rerun of the affected test as the evidence, not the selector string alone.
 - Offline support verifiers must validate guidance semantics, not just field presence. For `nextActions` and `approvalPlan`, require explicit approval blocking for gateway, real-traffic, and high-impact actions, and make sure summary counts cannot understate those risks.
 - Missing approval-plan count fields are as risky as low counts. Reject absent `blockedCount`, `requiresGatewayStartCount`, `requiresRealTrafficCount`, and `highImpactCount` instead of treating missing fields as unknown-but-acceptable.
+- In PowerShell, casting `$null` to `[int]` can silently become `0`. For report integrity fields, validate non-null non-negative integers before comparing counts.

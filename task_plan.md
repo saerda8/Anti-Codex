@@ -1699,3 +1699,4 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Follow-up: local connector/app-tool summaries now preserve connector/app-tool parity drift arrays through report summaries, diagnostics checks, and Manager text, so support views can show missing/extra/changed local metadata samples without opening raw reports.
 - Follow-up: offline reports-summary diagnostics now validates local connector evidence and release-gate `nextActions`/`approvalPlan` safety metadata, including explicit approval blocks for gateway, real-traffic, and high-impact actions.
 - Follow-up: offline reports-summary diagnostics now rejects incomplete `approvalPlan` count fields, so support bundles cannot understate approval scope by omitting blocked, gateway, real-traffic, or high-impact counts.
+- Follow-up: offline reports-summary diagnostics now rejects null or invalid `approvalPlan` counts instead of letting PowerShell coerce them to zero.

@@ -7497,6 +7497,68 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
   }
 });
 
+test("diagnostics reports-summary fixture rejects null approval plan counts", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-null-plan-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: true,
+      shortReady: true,
+      releaseReady: true,
+      effectiveOk: true,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: [],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: [],
+      releaseGateFailureReasons: [],
+      nextActions: [],
+      approvalPlan: {
+        actionCount: null,
+        blockedCount: null,
+        requiresGatewayStartCount: null,
+        requiresRealTrafficCount: null,
+        highImpactCount: null,
+        firstBlockedAction: "",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates approval plan invalid action count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid blocked count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid gateway count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid real-traffic count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid high-impact count"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("Anti-Codex ships a passive release gate summary verifier", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
