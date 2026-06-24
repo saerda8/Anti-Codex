@@ -916,6 +916,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /local connector parity:/);
   assert.match(managerInject, /local connector parity:/);
+  assert.match(managerBridge, /local connector drift:/);
+  assert.match(managerInject, /local connector drift:/);
   assert.match(managerBridge, /appToolGetPostExtraFromGet/);
   assert.match(managerInject, /appToolGetPostExtraFromGet/);
   assert.match(managerBridge, /pluginCapabilityEvidence/);
@@ -2688,6 +2690,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /coverageKind/);
   assert.match(reportSummarizer, /pluginCapabilityEvidence/);
   assert.match(reportSummarizer, /connectorParityMissingShared/);
+  assert.match(reportSummarizer, /appToolParityChangedShared/);
   assert.match(reportSummarizer, /appToolGetPostMissingFromGet/);
   assert.match(reportSummarizer, /mcpSkillEvidence/);
   assert.match(reportSummarizer, /mcpRealCallPassed/);
@@ -3622,8 +3625,26 @@ test("report summarizer surfaces local connector no-traffic evidence values", ()
         upstreamRequestsAfterLocalEndpoints: 1,
         upstreamRequestsDuringLocalEndpoints: 0,
       },
-      connectorParity: { contentMatches: true, sharedExists: true, localExists: true, sharedFingerprint: "abc", localFingerprint: "abc" },
-      appToolParity: { contentMatches: true, sharedExists: true, localExists: true, sharedFingerprint: "def", localFingerprint: "def" },
+      connectorParity: {
+        contentMatches: true,
+        sharedExists: true,
+        localExists: true,
+        sharedFingerprint: "abc",
+        localFingerprint: "abc",
+        missingShared: ["missing-connector"],
+        extraLocal: ["extra-connector"],
+        changedShared: ["changed-connector"],
+      },
+      appToolParity: {
+        contentMatches: true,
+        sharedExists: true,
+        localExists: true,
+        sharedFingerprint: "def",
+        localFingerprint: "def",
+        missingShared: ["missing-tool"],
+        extraLocal: ["extra-tool"],
+        changedShared: ["changed-tool"],
+      },
       appToolGetPostParity: { contentMatches: true, missingFromGet: [], extraFromGet: [] },
       tempIsolation: {
         codexHome: "C:/Temp/anticodex-local/codex-home",
@@ -3656,10 +3677,16 @@ test("report summarizer surfaces local connector no-traffic evidence values", ()
     assert.equal(summary.localConnectorEvidence.connectorSharedExists, true);
     assert.equal(summary.localConnectorEvidence.connectorLocalExists, true);
     assert.equal(summary.localConnectorEvidence.connectorFingerprintMatches, true);
+    assert.deepEqual(summary.localConnectorEvidence.connectorParityMissingShared, ["missing-connector"]);
+    assert.deepEqual(summary.localConnectorEvidence.connectorParityExtraLocal, ["extra-connector"]);
+    assert.deepEqual(summary.localConnectorEvidence.connectorParityChangedShared, ["changed-connector"]);
     assert.equal(summary.localConnectorEvidence.appToolParityClean, true);
     assert.equal(summary.localConnectorEvidence.appToolSharedExists, true);
     assert.equal(summary.localConnectorEvidence.appToolLocalExists, true);
     assert.equal(summary.localConnectorEvidence.appToolFingerprintMatches, true);
+    assert.deepEqual(summary.localConnectorEvidence.appToolParityMissingShared, ["missing-tool"]);
+    assert.deepEqual(summary.localConnectorEvidence.appToolParityExtraLocal, ["extra-tool"]);
+    assert.deepEqual(summary.localConnectorEvidence.appToolParityChangedShared, ["changed-tool"]);
     assert.equal(summary.localConnectorEvidence.appToolGetPostParityClean, true);
     assert.deepEqual(summary.localConnectorEvidence.appToolGetPostMissingFromGet, []);
     assert.deepEqual(summary.localConnectorEvidence.appToolGetPostExtraFromGet, []);
@@ -7027,6 +7054,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /local connector summary missing connector parity proof/);
   assert.match(diagnostics, /local connector summary missing app-tool parity proof/);
   assert.match(diagnostics, /local connector summary missing GET\/POST app-tool parity proof/);
+  assert.match(diagnostics, /local connector summary missing connector missing-shared drift samples/);
+  assert.match(diagnostics, /local connector summary missing app-tool changed-shared drift samples/);
   assert.match(diagnostics, /local connector summary exposed tool names is not exactly one 'linked_tool'/);
   assert.match(diagnostics, /plugin capability summary/);
   assert.match(diagnostics, /plugin capability summary is short-budget and not release-grade/);

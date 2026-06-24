@@ -522,8 +522,14 @@ function Test-DiagnosticBundle {
                 if (@($localEvidence.exposedToolNames).Count -ne [int]$localEvidence.exposedToolsPost) { Add-Failure "local connector summary exposed tool names mismatch" }
                 if ($localEvidence.connectorParityClean -ne $true) { Add-Failure "local connector summary missing connector parity proof" }
                 if ($localEvidence.connectorFingerprintMatches -ne $true) { Add-Failure "local connector summary missing connector fingerprint match proof" }
+                if (-not (Has-Property $localEvidence "connectorParityMissingShared")) { Add-Failure "local connector summary missing connector missing-shared drift samples" }
+                if (-not (Has-Property $localEvidence "connectorParityExtraLocal")) { Add-Failure "local connector summary missing connector extra-local drift samples" }
+                if (-not (Has-Property $localEvidence "connectorParityChangedShared")) { Add-Failure "local connector summary missing connector changed-shared drift samples" }
                 if ($localEvidence.appToolParityClean -ne $true) { Add-Failure "local connector summary missing app-tool parity proof" }
                 if ($localEvidence.appToolFingerprintMatches -ne $true) { Add-Failure "local connector summary missing app-tool fingerprint match proof" }
+                if (-not (Has-Property $localEvidence "appToolParityMissingShared")) { Add-Failure "local connector summary missing app-tool missing-shared drift samples" }
+                if (-not (Has-Property $localEvidence "appToolParityExtraLocal")) { Add-Failure "local connector summary missing app-tool extra-local drift samples" }
+                if (-not (Has-Property $localEvidence "appToolParityChangedShared")) { Add-Failure "local connector summary missing app-tool changed-shared drift samples" }
                 if ($localEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "local connector summary missing GET/POST app-tool parity proof" }
                 if ($localEvidence.tempSharedHomeUsed -ne $false) { Add-Failure "local connector summary used shared home during temp isolation" }
                 if ($localEvidence.tempCodexHomeUnderStateRoot -ne $true) { Add-Failure "local connector summary missing temp CODEX_HOME isolation proof" }

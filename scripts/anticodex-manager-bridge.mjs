@@ -501,9 +501,17 @@ function latestReportsSummary(result) {
       const getPostMissing = Array.isArray(evidence.appToolGetPostMissingFromGet) ? evidence.appToolGetPostMissingFromGet : [];
       const getPostExtra = Array.isArray(evidence.appToolGetPostExtraFromGet) ? evidence.appToolGetPostExtraFromGet : [];
       const getPostSamples = [...getPostMissing, ...getPostExtra].slice(0, 5);
+      const connectorMissing = Array.isArray(evidence.connectorParityMissingShared) ? evidence.connectorParityMissingShared : [];
+      const connectorExtra = Array.isArray(evidence.connectorParityExtraLocal) ? evidence.connectorParityExtraLocal : [];
+      const connectorChanged = Array.isArray(evidence.connectorParityChangedShared) ? evidence.connectorParityChangedShared : [];
+      const appToolMissing = Array.isArray(evidence.appToolParityMissingShared) ? evidence.appToolParityMissingShared : [];
+      const appToolExtra = Array.isArray(evidence.appToolParityExtraLocal) ? evidence.appToolParityExtraLocal : [];
+      const appToolChanged = Array.isArray(evidence.appToolParityChangedShared) ? evidence.appToolParityChangedShared : [];
+      const driftSamples = [...connectorMissing, ...connectorExtra, ...connectorChanged, ...appToolMissing, ...appToolExtra, ...appToolChanged].slice(0, 5);
       lines.push(`  local connector upstream: before=${evidence.upstreamRequestsBeforeLocalEndpoints ?? "\u672a\u77e5"} / after=${evidence.upstreamRequestsAfterLocalEndpoints ?? "\u672a\u77e5"} / delta=${evidence.upstreamRequestsDuringLocalEndpoints ?? "\u672a\u77e5"}`);
       lines.push(`  local connector isolation: sharedHomeUsed=${evidence.tempSharedHomeUsed ? "true" : "false"} / codexHomeUnderState=${evidence.tempCodexHomeUnderStateRoot ? "true" : "false"} / sharedUnderState=${evidence.tempSharedCodexHomeUnderStateRoot ? "true" : "false"} / distinct=${evidence.tempCodexHomeDistinctFromShared ? "true" : "false"}`);
       lines.push(`  local connector parity: connector=${evidence.connectorParityClean ? "ok" : "\u9700\u5904\u7406"} / appTool=${evidence.appToolParityClean ? "ok" : "\u9700\u5904\u7406"} / getPost=${evidence.appToolGetPostParityClean ? "ok" : "\u9700\u5904\u7406"} / getPostMissing=${getPostMissing.length} / getPostExtra=${getPostExtra.length}${getPostSamples.length ? ` / sample ${getPostSamples.join(", ")}` : ""}`);
+      lines.push(`  local connector drift: connectorMissing=${connectorMissing.length} / connectorExtra=${connectorExtra.length} / connectorChanged=${connectorChanged.length} / appToolMissing=${appToolMissing.length} / appToolExtra=${appToolExtra.length} / appToolChanged=${appToolChanged.length}${driftSamples.length ? ` / sample ${driftSamples.join(", ")}` : ""}`);
       lines.push(`  local cache fingerprints: connector=${evidence.connectorFingerprintMatches ? "match" : "\u672a\u77e5"} / appTool=${evidence.appToolFingerprintMatches ? "match" : "\u672a\u77e5"} / connectorFiles=${evidence.connectorSharedExists && evidence.connectorLocalExists ? "present" : "\u9700\u5904\u7406"} / appToolFiles=${evidence.appToolSharedExists && evidence.appToolLocalExists ? "present" : "\u9700\u5904\u7406"}`);
       if (Array.isArray(evidence.exposedToolNames) && evidence.exposedToolNames.length) lines.push(`  \u53ef\u89c1\u5de5\u5177\uff1a${evidence.exposedToolNames.join(", ")}`);
     }

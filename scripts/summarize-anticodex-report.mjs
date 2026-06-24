@@ -556,12 +556,18 @@ const summary = {
     connectorFingerprintMatches: connectorParity && has(connectorParity, "sharedFingerprint") && has(connectorParity, "localFingerprint")
       ? asString(connectorParity.sharedFingerprint) === asString(connectorParity.localFingerprint)
       : null,
+    connectorParityMissingShared: connectorParity && has(connectorParity, "missingShared") ? asStringArray(connectorParity.missingShared) : [],
+    connectorParityExtraLocal: connectorParity && has(connectorParity, "extraLocal") ? asStringArray(connectorParity.extraLocal) : [],
+    connectorParityChangedShared: connectorParity && has(connectorParity, "changedShared") ? asStringArray(connectorParity.changedShared) : [],
     appToolParityClean: appToolParity ? appToolParity.contentMatches === true : null,
     appToolSharedExists: appToolParity ? boolField(appToolParity, "sharedExists") : null,
     appToolLocalExists: appToolParity ? boolField(appToolParity, "localExists") : null,
     appToolFingerprintMatches: appToolParity && has(appToolParity, "sharedFingerprint") && has(appToolParity, "localFingerprint")
       ? asString(appToolParity.sharedFingerprint) === asString(appToolParity.localFingerprint)
       : null,
+    appToolParityMissingShared: appToolParity && has(appToolParity, "missingShared") ? asStringArray(appToolParity.missingShared) : [],
+    appToolParityExtraLocal: appToolParity && has(appToolParity, "extraLocal") ? asStringArray(appToolParity.extraLocal) : [],
+    appToolParityChangedShared: appToolParity && has(appToolParity, "changedShared") ? asStringArray(appToolParity.changedShared) : [],
     appToolGetPostParityClean: appToolGetPostParity ? appToolGetPostParity.contentMatches === true : null,
     appToolGetPostParityContentMatches: appToolGetPostParity ? boolField(appToolGetPostParity, "contentMatches") : null,
     appToolGetPostMissingFromGet: appToolGetPostParity && has(appToolGetPostParity, "missingFromGet") ? asStringArray(appToolGetPostParity.missingFromGet) : [],
