@@ -262,7 +262,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const managerOpenInject = readFileSync(resolve(root, "scripts", "anticodex-manager-open-inject.js"), "utf8");
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerServerSource = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
   const repairShortcuts = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 
   assert.match(brander, /anticodex-manager/);
@@ -407,6 +409,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /uiIdle: samples=/);
     assert.match(source, /syncReadinessEvidence/);
     assert.match(source, /syncReadiness: noTraffic=/);
+    assert.match(source, /syncReadiness versions: codex=/);
+    assert.match(source, /updateStatusSource/);
+    assert.match(source, /managerBridgeProcessCount/);
+    assert.match(source, /processes=/);
     assert.match(source, /installedOverallEvidence/);
     assert.match(source, /installedOverall: noTraffic=/);
     assert.match(source, /toolBridgeEvidence/);
@@ -423,10 +429,15 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v92/);
-  assert.match(syncReadiness, /native-panel-v92/);
+  assert.match(managerInject, /native-panel-v93/);
+  assert.match(syncReadiness, /native-panel-v93/);
+  assert.match(uiState, /native-panel-v93/);
+  assert.doesNotMatch(managerInject, /native-panel-v92/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v92/);
+  assert.doesNotMatch(uiState, /native-panel-v92/);
   assert.doesNotMatch(managerInject, /native-panel-v91/);
   assert.doesNotMatch(syncReadiness, /native-panel-v91/);
+  assert.doesNotMatch(uiState, /native-panel-v91/);
   assert.doesNotMatch(managerInject, /native-panel-v90/);
   assert.doesNotMatch(syncReadiness, /native-panel-v90/);
   assert.doesNotMatch(managerInject, /native-panel-v89/);
@@ -448,6 +459,15 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.doesNotMatch(managerInject, /native-panel-v66/);
   assert.doesNotMatch(syncReadiness, /native-panel-v66/);
   assert.match(managerInject, /function updateOperationStateText/);
+  assert.match(managerInject, /function syncReadinessEvidenceFromResult/);
+  assert.match(managerInject, /function syncReadinessEvidenceLines/);
+  assert.match(managerInject, /syncEvidence = diagnostics\?\.syncReadinessEvidence/);
+  assert.match(managerInject, /Manager bridge/);
+  assert.match(managerServerSource, /syncReadinessEvidence: latestManagerReportItem/);
+  assert.match(managerServerSource, /function syncReadinessEvidenceFromResult/);
+  assert.match(managerServerSource, /syncReadinessEvidenceLines/);
+  assert.match(managerServerSource, /sync drift/);
+  assert.match(managerServerSource, /processes=/);
   assert.match(managerInject, /function updateOperationStageText/);
   assert.match(managerInject, /function updateStatusText/);
   assert.match(managerInject, /candidate_build/);
@@ -652,8 +672,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v92["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v92"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v93["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v93"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v93"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -886,7 +907,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v92/);
+  assert.match(managerOpenInject, /native-panel-v93/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v89/);
@@ -1812,8 +1834,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v92 manager script/);
-  assert.doesNotMatch(manager, /native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
+  assert.match(manager, /latest native-panel-v93 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
   assert.match(manager, /PassThru/);
@@ -2476,6 +2498,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /healthySampleCount/);
   assert.match(reportSummarizer, /syncReadinessEvidence/);
   assert.match(reportSummarizer, /shortcutReadyCount/);
+  assert.match(reportSummarizer, /codexVersion/);
+  assert.match(reportSummarizer, /sourcePackageVersion/);
+  assert.match(reportSummarizer, /updateStatusSource/);
+  assert.match(reportSummarizer, /updateDriftState/);
+  assert.match(reportSummarizer, /managerBridgeProcessCount/);
   assert.match(reportSummarizer, /installedOverallEvidence/);
   assert.match(reportSummarizer, /realTrafficSkippedChecks/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
@@ -2947,6 +2974,8 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
         productName: "Anti-Codex",
         fileDescription: "Anti-Codex",
         originalFilename: "Anti-Codex.exe",
+        codexVersion: "1.2.3",
+        sourcePackageVersion: "4.5.6",
         hostIconExists: true,
         trayIconExists: true,
         appRootIconExists: true,
@@ -2964,11 +2993,12 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
         failureSafetyVerifierExists: true,
         installerExists: true,
         startScriptExists: true,
+        updateStatusSource: "installed-runtime",
         desktopShortcutIconPalette: { ok: true },
         updateStatus: {
           ok: true,
           updateNeeded: false,
-          drift: { state: "synced" },
+          drift: { state: "synced", hostChanged: false, cliChanged: false, activePackageVersion: "4.5.6" },
           guardrails: { brandPreserved: true, iconPreserved: true, activeHostValid: true, failures: [] },
         },
         shortcutVerification: [
@@ -2993,10 +3023,19 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
     assert.equal(summary.syncReadinessEvidence.brandReady, true);
     assert.equal(summary.syncReadinessEvidence.iconReady, true);
     assert.equal(summary.syncReadinessEvidence.syncScriptsReady, true);
+    assert.equal(summary.syncReadinessEvidence.codexVersion, "1.2.3");
+    assert.equal(summary.syncReadinessEvidence.sourcePackageVersion, "4.5.6");
+    assert.equal(summary.syncReadinessEvidence.updateStatusSource, "installed-runtime");
+    assert.equal(summary.syncReadinessEvidence.updateDriftState, "synced");
+    assert.equal(summary.syncReadinessEvidence.updateDriftHostChanged, false);
+    assert.equal(summary.syncReadinessEvidence.updateDriftCliChanged, false);
+    assert.equal(summary.syncReadinessEvidence.activePackageVersion, "4.5.6");
     assert.equal(summary.syncReadinessEvidence.updateReady, true);
     assert.equal(summary.syncReadinessEvidence.guardrailsReady, true);
     assert.equal(summary.syncReadinessEvidence.shortcutCount, 2);
     assert.equal(summary.syncReadinessEvidence.shortcutReadyCount, 1);
+    assert.equal(summary.syncReadinessEvidence.managerBridgeProcessCount, 1);
+    assert.equal(summary.syncReadinessEvidence.managerBridgeStaleProcessCount, 0);
     assert.equal(summary.syncReadinessEvidence.managerBridgeReady, true);
     assert.equal(summary.syncReadinessEvidence.cleanSyncState, true);
   } finally {
@@ -3726,6 +3765,8 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(diagnosticsFunc, /logDbGuard:\s*logDbGuardStatus\(\)/);
   assert.match(diagnosticsFunc, /installedChecks/);
   assert.match(diagnosticsFunc, /sourcePreflight/);
+  assert.match(diagnosticsFunc, /syncReadinessEvidence/);
+  assert.match(diagnosticsFunc, /latest-sync-readiness\.json/);
   assert.match(server, /function logDbGuardStatus/);
   assert.match(server, /protect-anticodex-log-db\.mjs/);
   assert.match(server, /"--status"/);

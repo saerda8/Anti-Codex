@@ -1516,3 +1516,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager panel version advanced to `native-panel-v92` so the updated real-button latest-report display reboots in already-open pages.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip.
 - Note: PowerShell `ConvertFrom-Json` can fail on the old raw manager-real-buttons artifact due mojibake text in nested output, while Node `JSON.parse` reads it successfully; the support path now uses the Node summarizer.
+
+## 2026-06-24 Sync Readiness Support Evidence
+- Completed: sync-readiness summaries now preserve host/source/active package versions, update-status source, drift state, host/CLI drift booleans, and Manager bridge process/stale counts through the report summarizer and fallback Manager summary.
+- Completed: external Manager bridge and injected Manager now display the same sync-readiness version/drift/process evidence, and the Manager panel version advanced to `native-panel-v93`.
+- Completed: diagnostics now carries the latest sync-readiness evidence so the Manager status card and immediate sync-readiness action result can expose the same support fields without opening raw JSON.
+- Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip; `git diff --check` passed; runtime sync ran with `NoRestart` and installed runtime source fingerprints matched `59/59`.
+- Note: runtime sync returned `ok:false` because `http://127.0.0.1:8484/health` was offline; strict passive release gate showed `installedRuntimeSync.satisfied:true` but `releaseReady:false` because the current sync-readiness evidence is a fast/offline report and older real-traffic reports were stale.

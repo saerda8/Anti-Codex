@@ -1275,6 +1275,7 @@ function diagnosticsPayload({
         installedChecks,
         shortcutRepair,
         sourcePreflight,
+        syncReadinessEvidence: latestManagerReportItem("Sync readiness", "latest-sync-readiness.json").syncReadinessEvidence,
         antigravityRetries: {
             count: ANTIGRAVITY_RETRY_AUDIT.count,
             latest: ANTIGRAVITY_RETRY_AUDIT.latest,
@@ -2483,16 +2484,25 @@ function latestManagerReportItem(label, fileName) {
         syncReadinessEvidence: (sync || activeHost) ? {
             noTrafficReady: report?.reportName === "sync-readiness" && report?.noTraffic === true && report?.usedRealTraffic === false && report?.behaviorCovered === true && report?.coverageKind === "installed-no-traffic",
             fullMode: report?.fast === false && report?.skipIconPaletteProbe === false,
+            codexVersion: shortSafeText(activeHost?.codexVersion || "", ""),
+            sourcePackageVersion: shortSafeText(activeHost?.sourcePackageVersion || "", ""),
             activeHostReady: !!activeHost && activeHost.exists === true && activeHost.markerExists === true && activeHost.manifestValid === true && activeHost.exeExists === true,
             brandReady: activeHost?.productName === "Anti-Codex" && activeHost?.fileDescription === "Anti-Codex" && activeHost?.originalFilename === "Anti-Codex.exe",
             iconReady: activeHost?.hostIconExists === true && activeHost?.trayIconExists === true && activeHost?.appRootIconExists === true && activeHost?.hostIconPalette?.ok === true && activeHost?.trayIconPalette?.ok === true && activeHost?.appRootIconPalette?.ok === true && (!sync?.desktopShortcutIconPalette || sync.desktopShortcutIconPalette.ok === true),
             syncScriptsReady: !!sync && sync.scriptExists === true && sync.launcherExists === true && sync.rollbackScriptExists === true && sync.rollbackLauncherExists === true && sync.updateCheckExists === true && sync.validatorExists === true && sync.failureSafetyVerifierExists === true && sync.installerExists === true && sync.startScriptExists === true,
+            updateStatusSource: shortSafeText(sync?.updateStatusSource || "", ""),
+            updateDriftState: shortSafeText(updateStatus?.drift?.state || "", ""),
+            updateDriftHostChanged: typeof updateStatus?.drift?.hostChanged === "boolean" ? updateStatus.drift.hostChanged : null,
+            updateDriftCliChanged: typeof updateStatus?.drift?.cliChanged === "boolean" ? updateStatus.drift.cliChanged : null,
+            activePackageVersion: shortSafeText(updateStatus?.drift?.activePackageVersion || "", ""),
             updateReady: updateStatus?.ok === true && updateStatus?.updateNeeded === false && updateStatus?.drift?.state === "synced",
             guardrailsReady: updateGuardrails?.brandPreserved === true && updateGuardrails?.iconPreserved === true && updateGuardrails?.activeHostValid === true && Array.isArray(updateGuardrails?.failures) && updateGuardrails.failures.length === 0,
             shortcutCount: shortcutVerification.length,
             shortcutReadyCount: shortcutVerification.filter((item) => item?.ok === true && item?.exists === true && item?.displayNameMatches === true && item?.targetMatches === true && item?.launcherTargetMatches === true && item?.scriptMatches === true && item?.iconMatches === true && item?.forbiddenCodexBranding !== true).length,
             desktopShortcutCount: Array.isArray(sync?.desktopAntiCodexShortcuts) ? sync.desktopAntiCodexShortcuts.length : null,
             forbiddenDesktopHelperCount: Array.isArray(sync?.forbiddenDesktopHelperShortcuts) ? sync.forbiddenDesktopHelperShortcuts.length : null,
+            managerBridgeProcessCount: Number.isFinite(Number(managerBridge?.processCount)) ? Number(managerBridge.processCount) : null,
+            managerBridgeStaleProcessCount: Number.isFinite(Number(managerBridge?.staleProcessCount)) ? Number(managerBridge.staleProcessCount) : null,
             managerBridgeReady: !!managerBridge && Number(managerBridge.processCount) === 1 && Number(managerBridge.staleProcessCount) === 0 && Array.isArray(managerBridge.processes) && managerBridge.processes.every((item) => item?.hasExpectedBaseUrl === true),
             cleanSyncState: sync?.hostSyncMarkerExists === false && sync?.staleCandidateExists === false && sync?.rollbackHostExists === true && sync?.rollbackMarkerExists === true,
         } : null,
@@ -3329,8 +3339,36 @@ const hasItems=(value)=>Array.isArray(value)?value.length>0:Boolean(value);
 function shortHash(value){const text=String(value||"");return text?text.slice(0,8):"未知"}
 function syncVersion(updateStatus){
   const sourceVersion=updateStatus?.source?.packageVersion||"未知";
-  const activeVersion=updateStatus?.updateNeeded===false?sourceVersion:"需同步";
+  const activeVersion=updateStatus?.drift?.activePackageVersion||updateStatus?.active?.packageVersion||(updateStatus?.updateNeeded===false?sourceVersion:"需同步");
   return {sourceVersion,activeVersion};
+}
+function triStateText(value){return value===true?"true":(value===false?"false":"unknown");}
+function syncReadinessEvidenceFromResult(result){
+  const r=result||{};
+  const sync=r.sync||{};
+  const activeHost=r.activeHost||{};
+  const updateStatus=sync.updateStatus||r.updateStatus||{};
+  const drift=updateStatus.drift||{};
+  const managerBridge=sync.managerBridge||{};
+  return {
+    codexVersion:activeHost.codexVersion||updateStatus.source?.codexVersion||"",
+    sourcePackageVersion:activeHost.sourcePackageVersion||updateStatus.source?.packageVersion||"",
+    activePackageVersion:drift.activePackageVersion||updateStatus.active?.packageVersion||"",
+    updateStatusSource:sync.updateStatusSource||updateStatus.sourceType||"",
+    updateDriftState:drift.state||updateStatus.reason||"",
+    updateDriftHostChanged:typeof drift.hostChanged==="boolean"?drift.hostChanged:null,
+    updateDriftCliChanged:typeof drift.cliChanged==="boolean"?drift.cliChanged:null,
+    managerBridgeProcessCount:Number.isFinite(Number(managerBridge.processCount))?Number(managerBridge.processCount):null,
+    managerBridgeStaleProcessCount:Number.isFinite(Number(managerBridge.staleProcessCount))?Number(managerBridge.staleProcessCount):null,
+  };
+}
+function syncReadinessEvidenceLines(evidence){
+  const e=evidence||{};
+  return [
+    "sync versions: codex="+(e.codexVersion||"unknown")+" / source="+(e.sourcePackageVersion||"unknown")+" / active="+(e.activePackageVersion||"unknown"),
+    "sync drift: state="+(e.updateDriftState||"unknown")+" / source="+(e.updateStatusSource||"unknown")+" / hostChanged="+triStateText(e.updateDriftHostChanged)+" / cliChanged="+triStateText(e.updateDriftCliChanged),
+    (e.managerBridgeProcessCount!==null||e.managerBridgeStaleProcessCount!==null)?("managerBridge: processes="+(e.managerBridgeProcessCount??"?")+" / stale="+(e.managerBridgeStaleProcessCount??"?")):"",
+  ].filter(Boolean);
 }
 function syncSafetyText(updateStatus){
   if(updateStatus?.sync?.available!==true) return "同步入口不可用，请先运行安装/同步检查。";
@@ -3512,7 +3550,8 @@ function latestReportsSummary(result){
     if(item.syncReadinessEvidence){
       const evidence=item.syncReadinessEvidence;
       lines.push("  syncReadiness: noTraffic="+(evidence.noTrafficReady?"true":"check")+" / full="+(evidence.fullMode?"true":"check")+" / host="+(evidence.activeHostReady&&evidence.brandReady?"ok":"check")+" / icons="+(evidence.iconReady?"ok":"check")+" / update="+(evidence.updateReady?"synced":"check")+" / guardrails="+(evidence.guardrailsReady?"ok":"check"));
-      lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / clean="+(evidence.cleanSyncState?"true":"false"));
+      lines.push("  syncReadiness versions: codex="+(evidence.codexVersion||"unknown")+" / source="+(evidence.sourcePackageVersion||"unknown")+" / active="+(evidence.activePackageVersion||"unknown")+" / drift="+(evidence.updateDriftState||"unknown")+" / updateSource="+(evidence.updateStatusSource||"unknown")+" / hostChanged="+triStateText(evidence.updateDriftHostChanged)+" / cliChanged="+triStateText(evidence.updateDriftCliChanged));
+      lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / processes="+(evidence.managerBridgeProcessCount??"?")+" / stale="+(evidence.managerBridgeStaleProcessCount??"?")+" / clean="+(evidence.cleanSyncState?"true":"false"));
     }
     if(item.installedOverallEvidence){
       const evidence=item.installedOverallEvidence;
@@ -3649,7 +3688,8 @@ function actionText(payload){
   }
   if(payload?.action==="syncReadiness"){
     const v=syncVersion(r.sync?.updateStatus);
-    return "安装/同步检查："+(r.ok?"通过":"失败")+"\\n原生 Codex："+v.sourceVersion+"    Anti-Codex："+v.activeVersion+"\\n"+(r.failures?.length?r.failures.join("\\n"):"桌面图标、程序图标、回滚点和同步入口已验证。");
+    const evidenceLines=syncReadinessEvidenceLines(syncReadinessEvidenceFromResult(r)).join("\\n");
+    return "安装/同步检查："+(r.ok?"通过":"失败")+"\\n原生 Codex："+v.sourceVersion+"    Anti-Codex："+v.activeVersion+"\\n"+evidenceLines+"\\n"+(r.failures?.length?r.failures.join("\\n"):"桌面图标、程序图标、回滚点和同步入口已验证。");
   }
   if(payload?.action==="repairShortcuts"){
     return "快捷方式修复："+(r.ok?"完成":"需要处理")+"\\n已修复："+(r.repairedCount??(r.shortcuts?.length??"未知"))+"\\n"+(r.failures?.length?r.failures.join("\\n"):"桌面和开始菜单快捷方式已重建。");
@@ -3844,7 +3884,13 @@ async function load(){
     ["说明",accessibleConnectors>0?"只显示真实授权后可调用的应用工具":"未授权连接器不会伪装成可调用工具"],
   ]);
   const syncInfo=syncVersion(diag.updateStatus);
+  const syncEvidence=diag.syncReadinessEvidence||syncReadinessEvidenceFromResult({updateStatus:diag.updateStatus});
   kv("sync",[
+    ["sync drift",syncEvidence.updateDriftState||"unknown"],
+    ["sync source",syncEvidence.updateStatusSource||"unknown"],
+    ["hostChanged",triStateText(syncEvidence.updateDriftHostChanged)],
+    ["cliChanged",triStateText(syncEvidence.updateDriftCliChanged)],
+    ["managerBridge","processes="+(syncEvidence.managerBridgeProcessCount??"?")+" / stale="+(syncEvidence.managerBridgeStaleProcessCount??"?")],
     ["原生 Codex 版本",syncInfo.sourceVersion],
     ["Anti-Codex 版本",syncInfo.activeVersion],
     ["更新状态",syncState(diag.updateStatus?.reason)],

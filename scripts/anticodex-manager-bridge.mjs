@@ -10,6 +10,7 @@ for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], proce
 const port = Number(args.get("--port") || process.env.DEEPCODEX_CDP_PORT || 58317);
 const baseUrl = String(args.get("--base-url") || process.env.ANTICODEX_MANAGER_API || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const triStateText = (value) => value === true ? "true" : (value === false ? "false" : "unknown");
 
 function httpJson(url, options = {}) {
   return new Promise((resolve, reject) => {
@@ -373,7 +374,8 @@ function latestReportsSummary(result) {
     if (item.syncReadinessEvidence) {
       const evidence = item.syncReadinessEvidence;
       lines.push(`  syncReadiness: noTraffic=${evidence.noTrafficReady ? "true" : "check"} / full=${evidence.fullMode ? "true" : "check"} / host=${evidence.activeHostReady && evidence.brandReady ? "ok" : "check"} / icons=${evidence.iconReady ? "ok" : "check"} / update=${evidence.updateReady ? "synced" : "check"} / guardrails=${evidence.guardrailsReady ? "ok" : "check"}`);
-      lines.push(`  syncReadiness shortcuts: ${evidence.shortcutReadyCount ?? 0}/${evidence.shortcutCount ?? 0} / managerBridge=${evidence.managerBridgeReady ? "ok" : "check"} / clean=${evidence.cleanSyncState ? "true" : "false"}`);
+      lines.push(`  syncReadiness versions: codex=${evidence.codexVersion || "unknown"} / source=${evidence.sourcePackageVersion || "unknown"} / active=${evidence.activePackageVersion || "unknown"} / drift=${evidence.updateDriftState || "unknown"} / updateSource=${evidence.updateStatusSource || "unknown"} / hostChanged=${triStateText(evidence.updateDriftHostChanged)} / cliChanged=${triStateText(evidence.updateDriftCliChanged)}`);
+      lines.push(`  syncReadiness shortcuts: ${evidence.shortcutReadyCount ?? 0}/${evidence.shortcutCount ?? 0} / managerBridge=${evidence.managerBridgeReady ? "ok" : "check"} / processes=${evidence.managerBridgeProcessCount ?? "?"} / stale=${evidence.managerBridgeStaleProcessCount ?? "?"} / clean=${evidence.cleanSyncState ? "true" : "false"}`);
     }
     if (item.installedOverallEvidence) {
       const evidence = item.installedOverallEvidence;

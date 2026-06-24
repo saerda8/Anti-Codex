@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v92";
+  const VERSION = "native-panel-v93";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -817,6 +817,43 @@
     return `\u5931\u8d25\u9879\uff1a${failures.length}\n${failures.slice(0, 3).join("\n")}`;
   }
 
+  function triStateText(value) {
+    if (value === true) return "true";
+    if (value === false) return "false";
+    return "unknown";
+  }
+
+  function syncReadinessEvidenceFromResult(result) {
+    const r = result || {};
+    const sync = r.sync || {};
+    const activeHost = r.activeHost || {};
+    const updateStatus = sync.updateStatus || r.updateStatus || {};
+    const drift = updateStatus.drift || {};
+    const managerBridge = sync.managerBridge || {};
+    return {
+      codexVersion: activeHost.codexVersion || updateStatus.source?.codexVersion || "",
+      sourcePackageVersion: activeHost.sourcePackageVersion || updateStatus.source?.packageVersion || "",
+      activePackageVersion: drift.activePackageVersion || updateStatus.active?.packageVersion || "",
+      updateStatusSource: sync.updateStatusSource || updateStatus.sourceType || "",
+      updateDriftState: drift.state || updateStatus.reason || "",
+      updateDriftHostChanged: typeof drift.hostChanged === "boolean" ? drift.hostChanged : null,
+      updateDriftCliChanged: typeof drift.cliChanged === "boolean" ? drift.cliChanged : null,
+      managerBridgeProcessCount: Number.isFinite(Number(managerBridge.processCount)) ? Number(managerBridge.processCount) : null,
+      managerBridgeStaleProcessCount: Number.isFinite(Number(managerBridge.staleProcessCount)) ? Number(managerBridge.staleProcessCount) : null,
+    };
+  }
+
+  function syncReadinessEvidenceLines(evidence) {
+    const e = evidence || {};
+    return [
+      `\u7248\u672c\uff1aCodex ${e.codexVersion || "\u672a\u77e5"} / source ${e.sourcePackageVersion || "\u672a\u77e5"} / active ${e.activePackageVersion || "\u672a\u77e5"}`,
+      `\u6f02\u79fb\uff1astate=${e.updateDriftState || "unknown"} / source=${e.updateStatusSource || "unknown"} / hostChanged=${triStateText(e.updateDriftHostChanged)} / cliChanged=${triStateText(e.updateDriftCliChanged)}`,
+      e.managerBridgeProcessCount !== null || e.managerBridgeStaleProcessCount !== null
+        ? `Manager bridge\uff1aprocesses=${e.managerBridgeProcessCount ?? "?"} / stale=${e.managerBridgeStaleProcessCount ?? "?"}`
+        : "",
+    ].filter(Boolean);
+  }
+
   function sourceSnapshotLine(result) {
     const evidence = result?.sourceSnapshot && typeof result.sourceSnapshot === "object" ? result.sourceSnapshot : null;
     if (!evidence) return "";
@@ -946,7 +983,8 @@
       if (item.syncReadinessEvidence) {
         const evidence = item.syncReadinessEvidence;
         lines.push(`  syncReadiness: noTraffic=${evidence.noTrafficReady ? "true" : "check"} / full=${evidence.fullMode ? "true" : "check"} / host=${evidence.activeHostReady && evidence.brandReady ? "ok" : "check"} / icons=${evidence.iconReady ? "ok" : "check"} / update=${evidence.updateReady ? "synced" : "check"} / guardrails=${evidence.guardrailsReady ? "ok" : "check"}`);
-        lines.push(`  syncReadiness shortcuts: ${evidence.shortcutReadyCount ?? 0}/${evidence.shortcutCount ?? 0} / managerBridge=${evidence.managerBridgeReady ? "ok" : "check"} / clean=${evidence.cleanSyncState ? "true" : "false"}`);
+        lines.push(`  syncReadiness versions: codex=${evidence.codexVersion || "unknown"} / source=${evidence.sourcePackageVersion || "unknown"} / active=${evidence.activePackageVersion || "unknown"} / drift=${evidence.updateDriftState || "unknown"} / updateSource=${evidence.updateStatusSource || "unknown"} / hostChanged=${triStateText(evidence.updateDriftHostChanged)} / cliChanged=${triStateText(evidence.updateDriftCliChanged)}`);
+        lines.push(`  syncReadiness shortcuts: ${evidence.shortcutReadyCount ?? 0}/${evidence.shortcutCount ?? 0} / managerBridge=${evidence.managerBridgeReady ? "ok" : "check"} / processes=${evidence.managerBridgeProcessCount ?? "?"} / stale=${evidence.managerBridgeStaleProcessCount ?? "?"} / clean=${evidence.cleanSyncState ? "true" : "false"}`);
       }
       if (item.installedOverallEvidence) {
         const evidence = item.installedOverallEvidence;
@@ -1114,6 +1152,7 @@
     ].filter(Boolean).join("\n");
     if (action === "syncReadiness") return [
       `\u5b89\u88c5/\u540c\u6b65\u68c0\u67e5\uff1a${r.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
+      ...syncReadinessEvidenceLines(syncReadinessEvidenceFromResult(r)),
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
     if (action === "repairShortcuts") return [
@@ -1599,6 +1638,7 @@
         }).filter(Boolean).join("\n\n");
         const quotaNotice = usingThirdParty ? null : quotaLimitNotice(health);
         const updateStatus = diagnostics?.updateStatus || {};
+        const syncEvidence = diagnostics?.syncReadinessEvidence || syncReadinessEvidenceFromResult({ updateStatus });
         const updateOperation = updateStatus.operation || {};
         const cards = [
           quotaNotice,
@@ -1617,8 +1657,13 @@
           card("\u6700\u8fd1\u8def\u7531", kv(routeSummaryRows(routes?.latest))),
           card("\u540c\u6b65\u72b6\u6001", kv([
             ["\u539f\u751f Codex \u7248\u672c", updateStatus?.source?.packageVersion],
-            ["Anti-Codex", updateStatus?.active?.root ? "\u5df2\u5b89\u88c5" : "\u672a\u77e5"],
+            ["Anti-Codex \u7248\u672c", syncEvidence.activePackageVersion || (updateStatus?.active?.root ? "\u5df2\u5b89\u88c5" : "\u672a\u77e5")],
             ["\u66f4\u65b0\u72b6\u6001", updateStatusText(updateStatus)],
+            ["\u6f02\u79fb\u72b6\u6001", syncEvidence.updateDriftState || "\u672a\u77e5"],
+            ["\u6f02\u79fb\u6765\u6e90", syncEvidence.updateStatusSource || "\u672a\u77e5"],
+            ["hostChanged", triStateText(syncEvidence.updateDriftHostChanged)],
+            ["cliChanged", triStateText(syncEvidence.updateDriftCliChanged)],
+            ["Manager bridge", `processes=${syncEvidence.managerBridgeProcessCount ?? "?"} / stale=${syncEvidence.managerBridgeStaleProcessCount ?? "?"}`],
             ["\u4efb\u52a1\u72b6\u6001", updateOperationStateText(updateOperation)],
             ["\u5f53\u524d\u9636\u6bb5", updateOperationStageText(updateOperation)],
             ["\u6700\u8fd1\u53d8\u5316", updateOperation.updatedAt || updateOperation.completedAt || updateStatus.checkedAt || "\u672a\u77e5"],
