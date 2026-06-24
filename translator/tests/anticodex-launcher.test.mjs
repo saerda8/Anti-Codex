@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { join, resolve } from "node:path";
 import os from "node:os";
 import { spawn, spawnSync } from "node:child_process";
@@ -43,6 +44,49 @@ function waitForServerUrl(child) {
         clearTimeout(timer);
         resolveUrl(match[0]);
       }
+    });
+  });
+}
+
+function listenOnLoopback(server) {
+  return new Promise((resolveListen, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolveListen(`http://127.0.0.1:${server.address().port}`));
+  });
+}
+
+function closeServer(server) {
+  return new Promise((resolveClose) => {
+    if (!server.listening) return resolveClose();
+    server.close(() => resolveClose());
+  });
+}
+
+function runChildProcess(command, args, { timeoutMs = 20000 } = {}) {
+  return new Promise((resolveRun) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let spawnError = null;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString("utf8"); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+    child.once("error", (error) => {
+      spawnError = error;
+    });
+    child.once("close", (status, signal) => {
+      clearTimeout(timer);
+      resolveRun({
+        status,
+        signal,
+        stdout,
+        stderr,
+        error: spawnError || (timedOut ? new Error(`${command} ETIMEDOUT`) : null),
+      });
     });
   });
 }
@@ -5317,6 +5361,140 @@ test("plugin capability verifier writes a short-budget degraded report", () => {
     assert.equal(report.capabilities.appToolGetPostParity.checked, false);
     assert.equal(report.capabilities.appToolGetPostParity.contentMatches, false);
   } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("plugin capability verifier accepts isolated fake endpoints without connector authorization", async () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-fake-"));
+  const stateRoot = resolve(tempRoot, "state");
+  const reportRoot = resolve(tempRoot, "reports");
+  const codexHome = resolve(stateRoot, "codex-home-deepseek-app");
+  const sharedCodexHome = resolve(stateRoot, "shared-codex-home");
+  const agentsSkillsPath = resolve(stateRoot, "agents-skills");
+  const connectors = [
+    { id: "metadata-demo", name: "Metadata Demo", isEnabled: true, isAccessible: false },
+    { id: "metadata-second", name: "Metadata Second", isEnabled: true, isAccessible: false },
+  ];
+  const tools = [];
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const { pathname } = new URL(req.url || "/", "http://127.0.0.1");
+    requests.push(`${req.method} ${pathname}`);
+    const send = (status, payload) => {
+      res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(payload));
+    };
+    if (pathname === "/health") {
+      send(200, { ok: true, upstream: "antigravity-desktop", accountReady: false, accountState: "metadata-only", modelCount: 1 });
+      return;
+    }
+    if (pathname === "/backend-api/ps/plugins/installed") {
+      send(200, [
+        { id: "metadata-plugin", apps: [{ id: "metadata-demo" }] },
+        { id: "metadata-second-plugin", apps: [{ id: "metadata-second" }] },
+      ]);
+      return;
+    }
+    if (pathname === "/backend-api/plugins/list") {
+      send(200, {
+        plugins: [
+          { summary: { name: "metadata-plugin", skills: ["demo-skill"], mcpServers: ["demo-mcp"] } },
+          { summary: { name: "metadata-second-plugin", skills: ["demo-skill"], mcpServers: ["demo-mcp"] } },
+        ],
+      });
+      return;
+    }
+    if (pathname === "/backend-api/aip/connectors") {
+      send(200, { connectors });
+      return;
+    }
+    if (pathname === "/backend-api/wham/apps" && (req.method === "GET" || req.method === "POST")) {
+      if (req.method === "POST") {
+        req.resume();
+        req.on("end", () => send(200, { tools }));
+      } else {
+        send(200, { tools });
+      }
+      return;
+    }
+    send(404, { error: "not_found" });
+  });
+
+  try {
+    for (const home of [codexHome, sharedCodexHome]) {
+      const connectorDir = resolve(home, "cache", "codex_app_directory");
+      const toolsDir = resolve(home, "cache", "codex_apps_tools");
+      mkdirSync(connectorDir, { recursive: true });
+      mkdirSync(toolsDir, { recursive: true });
+      mkdirSync(resolve(home, "skills", "metadata-demo"), { recursive: true });
+      writeFileSync(resolve(home, "config.toml"), "model = \"metadata-only\"\n", "utf8");
+      writeFileSync(resolve(home, "skills", "metadata-demo", "SKILL.md"), "# Metadata Demo\n", "utf8");
+      writeFileSync(resolve(connectorDir, "directory.json"), JSON.stringify({ schema_version: 1, connectors }), "utf8");
+      writeFileSync(resolve(toolsDir, "tools.json"), JSON.stringify({ schema_version: 2, tools }), "utf8");
+    }
+    mkdirSync(resolve(agentsSkillsPath, "agent-demo"), { recursive: true });
+    writeFileSync(resolve(agentsSkillsPath, "agent-demo", "SKILL.md"), "# Agent Demo\n", "utf8");
+
+    const baseUrl = await listenOnLoopback(server);
+    const result = await runChildProcess("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-plugin-capabilities.ps1"),
+      "-TimeoutSec", "8",
+      "-BaseUrl", baseUrl,
+      "-StateRoot", stateRoot,
+      "-ReportRoot", reportRoot,
+      "-CodexHome", codexHome,
+      "-SharedCodexHome", sharedCodexHome,
+      "-AgentsSkillsPath", agentsSkillsPath,
+    ], { timeoutMs: 20000 });
+    assert.equal(result.status, 0, [
+      result.error?.message,
+      result.signal ? `signal=${result.signal}` : "",
+      `requests=${requests.join(",")}`,
+      result.stdout,
+      result.stderr,
+    ].filter(Boolean).join("\n"));
+
+    const reportPath = resolve(reportRoot, "latest-plugin-capabilities.json");
+    const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    assert.equal(report.ok, true);
+    assert.notEqual(report.shortBudgetMode, true);
+    assert.equal(report.capabilities.nativeCodexWriteback, false);
+    assert.equal(report.capabilities.capabilityState, "metadata_only_no_accessible_connectors");
+    assert.equal(report.capabilities.connectorCount, 2);
+    assert.equal(report.capabilities.accessibleConnectorCount, 0);
+    assert.equal(report.capabilities.appToolCount, 0);
+    assert.equal(report.capabilities.appToolGetCount, 0);
+    assert.equal(report.capabilities.smoke.checked, true);
+    assert.equal(report.capabilities.smoke.endpointProjectionReadable, true);
+    assert.equal(report.capabilities.smoke.callableState, "skipped_no_accessible_connectors");
+    assert.equal(report.capabilities.connectorParity.checked, true);
+    assert.deepEqual(report.capabilities.connectorParity.missingShared, []);
+    assert.deepEqual(report.capabilities.connectorParity.extraLocal, []);
+    assert.deepEqual(report.capabilities.connectorParity.changedShared, []);
+    assert.equal(report.capabilities.appToolParity.checked, true);
+    assert.deepEqual(report.capabilities.appToolParity.missingShared, []);
+    assert.deepEqual(report.capabilities.appToolParity.extraLocal, []);
+    assert.deepEqual(report.capabilities.appToolParity.changedShared, []);
+    assert.equal(report.capabilities.appToolGetPostParity.checked, true);
+    assert.equal(report.capabilities.appToolGetPostParity.contentMatches, true);
+    assert.deepEqual(report.capabilities.appToolGetPostParity.missingFromGet, []);
+    assert.deepEqual(report.capabilities.appToolGetPostParity.extraFromGet, []);
+    assert.equal(typeof report.sourceSnapshot.fingerprint, "string");
+    assert.ok(report.sourceSnapshot.fileCount > 0);
+
+    const summaryResult = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(summaryResult.status, 0, summaryResult.stderr || summaryResult.stdout);
+    const summary = JSON.parse(summaryResult.stdout);
+    assert.equal(summary.pluginCapabilityEvidence.smokeChecked, true);
+    assert.equal(summary.pluginCapabilityEvidence.endpointProjectionReadable, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorParityClean, true);
+    assert.equal(summary.pluginCapabilityEvidence.appToolParityClean, true);
+    assert.equal(summary.pluginCapabilityEvidence.appToolGetPostParityClean, true);
+  } finally {
+    await closeServer(server);
     rmSync(tempRoot, { recursive: true, force: true });
   }
 });

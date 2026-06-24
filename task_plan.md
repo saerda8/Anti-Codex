@@ -1606,3 +1606,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: Manager latest-report summaries now add a human-readable stale-report hint when release-gate semantic failures include `*_source_snapshot_mismatch`, while preserving the exact failure codes.
 - Completed: external Manager bridge, injected Manager, and fallback Manager share the same hint, and UI-state static checks guard it.
 - Verification: JS syntax checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `130/130`.
+
+## 2026-06-24 Plugin Capability Offline Fake Endpoint Contract
+- Completed: launcher regression tests now run `test-anticodex-plugin-capabilities.ps1` against an isolated loopback fake endpoint with temp local/shared connector and app-tool caches, so plugin capability evidence can be verified without starting the real Anti-Codex gateway.
+- Completed: the fake endpoint keeps all connectors inaccessible and exposes zero app tools, proving health/plugin/connector/GET+POST app-tool paths, cache parity, source snapshots, and summaries while preserving the no-fake-authorization rule.
+- Verification: focused launcher contract passed `131/131`; PowerShell parser check, release-gate self-test, and `git diff --check` passed.
