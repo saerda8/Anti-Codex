@@ -1723,3 +1723,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Verification: Manager bridge self-test passed with expanded approval-plan display assertions.
 - Follow-up: Manager release-gate summaries now show installed-runtime `satisfied`, source max mtime, and installed-runtime max mtime alongside file counts, fingerprint match, and drift samples.
 - Verification: Manager bridge self-test passed with installed-runtime drift detail assertions; focused launcher Manager contracts passed `141/142` with one environment link-directory skip.
+- Follow-up: Manager release-gate failure reason summaries now include report age, freshness, selected-history status, and short/release required flags when that evidence exists.
+- Verification: Manager bridge self-test first failed on the missing detail, then passed after implementation; focused launcher Manager contracts passed `141/142` with one environment link-directory skip.

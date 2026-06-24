@@ -3733,6 +3733,15 @@ function latestReportsSummary(result){
         if(action?.highImpact===true) flags.push("highImpact");
         return gateId+":"+id+(flags.length?"["+flags.join(",")+"]":"");
       }
+      function failureReasonDisplayLabel(gate){
+        const reason=gate?.failureReason||(Array.isArray(gate?.failureReasons)?gate.failureReasons[0]:"unsatisfied");
+        const details=[];
+        if(gate?.ageHours!==undefined&&gate.ageHours!==null&&Number.isFinite(Number(gate.ageHours))) details.push("age="+Number(gate.ageHours).toFixed(1)+"h");
+        if(typeof gate?.fresh==="boolean") details.push("fresh="+triStateText(gate.fresh));
+        if(typeof gate?.selectedFromHistory==="boolean") details.push("history="+triStateText(gate.selectedFromHistory));
+        if(typeof gate?.requiredForShort==="boolean"||typeof gate?.requiredForRelease==="boolean") details.push("required="+triStateText(gate.requiredForShort)+"/"+triStateText(gate.requiredForRelease));
+        return (gate?.id||"unknown")+":"+reason+(details.length?"["+details.join("/")+"]":"");
+      }
       function mergedNextActions(){
         const seen=new Set();
         const actions=[];
@@ -3750,7 +3759,7 @@ function latestReportsSummary(result){
         return actions;
       }
       if(Array.isArray(item.releaseGateFailureReasons)&&item.releaseGateFailureReasons.length){
-        const failureReasonItems=item.releaseGateFailureReasons.slice(0,6).map((gate)=>gate.id+":"+(gate.failureReason||(Array.isArray(gate.failureReasons)?gate.failureReasons[0]:"unsatisfied")));
+        const failureReasonItems=item.releaseGateFailureReasons.slice(0,6).map((gate)=>failureReasonDisplayLabel(gate));
         const hiddenFailureReasons=Math.max(0,item.releaseGateFailureReasons.length-failureReasonItems.length);
         lines.push("  failureReasons: "+failureReasonItems.join(", ")+(hiddenFailureReasons?" (+"+hiddenFailureReasons+" more)":""));
         const reportFailureSource=item.releaseGateFailureReasons

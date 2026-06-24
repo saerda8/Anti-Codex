@@ -320,6 +320,15 @@ function latestReportsSummary(result) {
         if (action?.highImpact === true) flags.push("highImpact");
         return `${gateId}:${id}${flags.length ? `[${flags.join(",")}]` : ""}`;
       }
+      function failureReasonDisplayLabel(gate) {
+        const reason = gate?.failureReason || (Array.isArray(gate?.failureReasons) ? gate.failureReasons[0] : "unsatisfied");
+        const details = [];
+        if (gate?.ageHours !== undefined && gate.ageHours !== null && Number.isFinite(Number(gate.ageHours))) details.push(`age=${Number(gate.ageHours).toFixed(1)}h`);
+        if (typeof gate?.fresh === "boolean") details.push(`fresh=${triStateText(gate.fresh)}`);
+        if (typeof gate?.selectedFromHistory === "boolean") details.push(`history=${triStateText(gate.selectedFromHistory)}`);
+        if (typeof gate?.requiredForShort === "boolean" || typeof gate?.requiredForRelease === "boolean") details.push(`required=${triStateText(gate.requiredForShort)}/${triStateText(gate.requiredForRelease)}`);
+        return `${gate?.id || "unknown"}:${reason}${details.length ? `[${details.join("/")}]` : ""}`;
+      }
       function mergedNextActions() {
         const seen = new Set();
         const actions = [];
@@ -339,7 +348,7 @@ function latestReportsSummary(result) {
         return actions;
       }
       if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
-        const failureReasonItems = item.releaseGateFailureReasons.slice(0, 6).map((gate) => `${gate.id}:${gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}`);
+        const failureReasonItems = item.releaseGateFailureReasons.slice(0, 6).map((gate) => failureReasonDisplayLabel(gate));
         const hiddenFailureReasons = Math.max(0, item.releaseGateFailureReasons.length - failureReasonItems.length);
         lines.push(`  failureReasons: ${failureReasonItems.join(", ")}${hiddenFailureReasons ? ` (+${hiddenFailureReasons} more)` : ""}`);
         const reportFailureSource = item.releaseGateFailureReasons
@@ -804,7 +813,7 @@ if (args.has("--self-test")) {
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateFailureReasons: [
-        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
+        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], ageHours: 56.1, fresh: false, selectedFromHistory: true, requiredForShort: false, requiredForRelease: true, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
         { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork" }] },
         { id: "sourcePreflight", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-source-preflight.json", reportFailureSampleCodes: ["source_preflight_no_traffic"], reportFailureSamples: ["noTraffic missing"], guidance: "rerun source preflight", orderedActions: [{ id: "sourcePreflight" }] },
         { id: "mcpSkills", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-mcp-skills.json", reportFailureSampleCodes: ["mcp_skills_source_snapshot_mismatch"], reportFailureSamples: ["source mismatch"], guidance: "rerun MCP skills", orderedActions: [{ id: "mcpSkills" }] },
@@ -896,8 +905,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);
   assert.match(evidenceSummary, /missingOptional: coldRelaunch/);
   assert.match(evidenceSummary, /damagedReports: latest-native-tool-loop\.json/);
-  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report/);
-  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report, realWork:missing_report.*\(\+1 more\)/);
+  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report\[age=56\.1h\/fresh=false\/history=true\/required=false\/true\]/);
+  assert.match(evidenceSummary, /failureReasons: postVerification:stale_report\[age=56\.1h\/fresh=false\/history=true\/required=false\/true\], realWork:missing_report.*\(\+1 more\)/);
   assert.match(evidenceSummary, /reportFailures: postVerification:latest-post-verification\.json @ 2026-06-24T01:02:03\.000Z \/ codes local_gateway_offline \/ sample gateway offline \| health timeout/);
   assert.match(evidenceSummary, /reportFailures: .*\(\+2 more\)/);
   assert.match(evidenceSummary, /guidance: .*\(\+1 more\)/);
