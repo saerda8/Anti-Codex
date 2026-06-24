@@ -115,10 +115,14 @@ function Test-ReportsSummary {
             } elseif ([int]$approvalPlan.actionCount -ne $nextActions.Count) {
                 Add-Failure "release-gates approval plan action count mismatch"
             }
-            if ((Has-Property $approvalPlan "blockedCount") -and [int]$approvalPlan.blockedCount -lt $blockedActionCount) { Add-Failure "release-gates approval plan undercounts blocked actions" }
-            if ((Has-Property $approvalPlan "requiresGatewayStartCount") -and [int]$approvalPlan.requiresGatewayStartCount -lt $gatewayActionCount) { Add-Failure "release-gates approval plan undercounts gateway actions" }
-            if ((Has-Property $approvalPlan "requiresRealTrafficCount") -and [int]$approvalPlan.requiresRealTrafficCount -lt $realTrafficActionCount) { Add-Failure "release-gates approval plan undercounts real-traffic actions" }
-            if ((Has-Property $approvalPlan "highImpactCount") -and [int]$approvalPlan.highImpactCount -lt $highImpactActionCount) { Add-Failure "release-gates approval plan undercounts high-impact actions" }
+            if (-not (Has-Property $approvalPlan "blockedCount")) { Add-Failure "release-gates approval plan missing blocked count" }
+            elseif ([int]$approvalPlan.blockedCount -lt $blockedActionCount) { Add-Failure "release-gates approval plan undercounts blocked actions" }
+            if (-not (Has-Property $approvalPlan "requiresGatewayStartCount")) { Add-Failure "release-gates approval plan missing gateway count" }
+            elseif ([int]$approvalPlan.requiresGatewayStartCount -lt $gatewayActionCount) { Add-Failure "release-gates approval plan undercounts gateway actions" }
+            if (-not (Has-Property $approvalPlan "requiresRealTrafficCount")) { Add-Failure "release-gates approval plan missing real-traffic count" }
+            elseif ([int]$approvalPlan.requiresRealTrafficCount -lt $realTrafficActionCount) { Add-Failure "release-gates approval plan undercounts real-traffic actions" }
+            if (-not (Has-Property $approvalPlan "highImpactCount")) { Add-Failure "release-gates approval plan missing high-impact count" }
+            elseif ([int]$approvalPlan.highImpactCount -lt $highImpactActionCount) { Add-Failure "release-gates approval plan undercounts high-impact actions" }
             if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
                 Add-Failure "release-gates approval plan missing first blocked action"
             }
