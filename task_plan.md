@@ -1667,3 +1667,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: passive release gates now attach bounded `guidance` to plugin-capability failures when report samples show local gateway offline, and report summarizers/Manager summaries preserve that guidance.
 - Completed: plugin-capability release gates now require complete source snapshot evidence (`fingerprint`, positive `fileCount`, parseable `sourceMtimeMax`) and reject reused source snapshots so short-budget provenance cannot become release-grade proof.
 - Verification: JS syntax checks passed; release-gate self-test passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `132/132` with one environment link-directory skip; no Anti-Codex startup or real traffic was used.
+
+## 2026-06-24 Plugin Single-Tool Array Guard
+- Completed: plugin capability verifier now preserves endpoint arrays at the call site, so a single app tool or connector cannot be unwrapped into a scalar and serialized with `Count = null`.
+- Completed: launcher regression now runs an isolated fake endpoint with exactly one unauthorized app tool and another with POST/GET app-tool mismatch; both fail closed without connector authorization or real traffic.
+- Completed: diagnostics output now carries `installedRuntimeEvidence` inside the final `releaseGates` support object, matching the verifier checks and Manager/report summaries.
+- Verification: focused launcher contracts for plugin capability verifier passed `132/133` with one environment link-directory skip; PowerShell parser check passed after fixing command wrapping; `git diff --check` passed.

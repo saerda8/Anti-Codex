@@ -486,7 +486,7 @@ try {
 }
 
 try {
-    $installedPlugins = Get-ArrayItems (Invoke-LocalJson "/backend-api/ps/plugins/installed")
+    $installedPlugins = @(Get-ArrayItems (Invoke-LocalJson "/backend-api/ps/plugins/installed"))
     if ($installedPlugins.Count -lt 1) { Add-Failure "no installed plugins projected" }
 } catch {
     Add-Failure "installed plugins endpoint failed: $($_.Exception.Message)"
@@ -494,7 +494,7 @@ try {
 
 try {
     $pluginsPayload = Invoke-LocalJson "/backend-api/plugins/list"
-    $pluginList = Get-ArrayItems $pluginsPayload "plugins"
+    $pluginList = @(Get-ArrayItems $pluginsPayload "plugins")
     if ($pluginList.Count -lt 1) { Add-Failure "plugin list is empty" }
 } catch {
     Add-Failure "plugin list endpoint failed: $($_.Exception.Message)"
@@ -502,7 +502,7 @@ try {
 
 try {
     $connectorPayload = Invoke-LocalJson "/backend-api/aip/connectors"
-    $connectors = Get-ArrayItems $connectorPayload "connectors"
+    $connectors = @(Get-ArrayItems $connectorPayload "connectors")
     if ($connectors.Count -lt 1) { Add-Failure "connector directory is empty" }
 } catch {
     Add-Failure "connectors endpoint failed: $($_.Exception.Message)"
@@ -510,14 +510,14 @@ try {
 
 try {
     $whamPayload = Invoke-LocalJson "/backend-api/wham/apps" "POST" @{}
-    $whamTools = Get-ArrayItems $whamPayload "tools"
+    $whamTools = @(Get-ArrayItems $whamPayload "tools")
 } catch {
     Add-Failure "app tools endpoint failed: $($_.Exception.Message)"
 }
 
 try {
     $whamPayloadGet = Invoke-LocalJson "/backend-api/wham/apps" "GET"
-    $whamToolsGet = Get-ArrayItems $whamPayloadGet "tools"
+    $whamToolsGet = @(Get-ArrayItems $whamPayloadGet "tools")
 } catch {
     Add-Failure "app tools GET endpoint failed: $($_.Exception.Message)"
 }

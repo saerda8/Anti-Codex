@@ -5685,7 +5685,7 @@ test("plugin capability verifier accepts isolated fake endpoints without connect
   }
 });
 
-test("plugin capability verifier rejects fake app tools for inaccessible connectors", async () => {
+test("plugin capability verifier rejects a single fake app tool for inaccessible connectors", async () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-fake-negative-"));
   const stateRoot = resolve(tempRoot, "state");
   const reportRoot = resolve(tempRoot, "reports");
@@ -5698,7 +5698,6 @@ test("plugin capability verifier rejects fake app tools for inaccessible connect
   ];
   const tools = [
     { server_name: "apps", tool_namespace: "demo", tool_name: "unauthorized_tool", connector_id: "metadata-demo" },
-    { server_name: "apps", tool_namespace: "demo", tool_name: "second_unauthorized_tool", connector_id: "metadata-second" },
   ];
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -5785,11 +5784,125 @@ test("plugin capability verifier rejects fake app tools for inaccessible connect
     assert.equal(report.ok, false);
     assert.equal(report.capabilities.capabilityState, "degraded_verification_failed");
     assert.equal(report.capabilities.accessibleConnectorCount, 0);
-    assert.equal(report.capabilities.appToolCount, 2);
-    assert.equal(report.capabilities.appToolGetCount, 2);
-    assert.equal(report.capabilities.unauthorizedAppToolCount, 2);
+    assert.equal(report.capabilities.appToolCount, 1);
+    assert.equal(report.capabilities.appToolGetCount, 1);
+    assert.equal(report.capabilities.unauthorizedAppToolCount, 1);
+    assert.equal(report.capabilities.appToolGetPostParity.checked, true);
+    assert.equal(report.capabilities.appToolGetPostParity.contentMatches, true);
     assert.match(report.failures.join("\n"), /app tools exposed without any accessible connector; refusing fake callable capability/);
     assert.match(report.failures.join("\n"), /app tools exposed for connector_id outside accessible connectors; refusing fake callable capability/);
+  } finally {
+    await closeServer(server);
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("plugin capability verifier rejects GET/POST app-tool mismatch", async () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-get-post-negative-"));
+  const stateRoot = resolve(tempRoot, "state");
+  const reportRoot = resolve(tempRoot, "reports");
+  const codexHome = resolve(stateRoot, "codex-home-deepseek-app");
+  const sharedCodexHome = resolve(stateRoot, "shared-codex-home");
+  const agentsSkillsPath = resolve(stateRoot, "agents-skills");
+  const connectors = [
+    { id: "metadata-demo", name: "Metadata Demo", isEnabled: true, isAccessible: false },
+    { id: "metadata-second", name: "Metadata Second", isEnabled: true, isAccessible: false },
+  ];
+  const postTools = [
+    { server_name: "apps", tool_namespace: "demo", tool_name: "post_only_tool", connector_id: "metadata-demo" },
+  ];
+  const getTools = [];
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    const { pathname } = new URL(req.url || "/", "http://127.0.0.1");
+    requests.push(`${req.method} ${pathname}`);
+    const send = (status, payload) => {
+      res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(payload));
+    };
+    if (pathname === "/health") {
+      send(200, { ok: true, upstream: "antigravity-desktop", accountReady: false, accountState: "metadata-only", modelCount: 1 });
+      return;
+    }
+    if (pathname === "/backend-api/ps/plugins/installed") {
+      send(200, [
+        { id: "metadata-plugin", apps: [{ id: "metadata-demo" }] },
+        { id: "metadata-second-plugin", apps: [{ id: "metadata-second" }] },
+      ]);
+      return;
+    }
+    if (pathname === "/backend-api/plugins/list") {
+      send(200, {
+        plugins: [
+          { summary: { name: "metadata-plugin", skills: ["demo-skill"], mcpServers: ["demo-mcp"] } },
+          { summary: { name: "metadata-second-plugin", skills: ["demo-skill"], mcpServers: ["demo-mcp"] } },
+        ],
+      });
+      return;
+    }
+    if (pathname === "/backend-api/aip/connectors") {
+      send(200, { connectors });
+      return;
+    }
+    if (pathname === "/backend-api/wham/apps" && (req.method === "GET" || req.method === "POST")) {
+      if (req.method === "POST") {
+        req.resume();
+        req.on("end", () => send(200, { tools: postTools }));
+      } else {
+        send(200, { tools: getTools });
+      }
+      return;
+    }
+    send(404, { error: "not_found" });
+  });
+
+  try {
+    for (const home of [codexHome, sharedCodexHome]) {
+      const connectorDir = resolve(home, "cache", "codex_app_directory");
+      const toolsDir = resolve(home, "cache", "codex_apps_tools");
+      mkdirSync(connectorDir, { recursive: true });
+      mkdirSync(toolsDir, { recursive: true });
+      mkdirSync(resolve(home, "skills", "metadata-demo"), { recursive: true });
+      writeFileSync(resolve(home, "config.toml"), "model = \"metadata-only\"\n", "utf8");
+      writeFileSync(resolve(home, "skills", "metadata-demo", "SKILL.md"), "# Metadata Demo\n", "utf8");
+      writeFileSync(resolve(connectorDir, "directory.json"), JSON.stringify({ schema_version: 1, connectors }), "utf8");
+      writeFileSync(resolve(toolsDir, "tools.json"), JSON.stringify({ schema_version: 2, tools: postTools }), "utf8");
+    }
+    mkdirSync(resolve(agentsSkillsPath, "agent-demo"), { recursive: true });
+    writeFileSync(resolve(agentsSkillsPath, "agent-demo", "SKILL.md"), "# Agent Demo\n", "utf8");
+
+    const baseUrl = await listenOnLoopback(server);
+    const result = await runChildProcess("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-plugin-capabilities.ps1"),
+      "-TimeoutSec", "8",
+      "-BaseUrl", baseUrl,
+      "-StateRoot", stateRoot,
+      "-ReportRoot", reportRoot,
+      "-CodexHome", codexHome,
+      "-SharedCodexHome", sharedCodexHome,
+      "-AgentsSkillsPath", agentsSkillsPath,
+    ], { timeoutMs: 20000 });
+    assert.equal(result.status, 1, [
+      result.error?.message,
+      result.signal ? `signal=${result.signal}` : "",
+      `requests=${requests.join(",")}`,
+      result.stdout,
+      result.stderr,
+    ].filter(Boolean).join("\n"));
+
+    const reportPath = resolve(reportRoot, "latest-plugin-capabilities.json");
+    const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    assert.equal(report.ok, false);
+    assert.equal(report.capabilities.accessibleConnectorCount, 0);
+    assert.equal(report.capabilities.appToolCount, 1);
+    assert.equal(report.capabilities.appToolGetCount, 0);
+    assert.equal(report.capabilities.appToolGetPostParity.checked, true);
+    assert.equal(report.capabilities.appToolGetPostParity.contentMatches, false);
+    assert.deepEqual(report.capabilities.appToolGetPostParity.missingFromGet, ["metadata-demo|apps|demo|post_only_tool"]);
+    assert.deepEqual(report.capabilities.appToolGetPostParity.extraFromGet, []);
+    assert.match(report.failures.join("\n"), /GET \/backend-api\/wham\/apps does not match POST tool projection/);
   } finally {
     await closeServer(server);
     rmSync(tempRoot, { recursive: true, force: true });
@@ -6742,6 +6855,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /releaseGateFailures/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
+  assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);
   assert.match(diagnostics, /installed runtime source fingerprint/);
   assert.match(diagnostics, /latest-third-party-provider\.json/);
   assert.match(diagnostics, /third-party provider summary/);

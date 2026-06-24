@@ -824,6 +824,7 @@ function Test-DiagnosticBundle {
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
                 releaseGateSelectedReports = @($releaseGatesSummary.releaseGateSelectedReports)
+                installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
             }
         } else { $null }
         missingHistory = if ($missingHistorySummary) {
