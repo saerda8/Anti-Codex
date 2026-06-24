@@ -2692,11 +2692,17 @@ function latestManagerReportItem(label, fileName) {
         } : null,
         pluginCapabilityEvidence: capabilities ? {
             nativeCodexWriteback: capabilities.nativeCodexWriteback === true,
+            capabilityState: shortSafeText(capabilities.capabilityState || "", ""),
+            degraded: capabilities.degraded === true,
+            connectorCount: Number.isFinite(Number(capabilities.connectorCount)) ? Number(capabilities.connectorCount) : null,
+            enabledConnectorCount: Number.isFinite(Number(capabilities.enabledConnectorCount)) ? Number(capabilities.enabledConnectorCount) : null,
             accessibleConnectorCount: Number.isFinite(Number(capabilities.accessibleConnectorCount)) ? Number(capabilities.accessibleConnectorCount) : null,
             appToolCount: Number.isFinite(Number(capabilities.appToolCount)) ? Number(capabilities.appToolCount) : null,
             appToolGetCount: Number.isFinite(Number(capabilities.appToolGetCount)) ? Number(capabilities.appToolGetCount) : null,
             unattributedAppToolCount: Number.isFinite(Number(capabilities.unattributedAppToolCount)) ? Number(capabilities.unattributedAppToolCount) : null,
             unauthorizedAppToolCount: Number.isFinite(Number(capabilities.unauthorizedAppToolCount)) ? Number(capabilities.unauthorizedAppToolCount) : null,
+            appToolsNote: shortSafeText(capabilities.appToolsNote || "", ""),
+            callableState: shortSafeText(capabilities.smoke?.callableState || "", ""),
             connectorParityClean: connectorParity && Array.isArray(connectorParity.missingShared) ? connectorParity.missingShared.length === 0 && (!Array.isArray(connectorParity.extraLocal) || connectorParity.extraLocal.length === 0) && (!Array.isArray(connectorParity.changedShared) || connectorParity.changedShared.length === 0) : null,
             connectorParityMissingSharedCount: Array.isArray(connectorParity?.missingShared) ? connectorParity.missingShared.length : null,
             connectorParityMissingSharedSample: Array.isArray(connectorParity?.missingShared) ? connectorParity.missingShared.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 5) : [],
@@ -3621,6 +3627,8 @@ function latestReportsSummary(result){
       const evidence=item.pluginCapabilityEvidence;
       const parityClean=evidence.connectorParityClean===true&&evidence.appToolParityClean===true&&evidence.appToolGetPostParityClean===true;
       lines.push("  \\u5e94\\u7528\\u5de5\\u5177\\u8bc1\\u636e\\uff1a\\u672a\\u6388\\u6743\\u5de5\\u5177 "+(evidence.unauthorizedAppToolCount??"\\u672a\\u77e5")+" / \\u65e0 connector_id "+(evidence.unattributedAppToolCount??"\\u672a\\u77e5")+" / parity "+(parityClean?"\\u5e72\\u51c0":"\\u9700\\u5904\\u7406"));
+      lines.push("  app capability: state="+(evidence.capabilityState||"unknown")+" / degraded="+(evidence.degraded?"true":"false")+" / connectors="+(evidence.accessibleConnectorCount??"\\u672a\\u77e5")+"/"+(evidence.enabledConnectorCount??"\\u672a\\u77e5")+"/"+(evidence.connectorCount??"\\u672a\\u77e5")+" / tools="+(evidence.appToolCount??"\\u672a\\u77e5")+"/"+(evidence.appToolGetCount??"\\u672a\\u77e5")+" / callable="+(evidence.callableState||"unknown")+" / nativeWriteback="+(evidence.nativeCodexWriteback?"true":"false"));
+      if(evidence.appToolsNote) lines.push("  app capability note: "+evidence.appToolsNote);
       if(!parityClean){
         const samples=[...(evidence.connectorParityMissingSharedSample||[]),...(evidence.connectorParityExtraLocalSample||[]),...(evidence.connectorParityChangedSharedSample||[]),...(evidence.appToolParityMissingSharedSample||[]),...(evidence.appToolParityExtraLocalSample||[]),...(evidence.appToolParityChangedSharedSample||[]),...(evidence.appToolGetPostMissingFromGetSample||[]),...(evidence.appToolGetPostExtraFromGetSample||[])].slice(0,5);
         lines.push("  parity drift: connectorMissing="+(evidence.connectorParityMissingSharedCount??"\\u672a\\u77e5")+" / connectorExtra="+(evidence.connectorParityExtraLocalCount??"\\u672a\\u77e5")+" / connectorChanged="+(evidence.connectorParityChangedSharedCount??"\\u672a\\u77e5")+" / appToolMissing="+(evidence.appToolParityMissingSharedCount??"\\u672a\\u77e5")+" / appToolExtra="+(evidence.appToolParityExtraLocalCount??"\\u672a\\u77e5")+" / appToolChanged="+(evidence.appToolParityChangedSharedCount??"\\u672a\\u77e5")+" / getPostMissing="+(evidence.appToolGetPostMissingFromGetCount??"\\u672a\\u77e5")+" / getPostExtra="+(evidence.appToolGetPostExtraFromGetCount??"\\u672a\\u77e5")+(samples.length?" / sample "+samples.join(", "):""));

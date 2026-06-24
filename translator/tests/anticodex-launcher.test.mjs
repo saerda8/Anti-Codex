@@ -3442,12 +3442,19 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
       failures: ["drift"],
       capabilities: {
         nativeCodexWriteback: false,
+        capabilityState: "degraded_no_accessible_connectors",
+        degraded: true,
         connectorCount: 3,
+        enabledConnectorCount: 2,
         accessibleConnectorCount: 0,
         appToolCount: 0,
         appToolGetCount: 0,
         unattributedAppToolCount: 0,
         unauthorizedAppToolCount: 0,
+        appToolsNote: "expected 0: no accessible connectors linked",
+        smoke: {
+          callableState: "skipped_no_accessible_connectors",
+        },
         connectorParity: {
           missingShared: ["missing-connector"],
           extraLocal: ["extra-connector"],
@@ -3467,6 +3474,16 @@ test("report summarizer surfaces plugin capability parity drift samples", () => 
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
+    assert.equal(summary.pluginCapabilityEvidence.nativeCodexWriteback, false);
+    assert.equal(summary.pluginCapabilityEvidence.capabilityState, "degraded_no_accessible_connectors");
+    assert.equal(summary.pluginCapabilityEvidence.degraded, true);
+    assert.equal(summary.pluginCapabilityEvidence.connectorCount, 3);
+    assert.equal(summary.pluginCapabilityEvidence.enabledConnectorCount, 2);
+    assert.equal(summary.pluginCapabilityEvidence.accessibleConnectorCount, 0);
+    assert.equal(summary.pluginCapabilityEvidence.appToolCount, 0);
+    assert.equal(summary.pluginCapabilityEvidence.appToolGetCount, 0);
+    assert.equal(summary.pluginCapabilityEvidence.appToolsNote, "expected 0: no accessible connectors linked");
+    assert.equal(summary.pluginCapabilityEvidence.callableState, "skipped_no_accessible_connectors");
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityMissingShared, ["missing-connector"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityExtraLocal, ["extra-connector"]);
     assert.deepEqual(summary.pluginCapabilityEvidence.connectorParityChangedShared, ["changed-connector"]);

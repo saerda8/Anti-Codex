@@ -1523,3 +1523,9 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics now carries the latest sync-readiness evidence so the Manager status card and immediate sync-readiness action result can expose the same support fields without opening raw JSON.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip; `git diff --check` passed; runtime sync ran with `NoRestart` and installed runtime source fingerprints matched `59/59`.
 - Note: runtime sync returned `ok:false` because `http://127.0.0.1:8484/health` was offline; strict passive release gate showed `installedRuntimeSync.satisfied:true` but `releaseReady:false` because the current sync-readiness evidence is a fast/offline report and older real-traffic reports were stale.
+
+## 2026-06-24 Plugin Capability Callable Evidence
+- Completed: plugin/app capability summaries now preserve `capabilityState`, degraded state, total/enabled/access connector counts, POST/GET app-tool counts, callable state, no-access note, and native Codex writeback status through the report summarizer and Manager support views.
+- Completed: diagnostics now rejects plugin/app summaries that lose metadata-only/no-access callable evidence or confuse enabled connectors with accessible connectors.
+- Completed: UI-state static checks now guard the injected Manager and fallback Manager callable-state evidence line.
+- Verification: JS syntax checks passed; PowerShell parser check passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `128/129` with one environment-only linked-directory skip; `git diff --check` passed.

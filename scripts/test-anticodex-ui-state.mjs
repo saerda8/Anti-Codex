@@ -92,6 +92,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/app-tool registry:/.test(injectSource) || !/appToolRegistryFingerprintMatches/.test(injectSource)) {
     failures.push("in-app manager is missing MCP/Skill app-tool registry evidence");
   }
+  if (!/app capability: state=/.test(injectSource) || !/callable=\$\{evidence\.callableState/.test(injectSource) || !/nativeWriteback=\$\{evidence\.nativeCodexWriteback/.test(injectSource)) {
+    failures.push("in-app manager is missing plugin/app callable state evidence");
+  }
   if (!/syncReadiness versions: codex=/.test(injectSource) || !/managerBridge=\$\{evidence\.managerBridgeReady/.test(injectSource) || !/processes=\$\{evidence\.managerBridgeProcessCount/.test(injectSource)) {
     failures.push("in-app manager is missing sync-readiness version and Manager bridge process evidence");
   }
@@ -143,6 +146,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/app-tool registry:/.test(managerHtml) || !/appToolRegistryFingerprintMatches/.test(managerHtml)) {
     failures.push("manager page is missing MCP/Skill app-tool registry evidence");
+  }
+  if (!/app capability: state=/.test(managerHtml) || !/callable="\+\(evidence\.callableState/.test(managerHtml) || !/nativeWriteback="\+\(evidence\.nativeCodexWriteback/.test(managerHtml)) {
+    failures.push("manager page is missing plugin/app callable state evidence");
   }
   if (!/syncReadiness versions: codex=/.test(managerHtml) || !/managerBridge="\+\(evidence\.managerBridgeReady/.test(managerHtml) || !/processes="\+\(evidence\.managerBridgeProcessCount/.test(managerHtml)) {
     failures.push("manager page is missing sync-readiness version and Manager bridge process evidence");

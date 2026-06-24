@@ -443,8 +443,15 @@ function Test-DiagnosticBundle {
                 Add-Failure "plugin capability summary missing pluginCapabilityEvidence"
             } else {
                 if ($pluginEvidence.nativeCodexWriteback -ne $false) { Add-Failure "plugin capability summary allows native Codex writeback" }
+                if (-not [string]$pluginEvidence.capabilityState) { Add-Failure "plugin capability summary missing capability state" }
+                if ($pluginEvidence.degraded -ne $true) { Add-Failure "plugin capability summary missing degraded metadata-only state" }
+                if ([int]$pluginEvidence.connectorCount -lt [int]$pluginEvidence.enabledConnectorCount) { Add-Failure "plugin capability summary connector counts are inconsistent" }
+                if ([int]$pluginEvidence.enabledConnectorCount -lt [int]$pluginEvidence.accessibleConnectorCount) { Add-Failure "plugin capability summary enabled/access connector counts are inconsistent" }
                 if ([int]$pluginEvidence.accessibleConnectorCount -ne 0) { Add-Failure "plugin capability summary reports accessible connectors" }
+                if ([int]$pluginEvidence.appToolCount -ne [int]$pluginEvidence.appToolGetCount) { Add-Failure "plugin capability summary GET/POST app tool counts differ" }
                 if ([int]$pluginEvidence.unauthorizedAppToolCount -ne 0) { Add-Failure "plugin capability summary reports unauthorized app tools" }
+                if ($pluginEvidence.callableState -ne "skipped_no_accessible_connectors") { Add-Failure "plugin capability summary missing no-access callable state" }
+                if (-not [string]$pluginEvidence.appToolsNote) { Add-Failure "plugin capability summary missing app tools no-access note" }
                 if ($pluginEvidence.connectorParityClean -ne $true) { Add-Failure "plugin capability summary missing connector parity evidence" }
                 if ($pluginEvidence.appToolParityClean -ne $true) { Add-Failure "plugin capability summary missing app-tool parity evidence" }
                 if ($pluginEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "plugin capability summary missing GET/POST parity evidence" }
