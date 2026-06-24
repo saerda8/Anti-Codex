@@ -246,6 +246,7 @@ function Read-JsonSummary {
             damagedReports = @($json.damagedReports | ForEach-Object { [string]$_ })
             releaseGateFailures = @($json.releaseGateFailures)
             releaseGateFailureReasons = @($json.releaseGateFailureReasons)
+            nextActions = @($json.nextActions)
             releaseGateGroups = @($json.releaseGateGroups)
             releaseGateSelectedReports = @($json.releaseGateSelectedReports)
             installedRuntimeEvidence = $json.installedRuntimeEvidence

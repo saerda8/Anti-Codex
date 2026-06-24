@@ -2543,6 +2543,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /damagedReports/);
   assert.match(collector, /releaseGateGroups/);
   assert.match(collector, /releaseGateFailureReasons = @\(\$json\.releaseGateFailureReasons\)/);
+  assert.match(collector, /nextActions = @\(\$json\.nextActions\)/);
   assert.match(collector, /releaseGateSelectedReports = @\(\$json\.releaseGateSelectedReports\)/);
   assert.match(collector, /installedRuntimeEvidence = \$json\.installedRuntimeEvidence/);
   assert.match(collector, /function Resolve-NodeForJsonSummary/);
@@ -6893,6 +6894,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /missingOptional/);
   assert.match(diagnostics, /damagedReports/);
   assert.match(diagnostics, /releaseGateFailures/);
+  assert.match(diagnostics, /nextActions/);
+  assert.match(diagnostics, /release-gates summary missing ordered next actions/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
   assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);
