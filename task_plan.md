@@ -1556,3 +1556,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: support views now distinguish stale evidence from missing or damaged reports, so stale real-traffic reports no longer look like absent files.
 - Completed: release-gate self-test now directly asserts that missing, semantic-failure, and installed-runtime mismatch gates all carry non-empty `failureReasons[]` plus a primary `failureReason`.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; Manager bridge self-test passed; UI-state self-test passed; release-gate self-test passed; focused launcher contracts passed `129/129`; strict passive gate returned `shortReady:true`, installed runtime fingerprints matched `59/59`, and required real-traffic misses were classified as `stale_report`.
+
+## 2026-06-24 Local Connector Manager Guard
+- Completed: UI-state static checks now guard the injected Manager against confusing local connector allowlist metadata with truly callable app tools.
+- Completed: verified the current local connector summary still proves ChatGPT install URLs are scrubbed, link endpoints are metadata-only, upstream request delta is zero, and only the truly accessible connector exposes a tool.
+- Verification: UI-state syntax/self-test passed; focused launcher contracts passed `129/129`; no real traffic or restart was used.

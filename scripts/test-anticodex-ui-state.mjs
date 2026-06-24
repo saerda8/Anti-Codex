@@ -168,6 +168,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/app capability: state=/.test(managerHtml) || !/callable="\+\(evidence\.callableState/.test(managerHtml) || !/nativeWriteback="\+\(evidence\.nativeCodexWriteback/.test(managerHtml)) {
     failures.push("manager page is missing plugin/app callable state evidence");
   }
+  if (!/localAllowlisted/.test(injectSource) || !/callableAppToolCount/.test(injectSource) || !/accessibleConnectors > 0/.test(injectSource)) {
+    failures.push("in-app manager can confuse local connector allowlist metadata with callable app tools");
+  }
   if (!/local connector upstream: before=/.test(managerHtml) || !/local connector isolation: sharedHomeUsed=/.test(managerHtml) || !/local cache fingerprints: connector=/.test(managerHtml)) {
     failures.push("manager page is missing local connector upstream/isolation/cache evidence");
   }
