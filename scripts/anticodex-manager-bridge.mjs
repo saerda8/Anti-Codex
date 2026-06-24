@@ -374,7 +374,7 @@ function latestReportsSummary(result) {
       if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} more)` : ""}`);
       if (item.approvalPlan) {
         const plan = item.approvalPlan;
-        lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+        lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
       }
       if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
         const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
@@ -817,7 +817,17 @@ if (args.has("--self-test")) {
         { id: "postVerification", gateId: "postVerification" },
         ...Array.from({ length: 8 }, (_, index) => ({ id: `action${index + 3}`, gateId: `gate${index + 3}` })),
       ],
-      approvalPlan: { actionCount: 2, requiresGatewayStartCount: 2, requiresRealTrafficCount: 2, highImpactCount: 1, firstBlockedAction: "realWork" },
+      approvalPlan: {
+        actionCount: 2,
+        blockedCount: 2,
+        requiresGatewayStartCount: 2,
+        requiresRealTrafficCount: 2,
+        highImpactCount: 1,
+        requiredForShortCount: 1,
+        requiredForReleaseCount: 2,
+        firstBlockedAction: "realWork",
+        phases: [{ phase: "real-traffic-high-impact" }, { phase: "real-traffic-final" }],
+      },
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0, missingOptional: ["coldRelaunch"] }],
       releaseGateFailures: [
@@ -893,7 +903,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /guidance: .*\(\+1 more\)/);
   assert.match(evidenceSummary, /nextActions: realWork:realWork -> postVerification:postVerification/);
   assert.match(evidenceSummary, /nextActions: .*\(\+7 more\)/);
-  assert.match(evidenceSummary, /approvalPlan: actions=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ first=realWork/);
+  assert.match(evidenceSummary, /approvalPlan: actions=2 \/ blocked=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ required=1\/2 \/ phases=2 \/ first=realWork/);
+  assert.match(evidenceSummary, /approvalPlan: .*blocked=2 .*required=1\/2 .*phases=2/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);

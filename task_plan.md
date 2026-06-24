@@ -1719,3 +1719,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Verification: release-gate self-test passed with required-failed-gate action coverage; Manager bridge self-test passed with hidden-count assertions; diagnostics parser check passed; launcher diagnostics/release/Manager contracts passed `141/142` with one environment link-directory skip; `git diff --check` passed.
 - Follow-up: passive release gates now add field-level semantics for `postVerification` and `codexResponses`, rejecting reports that claim `ok:true` while the final overall check is not release-ready, provider wait was not ready, the Responses SSE did not complete, or the final text lost its marker/Chinese reply evidence.
 - Verification: release-gate self-test passed with the new post-verification and Codex Responses negative fixtures.
+- Follow-up: Manager release-gate summaries now show approval-plan blocked count, required short/release action counts, and phase count in addition to action/gateway/real-traffic/high-impact totals.
+- Verification: Manager bridge self-test passed with expanded approval-plan display assertions.

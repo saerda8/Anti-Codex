@@ -3783,7 +3783,7 @@ function latestReportsSummary(result){
       if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> ")+(hiddenNextActions?" (+"+hiddenNextActions+" more)":""));
       if(item.approvalPlan){
         const plan=item.approvalPlan;
-        lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / first="+(plan.firstBlockedAction||"none"));
+        lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / blocked="+(plan.blockedCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / required="+(plan.requiredForShortCount??"unknown")+"/"+(plan.requiredForReleaseCount??"unknown")+" / phases="+(Array.isArray(plan.phases)?plan.phases.length:"unknown")+" / first="+(plan.firstBlockedAction||"none"));
       }
       if(Array.isArray(item.releaseGateSelectedReports)&&item.releaseGateSelectedReports.length){
         const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile).join(", ");
