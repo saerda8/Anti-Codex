@@ -7264,7 +7264,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /offlineSnapshotEvidence/);
   assert.match(releaseGates, /plugin offline snapshot evidence was not attached from refresh-features/);
   assert.match(releaseGates, /pluginCapabilities still needs the local gateway for runtime endpoint evidence/);
-  assert.match(releaseGates, /real-traffic ordered action was not attached/);
+  assert.match(releaseGates, /real-traffic ordered action was not marked gateway and real-traffic/);
+  assert.match(releaseGates, /account-proxy ordered action was not marked gateway and real-traffic/);
+  assert.match(releaseGates, /optional stability-soak action was not marked gateway and real-traffic/);
   assert.match(releaseGates, /realTrafficRefreshOrder/);
   assert.match(releaseGates, /managerEvidenceRefreshOrder/);
   assert.match(releaseGates, /test-anticodex-manager-real-buttons\.ps1 -TimeoutSec 120/);
@@ -7275,13 +7277,13 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid account-proxy report satisfied the gate/);
   assert.match(releaseGates, /actionPhaseOrder/);
   assert.match(releaseGates, /top-level nextActions did not keep post-verification last/);
-  assert.match(releaseGates, /realMiniTool ordered action was not marked high-impact/);
-  assert.match(releaseGates, /realWork ordered action was not marked high-impact/);
+  assert.match(releaseGates, /realMiniTool ordered action was not marked gateway\/high-impact/);
+  assert.match(releaseGates, /realWork ordered action was not marked gateway\/high-impact/);
   assert.match(releaseGates, /optionalEvidenceRefreshOrder/);
   assert.match(releaseGates, /test-anticodex-stability-soak\.ps1 -DurationSec 180/);
   assert.match(releaseGates, /test-anticodex-cold-relaunch\.ps1 -ConfirmRelaunch/);
   assert.match(releaseGates, /optional cold-relaunch action was not attached/);
-  assert.match(releaseGates, /optional stability-soak action was not attached/);
+  assert.match(releaseGates, /optional stability-soak action was not marked gateway and real-traffic/);
   assert.match(releaseGates, /plugin_capabilities_source_snapshot_reused/);
   assert.match(releaseGates, /real-traffic stale guidance was not attached/);
   assert.match(releaseGates, /latest report failure samples were not preserved/);

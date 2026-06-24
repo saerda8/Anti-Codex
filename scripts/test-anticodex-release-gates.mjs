@@ -906,7 +906,7 @@ const realTrafficRefreshOrder = [
 ];
 
 const optionalEvidenceRefreshOrder = [
-  ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresRealTraffic: true, highImpact: true }],
+  ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { highImpact: true }],
 ];
 
@@ -930,7 +930,7 @@ function gateOrderedActions(gate) {
   if (gate?.id === "pluginCapabilities" && !gate.satisfied) {
     return [
       action("startGatewayTranslatorOnly", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }),
-      action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45"),
+      action("pluginCapabilities", "plugin-capabilities", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45", { requiresGatewayStart: true }),
     ];
   }
   if (gate?.group === "manager" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
@@ -943,7 +943,7 @@ function gateOrderedActions(gate) {
     const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command] = realTrafficRefreshOrder[index];
-    return [action(id, phase, command, { requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "postVerification"].includes(id) })];
+    return [action(id, phase, command, { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "postVerification"].includes(id) })];
   }
   if ((gate?.group === "soak" || gate?.group === "cold") && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = optionalEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
@@ -2076,14 +2076,14 @@ if (args.has("--self-test")) {
     const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");
     if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
     const postVerificationActions = gateOrderedActions(postVerificationGate);
-    if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not attached");
+    if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not marked gateway and real-traffic");
     const realMiniActions = gateOrderedActions(reasonGates.find((item) => item.id === "realMiniTool"));
-    if (!realMiniActions.some((item) => item.id === "realMiniTool" && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realMiniTool ordered action was not marked high-impact");
+    if (!realMiniActions.some((item) => item.id === "realMiniTool" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realMiniTool ordered action was not marked gateway/high-impact");
     const realWorkActions = gateOrderedActions(reasonGates.find((item) => item.id === "realWork"));
-    if (!realWorkActions.some((item) => item.id === "realWork" && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realWork ordered action was not marked high-impact");
+    if (!realWorkActions.some((item) => item.id === "realWork" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: realWork ordered action was not marked gateway/high-impact");
     const accountProxyGate = reasonGates.find((item) => item.id === "accountProxyReadiness");
     const accountProxyActions = gateOrderedActions(accountProxyGate);
-    if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not attached");
+    if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not marked gateway and real-traffic");
     const managerRealButtonActions = gateOrderedActions(reasonGates.find((item) => item.id === "managerRealButtons"));
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
     const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
@@ -2100,7 +2100,7 @@ if (args.has("--self-test")) {
     if (!coldActions.some((item) => item.id === "coldRelaunch" && item.highImpact === true && item.command.includes("-ConfirmRelaunch"))) throw new Error("self-test failed: optional cold-relaunch action was not attached");
     const soakGate = reasonGates.find((item) => item.id === "stabilitySoak");
     const soakActions = gateOrderedActions(soakGate);
-    if (!soakActions.some((item) => item.id === "stabilitySoak" && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: optional stability-soak action was not attached");
+    if (!soakActions.some((item) => item.id === "stabilitySoak" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: optional stability-soak action was not marked gateway and real-traffic");
 
     console.log(JSON.stringify({ ok: true, selfTest: true, semanticFailures }));
   } finally {
