@@ -7241,8 +7241,21 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
           appToolContentMatches: true,
         },
       }],
-      nextActions: [{ id: "pluginCapabilities", requiresGatewayStart: true }],
-      approvalPlan: { actionCount: 1, requiresGatewayStartCount: 1 },
+      nextActions: [{
+        id: "pluginCapabilities",
+        requiresGatewayStart: true,
+        requiresRealTraffic: false,
+        highImpact: false,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 1,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        firstBlockedAction: "pluginCapabilities",
+      },
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -7270,6 +7283,153 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.diagnostics, null);
     assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects incomplete local connector evidence", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-local-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: true,
+      shortReady: true,
+      releaseReady: true,
+      effectiveOk: true,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: [],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: [],
+      releaseGateFailureReasons: [],
+      nextActions: [],
+      approvalPlan: { actionCount: 0, requiresGatewayStartCount: 0 },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }, {
+      file: "latest-local-connectors.json",
+      ok: true,
+      reportName: "local-connectors",
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "local-fake-provider",
+      localConnectorEvidence: {
+        linkedConnectorAccessible: true,
+        chatgptInstallUrlsScrubbed: true,
+        linkEndpointsUnsupported: true,
+        upstreamRequestsBeforeLocalEndpoints: 1,
+        upstreamRequestsAfterLocalEndpoints: 1,
+        upstreamRequestsDuringLocalEndpoints: 0,
+        allowlistedConnectorAccessible: false,
+        allowlistedConnectorLocallyAllowlisted: true,
+        hiddenConnectorAccessible: false,
+        exposedToolsPost: 1,
+        exposedToolsGet: 1,
+        exposedToolNames: ["linked_tool"],
+        connectorParityClean: true,
+        connectorFingerprintMatches: true,
+        appToolParityClean: true,
+        appToolFingerprintMatches: true,
+        appToolGetPostParityClean: true,
+        tempSharedHomeUsed: false,
+        tempCodexHomeUnderStateRoot: true,
+        tempSharedCodexHomeUnderStateRoot: true,
+        tempCodexHomeDistinctFromShared: true,
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("local connector summary missing connector missing-shared drift samples"));
+    assert.ok(payload.failures.includes("local connector summary missing app-tool changed-shared drift samples"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects unsafe next action approval metadata", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-action-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["postVerification"],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["postVerification"],
+      releaseGateFailureReasons: [],
+      nextActions: [{
+        id: "postVerification",
+        requiresGatewayStart: true,
+        requiresRealTraffic: true,
+        highImpact: true,
+      }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 0,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        firstBlockedAction: "",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates next action postVerification missing explicit approval block"));
+    assert.ok(payload.failures.includes("release-gates approval plan undercounts real-traffic actions"));
+    assert.ok(payload.failures.includes("release-gates approval plan missing first blocked action"));
+    assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

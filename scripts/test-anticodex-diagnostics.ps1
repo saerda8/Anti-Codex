@@ -46,6 +46,7 @@ function Test-ReportsSummary {
 
     $summary = As-FlatArray (Get-Content -LiteralPath $SummaryPath -Raw | ConvertFrom-Json)
     $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
+    $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -82,6 +83,46 @@ function Test-ReportsSummary {
         }
         if (-not (Has-Property $releaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
         if (-not (Has-Property $releaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
+        $nextActions = @(As-FlatArray $releaseGatesSummary.nextActions)
+        $gatewayActionCount = 0
+        $realTrafficActionCount = 0
+        $highImpactActionCount = 0
+        $blockedActionCount = 0
+        $approvalBlockedRiskActionCount = 0
+        foreach ($nextAction in $nextActions) {
+            $actionId = [string]$nextAction.id
+            if ([string]::IsNullOrWhiteSpace($actionId)) {
+                Add-Failure "release-gates next action missing id"
+                $actionId = "unknown"
+            }
+            $requiresGateway = $nextAction.requiresGatewayStart -eq $true
+            $requiresRealTraffic = $nextAction.requiresRealTraffic -eq $true
+            $highImpact = $nextAction.highImpact -eq $true
+            $blocked = $nextAction.blockedUntilExplicitUserApproval -eq $true
+            if ($requiresGateway) { $gatewayActionCount++ }
+            if ($requiresRealTraffic) { $realTrafficActionCount++ }
+            if ($highImpact) { $highImpactActionCount++ }
+            if ($blocked) { $blockedActionCount++ }
+            if ($requiresGateway -or $requiresRealTraffic -or $highImpact) { $approvalBlockedRiskActionCount++ }
+            if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
+                Add-Failure "release-gates next action $actionId missing explicit approval block"
+            }
+        }
+        $approvalPlan = $releaseGatesSummary.approvalPlan
+        if ($approvalPlan) {
+            if (-not (Has-Property $approvalPlan "actionCount")) {
+                Add-Failure "release-gates approval plan missing action count"
+            } elseif ([int]$approvalPlan.actionCount -ne $nextActions.Count) {
+                Add-Failure "release-gates approval plan action count mismatch"
+            }
+            if ((Has-Property $approvalPlan "blockedCount") -and [int]$approvalPlan.blockedCount -lt $blockedActionCount) { Add-Failure "release-gates approval plan undercounts blocked actions" }
+            if ((Has-Property $approvalPlan "requiresGatewayStartCount") -and [int]$approvalPlan.requiresGatewayStartCount -lt $gatewayActionCount) { Add-Failure "release-gates approval plan undercounts gateway actions" }
+            if ((Has-Property $approvalPlan "requiresRealTrafficCount") -and [int]$approvalPlan.requiresRealTrafficCount -lt $realTrafficActionCount) { Add-Failure "release-gates approval plan undercounts real-traffic actions" }
+            if ((Has-Property $approvalPlan "highImpactCount") -and [int]$approvalPlan.highImpactCount -lt $highImpactActionCount) { Add-Failure "release-gates approval plan undercounts high-impact actions" }
+            if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
+                Add-Failure "release-gates approval plan missing first blocked action"
+            }
+        }
         if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
         if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
             Add-Failure "release-gates summary missing sync-readiness selected history report"
@@ -102,6 +143,47 @@ function Test-ReportsSummary {
             }
         }
     }
+    if ($localConnectorsSummary) {
+        if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
+        if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
+        if ($localConnectorsSummary.usedRealTraffic -ne $false) { Add-Failure "local connector summary used real traffic" }
+        if ($localConnectorsSummary.behaviorCovered -ne $true) { Add-Failure "local connector summary behavior not covered" }
+        if ($localConnectorsSummary.coverageKind -ne "local-fake-provider") { Add-Failure "local connector summary coverageKind mismatch" }
+        $localEvidence = $localConnectorsSummary.localConnectorEvidence
+        if (-not $localEvidence) {
+            Add-Failure "local connector summary missing localConnectorEvidence"
+        } else {
+            if ($localEvidence.linkedConnectorAccessible -ne $true) { Add-Failure "local connector summary missing linked connector access proof" }
+            if ($localEvidence.chatgptInstallUrlsScrubbed -ne $true) { Add-Failure "local connector summary missing ChatGPT URL scrub evidence" }
+            if ($localEvidence.linkEndpointsUnsupported -ne $true) { Add-Failure "local connector summary missing metadata-only link endpoint evidence" }
+            if ([int]$localEvidence.upstreamRequestsDuringLocalEndpoints -ne 0) { Add-Failure "local connector summary recorded upstream requests during local endpoints" }
+            if ([int]$localEvidence.upstreamRequestsBeforeLocalEndpoints -ne [int]$localEvidence.upstreamRequestsAfterLocalEndpoints) { Add-Failure "local connector summary before/after upstream request counts differ" }
+            if ($localEvidence.allowlistedConnectorAccessible -ne $false) { Add-Failure "local connector summary treats allowlist as access" }
+            if ($localEvidence.allowlistedConnectorLocallyAllowlisted -ne $true) { Add-Failure "local connector summary missing local allowlist evidence" }
+            if ($localEvidence.hiddenConnectorAccessible -ne $false) { Add-Failure "local connector summary exposes hidden connector" }
+            if ([int]$localEvidence.exposedToolsPost -ne [int]$localEvidence.exposedToolsGet) { Add-Failure "local connector summary GET/POST tool counts differ" }
+            if (@($localEvidence.exposedToolNames).Count -ne [int]$localEvidence.exposedToolsPost) { Add-Failure "local connector summary exposed tool names mismatch" }
+            if ($localEvidence.connectorParityClean -ne $true) { Add-Failure "local connector summary missing connector parity proof" }
+            if ($localEvidence.connectorFingerprintMatches -ne $true) { Add-Failure "local connector summary missing connector fingerprint match proof" }
+            if (-not (Has-Property $localEvidence "connectorParityMissingShared")) { Add-Failure "local connector summary missing connector missing-shared drift samples" }
+            if (-not (Has-Property $localEvidence "connectorParityExtraLocal")) { Add-Failure "local connector summary missing connector extra-local drift samples" }
+            if (-not (Has-Property $localEvidence "connectorParityChangedShared")) { Add-Failure "local connector summary missing connector changed-shared drift samples" }
+            if ($localEvidence.appToolParityClean -ne $true) { Add-Failure "local connector summary missing app-tool parity proof" }
+            if ($localEvidence.appToolFingerprintMatches -ne $true) { Add-Failure "local connector summary missing app-tool fingerprint match proof" }
+            if (-not (Has-Property $localEvidence "appToolParityMissingShared")) { Add-Failure "local connector summary missing app-tool missing-shared drift samples" }
+            if (-not (Has-Property $localEvidence "appToolParityExtraLocal")) { Add-Failure "local connector summary missing app-tool extra-local drift samples" }
+            if (-not (Has-Property $localEvidence "appToolParityChangedShared")) { Add-Failure "local connector summary missing app-tool changed-shared drift samples" }
+            if ($localEvidence.appToolGetPostParityClean -ne $true) { Add-Failure "local connector summary missing GET/POST app-tool parity proof" }
+            if ($localEvidence.tempSharedHomeUsed -ne $false) { Add-Failure "local connector summary used shared home during temp isolation" }
+            if ($localEvidence.tempCodexHomeUnderStateRoot -ne $true) { Add-Failure "local connector summary missing temp CODEX_HOME isolation proof" }
+            if ($localEvidence.tempSharedCodexHomeUnderStateRoot -ne $true) { Add-Failure "local connector summary missing temp shared home isolation proof" }
+            if ($localEvidence.tempCodexHomeDistinctFromShared -ne $true) { Add-Failure "local connector summary CODEX_HOME is not distinct from shared home" }
+            $exposedToolNames = @(As-FlatArray $localEvidence.exposedToolNames)
+            if ($exposedToolNames.Count -ne 1 -or $exposedToolNames[0] -ne "linked_tool") {
+                Add-Failure "local connector summary exposed tool names is not exactly one 'linked_tool'"
+            }
+        }
+    }
 
     return [pscustomobject]@{
         summaryPath = $SummaryPath
@@ -117,6 +199,13 @@ function Test-ReportsSummary {
                 missingOptional = @($releaseGatesSummary.missingOptional)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
                 installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
+            }
+        } else { $null }
+        localConnectors = if ($localConnectorsSummary) {
+            [pscustomobject]@{
+                ok = $localConnectorsSummary.ok
+                reportName = $localConnectorsSummary.reportName
+                evidence = $localConnectorsSummary.localConnectorEvidence
             }
         } else { $null }
     }
