@@ -1636,3 +1636,8 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: diagnostics verification explicitly rejects plugin capability reports from short-budget mode or `degraded_short_budget`, instead of relying only on indirect `ok:false` or smoke failures.
 - Completed: Manager plugin/app action summaries now show short-budget mode and source snapshot status immediately, not only inside latest-report details.
 - Verification: PowerShell parser checks passed; UI-state self-test passed; focused launcher contract passed `132/132`; Manager bridge self-test passed; release-gate self-test passed; `git diff --check` passed.
+
+## 2026-06-24 Installed Snapshot Refresh Follow-Up
+- Completed: after the interrupted refresh run left `latest-refresh-features.json` failing on connector snapshot parity, the local snapshot sync was rerun without starting Anti-Codex or touching native Codex.
+- Completed: `refresh-anticodex-local-features.ps1 -VerifyOnly` then passed with connector and app-tool fingerprints matching shared Codex (`7a4ff287...` and `889e4807...`), source fingerprint `c68ad593...`, and no failures.
+- Current blocker: normal MCP/Skill and plugin capability reports still cannot become release-grade while the Anti-Codex local gateway is offline; release-required real-traffic reports remain stale and require explicit approval before running.
