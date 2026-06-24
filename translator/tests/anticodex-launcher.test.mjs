@@ -7130,6 +7130,12 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
   assert.match(diagnostics, /release-gates approval plan is not an object/);
   assert.match(diagnostics, /release-gates approval plan invalid real-traffic count/);
+  assert.match(diagnostics, /release-gates approval plan missing report-only count/);
+  assert.match(diagnostics, /release-gates approval plan invalid report-only count/);
+  assert.match(diagnostics, /release-gates approval plan undercounts report-only actions/);
+  assert.match(diagnostics, /release-gates approval plan report-only action count mismatch/);
+  assert.match(diagnostics, /release-gates semantic failures missing report-only next action/);
+  assert.match(diagnostics, /nextActions = @\(\$releaseGatesSummary\.nextActions\)/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
   assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);
@@ -7382,6 +7388,7 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         requiresGatewayStartCount: 1,
         requiresRealTrafficCount: 0,
         highImpactCount: 0,
+        reportOnlyCount: 0,
         firstBlockedAction: "pluginCapabilities",
       },
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
@@ -7410,6 +7417,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.baseUrl, "");
     assert.equal(payload.diagnostics, null);
     assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
+    assert.equal(payload.reportsSummary.releaseGates.nextActions.length, 1);
+    assert.equal(payload.reportsSummary.releaseGates.approvalPlan.reportOnlyCount, 0);
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -7827,6 +7836,78 @@ test("diagnostics reports-summary fixture rejects command risk metadata mismatch
   }
 });
 
+test("diagnostics reports-summary fixture rejects semantic failures without report-only action", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-report-only-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["postVerification"],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["postVerification"],
+      releaseGateFailureReasons: [{
+        id: "postVerification",
+        failureReasons: ["semantic_failures"],
+        reportFailureSamples: ["missing final proof"],
+        reportFailureSampleCodes: ["semantic_failures"],
+      }],
+      nextActions: [{
+        id: "postVerification",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+        requiresGatewayStart: true,
+        requiresRealTraffic: true,
+        highImpact: true,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 1,
+        requiresRealTrafficCount: 1,
+        highImpactCount: 1,
+        reportOnlyCount: 1,
+        firstBlockedAction: "postVerification",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates semantic failures missing report-only next action"));
+    assert.ok(payload.failures.includes("release-gates approval plan report-only action count mismatch"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("diagnostics reports-summary fixture rejects incomplete approval plan counts", () => {
   const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-plan-summary-"));
   try {
@@ -7884,6 +7965,7 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
     assert.ok(payload.failures.includes("release-gates approval plan missing gateway count"));
     assert.ok(payload.failures.includes("release-gates approval plan missing real-traffic count"));
     assert.ok(payload.failures.includes("release-gates approval plan missing high-impact count"));
+    assert.ok(payload.failures.includes("release-gates approval plan missing report-only count"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -7916,6 +7998,7 @@ test("diagnostics reports-summary fixture rejects null approval plan counts", ()
         requiresGatewayStartCount: null,
         requiresRealTrafficCount: null,
         highImpactCount: null,
+        reportOnlyCount: null,
         firstBlockedAction: "",
       },
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
@@ -7946,6 +8029,7 @@ test("diagnostics reports-summary fixture rejects null approval plan counts", ()
     assert.ok(payload.failures.includes("release-gates approval plan invalid gateway count"));
     assert.ok(payload.failures.includes("release-gates approval plan invalid real-traffic count"));
     assert.ok(payload.failures.includes("release-gates approval plan invalid high-impact count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid report-only count"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -8135,6 +8219,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /blockedUntilExplicitUserApproval/);
   assert.match(releaseGates, /reportOnly/);
   assert.match(releaseGates, /reportOnlyCount/);
+  assert.match(releaseGates, /reportOnly: phaseActions\.some/);
   assert.match(releaseGates, /report-only/);
   assert.match(releaseGates, /semantic failure report-only action was not attached before real traffic/);
   assert.match(releaseGates, /approval plan did not count report-only actions/);

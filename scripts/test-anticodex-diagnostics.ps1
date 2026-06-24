@@ -120,8 +120,13 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     $gatewayActionCount = 0
     $realTrafficActionCount = 0
     $highImpactActionCount = 0
+    $reportOnlyActionCount = 0
     $blockedActionCount = 0
     $approvalBlockedRiskActionCount = 0
+    $semanticFailureCount = @(
+        As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons |
+            Where-Object { @(As-FlatArray $_.failureReasons | Where-Object { [string]$_ -eq "semantic_failures" }).Count -gt 0 }
+    ).Count
     $gatewayCommandHints = @(
         "start-deepcodex.ps1",
         "test-anticodex-plugin-capabilities.ps1",
@@ -184,6 +189,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($requiresGateway) { $gatewayActionCount++ }
         if ($requiresRealTraffic) { $realTrafficActionCount++ }
         if ($highImpact) { $highImpactActionCount++ }
+        if ($nextAction.reportOnly -eq $true) { $reportOnlyActionCount++ }
         if ($blocked) { $blockedActionCount++ }
         $commandText = ([string]$nextAction.command).ToLowerInvariant()
         if (-not [string]::IsNullOrWhiteSpace($commandText)) {
@@ -208,6 +214,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates next action $actionId missing explicit approval block"
         }
     }
+    if ($semanticFailureCount -gt 0 -and @($nextActions | Where-Object { $_.reportOnly -eq $true -and [string]$_.id -eq "releaseGateReportOnlyCheck" }).Count -lt 1) {
+        Add-Failure "release-gates semantic failures missing report-only next action"
+    }
     $approvalPlan = $ReleaseGatesSummary.approvalPlan
     if (-not $approvalPlan -or $approvalPlan -isnot [pscustomobject]) {
         Add-Failure "release-gates approval plan is not an object"
@@ -224,6 +233,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($null -ne $approvalRealTrafficCount -and $approvalRealTrafficCount -lt $realTrafficActionCount) { Add-Failure "release-gates approval plan undercounts real-traffic actions" }
         $approvalHighImpactCount = Get-NonNegativeIntProperty $approvalPlan "highImpactCount" "release-gates approval plan missing high-impact count" "release-gates approval plan invalid high-impact count"
         if ($null -ne $approvalHighImpactCount -and $approvalHighImpactCount -lt $highImpactActionCount) { Add-Failure "release-gates approval plan undercounts high-impact actions" }
+        $approvalReportOnlyCount = Get-NonNegativeIntProperty $approvalPlan "reportOnlyCount" "release-gates approval plan missing report-only count" "release-gates approval plan invalid report-only count"
+        if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -lt $reportOnlyActionCount) { Add-Failure "release-gates approval plan undercounts report-only actions" }
+        if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -ne $reportOnlyActionCount) { Add-Failure "release-gates approval plan report-only action count mismatch" }
         if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
             Add-Failure "release-gates approval plan missing first blocked action"
         }
@@ -339,6 +351,8 @@ function Test-ReportsSummary {
                 missingShort = @($releaseGatesSummary.missingShort)
                 missingOptional = @($releaseGatesSummary.missingOptional)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
+                nextActions = @($releaseGatesSummary.nextActions)
+                approvalPlan = $releaseGatesSummary.approvalPlan
                 installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
             }
         } else { $null }

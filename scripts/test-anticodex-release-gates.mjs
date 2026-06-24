@@ -1251,6 +1251,7 @@ function summarizeApprovalPlan(actions) {
         requiresGatewayStart: phaseActions.some((item) => item.requiresGatewayStart === true),
         requiresRealTraffic: phaseActions.some((item) => item.requiresRealTraffic === true),
         highImpact: phaseActions.some((item) => item.highImpact === true),
+        reportOnly: phaseActions.some((item) => item.reportOnly === true),
         blockedUntilExplicitUserApproval: phaseActions.some((item) => item.blockedUntilExplicitUserApproval === true),
       };
     })
