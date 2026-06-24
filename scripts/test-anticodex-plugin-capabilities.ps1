@@ -12,6 +12,9 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "anticodex-source-snapshot.ps1")
 
+$script:verifierStartedAt = [DateTime]::UtcNow
+$script:shortBudgetMode = ($TimeoutSec -lt 5)
+
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
@@ -39,6 +42,19 @@ function Save-JsonReport {
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
     . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
     Write-AntiCodexJsonReport -LatestPath $Paths.latest -HistoryPath $Paths.history -Json $json -Encoding $utf8NoBom
+}
+
+function Get-RemainingVerifierBudgetMs {
+    $elapsedMs = ([DateTime]::UtcNow - $script:verifierStartedAt).TotalMilliseconds
+    return [Math]::Max(0, ($TimeoutSec * 1000) - [int]$elapsedMs)
+}
+
+function Write-PluginCapabilityReport {
+    param($Payload)
+    $reportPaths = New-ReportPaths "plugin-capabilities"
+    $Payload | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths -Force
+    Save-JsonReport $reportPaths $Payload -Depth 10
+    $Payload | ConvertTo-Json -Depth 8 -Compress
 }
 
 function Invoke-LocalJsonWithRetry {
@@ -105,6 +121,30 @@ function Has-Property {
     return $null -ne $Value -and $Value.PSObject.Properties.Name -contains $Name
 }
 
+function Get-PreviousPluginCapabilityReport {
+    $latestPath = Join-Path $ReportRoot "latest-plugin-capabilities.json"
+    if (-not (Test-Path -LiteralPath $latestPath -PathType Leaf)) { return $null }
+    try {
+        return Get-Content -LiteralPath $latestPath -Raw -ErrorAction Stop | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+}
+
+function Get-ReusedSourceSnapshot {
+    param($PreviousReport)
+    $snapshot = if ($PreviousReport -and (Has-Property $PreviousReport "sourceSnapshot")) { $PreviousReport.sourceSnapshot } else { $null }
+    if ($snapshot) {
+        if (Has-Property $snapshot "reusedFromPreviousReport") { $snapshot.reusedFromPreviousReport = $true } else { $snapshot | Add-Member -NotePropertyName reusedFromPreviousReport -NotePropertyValue $true }
+        if (Has-Property $snapshot "refreshSkippedReason") { $snapshot.refreshSkippedReason = "source snapshot refresh skipped in short-budget plugin capability mode" } else { $snapshot | Add-Member -NotePropertyName refreshSkippedReason -NotePropertyValue "source snapshot refresh skipped in short-budget plugin capability mode" }
+        return $snapshot
+    }
+    return [pscustomobject]@{
+        reusedFromPreviousReport = $false
+        refreshSkippedReason = "source snapshot refresh skipped in short-budget plugin capability mode; no previous snapshot available"
+    }
+}
+
 function Get-PluginId {
     param($PluginRecord)
     if (Has-Property $PluginRecord "id") { return [string]$PluginRecord.id }
@@ -154,6 +194,63 @@ $appToolsCacheSmoke = [pscustomobject]@{
     fileCount = 0
     sampleReadable = $false
     sampleToolCount = 0
+}
+
+if ($script:shortBudgetMode) {
+    Add-Failure "short budget plugin capability verification skipped live connector/app-tool endpoints"
+    $previousReport = Get-PreviousPluginCapabilityReport
+    $sourceSnapshot = Get-ReusedSourceSnapshot -PreviousReport $previousReport
+    $result = [pscustomobject]@{
+        ok = $false
+        reportName = "plugin-capabilities"
+        shortBudgetMode = $true
+        failures = $failures.ToArray()
+        baseUrl = $BaseUrl
+        sourceSnapshot = $sourceSnapshot
+        health = [pscustomobject]@{
+            ok = $false
+            upstream = $null
+            accountReady = $false
+            accountState = $null
+            modelCount = 0
+            mode = "unknown"
+            protocol = $null
+            model = $null
+        }
+        capabilities = [pscustomobject]@{
+            snapshotSource = "anticodex-local-copy"
+            nativeCodexWriteback = $false
+            capabilityState = "degraded_short_budget"
+            degraded = $true
+            installedPluginCount = 0
+            pluginListCount = 0
+            pluginsWithSkills = 0
+            pluginsWithApps = 0
+            pluginsWithMcpServers = 0
+            connectorCount = 0
+            connectorParity = [pscustomobject]@{ checked = $false; missingShared = @(); extraLocal = @(); changedShared = @() }
+            enabledConnectorCount = 0
+            accessibleConnectorCount = 0
+            appToolCount = 0
+            appToolGetCount = 0
+            appToolGetPostParity = [pscustomobject]@{ checked = $false; contentMatches = $false; missingFromGet = @(); extraFromGet = @() }
+            appToolParity = [pscustomobject]@{ checked = $false; missingShared = @(); extraLocal = @(); changedShared = @() }
+            unattributedAppToolCount = 0
+            unauthorizedAppToolCount = 0
+            appToolsNote = "short budget: live connector/app-tool endpoints were not checked"
+            smoke = [pscustomobject]@{
+                checked = $false
+                endpointProjectionReadable = $false
+                connectorCache = $connectorCacheSmoke
+                appToolsCache = $appToolsCacheSmoke
+                callableState = "skipped_short_budget"
+            }
+            samplePluginIds = @()
+            sampleConnectorNames = @()
+        }
+    }
+    Write-PluginCapabilityReport $result
+    exit 1
 }
 
 function Test-ProjectionCache {
@@ -579,8 +676,5 @@ $result = [pscustomobject]@{
     }
 }
 
-$reportPaths = New-ReportPaths "plugin-capabilities"
-$result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
-Save-JsonReport $reportPaths $result -Depth 10
-$result | ConvertTo-Json -Depth 8 -Compress
+Write-PluginCapabilityReport $result
 if ($failures.Count -gt 0) { exit 1 }

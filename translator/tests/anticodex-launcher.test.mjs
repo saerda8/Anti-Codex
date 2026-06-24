@@ -5211,6 +5211,11 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /anticodex-source-snapshot\.ps1/);
   assert.match(capabilities, /Get-AntiCodexSourceSnapshot/);
   assert.match(capabilities, /sourceSnapshot = \$sourceSnapshot/);
+  assert.match(capabilities, /\$script:shortBudgetMode = \(\$TimeoutSec -lt 5\)/);
+  assert.match(capabilities, /function Get-RemainingVerifierBudgetMs/);
+  assert.match(capabilities, /Write-PluginCapabilityReport/);
+  assert.match(capabilities, /reusedFromPreviousReport/);
+  assert.match(capabilities, /degraded_short_budget/);
   assert.match(capabilities, /nativeCodexWriteback = \$false/);
   assert.match(capabilities, /capabilityState =/);
   assert.match(capabilities, /degraded =/);
@@ -5238,6 +5243,52 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.doesNotMatch(capabilities, /Codex\.exe/);
   assert.doesNotMatch(capabilities, /Antigravity\.exe/);
   assert.doesNotMatch(capabilities, /auth\/login/);
+});
+
+test("plugin capability verifier writes a short-budget degraded report", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-short-"));
+  const previousReportPath = resolve(tempRoot, "latest-plugin-capabilities.json");
+  try {
+    writeFileSync(previousReportPath, JSON.stringify({
+      ok: true,
+      reportName: "plugin-capabilities",
+      sourceSnapshot: {
+        fingerprint: "previous-plugin-source",
+        fileCount: 42,
+        sourceMtimeMax: "2026-06-24T00:00:00.000Z",
+      },
+    }), "utf8");
+    const startedAt = Date.now();
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-plugin-capabilities.ps1"),
+      "-TimeoutSec", "3",
+      "-BaseUrl", "http://127.0.0.1:9",
+      "-ReportRoot", tempRoot,
+    ], { encoding: "utf8", timeout: 10000 });
+    const elapsedMs = Date.now() - startedAt;
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.ok(elapsedMs < 8000, `short-budget verifier took ${elapsedMs}ms`);
+    const report = JSON.parse(readFileSync(previousReportPath, "utf8"));
+    assert.equal(report.ok, false);
+    assert.equal(report.shortBudgetMode, true);
+    assert.equal(report.sourceSnapshot.fingerprint, "previous-plugin-source");
+    assert.equal(report.sourceSnapshot.reusedFromPreviousReport, true);
+    assert.match(report.sourceSnapshot.refreshSkippedReason, /short-budget plugin capability/);
+    assert.equal(report.capabilities.nativeCodexWriteback, false);
+    assert.equal(report.capabilities.capabilityState, "degraded_short_budget");
+    assert.equal(report.capabilities.degraded, true);
+    assert.equal(report.capabilities.smoke.checked, false);
+    assert.equal(report.capabilities.smoke.callableState, "skipped_short_budget");
+    assert.equal(report.capabilities.smoke.endpointProjectionReadable, false);
+    assert.equal(report.capabilities.connectorParity.checked, false);
+    assert.equal(report.capabilities.appToolParity.checked, false);
+    assert.equal(report.capabilities.appToolGetPostParity.checked, false);
+    assert.equal(report.capabilities.appToolGetPostParity.contentMatches, false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex ships a script-level local connector and app-tool verifier", () => {
@@ -5444,6 +5495,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /function Get-FreshPluginCapabilitiesReportCheck/);
   assert.match(overall, /fresh-plugin-capabilities-report/);
   assert.match(overall, /reusedLatestReport = \$true/);
+  assert.match(overall, /\$report\.shortBudgetMode -ne \$true/);
+  assert.match(overall, /\[string\]\$capabilities\.capabilityState -ne "degraded_short_budget"/);
+  assert.match(overall, /\$capabilities\.smoke\.checked -eq \$true/);
   assert.match(overall, /realListPassed -ge 2/);
   assert.match(overall, /\$report\.skills\.fingerprintSkipped -ne \$true/);
   assert.match(overall, /connectorParityClean = \$true/);

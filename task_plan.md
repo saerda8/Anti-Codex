@@ -1581,3 +1581,10 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Completed: launcher regression fixtures and release-gate self-test now cover the `contentMatches:false` case, including a negative release-gate semantic failure.
 - Verification: JS syntax checks passed; PowerShell parser checks passed; release-gate self-test passed; Manager bridge self-test passed; UI-state self-test passed; focused launcher contracts passed `129/129`; `git diff --check` passed.
 - Current evidence note: installed runtime is synced, but strict passive gate now reports `shortReady:false` only because the existing `latest-plugin-capabilities.json` predates the new `contentMatches` field. Refreshing that local plugin report requires the Anti-Codex gateway or a longer verifier budget; no fake report was written.
+
+## 2026-06-24 Plugin Capability Short-Budget Degrade
+- Completed: `test-anticodex-plugin-capabilities.ps1 -TimeoutSec 3` now enters explicit short-budget mode before live endpoint calls or source snapshot scanning, writes a bounded degraded report, and exits instead of timing out without evidence.
+- Completed: the short-budget report carries `shortBudgetMode:true`, `capabilityState:"degraded_short_budget"`, `callableState:"skipped_short_budget"`, `appToolGetPostParity.contentMatches:false`, `nativeCodexWriteback:false`, and reused source-snapshot metadata when a previous report exists.
+- Completed: release gates and installed-overall reuse now reject plugin-capability short-budget/degraded/unchecked reports so degraded local evidence cannot be promoted to readiness.
+- Completed: launcher contracts now include a real temp-report `-TimeoutSec 3` run, not only static strings, and assert the short-budget report fail-closed fields.
+- Verification: PowerShell parser check passed; release-gate self-test passed; focused launcher contract passed `130/130`; temp-report `-TimeoutSec 3` run returned exit `1` and wrote `ok:false`, `shortBudgetMode:true`, `degraded_short_budget`, `skipped_short_budget`, and `contentMatches:false`.

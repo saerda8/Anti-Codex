@@ -485,6 +485,11 @@ function summarizeGate(definition) {
       const connectorParity = capabilities.connectorParity || {};
       const appToolParity = capabilities.appToolParity || {};
       const appToolGetPostParity = capabilities.appToolGetPostParity || {};
+      const smoke = capabilities.smoke || {};
+      if (report.shortBudgetMode === true) semanticFailures.push("plugin_capabilities_short_budget_report");
+      if (["degraded_short_budget", "degraded_verification_failed", "degraded_missing_local_snapshot", "degraded_no_tools_for_accessible_connectors"].includes(String(capabilities.capabilityState || ""))) semanticFailures.push("plugin_capabilities_degraded");
+      if (connectorParity.checked !== true || appToolParity.checked !== true || appToolGetPostParity.checked !== true) semanticFailures.push("plugin_capabilities_unchecked_parity");
+      if (smoke.checked !== true) semanticFailures.push("plugin_capabilities_smoke_unchecked");
       if (capabilities.nativeCodexWriteback !== false) semanticFailures.push("plugin_capabilities_native_codex_writeback");
       if (capabilities.accessibleConnectorCount !== 0) semanticFailures.push("plugin_capabilities_accessible_connector_count");
       if (capabilities.unauthorizedAppToolCount !== 0) semanticFailures.push("plugin_capabilities_unauthorized_app_tools");
@@ -903,25 +908,31 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-plugin-capabilities.json", {
       ok: true,
       reportName: "plugin-capabilities",
+      shortBudgetMode: true,
       capabilities: {
         nativeCodexWriteback: true,
+        capabilityState: "degraded_short_budget",
         accessibleConnectorCount: 1,
         unauthorizedAppToolCount: 1,
         appToolGetPostParity: {
+          checked: false,
           contentMatches: false,
           missingFromGet: ["unsafe-tool"],
           extraFromGet: [],
         },
         connectorParity: {
+          checked: false,
           missingShared: ["missing-connector"],
           extraLocal: ["extra-connector"],
           changedShared: ["changed-connector"],
         },
         appToolParity: {
+          checked: false,
           missingShared: ["missing-app-tool"],
           extraLocal: ["extra-app-tool"],
           changedShared: ["changed-app-tool"],
         },
+        smoke: { checked: false },
       },
     });
 
@@ -1665,6 +1676,10 @@ if (args.has("--self-test")) {
       "log_db_guard_not_protected",
     ]);
     semanticFailures.pluginCapabilities = assertSemanticFailures("pluginCapabilities", "self-test failed: semantically invalid plugin-capability report satisfied the gate", [
+      "plugin_capabilities_short_budget_report",
+      "plugin_capabilities_degraded",
+      "plugin_capabilities_unchecked_parity",
+      "plugin_capabilities_smoke_unchecked",
       "plugin_capabilities_native_codex_writeback",
       "plugin_capabilities_accessible_connector_count",
       "plugin_capabilities_unauthorized_app_tools",

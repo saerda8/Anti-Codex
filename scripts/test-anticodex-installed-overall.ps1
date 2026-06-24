@@ -192,7 +192,10 @@ function Get-FreshPluginCapabilitiesReportCheck {
         $acceptable = (
             $report.ok -eq $true -and
             [string]$report.reportName -eq "plugin-capabilities" -and
+            $report.shortBudgetMode -ne $true -and
             $sourceFingerprint -and
+            [string]$capabilities.capabilityState -ne "degraded_short_budget" -and
+            $capabilities.smoke.checked -eq $true -and
             $connectorParity.checked -eq $true -and
             $missingConnectors.Count -eq 0 -and
             $extraConnectors.Count -eq 0 -and
