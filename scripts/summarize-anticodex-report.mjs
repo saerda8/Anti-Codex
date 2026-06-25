@@ -69,7 +69,7 @@ function asApprovalPlan(value) {
       highImpact: phase?.highImpact === true,
       reportOnly: phase?.reportOnly === true,
       blockedUntilExplicitUserApproval: phase?.blockedUntilExplicitUserApproval === true,
-    })).filter((phase) => phase.phase).slice(0, 12) : [],
+    })).filter((phase) => phase.phase).slice(0, 24) : [],
   };
 }
 

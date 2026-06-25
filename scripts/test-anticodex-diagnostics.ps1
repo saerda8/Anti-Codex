@@ -214,6 +214,45 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates next action $actionId missing explicit approval block"
         }
     }
+    foreach ($gateFailure in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons)) {
+        $gateFailureId = [string]$gateFailure.id
+        if ([string]::IsNullOrWhiteSpace($gateFailureId)) { $gateFailureId = "unknown" }
+        if (-not (Has-Property $gateFailure "orderedActions")) { continue }
+        foreach ($orderedAction in @(As-FlatArray $gateFailure.orderedActions | Where-Object { $null -ne $_ })) {
+            $actionId = [string]$orderedAction.id
+            if ([string]::IsNullOrWhiteSpace($actionId)) {
+                Add-Failure "release-gates ordered action $gateFailureId missing id"
+                $actionId = "unknown"
+            }
+            $requiresGateway = $orderedAction.requiresGatewayStart -eq $true
+            $requiresRealTraffic = $orderedAction.requiresRealTraffic -eq $true
+            $highImpact = $orderedAction.highImpact -eq $true
+            $blocked = $orderedAction.blockedUntilExplicitUserApproval -eq $true
+            $commandText = ([string]$orderedAction.command).ToLowerInvariant()
+            if ([string]::IsNullOrWhiteSpace($commandText)) {
+                Add-Failure "release-gates ordered action $gateFailureId/$actionId missing command"
+            } else {
+                $gatewayHint = Find-TextHint $commandText $gatewayCommandHints
+                $realTrafficHint = Find-TextHint $commandText $realTrafficCommandHints
+                $highImpactHint = Find-TextHint $commandText $highImpactCommandHints
+                if (-not [string]::IsNullOrWhiteSpace($gatewayHint) -and -not $requiresGateway) {
+                    Add-Failure "release-gates ordered action $gateFailureId/$actionId command requires gateway metadata"
+                }
+                if (-not [string]::IsNullOrWhiteSpace($realTrafficHint) -and -not $requiresRealTraffic) {
+                    Add-Failure "release-gates ordered action $gateFailureId/$actionId command requires real-traffic metadata"
+                }
+                if (-not [string]::IsNullOrWhiteSpace($highImpactHint) -and -not $highImpact) {
+                    Add-Failure "release-gates ordered action $gateFailureId/$actionId command requires high-impact metadata"
+                }
+                if ((-not [string]::IsNullOrWhiteSpace($gatewayHint) -or -not [string]::IsNullOrWhiteSpace($realTrafficHint) -or -not [string]::IsNullOrWhiteSpace($highImpactHint)) -and -not $blocked) {
+                    Add-Failure "release-gates ordered action $gateFailureId/$actionId command risk missing explicit approval block"
+                }
+            }
+            if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
+                Add-Failure "release-gates ordered action $gateFailureId/$actionId missing explicit approval block"
+            }
+        }
+    }
     if ($semanticFailureCount -gt 0 -and @($nextActions | Where-Object { $_.reportOnly -eq $true -and [string]$_.id -eq "releaseGateReportOnlyCheck" }).Count -lt 1) {
         Add-Failure "release-gates semantic failures missing report-only next action"
     }
@@ -236,6 +275,13 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         $approvalReportOnlyCount = Get-NonNegativeIntProperty $approvalPlan "reportOnlyCount" "release-gates approval plan missing report-only count" "release-gates approval plan invalid report-only count"
         if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -lt $reportOnlyActionCount) { Add-Failure "release-gates approval plan undercounts report-only actions" }
         if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -ne $reportOnlyActionCount) { Add-Failure "release-gates approval plan report-only action count mismatch" }
+        $approvalPhases = @(As-FlatArray $approvalPlan.phases)
+        if ($reportOnlyActionCount -gt 0 -and $approvalPhases.Count -gt 0) {
+            $reportOnlyPhases = @($approvalPhases | Where-Object { [string]$_.phase -eq "report-only" })
+            if ($reportOnlyPhases.Count -lt 1 -or @($reportOnlyPhases | Where-Object { $_.reportOnly -eq $true }).Count -lt 1) {
+                Add-Failure "release-gates approval plan report-only phase mismatch"
+            }
+        }
         if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
             Add-Failure "release-gates approval plan missing first blocked action"
         }
