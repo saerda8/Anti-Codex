@@ -7180,6 +7180,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /strictOptionalRealTraffic/);
   assert.match(diagnostics, /optionalRealTrafficReady/);
   assert.match(diagnostics, /optionalRealTrafficFailures/);
+  assert.match(diagnostics, /release-gates optional real-traffic failure \$optionalFailureId missing guidance/);
   assert.match(diagnostics, /sourceSnapshotEvidence/);
   assert.match(diagnostics, /source snapshot evidence/);
   assert.match(diagnostics, /missingRequired/);
@@ -8059,6 +8060,70 @@ test("diagnostics reports-summary fixture rejects action gates without guidance"
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates failure managerRealButtons with ordered actions missing guidance"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects optional real-traffic failures without guidance", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-optional-guidance-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: true,
+      releaseReady: true,
+      effectiveOk: true,
+      strictOptionalRealTraffic: true,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: ["realThirdPartyProviderOptional"],
+      missingRequired: [],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["realThirdPartyProviderOptional"],
+      releaseGateFailureReasons: [{
+        id: "realThirdPartyProviderOptional",
+        failureReasons: ["stale_report"],
+        guidance: "",
+        orderedActions: [],
+      }],
+      nextActions: [],
+      approvalPlan: {
+        actionCount: 0,
+        blockedCount: 0,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        reportOnlyCount: 0,
+        firstBlockedAction: "",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates optional real-traffic failure realThirdPartyProviderOptional missing guidance"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
