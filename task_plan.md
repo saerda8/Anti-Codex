@@ -1839,3 +1839,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Verification: focused plugin capability contracts passed `171/171`, including the new timeout-budget fixture in about 5.5 seconds.
 - Follow-up: `test-anticodex-tool-bridge-mode.ps1` now caps retrying diagnostics requests against the remaining verifier budget instead of giving each attempt the full `TimeoutSec`, and launcher coverage proves a silent diagnostics endpoint exits with a report.
 - Verification: tool-bridge parser, launcher syntax, and `git diff --check` passed; focused tool-bridge contracts passed `172/172`, including a silent local diagnostics endpoint fixture in about 6.2 seconds.
+- Follow-up: `test-anticodex-diagnostics.ps1` now caps retrying `/anticodex/diagnostics` requests against a verifier-wide budget, preventing two silent attempts from consuming two full `TimeoutSec` windows.
+- Verification: diagnostics parser, launcher syntax, and `git diff --check` passed; focused diagnostics/report-summary contracts passed `173/173`, including a silent local diagnostics endpoint fixture in about 6.1 seconds.

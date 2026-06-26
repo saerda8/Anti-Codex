@@ -7286,6 +7286,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /function Test-ReportsSummary/);
   assert.match(diagnostics, /function Test-ReleaseGateApprovalAndOfflineEvidence/);
   assert.match(diagnostics, /function Test-InstalledRuntimeEvidence/);
+  assert.match(diagnostics, /function Get-RemainingVerifierBudgetMs/);
+  assert.match(diagnostics, /verifier budget exhausted before \$Path request attempt \$attempt/);
+  assert.match(diagnostics, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(3, \[Math\]::Min\(\$TimeoutSec/);
   assert.ok((diagnostics.match(/Test-ReleaseGateApprovalAndOfflineEvidence \$releaseGatesSummary/g) || []).length >= 2);
   assert.match(diagnostics, /reports summary file missing/);
   assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
@@ -7671,6 +7674,36 @@ function minimalDiagnosticsReleaseGateSummary(overrides = {}) {
     installedRuntimeEvidence,
   };
 }
+
+test("diagnostics verifier bounds a silent diagnostics endpoint", async () => {
+  const server = http.createServer(() => {
+    // Intentionally keep the request open until the verifier-side timeout fires.
+  });
+  await new Promise((resolveServer, rejectServer) => {
+    server.once("error", rejectServer);
+    server.listen(0, "127.0.0.1", resolveServer);
+  });
+  try {
+    const port = server.address().port;
+    const startedAt = Date.now();
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-TimeoutSec", "5",
+      "-BaseUrl", `http://127.0.0.1:${port}`,
+    ], { encoding: "utf8", timeout: 12000 });
+    const elapsedMs = Date.now() - startedAt;
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.ok(elapsedMs < 10000, `diagnostics verifier took ${elapsedMs}ms`);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.some((failure) => failure.includes("diagnostics request failed")));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    await new Promise((resolveClose) => server.close(resolveClose));
+  }
+});
 
 test("diagnostics verifier validates reports-summary fixtures without contacting the gateway", () => {
   const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-summary-"));
