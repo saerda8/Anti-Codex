@@ -2784,25 +2784,44 @@ const missingOptional = gates.filter((gate) => !gate.requiredForRelease && !gate
 const damagedReports = gates.filter((gate) => gate.present && (!gate.parseable || gate.hashValid !== true)).map((gate) => gate.id);
 const releaseGateFailureReasons = gates
   .filter((gate) => !gate.satisfied)
-  .map((gate) => ({
-    id: gate.id,
-    group: gate.group,
-    requiredForRelease: gate.requiredForRelease === true,
-    requiredForShort: gate.requiredForShort === true,
-    failureReason: gate.failureReason || "",
-    failureReasons: Array.isArray(gate.failureReasons) ? gate.failureReasons : [],
-    ageHours: gate.ageHours,
-    fresh: gate.fresh === true,
-    selectedFromHistory: gate.selectedFromHistory === true,
-    selectedKind: gate.selectedKind || "",
-    selectedFile: gate.selectedFile || "",
-    selectedMtime: gate.selectedMtime || "",
-    reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
-    reportFailureSampleCodes: reportFailureSampleCodes(gate.reportFailureSamples),
-    guidance: gateGuidance(gate),
-    orderedActions: gateOrderedActions(gate),
-    offlineSnapshotEvidence: gate.offlineSnapshotEvidence || null,
-  }));
+  .map((gate) => {
+    const failureReasons = Array.isArray(gate.failureReasons) ? gate.failureReasons : [];
+    return {
+      id: gate.id,
+      group: gate.group,
+      requiredForRelease: gate.requiredForRelease === true,
+      requiredForShort: gate.requiredForShort === true,
+      failureReason: gate.failureReason || "",
+      failureReasons,
+      failureReasonsAvailableCount: failureReasons.length,
+      failureReasonsHiddenCount: 0,
+      ageHours: gate.ageHours,
+      fresh: gate.fresh === true,
+      selectedFromHistory: gate.selectedFromHistory === true,
+      selectedKind: gate.selectedKind || "",
+      selectedFile: gate.selectedFile || "",
+      selectedMtime: gate.selectedMtime || "",
+      reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.slice(0, 3) : [],
+      reportFailureSampleCodes: reportFailureSampleCodes(gate.reportFailureSamples),
+      guidance: gateGuidance(gate),
+      orderedActions: gateOrderedActions(gate),
+      offlineSnapshotEvidence: gate.offlineSnapshotEvidence || null,
+    };
+  });
+const releaseGateFailures = gates
+  .filter((gate) => !gate.satisfied && Array.isArray(gate.semanticFailures) && gate.semanticFailures.length > 0)
+  .map((gate) => {
+    const semanticFailures = gate.semanticFailures;
+    return {
+      id: gate.id,
+      group: gate.group,
+      error: gate.error || "",
+      failureReason: gate.failureReason || "",
+      semanticFailures,
+      semanticFailuresAvailableCount: semanticFailures.length,
+      semanticFailuresHiddenCount: 0,
+    };
+  });
 const nextActionSummary = summarizeNextActions(releaseGateFailureReasons);
 const nextActions = nextActionSummary.actions;
 const approvalPlan = summarizeApprovalPlan(nextActionSummary.allActions);
@@ -2843,6 +2862,7 @@ const payload = {
   missingShort,
   missingOptional,
   damagedReports,
+  releaseGateFailures,
   releaseGateFailureReasons,
   nextActions,
   nextActionsAvailableCount: nextActionSummary.availableCount,
