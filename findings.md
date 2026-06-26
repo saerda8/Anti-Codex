@@ -997,3 +997,4 @@
 - `refresh-anticodex-local-features.ps1` has no `-TimeoutSec` parameter. A full refresh can exceed a 60-second wrapper while still copying useful local snapshots; use `-VerifyOnly` with a larger wrapper for parity evidence, or a narrow skills-only sync path when only skills drifted.
 - PowerShell does not support bash heredoc syntax such as `node - <<'NODE'`. Use `node -e` with a compact one-liner, or create a checked helper script when the probe is too large.
 - Do not pass `%APPDATA%` as a literal argument to Node scripts from PowerShell. Build report paths from `process.env.APPDATA` or pass `$env:APPDATA` only through a correctly escaped PowerShell wrapper.
+- `summarize-anticodex-report.mjs` takes the report JSON path as its first positional argument; it does not accept `--report`. Passing `--report` makes Node try to open a file literally named `--report`.
