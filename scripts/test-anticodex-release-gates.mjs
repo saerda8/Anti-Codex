@@ -1079,6 +1079,7 @@ function reportFailureSampleCodes(samples) {
 }
 
 function gateGuidance(gate) {
+  const failedReasons = Array.isArray(gate?.failureReasons) ? gate.failureReasons : [];
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
   }
@@ -1088,7 +1089,10 @@ function gateGuidance(gate) {
   if (syncReadinessHostSyncNeeded(gate)) {
     return "host_sync_required: installed Codex changed; run Sync Codex Update only with explicit approval. It builds and validates a candidate before replacing Anti-Codex; failed validation leaves the current host intact.";
   }
-  if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+  if (["short", "manager", "no-traffic"].includes(gate?.group || "") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures") && gateOrderedActions(gate).some((item) => item.requiresGatewayStart === true && item.requiresRealTraffic !== true)) {
+    return "local_gateway_required: start or restore the local Anti-Codex gateway, then rerun the listed gateway-dependent verifier.";
+  }
+  if (gate?.group === "real-traffic" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "real_traffic_evidence_stale: requires explicit user approval to start/verify Anti-Codex and refresh release-grade real-traffic reports.";
   }
   return "";
@@ -2647,6 +2651,9 @@ if (args.has("--self-test")) {
     assertFailureReason("installedRuntimeSync", "semantic_failures");
     const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");
     if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
+    if (gateGuidance(postVerificationGate).includes("local_gateway_required")) throw new Error("self-test failed: real-traffic guidance was misclassified as gateway-only");
+    const managerRealButtonGate = reasonGates.find((item) => item.id === "managerRealButtons");
+    if (!gateGuidance(managerRealButtonGate).includes("local_gateway_required")) throw new Error("self-test failed: gateway-dependent stale guidance was not attached");
     const syncReadinessActions = gateOrderedActions({
       id: "syncReadiness",
       satisfied: false,
@@ -2665,7 +2672,7 @@ if (args.has("--self-test")) {
     const accountProxyGate = reasonGates.find((item) => item.id === "accountProxyReadiness");
     const accountProxyActions = gateOrderedActions(accountProxyGate);
     if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not marked gateway and real-traffic");
-    const managerRealButtonActions = gateOrderedActions(reasonGates.find((item) => item.id === "managerRealButtons"));
+    const managerRealButtonActions = gateOrderedActions(managerRealButtonGate);
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
     const missingHistoryActions = gateOrderedActions(reasonGates.find((item) => item.id === "missingHistory"));
     if (!missingHistoryActions.some((item) => item.id === "missingHistory" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-missing-history.mjs"))) throw new Error("self-test failed: missing-history ordered action was not marked gateway-dependent");
