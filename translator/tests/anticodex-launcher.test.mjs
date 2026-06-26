@@ -5824,6 +5824,10 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(diagnostics, /toolBridge\.mode/);
   assert.match(diagnostics, /native Antigravity tool events/i);
   assert.match(bridge, /\[int\]\$TimeoutSec = 20/);
+  assert.match(bridge, /function Get-RemainingVerifierBudgetMs/);
+  assert.match(bridge, /verifier budget exhausted before \$Path request attempt \$attempt/);
+  assert.match(bridge, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(3, \[Math\]::Min\(\$TimeoutSec/);
+  assert.match(bridge, /TimeoutSec \$requestTimeoutSec/);
   assert.match(diagnostics, /\[int\]\$TimeoutSec = 20/);
   assert.match(bridge, /Start-Sleep -Milliseconds/);
   assert.match(diagnostics, /Start-Sleep -Milliseconds/);
@@ -10725,6 +10729,39 @@ test("Anti-Codex ships a read-only tool bridge mode verifier", () => {
   assert.match(toolBridge, /native_mcp_same_cascade/);
   assert.match(toolBridge, /ConvertTo-Json/);
   assert.doesNotMatch(toolBridge, /Stop-Process|Start-Process|auth\/login/);
+});
+
+test("tool bridge mode verifier bounds a silent diagnostics endpoint", async () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-tool-bridge-timeout-"));
+  const server = http.createServer(() => {
+    // Intentionally keep the request open until the verifier-side timeout fires.
+  });
+  await new Promise((resolveServer, rejectServer) => {
+    server.once("error", rejectServer);
+    server.listen(0, "127.0.0.1", resolveServer);
+  });
+  try {
+    const port = server.address().port;
+    const startedAt = Date.now();
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"),
+      "-TimeoutSec", "5",
+      "-BaseUrl", `http://127.0.0.1:${port}`,
+      "-ReportRoot", tempRoot,
+    ], { encoding: "utf8", timeout: 12000 });
+    const elapsedMs = Date.now() - startedAt;
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.ok(elapsedMs < 10000, `tool bridge verifier took ${elapsedMs}ms`);
+    const report = JSON.parse(readFileSync(resolve(tempRoot, "latest-tool-bridge-mode.json"), "utf8"));
+    assert.equal(report.ok, false);
+    assert.match(report.failures.join("\n"), /diagnostics request failed/);
+    assert.equal(report.toolBridge, null);
+  } finally {
+    await new Promise((resolveClose) => server.close(resolveClose));
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex ships an account and proxy readiness verifier", () => {

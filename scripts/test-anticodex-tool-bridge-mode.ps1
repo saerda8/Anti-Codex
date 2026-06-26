@@ -17,6 +17,11 @@ function Add-Failure {
     $failures.Add($Message) | Out-Null
 }
 
+function Get-RemainingVerifierBudgetMs {
+    $elapsedMs = ([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+    return [Math]::Max(0, ($TimeoutSec * 1000) - [int]$elapsedMs)
+}
+
 function Has-Property {
     param($Value, [string]$Name)
     return $null -ne $Value -and $Value.PSObject.Properties.Name -contains $Name
@@ -27,13 +32,21 @@ function Invoke-LocalJson {
     $lastError = $null
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         try {
-            return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $TimeoutSec
+            $remainingBudgetMs = Get-RemainingVerifierBudgetMs
+            if ($remainingBudgetMs -lt 250) {
+                throw "verifier budget exhausted before $Path request attempt $attempt"
+            }
+            $requestTimeoutSec = [Math]::Max(1, [Math]::Min(3, [Math]::Min($TimeoutSec, [int][Math]::Ceiling($remainingBudgetMs / 1000))))
+            return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $requestTimeoutSec
         } catch {
             $lastError = $_.Exception.Message
             if ($attempt -ge $MaxAttempts) {
                 throw "$Path request failed on attempt $attempt of $MaxAttempts`: $lastError"
             }
-            Start-Sleep -Milliseconds ([Math]::Min(1000, 250 * $attempt))
+            $sleepMs = [Math]::Min([Math]::Min(1000, 250 * $attempt), [Math]::Max(0, (Get-RemainingVerifierBudgetMs)))
+            if ($sleepMs -gt 0) {
+                Start-Sleep -Milliseconds $sleepMs
+            }
         }
     }
     throw "$Path request failed after $MaxAttempts attempts: $lastError"

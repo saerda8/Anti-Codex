@@ -988,3 +988,4 @@
 - `effectiveOk` must be tied to release readiness and report integrity. Diagnostics should reject `effectiveOk:true` when `releaseReady` is not true or when `damagedReports` is non-empty.
 - Release-gate ready booleans must be tied to their missing lists. Diagnostics should reject `shortReady:true` with non-empty `missingShort`, and `releaseReady:true` with non-empty `missingRequired`.
 - `test-anticodex-plugin-capabilities.ps1 -TimeoutSec 20` previously did not bound the entire offline verifier path; one refresh attempt exceeded 49 seconds without leaving a verifier process behind. The script now caps per-request waits and writes a degraded timeout-budget report before local parity/source-snapshot work when the remaining budget is too low.
+- Verifier request timeouts must be total-budget aware when they retry. `test-anticodex-tool-bridge-mode.ps1` now caps each diagnostics request to the remaining verifier budget and keeps sleeps inside that same budget.
