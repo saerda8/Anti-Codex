@@ -3567,12 +3567,19 @@ function syncReadinessEvidenceFromResult(result){
   const managerBridge=sync.managerBridge||{};
   return {
     codexVersion:activeHost.codexVersion||updateStatus.source?.codexVersion||"",
-    sourcePackageVersion:activeHost.sourcePackageVersion||updateStatus.source?.packageVersion||"",
+    sourcePackageVersion:updateStatus.source?.packageVersion||activeHost.sourcePackageVersion||"",
     activePackageVersion:drift.activePackageVersion||updateStatus.active?.packageVersion||"",
     updateStatusSource:sync.updateStatusSource||updateStatus.sourceType||"",
+    updateStatusReason:updateStatus.reason||"",
     updateDriftState:drift.state||updateStatus.reason||"",
     updateDriftHostChanged:typeof drift.hostChanged==="boolean"?drift.hostChanged:null,
     updateDriftCliChanged:typeof drift.cliChanged==="boolean"?drift.cliChanged:null,
+    sourceHostHash:updateStatus.source?.hostHash||"",
+    activeHostHash:updateStatus.active?.hostHash||"",
+    sourceCliHash:updateStatus.source?.cliHash||"",
+    activeCliHash:updateStatus.active?.cliHash||"",
+    hostHashMatches:updateStatus.source?.hostHash&&updateStatus.active?.hostHash?updateStatus.source.hostHash===updateStatus.active.hostHash:null,
+    cliHashMatches:updateStatus.source?.cliHash&&updateStatus.active?.cliHash?updateStatus.source.cliHash===updateStatus.active.cliHash:null,
     managerBridgeProcessCount:Number.isFinite(Number(managerBridge.processCount))?Number(managerBridge.processCount):null,
     managerBridgeStaleProcessCount:Number.isFinite(Number(managerBridge.staleProcessCount))?Number(managerBridge.staleProcessCount):null,
   };
@@ -3581,7 +3588,8 @@ function syncReadinessEvidenceLines(evidence){
   const e=evidence||{};
   return [
     "sync versions: codex="+(e.codexVersion||"unknown")+" / source="+(e.sourcePackageVersion||"unknown")+" / active="+(e.activePackageVersion||"unknown"),
-    "sync drift: state="+(e.updateDriftState||"unknown")+" / source="+(e.updateStatusSource||"unknown")+" / hostChanged="+triStateText(e.updateDriftHostChanged)+" / cliChanged="+triStateText(e.updateDriftCliChanged),
+    "sync drift: state="+(e.updateDriftState||"unknown")+" / reason="+(e.updateStatusReason||"unknown")+" / source="+(e.updateStatusSource||"unknown")+" / hostChanged="+triStateText(e.updateDriftHostChanged)+" / cliChanged="+triStateText(e.updateDriftCliChanged),
+    "sync hashes: host="+(String(e.activeHostHash||"").slice(0,8)||"unknown")+"/"+(String(e.sourceHostHash||"").slice(0,8)||"unknown")+" match="+triStateText(e.hostHashMatches)+" / cli="+(String(e.activeCliHash||"").slice(0,8)||"unknown")+"/"+(String(e.sourceCliHash||"").slice(0,8)||"unknown")+" match="+triStateText(e.cliHashMatches),
     (e.managerBridgeProcessCount!==null||e.managerBridgeStaleProcessCount!==null)?("managerBridge: processes="+(e.managerBridgeProcessCount??"?")+" / stale="+(e.managerBridgeStaleProcessCount??"?")):"",
   ].filter(Boolean);
 }
@@ -3882,7 +3890,8 @@ function latestReportsSummary(result){
     if(item.syncReadinessEvidence){
       const evidence=item.syncReadinessEvidence;
       lines.push("  syncReadiness: noTraffic="+(evidence.noTrafficReady?"true":"check")+" / full="+(evidence.fullMode?"true":"check")+" / host="+(evidence.activeHostReady&&evidence.brandReady?"ok":"check")+" / icons="+(evidence.iconReady?"ok":"check")+" / update="+(evidence.updateReady?"synced":"check")+" / guardrails="+(evidence.guardrailsReady?"ok":"check"));
-      lines.push("  syncReadiness versions: codex="+(evidence.codexVersion||"unknown")+" / source="+(evidence.sourcePackageVersion||"unknown")+" / active="+(evidence.activePackageVersion||"unknown")+" / drift="+(evidence.updateDriftState||"unknown")+" / updateSource="+(evidence.updateStatusSource||"unknown")+" / hostChanged="+triStateText(evidence.updateDriftHostChanged)+" / cliChanged="+triStateText(evidence.updateDriftCliChanged));
+      lines.push("  syncReadiness versions: codex="+(evidence.codexVersion||"unknown")+" / source="+(evidence.sourcePackageVersion||"unknown")+" / active="+(evidence.activePackageVersion||"unknown")+" / drift="+(evidence.updateDriftState||"unknown")+" / reason="+(evidence.updateStatusReason||"unknown")+" / updateSource="+(evidence.updateStatusSource||"unknown")+" / hostChanged="+triStateText(evidence.updateDriftHostChanged)+" / cliChanged="+triStateText(evidence.updateDriftCliChanged));
+      lines.push("  syncReadiness hashes: host="+(String(evidence.activeHostHash||"").slice(0,8)||"unknown")+"/"+(String(evidence.sourceHostHash||"").slice(0,8)||"unknown")+" match="+triStateText(evidence.hostHashMatches)+" / cli="+(String(evidence.activeCliHash||"").slice(0,8)||"unknown")+"/"+(String(evidence.sourceCliHash||"").slice(0,8)||"unknown")+" match="+triStateText(evidence.cliHashMatches));
       lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / processes="+(evidence.managerBridgeProcessCount??"?")+" / stale="+(evidence.managerBridgeStaleProcessCount??"?")+" / clean="+(evidence.cleanSyncState?"true":"false"));
     }
     if(item.installedOverallEvidence){

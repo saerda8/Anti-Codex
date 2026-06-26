@@ -467,7 +467,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /syncReadinessEvidence/);
     assert.match(source, /syncReadiness: noTraffic=/);
     assert.match(source, /syncReadiness versions: codex=/);
+    assert.match(source, /syncReadiness hashes: host=/);
     assert.match(source, /updateStatusSource/);
+    assert.match(source, /updateStatusReason/);
     assert.match(source, /managerBridgeProcessCount/);
     assert.match(source, /processes=/);
     assert.match(source, /installedOverallEvidence/);
@@ -518,12 +520,19 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /function updateOperationStateText/);
   assert.match(managerInject, /function syncReadinessEvidenceFromResult/);
   assert.match(managerInject, /function syncReadinessEvidenceLines/);
+  assert.match(managerInject, /updateStatus\.source\?\.packageVersion \|\| activeHost\.sourcePackageVersion/);
+  assert.match(managerInject, /sourceHostHash/);
+  assert.match(managerInject, /hostHashMatches/);
   assert.match(managerInject, /syncEvidence = diagnostics\?\.syncReadinessEvidence/);
   assert.match(managerInject, /Manager bridge/);
   assert.match(managerServerSource, /syncReadinessEvidence: latestManagerReportItem/);
   assert.match(managerServerSource, /function syncReadinessEvidenceFromResult/);
   assert.match(managerServerSource, /syncReadinessEvidenceLines/);
+  assert.match(managerServerSource, /updateStatus\.source\?\.packageVersion\|\|activeHost\.sourcePackageVersion/);
+  assert.match(managerServerSource, /sourceHostHash/);
+  assert.match(managerServerSource, /hostHashMatches/);
   assert.match(managerServerSource, /sync drift/);
+  assert.match(managerServerSource, /sync hashes/);
   assert.match(managerServerSource, /processes=/);
   assert.match(managerInject, /function updateOperationStageText/);
   assert.match(managerInject, /function updateStatusText/);
@@ -2732,7 +2741,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /shortcutReadyCount/);
   assert.match(reportSummarizer, /codexVersion/);
   assert.match(reportSummarizer, /sourcePackageVersion/);
+  assert.match(reportSummarizer, /sourcePackageVersion: updateStatus\?\.source/);
   assert.match(reportSummarizer, /updateStatusSource/);
+  assert.match(reportSummarizer, /updateStatusReason/);
+  assert.match(reportSummarizer, /sourceHostHash/);
+  assert.match(reportSummarizer, /hostHashMatches/);
   assert.match(reportSummarizer, /updateDriftState/);
   assert.match(reportSummarizer, /managerBridgeProcessCount/);
   assert.match(reportSummarizer, /installedOverallEvidence/);
@@ -3278,7 +3291,7 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
         fileDescription: "Anti-Codex",
         originalFilename: "Anti-Codex.exe",
         codexVersion: "1.2.3",
-        sourcePackageVersion: "4.5.6",
+        sourcePackageVersion: "4.5.5-active-host",
         hostIconExists: true,
         trayIconExists: true,
         appRootIconExists: true,
@@ -3301,6 +3314,9 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
         updateStatus: {
           ok: true,
           updateNeeded: false,
+          reason: "already_synced",
+          source: { packageVersion: "4.5.6", hostHash: "SOURCEHOST123456", cliHash: "SOURCECLI123456" },
+          active: { packageVersion: "4.5.6", hostHash: "SOURCEHOST123456", cliHash: "SOURCECLI123456" },
           drift: { state: "synced", hostChanged: false, cliChanged: false, activePackageVersion: "4.5.6" },
           guardrails: { brandPreserved: true, iconPreserved: true, activeHostValid: true, failures: [] },
         },
@@ -3329,10 +3345,17 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
     assert.equal(summary.syncReadinessEvidence.codexVersion, "1.2.3");
     assert.equal(summary.syncReadinessEvidence.sourcePackageVersion, "4.5.6");
     assert.equal(summary.syncReadinessEvidence.updateStatusSource, "installed-runtime");
+    assert.equal(summary.syncReadinessEvidence.updateStatusReason, "already_synced");
     assert.equal(summary.syncReadinessEvidence.updateDriftState, "synced");
     assert.equal(summary.syncReadinessEvidence.updateDriftHostChanged, false);
     assert.equal(summary.syncReadinessEvidence.updateDriftCliChanged, false);
     assert.equal(summary.syncReadinessEvidence.activePackageVersion, "4.5.6");
+    assert.equal(summary.syncReadinessEvidence.sourceHostHash, "SOURCEHOST123456");
+    assert.equal(summary.syncReadinessEvidence.activeHostHash, "SOURCEHOST123456");
+    assert.equal(summary.syncReadinessEvidence.sourceCliHash, "SOURCECLI123456");
+    assert.equal(summary.syncReadinessEvidence.activeCliHash, "SOURCECLI123456");
+    assert.equal(summary.syncReadinessEvidence.hostHashMatches, true);
+    assert.equal(summary.syncReadinessEvidence.cliHashMatches, true);
     assert.equal(summary.syncReadinessEvidence.updateReady, true);
     assert.equal(summary.syncReadinessEvidence.guardrailsReady, true);
     assert.equal(summary.syncReadinessEvidence.shortcutCount, 2);
