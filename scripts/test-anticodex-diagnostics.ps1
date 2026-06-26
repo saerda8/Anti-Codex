@@ -357,6 +357,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
             Add-Failure "release-gates next action $actionId missing explicit approval block"
         }
+        if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$nextAction.guidance)) {
+            Add-Failure "release-gates next action $actionId missing guidance"
+        }
     }
     foreach ($gateFailure in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons)) {
         $gateFailureId = [string]$gateFailure.id
@@ -541,8 +544,13 @@ function Test-ReportsSummary {
         if (-not (Has-Property $releaseGatesSummary "releaseGateFailureReasons")) { Add-Failure "release-gates summary missing failure reason details" }
         Test-ReleaseGateApprovalAndOfflineEvidence $releaseGatesSummary
         if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
-        if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
-            Add-Failure "release-gates summary missing sync-readiness selected history report"
+        $selectedReports = @(As-FlatArray $releaseGatesSummary.releaseGateSelectedReports)
+        foreach ($selectedGate in @(As-FlatArray $releaseGatesSummary.releaseGateFailureReasons | Where-Object { $_.selectedFromHistory -eq $true })) {
+            $selectedGateId = [string]$selectedGate.id
+            if ([string]::IsNullOrWhiteSpace($selectedGateId)) { continue }
+            if (@($selectedReports | Where-Object { [string]$_.id -eq $selectedGateId -and -not [string]::IsNullOrWhiteSpace([string]$_.selectedFile) }).Count -lt 1) {
+                Add-Failure "release-gates selected history gate $selectedGateId missing selected report detail"
+            }
         }
         Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
     }

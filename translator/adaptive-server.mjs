@@ -2433,7 +2433,7 @@ function latestManagerReportItem(label, fileName) {
                 orderedActions: orderedActions(gate.orderedActions),
                 ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
             };
-        }).filter((entry) => entry.id).slice(0, 24)
+        }).filter((entry) => entry.id).slice(0, 64)
         ;
     const nextActions = orderedActions(report?.nextActions);
     const nextActionsAvailableCount = report && Object.prototype.hasOwnProperty.call(report, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;

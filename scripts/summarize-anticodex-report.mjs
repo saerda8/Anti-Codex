@@ -249,7 +249,7 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
       orderedActions: asOrderedActions(gate.orderedActions),
       ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
     };
-  }).filter((entry) => entry.id).slice(0, 24)
+  }).filter((entry) => entry.id).slice(0, 64)
 const nextActions = asOrderedActions(report?.nextActions);
 const nextActionsAvailableCount = has(report || {}, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;
 const nextActionsHiddenCount = has(report || {}, "nextActionsHiddenCount") ? report.nextActionsHiddenCount : null;

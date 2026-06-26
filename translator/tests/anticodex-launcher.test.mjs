@@ -2463,6 +2463,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /installedRuntimeEvidence/);
   assert.match(server, /releaseGateSelectedReports/);
   assert.match(server, /releaseGateFailureReasons/);
+  assert.match(server, /releaseGateFailureReasons[\s\S]*slice\(0, 64\)/);
   assert.match(server, /installedRuntime: satisfied=/);
   assert.match(server, /files=/);
   assert.match(server, /sourceMtime=/);
@@ -2720,6 +2721,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
   assert.match(reportSummarizer, /releaseGateFailureReasons/);
+  assert.match(reportSummarizer, /releaseGateFailureReasons[\s\S]*slice\(0, 64\)/);
   assert.match(reportSummarizer, /failureReasonsAvailableCount/);
   assert.match(reportSummarizer, /failureReasonsHiddenCount/);
   assert.match(reportSummarizer, /semanticFailuresAvailableCount/);
@@ -7288,12 +7290,15 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing failure reason details/);
   assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
+  assert.match(diagnostics, /selectedFromHistory -eq \$true/);
+  assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report detail/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId absent from top-level missingRequired/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId has no next action/);
   assert.match(diagnostics, /release-gates group \$groupName missing optional gate \$groupMissingOptionalId absent from top-level missingOptional/);
   assert.match(diagnostics, /release-gates next action \$actionId missing command/);
   assert.match(diagnostics, /release-gates ordered action \$gateFailureId\/\$actionId command requires real-traffic metadata/);
   assert.match(diagnostics, /release-gates failure \$gateFailureId with ordered actions missing guidance/);
+  assert.match(diagnostics, /release-gates next action \$actionId missing guidance/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
   assert.match(diagnostics, /release-gates summary missing nextActions available count/);
@@ -8545,6 +8550,7 @@ test("diagnostics reports-summary fixture rejects action gates without guidance"
     assert.equal(result.status, 1, result.stderr || result.stdout);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates next action managerRealButtons missing guidance"));
     assert.ok(payload.failures.includes("release-gates failure managerRealButtons with ordered actions missing guidance"));
     assert.equal(payload.diagnostics, null);
   } finally {
