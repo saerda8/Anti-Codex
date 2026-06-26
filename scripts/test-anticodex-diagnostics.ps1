@@ -760,8 +760,26 @@ function Invoke-JsonScript {
         throw "Missing script: $ScriptName"
     }
     $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
-    $output = @(& $powerShellBin -NoProfile -ExecutionPolicy Bypass -File $scriptPath @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    $remainingBudgetMs = Get-RemainingVerifierBudgetMs
+    if ($remainingBudgetMs -lt 1000) {
+        throw "$ScriptName skipped because verifier budget was exhausted before child process start"
+    }
+    $stdoutPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-diagnostics-child-{0}.out" -f ([Guid]::NewGuid().ToString("N")))
+    $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-diagnostics-child-{0}.err" -f ([Guid]::NewGuid().ToString("N")))
+    try {
+        $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath) + $Arguments
+        $process = Start-Process -FilePath $powerShellBin -ArgumentList $argumentList -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        if (-not $process.WaitForExit([Math]::Max(1000, $remainingBudgetMs))) {
+            try { $process.Kill() } catch {}
+            throw "$ScriptName timed out after $([int]($remainingBudgetMs / 1000)) seconds while waiting for child process"
+        }
+        $exitCode = $process.ExitCode
+        $output = @()
+        if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue) }
+        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue) }
+    } finally {
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
     $lines = @($output | ForEach-Object { [string]$_ })
     $jsonLine = @($lines | Where-Object { $_.TrimStart().StartsWith("{") } | Select-Object -Last 1)
     if ($exitCode -ne 0) {
@@ -774,6 +792,12 @@ function Invoke-JsonScript {
 }
 
 function Resolve-InstalledScriptRoot {
+    if ($env:ANTICODEX_DIAGNOSTICS_SCRIPT_ROOT) {
+        $overrideRoot = [string]$env:ANTICODEX_DIAGNOSTICS_SCRIPT_ROOT
+        if (Test-Path -LiteralPath (Join-Path $overrideRoot "collect-anticodex-diagnostics.ps1") -PathType Leaf) {
+            return $overrideRoot
+        }
+    }
     $installedRoot = Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime\scripts"
     if (Test-Path -LiteralPath (Join-Path $installedRoot "collect-anticodex-diagnostics.ps1") -PathType Leaf) {
         return $installedRoot

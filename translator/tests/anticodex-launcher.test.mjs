@@ -7341,6 +7341,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /function Get-RemainingVerifierBudgetMs/);
   assert.match(diagnostics, /verifier budget exhausted before \$Path request attempt \$attempt/);
   assert.match(diagnostics, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(3, \[Math\]::Min\(\$TimeoutSec/);
+  assert.match(diagnostics, /Start-Process -FilePath \$powerShellBin/);
+  assert.match(diagnostics, /\$process\.WaitForExit\(\[Math\]::Max\(1000, \$remainingBudgetMs\)\)/);
+  assert.match(diagnostics, /\$ScriptName timed out after/);
+  assert.match(diagnostics, /ANTICODEX_DIAGNOSTICS_SCRIPT_ROOT/);
   assert.ok((diagnostics.match(/Test-ReleaseGateApprovalAndOfflineEvidence \$releaseGatesSummary/g) || []).length >= 2);
   assert.match(diagnostics, /reports summary file missing/);
   assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
@@ -7675,7 +7679,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /maxQueued/);
   assert.match(diagnostics, /exceeds its configured limit/);
   assert.match(diagnostics, /tool output\|messages\|input_items\|Return exactly this/);
-  assert.doesNotMatch(diagnostics, /Stop-Process|Start-Process|auth\/login/);
+  assert.doesNotMatch(diagnostics, /Stop-Process|auth\/login/);
 });
 
 function minimalDiagnosticsReleaseGateSummary(overrides = {}) {
@@ -7754,6 +7758,55 @@ test("diagnostics verifier bounds a silent diagnostics endpoint", async () => {
     assert.equal(payload.diagnostics, null);
   } finally {
     await new Promise((resolveClose) => server.close(resolveClose));
+  }
+});
+
+test("diagnostics bundle verification bounds a slow collector child", async () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-child-budget-"));
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({
+      ok: true,
+      object: "anticodex.diagnostics",
+      health: { upstream: "antigravity-desktop", modelCount: 1, accountReady: true },
+      mode: { upstream: "antigravity-desktop" },
+      reports: { summaries: [] },
+    }));
+  });
+  await new Promise((resolveServer, rejectServer) => {
+    server.once("error", rejectServer);
+    server.listen(0, "127.0.0.1", resolveServer);
+  });
+  try {
+    const port = server.address().port;
+    writeFileSync(join(tempRoot, "collect-anticodex-diagnostics.ps1"), [
+      "param([string]$BaseUrl = '', [switch]$NoPopup)",
+      "Start-Sleep -Seconds 20",
+      "'{\"ok\":true,\"zipPath\":\"fake.zip\",\"bundleRoot\":\"fake\"}'",
+    ].join("\n"), "utf8");
+    const startedAt = Date.now();
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyBundle",
+      "-TimeoutSec", "10",
+      "-BaseUrl", `http://127.0.0.1:${port}`,
+    ], {
+      encoding: "utf8",
+      timeout: 16000,
+      cwd: tempRoot,
+      env: { ...process.env, ANTICODEX_DIAGNOSTICS_SCRIPT_ROOT: tempRoot },
+    });
+    const elapsedMs = Date.now() - startedAt;
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.ok(elapsedMs < 15000, `diagnostics child verifier took ${elapsedMs}ms`);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.some((failure) => failure.includes("collect-anticodex-diagnostics.ps1 timed out")));
+  } finally {
+    await new Promise((resolveClose) => server.close(resolveClose));
+    rmSync(tempRoot, { recursive: true, force: true });
   }
 });
 
