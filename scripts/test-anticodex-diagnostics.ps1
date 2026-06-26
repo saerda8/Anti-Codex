@@ -222,6 +222,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingShortId }).Count -lt 1) {
             Add-Failure "release-gates missing short gate $missingShortId missing failure reason details"
         }
+        if (@($nextActions | Where-Object { [string]$_.id -eq $missingShortId -or [string]$_.gateId -eq $missingShortId }).Count -lt 1) {
+            Add-Failure "release-gates missing short gate $missingShortId missing next action"
+        }
     }
     $missingOptionalGates = @(As-FlatArray $ReleaseGatesSummary.missingOptional | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     foreach ($missingOptionalId in $missingOptionalGates) {

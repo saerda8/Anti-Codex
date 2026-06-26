@@ -7303,6 +7303,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId has no next action/);
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing failure reason details/);
+  assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing next action/);
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing failure reason details/);
   assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
   assert.match(diagnostics, /selectedFromHistory -eq \$true/);
@@ -8902,6 +8903,81 @@ test("diagnostics reports-summary fixture rejects missing short gates without de
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates missing short gate managerRealButtons missing failure reason details"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects missing short gates without next actions", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-short-action-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: true,
+      optionalRealTrafficFailures: [],
+      missingRequired: [],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities"],
+      releaseGateFailureReasons: [{
+        id: "pluginCapabilities",
+        failureReasons: ["ok_false"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        reportFailureSamples: ["local gateway offline"],
+        reportFailureSampleCodes: ["local_gateway_offline"],
+        guidance: "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.",
+        orderedActions: [],
+      }],
+      nextActions: [],
+      nextActionsAvailableCount: 0,
+      nextActionsHiddenCount: 0,
+      nextActionsTruncated: false,
+      approvalPlan: {
+        actionCount: 0,
+        blockedCount: 0,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        reportOnlyCount: 0,
+        firstBlockedAction: "",
+        phases: [],
+      },
+      releaseGateGroups: [],
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates missing short gate pluginCapabilities missing next action"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
