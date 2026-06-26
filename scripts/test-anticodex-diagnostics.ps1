@@ -115,6 +115,11 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates optional real-traffic failure $optionalFailureId missing guidance"
         }
     }
+    foreach ($failureId in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailures | ForEach-Object { if ($_.id) { [string]$_.id } else { [string]$_ } } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $failureId }).Count -lt 1) {
+            Add-Failure "release-gates failure $failureId missing failure reason details"
+        }
+    }
     if (-not (Has-Property $ReleaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
     if (-not (Has-Property $ReleaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
     $nextActions = @(As-FlatArray $ReleaseGatesSummary.nextActions)
