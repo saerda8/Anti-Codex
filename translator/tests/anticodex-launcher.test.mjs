@@ -8466,9 +8466,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_real_provider_return_route_transport/);
   assert.match(releaseGates, /optional_real_provider_return_requested_model/);
   assert.match(releaseGates, /optional_real_provider_return_resolved_model/);
+  assert.match(releaseGates, /optional_real_provider_required/);
   assert.match(releaseGates, /optional_antigravity_return_report_name/);
   assert.match(releaseGates, /optional_antigravity_return_missing_markers/);
   assert.match(releaseGates, /optional_antigravity_return_route_transport/);
+  assert.match(releaseGates, /optional_antigravity_return_required/);
   assert.match(releaseGates, /requireThirdPartyProviderSemantics/);
   assert.match(releaseGates, /third_party_provider_turn_count/);
   assert.match(releaseGates, /third_party_provider_openai_tool_pair_lost/);

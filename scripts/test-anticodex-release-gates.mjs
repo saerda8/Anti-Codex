@@ -1090,6 +1090,12 @@ function gateGuidance(gate) {
   if (syncReadinessHostSyncNeeded(gate)) {
     return "host_sync_required: installed Codex changed; run Sync Codex Update only with explicit approval. It builds and validates a candidate before replacing Anti-Codex; failed validation leaves the current host intact.";
   }
+  if (gate?.id === "realThirdPartyProviderOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "optional_real_provider_required: optional real third-party provider evidence is stale or missing; run only with explicit user approval and an environment-variable API key, never ChatGPT login or stored connector authorization.";
+  }
+  if (gate?.id === "providerAntigravityReturnOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "optional_antigravity_return_required: optional provider-to-Antigravity return evidence is stale or missing; run only with explicit user approval because it performs a real Antigravity return turn.";
+  }
   if (actions.some((item) => item.id === "stabilitySoak") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_stability_soak_required: optional soak evidence is stale; run only with explicit user approval because it uses the local gateway, real traffic, and a longer stability window.";
   }
@@ -2665,6 +2671,10 @@ if (args.has("--self-test")) {
     if (!gateGuidance(stabilitySoakGate).includes("optional_stability_soak_required")) throw new Error("self-test failed: optional stability-soak guidance was not attached");
     const coldRelaunchGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!gateGuidance(coldRelaunchGate).includes("optional_cold_relaunch_required")) throw new Error("self-test failed: optional cold-relaunch guidance was not attached");
+    const optionalRealProviderGate = reasonGates.find((item) => item.id === "realThirdPartyProviderOptional");
+    if (!gateGuidance(optionalRealProviderGate).includes("optional_real_provider_required")) throw new Error("self-test failed: optional real-provider guidance was not attached");
+    const optionalAntigravityReturnGate = reasonGates.find((item) => item.id === "providerAntigravityReturnOptional");
+    if (!gateGuidance(optionalAntigravityReturnGate).includes("optional_antigravity_return_required")) throw new Error("self-test failed: optional Antigravity-return guidance was not attached");
     const syncReadinessActions = gateOrderedActions({
       id: "syncReadiness",
       satisfied: false,
