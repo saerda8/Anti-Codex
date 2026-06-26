@@ -9335,6 +9335,10 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
   assert.match(verifier, /latest-missing-history\.json/);
   assert.match(verifier, /createHash\("sha256"\)/);
   assert.match(verifier, /usedRealTraffic:\s*false/);
+  assert.match(verifier, /gatewayReachable:\s*false/);
+  assert.match(verifier, /local_gateway_offline/);
+  assert.match(verifier, /gateway_endpoint_unreachable/);
+  assert.match(verifier, /local gateway offline or unreachable/);
   assert.match(overall, /\$checks\.missingHistory\s*=\s*if \(\$Fast -and -not \(Test-FastBudgetAvailable "missing response history verification" 8000\)\)/);
   assert.match(overall, /Invoke-NodeJsonScript "Missing response history verification"/);
   assert.match(overall, /test-anticodex-missing-history\.mjs/);
@@ -9344,6 +9348,8 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
   assert.match(server, /latest-missing-history\.json/);
   assert.match(summarizer, /missingHistoryEvidence/);
   assert.match(diagnostics, /missing-history summary missing missingHistoryEvidence/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-missing-history\.json/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-third-party-provider\.json/);
   assert.match(diagnostics, /missing-history summary status is not 410/);
   assert.match(diagnostics, /missing-history summary should be non-retryable/);
   assert.match(diagnostics, /missing-history summary reports route change/);
@@ -9356,6 +9362,7 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
   assert.match(releaseGates, /response_history_missing/);
   assert.match(releaseGates, /missing_history_used_real_traffic/);
   assert.match(releaseGates, /missing_history_route_changed/);
+  assert.match(releaseGates, /local_gateway_offline/);
 
   const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-missing-history-summary-"));
   try {

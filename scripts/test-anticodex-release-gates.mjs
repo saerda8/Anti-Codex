@@ -1059,6 +1059,7 @@ function isLocalGatewayFailureSample(value) {
   return text.includes("/health")
     || text.includes("endpoint failed")
     || text.includes("gateway offline")
+    || text.includes("fetch failed")
     || text.includes("failed to fetch")
     || text.includes("timeout")
     || text.includes("connection refused")
@@ -1080,6 +1081,9 @@ function reportFailureSampleCodes(samples) {
 function gateGuidance(gate) {
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
+  }
+  if (gate?.id === "missingHistory" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
+    return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun missing-history verification.";
   }
   if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "real_traffic_evidence_stale: requires explicit user approval to start/verify Anti-Codex and refresh release-grade real-traffic reports.";
@@ -1114,7 +1118,7 @@ const shortEvidenceRefreshOrder = [
   ["mcpSkills", "short-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-mcp-skills.ps1 -TimeoutSec 45"],
   ["localConnectors", "short-local", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-local-connectors.mjs --report-root $env:APPDATA\\anticodex\\reports\""],
   ["thirdPartyProvider", "short-local", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-third-party-provider.mjs --report-root $env:APPDATA\\anticodex\\reports\""],
-  ["missingHistory", "short-local", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-missing-history.mjs --report-root $env:APPDATA\\anticodex\\reports\""],
+  ["missingHistory", "short-gateway", "powershell.exe -NoProfile -Command \"& node scripts\\test-anticodex-missing-history.mjs --report-root $env:APPDATA\\anticodex\\reports\"", { requiresGatewayStart: true }],
   ["installedRuntimeSync", "short-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\sync-anticodex-runtime.ps1 -NoRestart -TimeoutSec 10"],
 ];
 
@@ -2633,6 +2637,8 @@ if (args.has("--self-test")) {
     if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not marked gateway and real-traffic");
     const managerRealButtonActions = gateOrderedActions(reasonGates.find((item) => item.id === "managerRealButtons"));
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
+    const missingHistoryActions = gateOrderedActions(reasonGates.find((item) => item.id === "missingHistory"));
+    if (!missingHistoryActions.some((item) => item.id === "missingHistory" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-missing-history.mjs"))) throw new Error("self-test failed: missing-history ordered action was not marked gateway-dependent");
     const missingRequiredWithoutActions = reasonGates
       .filter((item) => item.requiredForRelease === true && !item.satisfied && gateOrderedActions(item).length < 1)
       .map((item) => item.id);

@@ -129,6 +129,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     ).Count
     $gatewayCommandHints = @(
         "start-deepcodex.ps1",
+        "test-anticodex-missing-history.mjs",
         "test-anticodex-plugin-capabilities.ps1",
         "test-anticodex-manager-real-buttons.ps1",
         "test-anticodex-codex-responses.ps1",
@@ -725,7 +726,9 @@ function Test-DiagnosticBundle {
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
         }
         $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]
-        if ($thirdPartyProviderSummary) {
+        if (-not $thirdPartyProviderSummary) {
+            Add-Failure "diagnostic reports summary missing latest-third-party-provider.json"
+        } else {
             if ($thirdPartyProviderSummary.ok -ne $true) { Add-Failure "third-party provider summary ok=false" }
             if ($thirdPartyProviderSummary.upstreamFullUrlAccepted -ne $true) { Add-Failure "third-party provider summary missing full URL acceptance" }
             if ($thirdPartyProviderSummary.unauthorizedManagerBlocked -ne $true) { Add-Failure "third-party provider summary missing unauthorized Manager block" }
@@ -1045,7 +1048,9 @@ function Test-DiagnosticBundle {
             }
         }
         $missingHistorySummary = @($summary | Where-Object { $_.file -eq "latest-missing-history.json" } | Select-Object -First 1)[0]
-        if ($missingHistorySummary) {
+        if (-not $missingHistorySummary) {
+            Add-Failure "diagnostic reports summary missing latest-missing-history.json"
+        } else {
             $missingEvidence = $missingHistorySummary.missingHistoryEvidence
             if (-not $missingEvidence) {
                 Add-Failure "missing-history summary missing missingHistoryEvidence"

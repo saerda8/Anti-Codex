@@ -55,10 +55,16 @@ function writeReport(payload) {
 }
 
 async function getJson(path, options = {}) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...options,
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    const reason = String(error?.message || error || "request failed");
+    throw new Error(`${path} request failed: local gateway offline or unreachable: ${reason}`);
+  }
   const text = await response.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
@@ -136,6 +142,10 @@ try {
     behaviorCovered: false,
     coverageKind: "failed",
     usedRealTraffic: false,
+    gatewayReachable: false,
+    baseUrl,
+    failureCodes: ["gateway_endpoint_unreachable", "local_gateway_offline"],
+    guidance: "local gateway offline or unreachable; start or restore the local Anti-Codex gateway, then rerun missing-history verification",
     failures: [String(error?.message || error || "missing-history verification failed")],
     elapsedMs: Date.now() - startedAt,
   };
