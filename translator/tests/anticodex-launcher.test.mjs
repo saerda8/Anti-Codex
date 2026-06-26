@@ -820,6 +820,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /item\.nextActionsAvailableCount != null/);
   assert.match(managerInject, /item\.nextActionsAvailableCount != null/);
   assert.match(managerServerSource, /item\.nextActionsAvailableCount!=null/);
+  assert.match(managerServerSource, /nextActionsAvailableCount,\s*nextActionsHiddenCount,\s*nextActionsTruncated,/);
   for (const marker of ["hiddenFailureReasons", "hiddenReportFailures", "hiddenGuidance", "hiddenGateFailures"]) {
     assert.match(managerBridge, new RegExp(marker));
     assert.match(managerInject, new RegExp(marker));

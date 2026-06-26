@@ -2425,6 +2425,9 @@ function latestManagerReportItem(label, fileName) {
         })).filter((entry) => entry.id).slice(0, 24)
         ;
     const nextActions = orderedActions(report?.nextActions);
+    const nextActionsAvailableCount = report && Object.prototype.hasOwnProperty.call(report, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;
+    const nextActionsHiddenCount = report && Object.prototype.hasOwnProperty.call(report, "nextActionsHiddenCount") ? report.nextActionsHiddenCount : null;
+    const nextActionsTruncated = typeof report?.nextActionsTruncated === "boolean" ? report.nextActionsTruncated : null;
     const releaseGateGroups = report?.groups && typeof report.groups === "object"
         ? Object.entries(report.groups).map(([group, value]) => ({
             group: shortSafeText(group, ""),
@@ -2585,6 +2588,9 @@ function latestManagerReportItem(label, fileName) {
         releaseGateFailures,
         releaseGateFailureReasons,
         nextActions,
+        nextActionsAvailableCount,
+        nextActionsHiddenCount,
+        nextActionsTruncated,
         approvalPlan,
         releaseGateGroups,
         releaseGateSelectedReports,
