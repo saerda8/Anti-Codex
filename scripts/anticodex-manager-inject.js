@@ -989,8 +989,11 @@
         }
         const allNextActions = mergedNextActions();
         const nextActions = allNextActions.slice(0, 8);
-        const hiddenNextActions = Math.max(0, allNextActions.length - nextActions.length);
-        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} more)` : ""}`);
+        const reportHiddenNextActions = item.nextActionsHiddenCount != null && Number.isFinite(Number(item.nextActionsHiddenCount)) ? Math.max(0, Number(item.nextActionsHiddenCount)) : null;
+        const reportAvailableNextActions = item.nextActionsAvailableCount != null && Number.isFinite(Number(item.nextActionsAvailableCount)) ? Math.max(0, Number(item.nextActionsAvailableCount)) : null;
+        const hiddenNextActions = Math.max(0, reportHiddenNextActions ?? (allNextActions.length - nextActions.length));
+        const availableNextActions = reportAvailableNextActions ?? allNextActions.length;
+        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} hidden of ${availableNextActions})` : ""}`);
         if (item.approvalPlan) {
           const plan = item.approvalPlan;
           lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
