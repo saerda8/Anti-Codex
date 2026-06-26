@@ -5975,6 +5975,48 @@ test("plugin capability verifier writes a short-budget degraded report", () => {
   }
 });
 
+test("plugin capability verifier writes a timeout-budget degraded report", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-timeout-budget-"));
+  const previousReportPath = resolve(tempRoot, "latest-plugin-capabilities.json");
+  try {
+    writeFileSync(previousReportPath, JSON.stringify({
+      ok: true,
+      reportName: "plugin-capabilities",
+      sourceSnapshot: {
+        fingerprint: "previous-plugin-source",
+        fileCount: 42,
+        sourceMtimeMax: "2026-06-24T00:00:00.000Z",
+      },
+    }), "utf8");
+    const startedAt = Date.now();
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-plugin-capabilities.ps1"),
+      "-TimeoutSec", "5",
+      "-BaseUrl", "http://127.0.0.1:9",
+      "-ReportRoot", tempRoot,
+    ], { encoding: "utf8", timeout: 12000 });
+    const elapsedMs = Date.now() - startedAt;
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.ok(elapsedMs < 10000, `timeout-budget verifier took ${elapsedMs}ms`);
+    const report = JSON.parse(readFileSync(previousReportPath, "utf8"));
+    assert.equal(report.ok, false);
+    assert.equal(report.shortBudgetMode, false);
+    assert.ok(report.failures.includes("plugin capability verification budget exhausted before local parity scan"));
+    assert.equal(report.sourceSnapshot.fingerprint, "previous-plugin-source");
+    assert.equal(report.sourceSnapshot.reusedFromPreviousReport, true);
+    assert.match(report.sourceSnapshot.refreshSkippedReason, /budget was exhausted/);
+    assert.equal(report.capabilities.nativeCodexWriteback, false);
+    assert.equal(report.capabilities.capabilityState, "degraded_timeout_budget");
+    assert.equal(report.capabilities.degraded, true);
+    assert.equal(report.capabilities.smoke.checked, false);
+    assert.equal(report.capabilities.smoke.callableState, "skipped_timeout_budget");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("plugin capability verifier accepts isolated fake endpoints without connector authorization", async () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-plugin-fake-"));
   const stateRoot = resolve(tempRoot, "state");
