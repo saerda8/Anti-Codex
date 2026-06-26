@@ -72,6 +72,36 @@ function Find-TextHint {
     return ""
 }
 
+function Test-InstalledRuntimeEvidence {
+    param($Evidence)
+
+    if (-not $Evidence) {
+        Add-Failure "release-gates summary missing installed runtime drift evidence"
+        return
+    }
+
+    $sourceFileCount = Get-NonNegativeIntProperty $Evidence "sourceFileCount" "release-gates summary missing installed runtime source file count" "release-gates summary invalid installed runtime source file count"
+    if ($null -ne $sourceFileCount -and $sourceFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime source file count" }
+    $installedFileCount = Get-NonNegativeIntProperty $Evidence "installedRuntimeFileCount" "release-gates summary missing installed runtime target file count" "release-gates summary invalid installed runtime target file count"
+    if ($null -ne $installedFileCount -and $installedFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime target file count" }
+    if (-not [string]$Evidence.sourceFingerprint) { Add-Failure "release-gates summary missing installed runtime source fingerprint" }
+    if (-not [string]$Evidence.installedRuntimeFingerprint) { Add-Failure "release-gates summary missing installed runtime target fingerprint" }
+    if (-not (Has-Property $Evidence "satisfied")) { Add-Failure "release-gates summary missing installed runtime satisfied flag" }
+
+    if ($Evidence.satisfied -eq $true) {
+        if ([string]$Evidence.sourceFingerprint -ne [string]$Evidence.installedRuntimeFingerprint) {
+            Add-Failure "release-gates summary reports installed runtime satisfied with mismatched fingerprints"
+        }
+        foreach ($driftField in @("missingSourceFiles", "missingInstalledRuntimeFiles", "mismatchedRuntimeFiles")) {
+            if (-not (Has-Property $Evidence $driftField)) {
+                Add-Failure "release-gates summary reports installed runtime satisfied without $driftField evidence"
+            } elseif (@(As-FlatArray $Evidence.PSObject.Properties[$driftField].Value | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -ne 0) {
+                Add-Failure "release-gates summary reports installed runtime satisfied with $driftField drift"
+            }
+        }
+    }
+}
+
 function Test-ReleaseGateApprovalAndOfflineEvidence {
     param($ReleaseGatesSummary)
 
@@ -172,7 +202,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates missing optional gate $missingOptionalId missing failure reason details"
         }
     }
-    if (Has-Property $ReleaseGatesSummary "releaseGateGroups") {
+    if (-not (Has-Property $ReleaseGatesSummary "releaseGateGroups")) {
+        Add-Failure "release-gates summary missing release gate group evidence"
+    } else {
         foreach ($releaseGateGroup in @(As-FlatArray $ReleaseGatesSummary.releaseGateGroups | Where-Object { $null -ne $_ })) {
             $groupName = [string]$releaseGateGroup.group
             if ([string]::IsNullOrWhiteSpace($groupName)) {
@@ -482,21 +514,7 @@ function Test-ReportsSummary {
         if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
             Add-Failure "release-gates summary missing sync-readiness selected history report"
         }
-        $installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
-        if (-not $installedRuntimeEvidence) {
-            Add-Failure "release-gates summary missing installed runtime drift evidence"
-        } else {
-            if ([int]$installedRuntimeEvidence.sourceFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime source file count" }
-            if ([int]$installedRuntimeEvidence.installedRuntimeFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime target file count" }
-            if (-not [string]$installedRuntimeEvidence.sourceFingerprint) { Add-Failure "release-gates summary missing installed runtime source fingerprint" }
-            if (-not [string]$installedRuntimeEvidence.installedRuntimeFingerprint) { Add-Failure "release-gates summary missing installed runtime target fingerprint" }
-            if ($installedRuntimeEvidence.satisfied -eq $true -and [string]$installedRuntimeEvidence.sourceFingerprint -ne [string]$installedRuntimeEvidence.installedRuntimeFingerprint) {
-                Add-Failure "release-gates summary reports installed runtime satisfied with mismatched fingerprints"
-            }
-            if ($installedRuntimeEvidence.satisfied -eq $true -and @($installedRuntimeEvidence.mismatchedRuntimeFiles).Count -ne 0) {
-                Add-Failure "release-gates summary reports installed runtime satisfied with mismatched files"
-            }
-        }
+        Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
     }
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
@@ -1200,21 +1218,7 @@ function Test-DiagnosticBundle {
             if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
                 Add-Failure "release-gates summary missing sync-readiness selected history report"
             }
-            $installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
-            if (-not $installedRuntimeEvidence) {
-                Add-Failure "release-gates summary missing installed runtime drift evidence"
-            } else {
-                if ([int]$installedRuntimeEvidence.sourceFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime source file count" }
-                if ([int]$installedRuntimeEvidence.installedRuntimeFileCount -lt 1) { Add-Failure "release-gates summary missing installed runtime target file count" }
-                if (-not [string]$installedRuntimeEvidence.sourceFingerprint) { Add-Failure "release-gates summary missing installed runtime source fingerprint" }
-                if (-not [string]$installedRuntimeEvidence.installedRuntimeFingerprint) { Add-Failure "release-gates summary missing installed runtime target fingerprint" }
-                if ($installedRuntimeEvidence.satisfied -eq $true -and [string]$installedRuntimeEvidence.sourceFingerprint -ne [string]$installedRuntimeEvidence.installedRuntimeFingerprint) {
-                    Add-Failure "release-gates summary reports installed runtime satisfied with mismatched fingerprints"
-                }
-                if ($installedRuntimeEvidence.satisfied -eq $true -and @($installedRuntimeEvidence.mismatchedRuntimeFiles).Count -ne 0) {
-                    Add-Failure "release-gates summary reports installed runtime satisfied with mismatched files"
-                }
-            }
+            Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
         }
         $missingHistorySummary = @($summary | Where-Object { $_.file -eq "latest-missing-history.json" } | Select-Object -First 1)[0]
         if (-not $missingHistorySummary) {

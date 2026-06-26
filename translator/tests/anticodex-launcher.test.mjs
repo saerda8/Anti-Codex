@@ -7182,6 +7182,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /\[string\]\$VerifyReportsSummary/);
   assert.match(diagnostics, /function Test-ReportsSummary/);
   assert.match(diagnostics, /function Test-ReleaseGateApprovalAndOfflineEvidence/);
+  assert.match(diagnostics, /function Test-InstalledRuntimeEvidence/);
   assert.ok((diagnostics.match(/Test-ReleaseGateApprovalAndOfflineEvidence \$releaseGatesSummary/g) || []).length >= 2);
   assert.match(diagnostics, /reports summary file missing/);
   assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
@@ -7250,6 +7251,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing failure reason details/);
+  assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId absent from top-level missingRequired/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId has no next action/);
   assert.match(diagnostics, /release-gates group \$groupName missing optional gate \$groupMissingOptionalId absent from top-level missingOptional/);
@@ -7275,6 +7277,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /nextActions = @\(\$releaseGatesSummary\.nextActions\)/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
   assert.match(diagnostics, /release-gates summary missing installed runtime drift evidence/);
+  assert.match(diagnostics, /release-gates summary reports installed runtime satisfied without \$driftField evidence/);
+  assert.match(diagnostics, /release-gates summary reports installed runtime satisfied with \$driftField drift/);
   assert.match(diagnostics, /installedRuntimeEvidence = \$releaseGatesSummary\.installedRuntimeEvidence/);
   assert.match(diagnostics, /approvalPlan = \$releaseGatesSummary\.approvalPlan/);
   assert.match(diagnostics, /installed runtime source fingerprint/);
@@ -7482,6 +7486,53 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.doesNotMatch(diagnostics, /Stop-Process|Start-Process|auth\/login/);
 });
 
+function minimalDiagnosticsReleaseGateSummary(overrides = {}) {
+  const installedRuntimeEvidence = {
+    satisfied: true,
+    sourceFileCount: 2,
+    installedRuntimeFileCount: 2,
+    sourceFingerprint: "abc123",
+    installedRuntimeFingerprint: "abc123",
+    missingSourceFiles: [],
+    missingInstalledRuntimeFiles: [],
+    mismatchedRuntimeFiles: [],
+    ...(overrides.installedRuntimeEvidence || {}),
+  };
+  return {
+    file: "latest-release-gates.json",
+    ok: false,
+    shortReady: false,
+    releaseReady: false,
+    effectiveOk: false,
+    strictOptionalRealTraffic: false,
+    optionalRealTrafficReady: false,
+    optionalRealTrafficFailures: [],
+    missingRequired: [],
+    missingShort: [],
+    missingOptional: [],
+    damagedReports: [],
+    releaseGateFailures: [],
+    releaseGateFailureReasons: [],
+    nextActions: [],
+    nextActionsAvailableCount: 0,
+    nextActionsHiddenCount: 0,
+    nextActionsTruncated: false,
+    approvalPlan: {
+      actionCount: 0,
+      blockedCount: 0,
+      requiresGatewayStartCount: 0,
+      requiresRealTrafficCount: 0,
+      highImpactCount: 0,
+      reportOnlyCount: 0,
+      phases: [],
+    },
+    releaseGateGroups: [],
+    releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+    ...overrides,
+    installedRuntimeEvidence,
+  };
+}
+
 test("diagnostics verifier validates reports-summary fixtures without contacting the gateway", () => {
   const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-summary-"));
   try {
@@ -7551,6 +7602,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }, {
@@ -7594,6 +7647,62 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.reportsSummary.syncReadiness.evidence.sourcePackageVersion, "26.623.3245.0");
     assert.equal(payload.reportsSummary.syncReadiness.evidence.activePackageVersion, "26.616.9593.0");
     assert.equal(payload.reportsSummary.syncReadiness.evidence.hostHashMatches, false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects missing release-gate group evidence", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-groups-required-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    const releaseGates = minimalDiagnosticsReleaseGateSummary();
+    delete releaseGates.releaseGateGroups;
+    writeFileSync(summaryPath, JSON.stringify([releaseGates]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.notEqual(result.status, 0, result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.match(payload.failures.join("\n"), /missing release gate group evidence/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects satisfied installed-runtime drift", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-installed-drift-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([
+      minimalDiagnosticsReleaseGateSummary({
+        installedRuntimeEvidence: {
+          missingInstalledRuntimeFiles: ["scripts/anticodex-manager-bridge.mjs"],
+        },
+      }),
+    ]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.notEqual(result.status, 0, result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.match(payload.failures.join("\n"), /satisfied with missingInstalledRuntimeFiles drift/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -7655,6 +7764,8 @@ test("diagnostics reports-summary fixture rejects incomplete sync-readiness drif
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }, {
@@ -7736,6 +7847,8 @@ test("diagnostics reports-summary fixture rejects non-plugin failure samples wit
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -7787,6 +7900,7 @@ test("diagnostics reports-summary fixture rejects null approval plan object", ()
         blockedUntilExplicitUserApproval: true,
       }],
       approvalPlan: null,
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -7794,6 +7908,8 @@ test("diagnostics reports-summary fixture rejects null approval plan object", ()
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -7855,6 +7971,7 @@ test("diagnostics reports-summary fixture rejects weak plugin offline snapshot e
         highImpactCount: 0,
         firstBlockedAction: "",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -7862,6 +7979,8 @@ test("diagnostics reports-summary fixture rejects weak plugin offline snapshot e
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -7910,6 +8029,7 @@ test("diagnostics reports-summary fixture rejects incomplete local connector evi
       releaseGateFailureReasons: [],
       nextActions: [],
       approvalPlan: { actionCount: 0, requiresGatewayStartCount: 0 },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -7917,6 +8037,8 @@ test("diagnostics reports-summary fixture rejects incomplete local connector evi
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }, {
@@ -8005,6 +8127,7 @@ test("diagnostics reports-summary fixture rejects unsafe next action approval me
         highImpactCount: 0,
         firstBlockedAction: "",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8012,6 +8135,8 @@ test("diagnostics reports-summary fixture rejects unsafe next action approval me
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8080,6 +8205,7 @@ test("diagnostics reports-summary fixture rejects next action truncation count m
         reportOnlyCount: 0,
         firstBlockedAction: "postVerification",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8087,6 +8213,8 @@ test("diagnostics reports-summary fixture rejects next action truncation count m
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8146,6 +8274,7 @@ test("diagnostics reports-summary fixture rejects command risk metadata mismatch
         highImpactCount: 0,
         firstBlockedAction: "realMiniTool",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8153,6 +8282,8 @@ test("diagnostics reports-summary fixture rejects command risk metadata mismatch
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8226,6 +8357,7 @@ test("diagnostics reports-summary fixture rejects nested ordered action risk met
         reportOnlyCount: 0,
         firstBlockedAction: "realMiniTool",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8233,6 +8365,8 @@ test("diagnostics reports-summary fixture rejects nested ordered action risk met
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8306,6 +8440,7 @@ test("diagnostics reports-summary fixture rejects action gates without guidance"
         reportOnlyCount: 0,
         firstBlockedAction: "managerRealButtons",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8313,6 +8448,8 @@ test("diagnostics reports-summary fixture rejects action gates without guidance"
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8377,6 +8514,8 @@ test("diagnostics reports-summary fixture rejects optional real-traffic failures
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8436,6 +8575,7 @@ test("diagnostics reports-summary fixture rejects gate failures without details"
         reportOnlyCount: 0,
         firstBlockedAction: "postVerification",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8443,6 +8583,8 @@ test("diagnostics reports-summary fixture rejects gate failures without details"
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8502,6 +8644,8 @@ test("diagnostics reports-summary fixture rejects damaged reports without detail
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8561,6 +8705,7 @@ test("diagnostics reports-summary fixture rejects missing required gates without
         reportOnlyCount: 0,
         firstBlockedAction: "postVerification",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8568,6 +8713,8 @@ test("diagnostics reports-summary fixture rejects missing required gates without
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8620,6 +8767,7 @@ test("diagnostics reports-summary fixture rejects missing short gates without de
         reportOnlyCount: 0,
         firstBlockedAction: "",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8627,6 +8775,8 @@ test("diagnostics reports-summary fixture rejects missing short gates without de
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8679,6 +8829,7 @@ test("diagnostics reports-summary fixture rejects missing optional gates without
         reportOnlyCount: 0,
         firstBlockedAction: "",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8686,6 +8837,8 @@ test("diagnostics reports-summary fixture rejects missing optional gates without
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8750,6 +8903,8 @@ test("diagnostics reports-summary fixture rejects group missing gates without al
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8818,6 +8973,7 @@ test("diagnostics reports-summary fixture rejects semantic failures without repo
         reportOnlyCount: 1,
         firstBlockedAction: "postVerification",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8825,6 +8981,8 @@ test("diagnostics reports-summary fixture rejects semantic failures without repo
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8904,6 +9062,7 @@ test("diagnostics reports-summary fixture rejects report-only phase mismatches",
           reportOnly: false,
         }],
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8911,6 +9070,8 @@ test("diagnostics reports-summary fixture rejects report-only phase mismatches",
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -8991,6 +9152,7 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
           blockedUntilExplicitUserApproval: false,
         }],
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -8998,6 +9160,8 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -9056,6 +9220,7 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
       approvalPlan: {
         actionCount: 1,
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -9063,6 +9228,8 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
@@ -9119,6 +9286,7 @@ test("diagnostics reports-summary fixture rejects null approval plan counts", ()
         reportOnlyCount: null,
         firstBlockedAction: "",
       },
+      releaseGateGroups: [],
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
       installedRuntimeEvidence: {
         satisfied: true,
@@ -9126,6 +9294,8 @@ test("diagnostics reports-summary fixture rejects null approval plan counts", ()
         installedRuntimeFileCount: 2,
         sourceFingerprint: "abc123",
         installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
         mismatchedRuntimeFiles: [],
       },
     }]), "utf8");
