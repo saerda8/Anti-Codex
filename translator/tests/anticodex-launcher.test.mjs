@@ -7270,6 +7270,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /plugin capability failure offline source mtime missing/);
   assert.match(diagnostics, /plugin capability failure missing sample codes/);
   assert.match(diagnostics, /release-gates failure \$gateFailureId missing sample codes/);
+  assert.match(diagnostics, /release-gates failure \$gateFailureId missing failureReasons available count/);
+  assert.match(diagnostics, /release-gates failure \$gateFailureId failureReasons hidden count mismatch/);
+  assert.match(diagnostics, /release-gates failure \$semanticFailureId missing semanticFailures available count/);
+  assert.match(diagnostics, /release-gates failure \$semanticFailureId semanticFailures hidden count mismatch/);
   assert.match(diagnostics, /release-gates failure \$failureId missing failure reason details/);
   assert.match(diagnostics, /release-gates damaged report \$damagedReportId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId has no next action/);
@@ -7597,6 +7601,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       }, {
         id: "coldRelaunch",
         failureReasons: ["missing_report"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
         guidance: "optional_cold_relaunch_required: optional cold-relaunch evidence is missing or stale; run only with explicit user approval because it restarts the isolated Anti-Codex runtime.",
         orderedActions: [],
       }],
@@ -7672,6 +7678,47 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.reportsSummary.syncReadiness.evidence.sourcePackageVersion, "26.623.3245.0");
     assert.equal(payload.reportsSummary.syncReadiness.evidence.activePackageVersion, "26.616.9593.0");
     assert.equal(payload.reportsSummary.syncReadiness.evidence.hostHashMatches, false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects failure truncation count mismatches", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-failure-counts-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([minimalDiagnosticsReleaseGateSummary({
+      releaseGateFailures: [{
+        id: "postVerification",
+        semanticFailures: ["post_verification_not_release_ready", "post_verification_failed_checks"],
+        semanticFailuresAvailableCount: 4,
+        semanticFailuresHiddenCount: 0,
+      }],
+      releaseGateFailureReasons: [{
+        id: "postVerification",
+        failureReasons: ["stale_report", "semantic_failures"],
+        failureReasonsAvailableCount: 2,
+        failureReasonsHiddenCount: 3,
+        guidance: "real_traffic_evidence_stale: requires explicit user approval.",
+        orderedActions: [],
+      }],
+    })]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates failure postVerification failureReasons hidden count mismatch"));
+    assert.ok(payload.failures.includes("release-gates failure postVerification semanticFailures hidden count mismatch"));
+    assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

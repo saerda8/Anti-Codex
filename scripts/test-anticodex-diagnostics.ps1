@@ -146,6 +146,33 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($gateFailureSamples.Count -gt 0 -and $gateFailureCodes.Count -lt 1) {
             Add-Failure "release-gates failure $gateFailureId missing sample codes"
         }
+        if (Has-Property $gateFailure "failureReasons") {
+            $visibleFailureReasons = @(As-FlatArray $gateFailure.failureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+            $availableFailureReasons = Get-NonNegativeIntProperty $gateFailure "failureReasonsAvailableCount" "release-gates failure $gateFailureId missing failureReasons available count" "release-gates failure $gateFailureId invalid failureReasons available count"
+            $hiddenFailureReasons = Get-NonNegativeIntProperty $gateFailure "failureReasonsHiddenCount" "release-gates failure $gateFailureId missing failureReasons hidden count" "release-gates failure $gateFailureId invalid failureReasons hidden count"
+            if ($null -ne $availableFailureReasons -and $availableFailureReasons -lt $visibleFailureReasons.Count) {
+                Add-Failure "release-gates failure $gateFailureId failureReasons available count is below visible reasons"
+            }
+            if ($null -ne $availableFailureReasons -and $null -ne $hiddenFailureReasons -and $hiddenFailureReasons -ne ($availableFailureReasons - $visibleFailureReasons.Count)) {
+                Add-Failure "release-gates failure $gateFailureId failureReasons hidden count mismatch"
+            }
+        }
+    }
+    foreach ($semanticFailure in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailures)) {
+        if (-not (Has-Property $semanticFailure "semanticFailures")) { continue }
+        $semanticFailureId = [string]$semanticFailure.id
+        if ([string]::IsNullOrWhiteSpace($semanticFailureId)) {
+            $semanticFailureId = "unknown"
+        }
+        $visibleSemanticFailures = @(As-FlatArray $semanticFailure.semanticFailures | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $availableSemanticFailures = Get-NonNegativeIntProperty $semanticFailure "semanticFailuresAvailableCount" "release-gates failure $semanticFailureId missing semanticFailures available count" "release-gates failure $semanticFailureId invalid semanticFailures available count"
+        $hiddenSemanticFailures = Get-NonNegativeIntProperty $semanticFailure "semanticFailuresHiddenCount" "release-gates failure $semanticFailureId missing semanticFailures hidden count" "release-gates failure $semanticFailureId invalid semanticFailures hidden count"
+        if ($null -ne $availableSemanticFailures -and $availableSemanticFailures -lt $visibleSemanticFailures.Count) {
+            Add-Failure "release-gates failure $semanticFailureId semanticFailures available count is below visible failures"
+        }
+        if ($null -ne $availableSemanticFailures -and $null -ne $hiddenSemanticFailures -and $hiddenSemanticFailures -ne ($availableSemanticFailures - $visibleSemanticFailures.Count)) {
+            Add-Failure "release-gates failure $semanticFailureId semanticFailures hidden count mismatch"
+        }
     }
     foreach ($optionalFailureId in @(As-FlatArray $ReleaseGatesSummary.optionalRealTrafficFailures | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
         $optionalFailure = @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $optionalFailureId } | Select-Object -First 1)[0]
