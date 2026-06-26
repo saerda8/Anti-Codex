@@ -2752,6 +2752,11 @@ if (args.has("--self-test")) {
     const sortedActions = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) })));
     const sortedActionIds = sortedActions.map((item) => item.id);
     if (sortedActions.some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
+    const missingShortWithoutActions = reasonGates
+      .filter((item) => item.requiredForShort === true && !item.satisfied)
+      .filter((item) => !sortedActions.some((actionItem) => actionItem.id === item.id || actionItem.gateId === item.id))
+      .map((item) => item.id);
+    if (missingShortWithoutActions.length) throw new Error(`self-test failed: short failed gates missing next actions: ${missingShortWithoutActions.join(",")}`);
     if (!sortedActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required"))) throw new Error("self-test failed: nextActions did not preserve gate guidance");
     if (!sortedActions.some((item) => item.id === "accountProxyReadiness" && String(item.guidance || "").includes("real_traffic_evidence_stale"))) throw new Error("self-test failed: real-traffic nextActions did not preserve gate guidance");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");

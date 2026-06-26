@@ -9785,6 +9785,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /nextActionsHiddenCount/);
   assert.match(releaseGates, /nextActionsTruncated/);
   assert.match(releaseGates, /nextActions truncation evidence was not summarized/);
+  assert.match(releaseGates, /short failed gates missing next actions/);
   assert.match(releaseGates, /nextActions did not preserve gate guidance/);
   assert.match(releaseGates, /real-traffic nextActions did not preserve gate guidance/);
   assert.match(releaseGates, /gate ordered actions did not preserve reason and guidance/);
