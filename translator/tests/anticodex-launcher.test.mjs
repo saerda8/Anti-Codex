@@ -781,6 +781,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /releaseGateFailureReasons/);
   assert.match(managerBridge, /failureReasons/);
   assert.match(managerInject, /failureReasons/);
+  assert.match(managerServerSource, /failureReasonsAvailableCount/);
+  assert.match(managerBridge, /failureReasonsHiddenCount/);
+  assert.match(managerInject, /failureReasonsHiddenCount/);
+  assert.match(managerServerSource, /failureReasonsHiddenCount/);
+  assert.match(managerServerSource, /semanticFailuresAvailableCount/);
+  assert.match(managerBridge, /semanticFailuresHiddenCount/);
+  assert.match(managerInject, /semanticFailuresHiddenCount/);
+  assert.match(managerServerSource, /semanticFailuresHiddenCount/);
   assert.match(managerBridge, /nextActions/);
   assert.match(managerInject, /nextActions/);
   assert.match(managerServerSource, /nextActions/);
@@ -2707,6 +2715,10 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
   assert.match(reportSummarizer, /releaseGateFailureReasons/);
+  assert.match(reportSummarizer, /failureReasonsAvailableCount/);
+  assert.match(reportSummarizer, /failureReasonsHiddenCount/);
+  assert.match(reportSummarizer, /semanticFailuresAvailableCount/);
+  assert.match(reportSummarizer, /semanticFailuresHiddenCount/);
   assert.match(reportSummarizer, /nextActionsAvailableCount/);
   assert.match(reportSummarizer, /nextActionsHiddenCount/);
   assert.match(reportSummarizer, /nextActionsTruncated/);
@@ -4075,6 +4087,8 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       requiredForShort: false,
       failureReason: "stale_report",
       failureReasons: ["stale_report"],
+      failureReasonsAvailableCount: 1,
+      failureReasonsHiddenCount: 0,
       ageHours: 56.1,
       fresh: false,
       selectedFromHistory: false,
@@ -4099,6 +4113,8 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       requiredForShort: false,
       failureReason: "semantic_failures",
       failureReasons: ["semantic_failures"],
+      failureReasonsAvailableCount: 1,
+      failureReasonsHiddenCount: 0,
       ageHours: null,
       fresh: null,
       selectedFromHistory: false,

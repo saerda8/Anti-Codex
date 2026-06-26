@@ -2376,53 +2376,62 @@ function latestManagerReportItem(label, fileName) {
                     && gate.satisfied !== true
                     && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && (gate.error || gate.okField === false)));
             })
-            .map((gate) => ({
-                id: shortSafeText(gate.id, ""),
-                group: shortSafeText(gate.group, ""),
-                error: shortSafeText(gate.error, ""),
-                failureReason: shortSafeText(gate.failureReason || "", ""),
-                failureReasons: Array.isArray(gate.failureReasons)
-                    ? gate.failureReasons.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
-                    : [],
-                semanticFailures: Array.isArray(gate.semanticFailures)
-                    ? gate.semanticFailures.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8)
-                    : [],
-                selectedKind: shortSafeText(gate.selectedKind || "", ""),
-                selectedFile: shortSafeText(gate.selectedFile || "", ""),
-                selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
-                reportFailureSamples: Array.isArray(gate.reportFailureSamples)
-                    ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3)
-                    : [],
-                ...(Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? { reportFailureSampleCodes: gate.reportFailureSampleCodes.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 6) } : {}),
-                guidance: shortSafeText(gate.guidance || "", ""),
-                orderedActions: orderedActions(gate.orderedActions),
-                ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
-            }))
+            .map((gate) => {
+                const failureReasons = Array.isArray(gate.failureReasons) ? gate.failureReasons.map((item) => shortSafeText(item, "")).filter(Boolean) : [];
+                const semanticFailures = Array.isArray(gate.semanticFailures) ? gate.semanticFailures.map((item) => shortSafeText(item, "")).filter(Boolean) : [];
+                return {
+                    id: shortSafeText(gate.id, ""),
+                    group: shortSafeText(gate.group, ""),
+                    error: shortSafeText(gate.error, ""),
+                    failureReason: shortSafeText(gate.failureReason || "", ""),
+                    failureReasons: failureReasons.slice(0, 8),
+                    failureReasonsAvailableCount: failureReasons.length,
+                    failureReasonsHiddenCount: Math.max(0, failureReasons.length - 8),
+                    semanticFailures: semanticFailures.slice(0, 8),
+                    semanticFailuresAvailableCount: semanticFailures.length,
+                    semanticFailuresHiddenCount: Math.max(0, semanticFailures.length - 8),
+                    selectedKind: shortSafeText(gate.selectedKind || "", ""),
+                    selectedFile: shortSafeText(gate.selectedFile || "", ""),
+                    selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
+                    reportFailureSamples: Array.isArray(gate.reportFailureSamples)
+                        ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3)
+                        : [],
+                    ...(Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? { reportFailureSampleCodes: gate.reportFailureSampleCodes.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 6) } : {}),
+                    guidance: shortSafeText(gate.guidance || "", ""),
+                    orderedActions: orderedActions(gate.orderedActions),
+                    ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
+                };
+            })
             .slice(0, 12)
         : [];
     const rawReleaseGateFailureReasons = Array.isArray(report?.releaseGateFailureReasons)
         ? report.releaseGateFailureReasons
         : (Array.isArray(report?.gates) ? report.gates.filter((gate) => gate && gate.satisfied !== true) : []);
     const releaseGateFailureReasons = rawReleaseGateFailureReasons
-        .map((gate) => ({
-            id: shortSafeText(gate.id || "", ""),
-            group: shortSafeText(gate.group || "", ""),
-            requiredForRelease: gate.requiredForRelease === true,
-            requiredForShort: gate.requiredForShort === true,
-            failureReason: shortSafeText(gate.failureReason || "", ""),
-            failureReasons: Array.isArray(gate.failureReasons) ? gate.failureReasons.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
-            ageHours: Number.isFinite(Number(gate.ageHours)) ? Number(gate.ageHours) : null,
-            fresh: typeof gate.fresh === "boolean" ? gate.fresh : null,
-            selectedFromHistory: gate.selectedFromHistory === true,
-            selectedKind: shortSafeText(gate.selectedKind || "", ""),
-            selectedFile: shortSafeText(gate.selectedFile || "", ""),
-            selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
-            reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
-            ...(Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? { reportFailureSampleCodes: gate.reportFailureSampleCodes.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 6) } : {}),
-            guidance: shortSafeText(gate.guidance || "", ""),
-            orderedActions: orderedActions(gate.orderedActions),
-            ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
-        })).filter((entry) => entry.id).slice(0, 24)
+        .map((gate) => {
+            const failureReasons = Array.isArray(gate.failureReasons) ? gate.failureReasons.map((item) => shortSafeText(item, "")).filter(Boolean) : [];
+            return {
+                id: shortSafeText(gate.id || "", ""),
+                group: shortSafeText(gate.group || "", ""),
+                requiredForRelease: gate.requiredForRelease === true,
+                requiredForShort: gate.requiredForShort === true,
+                failureReason: shortSafeText(gate.failureReason || "", ""),
+                failureReasons: failureReasons.slice(0, 8),
+                failureReasonsAvailableCount: failureReasons.length,
+                failureReasonsHiddenCount: Math.max(0, failureReasons.length - 8),
+                ageHours: Number.isFinite(Number(gate.ageHours)) ? Number(gate.ageHours) : null,
+                fresh: typeof gate.fresh === "boolean" ? gate.fresh : null,
+                selectedFromHistory: gate.selectedFromHistory === true,
+                selectedKind: shortSafeText(gate.selectedKind || "", ""),
+                selectedFile: shortSafeText(gate.selectedFile || "", ""),
+                selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
+                reportFailureSamples: Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
+                ...(Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? { reportFailureSampleCodes: gate.reportFailureSampleCodes.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 6) } : {}),
+                guidance: shortSafeText(gate.guidance || "", ""),
+                orderedActions: orderedActions(gate.orderedActions),
+                ...(offlineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: offlineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
+            };
+        }).filter((entry) => entry.id).slice(0, 24)
         ;
     const nextActions = orderedActions(report?.nextActions);
     const nextActionsAvailableCount = report && Object.prototype.hasOwnProperty.call(report, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;
@@ -3752,7 +3761,8 @@ function latestReportsSummary(result){
         return gateId+":"+id+(flags.length?"["+flags.join(",")+"]":"");
       }
       function failureReasonDisplayLabel(gate){
-        const reason=gate?.failureReason||(Array.isArray(gate?.failureReasons)?gate.failureReasons[0]:"unsatisfied");
+        const hiddenReasons=gate?.failureReasonsHiddenCount!=null&&Number.isFinite(Number(gate.failureReasonsHiddenCount))?Math.max(0,Number(gate.failureReasonsHiddenCount)):0;
+        const reason=(gate?.failureReason||(Array.isArray(gate?.failureReasons)?gate.failureReasons[0]:"unsatisfied"))+(hiddenReasons?"(+"+hiddenReasons+" reasons)":"");
         const details=[];
         if(gate?.ageHours!==undefined&&gate.ageHours!==null&&Number.isFinite(Number(gate.ageHours))) details.push("age="+Number(gate.ageHours).toFixed(1)+"h");
         if(typeof gate?.fresh==="boolean") details.push("fresh="+triStateText(gate.fresh));
@@ -3854,7 +3864,10 @@ function latestReportsSummary(result){
     }
     if(Array.isArray(item.releaseGateFailures)&&item.releaseGateFailures.length){
       const gateFailures=item.releaseGateFailures.slice(0,4).map((gate)=>{
-        const details=Array.isArray(gate.semanticFailures)&&gate.semanticFailures.length?gate.semanticFailures.slice(0,4).join(", "):(gate.error||"unsatisfied");
+        const semanticFailures=Array.isArray(gate.semanticFailures)?gate.semanticFailures:[];
+        const shownSemanticFailures=semanticFailures.slice(0,4);
+        const hiddenSemanticFailures=Math.max(0,semanticFailures.length-shownSemanticFailures.length)+(gate.semanticFailuresHiddenCount!=null&&Number.isFinite(Number(gate.semanticFailuresHiddenCount))?Math.max(0,Number(gate.semanticFailuresHiddenCount)):0);
+        const details=shownSemanticFailures.length?shownSemanticFailures.join(", ")+(hiddenSemanticFailures?" (+"+hiddenSemanticFailures+" more)":""):(gate.error||"unsatisfied");
         return gate.id+":"+details;
       });
       const hiddenGateFailures=Math.max(0,item.releaseGateFailures.length-gateFailures.length);

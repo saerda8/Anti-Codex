@@ -939,7 +939,8 @@
           return `${gateId}:${id}${flags.length ? `[${flags.join(",")}]` : ""}`;
         }
         function failureReasonDisplayLabel(gate) {
-          const reason = gate?.failureReason || (Array.isArray(gate?.failureReasons) ? gate.failureReasons[0] : "unsatisfied");
+          const hiddenReasons = gate?.failureReasonsHiddenCount != null && Number.isFinite(Number(gate.failureReasonsHiddenCount)) ? Math.max(0, Number(gate.failureReasonsHiddenCount)) : 0;
+          const reason = `${gate?.failureReason || (Array.isArray(gate?.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}${hiddenReasons ? `(+${hiddenReasons} reasons)` : ""}`;
           const details = [];
           if (gate?.ageHours !== undefined && gate.ageHours !== null && Number.isFinite(Number(gate.ageHours))) details.push(`age=${Number(gate.ageHours).toFixed(1)}h`);
           if (typeof gate?.fresh === "boolean") details.push(`fresh=${triStateText(gate.fresh)}`);
@@ -1045,7 +1046,10 @@
       }
       if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
         const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
-          const details = Array.isArray(gate.semanticFailures) && gate.semanticFailures.length ? gate.semanticFailures.slice(0, 4).join(", ") : (gate.error || "unsatisfied");
+          const semanticFailures = Array.isArray(gate.semanticFailures) ? gate.semanticFailures : [];
+          const shownSemanticFailures = semanticFailures.slice(0, 4);
+          const hiddenSemanticFailures = Math.max(0, semanticFailures.length - shownSemanticFailures.length) + (gate.semanticFailuresHiddenCount != null && Number.isFinite(Number(gate.semanticFailuresHiddenCount)) ? Math.max(0, Number(gate.semanticFailuresHiddenCount)) : 0);
+          const details = shownSemanticFailures.length ? `${shownSemanticFailures.join(", ")}${hiddenSemanticFailures ? ` (+${hiddenSemanticFailures} more)` : ""}` : (gate.error || "unsatisfied");
           return `${gate.id}:${details}`;
         });
         const hiddenGateFailures = Math.max(0, item.releaseGateFailures.length - gateFailures.length);

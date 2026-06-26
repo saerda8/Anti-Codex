@@ -195,13 +195,49 @@ const releaseGateFailures = Array.isArray(report?.gates)
         && gate.satisfied !== true
         && (gate.requiredForRelease === true || gate.requiredForShort === true || semanticFailures.length > 0 || (gate.present === true && (gate.error || gate.okField === false)));
     })
-    .map((gate) => ({
+    .map((gate) => {
+      const failureReasons = has(gate, "failureReasons") ? asStringArray(gate.failureReasons) : [];
+      const semanticFailures = has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [];
+      return {
+        id: asString(gate.id),
+        group: asString(gate.group),
+        error: asString(gate.error),
+        failureReason: asString(gate.failureReason),
+        failureReasons,
+        failureReasonsAvailableCount: failureReasons.length,
+        failureReasonsHiddenCount: 0,
+        semanticFailures,
+        semanticFailuresAvailableCount: semanticFailures.length,
+        semanticFailuresHiddenCount: 0,
+        selectedKind: asString(gate.selectedKind || ""),
+        selectedFile: asString(gate.selectedFile || ""),
+        selectedMtime: asString(gate.selectedMtime || ""),
+        reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
+        ...(has(gate, "reportFailureSampleCodes") && asStringArray(gate.reportFailureSampleCodes).length ? { reportFailureSampleCodes: asStringArray(gate.reportFailureSampleCodes).slice(0, 6) } : {}),
+        guidance: asString(gate.guidance || ""),
+        orderedActions: asOrderedActions(gate.orderedActions),
+        ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
+      };
+    })
+  : [];
+const rawReleaseGateFailureReasons = has(report, "releaseGateFailureReasons") && Array.isArray(report.releaseGateFailureReasons)
+  ? report.releaseGateFailureReasons
+  : (Array.isArray(report?.gates) ? report.gates.filter((gate) => gate && gate.satisfied !== true) : []);
+const releaseGateFailureReasons = rawReleaseGateFailureReasons
+  .map((gate) => {
+    const failureReasons = has(gate, "failureReasons") ? asStringArray(gate.failureReasons) : [];
+    return {
       id: asString(gate.id),
       group: asString(gate.group),
-      error: asString(gate.error),
+      requiredForRelease: gate.requiredForRelease === true,
+      requiredForShort: gate.requiredForShort === true,
       failureReason: asString(gate.failureReason),
-      failureReasons: has(gate, "failureReasons") ? asStringArray(gate.failureReasons) : [],
-      semanticFailures: has(gate, "semanticFailures") ? asStringArray(gate.semanticFailures) : [],
+      failureReasons,
+      failureReasonsAvailableCount: failureReasons.length,
+      failureReasonsHiddenCount: 0,
+      ageHours: has(gate, "ageHours") ? gate.ageHours : null,
+      fresh: boolField(gate, "fresh"),
+      selectedFromHistory: gate.selectedFromHistory === true,
       selectedKind: asString(gate.selectedKind || ""),
       selectedFile: asString(gate.selectedFile || ""),
       selectedMtime: asString(gate.selectedMtime || ""),
@@ -210,31 +246,8 @@ const releaseGateFailures = Array.isArray(report?.gates)
       guidance: asString(gate.guidance || ""),
       orderedActions: asOrderedActions(gate.orderedActions),
       ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
-    }))
-  : [];
-const rawReleaseGateFailureReasons = has(report, "releaseGateFailureReasons") && Array.isArray(report.releaseGateFailureReasons)
-  ? report.releaseGateFailureReasons
-  : (Array.isArray(report?.gates) ? report.gates.filter((gate) => gate && gate.satisfied !== true) : []);
-const releaseGateFailureReasons = rawReleaseGateFailureReasons
-  .map((gate) => ({
-    id: asString(gate.id),
-    group: asString(gate.group),
-    requiredForRelease: gate.requiredForRelease === true,
-    requiredForShort: gate.requiredForShort === true,
-    failureReason: asString(gate.failureReason),
-    failureReasons: has(gate, "failureReasons") ? asStringArray(gate.failureReasons) : [],
-    ageHours: has(gate, "ageHours") ? gate.ageHours : null,
-    fresh: boolField(gate, "fresh"),
-    selectedFromHistory: gate.selectedFromHistory === true,
-    selectedKind: asString(gate.selectedKind || ""),
-    selectedFile: asString(gate.selectedFile || ""),
-    selectedMtime: asString(gate.selectedMtime || ""),
-    reportFailureSamples: has(gate, "reportFailureSamples") ? asStringArray(gate.reportFailureSamples).slice(0, 3) : [],
-    ...(has(gate, "reportFailureSampleCodes") && asStringArray(gate.reportFailureSampleCodes).length ? { reportFailureSampleCodes: asStringArray(gate.reportFailureSampleCodes).slice(0, 6) } : {}),
-    guidance: asString(gate.guidance || ""),
-    orderedActions: asOrderedActions(gate.orderedActions),
-    ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
-  })).filter((entry) => entry.id).slice(0, 24)
+    };
+  }).filter((entry) => entry.id).slice(0, 24)
 const nextActions = asOrderedActions(report?.nextActions);
 const nextActionsAvailableCount = has(report || {}, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;
 const nextActionsHiddenCount = has(report || {}, "nextActionsHiddenCount") ? report.nextActionsHiddenCount : null;
