@@ -133,6 +133,16 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates missing required gate $missingGateId missing failure reason details"
         }
     }
+    foreach ($missingShortId in @(As-FlatArray $ReleaseGatesSummary.missingShort | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingShortId }).Count -lt 1) {
+            Add-Failure "release-gates missing short gate $missingShortId missing failure reason details"
+        }
+    }
+    foreach ($missingOptionalId in @(As-FlatArray $ReleaseGatesSummary.missingOptional | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingOptionalId }).Count -lt 1) {
+            Add-Failure "release-gates missing optional gate $missingOptionalId missing failure reason details"
+        }
+    }
     $gatewayActionCount = 0
     $realTrafficActionCount = 0
     $highImpactActionCount = 0
