@@ -1080,6 +1080,7 @@ function reportFailureSampleCodes(samples) {
 
 function gateGuidance(gate) {
   const failedReasons = Array.isArray(gate?.failureReasons) ? gate.failureReasons : [];
+  const actions = gateOrderedActions(gate);
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
   }
@@ -1089,7 +1090,13 @@ function gateGuidance(gate) {
   if (syncReadinessHostSyncNeeded(gate)) {
     return "host_sync_required: installed Codex changed; run Sync Codex Update only with explicit approval. It builds and validates a candidate before replacing Anti-Codex; failed validation leaves the current host intact.";
   }
-  if (["short", "manager", "no-traffic"].includes(gate?.group || "") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures") && gateOrderedActions(gate).some((item) => item.requiresGatewayStart === true && item.requiresRealTraffic !== true)) {
+  if (actions.some((item) => item.id === "stabilitySoak") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "optional_stability_soak_required: optional soak evidence is stale; run only with explicit user approval because it uses the local gateway, real traffic, and a longer stability window.";
+  }
+  if (actions.some((item) => item.id === "coldRelaunch") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "optional_cold_relaunch_required: optional cold-relaunch evidence is missing or stale; run only with explicit user approval because it restarts the isolated Anti-Codex runtime.";
+  }
+  if (["short", "manager", "no-traffic"].includes(gate?.group || "") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures") && actions.some((item) => item.requiresGatewayStart === true && item.requiresRealTraffic !== true)) {
     return "local_gateway_required: start or restore the local Anti-Codex gateway, then rerun the listed gateway-dependent verifier.";
   }
   if (gate?.group === "real-traffic" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
@@ -2654,6 +2661,10 @@ if (args.has("--self-test")) {
     if (gateGuidance(postVerificationGate).includes("local_gateway_required")) throw new Error("self-test failed: real-traffic guidance was misclassified as gateway-only");
     const managerRealButtonGate = reasonGates.find((item) => item.id === "managerRealButtons");
     if (!gateGuidance(managerRealButtonGate).includes("local_gateway_required")) throw new Error("self-test failed: gateway-dependent stale guidance was not attached");
+    const stabilitySoakGate = reasonGates.find((item) => item.id === "stabilitySoak");
+    if (!gateGuidance(stabilitySoakGate).includes("optional_stability_soak_required")) throw new Error("self-test failed: optional stability-soak guidance was not attached");
+    const coldRelaunchGate = reasonGates.find((item) => item.id === "coldRelaunch");
+    if (!gateGuidance(coldRelaunchGate).includes("optional_cold_relaunch_required")) throw new Error("self-test failed: optional cold-relaunch guidance was not attached");
     const syncReadinessActions = gateOrderedActions({
       id: "syncReadiness",
       satisfied: false,
