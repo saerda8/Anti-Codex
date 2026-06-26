@@ -986,3 +986,4 @@
 - Semantic-failure support evidence has two surfaces. If `releaseGateFailures[].semanticFailures` is present, diagnostics should require a matching `releaseGateFailureReasons[].failureReasons` entry with `semantic_failures` and require the report-only next action even if the reason marker was stripped.
 - Optional real-traffic readiness must be self-consistent. A support bundle should fail offline if `optionalRealTrafficReady:true` still lists optional failures, or if strict optional real-traffic is enabled while `releaseReady:true` hides that optional evidence is not ready.
 - `effectiveOk` must be tied to release readiness and report integrity. Diagnostics should reject `effectiveOk:true` when `releaseReady` is not true or when `damagedReports` is non-empty.
+- Release-gate ready booleans must be tied to their missing lists. Diagnostics should reject `shortReady:true` with non-empty `missingShort`, and `releaseReady:true` with non-empty `missingRequired`.

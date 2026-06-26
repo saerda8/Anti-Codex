@@ -199,6 +199,12 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     if ($ReleaseGatesSummary.strictOptionalRealTraffic -eq $true -and $ReleaseGatesSummary.optionalRealTrafficReady -ne $true -and $ReleaseGatesSummary.releaseReady -eq $true) {
         Add-Failure "release-gates releaseReady true while strict optional real-traffic is not ready"
     }
+    if ($ReleaseGatesSummary.shortReady -eq $true -and @(As-FlatArray $ReleaseGatesSummary.missingShort | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+        Add-Failure "release-gates shortReady true with missing short gates"
+    }
+    if ($ReleaseGatesSummary.releaseReady -eq $true -and @(As-FlatArray $ReleaseGatesSummary.missingRequired | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+        Add-Failure "release-gates releaseReady true with missing required gates"
+    }
     if ($ReleaseGatesSummary.effectiveOk -eq $true -and $ReleaseGatesSummary.releaseReady -ne $true) {
         Add-Failure "release-gates effectiveOk true while releaseReady is not true"
     }
