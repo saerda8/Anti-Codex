@@ -7191,6 +7191,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /plugin capability failure missing offline snapshot evidence/);
   assert.match(diagnostics, /plugin capability failure offline refresh gate is not satisfied/);
   assert.match(diagnostics, /plugin capability failure offline refresh selected file missing/);
+  assert.match(diagnostics, /plugin capability failure offline source fingerprint missing/);
+  assert.match(diagnostics, /plugin capability failure offline source file count missing/);
+  assert.match(diagnostics, /plugin capability failure offline source mtime missing/);
   assert.match(diagnostics, /plugin capability failure missing sample codes/);
   assert.match(diagnostics, /release-gates failure \$gateFailureId missing sample codes/);
   assert.match(diagnostics, /release-gates failure \$failureId missing failure reason details/);
@@ -7452,6 +7455,9 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
           appToolContentMatches: true,
           refreshGateSatisfied: true,
           refreshSelectedFile: "latest-refresh-features.json",
+          sourceFingerprint: "abc123",
+          sourceFileCount: 2,
+          sourceMtimeMax: "2026-06-24T00:00:00.000Z",
         },
       }, {
         id: "coldRelaunch",
@@ -7700,6 +7706,9 @@ test("diagnostics reports-summary fixture rejects weak plugin offline snapshot e
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("plugin capability failure offline refresh gate is not satisfied"));
     assert.ok(payload.failures.includes("plugin capability failure offline refresh selected file missing"));
+    assert.ok(payload.failures.includes("plugin capability failure offline source fingerprint missing"));
+    assert.ok(payload.failures.includes("plugin capability failure offline source file count missing"));
+    assert.ok(payload.failures.includes("plugin capability failure offline source mtime missing"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

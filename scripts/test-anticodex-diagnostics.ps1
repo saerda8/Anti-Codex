@@ -89,6 +89,16 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             if ([string]::IsNullOrWhiteSpace([string]$offlineSnapshotEvidence.refreshSelectedFile)) {
                 Add-Failure "plugin capability failure offline refresh selected file missing"
             }
+            if ([string]::IsNullOrWhiteSpace([string]$offlineSnapshotEvidence.sourceFingerprint)) {
+                Add-Failure "plugin capability failure offline source fingerprint missing"
+            }
+            $offlineSourceFileCount = Get-NonNegativeIntProperty $offlineSnapshotEvidence "sourceFileCount" "plugin capability failure offline source file count missing" "plugin capability failure offline source file count invalid"
+            if ($null -ne $offlineSourceFileCount -and $offlineSourceFileCount -lt 1) {
+                Add-Failure "plugin capability failure offline source file count invalid"
+            }
+            if ([string]::IsNullOrWhiteSpace([string]$offlineSnapshotEvidence.sourceMtimeMax)) {
+                Add-Failure "plugin capability failure offline source mtime missing"
+            }
         }
         $pluginFailureSamples = @(As-FlatArray $pluginCapabilityFailure.reportFailureSamples | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         $pluginFailureCodes = @(As-FlatArray $pluginCapabilityFailure.reportFailureSampleCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
