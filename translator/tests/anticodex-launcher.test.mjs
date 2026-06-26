@@ -7164,6 +7164,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /syncReadinessEvidence/);
   assert.match(diagnostics, /diagnostic sync-readiness summary missing syncReadinessEvidence/);
   assert.match(diagnostics, /diagnostic sync-readiness summary manager bridge not ready/);
+  assert.match(diagnostics, /sync-anticodex-launcher\.ps1/);
   assert.match(diagnostics, /installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing real traffic skipped checks/);
@@ -8512,6 +8513,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid ui-idle report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid sync-readiness report satisfied the gate/);
+  assert.match(releaseGates, /id:\s*"syncHost"[\s\S]*?sync-anticodex-launcher\.ps1[\s\S]*?highImpact:\s*true/);
+  assert.match(releaseGates, /sync-readiness host-sync action was not marked high-impact/);
+  assert.match(releaseGates, /host_sync_required/);
   assert.match(releaseGates, /semantically invalid cold-relaunch report satisfied the gate/);
   assert.match(releaseGates, /tool_bridge_codex_bridge/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);

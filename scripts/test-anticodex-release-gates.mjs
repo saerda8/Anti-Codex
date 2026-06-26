@@ -1085,6 +1085,9 @@ function gateGuidance(gate) {
   if (gate?.id === "missingHistory" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun missing-history verification.";
   }
+  if (syncReadinessHostSyncNeeded(gate)) {
+    return "host_sync_required: installed Codex changed; run Sync Codex Update only with explicit approval. It builds and validates a candidate before replacing Anti-Codex; failed validation leaves the current host intact.";
+  }
   if (gate?.group === "real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "real_traffic_evidence_stale: requires explicit user approval to start/verify Anti-Codex and refresh release-grade real-traffic reports.";
   }
@@ -1155,7 +1158,25 @@ function semanticReportOnlyAction(gate) {
   return [action("releaseGateReportOnlyCheck", "report-only", "node scripts/test-anticodex-release-gates.mjs --strict", { reportOnly: true })];
 }
 
+function syncReadinessHostSyncNeeded(gate) {
+  if (gate?.id !== "syncReadiness") return false;
+  const semanticFailures = Array.isArray(gate.semanticFailures) ? gate.semanticFailures : [];
+  const samples = Array.isArray(gate.reportFailureSamples) ? gate.reportFailureSamples.map((sample) => String(sample || "").toLowerCase()) : [];
+  return semanticFailures.some((failure) => [
+    "sync_readiness_update_status",
+    "sync_readiness_source_active_hash_mismatch",
+    "sync_readiness_guardrails",
+  ].includes(failure)) || samples.some((sample) => sample.includes("source_codex_changed") || sample.includes("anti-codex sync is required"));
+}
+
 function gateOrderedActions(gate) {
+  if (syncReadinessHostSyncNeeded(gate)) {
+    return [
+      ...semanticReportOnlyAction(gate),
+      action("syncReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-sync-readiness.ps1"),
+      { id: "syncHost", phase: "host-sync", command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\sync-anticodex-launcher.ps1", reportOnly: false, requiresGatewayStart: false, requiresRealTraffic: false, highImpact: true, blockedUntilExplicitUserApproval: true },
+    ];
+  }
   if (gate?.group === "short" && !gate.satisfied && gate.id !== "pluginCapabilities") {
     const index = shortEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index >= 0) {
@@ -1207,6 +1228,7 @@ const actionPhaseOrder = [
   "manager-gateway-check",
   "no-traffic-local",
   "no-traffic-gateway",
+  "host-sync",
   "real-traffic-low-state",
   "real-traffic-session-state",
   "real-traffic-high-impact",
@@ -2625,6 +2647,14 @@ if (args.has("--self-test")) {
     assertFailureReason("installedRuntimeSync", "semantic_failures");
     const postVerificationGate = reasonGates.find((item) => item.id === "postVerification");
     if (!gateGuidance(postVerificationGate).includes("real_traffic_evidence_stale")) throw new Error("self-test failed: real-traffic stale guidance was not attached");
+    const syncReadinessActions = gateOrderedActions({
+      id: "syncReadiness",
+      satisfied: false,
+      failureReasons: ["semantic_failures"],
+      semanticFailures: ["sync_readiness_update_status", "sync_readiness_source_active_hash_mismatch", "sync_readiness_guardrails"],
+      reportFailureSamples: ["Codex update status is not comparable: source_codex_changed", "installed Codex changed; Anti-Codex sync is required"],
+    });
+    if (!syncReadinessActions.some((item) => item.id === "syncHost" && item.highImpact === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("sync-anticodex-launcher.ps1"))) throw new Error("self-test failed: sync-readiness host-sync action was not marked high-impact");
     const postVerificationActions = gateOrderedActions(postVerificationGate);
     if (!postVerificationActions.some((item) => item.reportOnly === true && item.requiresGatewayStart === false && item.requiresRealTraffic === false && item.blockedUntilExplicitUserApproval === false)) throw new Error("self-test failed: semantic failure report-only action was not attached before real traffic");
     if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not marked gateway and real-traffic");

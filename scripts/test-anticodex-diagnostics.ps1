@@ -168,6 +168,8 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     $highImpactCommandHints = @(
         "-allowrealtraffic",
         "-confirmrelaunch",
+        "sync-anticodex-launcher.ps1",
+        "sync-anticodex.ps1",
         "test-anticodex-real-mini-tool.ps1",
         "test-anticodex-real-work.ps1",
         "test-anticodex-post-verification.ps1",
