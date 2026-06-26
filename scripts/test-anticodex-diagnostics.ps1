@@ -357,10 +357,11 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
             Add-Failure "release-gates next action $actionId missing explicit approval block"
         }
-        if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$nextAction.guidance)) {
+        $reportOnly = $nextAction.reportOnly -eq $true
+        if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked -or $reportOnly) -and [string]::IsNullOrWhiteSpace([string]$nextAction.guidance)) {
             Add-Failure "release-gates next action $actionId missing guidance"
         }
-        if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$nextAction.reason)) {
+        if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked -or $reportOnly) -and [string]::IsNullOrWhiteSpace([string]$nextAction.reason)) {
             Add-Failure "release-gates next action $actionId missing reason"
         }
     }
@@ -382,6 +383,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             $requiresRealTraffic = $orderedAction.requiresRealTraffic -eq $true
             $highImpact = $orderedAction.highImpact -eq $true
             $blocked = $orderedAction.blockedUntilExplicitUserApproval -eq $true
+            $reportOnly = $orderedAction.reportOnly -eq $true
             $commandText = ([string]$orderedAction.command).ToLowerInvariant()
             if ([string]::IsNullOrWhiteSpace($commandText)) {
                 Add-Failure "release-gates ordered action $gateFailureId/$actionId missing command"
@@ -405,10 +407,10 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
                 Add-Failure "release-gates ordered action $gateFailureId/$actionId missing explicit approval block"
             }
-            if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$orderedAction.guidance)) {
+            if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked -or $reportOnly) -and [string]::IsNullOrWhiteSpace([string]$orderedAction.guidance)) {
                 Add-Failure "release-gates ordered action $gateFailureId/$actionId missing guidance"
             }
-            if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$orderedAction.reason)) {
+            if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked -or $reportOnly) -and [string]::IsNullOrWhiteSpace([string]$orderedAction.reason)) {
                 Add-Failure "release-gates ordered action $gateFailureId/$actionId missing reason"
             }
         }
