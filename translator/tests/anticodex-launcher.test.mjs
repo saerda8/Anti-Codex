@@ -829,6 +829,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /approvalPlan: actions=/);
   assert.match(managerInject, /approvalPlan: actions=/);
   assert.match(managerServerSource, /approvalPlan: actions=/);
+  assert.match(managerBridge, /approvalPhases:/);
+  assert.match(managerInject, /approvalPhases:/);
+  assert.match(managerServerSource, /approvalPhases:/);
+  for (const marker of ["reportOnly", "gateway", "realTraffic", "highImpact", "blocked"]) {
+    assert.match(managerBridge, new RegExp(`flags\\.push\\("${marker}"\\)`));
+    assert.match(managerInject, new RegExp(`flags\\.push\\("${marker}"\\)`));
+    assert.match(managerServerSource, new RegExp(`flags\\.push\\("${marker}"\\)`));
+  }
   assert.match(managerBridge, /reportOnly=\$\{plan\.reportOnlyCount/);
   assert.match(managerInject, /reportOnly=\$\{plan\.reportOnlyCount/);
   assert.match(managerServerSource, /reportOnly="\+\(plan\.reportOnlyCount/);

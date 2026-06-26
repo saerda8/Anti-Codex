@@ -388,6 +388,19 @@ function latestReportsSummary(result) {
       if (item.approvalPlan) {
         const plan = item.approvalPlan;
         lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+        if (Array.isArray(plan.phases) && plan.phases.length) {
+          const phaseSummary = plan.phases.slice(0, 8).map((phase) => {
+            const flags = [];
+            if (phase.reportOnly === true) flags.push("reportOnly");
+            if (phase.requiresGatewayStart === true) flags.push("gateway");
+            if (phase.requiresRealTraffic === true) flags.push("realTraffic");
+            if (phase.highImpact === true) flags.push("highImpact");
+            if (phase.blockedUntilExplicitUserApproval === true) flags.push("blocked");
+            return `${phase.phase || "unknown"}:${phase.count ?? "?"}${flags.length ? `[${flags.join(",")}]` : ""}`;
+          }).join(" | ");
+          const hiddenPhases = Math.max(0, plan.phases.length - 8);
+          lines.push(`  approvalPhases: ${phaseSummary}${hiddenPhases ? ` (+${hiddenPhases} more)` : ""}`);
+        }
       }
       if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
         const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
@@ -843,7 +856,10 @@ if (args.has("--self-test")) {
         requiredForShortCount: 1,
         requiredForReleaseCount: 2,
         firstBlockedAction: "realWork",
-        phases: [{ phase: "real-traffic-high-impact" }, { phase: "real-traffic-final" }],
+        phases: [
+          { phase: "real-traffic-high-impact", count: 1, requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true, blockedUntilExplicitUserApproval: true },
+          { phase: "real-traffic-final", count: 1, requiresGatewayStart: true, requiresRealTraffic: true, blockedUntilExplicitUserApproval: true },
+        ],
       },
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
       releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0, missingOptional: ["coldRelaunch"] }, { group: "real-traffic", required: 2, requiredSatisfied: 0, optional: 0, optionalSatisfied: 0, missingRequired: ["postVerification", "realWork"] }],
@@ -922,6 +938,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /nextActions: postVerification:releaseGateReportOnlyCheck\[reportOnly\] -> realWork:realWork -> postVerification:postVerification/);
   assert.match(evidenceSummary, /nextActions: .*\(\+8 hidden of 16\)/);
   assert.match(evidenceSummary, /approvalPlan: actions=3 \/ reportOnly=1 \/ blocked=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ required=1\/2 \/ phases=2 \/ first=realWork/);
+  assert.match(evidenceSummary, /approvalPhases: real-traffic-high-impact:1\[gateway,realTraffic,highImpact,blocked\] \| real-traffic-final:1\[gateway,realTraffic,blocked\]/);
   assert.match(evidenceSummary, /approvalPlan: .*reportOnly=1 .*blocked=2 .*required=1\/2 .*phases=2/);
   assert.doesNotMatch(evidenceSummary, /extra hidden/);
   assert.match(evidenceSummary, /真实流量验收证据需更新\/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（postVerification, realWork）/);

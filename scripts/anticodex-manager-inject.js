@@ -1005,6 +1005,19 @@
         if (item.approvalPlan) {
           const plan = item.approvalPlan;
           lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
+          if (Array.isArray(plan.phases) && plan.phases.length) {
+            const phaseSummary = plan.phases.slice(0, 8).map((phase) => {
+              const flags = [];
+              if (phase.reportOnly === true) flags.push("reportOnly");
+              if (phase.requiresGatewayStart === true) flags.push("gateway");
+              if (phase.requiresRealTraffic === true) flags.push("realTraffic");
+              if (phase.highImpact === true) flags.push("highImpact");
+              if (phase.blockedUntilExplicitUserApproval === true) flags.push("blocked");
+              return `${phase.phase || "unknown"}:${phase.count ?? "?"}${flags.length ? `[${flags.join(",")}]` : ""}`;
+            }).join(" | ");
+            const hiddenPhases = Math.max(0, plan.phases.length - 8);
+            lines.push(`  approvalPhases: ${phaseSummary}${hiddenPhases ? ` (+${hiddenPhases} more)` : ""}`);
+          }
         }
         if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
           const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
