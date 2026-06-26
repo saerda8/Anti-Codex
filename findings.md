@@ -998,3 +998,5 @@
 - PowerShell does not support bash heredoc syntax such as `node - <<'NODE'`. Use `node -e` with a compact one-liner, or create a checked helper script when the probe is too large.
 - Do not pass `%APPDATA%` as a literal argument to Node scripts from PowerShell. Build report paths from `process.env.APPDATA` or pass `$env:APPDATA` only through a correctly escaped PowerShell wrapper.
 - `summarize-anticodex-report.mjs` takes the report JSON path as its first positional argument; it does not accept `--report`. Passing `--report` makes Node try to open a file literally named `--report`.
+- Avoid JavaScript template literals inside `node -e` commands launched from PowerShell; backticks are PowerShell escapes and can corrupt the inline script before Node sees it. Use string concatenation or a checked helper script.
+- Direct `summarize-anticodex-report.mjs` output does not add the diagnostic collector's `file` field. When building a temporary `reports-summary.json` outside `collect-anticodex-diagnostics.ps1`, add `{ file: latestReportName, ...summary }` before running diagnostics summary validation.
