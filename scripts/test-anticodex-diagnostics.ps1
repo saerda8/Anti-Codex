@@ -274,6 +274,8 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     $realTrafficActionCount = 0
     $highImpactActionCount = 0
     $reportOnlyActionCount = 0
+    $requiredForShortActionCount = 0
+    $requiredForReleaseActionCount = 0
     $blockedActionCount = 0
     $approvalBlockedRiskActionCount = 0
     $semanticFailureCount = @(
@@ -346,6 +348,8 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($requiresRealTraffic) { $realTrafficActionCount++ }
         if ($highImpact) { $highImpactActionCount++ }
         if ($nextAction.reportOnly -eq $true) { $reportOnlyActionCount++ }
+        if ($nextAction.requiredForShort -eq $true) { $requiredForShortActionCount++ }
+        if ($nextAction.requiredForRelease -eq $true) { $requiredForReleaseActionCount++ }
         if ($blocked) { $blockedActionCount++ }
         $commandText = ([string]$nextAction.command).ToLowerInvariant()
         if (-not [string]::IsNullOrWhiteSpace($commandText)) {
@@ -453,6 +457,12 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         $approvalReportOnlyCount = Get-NonNegativeIntProperty $approvalPlan "reportOnlyCount" "release-gates approval plan missing report-only count" "release-gates approval plan invalid report-only count"
         if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -lt $reportOnlyActionCount) { Add-Failure "release-gates approval plan undercounts report-only actions" }
         if ($null -ne $approvalReportOnlyCount -and $null -ne $approvalActionCount -and $approvalReportOnlyCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan report-only action count mismatch" }
+        $approvalRequiredForShortCount = Get-NonNegativeIntProperty $approvalPlan "requiredForShortCount" "release-gates approval plan missing required-for-short count" "release-gates approval plan invalid required-for-short count"
+        if ($null -ne $approvalRequiredForShortCount -and $approvalRequiredForShortCount -lt $requiredForShortActionCount) { Add-Failure "release-gates approval plan undercounts required-for-short actions" }
+        if ($null -ne $approvalRequiredForShortCount -and $null -ne $approvalActionCount -and $approvalRequiredForShortCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan overcounts required-for-short actions" }
+        $approvalRequiredForReleaseCount = Get-NonNegativeIntProperty $approvalPlan "requiredForReleaseCount" "release-gates approval plan missing required-for-release count" "release-gates approval plan invalid required-for-release count"
+        if ($null -ne $approvalRequiredForReleaseCount -and $approvalRequiredForReleaseCount -lt $requiredForReleaseActionCount) { Add-Failure "release-gates approval plan undercounts required-for-release actions" }
+        if ($null -ne $approvalRequiredForReleaseCount -and $null -ne $approvalActionCount -and $approvalRequiredForReleaseCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan overcounts required-for-release actions" }
         $approvalPhases = @()
         if (Has-Property $approvalPlan "phases") {
             $approvalPhases = @(As-FlatArray $approvalPlan.phases | Where-Object { $null -ne $_ })

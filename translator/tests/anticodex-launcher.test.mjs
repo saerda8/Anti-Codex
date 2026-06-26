@@ -7332,6 +7332,12 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates approval plan missing report-only count/);
   assert.match(diagnostics, /release-gates approval plan invalid report-only count/);
   assert.match(diagnostics, /release-gates approval plan undercounts report-only actions/);
+  assert.match(diagnostics, /release-gates approval plan missing required-for-short count/);
+  assert.match(diagnostics, /release-gates approval plan undercounts required-for-short actions/);
+  assert.match(diagnostics, /release-gates approval plan overcounts required-for-short actions/);
+  assert.match(diagnostics, /release-gates approval plan missing required-for-release count/);
+  assert.match(diagnostics, /release-gates approval plan undercounts required-for-release actions/);
+  assert.match(diagnostics, /release-gates approval plan overcounts required-for-release actions/);
   assert.match(diagnostics, /release-gates approval plan report-only action count mismatch/);
   assert.match(diagnostics, /release-gates approval plan report-only phase mismatch/);
   assert.match(diagnostics, /release-gates approval plan overcounts gateway actions/);
@@ -7588,6 +7594,8 @@ function minimalDiagnosticsReleaseGateSummary(overrides = {}) {
       requiresRealTrafficCount: 0,
       highImpactCount: 0,
       reportOnlyCount: 0,
+      requiredForShortCount: 0,
+      requiredForReleaseCount: 0,
       phases: [],
     },
     releaseGateGroups: [],
@@ -7650,6 +7658,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         requiresGatewayStart: true,
         requiresRealTraffic: false,
         highImpact: false,
+        requiredForShort: true,
+        requiredForRelease: true,
         blockedUntilExplicitUserApproval: true,
       }],
       nextActionsAvailableCount: 1,
@@ -7662,6 +7672,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         requiresRealTrafficCount: 0,
         highImpactCount: 0,
         reportOnlyCount: 0,
+        requiredForShortCount: 1,
+        requiredForReleaseCount: 1,
         firstBlockedAction: "pluginCapabilities",
       },
       releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
@@ -9669,6 +9681,8 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
         requiresRealTraffic: false,
         highImpact: false,
         reportOnly: false,
+        requiredForShort: false,
+        requiredForRelease: false,
         blockedUntilExplicitUserApproval: true,
       }],
       approvalPlan: {
@@ -9678,6 +9692,8 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
         requiresRealTrafficCount: 2,
         highImpactCount: 2,
         reportOnlyCount: 0,
+        requiredForShortCount: 2,
+        requiredForReleaseCount: 2,
         firstBlockedAction: "pluginCapabilities",
         phases: [{
           phase: "plugin-capabilities",
@@ -9718,6 +9734,8 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
     assert.ok(payload.failures.includes("release-gates approval plan overcounts gateway actions"));
     assert.ok(payload.failures.includes("release-gates approval plan overcounts real-traffic actions"));
     assert.ok(payload.failures.includes("release-gates approval plan overcounts high-impact actions"));
+    assert.ok(payload.failures.includes("release-gates approval plan overcounts required-for-short actions"));
+    assert.ok(payload.failures.includes("release-gates approval plan overcounts required-for-release actions"));
     assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities count mismatch"));
     assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities blocked mismatch"));
     assert.equal(payload.diagnostics, null);
@@ -9751,6 +9769,8 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
         requiresGatewayStart: true,
         requiresRealTraffic: false,
         highImpact: false,
+        requiredForShort: true,
+        requiredForRelease: true,
         blockedUntilExplicitUserApproval: true,
       }],
       approvalPlan: {
@@ -9787,6 +9807,8 @@ test("diagnostics reports-summary fixture rejects incomplete approval plan count
     assert.ok(payload.failures.includes("release-gates approval plan missing real-traffic count"));
     assert.ok(payload.failures.includes("release-gates approval plan missing high-impact count"));
     assert.ok(payload.failures.includes("release-gates approval plan missing report-only count"));
+    assert.ok(payload.failures.includes("release-gates approval plan missing required-for-short count"));
+    assert.ok(payload.failures.includes("release-gates approval plan missing required-for-release count"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -9820,6 +9842,8 @@ test("diagnostics reports-summary fixture rejects null approval plan counts", ()
         requiresRealTrafficCount: null,
         highImpactCount: null,
         reportOnlyCount: null,
+        requiredForShortCount: null,
+        requiredForReleaseCount: null,
         firstBlockedAction: "",
       },
       releaseGateGroups: [],
@@ -9854,6 +9878,8 @@ test("diagnostics reports-summary fixture rejects null approval plan counts", ()
     assert.ok(payload.failures.includes("release-gates approval plan invalid real-traffic count"));
     assert.ok(payload.failures.includes("release-gates approval plan invalid high-impact count"));
     assert.ok(payload.failures.includes("release-gates approval plan invalid report-only count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid required-for-short count"));
+    assert.ok(payload.failures.includes("release-gates approval plan invalid required-for-release count"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

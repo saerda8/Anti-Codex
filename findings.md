@@ -979,3 +979,4 @@
 - Missing-gate failure detail is incomplete without `guidance`. Diagnostics should reject missing required, short, and optional gate details that keep the failure reason but lose the operator instruction.
 - Do not use `node --check` on `.ps1` scripts. Use the PowerShell parser for PowerShell files; Node reports `ERR_UNKNOWN_FILE_EXTENSION`, which is only a command-selection error.
 - Selected-history support details need freshness evidence. If `releaseGateFailureReasons` marks a gate as `selectedFromHistory:true`, diagnostics should require the matching `releaseGateSelectedReports` entry to preserve `selectedMtime`, not just the selected file name.
+- Approval-plan required counts are support evidence. Diagnostics should require `requiredForShortCount` and `requiredForReleaseCount` and bound them against action evidence, just like gateway, real-traffic, high-impact, report-only, and blocked counts.
