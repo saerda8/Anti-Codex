@@ -7298,6 +7298,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates next action \$actionId missing command/);
   assert.match(diagnostics, /release-gates ordered action \$gateFailureId\/\$actionId command requires real-traffic metadata/);
   assert.match(diagnostics, /release-gates failure \$gateFailureId with ordered actions missing guidance/);
+  assert.match(diagnostics, /release-gates ordered action \$gateFailureId\/\$actionId missing guidance/);
+  assert.match(diagnostics, /release-gates ordered action \$gateFailureId\/\$actionId missing reason/);
   assert.match(diagnostics, /release-gates next action \$actionId missing guidance/);
   assert.match(diagnostics, /release-gates next action \$actionId missing reason/);
   assert.match(diagnostics, /nextActions/);
@@ -8554,6 +8556,8 @@ test("diagnostics reports-summary fixture rejects action gates without guidance"
     assert.ok(payload.failures.includes("release-gates next action managerRealButtons missing guidance"));
     assert.ok(payload.failures.includes("release-gates next action managerRealButtons missing reason"));
     assert.ok(payload.failures.includes("release-gates failure managerRealButtons with ordered actions missing guidance"));
+    assert.ok(payload.failures.includes("release-gates ordered action managerRealButtons/managerRealButtons missing guidance"));
+    assert.ok(payload.failures.includes("release-gates ordered action managerRealButtons/managerRealButtons missing reason"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -9603,6 +9607,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /nextActions truncation evidence was not summarized/);
   assert.match(releaseGates, /nextActions did not preserve gate guidance/);
   assert.match(releaseGates, /real-traffic nextActions did not preserve gate guidance/);
+  assert.match(releaseGates, /gate ordered actions did not preserve reason and guidance/);
   assert.match(releaseGates, /approvalPlan/);
   assert.match(releaseGates, /const approvalPlan = summarizeApprovalPlan\(nextActionSummary\.allActions\)/);
   assert.match(releaseGates, /summarizeApprovalPlan/);

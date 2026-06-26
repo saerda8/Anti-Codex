@@ -405,6 +405,12 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             if (($requiresGateway -or $requiresRealTraffic -or $highImpact) -and -not $blocked) {
                 Add-Failure "release-gates ordered action $gateFailureId/$actionId missing explicit approval block"
             }
+            if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$orderedAction.guidance)) {
+                Add-Failure "release-gates ordered action $gateFailureId/$actionId missing guidance"
+            }
+            if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$orderedAction.reason)) {
+                Add-Failure "release-gates ordered action $gateFailureId/$actionId missing reason"
+            }
         }
     }
     if ($semanticFailureCount -gt 0 -and @($nextActions | Where-Object { $_.reportOnly -eq $true -and [string]$_.id -eq "releaseGateReportOnlyCheck" }).Count -lt 1) {

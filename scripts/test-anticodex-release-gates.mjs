@@ -1081,7 +1081,7 @@ function reportFailureSampleCodes(samples) {
 
 function gateGuidance(gate) {
   const failedReasons = Array.isArray(gate?.failureReasons) ? gate.failureReasons : [];
-  const actions = gateOrderedActions(gate);
+  const actions = rawGateOrderedActions(gate);
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
   }
@@ -1192,7 +1192,7 @@ function syncReadinessHostSyncNeeded(gate) {
   ].includes(failure)) || samples.some((sample) => sample.includes("source_codex_changed") || sample.includes("anti-codex sync is required"));
 }
 
-function gateOrderedActions(gate) {
+function rawGateOrderedActions(gate) {
   if (syncReadinessHostSyncNeeded(gate)) {
     return [
       ...semanticReportOnlyAction(gate),
@@ -1239,6 +1239,20 @@ function gateOrderedActions(gate) {
     return [...semanticReportOnlyAction(gate), action(id, phase, command, options)];
   }
   return [];
+}
+
+function gateActionReason(gate) {
+  return gate?.failureReason || (Array.isArray(gate?.failureReasons) ? gate.failureReasons[0] : "") || "";
+}
+
+function gateOrderedActions(gate) {
+  const reason = gateActionReason(gate);
+  const guidance = gateGuidance(gate);
+  return rawGateOrderedActions(gate).map((item) => ({
+    ...item,
+    reason: item.reason || reason,
+    guidance: item.guidance || guidance,
+  }));
 }
 
 const actionPhaseOrder = [
@@ -2728,6 +2742,7 @@ if (args.has("--self-test")) {
     if (!accountProxyActions.some((item) => item.id === "accountProxyReadiness" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.command.includes("test-anticodex-account-proxy-readiness.ps1"))) throw new Error("self-test failed: account-proxy ordered action was not marked gateway and real-traffic");
     const managerRealButtonActions = gateOrderedActions(managerRealButtonGate);
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-manager-real-buttons.ps1"))) throw new Error("self-test failed: manager real-button ordered action was not attached");
+    if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required") && String(item.reason || ""))) throw new Error("self-test failed: gate ordered actions did not preserve reason and guidance");
     const missingHistoryActions = gateOrderedActions(reasonGates.find((item) => item.id === "missingHistory"));
     if (!missingHistoryActions.some((item) => item.id === "missingHistory" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-missing-history.mjs"))) throw new Error("self-test failed: missing-history ordered action was not marked gateway-dependent");
     const missingRequiredWithoutActions = reasonGates
