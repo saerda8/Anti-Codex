@@ -382,24 +382,24 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         Add-Failure "release-gates approval plan is not an object"
     } else {
         $approvalActionCount = Get-NonNegativeIntProperty $approvalPlan "actionCount" "release-gates approval plan missing action count" "release-gates approval plan invalid action count"
-        if ($null -ne $approvalActionCount -and $approvalActionCount -ne $nextActions.Count) {
+        if ($null -ne $approvalActionCount -and $null -ne $nextActionsAvailableCount -and $approvalActionCount -ne $nextActionsAvailableCount) {
             Add-Failure "release-gates approval plan action count mismatch"
         }
         $approvalBlockedCount = Get-NonNegativeIntProperty $approvalPlan "blockedCount" "release-gates approval plan missing blocked count" "release-gates approval plan invalid blocked count"
         if ($null -ne $approvalBlockedCount -and $approvalBlockedCount -lt $blockedActionCount) { Add-Failure "release-gates approval plan undercounts blocked actions" }
-        if ($null -ne $approvalBlockedCount -and $approvalBlockedCount -gt $blockedActionCount) { Add-Failure "release-gates approval plan overcounts blocked actions" }
+        if ($null -ne $approvalBlockedCount -and $null -ne $approvalActionCount -and $approvalBlockedCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan overcounts blocked actions" }
         $approvalGatewayCount = Get-NonNegativeIntProperty $approvalPlan "requiresGatewayStartCount" "release-gates approval plan missing gateway count" "release-gates approval plan invalid gateway count"
         if ($null -ne $approvalGatewayCount -and $approvalGatewayCount -lt $gatewayActionCount) { Add-Failure "release-gates approval plan undercounts gateway actions" }
-        if ($null -ne $approvalGatewayCount -and $approvalGatewayCount -gt $gatewayActionCount) { Add-Failure "release-gates approval plan overcounts gateway actions" }
+        if ($null -ne $approvalGatewayCount -and $null -ne $approvalActionCount -and $approvalGatewayCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan overcounts gateway actions" }
         $approvalRealTrafficCount = Get-NonNegativeIntProperty $approvalPlan "requiresRealTrafficCount" "release-gates approval plan missing real-traffic count" "release-gates approval plan invalid real-traffic count"
         if ($null -ne $approvalRealTrafficCount -and $approvalRealTrafficCount -lt $realTrafficActionCount) { Add-Failure "release-gates approval plan undercounts real-traffic actions" }
-        if ($null -ne $approvalRealTrafficCount -and $approvalRealTrafficCount -gt $realTrafficActionCount) { Add-Failure "release-gates approval plan overcounts real-traffic actions" }
+        if ($null -ne $approvalRealTrafficCount -and $null -ne $approvalActionCount -and $approvalRealTrafficCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan overcounts real-traffic actions" }
         $approvalHighImpactCount = Get-NonNegativeIntProperty $approvalPlan "highImpactCount" "release-gates approval plan missing high-impact count" "release-gates approval plan invalid high-impact count"
         if ($null -ne $approvalHighImpactCount -and $approvalHighImpactCount -lt $highImpactActionCount) { Add-Failure "release-gates approval plan undercounts high-impact actions" }
-        if ($null -ne $approvalHighImpactCount -and $approvalHighImpactCount -gt $highImpactActionCount) { Add-Failure "release-gates approval plan overcounts high-impact actions" }
+        if ($null -ne $approvalHighImpactCount -and $null -ne $approvalActionCount -and $approvalHighImpactCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan overcounts high-impact actions" }
         $approvalReportOnlyCount = Get-NonNegativeIntProperty $approvalPlan "reportOnlyCount" "release-gates approval plan missing report-only count" "release-gates approval plan invalid report-only count"
         if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -lt $reportOnlyActionCount) { Add-Failure "release-gates approval plan undercounts report-only actions" }
-        if ($null -ne $approvalReportOnlyCount -and $approvalReportOnlyCount -ne $reportOnlyActionCount) { Add-Failure "release-gates approval plan report-only action count mismatch" }
+        if ($null -ne $approvalReportOnlyCount -and $null -ne $approvalActionCount -and $approvalReportOnlyCount -gt $approvalActionCount) { Add-Failure "release-gates approval plan report-only action count mismatch" }
         $approvalPhases = @()
         if (Has-Property $approvalPlan "phases") {
             $approvalPhases = @(As-FlatArray $approvalPlan.phases | Where-Object { $null -ne $_ })
@@ -418,7 +418,10 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             }
             $phaseActions = @($nextActions | Where-Object { [string]$_.phase -eq $phaseName })
             $phaseCount = Get-NonNegativeIntProperty $approvalPhase "count" "release-gates approval plan phase $phaseName missing count" "release-gates approval plan phase $phaseName invalid count"
-            if ($null -ne $phaseCount -and $phaseCount -ne $phaseActions.Count) {
+            if ($null -ne $phaseCount -and $phaseCount -lt $phaseActions.Count) {
+                Add-Failure "release-gates approval plan phase $phaseName count mismatch"
+            }
+            if ($null -ne $phaseCount -and $null -ne $approvalActionCount -and $phaseCount -gt $approvalActionCount) {
                 Add-Failure "release-gates approval plan phase $phaseName count mismatch"
             }
             $expectedPhaseGateway = @($phaseActions | Where-Object { $_.requiresGatewayStart -eq $true }).Count -gt 0
@@ -426,11 +429,11 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             $expectedPhaseHighImpact = @($phaseActions | Where-Object { $_.highImpact -eq $true }).Count -gt 0
             $expectedPhaseReportOnly = @($phaseActions | Where-Object { $_.reportOnly -eq $true }).Count -gt 0
             $expectedPhaseBlocked = @($phaseActions | Where-Object { $_.blockedUntilExplicitUserApproval -eq $true }).Count -gt 0
-            if (($approvalPhase.requiresGatewayStart -eq $true) -ne $expectedPhaseGateway) { Add-Failure "release-gates approval plan phase $phaseName gateway mismatch" }
-            if (($approvalPhase.requiresRealTraffic -eq $true) -ne $expectedPhaseRealTraffic) { Add-Failure "release-gates approval plan phase $phaseName real-traffic mismatch" }
-            if (($approvalPhase.highImpact -eq $true) -ne $expectedPhaseHighImpact) { Add-Failure "release-gates approval plan phase $phaseName high-impact mismatch" }
-            if (($approvalPhase.reportOnly -eq $true) -ne $expectedPhaseReportOnly) { Add-Failure "release-gates approval plan phase $phaseName report-only mismatch" }
-            if (($approvalPhase.blockedUntilExplicitUserApproval -eq $true) -ne $expectedPhaseBlocked) { Add-Failure "release-gates approval plan phase $phaseName blocked mismatch" }
+            if ($expectedPhaseGateway -and $approvalPhase.requiresGatewayStart -ne $true) { Add-Failure "release-gates approval plan phase $phaseName gateway mismatch" }
+            if ($expectedPhaseRealTraffic -and $approvalPhase.requiresRealTraffic -ne $true) { Add-Failure "release-gates approval plan phase $phaseName real-traffic mismatch" }
+            if ($expectedPhaseHighImpact -and $approvalPhase.highImpact -ne $true) { Add-Failure "release-gates approval plan phase $phaseName high-impact mismatch" }
+            if ($expectedPhaseReportOnly -and $approvalPhase.reportOnly -ne $true) { Add-Failure "release-gates approval plan phase $phaseName report-only mismatch" }
+            if ($expectedPhaseBlocked -and $approvalPhase.blockedUntilExplicitUserApproval -ne $true) { Add-Failure "release-gates approval plan phase $phaseName blocked mismatch" }
         }
         if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
             Add-Failure "release-gates approval plan missing first blocked action"

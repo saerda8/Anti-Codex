@@ -1291,6 +1291,7 @@ function summarizeNextActions(failureReasons) {
   const actions = available.slice(0, 32);
   return {
     actions,
+    allActions: available,
     availableCount: available.length,
     hiddenCount: Math.max(0, available.length - actions.length),
     truncated: available.length > actions.length,
@@ -2804,7 +2805,7 @@ const releaseGateFailureReasons = gates
   }));
 const nextActionSummary = summarizeNextActions(releaseGateFailureReasons);
 const nextActions = nextActionSummary.actions;
-const approvalPlan = summarizeApprovalPlan(nextActions);
+const approvalPlan = summarizeApprovalPlan(nextActionSummary.allActions);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
   .filter((gate) => !gate.satisfied || gate.requestedRealTraffic !== true || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")

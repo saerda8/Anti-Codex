@@ -8971,7 +8971,7 @@ test("diagnostics reports-summary fixture rejects semantic failures without repo
         requiresGatewayStartCount: 1,
         requiresRealTrafficCount: 1,
         highImpactCount: 1,
-        reportOnlyCount: 1,
+        reportOnlyCount: 2,
         firstBlockedAction: "postVerification",
       },
       releaseGateGroups: [],
@@ -9139,8 +9139,8 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
         actionCount: 1,
         blockedCount: 2,
         requiresGatewayStartCount: 2,
-        requiresRealTrafficCount: 1,
-        highImpactCount: 1,
+        requiresRealTrafficCount: 2,
+        highImpactCount: 2,
         reportOnlyCount: 0,
         firstBlockedAction: "pluginCapabilities",
         phases: [{
@@ -9183,7 +9183,6 @@ test("diagnostics reports-summary fixture rejects overcounted approval plan risk
     assert.ok(payload.failures.includes("release-gates approval plan overcounts real-traffic actions"));
     assert.ok(payload.failures.includes("release-gates approval plan overcounts high-impact actions"));
     assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities count mismatch"));
-    assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities real-traffic mismatch"));
     assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities blocked mismatch"));
     assert.equal(payload.diagnostics, null);
   } finally {
@@ -9509,6 +9508,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /nextActionsTruncated/);
   assert.match(releaseGates, /nextActions truncation evidence was not summarized/);
   assert.match(releaseGates, /approvalPlan/);
+  assert.match(releaseGates, /const approvalPlan = summarizeApprovalPlan\(nextActionSummary\.allActions\)/);
   assert.match(releaseGates, /summarizeApprovalPlan/);
   assert.match(releaseGates, /approval plan did not summarize gateway, real-traffic, and high-impact actions/);
   assert.match(releaseGates, /reportFailureSampleCodes/);
