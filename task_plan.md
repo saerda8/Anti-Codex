@@ -1792,3 +1792,4 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Follow-up: diagnostics reports-summary verification now rejects mismatched per-gate `failureReasons` and `semanticFailures` available/hidden counts, so support bundles cannot silently strip or forge truncation evidence.
 - Follow-up: passive release-gate reports now emit per-gate failure/semantic available and hidden counts directly in the producer output, not only through later report summarization.
 - Follow-up: passive release-gate reports now emit `releaseGateGroups` directly as a support array while preserving the legacy `groups` object, so diagnostics-required group evidence is present in raw reports as well as summaries.
+- Follow-up: passive release-gate reports now emit `releaseGateSelectedReports` directly when history fallback selects an older report, while summaries remain compatible with older raw reports that only expose selected-history fields on `gates`.

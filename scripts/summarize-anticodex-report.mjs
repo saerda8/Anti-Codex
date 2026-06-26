@@ -277,17 +277,28 @@ const releaseGateGroups = rawReleaseGateGroups.map((value) => ({
   missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
   missingOptional: value && has(value, "missingOptional") ? asStringArray(value.missingOptional) : [],
 })).filter((entry) => entry.group).slice(0, 16);
-const releaseGateSelectedReports = Array.isArray(report?.gates)
-  ? report.gates
+const releaseGateSelectedReports = Array.isArray(report?.releaseGateSelectedReports)
+  ? report.releaseGateSelectedReports
+    .map((entry) => ({
+      id: asString(entry.id),
+      group: asString(entry.group),
+      selectedFile: asString(entry.selectedFile),
+      ...(asString(entry.selectedMtime) ? { selectedMtime: asString(entry.selectedMtime) } : {}),
+    }))
+    .filter((entry) => entry.id && entry.selectedFile)
+    .slice(0, 12)
+  : (Array.isArray(report?.gates)
+    ? report.gates
     .filter((gate) => gate && gate.selectedFromHistory === true)
     .map((gate) => ({
       id: asString(gate.id),
       group: asString(gate.group),
       selectedFile: asString(gate.selectedFile),
+      ...(asString(gate.selectedMtime) ? { selectedMtime: asString(gate.selectedMtime) } : {}),
     }))
     .filter((entry) => entry.id && entry.selectedFile)
     .slice(0, 12)
-  : [];
+    : []);
 const installedRuntimeGate = Array.isArray(report?.gates)
   ? report.gates.find((gate) => gate && gate.id === "installedRuntimeSync")
   : null;
