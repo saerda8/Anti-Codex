@@ -1074,6 +1074,7 @@ function reportFailureSampleCodes(samples) {
     if (!text) continue;
     if (text.includes("endpoint failed") || text.includes("/backend-api/") || text.includes("/health")) codes.add("gateway_endpoint_unreachable");
     if (isLocalGatewayFailureSample(text)) codes.add("local_gateway_offline");
+    if (text.includes("source_codex_changed") || text.includes("anti-codex sync is required") || text.includes("installed codex changed")) codes.add("host_sync_required");
   }
   return [...codes].sort();
 }
@@ -2683,6 +2684,8 @@ if (args.has("--self-test")) {
       reportFailureSamples: ["Codex update status is not comparable: source_codex_changed", "installed Codex changed; Anti-Codex sync is required"],
     });
     if (!syncReadinessActions.some((item) => item.id === "syncHost" && item.highImpact === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("sync-anticodex-launcher.ps1"))) throw new Error("self-test failed: sync-readiness host-sync action was not marked high-impact");
+    const syncReadinessSampleCodes = reportFailureSampleCodes(["Codex update status is not comparable: source_codex_changed", "installed Codex changed; Anti-Codex sync is required"]);
+    if (!syncReadinessSampleCodes.includes("host_sync_required")) throw new Error("self-test failed: sync-readiness host-sync samples were not normalized");
     const postVerificationActions = gateOrderedActions(postVerificationGate);
     if (!postVerificationActions.some((item) => item.reportOnly === true && item.requiresGatewayStart === false && item.requiresRealTraffic === false && item.blockedUntilExplicitUserApproval === false)) throw new Error("self-test failed: semantic failure report-only action was not attached before real traffic");
     if (!postVerificationActions.some((item) => item.id === "postVerification" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true)) throw new Error("self-test failed: real-traffic ordered action was not marked gateway and real-traffic");
