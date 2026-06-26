@@ -1821,3 +1821,5 @@ Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deplo
 - Verification: diagnostics parser, launcher syntax, and `git diff --check` passed; focused diagnostics launcher contracts passed `165/165`, including the selected-history mtime rejection.
 - Follow-up: diagnostics approval-plan validation now also requires and bounds `requiredForShortCount` and `requiredForReleaseCount` against the visible action evidence, so Manager support text cannot understate or overstate release-required work.
 - Verification: diagnostics parser, launcher syntax, and `git diff --check` passed; focused approval-plan diagnostics contracts passed `165/165`, including missing/null/overcounted required-count checks.
+- Follow-up: diagnostics reports-summary validation now requires missing required and short gate failure details to preserve `requiredForRelease` / `requiredForShort` markers, and missing optional gate details to preserve an explicit non-release-required marker.
+- Verification: diagnostics parser, launcher syntax, and `git diff --check` passed; focused missing-gate marker contracts passed `166/166`.

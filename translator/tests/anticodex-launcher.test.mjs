@@ -7303,11 +7303,14 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId has no next action/);
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId missing guidance/);
+  assert.match(diagnostics, /release-gates missing required gate \$missingGateId missing required-for-release marker/);
   assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing guidance/);
+  assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing required-for-short marker/);
   assert.match(diagnostics, /release-gates missing short gate \$missingShortId missing next action/);
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing guidance/);
+  assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing optional marker/);
   assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
   assert.match(diagnostics, /selectedFromHistory -eq \$true/);
   assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report detail/);
@@ -7630,6 +7633,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       releaseGateFailures: ["pluginCapabilities"],
       releaseGateFailureReasons: [{
         id: "pluginCapabilities",
+        requiredForShort: true,
+        requiredForRelease: true,
         guidance: "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.",
         reportFailureSamples: ["health request failed"],
         reportFailureSampleCodes: ["local_gateway_offline"],
@@ -7644,6 +7649,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         },
       }, {
         id: "coldRelaunch",
+        requiredForShort: false,
+        requiredForRelease: false,
         failureReasons: ["missing_report"],
         failureReasonsAvailableCount: 1,
         failureReasonsHiddenCount: 0,
@@ -9239,6 +9246,105 @@ test("diagnostics reports-summary fixture rejects short and optional gates witho
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates missing short gate managerRealButtons missing guidance"));
     assert.ok(payload.failures.includes("release-gates missing optional gate coldRelaunch missing guidance"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects missing gates without required markers", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-missing-gate-marker-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["pluginCapabilities"],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: ["coldRelaunch"],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities", "coldRelaunch"],
+      releaseGateFailureReasons: [{
+        id: "pluginCapabilities",
+        failureReasons: ["ok_false"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        reportFailureSamples: ["local gateway offline"],
+        reportFailureSampleCodes: ["local_gateway_offline"],
+        guidance: "local_gateway_offline: start or restore the local Anti-Codex gateway.",
+        orderedActions: [],
+      }, {
+        id: "coldRelaunch",
+        failureReasons: ["missing_report"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        reportFailureSamples: ["missing cold relaunch report"],
+        reportFailureSampleCodes: ["missing_report"],
+        guidance: "optional_cold_relaunch_required: run only with explicit approval.",
+        orderedActions: [],
+      }],
+      nextActions: [{
+        id: "pluginCapabilities",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
+        reason: "ok_false",
+        guidance: "local_gateway_offline: start or restore the local Anti-Codex gateway.",
+        requiresGatewayStart: true,
+        requiresRealTraffic: false,
+        highImpact: false,
+        requiredForShort: true,
+        requiredForRelease: true,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      nextActionsAvailableCount: 1,
+      nextActionsHiddenCount: 0,
+      nextActionsTruncated: false,
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 1,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        reportOnlyCount: 0,
+        requiredForShortCount: 1,
+        requiredForReleaseCount: 1,
+        firstBlockedAction: "pluginCapabilities",
+        phases: [],
+      },
+      releaseGateGroups: [],
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates missing required gate pluginCapabilities missing required-for-release marker"));
+    assert.ok(payload.failures.includes("release-gates missing short gate pluginCapabilities missing required-for-short marker"));
+    assert.ok(payload.failures.includes("release-gates missing optional gate coldRelaunch missing optional marker"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

@@ -219,6 +219,8 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates missing required gate $missingGateId missing failure reason details"
         } elseif (@($matchingFailureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.guidance) }).Count -lt 1) {
             Add-Failure "release-gates missing required gate $missingGateId missing guidance"
+        } elseif (@($matchingFailureReasons | Where-Object { $_.requiredForRelease -eq $true }).Count -lt 1) {
+            Add-Failure "release-gates missing required gate $missingGateId missing required-for-release marker"
         }
     }
     foreach ($missingShortId in @(As-FlatArray $ReleaseGatesSummary.missingShort | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
@@ -227,6 +229,8 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates missing short gate $missingShortId missing failure reason details"
         } elseif (@($matchingFailureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.guidance) }).Count -lt 1) {
             Add-Failure "release-gates missing short gate $missingShortId missing guidance"
+        } elseif (@($matchingFailureReasons | Where-Object { $_.requiredForShort -eq $true }).Count -lt 1) {
+            Add-Failure "release-gates missing short gate $missingShortId missing required-for-short marker"
         }
         if (@($nextActions | Where-Object { [string]$_.id -eq $missingShortId -or [string]$_.gateId -eq $missingShortId }).Count -lt 1) {
             Add-Failure "release-gates missing short gate $missingShortId missing next action"
@@ -239,6 +243,8 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates missing optional gate $missingOptionalId missing failure reason details"
         } elseif (@($matchingFailureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.guidance) }).Count -lt 1) {
             Add-Failure "release-gates missing optional gate $missingOptionalId missing guidance"
+        } elseif (@($matchingFailureReasons | Where-Object { (Has-Property $_ "requiredForRelease") -and $_.requiredForRelease -ne $true }).Count -lt 1) {
+            Add-Failure "release-gates missing optional gate $missingOptionalId missing optional marker"
         }
     }
     if (-not (Has-Property $ReleaseGatesSummary "releaseGateGroups")) {
