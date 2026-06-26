@@ -9182,7 +9182,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
     assert.match(server, reportFilePattern(reportFile), `${reportFile} must be visible in Manager latest reports`);
     assert.match(installedOverall, reportFilePattern(reportFile), `${reportFile} must be covered by installed report integrity checks`);
   }
-  assert.doesNotMatch(releaseGates, /fetch\(|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
+  assert.doesNotMatch(releaseGates, /fetch\(|node:(?:http|https|net|child_process)|require\(["'](?:http|https|net|node:http|node:https|node:net|child_process|node:child_process)["']\)|Invoke-RestMethod|Invoke-WebRequest|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
 });
 
 test("passive release gate self-test executes successfully", () => {
