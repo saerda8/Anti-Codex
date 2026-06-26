@@ -153,9 +153,37 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             Add-Failure "release-gates missing short gate $missingShortId missing failure reason details"
         }
     }
-    foreach ($missingOptionalId in @(As-FlatArray $ReleaseGatesSummary.missingOptional | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+    $missingOptionalGates = @(As-FlatArray $ReleaseGatesSummary.missingOptional | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    foreach ($missingOptionalId in $missingOptionalGates) {
         if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingOptionalId }).Count -lt 1) {
             Add-Failure "release-gates missing optional gate $missingOptionalId missing failure reason details"
+        }
+    }
+    if (Has-Property $ReleaseGatesSummary "releaseGateGroups") {
+        foreach ($releaseGateGroup in @(As-FlatArray $ReleaseGatesSummary.releaseGateGroups | Where-Object { $null -ne $_ })) {
+            $groupName = [string]$releaseGateGroup.group
+            if ([string]::IsNullOrWhiteSpace($groupName)) {
+                $groupName = "unknown"
+            }
+            foreach ($groupMissingRequiredId in @(As-FlatArray $releaseGateGroup.missingRequired | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+                if ($missingRequiredGates -notcontains $groupMissingRequiredId) {
+                    Add-Failure "release-gates group $groupName missing required gate $groupMissingRequiredId absent from top-level missingRequired"
+                }
+                if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $groupMissingRequiredId }).Count -lt 1) {
+                    Add-Failure "release-gates group $groupName missing required gate $groupMissingRequiredId missing failure reason details"
+                }
+                if (@($nextActions | Where-Object { [string]$_.id -eq $groupMissingRequiredId -or [string]$_.gateId -eq $groupMissingRequiredId }).Count -lt 1) {
+                    Add-Failure "release-gates group $groupName missing required gate $groupMissingRequiredId has no next action"
+                }
+            }
+            foreach ($groupMissingOptionalId in @(As-FlatArray $releaseGateGroup.missingOptional | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+                if ($missingOptionalGates -notcontains $groupMissingOptionalId) {
+                    Add-Failure "release-gates group $groupName missing optional gate $groupMissingOptionalId absent from top-level missingOptional"
+                }
+                if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $groupMissingOptionalId }).Count -lt 1) {
+                    Add-Failure "release-gates group $groupName missing optional gate $groupMissingOptionalId missing failure reason details"
+                }
+            }
         }
     }
     $gatewayActionCount = 0
