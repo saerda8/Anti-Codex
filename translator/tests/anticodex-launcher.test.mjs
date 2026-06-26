@@ -7270,11 +7270,63 @@ test("Anti-Codex ships a read-only UI idle stability verifier", () => {
   assert.match(idle, /anticodex-manager-inject\\\.js/);
   assert.match(idle, /--watch/);
   assert.match(idle, /ConvertFrom-Json -ErrorAction Stop/);
+  assert.match(idle, /function Get-RemainingIdleBudgetMs/);
+  assert.match(idle, /UI state verifier timed out after \$RequestTimeoutSec seconds/);
+  assert.match(idle, /\$process\.WaitForExit\(\$waitMs\)/);
+  assert.match(idle, /\$process\.Kill\(\)/);
+  assert.match(idle, /\$sleepMs = \[Math\]::Min/);
   assert.match(idle, /New-ReportPaths "ui-idle-stability"/);
   assert.match(overall, /test-anticodex-ui-idle-stability\.ps1/);
   assert.match(overall, /UI idle stability verification/);
   assert.match(overall, /IdleStabilityIntervalSec = 5/);
-  assert.doesNotMatch(idle, /Stop-Process|Start-Process|auth\/login|click\(/i);
+  assert.doesNotMatch(idle, /Stop-Process|auth\/login|click\(/i);
+});
+
+test("UI idle stability verifier bounds a slow child UI state check", async () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-ui-idle-budget-"));
+  const runtimeRoot = resolve(tempRoot, "runtime");
+  const scriptsRoot = resolve(runtimeRoot, "scripts");
+  const reportRoot = resolve(tempRoot, "reports");
+  mkdirSync(scriptsRoot, { recursive: true });
+  writeFileSync(resolve(scriptsRoot, "test-anticodex-ui-state.ps1"), [
+    "param([int]$TimeoutSec = 8)",
+    "Start-Sleep -Seconds ([Math]::Max(5, $TimeoutSec + 5))",
+    "'{\"ok\":true,\"page\":{\"hasReconnectText\":false,\"hasLoginText\":false},\"matchedModelText\":\"fake\"}'",
+  ].join("\n"), "utf8");
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: true, upstream: "antigravity-desktop", accountReady: true, modelCount: 1 }));
+  });
+  await new Promise((resolveServer, rejectServer) => {
+    server.once("error", rejectServer);
+    server.listen(0, "127.0.0.1", resolveServer);
+  });
+  try {
+    const port = server.address().port;
+    const startedAt = Date.now();
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", resolve(root, "scripts", "test-anticodex-ui-idle-stability.ps1"),
+      "-BaseUrl", `http://127.0.0.1:${port}`,
+      "-RuntimeRoot", runtimeRoot,
+      "-ReportRoot", reportRoot,
+      "-DurationSec", "5",
+      "-IntervalSec", "5",
+      "-TimeoutSec", "3",
+      "-SkipManagerActionProbe",
+    ], { encoding: "utf8", timeout: 12000 });
+    const elapsedMs = Date.now() - startedAt;
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.ok(elapsedMs < 10000, `UI idle verifier took ${elapsedMs}ms`);
+    const report = JSON.parse(readFileSync(resolve(reportRoot, "latest-ui-idle-stability.json"), "utf8"));
+    assert.equal(report.ok, false);
+    assert.ok(report.failures.some((failure) => failure.includes("UI state failed")));
+    assert.equal(report.samples[0].uiOk, false);
+  } finally {
+    await new Promise((resolveClose) => server.close(resolveClose));
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex ships a read-only diagnostics verifier", () => {

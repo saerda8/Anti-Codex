@@ -24,6 +24,11 @@ function Add-Failure {
     $failures.Add($Message) | Out-Null
 }
 
+function Get-RemainingIdleBudgetMs {
+    param([DateTime]$Deadline)
+    return [Math]::Max(0, [int]($Deadline - [DateTime]::UtcNow).TotalMilliseconds)
+}
+
 function Normalize-Path {
     param([string]$Path)
     if (-not $Path) { return "" }
@@ -31,25 +36,44 @@ function Normalize-Path {
 }
 
 function Invoke-LocalJson {
-    param([string]$Path)
-    return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $TimeoutSec
+    param([string]$Path, [int]$RequestTimeoutSec = $TimeoutSec)
+    return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec ([Math]::Max(1, $RequestTimeoutSec))
 }
 
 function Invoke-UiState {
-    param([string]$ScriptPath, [string]$RuntimeRootFull)
+    param([string]$ScriptPath, [string]$RuntimeRootFull, [int]$RequestTimeoutSec = $TimeoutSec)
 
     $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
     $arguments = @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath,
         "-BaseUrl", $BaseUrl,
         "-RuntimeRoot", $RuntimeRootFull,
-        "-TimeoutSec", "$TimeoutSec"
+        "-TimeoutSec", "$([Math]::Max(1, $RequestTimeoutSec))"
     )
     if ($SkipManagerActionProbe) {
         $arguments += "-SkipManagerActionProbe"
     }
-    $output = @(& $powerShellBin @arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    $stdoutPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-idle-ui-state-{0}.out" -f ([Guid]::NewGuid().ToString("N")))
+    $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-idle-ui-state-{0}.err" -f ([Guid]::NewGuid().ToString("N")))
+    try {
+        $process = Start-Process -FilePath $powerShellBin -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $waitMs = [Math]::Max(1000, ([Math]::Max(1, $RequestTimeoutSec) * 1000) + 1000)
+        if (-not $process.WaitForExit($waitMs)) {
+            try { $process.Kill() } catch {}
+            return [pscustomobject]@{
+                ok = $false
+                exitCode = $null
+                failures = @("UI state verifier timed out after $RequestTimeoutSec seconds")
+                tail = @()
+            }
+        }
+        $exitCode = $process.ExitCode
+        $output = @()
+        if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue) }
+        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue) }
+    } finally {
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
     $lines = @($output | ForEach-Object { [string]$_ })
     $payloadText = ($lines -join "").Trim()
     if (-not $payloadText) {
@@ -162,7 +186,8 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     $processes = Get-AntiCodexProcesses $installRoot $runtimeRootFull
 
     try {
-        $health = Invoke-LocalJson "/health"
+        $healthTimeoutSec = [Math]::Max(1, [Math]::Min($TimeoutSec, [int][Math]::Ceiling((Get-RemainingIdleBudgetMs $deadline) / 1000)))
+        $health = Invoke-LocalJson "/health" -RequestTimeoutSec $healthTimeoutSec
         if ($health.ok -ne $true) { Add-Failure "sample ${sampleIndex}: health ok=false" }
         if ($health.upstream -ne "antigravity-desktop") { Add-Failure "sample ${sampleIndex}: upstream is $($health.upstream)" }
         if ($health.accountReady -ne $true -and [int]$health.modelCount -lt 1) { Add-Failure "sample ${sampleIndex}: model catalog is not ready" }
@@ -171,7 +196,13 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     }
 
     if (Test-Path -LiteralPath $uiStateScript -PathType Leaf) {
-        $ui = Invoke-UiState $uiStateScript $runtimeRootFull
+        $remainingMs = Get-RemainingIdleBudgetMs $deadline
+        if ($remainingMs -lt 1000 -and $sampleIndex -gt 1) {
+            Add-Failure "sample ${sampleIndex}: UI state skipped because idle verifier budget was exhausted"
+        } else {
+            $uiTimeoutSec = [Math]::Max(1, [Math]::Min($TimeoutSec, [int][Math]::Ceiling([Math]::Max(1000, $remainingMs) / 1000)))
+            $ui = Invoke-UiState $uiStateScript $runtimeRootFull -RequestTimeoutSec $uiTimeoutSec
+        }
         if ($ui.ok -ne $true) {
             Add-Failure "sample ${sampleIndex}: UI state failed"
         }
@@ -236,7 +267,10 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     }) | Out-Null
 
     if ([DateTime]::UtcNow -lt $deadline) {
-        Start-Sleep -Seconds ([Math]::Max(1, $IntervalSec))
+        $sleepMs = [Math]::Min(([Math]::Max(1, $IntervalSec) * 1000), (Get-RemainingIdleBudgetMs $deadline))
+        if ($sleepMs -gt 0) {
+            Start-Sleep -Milliseconds $sleepMs
+        }
     }
 }
 
