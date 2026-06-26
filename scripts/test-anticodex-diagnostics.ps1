@@ -360,6 +360,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$nextAction.guidance)) {
             Add-Failure "release-gates next action $actionId missing guidance"
         }
+        if (($requiresGateway -or $requiresRealTraffic -or $highImpact -or $blocked) -and [string]::IsNullOrWhiteSpace([string]$nextAction.reason)) {
+            Add-Failure "release-gates next action $actionId missing reason"
+        }
     }
     foreach ($gateFailure in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons)) {
         $gateFailureId = [string]$gateFailure.id
