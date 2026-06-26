@@ -2437,9 +2437,12 @@ function latestManagerReportItem(label, fileName) {
     const nextActionsAvailableCount = report && Object.prototype.hasOwnProperty.call(report, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;
     const nextActionsHiddenCount = report && Object.prototype.hasOwnProperty.call(report, "nextActionsHiddenCount") ? report.nextActionsHiddenCount : null;
     const nextActionsTruncated = typeof report?.nextActionsTruncated === "boolean" ? report.nextActionsTruncated : null;
-    const releaseGateGroups = report?.groups && typeof report.groups === "object"
-        ? Object.entries(report.groups).map(([group, value]) => ({
-            group: shortSafeText(group, ""),
+    const rawReleaseGateGroups = Array.isArray(report?.releaseGateGroups)
+        ? report.releaseGateGroups
+        : (report?.groups && typeof report.groups === "object" ? Object.entries(report.groups).map(([group, value]) => ({ ...(value || {}), group })) : []);
+    const releaseGateGroups = rawReleaseGateGroups
+        .map((value) => ({
+            group: shortSafeText(value?.group || "", ""),
             total: Number.isFinite(Number(value?.total)) ? Number(value.total) : null,
             satisfied: Number.isFinite(Number(value?.satisfied)) ? Number(value.satisfied) : null,
             required: Number.isFinite(Number(value?.required)) ? Number(value.required) : null,
@@ -2448,19 +2451,29 @@ function latestManagerReportItem(label, fileName) {
             optionalSatisfied: Number.isFinite(Number(value?.optionalSatisfied)) ? Number(value.optionalSatisfied) : null,
             missingRequired: Array.isArray(value?.missingRequired) ? value.missingRequired.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
             missingOptional: Array.isArray(value?.missingOptional) ? value.missingOptional.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 8) : [],
-        })).filter((entry) => entry.group).slice(0, 16)
-        : [];
-    const releaseGateSelectedReports = Array.isArray(report?.gates)
+        })).filter((entry) => entry.group).slice(0, 16);
+    const releaseGateSelectedReports = Array.isArray(report?.releaseGateSelectedReports)
+        ? report.releaseGateSelectedReports
+            .map((entry) => ({
+                id: shortSafeText(entry.id || "", ""),
+                group: shortSafeText(entry.group || "", ""),
+                selectedFile: shortSafeText(entry.selectedFile || "", ""),
+                selectedMtime: shortSafeText(entry.selectedMtime || "", ""),
+            }))
+            .filter((entry) => entry.id && entry.selectedFile)
+            .slice(0, 12)
+        : (Array.isArray(report?.gates)
         ? report.gates
             .filter((gate) => gate && gate.selectedFromHistory === true)
             .map((gate) => ({
                 id: shortSafeText(gate.id || "", ""),
                 group: shortSafeText(gate.group || "", ""),
                 selectedFile: shortSafeText(gate.selectedFile || "", ""),
+                selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
             }))
             .filter((entry) => entry.id && entry.selectedFile)
             .slice(0, 12)
-        : [];
+        : []);
     const installedRuntimeGate = Array.isArray(report?.gates)
         ? report.gates.find((gate) => gate && gate.id === "installedRuntimeSync")
         : null;

@@ -2455,6 +2455,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /appToolGetPostParityClean/);
   assert.match(server, /appToolGetPostParityContentMatches/);
   assert.match(server, /releaseGateFailures/);
+  assert.match(server, /rawReleaseGateGroups/);
+  assert.match(server, /report\?\.releaseGateGroups/);
+  assert.match(server, /report\?\.releaseGateSelectedReports/);
   assert.match(server, /installedRuntimeEvidence/);
   assert.match(server, /releaseGateSelectedReports/);
   assert.match(server, /releaseGateFailureReasons/);
