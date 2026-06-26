@@ -1079,9 +1079,18 @@ function reportFailureSampleCodes(samples) {
   return [...codes].sort();
 }
 
+function mcpSkillsGatewayNeeded(gate) {
+  return gate?.id === "mcpSkills"
+    && Array.isArray(gate.reportFailureSamples)
+    && gate.reportFailureSamples.some(isLocalGatewayFailureSample);
+}
+
 function gateGuidance(gate) {
   const failedReasons = Array.isArray(gate?.failureReasons) ? gate.failureReasons : [];
   const actions = rawGateOrderedActions(gate);
+  if (mcpSkillsGatewayNeeded(gate)) {
+    return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun MCP/Skill release-grade verification.";
+  }
   if (gate?.id === "pluginCapabilities" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.";
   }
@@ -1204,7 +1213,9 @@ function rawGateOrderedActions(gate) {
     const index = shortEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index >= 0) {
       const [id, phase, command, options] = shortEvidenceRefreshOrder[index];
-      return [...semanticReportOnlyAction(gate), action(id, phase, command, options || {})];
+      const gatewayNeeded = mcpSkillsGatewayNeeded(gate);
+      const actionOptions = gatewayNeeded ? { ...(options || {}), requiresGatewayStart: true } : (options || {});
+      return [...semanticReportOnlyAction(gate), action(id, gatewayNeeded ? "short-gateway" : phase, command, actionOptions)];
     }
   }
   if (gate?.id === "pluginCapabilities" && !gate.satisfied) {
@@ -2745,6 +2756,20 @@ if (args.has("--self-test")) {
     if (!managerRealButtonActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required") && String(item.reason || ""))) throw new Error("self-test failed: gate ordered actions did not preserve reason and guidance");
     const missingHistoryActions = gateOrderedActions(reasonGates.find((item) => item.id === "missingHistory"));
     if (!missingHistoryActions.some((item) => item.id === "missingHistory" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("test-anticodex-missing-history.mjs"))) throw new Error("self-test failed: missing-history ordered action was not marked gateway-dependent");
+    const mcpGatewayFailureGate = {
+      id: "mcpSkills",
+      group: "short",
+      satisfied: false,
+      failureReasons: ["ok_false", "semantic_failures"],
+      semanticFailures: ["mcp_skills_source_snapshot_missing"],
+      reportFailureSamples: [
+        "health request failed: /health request failed on attempt 2 of 2: The operation has timed out.",
+        "installed plugins endpoint failed: /backend-api/ps/plugins/installed request failed on attempt 2 of 2: The operation has timed out.",
+      ],
+    };
+    const mcpGatewayActions = gateOrderedActions(mcpGatewayFailureGate);
+    if (!gateGuidance(mcpGatewayFailureGate).includes("local_gateway_offline")) throw new Error("self-test failed: MCP/Skill gateway-offline guidance was not attached");
+    if (!mcpGatewayActions.some((item) => item.id === "mcpSkills" && item.requiresGatewayStart === true && item.blockedUntilExplicitUserApproval === true && item.phase === "short-gateway")) throw new Error("self-test failed: MCP/Skill gateway-offline action was not marked gateway-dependent");
     const missingRequiredWithoutActions = reasonGates
       .filter((item) => item.requiredForRelease === true && !item.satisfied && gateOrderedActions(item).length < 1)
       .map((item) => item.id);
