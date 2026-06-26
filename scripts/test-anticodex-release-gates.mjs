@@ -1088,6 +1088,9 @@ function gateGuidance(gate) {
   if (gate?.id === "missingHistory" && Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.some(isLocalGatewayFailureSample)) {
     return "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun missing-history verification.";
   }
+  if (gate?.id === "installedRuntimeSync" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "runtime_sync_refresh_required: rerun the no-restart runtime sync; if the local gateway is offline, use installedRuntimeEvidence fingerprints to distinguish copied files from live health.";
+  }
   if (syncReadinessHostSyncNeeded(gate)) {
     return "host_sync_required: installed Codex changed; run Sync Codex Update only with explicit approval. It builds and validates a candidate before replacing Anti-Codex; failed validation leaves the current host intact.";
   }
@@ -1163,6 +1166,8 @@ function action(id, phase, command, options = {}) {
     id,
     phase,
     command,
+    reason: typeof options.reason === "string" ? options.reason : "",
+    guidance: typeof options.guidance === "string" ? options.guidance : "",
     reportOnly: options.reportOnly === true,
     requiresGatewayStart: options.requiresGatewayStart === true,
     requiresRealTraffic: options.requiresRealTraffic === true,
@@ -1257,13 +1262,19 @@ const actionPhaseOrder = [
 
 function collectOrderedNextActions(failureReasons) {
   const items = failureReasons
-    .flatMap((gate, gateIndex) => (Array.isArray(gate.orderedActions) ? gate.orderedActions : []).map((item, actionIndex) => ({
-      ...item,
-      gateId: gate.id,
-      requiredForRelease: gate.requiredForRelease === true,
-      requiredForShort: gate.requiredForShort === true,
-      order: gateIndex * 100 + actionIndex,
-    })))
+    .flatMap((gate, gateIndex) => (Array.isArray(gate.orderedActions) ? gate.orderedActions : []).map((item, actionIndex) => {
+      const failureReason = gate.failureReason || (Array.isArray(gate.failureReasons) ? gate.failureReasons[0] : "") || "";
+      const guidance = typeof gate.guidance === "string" && gate.guidance ? gate.guidance : gateGuidance(gate);
+      return {
+        ...item,
+        reason: item.reason || failureReason,
+        guidance: item.guidance || guidance,
+        gateId: gate.id,
+        requiredForRelease: gate.requiredForRelease === true,
+        requiredForShort: gate.requiredForShort === true,
+        order: gateIndex * 100 + actionIndex,
+      };
+    }))
     .filter((item, index, array) => {
       const key = item.reportOnly === true ? `${item.phase}:${item.id}` : `${item.gateId}:${item.id}`;
       return array.findIndex((other) => (other.reportOnly === true ? `${other.phase}:${other.id}` : `${other.gateId}:${other.id}`) === key) === index;
@@ -1277,7 +1288,11 @@ function collectOrderedNextActions(failureReasons) {
     })
     .map(({ order, ...item }) => item);
   if (items.some((item) => item.requiresGatewayStart === true) && !items.some((item) => item.id === "startGatewayTranslatorOnly")) {
-    items.unshift(action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }));
+    items.unshift(action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", {
+      requiresGatewayStart: true,
+      reason: "local_gateway_required",
+      guidance: "local_gateway_required: start or restore the local Anti-Codex gateway before running gateway-dependent verifiers.",
+    }));
   }
   return items;
 }
@@ -2719,8 +2734,11 @@ if (args.has("--self-test")) {
       .filter((item) => item.requiredForRelease === true && !item.satisfied && gateOrderedActions(item).length < 1)
       .map((item) => item.id);
     if (missingRequiredWithoutActions.length) throw new Error(`self-test failed: required failed gates missing ordered actions: ${missingRequiredWithoutActions.join(",")}`);
-    const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
-    if (orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
+    const sortedActions = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) })));
+    const sortedActionIds = sortedActions.map((item) => item.id);
+    if (sortedActions.some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
+    if (!sortedActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required"))) throw new Error("self-test failed: nextActions did not preserve gate guidance");
+    if (!sortedActions.some((item) => item.id === "accountProxyReadiness" && String(item.guidance || "").includes("real_traffic_evidence_stale"))) throw new Error("self-test failed: real-traffic nextActions did not preserve gate guidance");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const truncatedActions = summarizeNextActions(Array.from({ length: 40 }, (_, index) => ({
       id: `overflow${index}`,

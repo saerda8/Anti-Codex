@@ -9572,6 +9572,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /reportFailureSamples/);
   assert.match(releaseGates, /local_gateway_offline/);
   assert.match(releaseGates, /local_gateway_required/);
+  assert.match(releaseGates, /runtime_sync_refresh_required/);
   assert.match(releaseGates, /real_traffic_evidence_stale/);
   assert.match(releaseGates, /optional_stability_soak_required/);
   assert.match(releaseGates, /optional_cold_relaunch_required/);
@@ -9588,6 +9589,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /nextActionsHiddenCount/);
   assert.match(releaseGates, /nextActionsTruncated/);
   assert.match(releaseGates, /nextActions truncation evidence was not summarized/);
+  assert.match(releaseGates, /nextActions did not preserve gate guidance/);
+  assert.match(releaseGates, /real-traffic nextActions did not preserve gate guidance/);
   assert.match(releaseGates, /approvalPlan/);
   assert.match(releaseGates, /const approvalPlan = summarizeApprovalPlan\(nextActionSummary\.allActions\)/);
   assert.match(releaseGates, /summarizeApprovalPlan/);
