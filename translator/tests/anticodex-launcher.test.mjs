@@ -7279,6 +7279,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /optionalRealTrafficReady/);
   assert.match(diagnostics, /optionalRealTrafficFailures/);
   assert.match(diagnostics, /release-gates optional real-traffic failure \$optionalFailureId missing guidance/);
+  assert.match(diagnostics, /release-gates optional real-traffic ready has failures/);
+  assert.match(diagnostics, /release-gates releaseReady true while strict optional real-traffic is not ready/);
   assert.match(diagnostics, /sourceSnapshotEvidence/);
   assert.match(diagnostics, /source snapshot evidence/);
   assert.match(diagnostics, /missingRequired/);
@@ -8676,6 +8678,51 @@ test("diagnostics reports-summary fixture rejects optional real-traffic failures
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates optional real-traffic failure realThirdPartyProviderOptional missing guidance"));
+    assert.ok(payload.failures.includes("release-gates releaseReady true while strict optional real-traffic is not ready"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects optional ready with failures", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-optional-ready-failures-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([minimalDiagnosticsReleaseGateSummary({
+      ok: false,
+      shortReady: true,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: true,
+      optionalRealTrafficFailures: ["realThirdPartyProviderOptional"],
+      releaseGateFailures: ["realThirdPartyProviderOptional"],
+      releaseGateFailureReasons: [{
+        id: "realThirdPartyProviderOptional",
+        requiredForShort: false,
+        requiredForRelease: false,
+        failureReasons: ["stale_report"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        guidance: "optional_real_provider_required: run only with explicit approval and environment-variable API key.",
+        orderedActions: [],
+      }],
+    })]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates optional real-traffic ready has failures"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
