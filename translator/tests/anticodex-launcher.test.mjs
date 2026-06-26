@@ -811,9 +811,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(managerInject, new RegExp(`flags\\.push\\("${marker}"\\)`));
     assert.match(managerServerSource, new RegExp(`flags\\.push\\("${marker}"\\)`));
   }
-  assert.match(managerBridge, /mergedNextActions/);
-  assert.match(managerInject, /mergedNextActions/);
-  assert.match(managerServerSource, /mergedNextActions/);
+  assert.match(managerBridge, /mergedNextActionObjects/);
+  assert.match(managerInject, /mergedNextActionObjects/);
+  assert.match(managerServerSource, /mergedNextActionObjects/);
+  for (const marker of ["actionReasons: ", "actionGuidance: ", "__fallbackGateId"]) {
+    assert.match(managerBridge, new RegExp(marker));
+    assert.match(managerInject, new RegExp(marker));
+    assert.match(managerServerSource, new RegExp(marker));
+  }
   assert.match(managerBridge, /hiddenNextActions/);
   assert.match(managerInject, /hiddenNextActions/);
   assert.match(managerServerSource, /hiddenNextActions/);
@@ -7626,6 +7631,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       nextActions: [{
         id: "pluginCapabilities",
         command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
+        reason: "ok_false",
+        guidance: "local_gateway_offline: start or restore the local Anti-Codex gateway, then rerun plugin/app capability check.",
         requiresGatewayStart: true,
         requiresRealTraffic: false,
         highImpact: false,

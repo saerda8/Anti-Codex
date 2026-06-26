@@ -331,7 +331,7 @@ function latestReportsSummary(result) {
         if (typeof gate?.requiredForShort === "boolean" || typeof gate?.requiredForRelease === "boolean") details.push(`required=${triStateText(gate.requiredForShort)}/${triStateText(gate.requiredForRelease)}`);
         return `${gate?.id || "unknown"}:${reason}${details.length ? `[${details.join("/")}]` : ""}`;
       }
-      function mergedNextActions() {
+      function mergedNextActionObjects() {
         const seen = new Set();
         const actions = [];
         const add = (action, fallbackGateId = "") => {
@@ -339,7 +339,7 @@ function latestReportsSummary(result) {
           const key = `${action.gateId || fallbackGateId || action.id}:${action.id}`;
           if (seen.has(key)) return;
           seen.add(key);
-          actions.push(actionDisplayLabel(action, fallbackGateId));
+          actions.push({ ...action, __fallbackGateId: fallbackGateId });
         };
         if (Array.isArray(item.nextActions)) item.nextActions.forEach((action) => add(action, action?.gateId || ""));
         if (Array.isArray(item.releaseGateFailureReasons)) {
@@ -379,13 +379,20 @@ function latestReportsSummary(result) {
           lines.push(`  真实流量验收证据需更新/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（${realTrafficEvidenceGates.slice(0, 6).join(", ")}）`);
         }
       }
-      const allNextActions = mergedNextActions();
+      const allNextActionObjects = mergedNextActionObjects();
+      const allNextActions = allNextActionObjects.map((action) => actionDisplayLabel(action, action.__fallbackGateId || ""));
       const nextActions = allNextActions.slice(0, 8);
       const reportHiddenNextActions = item.nextActionsHiddenCount != null && Number.isFinite(Number(item.nextActionsHiddenCount)) ? Math.max(0, Number(item.nextActionsHiddenCount)) : null;
       const reportAvailableNextActions = item.nextActionsAvailableCount != null && Number.isFinite(Number(item.nextActionsAvailableCount)) ? Math.max(0, Number(item.nextActionsAvailableCount)) : null;
       const hiddenNextActions = Math.max(0, reportHiddenNextActions ?? (allNextActions.length - nextActions.length));
       const availableNextActions = reportAvailableNextActions ?? allNextActions.length;
       if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} hidden of ${availableNextActions})` : ""}`);
+      const actionReasonDetails = allNextActionObjects.filter((action) => action?.reason).slice(0, 6).map((action) => `${actionDisplayLabel(action, action.__fallbackGateId || "")}=${action.reason}`);
+      const hiddenActionReasons = Math.max(0, allNextActionObjects.filter((action) => action?.reason).length - actionReasonDetails.length);
+      if (actionReasonDetails.length) lines.push(`  actionReasons: ${actionReasonDetails.join("; ")}${hiddenActionReasons ? ` (+${hiddenActionReasons} more)` : ""}`);
+      const actionGuidanceDetails = allNextActionObjects.filter((action) => action?.guidance).slice(0, 4).map((action) => `${actionDisplayLabel(action, action.__fallbackGateId || "")}=${action.guidance}`);
+      const hiddenActionGuidance = Math.max(0, allNextActionObjects.filter((action) => action?.guidance).length - actionGuidanceDetails.length);
+      if (actionGuidanceDetails.length) lines.push(`  actionGuidance: ${actionGuidanceDetails.join("; ")}${hiddenActionGuidance ? ` (+${hiddenActionGuidance} more)` : ""}`);
       if (item.approvalPlan) {
         const plan = item.approvalPlan;
         lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
@@ -836,8 +843,8 @@ if (args.has("--self-test")) {
       missingOptional: ["coldRelaunch"],
       damagedReports: ["latest-native-tool-loop.json"],
       releaseGateFailureReasons: [
-        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], failureReasonsHiddenCount: 2, ageHours: 56.1, fresh: false, selectedFromHistory: true, requiredForShort: false, requiredForRelease: true, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification" }] },
-        { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork" }] },
+        { id: "postVerification", group: "real-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], failureReasonsHiddenCount: 2, ageHours: 56.1, fresh: false, selectedFromHistory: true, requiredForShort: false, requiredForRelease: true, selectedFile: "latest-post-verification.json", selectedMtime: "2026-06-24T01:02:03.000Z", reportFailureSampleCodes: ["local_gateway_offline"], reportFailureSamples: ["gateway offline", "health timeout", "extra hidden"], orderedActions: [{ id: "postVerification", reason: "stale_report", guidance: "rerun post verification with real traffic" }] },
+        { id: "realWork", group: "real-traffic", failureReason: "missing_report", failureReasons: ["missing_report"], orderedActions: [{ id: "realWork", reason: "missing_report", guidance: "run real work verifier after approval" }] },
         { id: "sourcePreflight", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-source-preflight.json", reportFailureSampleCodes: ["source_preflight_no_traffic"], reportFailureSamples: ["noTraffic missing"], guidance: "rerun source preflight", orderedActions: [{ id: "sourcePreflight" }] },
         { id: "mcpSkills", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-mcp-skills.json", reportFailureSampleCodes: ["mcp_skills_source_snapshot_mismatch"], reportFailureSamples: ["source mismatch"], guidance: "rerun MCP skills", orderedActions: [{ id: "mcpSkills" }] },
         { id: "localConnectors", group: "short", failureReason: "semantic_failures", failureReasons: ["semantic_failures"], selectedFile: "latest-local-connectors.json", reportFailureSampleCodes: ["local_connector_parity"], reportFailureSamples: ["connector drift"], guidance: "rerun local connectors", orderedActions: [{ id: "localConnectors" }] },
@@ -845,9 +852,9 @@ if (args.has("--self-test")) {
         { id: "syncReadiness", group: "no-traffic", failureReason: "stale_report", failureReasons: ["stale_report"], selectedFile: "latest-sync-readiness.json", reportFailureSampleCodes: ["stale_report"], reportFailureSamples: ["stale sync"], guidance: "rerun sync readiness", orderedActions: [{ id: "syncReadiness" }] },
       ],
       nextActions: [
-        { id: "releaseGateReportOnlyCheck", gateId: "postVerification", reportOnly: true },
-        { id: "realWork", gateId: "realWork" },
-        { id: "postVerification", gateId: "postVerification" },
+        { id: "releaseGateReportOnlyCheck", gateId: "postVerification", reportOnly: true, reason: "semantic_failures", guidance: "review release gate details first" },
+        { id: "realWork", gateId: "realWork", reason: "missing_report", guidance: "run real work verifier after approval" },
+        { id: "postVerification", gateId: "postVerification", reason: "stale_report", guidance: "rerun post verification with real traffic" },
         ...Array.from({ length: 8 }, (_, index) => ({ id: `action${index + 3}`, gateId: `gate${index + 3}` })),
       ],
       approvalPlan: {
@@ -941,6 +948,8 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /guidance: .*\(\+1 more\)/);
   assert.match(evidenceSummary, /nextActions: postVerification:releaseGateReportOnlyCheck\[reportOnly\] -> realWork:realWork -> postVerification:postVerification/);
   assert.match(evidenceSummary, /nextActions: .*\(\+8 hidden of 16\)/);
+  assert.match(evidenceSummary, /actionReasons: postVerification:releaseGateReportOnlyCheck\[reportOnly\]=semantic_failures; realWork:realWork=missing_report; postVerification:postVerification=stale_report/);
+  assert.match(evidenceSummary, /actionGuidance: postVerification:releaseGateReportOnlyCheck\[reportOnly\]=review release gate details first; realWork:realWork=run real work verifier after approval; postVerification:postVerification=rerun post verification with real traffic/);
   assert.match(evidenceSummary, /approvalPlan: actions=3 \/ reportOnly=1 \/ blocked=2 \/ gateway=2 \/ realTraffic=2 \/ highImpact=1 \/ required=1\/2 \/ phases=2 \/ first=realWork/);
   assert.match(evidenceSummary, /approvalPhases: real-traffic-high-impact:1\[gateway,realTraffic,highImpact,blocked\] \| real-traffic-final:1\[gateway,realTraffic,blocked\]/);
   assert.match(evidenceSummary, /approvalPlan: .*reportOnly=1 .*blocked=2 .*required=1\/2 .*phases=2/);
