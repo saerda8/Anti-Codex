@@ -406,6 +406,43 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     }
 }
 
+function Test-SyncReadinessEvidence {
+    param(
+        $SyncEvidence,
+        [string]$Prefix,
+        [bool]$RequireReady = $true
+    )
+    if (-not $SyncEvidence) {
+        Add-Failure "$Prefix missing syncReadinessEvidence"
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.sourcePackageVersion)) { Add-Failure "$Prefix missing source package version" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activePackageVersion)) { Add-Failure "$Prefix missing active package version" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.updateStatusReason)) { Add-Failure "$Prefix missing update status reason" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.sourceHostHash)) { Add-Failure "$Prefix missing source host hash" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activeHostHash)) { Add-Failure "$Prefix missing active host hash" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.sourceCliHash)) { Add-Failure "$Prefix missing source CLI hash" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activeCliHash)) { Add-Failure "$Prefix missing active CLI hash" }
+    if (-not (Has-Property $SyncEvidence "hostHashMatches")) { Add-Failure "$Prefix missing host hash match flag" }
+    if (-not (Has-Property $SyncEvidence "cliHashMatches")) { Add-Failure "$Prefix missing CLI hash match flag" }
+    if ($RequireReady) {
+        if ($SyncEvidence.noTrafficReady -ne $true) { Add-Failure "$Prefix missing no-traffic attestation" }
+        if ($SyncEvidence.fullMode -ne $true) { Add-Failure "$Prefix not full mode" }
+        if ($SyncEvidence.activeHostReady -ne $true) { Add-Failure "$Prefix active host not ready" }
+        if ($SyncEvidence.brandReady -ne $true) { Add-Failure "$Prefix brand not preserved" }
+        if ($SyncEvidence.iconReady -ne $true) { Add-Failure "$Prefix icons not ready" }
+        if ($SyncEvidence.syncScriptsReady -ne $true) { Add-Failure "$Prefix scripts not ready" }
+        if ($SyncEvidence.updateReady -ne $true) { Add-Failure "$Prefix update status not synced" }
+        if ($SyncEvidence.guardrailsReady -ne $true) { Add-Failure "$Prefix guardrails not ready" }
+        if ([int]$SyncEvidence.shortcutCount -lt 5) { Add-Failure "$Prefix shortcut count too low" }
+        if ([int]$SyncEvidence.shortcutReadyCount -ne [int]$SyncEvidence.shortcutCount) { Add-Failure "$Prefix shortcuts not ready" }
+        if ([int]$SyncEvidence.desktopShortcutCount -ne 1) { Add-Failure "$Prefix desktop shortcut count wrong" }
+        if ([int]$SyncEvidence.forbiddenDesktopHelperCount -ne 0) { Add-Failure "$Prefix has forbidden desktop helpers" }
+        if ($SyncEvidence.managerBridgeReady -ne $true) { Add-Failure "$Prefix manager bridge not ready" }
+        if ($SyncEvidence.cleanSyncState -ne $true) { Add-Failure "$Prefix sync state not clean" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -419,6 +456,7 @@ function Test-ReportsSummary {
     $summary = As-FlatArray (Get-Content -LiteralPath $SummaryPath -Raw | ConvertFrom-Json)
     $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
     $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
+    $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -501,6 +539,9 @@ function Test-ReportsSummary {
             }
         }
     }
+    if ($syncReadinessSummary) {
+        Test-SyncReadinessEvidence $syncReadinessSummary.syncReadinessEvidence "sync-readiness summary" -RequireReady:$false
+    }
 
     return [pscustomobject]@{
         summaryPath = $SummaryPath
@@ -528,6 +569,12 @@ function Test-ReportsSummary {
                 ok = $localConnectorsSummary.ok
                 reportName = $localConnectorsSummary.reportName
                 evidence = $localConnectorsSummary.localConnectorEvidence
+            }
+        } else { $null }
+        syncReadiness = if ($syncReadinessSummary) {
+            [pscustomobject]@{
+                ok = $syncReadinessSummary.ok
+                evidence = $syncReadinessSummary.syncReadinessEvidence
             }
         } else { $null }
     }
@@ -755,6 +802,7 @@ function Test-DiagnosticBundle {
             if (-not $syncEvidence) {
                 Add-Failure "diagnostic sync-readiness summary missing syncReadinessEvidence"
             } else {
+                Test-SyncReadinessEvidence $syncEvidence "diagnostic sync-readiness summary" -RequireReady:$false
                 if ($syncEvidence.noTrafficReady -ne $true) { Add-Failure "diagnostic sync-readiness summary missing no-traffic attestation" }
                 if ($syncEvidence.fullMode -ne $true) { Add-Failure "diagnostic sync-readiness summary not full mode" }
                 if ($syncEvidence.activeHostReady -ne $true) { Add-Failure "diagnostic sync-readiness summary active host not ready" }

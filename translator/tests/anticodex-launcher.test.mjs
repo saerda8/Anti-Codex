@@ -7203,6 +7203,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic ui-idle summary has reconnect text/);
   assert.match(diagnostics, /syncReadinessEvidence/);
   assert.match(diagnostics, /diagnostic sync-readiness summary missing syncReadinessEvidence/);
+  assert.match(diagnostics, /function Test-SyncReadinessEvidence/);
+  assert.match(diagnostics, /missing source package version/);
+  assert.match(diagnostics, /missing update status reason/);
+  assert.match(diagnostics, /missing source host hash/);
+  assert.match(diagnostics, /missing host hash match flag/);
   assert.match(diagnostics, /diagnostic sync-readiness summary manager bridge not ready/);
   assert.match(diagnostics, /sync-anticodex-launcher\.ps1/);
   assert.match(diagnostics, /installedOverallEvidence/);
@@ -7540,6 +7545,20 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         installedRuntimeFingerprint: "abc123",
         mismatchedRuntimeFiles: [],
       },
+    }, {
+      file: "latest-sync-readiness.json",
+      ok: false,
+      syncReadinessEvidence: {
+        sourcePackageVersion: "26.623.3245.0",
+        activePackageVersion: "26.616.9593.0",
+        updateStatusReason: "source_codex_changed",
+        sourceHostHash: "SOURCEHOST",
+        activeHostHash: "ACTIVEHOST",
+        sourceCliHash: "SOURCECLI",
+        activeCliHash: "ACTIVECLI",
+        hostHashMatches: false,
+        cliHashMatches: false,
+      },
     }]), "utf8");
 
     const result = spawnSync("powershell.exe", [
@@ -7563,6 +7582,100 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.reportsSummary.releaseGates.nextActionsTruncated, false);
     assert.equal(payload.reportsSummary.releaseGates.approvalPlan.reportOnlyCount, 0);
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
+    assert.equal(payload.reportsSummary.syncReadiness.evidence.sourcePackageVersion, "26.623.3245.0");
+    assert.equal(payload.reportsSummary.syncReadiness.evidence.activePackageVersion, "26.616.9593.0");
+    assert.equal(payload.reportsSummary.syncReadiness.evidence.hostHashMatches, false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects incomplete sync-readiness drift evidence", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-sync-evidence-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: false,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["pluginCapabilities"],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities"],
+      releaseGateFailureReasons: [{
+        id: "pluginCapabilities",
+        reportFailureSamples: ["health request failed"],
+        reportFailureSampleCodes: ["local_gateway_offline"],
+        offlineSnapshotEvidence: {
+          connectorContentMatches: true,
+          appToolContentMatches: true,
+          refreshGateSatisfied: true,
+          refreshSelectedFile: "latest-refresh-features.json",
+          sourceFingerprint: "abc123",
+          sourceFileCount: 2,
+          sourceMtimeMax: "2026-06-24T00:00:00.000Z",
+        },
+      }],
+      nextActions: [{
+        id: "pluginCapabilities",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
+        requiresGatewayStart: true,
+        requiresRealTraffic: false,
+        highImpact: false,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 1,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        reportOnlyCount: 0,
+        firstBlockedAction: "pluginCapabilities",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }, {
+      file: "latest-sync-readiness.json",
+      ok: false,
+      syncReadinessEvidence: {
+        sourcePackageVersion: "26.623.3245.0",
+        activePackageVersion: "26.616.9593.0",
+        sourceHostHash: "SOURCEHOST",
+        activeHostHash: "ACTIVEHOST",
+        sourceCliHash: "SOURCECLI",
+        activeCliHash: "ACTIVECLI",
+        hostHashMatches: false,
+        cliHashMatches: false,
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.notEqual(result.status, 0, result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.match(payload.failures.join("\n"), /sync-readiness summary missing update status reason/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
