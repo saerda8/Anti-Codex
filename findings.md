@@ -976,3 +976,5 @@
 - Report-only release-gate actions are still operator-facing support actions. Even though they do not need gateway, real traffic, high impact approval, or explicit blocking, diagnostics should reject them if they lose `reason` or `guidance`.
 - A short-readiness miss without a matching next action is a broken support bundle, even when the failure reason details are present. Operators need the action object to distinguish read-only checks from gateway-start or real-traffic work.
 - Keep short-gate action coverage checked at both layers: producer self-test should prove failed short gates emit actions, and diagnostics should reject exported summaries that drop those actions.
+- Missing-gate failure detail is incomplete without `guidance`. Diagnostics should reject missing required, short, and optional gate details that keep the failure reason but lose the operator instruction.
+- Do not use `node --check` on `.ps1` scripts. Use the PowerShell parser for PowerShell files; Node reports `ERR_UNKNOWN_FILE_EXTENSION`, which is only a command-selection error.

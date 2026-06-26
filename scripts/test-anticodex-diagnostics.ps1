@@ -214,13 +214,19 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($matchingActions.Count -lt 1) {
             Add-Failure "release-gates missing required gate $missingGateId has no next action"
         }
-        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingGateId }).Count -lt 1) {
+        $matchingFailureReasons = @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingGateId })
+        if ($matchingFailureReasons.Count -lt 1) {
             Add-Failure "release-gates missing required gate $missingGateId missing failure reason details"
+        } elseif (@($matchingFailureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.guidance) }).Count -lt 1) {
+            Add-Failure "release-gates missing required gate $missingGateId missing guidance"
         }
     }
     foreach ($missingShortId in @(As-FlatArray $ReleaseGatesSummary.missingShort | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
-        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingShortId }).Count -lt 1) {
+        $matchingFailureReasons = @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingShortId })
+        if ($matchingFailureReasons.Count -lt 1) {
             Add-Failure "release-gates missing short gate $missingShortId missing failure reason details"
+        } elseif (@($matchingFailureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.guidance) }).Count -lt 1) {
+            Add-Failure "release-gates missing short gate $missingShortId missing guidance"
         }
         if (@($nextActions | Where-Object { [string]$_.id -eq $missingShortId -or [string]$_.gateId -eq $missingShortId }).Count -lt 1) {
             Add-Failure "release-gates missing short gate $missingShortId missing next action"
@@ -228,8 +234,11 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     }
     $missingOptionalGates = @(As-FlatArray $ReleaseGatesSummary.missingOptional | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     foreach ($missingOptionalId in $missingOptionalGates) {
-        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingOptionalId }).Count -lt 1) {
+        $matchingFailureReasons = @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingOptionalId })
+        if ($matchingFailureReasons.Count -lt 1) {
             Add-Failure "release-gates missing optional gate $missingOptionalId missing failure reason details"
+        } elseif (@($matchingFailureReasons | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.guidance) }).Count -lt 1) {
+            Add-Failure "release-gates missing optional gate $missingOptionalId missing guidance"
         }
     }
     if (-not (Has-Property $ReleaseGatesSummary "releaseGateGroups")) {
