@@ -2843,6 +2843,17 @@ const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].
     missingOptional: groupGates.filter((gate) => !gate.requiredForRelease && !gate.satisfied).map((gate) => gate.id),
   }];
 }));
+const releaseGateGroups = Object.entries(groups).map(([group, value]) => ({
+  group,
+  total: value.total,
+  satisfied: value.satisfied,
+  required: value.required,
+  requiredSatisfied: value.requiredSatisfied,
+  optional: value.optional,
+  optionalSatisfied: value.optionalSatisfied,
+  missingRequired: Array.isArray(value.missingRequired) ? value.missingRequired : [],
+  missingOptional: Array.isArray(value.missingOptional) ? value.missingOptional : [],
+}));
 
 const releaseReady = missingRequired.length === 0 && (!strictOptionalRealTraffic || optionalRealTrafficReady);
 const shortReady = missingShort.length === 0;
@@ -2863,6 +2874,7 @@ const payload = {
   missingOptional,
   damagedReports,
   releaseGateFailures,
+  releaseGateGroups,
   releaseGateFailureReasons,
   nextActions,
   nextActionsAvailableCount: nextActionSummary.availableCount,

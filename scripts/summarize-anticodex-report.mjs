@@ -253,8 +253,9 @@ const nextActionsAvailableCount = has(report || {}, "nextActionsAvailableCount")
 const nextActionsHiddenCount = has(report || {}, "nextActionsHiddenCount") ? report.nextActionsHiddenCount : null;
 const nextActionsTruncated = boolField(report || {}, "nextActionsTruncated");
 const approvalPlan = asApprovalPlan(report?.approvalPlan);
-const releaseGateGroups = report && report.groups && typeof report.groups === "object"
-  ? Object.entries(report.groups).map(([group, value]) => ({
+const rawReleaseGateGroups = Array.isArray(report?.releaseGateGroups)
+  ? report.releaseGateGroups
+  : (report && report.groups && typeof report.groups === "object" ? Object.entries(report.groups).map(([group, value]) => ({
     group: asString(group),
     total: value && has(value, "total") ? value.total : null,
     satisfied: value && has(value, "satisfied") ? value.satisfied : null,
@@ -264,8 +265,18 @@ const releaseGateGroups = report && report.groups && typeof report.groups === "o
     optionalSatisfied: value && has(value, "optionalSatisfied") ? value.optionalSatisfied : null,
     missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
     missingOptional: value && has(value, "missingOptional") ? asStringArray(value.missingOptional) : [],
-  })).filter((entry) => entry.group).slice(0, 16)
-  : [];
+  })) : []);
+const releaseGateGroups = rawReleaseGateGroups.map((value) => ({
+  group: asString(value.group),
+  total: value && has(value, "total") ? value.total : null,
+  satisfied: value && has(value, "satisfied") ? value.satisfied : null,
+  required: value && has(value, "required") ? value.required : null,
+  requiredSatisfied: value && has(value, "requiredSatisfied") ? value.requiredSatisfied : null,
+  optional: value && has(value, "optional") ? value.optional : null,
+  optionalSatisfied: value && has(value, "optionalSatisfied") ? value.optionalSatisfied : null,
+  missingRequired: value && has(value, "missingRequired") ? asStringArray(value.missingRequired) : [],
+  missingOptional: value && has(value, "missingOptional") ? asStringArray(value.missingOptional) : [],
+})).filter((entry) => entry.group).slice(0, 16);
 const releaseGateSelectedReports = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => gate && gate.selectedFromHistory === true)

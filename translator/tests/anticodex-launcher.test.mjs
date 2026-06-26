@@ -9574,6 +9574,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requires explicit user approval/);
   assert.match(releaseGates, /orderedActions/);
   assert.match(releaseGates, /releaseGateFailures/);
+  assert.match(releaseGates, /releaseGateGroups/);
   assert.match(releaseGates, /failureReasonsAvailableCount/);
   assert.match(releaseGates, /failureReasonsHiddenCount/);
   assert.match(releaseGates, /semanticFailuresAvailableCount/);
