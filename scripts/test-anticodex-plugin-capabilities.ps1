@@ -69,11 +69,16 @@ function Invoke-LocalJsonWithRetry {
     $lastError = $null
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         try {
+            $remainingBudgetMs = Get-RemainingVerifierBudgetMs
+            if ($remainingBudgetMs -lt 250) {
+                throw "verifier budget exhausted before $Path request attempt $attempt"
+            }
+            $requestTimeoutSec = [Math]::Max(1, [Math]::Min(3, [Math]::Min($TimeoutSec, [int][Math]::Ceiling($remainingBudgetMs / 1000))))
             $args = @{
                 Uri = "$BaseUrl$Path"
                 Method = $Method
                 Proxy = $null
-                TimeoutSec = $TimeoutSec
+                TimeoutSec = $requestTimeoutSec
             }
             if ($null -ne $Body) {
                 $args.ContentType = "application/json"
@@ -85,7 +90,10 @@ function Invoke-LocalJsonWithRetry {
             if ($attempt -ge $MaxAttempts) {
                 throw "$Path request failed on attempt $attempt of $MaxAttempts`: $lastError"
             }
-            Start-Sleep -Milliseconds ([Math]::Min(1000, 250 * $attempt))
+            $sleepMs = [Math]::Min([Math]::Min(1000, 250 * $attempt), [Math]::Max(0, (Get-RemainingVerifierBudgetMs)))
+            if ($sleepMs -gt 0) {
+                Start-Sleep -Milliseconds $sleepMs
+            }
         }
     }
 
@@ -132,16 +140,19 @@ function Get-PreviousPluginCapabilityReport {
 }
 
 function Get-ReusedSourceSnapshot {
-    param($PreviousReport)
+    param(
+        $PreviousReport,
+        [string]$RefreshSkippedReason = "source snapshot refresh skipped in short-budget plugin capability mode"
+    )
     $snapshot = if ($PreviousReport -and (Has-Property $PreviousReport "sourceSnapshot")) { $PreviousReport.sourceSnapshot } else { $null }
     if ($snapshot) {
         if (Has-Property $snapshot "reusedFromPreviousReport") { $snapshot.reusedFromPreviousReport = $true } else { $snapshot | Add-Member -NotePropertyName reusedFromPreviousReport -NotePropertyValue $true }
-        if (Has-Property $snapshot "refreshSkippedReason") { $snapshot.refreshSkippedReason = "source snapshot refresh skipped in short-budget plugin capability mode" } else { $snapshot | Add-Member -NotePropertyName refreshSkippedReason -NotePropertyValue "source snapshot refresh skipped in short-budget plugin capability mode" }
+        if (Has-Property $snapshot "refreshSkippedReason") { $snapshot.refreshSkippedReason = $RefreshSkippedReason } else { $snapshot | Add-Member -NotePropertyName refreshSkippedReason -NotePropertyValue $RefreshSkippedReason }
         return $snapshot
     }
     return [pscustomobject]@{
         reusedFromPreviousReport = $false
-        refreshSkippedReason = "source snapshot refresh skipped in short-budget plugin capability mode; no previous snapshot available"
+        refreshSkippedReason = "$RefreshSkippedReason; no previous snapshot available"
     }
 }
 
@@ -520,6 +531,47 @@ try {
     $whamToolsGet = @(Get-ArrayItems $whamPayloadGet "tools")
 } catch {
     Add-Failure "app tools GET endpoint failed: $($_.Exception.Message)"
+}
+
+if ((Get-RemainingVerifierBudgetMs) -lt 2000) {
+    Add-Failure "plugin capability verification budget exhausted before local parity scan"
+    $previousReport = Get-PreviousPluginCapabilityReport
+    $sourceSnapshot = Get-ReusedSourceSnapshot -PreviousReport $previousReport -RefreshSkippedReason "source snapshot refresh skipped because plugin capability verifier budget was exhausted"
+    $result = [pscustomobject]@{
+        ok = $false
+        reportName = "plugin-capabilities"
+        shortBudgetMode = $shortBudgetMode
+        failures = $failures.ToArray()
+        baseUrl = $BaseUrl
+        sourceSnapshot = $sourceSnapshot
+        health = [pscustomobject]@{
+            ok = if ($health) { $health.ok } else { $false }
+            upstream = if ($health) { $health.upstream } else { $null }
+            accountReady = if ($health) { $health.accountReady } else { $false }
+            accountState = if ($health) { $health.accountState } else { $null }
+            modelCount = if ($health) { $health.modelCount } else { 0 }
+            mode = $healthMode
+            protocol = $healthProtocol
+            model = $healthModel
+        }
+        capabilities = [pscustomobject]@{
+            snapshotSource = "anticodex-local-copy"
+            nativeCodexWriteback = $false
+            capabilityState = "degraded_timeout_budget"
+            degraded = $true
+            installedPluginCount = @($installedPlugins).Count
+            pluginListCount = @($pluginList).Count
+            connectorCount = @($connectors).Count
+            appToolCount = @($whamTools).Count
+            appToolGetCount = @($whamToolsGet).Count
+            smoke = [pscustomobject]@{
+                checked = $false
+                callableState = "skipped_timeout_budget"
+            }
+        }
+    }
+    Write-PluginCapabilityReport $result
+    exit 1
 }
 
 $pluginsWithSkills = @($pluginList | Where-Object {

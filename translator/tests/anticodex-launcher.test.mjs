@@ -5889,8 +5889,16 @@ test("Anti-Codex ships a repeatable plugin/connector capability grading script",
   assert.match(capabilities, /sourceSnapshot = \$sourceSnapshot/);
   assert.match(capabilities, /\$script:shortBudgetMode = \(\$TimeoutSec -lt 5\)/);
   assert.match(capabilities, /function Get-RemainingVerifierBudgetMs/);
+  assert.match(capabilities, /\$remainingBudgetMs = Get-RemainingVerifierBudgetMs/);
+  assert.match(capabilities, /verifier budget exhausted before \$Path request attempt \$attempt/);
+  assert.match(capabilities, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(3, \[Math\]::Min\(\$TimeoutSec/);
+  assert.match(capabilities, /TimeoutSec = \$requestTimeoutSec/);
   assert.match(capabilities, /Write-PluginCapabilityReport/);
   assert.match(capabilities, /reusedFromPreviousReport/);
+  assert.match(capabilities, /plugin capability verification budget exhausted before local parity scan/);
+  assert.match(capabilities, /source snapshot refresh skipped because plugin capability verifier budget was exhausted/);
+  assert.match(capabilities, /degraded_timeout_budget/);
+  assert.match(capabilities, /skipped_timeout_budget/);
   assert.match(capabilities, /degraded_short_budget/);
   assert.match(capabilities, /nativeCodexWriteback = \$false/);
   assert.match(capabilities, /capabilityState =/);
