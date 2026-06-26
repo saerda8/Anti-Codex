@@ -7311,6 +7311,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
   assert.match(diagnostics, /selectedFromHistory -eq \$true/);
   assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report detail/);
+  assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report mtime/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId absent from top-level missingRequired/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId has no next action/);
   assert.match(diagnostics, /release-gates group \$groupName missing optional gate \$groupMissingOptionalId absent from top-level missingOptional/);
@@ -9296,6 +9297,85 @@ test("diagnostics reports-summary fixture rejects group missing gates without al
     assert.ok(payload.failures.includes("release-gates group real-traffic missing required gate postVerification has no next action"));
     assert.ok(payload.failures.includes("release-gates group real-traffic missing optional gate coldRelaunch absent from top-level missingOptional"));
     assert.ok(payload.failures.includes("release-gates group real-traffic missing optional gate coldRelaunch missing failure reason details"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects selected history without mtime", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-selected-history-mtime-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: true,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: true,
+      optionalRealTrafficFailures: [],
+      missingRequired: [],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["syncReadiness"],
+      releaseGateFailureReasons: [{
+        id: "syncReadiness",
+        group: "no-traffic",
+        failureReasons: ["selected_history"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        reportFailureSamples: ["latest report was fast; selected full history report"],
+        reportFailureSampleCodes: ["selected_history"],
+        guidance: "host_sync_required: inspect sync-readiness history before host sync approval.",
+        selectedFromHistory: true,
+        selectedFile: "20260624-sync-readiness.json",
+        selectedMtime: "2026-06-24T00:00:00.000Z",
+        orderedActions: [],
+      }],
+      nextActions: [],
+      nextActionsAvailableCount: 0,
+      nextActionsHiddenCount: 0,
+      nextActionsTruncated: false,
+      approvalPlan: {
+        actionCount: 0,
+        blockedCount: 0,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        reportOnlyCount: 0,
+        firstBlockedAction: "",
+        phases: [],
+      },
+      releaseGateGroups: [],
+      releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        missingSourceFiles: [],
+        missingInstalledRuntimeFiles: [],
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates selected history gate syncReadiness missing selected report mtime"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

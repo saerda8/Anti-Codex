@@ -571,8 +571,11 @@ function Test-ReportsSummary {
         foreach ($selectedGate in @(As-FlatArray $releaseGatesSummary.releaseGateFailureReasons | Where-Object { $_.selectedFromHistory -eq $true })) {
             $selectedGateId = [string]$selectedGate.id
             if ([string]::IsNullOrWhiteSpace($selectedGateId)) { continue }
-            if (@($selectedReports | Where-Object { [string]$_.id -eq $selectedGateId -and -not [string]::IsNullOrWhiteSpace([string]$_.selectedFile) }).Count -lt 1) {
+            $matchingSelectedReports = @($selectedReports | Where-Object { [string]$_.id -eq $selectedGateId -and -not [string]::IsNullOrWhiteSpace([string]$_.selectedFile) })
+            if ($matchingSelectedReports.Count -lt 1) {
                 Add-Failure "release-gates selected history gate $selectedGateId missing selected report detail"
+            } elseif (@($matchingSelectedReports | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.selectedMtime) }).Count -lt 1) {
+                Add-Failure "release-gates selected history gate $selectedGateId missing selected report mtime"
             }
         }
         Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence

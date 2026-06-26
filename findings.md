@@ -978,3 +978,4 @@
 - Keep short-gate action coverage checked at both layers: producer self-test should prove failed short gates emit actions, and diagnostics should reject exported summaries that drop those actions.
 - Missing-gate failure detail is incomplete without `guidance`. Diagnostics should reject missing required, short, and optional gate details that keep the failure reason but lose the operator instruction.
 - Do not use `node --check` on `.ps1` scripts. Use the PowerShell parser for PowerShell files; Node reports `ERR_UNKNOWN_FILE_EXTENSION`, which is only a command-selection error.
+- Selected-history support details need freshness evidence. If `releaseGateFailureReasons` marks a gate as `selectedFromHistory:true`, diagnostics should require the matching `releaseGateSelectedReports` entry to preserve `selectedMtime`, not just the selected file name.
