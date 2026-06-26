@@ -2618,6 +2618,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /releaseGateGroups/);
   assert.match(collector, /releaseGateFailureReasons = @\(\$json\.releaseGateFailureReasons\)/);
   assert.match(collector, /nextActions = @\(\$json\.nextActions\)/);
+  assert.match(collector, /nextActionsAvailableCount = \$json\.nextActionsAvailableCount/);
+  assert.match(collector, /nextActionsHiddenCount = \$json\.nextActionsHiddenCount/);
+  assert.match(collector, /nextActionsTruncated = \$json\.nextActionsTruncated/);
   assert.match(collector, /approvalPlan = \$json\.approvalPlan/);
   assert.match(collector, /releaseGateSelectedReports = @\(\$json\.releaseGateSelectedReports\)/);
   assert.match(collector, /installedRuntimeEvidence = \$json\.installedRuntimeEvidence/);
@@ -2672,6 +2675,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /releaseGateFailures/);
   assert.match(reportSummarizer, /releaseGateGroups/);
   assert.match(reportSummarizer, /releaseGateFailureReasons/);
+  assert.match(reportSummarizer, /nextActionsAvailableCount/);
+  assert.match(reportSummarizer, /nextActionsHiddenCount/);
+  assert.match(reportSummarizer, /nextActionsTruncated/);
   assert.match(reportSummarizer, /approvalPlan/);
   assert.match(reportSummarizer, /asApprovalPlan/);
   assert.match(reportSummarizer, /reportOnly/);
@@ -7210,6 +7216,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates failure \$gateFailureId with ordered actions missing guidance/);
   assert.match(diagnostics, /nextActions/);
   assert.match(diagnostics, /release-gates summary missing ordered next actions/);
+  assert.match(diagnostics, /release-gates summary missing nextActions available count/);
+  assert.match(diagnostics, /release-gates summary nextActions hidden count mismatch/);
+  assert.match(diagnostics, /release-gates summary nextActions truncated flag mismatch/);
   assert.match(diagnostics, /release-gates approval plan is not an object/);
   assert.match(diagnostics, /release-gates approval plan invalid real-traffic count/);
   assert.match(diagnostics, /release-gates approval plan missing report-only count/);
@@ -7476,6 +7485,9 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         highImpact: false,
         blockedUntilExplicitUserApproval: true,
       }],
+      nextActionsAvailableCount: 1,
+      nextActionsHiddenCount: 0,
+      nextActionsTruncated: false,
       approvalPlan: {
         actionCount: 1,
         blockedCount: 1,
@@ -7512,6 +7524,9 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.diagnostics, null);
     assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
     assert.equal(payload.reportsSummary.releaseGates.nextActions.length, 1);
+    assert.equal(payload.reportsSummary.releaseGates.nextActionsAvailableCount, 1);
+    assert.equal(payload.reportsSummary.releaseGates.nextActionsHiddenCount, 0);
+    assert.equal(payload.reportsSummary.releaseGates.nextActionsTruncated, false);
     assert.equal(payload.reportsSummary.releaseGates.approvalPlan.reportOnlyCount, 0);
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
   } finally {
@@ -7860,6 +7875,80 @@ test("diagnostics reports-summary fixture rejects unsafe next action approval me
     assert.ok(payload.failures.includes("release-gates next action postVerification missing explicit approval block"));
     assert.ok(payload.failures.includes("release-gates approval plan undercounts real-traffic actions"));
     assert.ok(payload.failures.includes("release-gates approval plan missing first blocked action"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects next action truncation count mismatches", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-next-action-count-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: true,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["postVerification"],
+      missingShort: [],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["postVerification"],
+      releaseGateFailureReasons: [{
+        id: "postVerification",
+        failureReasons: ["stale_report"],
+        guidance: "real_traffic_evidence_stale: requires explicit user approval to start/verify Anti-Codex and refresh release-grade real-traffic reports.",
+      }],
+      nextActions: [{
+        id: "postVerification",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+        requiresGatewayStart: true,
+        requiresRealTraffic: true,
+        highImpact: true,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      nextActionsAvailableCount: 5,
+      nextActionsHiddenCount: 3,
+      nextActionsTruncated: false,
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 1,
+        requiresRealTrafficCount: 1,
+        highImpactCount: 1,
+        reportOnlyCount: 0,
+        firstBlockedAction: "postVerification",
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates summary nextActions hidden count mismatch"));
+    assert.ok(payload.failures.includes("release-gates summary nextActions truncated flag mismatch"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -9088,6 +9177,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requires explicit user approval/);
   assert.match(releaseGates, /orderedActions/);
   assert.match(releaseGates, /nextActions/);
+  assert.match(releaseGates, /nextActionsAvailableCount/);
+  assert.match(releaseGates, /nextActionsHiddenCount/);
+  assert.match(releaseGates, /nextActionsTruncated/);
+  assert.match(releaseGates, /nextActions truncation evidence was not summarized/);
   assert.match(releaseGates, /approvalPlan/);
   assert.match(releaseGates, /summarizeApprovalPlan/);
   assert.match(releaseGates, /approval plan did not summarize gateway, real-traffic, and high-impact actions/);

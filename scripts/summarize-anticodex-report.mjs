@@ -236,6 +236,9 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
     ...(asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) ? { offlineSnapshotEvidence: asOfflineSnapshotEvidence(gate.offlineSnapshotEvidence) } : {}),
   })).filter((entry) => entry.id).slice(0, 24)
 const nextActions = asOrderedActions(report?.nextActions);
+const nextActionsAvailableCount = has(report || {}, "nextActionsAvailableCount") ? report.nextActionsAvailableCount : null;
+const nextActionsHiddenCount = has(report || {}, "nextActionsHiddenCount") ? report.nextActionsHiddenCount : null;
+const nextActionsTruncated = boolField(report || {}, "nextActionsTruncated");
 const approvalPlan = asApprovalPlan(report?.approvalPlan);
 const releaseGateGroups = report && report.groups && typeof report.groups === "object"
   ? Object.entries(report.groups).map(([group, value]) => ({
@@ -530,6 +533,9 @@ const summary = {
   releaseGateFailures,
   releaseGateFailureReasons,
   nextActions,
+  nextActionsAvailableCount,
+  nextActionsHiddenCount,
+  nextActionsTruncated,
   approvalPlan,
   releaseGateGroups,
   releaseGateSelectedReports,

@@ -138,6 +138,19 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     if (-not (Has-Property $ReleaseGatesSummary "nextActions")) { Add-Failure "release-gates summary missing ordered next actions" }
     if (-not (Has-Property $ReleaseGatesSummary "approvalPlan")) { Add-Failure "release-gates summary missing approval plan" }
     $nextActions = @(As-FlatArray $ReleaseGatesSummary.nextActions)
+    $nextActionsAvailableCount = Get-NonNegativeIntProperty $ReleaseGatesSummary "nextActionsAvailableCount" "release-gates summary missing nextActions available count" "release-gates summary invalid nextActions available count"
+    $nextActionsHiddenCount = Get-NonNegativeIntProperty $ReleaseGatesSummary "nextActionsHiddenCount" "release-gates summary missing nextActions hidden count" "release-gates summary invalid nextActions hidden count"
+    if ($null -ne $nextActionsAvailableCount -and $nextActionsAvailableCount -lt $nextActions.Count) {
+        Add-Failure "release-gates summary nextActions available count is below visible actions"
+    }
+    if ($null -ne $nextActionsAvailableCount -and $null -ne $nextActionsHiddenCount -and $nextActionsHiddenCount -ne ($nextActionsAvailableCount - $nextActions.Count)) {
+        Add-Failure "release-gates summary nextActions hidden count mismatch"
+    }
+    if (-not (Has-Property $ReleaseGatesSummary "nextActionsTruncated")) {
+        Add-Failure "release-gates summary missing nextActions truncated flag"
+    } elseif (($ReleaseGatesSummary.nextActionsTruncated -eq $true) -ne ($nextActionsHiddenCount -gt 0)) {
+        Add-Failure "release-gates summary nextActions truncated flag mismatch"
+    }
     $missingRequiredGates = @(As-FlatArray $ReleaseGatesSummary.missingRequired | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     foreach ($missingGateId in $missingRequiredGates) {
         $matchingActions = @($nextActions | Where-Object { [string]$_.id -eq $missingGateId -or [string]$_.gateId -eq $missingGateId })
@@ -503,6 +516,9 @@ function Test-ReportsSummary {
                 missingOptional = @($releaseGatesSummary.missingOptional)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
                 nextActions = @($releaseGatesSummary.nextActions)
+                nextActionsAvailableCount = $releaseGatesSummary.nextActionsAvailableCount
+                nextActionsHiddenCount = $releaseGatesSummary.nextActionsHiddenCount
+                nextActionsTruncated = $releaseGatesSummary.nextActionsTruncated
                 approvalPlan = $releaseGatesSummary.approvalPlan
                 installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence
             }
@@ -1325,6 +1341,9 @@ function Test-DiagnosticBundle {
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
                 nextActions = @($releaseGatesSummary.nextActions)
+                nextActionsAvailableCount = $releaseGatesSummary.nextActionsAvailableCount
+                nextActionsHiddenCount = $releaseGatesSummary.nextActionsHiddenCount
+                nextActionsTruncated = $releaseGatesSummary.nextActionsTruncated
                 approvalPlan = $releaseGatesSummary.approvalPlan
                 releaseGateSelectedReports = @($releaseGatesSummary.releaseGateSelectedReports)
                 installedRuntimeEvidence = $releaseGatesSummary.installedRuntimeEvidence

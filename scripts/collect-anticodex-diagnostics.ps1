@@ -247,6 +247,9 @@ function Read-JsonSummary {
             releaseGateFailures = @($json.releaseGateFailures)
             releaseGateFailureReasons = @($json.releaseGateFailureReasons)
             nextActions = @($json.nextActions)
+            nextActionsAvailableCount = $json.nextActionsAvailableCount
+            nextActionsHiddenCount = $json.nextActionsHiddenCount
+            nextActionsTruncated = $json.nextActionsTruncated
             approvalPlan = $json.approvalPlan
             releaseGateGroups = @($json.releaseGateGroups)
             releaseGateSelectedReports = @($json.releaseGateSelectedReports)

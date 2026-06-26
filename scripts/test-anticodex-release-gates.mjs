@@ -1255,7 +1255,7 @@ const actionPhaseOrder = [
   "optional-cold-relaunch",
 ];
 
-function orderedNextActions(failureReasons) {
+function collectOrderedNextActions(failureReasons) {
   const items = failureReasons
     .flatMap((gate, gateIndex) => (Array.isArray(gate.orderedActions) ? gate.orderedActions : []).map((item, actionIndex) => ({
       ...item,
@@ -1275,12 +1275,26 @@ function orderedNextActions(failureReasons) {
       const rightRank = rightPhase < 0 ? actionPhaseOrder.length : rightPhase;
       return leftRank - rightRank || left.order - right.order;
     })
-    .map(({ order, ...item }) => item)
-    .slice(0, 32);
+    .map(({ order, ...item }) => item);
   if (items.some((item) => item.requiresGatewayStart === true) && !items.some((item) => item.id === "startGatewayTranslatorOnly")) {
     items.unshift(action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", { requiresGatewayStart: true }));
   }
-  return items.slice(0, 32);
+  return items;
+}
+
+function orderedNextActions(failureReasons) {
+  return collectOrderedNextActions(failureReasons).slice(0, 32);
+}
+
+function summarizeNextActions(failureReasons) {
+  const available = collectOrderedNextActions(failureReasons);
+  const actions = available.slice(0, 32);
+  return {
+    actions,
+    availableCount: available.length,
+    hiddenCount: Math.max(0, available.length - actions.length),
+    truncated: available.length > actions.length,
+  };
 }
 
 function summarizeApprovalPlan(actions) {
@@ -2707,6 +2721,13 @@ if (args.has("--self-test")) {
     const sortedActionIds = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).map((item) => item.id);
     if (orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))).some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
+    const truncatedActions = summarizeNextActions(Array.from({ length: 40 }, (_, index) => ({
+      id: `overflow${index}`,
+      orderedActions: [action(`overflow${index}`, "real-traffic-low-state", `echo overflow-${index}`, { requiresGatewayStart: true, requiresRealTraffic: true })],
+    })));
+    if (truncatedActions.actions.length !== 32 || truncatedActions.availableCount <= truncatedActions.actions.length || truncatedActions.hiddenCount !== truncatedActions.availableCount - truncatedActions.actions.length || truncatedActions.truncated !== true) {
+      throw new Error("self-test failed: nextActions truncation evidence was not summarized");
+    }
     const approvalPlan = summarizeApprovalPlan(orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))));
     if (approvalPlan.reportOnlyCount < 1) throw new Error("self-test failed: approval plan did not count report-only actions");
     if (approvalPlan.requiresGatewayStartCount < 1 || approvalPlan.requiresRealTrafficCount < 1 || approvalPlan.highImpactCount < 1 || approvalPlan.firstBlockedAction !== "startGatewayTranslatorOnly") {
@@ -2781,7 +2802,8 @@ const releaseGateFailureReasons = gates
     orderedActions: gateOrderedActions(gate),
     offlineSnapshotEvidence: gate.offlineSnapshotEvidence || null,
   }));
-const nextActions = orderedNextActions(releaseGateFailureReasons);
+const nextActionSummary = summarizeNextActions(releaseGateFailureReasons);
+const nextActions = nextActionSummary.actions;
 const approvalPlan = summarizeApprovalPlan(nextActions);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
@@ -2822,6 +2844,9 @@ const payload = {
   damagedReports,
   releaseGateFailureReasons,
   nextActions,
+  nextActionsAvailableCount: nextActionSummary.availableCount,
+  nextActionsHiddenCount: nextActionSummary.hiddenCount,
+  nextActionsTruncated: nextActionSummary.truncated,
   approvalPlan,
   installedRuntimeEvidence,
   groups,
