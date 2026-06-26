@@ -199,6 +199,12 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     if ($ReleaseGatesSummary.strictOptionalRealTraffic -eq $true -and $ReleaseGatesSummary.optionalRealTrafficReady -ne $true -and $ReleaseGatesSummary.releaseReady -eq $true) {
         Add-Failure "release-gates releaseReady true while strict optional real-traffic is not ready"
     }
+    if ($ReleaseGatesSummary.effectiveOk -eq $true -and $ReleaseGatesSummary.releaseReady -ne $true) {
+        Add-Failure "release-gates effectiveOk true while releaseReady is not true"
+    }
+    if ($ReleaseGatesSummary.effectiveOk -eq $true -and @(As-FlatArray $ReleaseGatesSummary.damagedReports | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+        Add-Failure "release-gates effectiveOk true with damaged reports"
+    }
     foreach ($failureId in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailures | ForEach-Object { if ($_.id) { [string]$_.id } else { [string]$_ } } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
         if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $failureId }).Count -lt 1) {
             Add-Failure "release-gates failure $failureId missing failure reason details"

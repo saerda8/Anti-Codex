@@ -7275,6 +7275,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates summary releaseReady is not true/);
   assert.match(diagnostics, /release-gates summary missing effectiveOk/);
   assert.match(diagnostics, /release-gates summary effectiveOk is not true/);
+  assert.match(diagnostics, /release-gates effectiveOk true while releaseReady is not true/);
+  assert.match(diagnostics, /release-gates effectiveOk true with damaged reports/);
   assert.match(diagnostics, /strictOptionalRealTraffic/);
   assert.match(diagnostics, /optionalRealTrafficReady/);
   assert.match(diagnostics, /optionalRealTrafficFailures/);
@@ -8723,6 +8725,49 @@ test("diagnostics reports-summary fixture rejects optional ready with failures",
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates optional real-traffic ready has failures"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects inconsistent effectiveOk", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-effective-ok-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([minimalDiagnosticsReleaseGateSummary({
+      ok: true,
+      shortReady: true,
+      releaseReady: false,
+      effectiveOk: true,
+      damagedReports: ["latest-model-routing.json"],
+      releaseGateFailureReasons: [{
+        id: "latest-model-routing.json",
+        file: "latest-model-routing.json",
+        failureReasons: ["damaged_report"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        reportFailureSamples: ["hash mismatch"],
+        reportFailureSampleCodes: ["hash_mismatch"],
+        guidance: "releaseGateReportOnlyCheck: inspect damaged release-gate report before rerun.",
+        orderedActions: [],
+      }],
+    })]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates effectiveOk true while releaseReady is not true"));
+    assert.ok(payload.failures.includes("release-gates effectiveOk true with damaged reports"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
