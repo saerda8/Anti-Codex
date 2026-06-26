@@ -221,7 +221,11 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         $gateFailureId = [string]$gateFailure.id
         if ([string]::IsNullOrWhiteSpace($gateFailureId)) { $gateFailureId = "unknown" }
         if (-not (Has-Property $gateFailure "orderedActions")) { continue }
-        foreach ($orderedAction in @(As-FlatArray $gateFailure.orderedActions | Where-Object { $null -ne $_ })) {
+        $orderedActions = @(As-FlatArray $gateFailure.orderedActions | Where-Object { $null -ne $_ })
+        if ($orderedActions.Count -gt 0 -and [string]::IsNullOrWhiteSpace([string]$gateFailure.guidance)) {
+            Add-Failure "release-gates failure $gateFailureId with ordered actions missing guidance"
+        }
+        foreach ($orderedAction in $orderedActions) {
             $actionId = [string]$orderedAction.id
             if ([string]::IsNullOrWhiteSpace($actionId)) {
                 Add-Failure "release-gates ordered action $gateFailureId missing id"
