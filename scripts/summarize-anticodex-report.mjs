@@ -27,6 +27,8 @@ function asOrderedActions(value) {
     ...(item?.gateId ? { gateId: asString(item.gateId) } : {}),
     phase: asString(item?.phase),
     command: asString(item?.command),
+    ...(item?.reason ? { reason: asString(item.reason) } : {}),
+    ...(item?.guidance ? { guidance: asString(item.guidance) } : {}),
     ...(item?.reportOnly === true ? { reportOnly: true } : {}),
     requiresGatewayStart: item?.requiresGatewayStart === true,
     requiresRealTraffic: item?.requiresRealTraffic === true,

@@ -2326,6 +2326,8 @@ function latestManagerReportItem(label, fileName) {
             ...(action?.gateId ? { gateId: shortSafeText(action.gateId, "") } : {}),
             phase: shortSafeText(action?.phase || "", ""),
             command: shortSafeText(action?.command || "", ""),
+            ...(action?.reason ? { reason: shortSafeText(action.reason, "") } : {}),
+            ...(action?.guidance ? { guidance: shortSafeText(action.guidance, "") } : {}),
             ...(action?.reportOnly === true ? { reportOnly: true } : {}),
             requiresGatewayStart: action?.requiresGatewayStart === true,
             requiresRealTraffic: action?.requiresRealTraffic === true,

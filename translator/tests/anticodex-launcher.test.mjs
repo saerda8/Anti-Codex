@@ -2455,6 +2455,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /appToolGetPostParityClean/);
   assert.match(server, /appToolGetPostParityContentMatches/);
   assert.match(server, /releaseGateFailures/);
+  assert.match(server, /reason: shortSafeText\(action\.reason/);
+  assert.match(server, /guidance: shortSafeText\(action\.guidance/);
   assert.match(server, /rawReleaseGateGroups/);
   assert.match(server, /report\?\.releaseGateGroups/);
   assert.match(server, /report\?\.releaseGateSelectedReports/);
@@ -2725,6 +2727,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /nextActionsAvailableCount/);
   assert.match(reportSummarizer, /nextActionsHiddenCount/);
   assert.match(reportSummarizer, /nextActionsTruncated/);
+  assert.match(reportSummarizer, /reason: asString\(item\.reason\)/);
+  assert.match(reportSummarizer, /guidance: asString\(item\.guidance\)/);
   assert.match(reportSummarizer, /approvalPlan/);
   assert.match(reportSummarizer, /asApprovalPlan/);
   assert.match(reportSummarizer, /reportOnly/);
