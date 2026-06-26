@@ -7211,6 +7211,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates approval plan undercounts report-only actions/);
   assert.match(diagnostics, /release-gates approval plan report-only action count mismatch/);
   assert.match(diagnostics, /release-gates approval plan report-only phase mismatch/);
+  assert.match(diagnostics, /release-gates approval plan overcounts gateway actions/);
+  assert.match(diagnostics, /release-gates approval plan phase \$phaseName count mismatch/);
+  assert.match(diagnostics, /release-gates approval plan phase \$phaseName real-traffic mismatch/);
   assert.match(diagnostics, /release-gates semantic failures missing report-only next action/);
   assert.match(diagnostics, /nextActions = @\(\$releaseGatesSummary\.nextActions\)/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
@@ -8600,6 +8603,98 @@ test("diagnostics reports-summary fixture rejects report-only phase mismatches",
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates approval plan report-only phase mismatch"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects overcounted approval plan risk fields", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-plan-overcount-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([{
+      file: "latest-release-gates.json",
+      ok: false,
+      shortReady: false,
+      releaseReady: false,
+      effectiveOk: false,
+      strictOptionalRealTraffic: false,
+      optionalRealTrafficReady: true,
+      optionalRealTrafficFailures: [],
+      missingRequired: ["pluginCapabilities"],
+      missingShort: ["pluginCapabilities"],
+      missingOptional: [],
+      damagedReports: [],
+      releaseGateFailures: ["pluginCapabilities"],
+      releaseGateFailureReasons: [{
+        id: "pluginCapabilities",
+        reportFailureSamples: ["health request failed"],
+        reportFailureSampleCodes: ["local_gateway_offline"],
+        offlineSnapshotEvidence: {
+          connectorContentMatches: true,
+          appToolContentMatches: true,
+          refreshGateSatisfied: true,
+          refreshSelectedFile: "latest-refresh-features.json",
+        },
+      }],
+      nextActions: [{
+        id: "pluginCapabilities",
+        phase: "plugin-capabilities",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-plugin-capabilities.ps1 -TimeoutSec 45",
+        requiresGatewayStart: true,
+        requiresRealTraffic: false,
+        highImpact: false,
+        reportOnly: false,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 2,
+        requiresGatewayStartCount: 2,
+        requiresRealTrafficCount: 1,
+        highImpactCount: 1,
+        reportOnlyCount: 0,
+        firstBlockedAction: "pluginCapabilities",
+        phases: [{
+          phase: "plugin-capabilities",
+          count: 2,
+          requiresGatewayStart: false,
+          requiresRealTraffic: true,
+          highImpact: true,
+          reportOnly: false,
+          blockedUntilExplicitUserApproval: false,
+        }],
+      },
+      releaseGateSelectedReports: [{ id: "syncReadiness", selectedFile: "20260624-sync-readiness.json" }],
+      installedRuntimeEvidence: {
+        satisfied: true,
+        sourceFileCount: 2,
+        installedRuntimeFileCount: 2,
+        sourceFingerprint: "abc123",
+        installedRuntimeFingerprint: "abc123",
+        mismatchedRuntimeFiles: [],
+      },
+    }]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates approval plan overcounts gateway actions"));
+    assert.ok(payload.failures.includes("release-gates approval plan overcounts real-traffic actions"));
+    assert.ok(payload.failures.includes("release-gates approval plan overcounts high-impact actions"));
+    assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities count mismatch"));
+    assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities real-traffic mismatch"));
+    assert.ok(payload.failures.includes("release-gates approval plan phase plugin-capabilities blocked mismatch"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
