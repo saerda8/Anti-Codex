@@ -2464,6 +2464,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /releaseGateSelectedReports/);
   assert.match(server, /releaseGateFailureReasons/);
   assert.match(server, /releaseGateFailureReasons[\s\S]*slice\(0, 64\)/);
+  assert.match(server, /actionReasons: /);
+  assert.match(server, /actionGuidance: /);
   assert.match(server, /installedRuntime: satisfied=/);
   assert.match(server, /files=/);
   assert.match(server, /sourceMtime=/);

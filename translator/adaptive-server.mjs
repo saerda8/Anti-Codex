@@ -3785,7 +3785,7 @@ function latestReportsSummary(result){
         if(typeof gate?.requiredForShort==="boolean"||typeof gate?.requiredForRelease==="boolean") details.push("required="+triStateText(gate.requiredForShort)+"/"+triStateText(gate.requiredForRelease));
         return (gate?.id||"unknown")+":"+reason+(details.length?"["+details.join("/")+"]":"");
       }
-      function mergedNextActions(){
+      function mergedNextActionObjects(){
         const seen=new Set();
         const actions=[];
         const add=(action,fallbackGateId="")=>{
@@ -3793,7 +3793,7 @@ function latestReportsSummary(result){
           const key=(action.gateId||fallbackGateId||action.id)+":"+action.id;
           if(seen.has(key)) return;
           seen.add(key);
-          actions.push(actionDisplayLabel(action,fallbackGateId));
+          actions.push({...action,__fallbackGateId:fallbackGateId});
         };
         if(Array.isArray(item.nextActions)) item.nextActions.forEach((action)=>add(action,action?.gateId||""));
         if(Array.isArray(item.releaseGateFailureReasons)) item.releaseGateFailureReasons.forEach((gate)=>{
@@ -3829,13 +3829,20 @@ function latestReportsSummary(result){
           .filter(Boolean);
         if(realTrafficEvidenceGates.length) lines.push("  真实流量验收证据需更新/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（"+realTrafficEvidenceGates.slice(0,6).join(", ")+"）");
       }
-      const allNextActions=mergedNextActions();
+      const allNextActionObjects=mergedNextActionObjects();
+      const allNextActions=allNextActionObjects.map((action)=>actionDisplayLabel(action,action.__fallbackGateId||""));
       const nextActions=allNextActions.slice(0,8);
       const reportHiddenNextActions=item.nextActionsHiddenCount!=null&&Number.isFinite(Number(item.nextActionsHiddenCount))?Math.max(0,Number(item.nextActionsHiddenCount)):null;
       const reportAvailableNextActions=item.nextActionsAvailableCount!=null&&Number.isFinite(Number(item.nextActionsAvailableCount))?Math.max(0,Number(item.nextActionsAvailableCount)):null;
       const hiddenNextActions=Math.max(0,reportHiddenNextActions??(allNextActions.length-nextActions.length));
       const availableNextActions=reportAvailableNextActions??allNextActions.length;
       if(nextActions.length) lines.push("  nextActions: "+nextActions.join(" -> ")+(hiddenNextActions?" (+"+hiddenNextActions+" hidden of "+availableNextActions+")":""));
+      const actionReasonDetails=allNextActionObjects.filter((action)=>action?.reason).slice(0,6).map((action)=>actionDisplayLabel(action,action.__fallbackGateId||"")+"="+action.reason);
+      const hiddenActionReasons=Math.max(0,allNextActionObjects.filter((action)=>action?.reason).length-actionReasonDetails.length);
+      if(actionReasonDetails.length) lines.push("  actionReasons: "+actionReasonDetails.join("; ")+(hiddenActionReasons?" (+"+hiddenActionReasons+" more)":""));
+      const actionGuidanceDetails=allNextActionObjects.filter((action)=>action?.guidance).slice(0,4).map((action)=>actionDisplayLabel(action,action.__fallbackGateId||"")+"="+action.guidance);
+      const hiddenActionGuidance=Math.max(0,allNextActionObjects.filter((action)=>action?.guidance).length-actionGuidanceDetails.length);
+      if(actionGuidanceDetails.length) lines.push("  actionGuidance: "+actionGuidanceDetails.join("; ")+(hiddenActionGuidance?" (+"+hiddenActionGuidance+" more)":""));
       if(item.approvalPlan){
         const plan=item.approvalPlan;
         lines.push("  approvalPlan: actions="+(plan.actionCount??"unknown")+" / reportOnly="+(plan.reportOnlyCount??"unknown")+" / blocked="+(plan.blockedCount??"unknown")+" / gateway="+(plan.requiresGatewayStartCount??"unknown")+" / realTraffic="+(plan.requiresRealTrafficCount??"unknown")+" / highImpact="+(plan.highImpactCount??"unknown")+" / required="+(plan.requiredForShortCount??"unknown")+"/"+(plan.requiredForReleaseCount??"unknown")+" / phases="+(Array.isArray(plan.phases)?plan.phases.length:"unknown")+" / first="+(plan.firstBlockedAction||"none"));
