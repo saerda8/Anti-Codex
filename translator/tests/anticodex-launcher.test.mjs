@@ -842,6 +842,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /missingOpt=/);
   assert.match(managerInject, /missingOpt=/);
   assert.match(managerServerSource, /missingOpt=/);
+  assert.match(managerBridge, /missingReq=/);
+  assert.match(managerInject, /missingReq=/);
+  assert.match(managerServerSource, /missingReq=/);
   assert.match(managerBridge, /reportFailureSampleCodes/);
   assert.match(managerInject, /reportFailureSampleCodes/);
   assert.match(managerServerSource, /reportFailureSampleCodes/);
@@ -7495,6 +7498,11 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       missingRequired: ["pluginCapabilities"],
       missingShort: ["pluginCapabilities"],
       missingOptional: ["coldRelaunch"],
+      releaseGateGroups: [{
+        group: "short",
+        missingRequired: ["pluginCapabilities"],
+        missingOptional: [],
+      }],
       damagedReports: [],
       releaseGateFailures: ["pluginCapabilities"],
       releaseGateFailureReasons: [{
@@ -7576,6 +7584,7 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.baseUrl, "");
     assert.equal(payload.diagnostics, null);
     assert.equal(payload.reportsSummary.releaseGates.missingRequired[0], "pluginCapabilities");
+    assert.equal(payload.reportsSummary.releaseGates.releaseGateGroups[0].missingRequired[0], "pluginCapabilities");
     assert.equal(payload.reportsSummary.releaseGates.nextActions.length, 1);
     assert.equal(payload.reportsSummary.releaseGates.nextActionsAvailableCount, 1);
     assert.equal(payload.reportsSummary.releaseGates.nextActionsHiddenCount, 0);

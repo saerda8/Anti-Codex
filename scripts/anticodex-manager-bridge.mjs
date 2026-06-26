@@ -395,8 +395,9 @@ function latestReportsSummary(result) {
       }
       if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
         const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => {
+          const missingRequired = Array.isArray(group.missingRequired) && group.missingRequired.length ? ` missingReq=${group.missingRequired.slice(0, 3).join(",")}` : "";
           const missingOptional = Array.isArray(group.missingOptional) && group.missingOptional.length ? ` missingOpt=${group.missingOptional.slice(0, 3).join(",")}` : "";
-          return `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}${missingOptional}`;
+          return `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}${missingRequired}${missingOptional}`;
         }).join(" | ");
         lines.push(`  Release groups: ${groupSummary}`);
       }
@@ -845,7 +846,7 @@ if (args.has("--self-test")) {
         phases: [{ phase: "real-traffic-high-impact" }, { phase: "real-traffic-final" }],
       },
       releaseGateSelectedReports: [{ id: "syncReadiness", group: "no-traffic", selectedFile: "20260624-071841-sync-readiness.json" }],
-      releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0, missingOptional: ["coldRelaunch"] }],
+      releaseGateGroups: [{ group: "cold", required: 0, requiredSatisfied: 0, optional: 1, optionalSatisfied: 0, missingOptional: ["coldRelaunch"] }, { group: "real-traffic", required: 2, requiredSatisfied: 0, optional: 0, optionalSatisfied: 0, missingRequired: ["postVerification", "realWork"] }],
       releaseGateFailures: [
         { id: "ui-idle", semanticFailures: ["ui_idle_missing_samples"] },
         { id: "mcpSkills", semanticFailures: ["mcp_skills_source_snapshot_mismatch"] },
@@ -907,6 +908,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1 missingOpt=coldRelaunch/);
+  assert.match(evidenceSummary, /real-traffic req 0\/2 opt 0\/0 missingReq=postVerification,realWork/);
   assert.match(evidenceSummary, /installedRuntime: satisfied=false \/ files=58\/58 \/ fingerprint=match \/ mismatches=1 \/ sourceMtime=2026-06-24T01:02:03.000Z \/ installedMtime=2026-06-24T01:03:04.000Z/);
   assert.match(evidenceSummary, /installedRuntime drift: missingSource:scripts\/a\.ps1, missingInstalled:scripts\/b\.ps1, mismatch:scripts\/c\.ps1/);
   assert.match(evidenceSummary, /missingShort: latest-ui-idle\.json/);

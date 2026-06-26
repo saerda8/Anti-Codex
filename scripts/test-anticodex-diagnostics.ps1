@@ -555,6 +555,7 @@ function Test-ReportsSummary {
                 missingRequired = @($releaseGatesSummary.missingRequired)
                 missingShort = @($releaseGatesSummary.missingShort)
                 missingOptional = @($releaseGatesSummary.missingOptional)
+                releaseGateGroups = @($releaseGatesSummary.releaseGateGroups)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
                 nextActions = @($releaseGatesSummary.nextActions)
                 nextActionsAvailableCount = $releaseGatesSummary.nextActionsAvailableCount
@@ -1387,6 +1388,7 @@ function Test-DiagnosticBundle {
                 missingOptional = @($releaseGatesSummary.missingOptional)
                 damagedReports = @($releaseGatesSummary.damagedReports)
                 releaseGateFailures = @($releaseGatesSummary.releaseGateFailures)
+                releaseGateGroups = @($releaseGatesSummary.releaseGateGroups)
                 releaseGateFailureReasons = @($releaseGatesSummary.releaseGateFailureReasons)
                 nextActions = @($releaseGatesSummary.nextActions)
                 nextActionsAvailableCount = $releaseGatesSummary.nextActionsAvailableCount

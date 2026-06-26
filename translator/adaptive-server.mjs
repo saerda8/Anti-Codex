@@ -3815,8 +3815,9 @@ function latestReportsSummary(result){
       }
       if(Array.isArray(item.releaseGateGroups)&&item.releaseGateGroups.length){
         const groupSummary=item.releaseGateGroups.slice(0,8).map((group)=>{
+          const missingRequired=Array.isArray(group.missingRequired)&&group.missingRequired.length?" missingReq="+group.missingRequired.slice(0,3).join(","):"";
           const missingOptional=Array.isArray(group.missingOptional)&&group.missingOptional.length?" missingOpt="+group.missingOptional.slice(0,3).join(","):"";
-          return group.group+" req "+(group.requiredSatisfied??0)+"/"+(group.required??0)+" opt "+(group.optionalSatisfied??0)+"/"+(group.optional??0)+missingOptional;
+          return group.group+" req "+(group.requiredSatisfied??0)+"/"+(group.required??0)+" opt "+(group.optionalSatisfied??0)+"/"+(group.optional??0)+missingRequired+missingOptional;
         }).join(" | ");
         lines.push("  Release groups: "+groupSummary);
       }
