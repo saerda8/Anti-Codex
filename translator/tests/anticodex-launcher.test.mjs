@@ -11255,6 +11255,7 @@ test("real third-party provider verifier is explicit isolated and secret-safe", 
   assert.match(verifier, /--allow-real-antigravity-return/);
   assert.match(verifier, /--antigravity-model/);
   assert.match(verifier, /--api-key-env/);
+  assert.match(verifier, /process\.env\.APPDATA[\s\S]*?anticodex[\s\S]*?reports/);
   assert.match(verifier, /command-line API keys are not accepted/);
   assert.doesNotMatch(verifier, /args\.get\("--api-key"\)/);
   assert.doesNotMatch(verifier, /dotenv|readFileSync\([^)]*["'`]\.env/);

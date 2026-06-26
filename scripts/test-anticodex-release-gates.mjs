@@ -611,6 +611,7 @@ function summarizeGate(definition) {
     }
     if (definition.requireOptionalRealTrafficSemantics && present) {
       if (report.skipped === true) {
+        semanticFailures.push("optional_real_traffic_not_requested");
         if (report.requestedRealTraffic !== false) semanticFailures.push("optional_skipped_requested_real_traffic_not_false");
         if (report.usedRealTraffic !== false) semanticFailures.push("optional_skipped_used_real_traffic");
         if (report.behaviorCovered !== false) semanticFailures.push("optional_skipped_behavior_covered");
@@ -1141,6 +1142,8 @@ const realTrafficRefreshOrder = [
 ];
 
 const optionalEvidenceRefreshOrder = [
+  ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
+  ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
@@ -1249,6 +1252,12 @@ function rawGateOrderedActions(gate) {
     const [id, phase, command, options] = optionalEvidenceRefreshOrder[index];
     return [...semanticReportOnlyAction(gate), action(id, phase, command, options)];
   }
+  if (gate?.group === "optional-real-traffic" && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    const index = optionalEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
+    if (index < 0) return [];
+    const [id, phase, command, options] = optionalEvidenceRefreshOrder[index];
+    return [...semanticReportOnlyAction(gate), action(id, phase, command, options)];
+  }
   return [];
 }
 
@@ -1281,6 +1290,8 @@ const actionPhaseOrder = [
   "real-traffic-session-state",
   "real-traffic-high-impact",
   "real-traffic-final",
+  "optional-real-provider",
+  "optional-antigravity-return",
   "optional-stability-soak",
   "optional-cold-relaunch",
 ];
@@ -2189,6 +2200,20 @@ if (args.has("--self-test")) {
       "optional_skipped_metadata_missing",
       "optional_requested_real_traffic_uncovered_but_ok",
     ]);
+    writeFakeLatestReport("latest-real-third-party-provider.json", {
+      ok: true,
+      reportName: "real-third-party-provider",
+      skipped: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      behaviorCovered: false,
+      coverageKind: "skipped",
+      reason: "real third-party provider verification is opt-in",
+      coveredBy: "test-anticodex-real-third-party-provider.mjs",
+    });
+    semanticFailures.optionalRealProviderSkipped = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: skipped optional real-provider report satisfied real-traffic evidence", [
+      "optional_real_traffic_not_requested",
+    ]);
     writeFakeLatestReport("latest-provider-antigravity-return.json", {
       ok: true,
       reportName: "provider-antigravity-return",
@@ -2731,6 +2756,10 @@ if (args.has("--self-test")) {
     if (!gateGuidance(optionalRealProviderGate).includes("optional_real_provider_required")) throw new Error("self-test failed: optional real-provider guidance was not attached");
     const optionalAntigravityReturnGate = reasonGates.find((item) => item.id === "providerAntigravityReturnOptional");
     if (!gateGuidance(optionalAntigravityReturnGate).includes("optional_antigravity_return_required")) throw new Error("self-test failed: optional Antigravity-return guidance was not attached");
+    const optionalRealProviderActions = gateOrderedActions(optionalRealProviderGate);
+    if (!optionalRealProviderActions.some((item) => item.id === "realThirdPartyProviderOptional" && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true && item.command.includes("--api-key-env"))) throw new Error("self-test failed: optional real-provider action was not approval-blocked real traffic");
+    const optionalAntigravityReturnActions = gateOrderedActions(optionalAntigravityReturnGate);
+    if (!optionalAntigravityReturnActions.some((item) => item.id === "providerAntigravityReturnOptional" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: optional Antigravity-return action was not approval-blocked real traffic");
     const syncReadinessActions = gateOrderedActions({
       id: "syncReadiness",
       satisfied: false,
@@ -2774,7 +2803,9 @@ if (args.has("--self-test")) {
       .filter((item) => item.requiredForRelease === true && !item.satisfied && gateOrderedActions(item).length < 1)
       .map((item) => item.id);
     if (missingRequiredWithoutActions.length) throw new Error(`self-test failed: required failed gates missing ordered actions: ${missingRequiredWithoutActions.join(",")}`);
-    const sortedActions = orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) })));
+    const nextActionSummary = summarizeNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) })));
+    const sortedActions = nextActionSummary.actions;
+    const allSortedActions = nextActionSummary.allActions;
     const sortedActionIds = sortedActions.map((item) => item.id);
     if (sortedActions.some((item) => !item.command)) throw new Error("self-test failed: nextActions contained an action without a command");
     const missingShortWithoutActions = reasonGates
@@ -2784,6 +2815,8 @@ if (args.has("--self-test")) {
     if (missingShortWithoutActions.length) throw new Error(`self-test failed: short failed gates missing next actions: ${missingShortWithoutActions.join(",")}`);
     if (!sortedActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required"))) throw new Error("self-test failed: nextActions did not preserve gate guidance");
     if (!sortedActions.some((item) => item.id === "accountProxyReadiness" && String(item.guidance || "").includes("real_traffic_evidence_stale"))) throw new Error("self-test failed: real-traffic nextActions did not preserve gate guidance");
+    if (!sortedActions.some((item) => item.id === "realThirdPartyProviderOptional" && item.phase === "optional-real-provider" && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: optional real-provider nextAction missing approval block");
+    if (!allSortedActions.some((item) => item.id === "providerAntigravityReturnOptional" && item.phase === "optional-antigravity-return" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true && String(item.guidance || "").includes("optional_antigravity_return_required"))) throw new Error("self-test failed: optional Antigravity-return nextAction missing approval block");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const truncatedActions = summarizeNextActions(Array.from({ length: 40 }, (_, index) => ({
       id: `overflow${index}`,
@@ -2792,7 +2825,21 @@ if (args.has("--self-test")) {
     if (truncatedActions.actions.length !== 32 || truncatedActions.availableCount <= truncatedActions.actions.length || truncatedActions.hiddenCount !== truncatedActions.availableCount - truncatedActions.actions.length || truncatedActions.truncated !== true) {
       throw new Error("self-test failed: nextActions truncation evidence was not summarized");
     }
-    const approvalPlan = summarizeApprovalPlan(orderedNextActions(reasonGates.map((gate) => ({ ...gate, orderedActions: gateOrderedActions(gate) }))));
+    const hiddenHighImpactActions = summarizeNextActions([
+      ...Array.from({ length: 40 }, (_, index) => ({
+        id: `lowRiskOverflow${index}`,
+        orderedActions: [action(`lowRiskOverflow${index}`, "gateway-start", `echo low-risk-${index}`, { requiresGatewayStart: true })],
+      })),
+      {
+        id: "hiddenOptionalRealTraffic",
+        orderedActions: [action("hiddenOptionalRealTraffic", "optional-antigravity-return", "echo hidden-real-traffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true })],
+      },
+    ]);
+    const hiddenHighImpactPlan = summarizeApprovalPlan(hiddenHighImpactActions.allActions);
+    if (hiddenHighImpactActions.actions.some((item) => item.id === "hiddenOptionalRealTraffic") || hiddenHighImpactPlan.requiresRealTrafficCount < 1 || hiddenHighImpactPlan.highImpactCount < 1) {
+      throw new Error("self-test failed: approval plan did not count hidden high-risk actions");
+    }
+    const approvalPlan = summarizeApprovalPlan(nextActionSummary.allActions);
     if (approvalPlan.reportOnlyCount < 1) throw new Error("self-test failed: approval plan did not count report-only actions");
     if (approvalPlan.requiresGatewayStartCount < 1 || approvalPlan.requiresRealTrafficCount < 1 || approvalPlan.highImpactCount < 1 || approvalPlan.firstBlockedAction !== "startGatewayTranslatorOnly") {
       throw new Error("self-test failed: approval plan did not summarize gateway, real-traffic, and high-impact actions");

@@ -29,7 +29,8 @@ for (let index = 2; index < process.argv.length; index += 1) {
 
 const sourceRoot = resolve(args.get("--source-root") || resolve(import.meta.dirname, ".."));
 const runtimeRoot = resolve(args.get("--runtime-root") || sourceRoot);
-const reportRoot = resolve(args.get("--report-root") || join(os.tmpdir(), "anticodex-reports"));
+const defaultReportRoot = join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports");
+const reportRoot = resolve(args.get("--report-root") || defaultReportRoot);
 const timeoutMs = Math.max(10_000, Number(args.get("--timeout-ms") || 90_000));
 const translatorPath = resolve(runtimeRoot, "translator", "adaptive-server.mjs");
 const startedAt = Date.now();
