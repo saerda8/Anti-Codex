@@ -7318,6 +7318,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId absent from top-level missingRequired/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId has no next action/);
   assert.match(diagnostics, /release-gates group \$groupName missing optional gate \$groupMissingOptionalId absent from top-level missingOptional/);
+  assert.match(diagnostics, /release-gates group \$groupName missing total count/);
+  assert.match(diagnostics, /release-gates group \$groupName total count mismatch/);
+  assert.match(diagnostics, /release-gates group \$groupName satisfied count exceeds total/);
   assert.match(diagnostics, /release-gates next action \$actionId missing command/);
   assert.match(diagnostics, /release-gates ordered action \$gateFailureId\/\$actionId command requires real-traffic metadata/);
   assert.match(diagnostics, /release-gates failure \$gateFailureId with ordered actions missing guidance/);
@@ -7626,6 +7629,12 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       missingOptional: ["coldRelaunch"],
       releaseGateGroups: [{
         group: "short",
+        total: 1,
+        satisfied: 0,
+        required: 1,
+        requiredSatisfied: 0,
+        optional: 0,
+        optionalSatisfied: 0,
         missingRequired: ["pluginCapabilities"],
         missingOptional: [],
       }],
@@ -9415,6 +9424,7 @@ test("diagnostics reports-summary fixture rejects group missing gates without al
     assert.ok(payload.failures.includes("release-gates group real-traffic missing required gate postVerification has no next action"));
     assert.ok(payload.failures.includes("release-gates group real-traffic missing optional gate coldRelaunch absent from top-level missingOptional"));
     assert.ok(payload.failures.includes("release-gates group real-traffic missing optional gate coldRelaunch missing failure reason details"));
+    assert.ok(payload.failures.includes("release-gates group real-traffic missing total count"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

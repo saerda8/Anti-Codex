@@ -255,6 +255,16 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             if ([string]::IsNullOrWhiteSpace($groupName)) {
                 $groupName = "unknown"
             }
+            $groupTotal = Get-NonNegativeIntProperty $releaseGateGroup "total" "release-gates group $groupName missing total count" "release-gates group $groupName invalid total count"
+            $groupSatisfied = Get-NonNegativeIntProperty $releaseGateGroup "satisfied" "release-gates group $groupName missing satisfied count" "release-gates group $groupName invalid satisfied count"
+            $groupRequired = Get-NonNegativeIntProperty $releaseGateGroup "required" "release-gates group $groupName missing required count" "release-gates group $groupName invalid required count"
+            $groupRequiredSatisfied = Get-NonNegativeIntProperty $releaseGateGroup "requiredSatisfied" "release-gates group $groupName missing required satisfied count" "release-gates group $groupName invalid required satisfied count"
+            $groupOptional = Get-NonNegativeIntProperty $releaseGateGroup "optional" "release-gates group $groupName missing optional count" "release-gates group $groupName invalid optional count"
+            $groupOptionalSatisfied = Get-NonNegativeIntProperty $releaseGateGroup "optionalSatisfied" "release-gates group $groupName missing optional satisfied count" "release-gates group $groupName invalid optional satisfied count"
+            if ($null -ne $groupTotal -and $null -ne $groupSatisfied -and $groupSatisfied -gt $groupTotal) { Add-Failure "release-gates group $groupName satisfied count exceeds total" }
+            if ($null -ne $groupRequired -and $null -ne $groupRequiredSatisfied -and $groupRequiredSatisfied -gt $groupRequired) { Add-Failure "release-gates group $groupName required satisfied count exceeds required" }
+            if ($null -ne $groupOptional -and $null -ne $groupOptionalSatisfied -and $groupOptionalSatisfied -gt $groupOptional) { Add-Failure "release-gates group $groupName optional satisfied count exceeds optional" }
+            if ($null -ne $groupTotal -and $null -ne $groupRequired -and $null -ne $groupOptional -and $groupTotal -ne ($groupRequired + $groupOptional)) { Add-Failure "release-gates group $groupName total count mismatch" }
             foreach ($groupMissingRequiredId in @(As-FlatArray $releaseGateGroup.missingRequired | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
                 if ($missingRequiredGates -notcontains $groupMissingRequiredId) {
                     Add-Failure "release-gates group $groupName missing required gate $groupMissingRequiredId absent from top-level missingRequired"
