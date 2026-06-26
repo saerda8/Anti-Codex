@@ -129,6 +129,9 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if ($matchingActions.Count -lt 1) {
             Add-Failure "release-gates missing required gate $missingGateId has no next action"
         }
+        if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $missingGateId }).Count -lt 1) {
+            Add-Failure "release-gates missing required gate $missingGateId missing failure reason details"
+        }
     }
     $gatewayActionCount = 0
     $realTrafficActionCount = 0
