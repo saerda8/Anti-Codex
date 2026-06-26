@@ -7298,6 +7298,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates failure \$gateFailureId failureReasons hidden count mismatch/);
   assert.match(diagnostics, /release-gates failure \$semanticFailureId missing semanticFailures available count/);
   assert.match(diagnostics, /release-gates failure \$semanticFailureId semanticFailures hidden count mismatch/);
+  assert.match(diagnostics, /release-gates failure \$semanticFailureId missing semantic failure reason marker/);
   assert.match(diagnostics, /release-gates failure \$failureId missing failure reason details/);
   assert.match(diagnostics, /release-gates damaged report \$damagedReportId missing failure reason details/);
   assert.match(diagnostics, /release-gates missing required gate \$missingGateId has no next action/);
@@ -9579,6 +9580,64 @@ test("diagnostics reports-summary fixture rejects semantic failures without repo
     assert.equal(payload.ok, false);
     assert.ok(payload.failures.includes("release-gates semantic failures missing report-only next action"));
     assert.ok(payload.failures.includes("release-gates approval plan report-only action count mismatch"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects semantic failures without reason marker", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-semantic-marker-summary-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([minimalDiagnosticsReleaseGateSummary({
+      releaseReady: false,
+      effectiveOk: false,
+      releaseGateFailures: [{
+        id: "sourcePreflight",
+        semanticFailures: ["source_preflight_public_documentation"],
+        semanticFailuresAvailableCount: 1,
+        semanticFailuresHiddenCount: 0,
+      }],
+      releaseGateFailureReasons: [{
+        id: "sourcePreflight",
+        requiredForShort: true,
+        requiredForRelease: true,
+        failureReasons: ["ok_false"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        guidance: "releaseGateReportOnlyCheck: inspect release-gate semantic evidence before rerunning.",
+        orderedActions: [],
+      }],
+      nextActions: [],
+      approvalPlan: {
+        actionCount: 0,
+        blockedCount: 0,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 0,
+        highImpactCount: 0,
+        reportOnlyCount: 0,
+        requiredForShortCount: 0,
+        requiredForReleaseCount: 0,
+        firstBlockedAction: "",
+        phases: [],
+      },
+    })]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates failure sourcePreflight missing semantic failure reason marker"));
+    assert.ok(payload.failures.includes("release-gates semantic failures missing report-only next action"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

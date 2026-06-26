@@ -158,6 +158,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             }
         }
     }
+    $semanticFailureEntryCount = 0
     foreach ($semanticFailure in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailures)) {
         if (-not (Has-Property $semanticFailure "semanticFailures")) { continue }
         $semanticFailureId = [string]$semanticFailure.id
@@ -165,6 +166,15 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             $semanticFailureId = "unknown"
         }
         $visibleSemanticFailures = @(As-FlatArray $semanticFailure.semanticFailures | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        if ($visibleSemanticFailures.Count -gt 0) {
+            $semanticFailureEntryCount++
+            $matchingSemanticReason = @(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object {
+                [string]$_.id -eq $semanticFailureId -and @(As-FlatArray $_.failureReasons | Where-Object { [string]$_ -eq "semantic_failures" }).Count -gt 0
+            })
+            if ($matchingSemanticReason.Count -lt 1) {
+                Add-Failure "release-gates failure $semanticFailureId missing semantic failure reason marker"
+            }
+        }
         $availableSemanticFailures = Get-NonNegativeIntProperty $semanticFailure "semanticFailuresAvailableCount" "release-gates failure $semanticFailureId missing semanticFailures available count" "release-gates failure $semanticFailureId invalid semanticFailures available count"
         $hiddenSemanticFailures = Get-NonNegativeIntProperty $semanticFailure "semanticFailuresHiddenCount" "release-gates failure $semanticFailureId missing semanticFailures hidden count" "release-gates failure $semanticFailureId invalid semanticFailures hidden count"
         if ($null -ne $availableSemanticFailures -and $availableSemanticFailures -lt $visibleSemanticFailures.Count) {
@@ -447,7 +457,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
             }
         }
     }
-    if ($semanticFailureCount -gt 0 -and @($nextActions | Where-Object { $_.reportOnly -eq $true -and [string]$_.id -eq "releaseGateReportOnlyCheck" }).Count -lt 1) {
+    if (($semanticFailureCount + $semanticFailureEntryCount) -gt 0 -and @($nextActions | Where-Object { $_.reportOnly -eq $true -and [string]$_.id -eq "releaseGateReportOnlyCheck" }).Count -lt 1) {
         Add-Failure "release-gates semantic failures missing report-only next action"
     }
     $approvalPlan = $ReleaseGatesSummary.approvalPlan
