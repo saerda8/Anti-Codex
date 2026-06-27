@@ -6,7 +6,7 @@ param(
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$CdpPort = 0,
     [ValidateSet("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")]
-    [string[]]$Actions = @("mcpSkills", "pluginCapabilities"),
+    [string[]]$Actions = @("pluginCapabilities", "mcpSkills"),
     [int]$TimeoutSec = 120,
     [int]$MaxAttempts = 2
 )
@@ -155,7 +155,7 @@ function Invoke-ManagerButtonAction {
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath
         [void]$process.Handle
-        $completed = Wait-ManagerButtonProcess -Process $process -TimeoutSeconds ([Math]::Max(1, $TimeoutSec + 10))
+        $completed = Wait-ManagerButtonProcess -Process $process -TimeoutSeconds ([Math]::Max(1, $TimeoutSec + 20))
         if (-not $completed) {
             try { $process.Kill() } catch {}
             Wait-ManagerButtonProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null

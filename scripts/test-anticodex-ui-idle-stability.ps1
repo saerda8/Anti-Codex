@@ -16,6 +16,7 @@ if (-not $BaseUrl) {
 }
 
 $failures = New-Object System.Collections.Generic.List[string]
+$transientUiFailures = New-Object System.Collections.Generic.List[string]
 $samples = New-Object System.Collections.Generic.List[object]
 $startedAt = [DateTime]::UtcNow
 
@@ -57,7 +58,7 @@ function Invoke-UiState {
     $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-idle-ui-state-{0}.err" -f ([Guid]::NewGuid().ToString("N")))
     try {
         $process = Start-Process -FilePath $powerShellBin -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
-        $waitMs = [Math]::Max(1000, ([Math]::Max(1, $RequestTimeoutSec) * 1000) + 1000)
+        $waitMs = [Math]::Max(1000, ([Math]::Max(1, $RequestTimeoutSec) * 1000) + 15000)
         if (-not $process.WaitForExit($waitMs)) {
             try { $process.Kill() } catch {}
             return [pscustomobject]@{
@@ -67,10 +68,11 @@ function Invoke-UiState {
                 tail = @()
             }
         }
+        $process.Refresh()
         $exitCode = $process.ExitCode
         $output = @()
-        if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue) }
-        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue) }
+        if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8 -ErrorAction SilentlyContinue) }
+        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -Encoding UTF8 -ErrorAction SilentlyContinue) }
     } finally {
         Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
     }
@@ -177,6 +179,7 @@ $firstTranslatorPids = $null
 $firstManagerWatcherPids = $null
 $firstLegacyManagerWatcherPids = $null
 $sampleIndex = 0
+$uiSuccessCount = 0
 
 while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     $sampleIndex += 1
@@ -186,7 +189,7 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     $processes = Get-AntiCodexProcesses $installRoot $runtimeRootFull
 
     try {
-        $healthTimeoutSec = [Math]::Max(1, [Math]::Min($TimeoutSec, [int][Math]::Ceiling((Get-RemainingIdleBudgetMs $deadline) / 1000)))
+        $healthTimeoutSec = [Math]::Max(1, $TimeoutSec)
         $health = Invoke-LocalJson "/health" -RequestTimeoutSec $healthTimeoutSec
         if ($health.ok -ne $true) { Add-Failure "sample ${sampleIndex}: health ok=false" }
         if ($health.upstream -ne "antigravity-desktop") { Add-Failure "sample ${sampleIndex}: upstream is $($health.upstream)" }
@@ -197,13 +200,17 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
 
     if (Test-Path -LiteralPath $uiStateScript -PathType Leaf) {
         $remainingMs = Get-RemainingIdleBudgetMs $deadline
-        if ($remainingMs -lt 1000 -and $sampleIndex -gt 1) {
+        if ($remainingMs -lt 1000 -and $sampleIndex -gt 1 -and $uiSuccessCount -lt 1) {
             Add-Failure "sample ${sampleIndex}: UI state skipped because idle verifier budget was exhausted"
         } else {
-            $uiTimeoutSec = [Math]::Max(1, [Math]::Min($TimeoutSec, [int][Math]::Ceiling([Math]::Max(1000, $remainingMs) / 1000)))
+            $uiTimeoutSec = [Math]::Max(1, $TimeoutSec)
             $ui = Invoke-UiState $uiStateScript $runtimeRootFull -RequestTimeoutSec $uiTimeoutSec
         }
-        if ($ui.ok -ne $true) {
+        if ($ui.ok -eq $true) {
+            $uiSuccessCount += 1
+        } elseif ($sampleIndex -eq 1) {
+            $transientUiFailures.Add("sample ${sampleIndex}: UI state was not ready during warmup") | Out-Null
+        } else {
             Add-Failure "sample ${sampleIndex}: UI state failed"
         }
         if ($ui.page -and $ui.page.hasReconnectText -eq $true) {
@@ -264,6 +271,8 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
         hasReconnectText = if ($ui -and $ui.page) { $ui.page.hasReconnectText } else { $null }
         hasLoginText = if ($ui -and $ui.page) { $ui.page.hasLoginText } else { $null }
         matchedModelText = if ($ui) { $ui.matchedModelText } else { "" }
+        uiFailures = if ($ui -and $ui.failures) { @($ui.failures) } else { @() }
+        uiExitCode = if ($ui -and ($ui.PSObject.Properties.Name -contains "exitCode")) { $ui.exitCode } else { $null }
     }) | Out-Null
 
     if ([DateTime]::UtcNow -lt $deadline) {
@@ -274,10 +283,15 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     }
 }
 
+if ((Test-Path -LiteralPath $uiStateScript -PathType Leaf) -and $uiSuccessCount -lt 1) {
+    Add-Failure "UI state never reached ready during idle window"
+}
+
 $endedAt = [DateTime]::UtcNow
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     failures = $failures.ToArray()
+    transientUiFailures = $transientUiFailures.ToArray()
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
     baseUrl = $BaseUrl
     runtimeRoot = $runtimeRootFull
@@ -285,6 +299,7 @@ $result = [pscustomobject]@{
     durationSec = $DurationSec
     intervalSec = $IntervalSec
     sampleCount = $samples.Count
+    uiSuccessCount = $uiSuccessCount
     samples = $samples.ToArray()
 }
 

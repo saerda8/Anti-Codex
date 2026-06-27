@@ -32,7 +32,7 @@ test("Antigravity session lock lets the same tool continuation pass while blocki
 });
 
 test("Antigravity session lock releases queued sessions when a tool continuation expires", async () => {
-  const lock = createAntigravitySessionLock({ ttlMs: 20 });
+  const lock = createAntigravitySessionLock({ ttlMs: 1000 });
   const first = await lock.acquire();
   first.continueWith("resp_waiting");
 
@@ -41,6 +41,88 @@ test("Antigravity session lock releases queued sessions when a tool continuation
 
   const secondLease = await second;
   assert.equal(lock.snapshot().expired, 1);
+  secondLease.release();
+});
+
+test("Antigravity session lock releases a stale tool continuation by response id", async () => {
+  const lock = createAntigravitySessionLock({ ttlMs: 5000 });
+  const first = await lock.acquire();
+  first.continueWith("resp_waiting");
+
+  let secondStarted = false;
+  const second = lock.acquire().then((lease) => {
+    secondStarted = true;
+    return lease;
+  });
+
+  await Promise.resolve();
+  assert.equal(secondStarted, false);
+  assert.equal(lock.snapshot().queued, 1);
+
+  const release = lock.releaseResponseId("resp_waiting", { reason: "test_cancel" });
+  assert.equal(release.ok, true);
+  assert.equal(release.released, true);
+  assert.equal(release.reason, "test_cancel");
+  assert.equal(release.responseId, "resp_waiting");
+
+  const secondLease = await second;
+  assert.equal(secondStarted, true);
+  assert.equal(lock.snapshot().responseCancelled, 1);
+  secondLease.release();
+});
+
+test("Antigravity session lock ignores response-id release misses", async () => {
+  const lock = createAntigravitySessionLock();
+  const first = await lock.acquire();
+  first.continueWith("resp_waiting");
+
+  const release = lock.releaseResponseId("resp_missing");
+  assert.equal(release.ok, true);
+  assert.equal(release.released, false);
+  assert.equal(lock.snapshot().active, true);
+  assert.equal(lock.snapshot().responseCancelled, 0);
+
+  first.release();
+});
+
+test("Antigravity session lock can release an idle tool continuation early", async () => {
+  const lock = createAntigravitySessionLock({ ttlMs: 5000 });
+  const first = await lock.acquire();
+  first.continueWith("resp_waiting");
+
+  const early = lock.releaseIdleContinuation({ maxIdleMs: 1000, reason: "test_idle" });
+  assert.equal(early.released, false);
+  assert.equal(lock.snapshot().active, true);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const released = lock.releaseIdleContinuation({ maxIdleMs: 1, reason: "test_idle" });
+  assert.equal(released.ok, true);
+  assert.equal(released.released, true);
+  assert.equal(released.reason, "test_idle");
+  assert.equal(lock.snapshot().active, false);
+  assert.equal(lock.snapshot().idleReleased, 1);
+});
+
+test("Antigravity session lock can release an idle active session without continuation ids", async () => {
+  const lock = createAntigravitySessionLock({ ttlMs: 5000 });
+  await lock.acquire();
+  const queued = lock.acquire();
+
+  const early = lock.releaseIdleActive({ maxIdleMs: 1000, reason: "test_idle_active" });
+  assert.equal(early.released, false);
+  assert.equal(lock.snapshot().active, true);
+  assert.equal(lock.snapshot().queued, 1);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const released = lock.releaseIdleActive({ maxIdleMs: 1, reason: "test_idle_active" });
+  assert.equal(released.ok, true);
+  assert.equal(released.released, true);
+  assert.equal(released.reason, "test_idle_active");
+  assert.equal(lock.snapshot().active, true);
+  assert.equal(lock.snapshot().queued, 0);
+  assert.equal(lock.snapshot().idleReleased, 1);
+
+  const secondLease = await queued;
   secondLease.release();
 });
 
@@ -62,6 +144,21 @@ test("Antigravity session lock rejects overflow without releasing the active ses
   first.release();
   const secondLease = await second;
   secondLease.release();
+});
+
+test("Antigravity session lock auto-releases an idle continued session after TTL expires (no queued requests)", async () => {
+  const lock = createAntigravitySessionLock({ ttlMs: 1000 });
+  const first = await lock.acquire();
+  first.continueWith("resp_tool_call");
+  assert.equal(lock.snapshot().active, true);
+  assert.equal(lock.snapshot().queued, 0);
+
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+
+  const snap = lock.snapshot();
+  assert.equal(snap.active, false, "expected session lock to auto-release after TTL");
+  assert.equal(snap.queued, 0, "no queued sessions");
+  assert.equal(snap.expired, 1, "expected expired counter to be incremented");
 });
 
 test("Antigravity session lock reset releases active and rejects queued sessions", async () => {

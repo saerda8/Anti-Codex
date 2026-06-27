@@ -69,11 +69,27 @@ export function createAntigravityRequestQueue(options = {}) {
           activeEntry = null;
           continue;
         }
+        let cleanupAbortWait = () => {};
         try {
-          entry.resolve(await entry.task({ signal: entry.controller.signal }));
+          const abortWait = new Promise((_, reject) => {
+            if (entry.controller.signal.aborted) {
+              reject(entry.controller.signal.reason ?? abortReason(entry.signal));
+              return;
+            }
+            const onAbort = () => {
+              reject(entry.controller.signal.reason ?? abortReason(entry.signal));
+            };
+            entry.controller.signal.addEventListener("abort", onAbort, { once: true });
+            cleanupAbortWait = () => entry.controller.signal.removeEventListener("abort", onAbort);
+          });
+          const taskPromise = Promise.resolve()
+            .then(() => entry.task({ signal: entry.controller.signal }));
+          taskPromise.catch(() => {});
+          entry.resolve(await Promise.race([taskPromise, abortWait]));
         } catch (error) {
           entry.reject(error);
         } finally {
+          cleanupAbortWait();
           entry.cleanup?.();
           activeEntry = null;
         }

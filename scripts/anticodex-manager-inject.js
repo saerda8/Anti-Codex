@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v94";
+  const VERSION = "native-panel-v96";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -79,6 +79,7 @@
   const BRIDGE_TIMEOUT_MS = 5000;
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
+  const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
   const HIGH_IMPACT_CONFIRMATION_MS = 15000;
   const LOAD_FETCH_TIMEOUT_MS = 2500;
   const DIAGNOSTICS_FETCH_TIMEOUT_MS = 30000;
@@ -1417,7 +1418,8 @@
   function actionUiTimeoutMs(action) {
     if (action === "accountSwitch") return 65000;
     if (action === "fastOverallNoTraffic") return 90000;
-    if (action === "updateCheck" || action === "sourcePreflight" || action === "mcpSkills" || action === "pluginCapabilities" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
+    if (action === "mcpSkills" || action === "pluginCapabilities") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
+    if (action === "updateCheck" || action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
     return ACTION_UI_TIMEOUT_MS;
   }
 

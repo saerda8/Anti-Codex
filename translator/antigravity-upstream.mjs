@@ -77,15 +77,24 @@ export function antigravityPromptLimits(options = {}) {
 
 export function chatMessagesToPrompt(messages, options = {}) {
   const { promptMaxChars: maxChars, toolOutputMaxChars } = antigravityPromptLimits(options);
-  const blocks = chatMessageBlocks(messages, { toolOutputMaxChars });
+  const effectiveMessages = freshPlainUserMessagesAfterToolHistory(messages);
+  const blocks = chatMessageBlocks(effectiveMessages, { toolOutputMaxChars });
+  const latestText = latestUserText(effectiveMessages).trim();
 
-  const languageHint = latestUserText(messages).match(/[\u3400-\u9fff]/)
+  const languageHint = latestText.match(/[\u3400-\u9fff]/)
     ? "[LANGUAGE]\nThe latest user message is Chinese. Reply in Simplified Chinese unless the user explicitly asks otherwise."
     : "";
+  const latestFocus = latestText ? [
+    "[LATEST_USER_MESSAGE]",
+    latestText,
+    "[ANTI_CODEX_TURN_RULE]",
+    "Answer the LATEST_USER_MESSAGE now. Earlier tool-result blocks are completed prior turns; do not continue or verify an earlier task unless the latest user message explicitly asks to continue it.",
+  ].join("\n") : "";
   const reasoningHint = reasoningEffortHint(options.reasoningEffort);
   const toolsHint = options.nativeTools ? "" : toolProtocolHint(options.tools);
   const header = [ANTIGRAVITY_PROMPT_HEADER, languageHint, reasoningHint, toolsHint].filter(Boolean).join("\n\n");
-  const fullPrompt = [header, ...blocks].filter(Boolean).join("\n\n");
+  const promptBlocks = [...blocks, latestFocus].filter(Boolean);
+  const fullPrompt = [header, ...promptBlocks].filter(Boolean).join("\n\n");
   if (!fullPrompt || fullPrompt.length <= maxChars) return fullPrompt;
 
   const notice = [
@@ -96,11 +105,11 @@ export function chatMessagesToPrompt(messages, options = {}) {
   const prefix = `${header}\n\n${notice}`;
   const selected = [];
   let remaining = Math.max(0, maxChars - prefix.length);
-  for (let index = blocks.length - 1; index >= 0 && remaining > 2; index -= 1) {
+  for (let index = promptBlocks.length - 1; index >= 0 && remaining > 2; index -= 1) {
     const separatorLength = selected.length ? 2 : 2;
     const available = remaining - separatorLength;
     if (available <= 0) break;
-    const block = blocks[index];
+    const block = promptBlocks[index];
     if (block.length <= available) {
       selected.unshift(block);
       remaining -= block.length + separatorLength;
@@ -110,6 +119,34 @@ export function chatMessagesToPrompt(messages, options = {}) {
     remaining = 0;
   }
   return [prefix, selected.join("\n\n")].filter(Boolean).join("\n\n").slice(0, maxChars);
+}
+
+function freshPlainUserMessagesAfterToolHistory(messages = []) {
+  const list = Array.isArray(messages) ? messages : [];
+  let latestUserIndex = -1;
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    if (String(list[index]?.role ?? "").toLowerCase() === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+  if (latestUserIndex <= 0) return list;
+  const latestText = messageText(list[latestUserIndex]?.content);
+  if (!userMessageLooksLikeFreshPlainRequest(latestText)) return list;
+  const earlier = list.slice(0, latestUserIndex);
+  const hasToolHistory = earlier.some((message) => {
+    const role = String(message?.role ?? "").toLowerCase();
+    return role === "tool" || (role === "assistant" && Array.isArray(message?.tool_calls) && message.tool_calls.length > 0);
+  });
+  return hasToolHistory ? [list[latestUserIndex]] : list;
+}
+
+function userMessageLooksLikeFreshPlainRequest(text = "") {
+  const value = String(text || "").trim();
+  if (!value || userMessageLooksLikeToolContinuation(value)) return false;
+  if (/(?:\b(?:create|write|generate|run|execute|search|fetch|browse|open|read|inspect|verify|continue|resume)\b|PowerShell|package\.json|index\.html|README\.md|done\.txt|word-tally|https?:\/\/|C:\\|\/tmp\/|AppData|Roaming|directory|folder|file|artifact|tool|web_search|web_fetch)/i.test(value)) return false;
+  if (/(?:创建|新建|写入|生成|运行|执行|搜索|检索|上网|联网|打开|读取|查看|验证|继续|恢复|目录|文件|工具|网页|报告)/.test(value)) return false;
+  return true;
 }
 
 export function makeAntigravityCompletion(model, text, options = {}) {
@@ -383,16 +420,29 @@ function takeNativeContinuation(messages = []) {
   const matched = results.filter((result) => required.has(result.callId));
   if (matched.length !== required.size) return null;
   const latestResultIndex = Math.max(...matched.map((result) => result.messageIndex));
+  const followUpUserMessages = messages
+    .slice(latestResultIndex + 1)
+    .filter((message) => String(message?.role ?? "").toLowerCase() === "user")
+    .map((message) => messageText(message?.content))
+    .filter(Boolean);
+  const completedAssistantAfterResult = messages
+    .slice(latestResultIndex + 1)
+    .some((message) => String(message?.role ?? "").toLowerCase() === "assistant"
+      && !Array.isArray(message?.tool_calls)
+      && messageText(message?.content).trim());
+  const hasNewPlainUserMessage = completedAssistantAfterResult
+    && followUpUserMessages.some((text) => !userMessageLooksLikeToolContinuation(text));
+  if (hasNewPlainUserMessage) {
+    clearNativeContinuation(session);
+    void cancelAntigravityCascade(session.connection, session.cascadeId).catch(() => {});
+    void session.nativeToolBridge?.close?.().catch(() => {});
+    return null;
+  }
   clearNativeContinuation(session);
   return {
     session,
     results: matched.map(({ messageIndex, ...result }) => result),
-    followUpPrompt: messages
-      .slice(latestResultIndex + 1)
-      .filter((message) => String(message?.role ?? "").toLowerCase() === "user")
-      .map((message) => messageText(message?.content))
-      .filter(Boolean)
-      .join("\n\n"),
+    followUpPrompt: followUpUserMessages.join("\n\n"),
   };
 }
 
@@ -417,6 +467,10 @@ function toolResultsFromMessages(messages = []) {
       messageIndex,
     }];
   });
+}
+
+function userMessageLooksLikeToolContinuation(text = "") {
+  return /(?:tool call is complete|tool results? (?:are|is) complete|web_search call is complete|web_fetch call is complete|continue (?:the )?(?:same|current) task|this is not the final answer|Anti-Codex blocked|Anti-Codex artifact marker verification|继续当前任务|继续同一任务|这不是最终回答)/i.test(String(text || ""));
 }
 
 function retryMaxAttempts(options) {

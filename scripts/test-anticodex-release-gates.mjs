@@ -50,6 +50,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-custom-tool-loop.ps1",
   "scripts/test-anticodex-diagnostics.ps1",
   "scripts/test-anticodex-installed-overall.ps1",
+  "scripts/test-anticodex-ambient-suggestions.ps1",
   "scripts/test-anticodex-local-connectors.mjs",
   "scripts/test-anticodex-manager-action.ps1",
   "scripts/test-anticodex-manager-button.mjs",
@@ -69,12 +70,15 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-real-third-party-provider.mjs",
   "scripts/test-anticodex-real-work.ps1",
   "scripts/test-anticodex-real-mini-tool.ps1",
+  "scripts/test-anticodex-real-report-site.ps1",
+  "scripts/test-anticodex-real-small-project.ps1",
   "scripts/test-anticodex-source-preflight.ps1",
   "scripts/test-anticodex-stability-soak.ps1",
   "scripts/test-anticodex-sync-readiness.ps1",
   "scripts/test-anticodex-third-party-provider.mjs",
   "scripts/test-anticodex-tool-bridge-mode.ps1",
   "scripts/test-anticodex-tool-loop.ps1",
+  "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
   "scripts/test-anticodex-ui-idle-stability.ps1",
@@ -113,9 +117,15 @@ const gateDefinitions = [
   { id: "uiIdleStability", group: "no-traffic", file: "latest-ui-idle-stability.json", requiredForRelease: true, requireUiIdleSemantics: true },
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true, requireSyncReadinessSemantics: true },
   { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true, requireModelThinkingSemantics: true },
+  { id: "ambientSuggestions", group: "no-traffic", file: "latest-ambient-suggestions.json", requiredForRelease: true, requireAmbientSuggestionSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
+  { id: "uiChatSmoke", group: "real-traffic", file: "latest-ui-chat-smoke.json", requiredForRelease: true, requireUiChatSmokeSemantics: true },
+  { id: "uiWebSearchSmoke", group: "real-traffic", file: "latest-ui-web-search-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-web-search-smoke", taskMode: "web-search", prefix: "ui_web_search_smoke", requireSourceUrls: true } },
+  { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
+  { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requireCodingProject: true } },
+  { id: "uiReportSiteSmoke", group: "real-traffic", file: "latest-ui-report-site-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-report-site-smoke", taskMode: "report-site", prefix: "ui_report_site_smoke", requiredFiles: ["reportMd", "indexHtml", "doneTxt"], requireReportSite: true } },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
   { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "native" },
   { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "native-multi" },
@@ -126,6 +136,7 @@ const gateDefinitions = [
   { id: "webTools", group: "real-traffic", file: "latest-web-tools.json", requiredForRelease: true, requireWebToolsSemantics: true },
   { id: "realMiniTool", group: "real-traffic", file: "latest-real-mini-tool.json", requiredForRelease: true, requireRealMiniToolSemantics: true },
   { id: "realWork", group: "real-traffic", file: "latest-real-work.json", requiredForRelease: true, requireRealWorkSemantics: true },
+  { id: "realSmallProject", group: "real-traffic", file: "latest-real-small-project.json", requiredForRelease: true, requireRealSmallProjectSemantics: true },
   { id: "accountProxyReadiness", group: "real-traffic", file: "latest-account-proxy-readiness.json", requiredForRelease: true, requireAccountProxySemantics: true },
 
   { id: "stabilitySoak", group: "soak", file: "latest-stability-soak.json", requiredForRelease: false, requireStabilitySoakSemantics: true },
@@ -387,14 +398,17 @@ function summarizeGate(definition) {
         "managerButtonSafeActions",
         "managerButtonReportActions",
         "managerButtonDiagnosticsBundle",
+        "managerButtonMcpSkills",
         "managerButtonPluginCapabilities",
         "managerAction",
+        "uiIdleStability",
         "mcpSkills",
         "pluginCapabilities",
         "realThirdPartyProviderOptional",
         "providerAntigravityReturnOptional",
         "realMiniTool",
         "realWork",
+        "realSmallProject",
       ]);
       if (report.reportName !== definition.expectedReportName) semanticFailures.push("installed_overall_report_name");
       if (report.fast !== definition.expectedFast) semanticFailures.push("installed_overall_fast_flag");
@@ -404,11 +418,17 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push("installed_overall_behavior_not_covered");
       if (definition.expectedFast && Number(report.fastMaxElapsedMs || 0) > 0 && Number(report.elapsedMs || 0) > Number(report.fastMaxElapsedMs)) semanticFailures.push("installed_overall_fast_elapsed");
       if (entries.length < 1) semanticFailures.push("installed_overall_checks_missing");
-      if (entries.some((entry) => entry.value.ok !== true)) semanticFailures.push("installed_overall_check_not_ok");
+      const nonBlockingHostSyncCheck = (entry) => entry.id === "syncReadiness"
+        && entry.value.ok !== true
+        && entry.value.hostSyncRequired === true
+        && entry.value.overallBlocking === false
+        && entry.value.releaseBlocking === true
+        && entry.value.overallClassification === "host_sync_required_not_runtime_unusable";
+      if (entries.some((entry) => entry.value.ok !== true && !nonBlockingHostSyncCheck(entry))) semanticFailures.push("installed_overall_check_not_ok");
       if (skippedEntries.some((entry) => !entry.value.reason || !entry.value.coveredBy)) semanticFailures.push("installed_overall_skip_metadata_missing");
       if (!definition.expectedFast && skippedEntries.some((entry) => !allowedFullSkipped.has(entry.id))) semanticFailures.push("installed_overall_unexpected_skipped_check");
       const skippedIds = new Set(skippedEntries.map((entry) => entry.id));
-      if (!skippedIds.has("realMiniTool") || !skippedIds.has("realWork")) semanticFailures.push("installed_overall_real_traffic_skip_missing");
+      if (!skippedIds.has("realMiniTool") || !skippedIds.has("realWork") || !skippedIds.has("realSmallProject")) semanticFailures.push("installed_overall_real_traffic_skip_missing");
     }
     if (definition.requireSkipRequests && report.skipRequests !== true) {
       semanticFailures.push("expected_skipRequests_true");
@@ -449,6 +469,64 @@ function summarizeGate(definition) {
       if (!marker || !finalText.includes(marker)) semanticFailures.push("codex_responses_marker_missing");
       if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("codex_responses_chinese_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("codex_responses_failures");
+    }
+    if (definition.requireUiChatSmokeSemantics) {
+      const marker = String(report.marker || "");
+      const lastSample = String(report.lastSample || "");
+      const sessionLock = report.antigravitySessionLock && typeof report.antigravitySessionLock === "object" ? report.antigravitySessionLock : {};
+      if (report.reportName !== "ui-chat-smoke") semanticFailures.push("ui_chat_smoke_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("ui_chat_smoke_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("ui_chat_smoke_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("ui_chat_smoke_behavior_not_covered");
+      if (report.coverageKind !== "desktop-ui-real-traffic") semanticFailures.push("ui_chat_smoke_coverage_kind");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("ui_chat_smoke_failures");
+      if (!marker || Number(report.markerCount || 0) < 2 || !lastSample.includes(marker)) semanticFailures.push("ui_chat_smoke_marker_missing");
+      if (report.clicked !== true) semanticFailures.push("ui_chat_smoke_not_sent");
+      if (report.composerCleared !== true) semanticFailures.push("ui_chat_smoke_composer_not_cleared");
+      if (report.activeReconnectSeen === true) semanticFailures.push("ui_chat_smoke_active_reconnect_seen");
+      if (sessionLock.active === true || Number(sessionLock.queued || 0) > 0) semanticFailures.push("ui_chat_smoke_session_lock_not_clear");
+    }
+    if (definition.requireUiTaskSmokeSemantics) {
+      const spec = definition.requireUiTaskSmokeSemantics;
+      const prefix = spec.prefix || definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`).replace(/^_/, "");
+      const marker = String(report.marker || "");
+      const lastSample = String(report.lastSample || "");
+      const sessionLock = report.antigravitySessionLock && typeof report.antigravitySessionLock === "object" ? report.antigravitySessionLock : {};
+      const artifact = report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
+      const files = artifact.files && typeof artifact.files === "object" ? artifact.files : {};
+      if (report.reportName !== spec.reportName) semanticFailures.push(`${prefix}_report_name`);
+      if (report.taskMode !== spec.taskMode) semanticFailures.push(`${prefix}_task_mode`);
+      if (report.requestedRealTraffic !== true) semanticFailures.push(`${prefix}_real_traffic_not_requested`);
+      if (report.usedRealTraffic !== true) semanticFailures.push(`${prefix}_real_traffic_missing`);
+      if (report.behaviorCovered !== true) semanticFailures.push(`${prefix}_behavior_not_covered`);
+      if (report.coverageKind !== "desktop-ui-real-traffic") semanticFailures.push(`${prefix}_coverage_kind`);
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push(`${prefix}_failures`);
+      if (!marker || Number(report.answerMarkerCount || 0) < 1) semanticFailures.push(`${prefix}_marker_missing`);
+      if (report.clicked !== true) semanticFailures.push(`${prefix}_not_sent`);
+      if (report.composerCleared !== true) semanticFailures.push(`${prefix}_composer_not_cleared`);
+      if (report.activeReconnectSeen === true) semanticFailures.push(`${prefix}_active_reconnect_seen`);
+      if (report.sessionLockClear !== true || sessionLock.active === true || Number(sessionLock.queued || 0) > 0) semanticFailures.push(`${prefix}_session_lock_not_clear`);
+      for (const fileKey of spec.requiredFiles || []) {
+        if (files[fileKey] !== true) semanticFailures.push(`${prefix}_${fileKey}_missing`);
+      }
+      if ((spec.requiredFiles || []).length > 0 && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
+      if (spec.requireSourceUrls && !/https?:\/\//i.test(lastSample)) semanticFailures.push(`${prefix}_source_urls_missing`);
+      if (spec.requireCodingProject) {
+        if (artifact.exportsFunction !== true) semanticFailures.push(`${prefix}_export_missing`);
+        if (artifact.testPassed !== true) semanticFailures.push(`${prefix}_tests_not_passed`);
+        if (artifact.cliPassed !== true) semanticFailures.push(`${prefix}_cli_not_passed`);
+      }
+      if (spec.requireReportSite) {
+        if (artifact.reportHasChinese !== true) semanticFailures.push(`${prefix}_report_chinese_missing`);
+        if (artifact.htmlHasChinese !== true) semanticFailures.push(`${prefix}_html_chinese_missing`);
+        if (artifact.reportMentionsCodex !== true) semanticFailures.push(`${prefix}_report_codex_missing`);
+        if (artifact.htmlMentionsCodex !== true) semanticFailures.push(`${prefix}_html_codex_missing`);
+        if (Number(artifact.reportUrlCount || 0) < 3) semanticFailures.push(`${prefix}_report_urls_missing`);
+        if (Number(artifact.htmlUrlCount || 0) < 3) semanticFailures.push(`${prefix}_html_urls_missing`);
+        if (Number(artifact.sharedUrlCount || 0) < 1) semanticFailures.push(`${prefix}_shared_urls_missing`);
+        if (artifact.htmlComplete !== true) semanticFailures.push(`${prefix}_html_not_complete`);
+        if (artifact.htmlLinksReport !== true) semanticFailures.push(`${prefix}_html_report_link_missing`);
+      }
     }
     if (definition.requireToolLoopSemantics) {
       const finalText = String(report.final_text || "");
@@ -595,6 +673,27 @@ function summarizeGate(definition) {
       if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("real_work_chinese_missing");
       if (/DeepCodex|Deep Codex/.test(finalText)) semanticFailures.push("real_work_legacy_brand_leak");
     }
+    if (definition.requireRealSmallProjectSemantics) {
+      const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+      const files = Array.isArray(artifact.files) ? artifact.files.map((item) => String(item).replaceAll("\\", "/")) : [];
+      const finalText = String(report.final_text || "");
+      if (report.reportName !== "real-small-project") semanticFailures.push("real_small_project_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("real_small_project_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("real_small_project_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("real_small_project_behavior_not_covered");
+      if (report.coverageKind !== "real-traffic-small-project") semanticFailures.push("real_small_project_coverage_kind");
+      if (!report.first_response_id) semanticFailures.push("real_small_project_first_response_missing");
+      if (!report.call_id) semanticFailures.push("real_small_project_call_id_missing");
+      for (const requiredFile of ["package.json", "word-tally.mjs", "word-tally.test.mjs"]) {
+        if (!files.includes(requiredFile)) semanticFailures.push(`real_small_project_${requiredFile.replaceAll(".", "_")}_missing`);
+      }
+      if (artifact.testPassed !== true) semanticFailures.push("real_small_project_tests_not_passed");
+      if (artifact.cliPassed !== true) semanticFailures.push("real_small_project_cli_not_passed");
+      if (artifact.markerMatched !== true) semanticFailures.push("real_small_project_marker_mismatch");
+      if (!finalText.includes("SMALL_PROJECT_OK")) semanticFailures.push("real_small_project_final_confirmation_missing");
+      if (!/[\u4e00-\u9fff]/.test(finalText)) semanticFailures.push("real_small_project_chinese_missing");
+      if (/DeepCodex|Deep Codex/.test(finalText)) semanticFailures.push("real_small_project_legacy_brand_leak");
+    }
     if (definition.requireAccountProxySemantics) {
       const phaseSummary = report.phaseSummary && typeof report.phaseSummary === "object" ? report.phaseSummary : {};
       const antigravityLogSignals = report.antigravityLogSignals && typeof report.antigravityLogSignals === "object" ? report.antigravityLogSignals : {};
@@ -726,7 +825,7 @@ function summarizeGate(definition) {
       if (Number(skills.count || 0) < 1) semanticFailures.push("mcp_skills_no_local_skills");
       if (Number(skills.sharedCount || 0) < 1) semanticFailures.push("mcp_skills_no_shared_skills");
       if (Number(skills.agentsCount || 0) < 1) semanticFailures.push("mcp_skills_no_agents_skills");
-      if (Number(skills.expectedSharedCount || 0) < Number(skills.sharedCount || 0) + Number(skills.agentsCount || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
+      if (Number(skills.expectedSharedCount || 0) < Number(skills.count || 0)) semanticFailures.push("mcp_skills_expected_shared_count");
       if (!isEmptyArray(skills.missingShared)) semanticFailures.push("mcp_skills_missing_shared_skills");
       if (!isEmptyArray(skills.extraLocal)) semanticFailures.push("mcp_skills_extra_local_skills");
       if (!isEmptyArray(skills.changedShared)) semanticFailures.push("mcp_skills_changed_shared_skills");
@@ -825,6 +924,22 @@ function summarizeGate(definition) {
       if (models.some((item) => !item?.reasoning_level)) semanticFailures.push("model_thinking_reasoning_level");
       if (models.some((item) => item?.supports_thinking !== true)) semanticFailures.push("model_thinking_supports_thinking");
       if (models.some((item) => !Number.isFinite(Number(item?.thinking_budget)) || !Number.isFinite(Number(item?.min_thinking_budget)) || Number(item.thinking_budget) < Number(item.min_thinking_budget))) semanticFailures.push("model_thinking_budget");
+    }
+    if (definition.requireAmbientSuggestionSemantics) {
+      const sqliteChecks = Array.isArray(report.sqliteChecks) ? report.sqliteChecks : [];
+      const codexEntries = Array.isArray(report.nameScans?.codexHome?.entries) ? report.nameScans.codexHome.entries : [];
+      const installEntries = Array.isArray(report.nameScans?.installRoot?.entries) ? report.nameScans.installRoot.entries : [];
+      const nameEntries = [...codexEntries, ...installEntries];
+      if (report.reportName !== "ambient-suggestions") semanticFailures.push("ambient_suggestions_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("ambient_suggestions_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("ambient_suggestions_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("ambient_suggestions_behavior_not_covered");
+      if (report.coverageKind !== "installed-no-traffic") semanticFailures.push("ambient_suggestions_coverage_kind");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("ambient_suggestions_failures");
+      if (!sqliteChecks.length) semanticFailures.push("ambient_suggestions_sqlite_missing");
+      if (sqliteChecks.some((item) => (Array.isArray(item?.tableHits) && item.tableHits.length) || (Array.isArray(item?.columnHits) && item.columnHits.length) || (Array.isArray(item?.targetHits) && item.targetHits.length))) semanticFailures.push("ambient_suggestions_sqlite_sources");
+      if (nameEntries.some((item) => item?.allowed !== true)) semanticFailures.push("ambient_suggestions_unallowed_name");
+      if (!report.chromiumOnDeviceHeadSuggestModel || !Number.isFinite(Number(report.chromiumOnDeviceHeadSuggestModel.fileCount))) semanticFailures.push("ambient_suggestions_chromium_probe_missing");
     }
     if (definition.requireUiIdleSemantics) {
       const samples = Array.isArray(report.samples) ? report.samples : [];
@@ -1128,6 +1243,11 @@ function gateGuidance(gate) {
 const realTrafficRefreshOrder = [
   ["accountProxyReadiness", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-account-proxy-readiness.ps1 -TimeoutSec 120"],
   ["codexResponses", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-codex-responses.ps1 -TimeoutSec 90"],
+  ["uiChatSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --timeout-ms 90000"],
+  ["uiWebSearchSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode web-search --timeout-ms 90000"],
+  ["uiLocalProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode local-project --timeout-ms 120000"],
+  ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],
+  ["uiReportSiteSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode report-site --timeout-ms 150000"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
   ["customToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-custom-tool-loop.ps1 -TimeoutSec 90"],
   ["nativeToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-native-tool-loop.ps1 -TimeoutSec 90"],
@@ -1138,6 +1258,7 @@ const realTrafficRefreshOrder = [
   ["cancellation", "real-traffic-session-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cancellation.ps1 -TimeoutSec 90"],
   ["realMiniTool", "real-traffic-high-impact", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-real-mini-tool.ps1 -TimeoutSec 90 -AllowRealTraffic"],
   ["realWork", "real-traffic-high-impact", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-real-work.ps1 -TimeoutSec 90 -AllowRealTraffic"],
+  ["realSmallProject", "real-traffic-high-impact", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-real-small-project.ps1 -TimeoutSec 120 -AllowRealTraffic"],
   ["postVerification", "real-traffic-final", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10"],
 ];
 
@@ -1171,6 +1292,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["uiIdleStability", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-ui-idle-stability.ps1 -DurationSec 20 -IntervalSec 5 -TimeoutSec 8 -SkipManagerActionProbe", { requiresGatewayStart: true }],
   ["syncReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-sync-readiness.ps1"],
   ["modelThinking", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-model-thinking.ps1 -TimeoutSec 8", { requiresGatewayStart: true }],
+  ["ambientSuggestions", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-ambient-suggestions.ps1"],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -1244,7 +1366,7 @@ function rawGateOrderedActions(gate) {
     const index = realTrafficRefreshOrder.findIndex(([id]) => id === gate.id);
     if (index < 0) return [];
     const [id, phase, command] = realTrafficRefreshOrder[index];
-    return [...semanticReportOnlyAction(gate), action(id, phase, command, { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "postVerification"].includes(id) })];
+    return [...semanticReportOnlyAction(gate), action(id, phase, command, { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: ["realMiniTool", "realWork", "realSmallProject", "postVerification"].includes(id) })];
   }
   if ((gate?.group === "soak" || gate?.group === "cold") && Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     const index = optionalEvidenceRefreshOrder.findIndex(([id]) => id === gate.id);
@@ -1333,13 +1455,24 @@ function collectOrderedNextActions(failureReasons) {
   return items;
 }
 
+const NEXT_ACTION_LIMIT = 32;
+
+function visibleNextActions(available) {
+  const actions = available.slice(0, NEXT_ACTION_LIMIT);
+  const finalVerification = available.find((item) => item.id === "postVerification");
+  if (finalVerification && !actions.some((item) => item.id === "postVerification") && actions.length > 0) {
+    actions[actions.length - 1] = finalVerification;
+  }
+  return actions;
+}
+
 function orderedNextActions(failureReasons) {
-  return collectOrderedNextActions(failureReasons).slice(0, 32);
+  return visibleNextActions(collectOrderedNextActions(failureReasons));
 }
 
 function summarizeNextActions(failureReasons) {
   const available = collectOrderedNextActions(failureReasons);
-  const actions = available.slice(0, 32);
+  const actions = visibleNextActions(available);
   return {
     actions,
     allActions: available,
@@ -1540,7 +1673,7 @@ if (args.has("--self-test")) {
         },
       },
       skills: {
-        count: 1,
+        count: 2,
         sharedCount: 1,
         agentsCount: 0,
         expectedSharedCount: 1,
@@ -1609,6 +1742,24 @@ if (args.has("--self-test")) {
         { id: "fake", display_name: "", reasoning_level: "", supports_thinking: false, thinking_budget: 1, min_thinking_budget: 32 },
         { id: "fake", display_name: "duplicate", reasoning_level: "low", supports_thinking: true, thinking_budget: 16, min_thinking_budget: 32 },
       ],
+    });
+
+    writeFakeLatestReport("latest-ambient-suggestions.json", {
+      ok: true,
+      reportName: "wrong-ambient-suggestions",
+      noTraffic: false,
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      failures: ["ambient job found"],
+      nameScans: {
+        codexHome: { entries: [{ path: "ambient-task.json", allowed: false }] },
+        installRoot: { entries: [] },
+      },
+      sqliteChecks: [
+        { tableHits: ["ambient_suggestions"], columnHits: [], targetHits: [] },
+      ],
+      chromiumOnDeviceHeadSuggestModel: {},
     });
 
     writeFakeLatestReport("latest-ui-idle-stability.json", {
@@ -1741,6 +1892,47 @@ if (args.has("--self-test")) {
       failures: [],
     });
 
+    writeFakeLatestReport("latest-ui-chat-smoke.json", {
+      ok: true,
+      reportName: "wrong-ui-chat-smoke",
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      failures: ["still thinking"],
+      marker: "UI_CHAT_SMOKE_MARKER",
+      markerCount: 1,
+      clicked: false,
+      composerCleared: false,
+      activeReconnectSeen: true,
+      lastSample: "no assistant reply",
+      antigravitySessionLock: { active: true, queued: 1 },
+    });
+
+    const invalidUiTaskReport = (reportName, taskMode, marker = "UI_TASK_MARKER") => ({
+      ok: true,
+      reportName: `wrong-${reportName}`,
+      taskMode: `wrong-${taskMode}`,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      failures: ["still thinking"],
+      marker,
+      answerMarkerCount: 0,
+      clicked: false,
+      composerCleared: false,
+      activeReconnectSeen: true,
+      sessionLockClear: false,
+      lastSample: "no final desktop answer",
+      antigravitySessionLock: { active: true, queued: 1 },
+      artifactEvidence: { files: {}, doneExact: false },
+    });
+    writeFakeLatestReport("latest-ui-web-search-smoke.json", invalidUiTaskReport("ui-web-search-smoke", "web-search", "UI_WEB_SEARCH_MARKER"));
+    writeFakeLatestReport("latest-ui-local-project-smoke.json", invalidUiTaskReport("ui-local-project-smoke", "local-project", "UI_LOCAL_PROJECT_MARKER"));
+    writeFakeLatestReport("latest-ui-coding-project-smoke.json", invalidUiTaskReport("ui-coding-project-smoke", "coding-project", "UI_CODING_PROJECT_MARKER"));
+    writeFakeLatestReport("latest-ui-report-site-smoke.json", invalidUiTaskReport("ui-report-site-smoke", "report-site", "UI_REPORT_SITE_MARKER"));
+
     writeFakeLatestReport("latest-tool-loop.json", {
       ok: true,
       call_id: "",
@@ -1860,6 +2052,24 @@ if (args.has("--self-test")) {
       artifact: { exists: false, ran: false, markerMatched: false },
       executor: { tool: "wrong", realFileWrite: false, realMcp: { ok: false, markerObserved: false } },
       final_text: "FILE failed",
+    });
+
+    writeFakeLatestReport("latest-real-small-project.json", {
+      ok: true,
+      reportName: "real-small-project",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic-small-project",
+      first_response_id: "",
+      call_id: "",
+      artifact: {
+        files: ["package.json"],
+        testPassed: false,
+        cliPassed: false,
+        markerMatched: false,
+      },
+      final_text: "SMALL_PROJECT failed",
     });
 
     writeFakeLatestReport("latest-third-party-provider.json", {
@@ -2012,6 +2222,20 @@ if (args.has("--self-test")) {
       "model_thinking_reasoning_level",
       "model_thinking_supports_thinking",
       "model_thinking_budget",
+    ]);
+    semanticFailures.ambientSuggestions = assertSemanticFailures("ambientSuggestions", "self-test failed: semantically invalid ambient-suggestions report satisfied the gate", [
+      "expected_no_real_traffic",
+      "expected_behavior_covered",
+      "expected_no_real_traffic_coverage_kind",
+      "ambient_suggestions_report_name",
+      "ambient_suggestions_no_traffic",
+      "ambient_suggestions_used_real_traffic",
+      "ambient_suggestions_behavior_not_covered",
+      "ambient_suggestions_coverage_kind",
+      "ambient_suggestions_failures",
+      "ambient_suggestions_sqlite_sources",
+      "ambient_suggestions_unallowed_name",
+      "ambient_suggestions_chromium_probe_missing",
     ]);
     semanticFailures.uiIdleStability = assertSemanticFailures("uiIdleStability", "self-test failed: semantically invalid ui-idle report satisfied the gate", [
       "ui_idle_duration",
@@ -2195,6 +2419,101 @@ if (args.has("--self-test")) {
       "codex_responses_marker_missing",
       "codex_responses_chinese_missing",
     ]);
+    semanticFailures.uiChatSmoke = assertSemanticFailures("uiChatSmoke", "self-test failed: semantically invalid ui-chat-smoke report satisfied the gate", [
+      "ui_chat_smoke_report_name",
+      "ui_chat_smoke_real_traffic_not_requested",
+      "ui_chat_smoke_real_traffic_missing",
+      "ui_chat_smoke_behavior_not_covered",
+      "ui_chat_smoke_coverage_kind",
+      "ui_chat_smoke_failures",
+      "ui_chat_smoke_marker_missing",
+      "ui_chat_smoke_not_sent",
+      "ui_chat_smoke_composer_not_cleared",
+      "ui_chat_smoke_active_reconnect_seen",
+      "ui_chat_smoke_session_lock_not_clear",
+    ]);
+    semanticFailures.uiWebSearchSmoke = assertSemanticFailures("uiWebSearchSmoke", "self-test failed: semantically invalid ui-web-search-smoke report satisfied the gate", [
+      "ui_web_search_smoke_report_name",
+      "ui_web_search_smoke_task_mode",
+      "ui_web_search_smoke_real_traffic_not_requested",
+      "ui_web_search_smoke_real_traffic_missing",
+      "ui_web_search_smoke_behavior_not_covered",
+      "ui_web_search_smoke_coverage_kind",
+      "ui_web_search_smoke_failures",
+      "ui_web_search_smoke_marker_missing",
+      "ui_web_search_smoke_not_sent",
+      "ui_web_search_smoke_composer_not_cleared",
+      "ui_web_search_smoke_active_reconnect_seen",
+      "ui_web_search_smoke_session_lock_not_clear",
+      "ui_web_search_smoke_source_urls_missing",
+    ]);
+    semanticFailures.uiLocalProjectSmoke = assertSemanticFailures("uiLocalProjectSmoke", "self-test failed: semantically invalid ui-local-project-smoke report satisfied the gate", [
+      "ui_local_project_smoke_report_name",
+      "ui_local_project_smoke_task_mode",
+      "ui_local_project_smoke_real_traffic_not_requested",
+      "ui_local_project_smoke_real_traffic_missing",
+      "ui_local_project_smoke_behavior_not_covered",
+      "ui_local_project_smoke_coverage_kind",
+      "ui_local_project_smoke_failures",
+      "ui_local_project_smoke_marker_missing",
+      "ui_local_project_smoke_not_sent",
+      "ui_local_project_smoke_composer_not_cleared",
+      "ui_local_project_smoke_active_reconnect_seen",
+      "ui_local_project_smoke_session_lock_not_clear",
+      "ui_local_project_smoke_indexHtml_missing",
+      "ui_local_project_smoke_readmeMd_missing",
+      "ui_local_project_smoke_doneTxt_missing",
+      "ui_local_project_smoke_done_marker_mismatch",
+    ]);
+    semanticFailures.uiCodingProjectSmoke = assertSemanticFailures("uiCodingProjectSmoke", "self-test failed: semantically invalid ui-coding-project-smoke report satisfied the gate", [
+      "ui_coding_project_smoke_report_name",
+      "ui_coding_project_smoke_task_mode",
+      "ui_coding_project_smoke_real_traffic_not_requested",
+      "ui_coding_project_smoke_real_traffic_missing",
+      "ui_coding_project_smoke_behavior_not_covered",
+      "ui_coding_project_smoke_coverage_kind",
+      "ui_coding_project_smoke_failures",
+      "ui_coding_project_smoke_marker_missing",
+      "ui_coding_project_smoke_not_sent",
+      "ui_coding_project_smoke_composer_not_cleared",
+      "ui_coding_project_smoke_active_reconnect_seen",
+      "ui_coding_project_smoke_session_lock_not_clear",
+      "ui_coding_project_smoke_packageJson_missing",
+      "ui_coding_project_smoke_wordTally_missing",
+      "ui_coding_project_smoke_testFile_missing",
+      "ui_coding_project_smoke_doneTxt_missing",
+      "ui_coding_project_smoke_done_marker_mismatch",
+      "ui_coding_project_smoke_export_missing",
+      "ui_coding_project_smoke_tests_not_passed",
+      "ui_coding_project_smoke_cli_not_passed",
+    ]);
+    semanticFailures.uiReportSiteSmoke = assertSemanticFailures("uiReportSiteSmoke", "self-test failed: semantically invalid ui-report-site-smoke report satisfied the gate", [
+      "ui_report_site_smoke_report_name",
+      "ui_report_site_smoke_task_mode",
+      "ui_report_site_smoke_real_traffic_not_requested",
+      "ui_report_site_smoke_real_traffic_missing",
+      "ui_report_site_smoke_behavior_not_covered",
+      "ui_report_site_smoke_coverage_kind",
+      "ui_report_site_smoke_failures",
+      "ui_report_site_smoke_marker_missing",
+      "ui_report_site_smoke_not_sent",
+      "ui_report_site_smoke_composer_not_cleared",
+      "ui_report_site_smoke_active_reconnect_seen",
+      "ui_report_site_smoke_session_lock_not_clear",
+      "ui_report_site_smoke_reportMd_missing",
+      "ui_report_site_smoke_indexHtml_missing",
+      "ui_report_site_smoke_doneTxt_missing",
+      "ui_report_site_smoke_done_marker_mismatch",
+      "ui_report_site_smoke_report_chinese_missing",
+      "ui_report_site_smoke_html_chinese_missing",
+      "ui_report_site_smoke_report_codex_missing",
+      "ui_report_site_smoke_html_codex_missing",
+      "ui_report_site_smoke_report_urls_missing",
+      "ui_report_site_smoke_html_urls_missing",
+      "ui_report_site_smoke_shared_urls_missing",
+      "ui_report_site_smoke_html_not_complete",
+      "ui_report_site_smoke_html_report_link_missing",
+    ]);
     semanticFailures.optionalRealTraffic = assertSemanticFailures("realThirdPartyProviderOptional", "self-test failed: semantically invalid optional real-traffic report satisfied the gate", [
       "optional_skipped_requested_real_traffic_not_false",
       "optional_skipped_metadata_missing",
@@ -2323,6 +2642,7 @@ if (args.has("--self-test")) {
       "mcp_skills_smoke_not_passed",
       "mcp_skills_real_call_not_passed",
       "mcp_skills_no_agents_skills",
+      "mcp_skills_expected_shared_count",
       "mcp_skills_missing_shared_skills",
       "mcp_skills_extra_local_skills",
       "mcp_skills_conflicting_duplicate_skills",
@@ -2480,6 +2800,16 @@ if (args.has("--self-test")) {
       "real_work_mcp_missing",
       "real_work_final_confirmation_missing",
       "real_work_chinese_missing",
+    ]);
+    semanticFailures.realSmallProject = assertSemanticFailures("realSmallProject", "self-test failed: semantically invalid real-small-project report satisfied the gate", [
+      "real_small_project_first_response_missing",
+      "real_small_project_call_id_missing",
+      "real_small_project_word-tally_mjs_missing",
+      "real_small_project_tests_not_passed",
+      "real_small_project_cli_not_passed",
+      "real_small_project_marker_mismatch",
+      "real_small_project_final_confirmation_missing",
+      "real_small_project_chinese_missing",
     ]);
     semanticFailures.thirdPartyProvider = assertSemanticFailures("thirdPartyProvider", "self-test failed: semantically invalid third-party provider report satisfied the gate", [
       "third_party_provider_report_name",
@@ -2815,7 +3145,7 @@ if (args.has("--self-test")) {
     if (missingShortWithoutActions.length) throw new Error(`self-test failed: short failed gates missing next actions: ${missingShortWithoutActions.join(",")}`);
     if (!sortedActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required"))) throw new Error("self-test failed: nextActions did not preserve gate guidance");
     if (!sortedActions.some((item) => item.id === "accountProxyReadiness" && String(item.guidance || "").includes("real_traffic_evidence_stale"))) throw new Error("self-test failed: real-traffic nextActions did not preserve gate guidance");
-    if (!sortedActions.some((item) => item.id === "realThirdPartyProviderOptional" && item.phase === "optional-real-provider" && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: optional real-provider nextAction missing approval block");
+    if (!allSortedActions.some((item) => item.id === "realThirdPartyProviderOptional" && item.phase === "optional-real-provider" && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: optional real-provider nextAction missing approval block");
     if (!allSortedActions.some((item) => item.id === "providerAntigravityReturnOptional" && item.phase === "optional-antigravity-return" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true && String(item.guidance || "").includes("optional_antigravity_return_required"))) throw new Error("self-test failed: optional Antigravity-return nextAction missing approval block");
     if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const truncatedActions = summarizeNextActions(Array.from({ length: 40 }, (_, index) => ({

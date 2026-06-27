@@ -27,6 +27,7 @@ if (simulatePendingReopen) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.lock");
 let managerActionToken = "";
+const MANAGER_BOOTSTRAP_MAX_ATTEMPTS = 3;
 
 async function acquireManagerButtonLock() {
   const deadline = Date.now() + Math.max(10000, timeoutMs + 5000);
@@ -192,18 +193,18 @@ function realBridgeSource(enabled = !uiOnlyMode) {
   if (!enabled) return "";
   return `
   delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-  window.__ANTICODEX_MANAGER_ACTION_PROMISES__ = {};
-  window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [];
-  window.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = (id, payload) => {
-    const entry = window.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[id];
+  window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ = {};
+  window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__ = [];
+  window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__ = (id, payload) => {
+    const entry = window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__?.[id];
     if (!entry) return;
-    delete window.__ANTICODEX_MANAGER_ACTION_PROMISES__[id];
+    delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[id];
     entry.resolve(payload);
   };
   window.__ANTICODEX_RUN_MANAGER_ACTION__ = (requestedAction) => new Promise((resolve) => {
     const requestId = Date.now() + ":" + Math.random().toString(36).slice(2);
-    window.__ANTICODEX_MANAGER_ACTION_PROMISES__[requestId] = { resolve };
-    window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id: requestId, action: requestedAction });
+    window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[requestId] = { resolve };
+    window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.push({ id: requestId, action: requestedAction });
   });
   window.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
 `;
@@ -226,6 +227,32 @@ function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode) {
     }
   }
 `;
+}
+
+function managerSummaryFromActionPayload(actionName, payload) {
+  const result = payload?.result || payload || {};
+  if (actionName === "refreshStatus") return `\u5237\u65b0\u72b6\u6001\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u5b8c\u6210"}`;
+  if (actionName === "mcpSkills") {
+    const realCallPassed = result.mcp?.smoke?.realCall?.passed === true
+      || result.mcp?.realCallPassed === true
+      || result.mcp?.realCall?.passed === true;
+    return [
+      `MCP/Skill \u6e05\u5355\u53ef\u89c1\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u901a\u8fc7"}`,
+      `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
+      `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1a${realCallPassed ? "node_repl \u901a\u8fc7" : "\u5f85\u590d\u6838"}`,
+    ].join("\n");
+  }
+  if (actionName === "pluginCapabilities") {
+    const capabilities = result.capabilities || {};
+    const note = capabilities.appToolsNote ? `\n\u8bf4\u660e\uff1a${capabilities.appToolsNote}` : "";
+    return [
+      `\u63d2\u4ef6/\u5e94\u7528\u6e05\u5355\u53ef\u89c1\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u901a\u8fc7"}`,
+      `\u5df2\u5b89\u88c5\u63d2\u4ef6 ${capabilities.installedPluginCount ?? "\u672a\u77e5"} / \u8fde\u63a5\u5668 ${capabilities.connectorCount ?? "\u672a\u77e5"}`,
+      `\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a${capabilities.callableState || "checked"}`,
+    ].join("\n") + note;
+  }
+  if (payload?.message) return String(payload.message);
+  return `${actionName}: ${payload?.ok === false ? "failed" : "ok"}`;
 }
 
 if (args.has("--self-test")) {
@@ -315,17 +342,36 @@ async function getManagerActionToken() {
   return await bootstrapManagerActionToken();
 }
 
+function managerBootstrapRetryBudgetMs() {
+  return Math.max(15000, Math.min(60000, timeoutMs));
+}
+
+function managerBootstrapRequestTimeoutMs() {
+  return Math.max(5000, Math.min(30000, Math.ceil(managerBootstrapRetryBudgetMs() / MANAGER_BOOTSTRAP_MAX_ATTEMPTS)));
+}
+
 async function bootstrapManagerActionToken() {
-  const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
-    timeout: 5000,
-    headers: {
-      "origin": baseUrl,
-      "referer": `${baseUrl}/anticodex/manager`,
-    },
-  });
-  managerActionToken = String(bootstrap?.token || "");
-  if (!managerActionToken) throw new Error("Manager bootstrap did not return an action token");
-  return managerActionToken;
+  const deadline = Date.now() + managerBootstrapRetryBudgetMs();
+  let lastError = null;
+  for (let attempt = 1; attempt <= MANAGER_BOOTSTRAP_MAX_ATTEMPTS && Date.now() < deadline; attempt += 1) {
+    try {
+      const bootstrap = await httpJson(`${baseUrl}/anticodex/manager/bootstrap`, {
+        timeout: Math.min(managerBootstrapRequestTimeoutMs(), Math.max(1000, deadline - Date.now())),
+        headers: {
+          "origin": baseUrl,
+          "referer": `${baseUrl}/anticodex/manager`,
+        },
+      });
+      managerActionToken = String(bootstrap?.token || "");
+      if (!managerActionToken) throw new Error("Manager bootstrap did not return an action token");
+      return managerActionToken;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= MANAGER_BOOTSTRAP_MAX_ATTEMPTS || Date.now() >= deadline) break;
+      await sleep(Math.min(1000, 250 * attempt));
+    }
+  }
+  throw new Error(`Manager bootstrap failed after ${MANAGER_BOOTSTRAP_MAX_ATTEMPTS} attempts: ${lastError?.message || "unknown error"}`);
 }
 
 async function postManagerAction(actionName, options = {}) {
@@ -618,9 +664,10 @@ async function evaluate(expression, timeout = 8000) {
 }
 
 async function drainManagerActionQueue() {
+  const drainedPayloads = {};
   const queued = await evaluate(`(() => {
-    const queue = Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__)
-      ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.splice(0)
+    const queue = Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__)
+      ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.splice(0)
       : [];
     return { items: queue };
   })()`, 2500).catch(() => ({ items: [] }));
@@ -631,11 +678,27 @@ async function drainManagerActionQueue() {
     } catch (error) {
       payload = { ok: false, action: item.action, message: error?.message || String(error) };
     }
+    drainedPayloads[item.action] = payload;
+    const managerSummary = managerSummaryFromActionPayload(item.action, payload);
     await evaluate(`(() => {
-      window.__ANTICODEX_RESOLVE_MANAGER_ACTION__?.(${JSON.stringify(item.id)}, ${JSON.stringify(payload)});
+      window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__?.(${JSON.stringify(item.id)}, ${JSON.stringify(payload)});
+      window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
+        ...${JSON.stringify(payload)},
+        action: ${JSON.stringify(item.action)},
+        managerSummary: ${JSON.stringify(managerSummary)},
+        pending: false,
+      };
+      const result = document.querySelector('[data-anticodex-result="action"]');
+      if (result) {
+        result.removeAttribute('data-anticodex-running');
+        result.textContent = ${JSON.stringify(managerSummary)};
+      }
+      document.querySelector('.anticodex-actions')?.removeAttribute('data-anticodex-busy');
+      for (const button of document.querySelectorAll('button[data-action]')) button.disabled = false;
       return true;
     })()`, 2500).catch(() => {});
   }
+  return drainedPayloads;
 }
 
 async function runManagerActionBatch(actions) {
@@ -666,15 +729,21 @@ async function runManagerActionBatch(actions) {
   const closeCenterHitsButton = !!closeCenterTarget?.closest?.('[data-anticodex-close="true"]');
   const closeUpperCenterHitsButton = !!closeUpperCenterTarget?.closest?.('[data-anticodex-close="true"]');
   const closeLowerCenterHitsButton = !!closeLowerCenterTarget?.closest?.('[data-anticodex-close="true"]');
-  if (!closeCenterHitsButton || !closeUpperCenterHitsButton || !closeLowerCenterHitsButton) {
-    return {
-      ok: false,
-      error: "close button hit area is not centered on the visible button",
-      closeCenterHitsButton,
-      closeUpperCenterHitsButton,
-      closeLowerCenterHitsButton,
-    };
-  }
+    if (!closeCenterHitsButton || !closeUpperCenterHitsButton || !closeLowerCenterHitsButton) {
+      return {
+        ok: false,
+        error: "close button hit area is not centered on the visible button",
+        closeCenterHitsButton,
+        closeUpperCenterHitsButton,
+        closeLowerCenterHitsButton,
+      };
+    }
+    const closeHitAreaOk = closeCenterHitsButton && closeUpperCenterHitsButton && closeLowerCenterHitsButton;
+    const closeHitResults = [
+      { name: "center", hit: closeCenterHitsButton },
+      { name: "upper-center", hit: closeUpperCenterHitsButton },
+      { name: "lower-center", hit: closeLowerCenterHitsButton },
+    ];
   const rect = button.getBoundingClientRect();
   const actionCenterX = rect.left + rect.width / 2;
   const actionCenterY = rect.top + rect.height / 2;
@@ -697,22 +766,24 @@ async function runManagerActionBatch(actions) {
   await sleep(50);
   return {
     ok: true,
-    closeCenterHitsButton,
-    closeUpperCenterHitsButton,
-    closeLowerCenterHitsButton,
-    actionCenterHitsButton,
-    label: button.textContent || "",
-    initialText: result.textContent || "",
+      closeCenterHitsButton,
+      closeUpperCenterHitsButton,
+      closeLowerCenterHitsButton,
+      closeHitAreaOk,
+      closeHitResults,
+      actionCenterHitsButton,
+      label: button.textContent || "",
+      initialText: result.textContent || "",
   };
 })()
 `, 12000);
 
     let latest = initial;
     const deadline = Date.now() + timeoutMs;
-    await drainManagerActionQueue();
+    let drainedPayloads = await drainManagerActionQueue();
     while (initial.ok && Date.now() < deadline) {
       await sleep(100);
-      await drainManagerActionQueue();
+      drainedPayloads = { ...drainedPayloads, ...(await drainManagerActionQueue()) };
       latest = await evaluate(`(() => {
         const overlay = document.querySelector("#anticodex-manager-overlay");
         const button = overlay?.querySelector('button[data-action=' + ${safeActionName} + ']') || null;
@@ -726,8 +797,8 @@ async function runManagerActionBatch(actions) {
           buttonPresent: Boolean(button),
           resultPresent: Boolean(result),
           disabled: button?.disabled === true,
-          queueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : null,
-          pendingCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+          queueLength: Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.length : null,
+          pendingCount: Object.keys(window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {}).length,
           lastAction: lastActionResult?.action || "",
           lastOk: lastActionResult?.ok,
           lastPending: lastActionResult?.pending,
@@ -736,6 +807,22 @@ async function runManagerActionBatch(actions) {
           text: result?.textContent || lastActionResult?.managerSummary || "",
         };
       })()`, Math.max(250, Math.min(2500, deadline - Date.now())));
+      const drainedPayload = drainedPayloads[actionName] || null;
+      if (drainedPayload) {
+        const drainedSummary = managerSummaryFromActionPayload(actionName, drainedPayload);
+        latest = {
+          ...latest,
+          disabled: false,
+          queueLength: 0,
+          pendingCount: 0,
+          lastAction: actionName,
+          lastOk: drainedPayload.ok !== false,
+          lastPending: false,
+          lastUiOnly: drainedPayload.uiOnly === true,
+          lastSummary: drainedSummary,
+          text: drainedSummary,
+        };
+      }
       const text = latest.text || latest.lastSummary || "";
       const settled = latest.lastAction === actionName
         && latest.lastPending !== true
@@ -764,6 +851,22 @@ async function runManagerActionBatch(actions) {
       } else {
         if (settled && visibleFinished) break;
       }
+    }
+    const drainedPayload = drainedPayloads[actionName] || null;
+    if (drainedPayload) {
+      const drainedSummary = managerSummaryFromActionPayload(actionName, drainedPayload);
+      latest = {
+        ...latest,
+        disabled: false,
+        queueLength: 0,
+        pendingCount: 0,
+        lastAction: actionName,
+        lastOk: drainedPayload.ok !== false,
+        lastPending: false,
+        lastUiOnly: drainedPayload.uiOnly === true,
+        lastSummary: drainedSummary,
+        text: drainedSummary,
+      };
     }
     const text = latest.text || latest.lastSummary || "";
     const settled = latest.lastAction === actionName
@@ -796,6 +899,9 @@ async function runManagerActionBatch(actions) {
       port,
       target: { id: target.id, title: target.title, url: target.url },
       result: { ...latest, lastUiOnly: uiOnlyMode || latest.lastUiOnly === true, action: actionName, label: initial.label, initialText: initial.initialText, text, initial },
+      managerOpenedNewPage: false,
+      pageTargetCountBeforeManagerOpen: pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length,
+      pageTargetCountAfterManagerOpen: pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length,
     };
     await evaluate(`(() => {
       ${cleanupUiOnlyBridgeSource()}
@@ -949,8 +1055,8 @@ const initial = await evaluate(`
     actionCount: overlay.querySelectorAll("button[data-action]").length,
     busyAttr: overlay.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") || "",
     runningMarker: result?.getAttribute("data-anticodex-running") || "",
-    queueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : null,
-    pendingCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+    queueLength: Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.length : null,
+    pendingCount: Object.keys(window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {}).length,
     text: result?.textContent || "",
   };
 })()
@@ -1066,7 +1172,7 @@ if (simulatePendingReopen) {
 
 let latest = initial;
 const deadline = Date.now() + timeoutMs;
-await drainManagerActionQueue();
+let drainedPayloads = await drainManagerActionQueue();
 const initialUiOnlyFinished = uiOnlyMode
   && !isRunningText(initial.text || "")
   && !isFailureText(initial.text || "")
@@ -1079,7 +1185,7 @@ function remainingActionTimeoutMs() {
 while (initial.ok && Date.now() < deadline) {
   await sleep(Math.min(500, Math.max(50, deadline - Date.now())));
   if (Date.now() >= deadline) break;
-  await drainManagerActionQueue();
+  drainedPayloads = { ...drainedPayloads, ...(await drainManagerActionQueue()) };
   latest = await evaluate(`(() => {
     const overlay = document.querySelector("#anticodex-manager-overlay");
     const button = overlay?.querySelector('button[data-action=' + ${safeAction} + ']');
@@ -1094,8 +1200,8 @@ while (initial.ok && Date.now() < deadline) {
       resultPresent: Boolean(result),
       disabled: button?.disabled === true,
       runningMarker: result?.getAttribute("data-anticodex-running") || "",
-      queueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : null,
-      pendingCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+      queueLength: Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.length : null,
+      pendingCount: Object.keys(window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {}).length,
       lastAction: lastActionResult?.action || "",
       lastOk: lastActionResult?.ok,
       lastUiOnly: lastActionResult?.uiOnly === true,
@@ -1120,7 +1226,25 @@ while (initial.ok && Date.now() < deadline) {
     && isFinishedText(latestText)
     && hasActionSpecificResult(action, latestText);
   const isFastMode = !uiOnlyMode && action === "mcpSkills" && timeoutMs <= 15000;
+  const drainedPayload = drainedPayloads[action];
+  const drainedText = drainedPayload ? managerSummaryFromActionPayload(action, drainedPayload) : "";
+  const drainedFinished = drainedPayload?.ok !== false
+    && !isRunningText(drainedText)
+    && !isFailureText(drainedText)
+    && isFinishedText(drainedText)
+    && (uiOnlyMode || !isUiOnlySmokeText(drainedText))
+    && hasActionSpecificResult(action, drainedText);
   if (uiOnlyFinished) {
+    break;
+  } else if (drainedFinished) {
+    latest = {
+      ...latest,
+      lastAction: action,
+      lastOk: drainedPayload.ok,
+      lastUiOnly: drainedPayload.uiOnly === true,
+      lastSummary: drainedText,
+      text: drainedText,
+    };
     break;
   } else if (isFastMode) {
     const started = latest.disabled || latest.runningMarker === action || isRunningText(latestText);
@@ -1137,7 +1261,9 @@ await evaluate(`(() => {
   return true;
 })()`, 2000).catch(() => {});
 
-const text = latest.text || "";
+const drainedPayload = drainedPayloads[action];
+const drainedText = drainedPayload ? managerSummaryFromActionPayload(action, drainedPayload) : "";
+const text = drainedPayload?.ok !== false && drainedText ? drainedText : (latest.text || "");
 const uiOnlyFinished = uiOnlyMode
   && !latest.disabled
   && !isRunningText(text)
@@ -1159,8 +1285,9 @@ const visibleFinished = !latest.disabled
   && (uiOnlyMode || !isUiOnlySmokeText(text))
   && hasActionSpecificResult(action, text);
 const explicitActionSuccess = visibleFinished
-  && latest.lastAction === action
-  && latest.lastOk !== false;
+  && (latest.lastAction === action || Boolean(drainedPayload))
+  && latest.lastOk !== false
+  && drainedPayload?.ok !== false;
 const ok = Boolean(initial.ok)
   && actionStarted
   && initial.closeHitAreaOk === true

@@ -104,6 +104,53 @@ function listWindowsProcesses() {
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
+test("Antigravity idle lock reap is allowed while later requests are queued", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  assert.match(server, /function releaseIdleAntigravitySessionLockIfSafe/);
+  assert.match(server, /ANTIGRAVITY_QUEUED_IDLE_SESSION_RELEASE_MS/);
+  assert.match(server, /ANTIGRAVITY_STREAM_IDLE_TIMEOUT_MS/);
+  assert.match(server, /ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS/);
+  assert.match(server, /refreshStreamIdleTimeout/);
+  assert.match(server, /Anti-Codex Antigravity stream produced no events/);
+  assert.match(server, /antigravity_stream_total_timeout/);
+  assert.match(server, /streamIdleTimedOut/);
+  assert.match(server, /antigravity_stream_idle_timeout/);
+  assert.match(server, /Promise\.race\(\[upstreamRun,\s*streamIdleWait\]\)/);
+  assert.match(server, /releaseIdleActive/);
+  assert.match(server, /Number\(lock\.queued\s*\|\|\s*0\)\s*>\s*0/);
+  assert.match(server, /Math\.min\(ANTIGRAVITY_IDLE_SESSION_RELEASE_MS,\s*ANTIGRAVITY_QUEUED_IDLE_SESSION_RELEASE_MS\)/);
+  assert.doesNotMatch(
+    server,
+    /Number\(queue\.queued\s*\|\|\s*0\)\s*!==\s*0/,
+    "queued follow-up requests must not prevent stale tool-continuation lock cleanup",
+  );
+  assert.match(server, /attachAntigravityStreamingClientAbort/);
+  assert.match(server, /res\.on\?\.\("close", abortStreaming\)/);
+});
+
+test("Antigravity system prompt requires local artifact verification before completion", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(server, /Local artifact completion rule/);
+  assert.match(server, /preserve exact user-provided strings, markers, file names, and paths byte-for-byte/);
+  assert.match(server, /treat them as a checklist/);
+  assert.match(server, /run a follow-up read\/check command before claiming completion/);
+  assert.match(server, /Verify required files exist and required exact marker strings and feature keywords are present/);
+  assert.match(server, /Do not reply with \\"completed\\" merely because a write command exited successfully/);
+  assert.match(server, /prefer shell\/PowerShell file writes over apply_patch/);
+  assert.match(server, /Do not retry a failing apply_patch for a one-off user artifact more than once/);
+  assert.match(server, /This source-file restriction does not apply to user-requested one-off artifact directories outside the current source repo/);
+});
+
+test("Antigravity routes explicit desktop web searches through deterministic internal search", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(server, /preferredInternalWebToolName\(parsed\) === "web_search"/);
+  assert.match(server, /deterministicInternalWebSearchResponse\(parsed,\s*chatBody,\s*routing\)/);
+  assert.doesNotMatch(server, /preferredInternalWebToolName\(parsed\) === "web_search" && chatBodyHasWebDetourPollution/);
+  assert.match(server, /webEvidenceFallbackText\(result,\s*userText,\s*"translator_direct_web_search_before_model"\)/);
+});
+
 test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
 
@@ -156,6 +203,8 @@ test("Anti-Codex recovers a dead translator without restarting its desktop windo
   assert.match(runningMainBranch, /Activate-AntiCodexWindow/);
   assert.doesNotMatch(runningMainBranch, /Stop-Process|StartsWith\(\$installRoot/);
   assert.match(sharedLauncher, /param\s*\(\s*\[switch\]\$TranslatorOnly\s*\)/);
+  assert.match(sharedLauncher, /translator-only start found restart lock; waiting for existing restart owner/);
+  assert.match(sharedLauncher, /ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER/);
 });
 
 test("shared launcher watchdog restores translator while the desktop window is open", () => {
@@ -182,21 +231,49 @@ test("translator watchdog tolerates transient health stalls before restarting", 
   const ensureFunction = sharedLauncher.match(/function Ensure-TranslatorRunning \{[\s\S]*?\n\}/)?.[0];
 
   assert.match(sharedLauncher, /TRANSLATOR_HEALTH_TIMEOUT_MS/);
+  assert.match(sharedLauncher, /TRANSLATOR_LISTEN_HOST[\s\S]*"127\.0\.0\.1"/);
+  assert.doesNotMatch(sharedLauncher, /TRANSLATOR_LISTEN_HOST[\s\S]{0,80}"0\.0\.0\.0"/);
   assert.match(sharedLauncher, /TRANSLATOR_HEALTH_FAILURE_THRESHOLD/);
   assert.match(sharedLauncher, /function Test-TranslatorHealthWithGrace/);
   assert.match(sharedLauncher, /ANTICODEX_TRANSLATOR_BUSY_PATH/);
+  assert.match(sharedLauncher, /ANTICODEX_TRANSLATOR_BUSY_HEALTH_GRACE_SECONDS/);
+  assert.match(sharedLauncher, /ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH/);
+  assert.match(sharedLauncher, /ANTICODEX_TRANSLATOR_RESTART_LOCK_MAX_AGE_SECONDS/);
+  assert.match(
+    sharedLauncher,
+    /\$ANTICODEX_TRANSLATOR_BUSY_HEALTH_GRACE_SECONDS[\s\S]*else \{ 900 \}/,
+    "desktop real-traffic requests must not be killed by the watchdog after a 30-second health stall",
+  );
   assert.match(sharedLauncher, /function Test-TranslatorBusyMarker/);
+  assert.match(sharedLauncher, /function Test-TranslatorBusyRestartGraceActive/);
+  assert.match(sharedLauncher, /function Test-TranslatorRestartLockActive/);
+  assert.match(sharedLauncher, /function Test-TranslatorDiagnosticsBusy/);
+  assert.match(sharedLauncher, /\/anticodex\/diagnostics/);
+  assert.match(sharedLauncher, /activeAntigravityRequests\.active/);
+  assert.match(sharedLauncher, /antigravityQueue\.running/);
+  assert.match(sharedLauncher, /antigravitySessionLock\.queued/);
   assert.ok(ensureFunction, "missing translator watchdog function");
   assert.match(ensureFunction, /Test-TranslatorHealthWithGrace/);
   assert.ok(
+    ensureFunction.indexOf("Test-TranslatorRestartLockActive") < ensureFunction.indexOf("translator health lost; restarting"),
+    "watchdog must honor a sync restart lock before restarting",
+  );
+  assert.ok(
     ensureFunction.indexOf("Test-TranslatorBusyMarker") < ensureFunction.indexOf("translator health lost; restarting"),
-    "watchdog must skip restart while an Antigravity request is busy",
+    "watchdog must evaluate busy state before restarting",
+  );
+  assert.ok(
+    ensureFunction.indexOf("Test-TranslatorDiagnosticsBusy") < ensureFunction.indexOf("translator health lost; restarting"),
+    "watchdog must evaluate diagnostics busy state before restarting",
   );
   assert.ok(
     ensureFunction.indexOf("Test-TranslatorBusyMarker") < ensureFunction.indexOf("Stop-StaleDeepCodexTranslator"),
     "busy marker check must happen before stopping translator processes",
   );
-  assert.match(ensureFunction, /restart skipped/i);
+  assert.match(ensureFunction, /restart skipped within busy grace/i);
+  assert.match(ensureFunction, /translator restart lock is active; watchdog restart skipped/i);
+  assert.match(ensureFunction, /Stop-StaleDeepCodexTranslator[\s\S]{0,160}Start-TranslatorProcess \$FallbackRuntimeBin/);
+  assert.match(ensureFunction, /busy grace expired; forcing restart/i);
   assert.match(ensureFunction, /translator health lost; restarting/i);
 });
 
@@ -488,9 +565,11 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v94/);
-  assert.match(syncReadiness, /native-panel-v94/);
-  assert.match(uiState, /native-panel-v94/);
+  assert.match(managerInject, /native-panel-v96/);
+  assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
+  assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
+  assert.match(syncReadiness, /native-panel-v96/);
+  assert.match(uiState, /native-panel-v96/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -738,9 +817,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v94["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v94"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v94"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v96["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v96"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v96"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -762,6 +841,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /__ANTICODEX_RUN_MANAGER_ACTION__/);
   assert.match(managerBridge, /\/anticodex\/manager\/action/);
   assert.match(managerBridge, /const token = await bootstrapManagerActionToken\(\);[\s\S]*?try \{[\s\S]*?return await postManagerActionWithToken\(token\);/);
+  assert.match(managerBridge, /"x-anticodex-manager-token": token/);
+  assert.doesNotMatch(managerBridge, /"x-anticodex-manager-token": bootstrap\.token/);
   assert.match(managerBridge, /error\?\.statusCode !== 403/);
   assert.match(managerBridge, /return await postManagerActionWithToken\(await bootstrapManagerActionToken\(\)\)/);
   assert.match(managerBridge, /\/backend-api\/ps\/plugins\/installed/);
@@ -1128,7 +1209,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v94/);
+  assert.match(managerOpenInject, /native-panel-v96/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -1292,6 +1373,7 @@ test("Anti-Codex shell shows visible models returned by its local app-server", (
   assert.match(brander, /patchLocalModelAvailability/);
   assert.match(brander, /models-and-reasoning-efforts-/);
   assert.match(brander, /model-list-filter-/);
+  assert.match(brander, /\(\?=\[,;\]\)/);
   assert.match(brander, /amazonBedrock/);
   assert.match(brander, /replacement = `let \$\{match\[1\]\}=\[\],/);
   assert.match(brander, /"local-model-availability"/);
@@ -1312,7 +1394,7 @@ test("Anti-Codex shell loads installed local plugins without ChatGPT catalog syn
   assert.ok(brander.includes(String.raw`/"list-plugins":[\w$]+\(([\w$]+)=>\1\.listPlugins\(\{\}\)\)/.test(text)`));
 });
 
-test("Anti-Codex default runtime config is file-auth and Gemini-first", () => {
+test("Anti-Codex default runtime config is file-auth and Flash-first", () => {
   const config = readFileSync(resolve(root, "codex-home-deepseek-app", "config.adaptive-oneapi.toml"), "utf8");
   const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
   const catalog = JSON.parse(readFileSync(resolve(root, "codex-home-deepseek-app", "deepseek-model-catalog.json"), "utf8"));
@@ -1320,6 +1402,8 @@ test("Anti-Codex default runtime config is file-auth and Gemini-first", () => {
 
   assert.match(config, /cli_auth_credentials_store\s*=\s*"file"/);
   assert.match(config, /model_reasoning_effort\s*=\s*"high"/);
+  assert.match(config, /model\s*=\s*"gemini-3-flash-agent"/);
+  assert.match(launcher, /let defaultModel = isAntigravityMode === "True" \? "gemini-3-flash-agent" : "gpt-5\.5"/);
   assert.equal(slugs[0], "gemini-pro-agent");
   assert.equal(slugs[1], "gemini-3-flash-agent");
   assert.equal(slugs.some((slug) => /^gpt-/i.test(slug)), false);
@@ -1555,6 +1639,10 @@ test("translator-only recovery keeps lightweight snapshots fresh even when DEEPC
   assert.match(launcher, /function Sync-AntiCodexStartupSnapshots/);
   assert.match(launcher, /ANTICODEX_FORCE_STARTUP_SNAPSHOTS/);
   assert.match(launcher, /ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS/);
+  assert.match(launcher, /\$TRANSLATOR_HEALTH_TIMEOUT_MS[\s\S]*else \{ 12000 \}/);
+  assert.match(launcher, /\$PRESERVE_TRANSLATOR_ON_EXIT = \$false/);
+  assert.match(launcher, /\$PRESERVE_TRANSLATOR_ON_EXIT = \$true/);
+  assert.match(launcher, /if \(-not \$PRESERVE_TRANSLATOR_ON_EXIT\) \{/);
   assert.match(launcher, /\.anticodex-startup-snapshots-ready\.json/);
   assert.match(launcher, /anticodex-startup-snapshots-ready-v1/);
   assert.match(launcher, /marker\.sharedCodexHome/);
@@ -1940,6 +2028,7 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   assert.match(runtimeSync, /translator\\antigravity-session-lock\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-work\.ps1/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-mini-tool\.ps1/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-real-small-project\.ps1/);
   assert.match(runtimeSync, /scripts\\test-anticodex-model-switch-history\.ps1/);
   assert.match(runtimeSync, /Copy-AntiCodexRuntimeTree/);
   assert.match(runtimeSync, /robocopy\.exe/);
@@ -1956,6 +2045,14 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   assert.match(runtimeSync, /Wait-AntiCodexHealth -Seconds 1/);
   assert.match(runtimeSync, /\$launchExitCode = if \(\$restartHealthy\) \{ 0 \}/);
   assert.match(runtimeSync, /Stop-AntiCodexTranslator/);
+  assert.match(runtimeSync, /ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER/);
+  assert.match(runtimeSync, /function Stop-ExtraAntiCodexTranslators/);
+  assert.match(runtimeSync, /Stop-ExtraAntiCodexTranslators -KeepPid/);
+  assert.match(runtimeSync, /stoppedExtraTranslatorCount/);
+  assert.match(runtimeSync, /translator-restart\.lock/);
+  assert.match(runtimeSync, /translatorRestartLockCreated/);
+  assert.match(runtimeSync, /WriteAllText\(\$translatorRestartLockPath/);
+  assert.match(runtimeSync, /Remove-Item -LiteralPath \$translatorRestartLockPath/);
   assert.match(runtimeSync, /\/anticodex\/diagnostics/);
   assert.match(runtimeSync, /Wait-AntiCodexSessionLock/);
   assert.match(runtimeSync, /diagnosticsTimeoutSec/);
@@ -1969,6 +2066,7 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
 test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   const miniTool = readFileSync(resolve(root, "scripts", "test-anticodex-real-mini-tool.ps1"), "utf8");
   const realWork = readFileSync(resolve(root, "scripts", "test-anticodex-real-work.ps1"), "utf8");
+  const realSmallProject = readFileSync(resolve(root, "scripts", "test-anticodex-real-small-project.ps1"), "utf8");
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const postVerification = readFileSync(resolve(root, "scripts", "test-anticodex-post-verification.ps1"), "utf8");
 
@@ -2001,6 +2099,20 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(realWork, /\$mcpExecution\s*=\s*Invoke-RealNodeReplMcpResult/);
   assert.match(realWork, /realMcp\s*=\s*\$mcpExecution/);
   assert.match(realWork, /MCP_OK/);
+  assert.match(realSmallProject, /\[switch\]\$AllowRealTraffic/);
+  assert.match(realSmallProject, /if \(-not \$AllowRealTraffic\)/);
+  assert.match(realSmallProject, /name\s*=\s*"write_small_project"/);
+  assert.match(realSmallProject, /tool_choice\s*=\s*"required"/);
+  assert.match(realSmallProject, /previous_response_id/);
+  assert.match(realSmallProject, /function_call_output/);
+  assert.match(realSmallProject, /Invoke-SafeSessionResetIfIdle/);
+  assert.match(realSmallProject, /activeAntigravityRequests/);
+  assert.match(realSmallProject, /resetAntigravitySessionLock/);
+  assert.match(realSmallProject, /word-tally\.test\.mjs/);
+  assert.match(realSmallProject, /node:test failed/);
+  assert.match(realSmallProject, /CLI exited non-zero/);
+  assert.match(realSmallProject, /reportName\s*=\s*"real-small-project"/);
+  assert.match(realSmallProject, /coverageKind\s*=\s*"real-traffic-small-project"/);
   assert.match(miniTool, /\$finalText\s+-match\s+"DeepCodex"/);
   assert.match(realWork, /\$finalText\s+-match\s+"DeepCodex"/);
   assert.match(miniTool, /finally\s*\{[\s\S]*Remove-Item[\s\S]*Exit-AntiCodexRealTrafficLock/);
@@ -2011,6 +2123,9 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(overall, /test-anticodex-real-work\.ps1/);
   assert.match(overall, /Real work task verification/);
   assert.match(overall, /\$checks\.realWork/);
+  assert.match(overall, /test-anticodex-real-small-project\.ps1/);
+  assert.match(overall, /Real small-project task verification/);
+  assert.match(overall, /\$checks\.realSmallProject/);
   assert.match(postVerification, /"-AllowRealTraffic"/);
 });
 
@@ -2065,7 +2180,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v94 manager script/);
+  assert.match(manager, /latest native-panel-v96 manager script/);
   assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -2498,6 +2613,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /providerContinuity: turns=/);
   assert.match(server, /latest-codex-responses\.json/);
   assert.match(server, /latest-real-work\.json/);
+  assert.match(server, /latest-real-small-project\.json/);
   assert.match(server, /latest-native-tool-loop\.json/);
   assert.match(server, /latest-native-multi-tool-loop\.json/);
   assert.match(server, /latest-mcp-tool-loop\.json/);
@@ -2633,6 +2749,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-codex-responses\.json/);
   assert.match(collector, /latest-real-work\.json/);
   assert.match(collector, /latest-real-mini-tool\.json/);
+  assert.match(collector, /latest-real-small-project\.json/);
   assert.match(collector, /latest-native-tool-loop\.json/);
   assert.match(collector, /latest-tool-loop\.json/);
   assert.match(collector, /latest-native-multi-tool-loop\.json/);
@@ -4459,6 +4576,7 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(installedOverall, /latest-source-preflight\.json/);
   assert.match(installedOverall, /latest-real-work\.json/);
   assert.match(installedOverall, /latest-real-mini-tool\.json/);
+  assert.match(installedOverall, /latest-real-small-project\.json/);
   assert.match(installedOverall, /latest-native-multi-tool-loop\.json/);
   assert.match(installedOverall, /latest-custom-tool-loop\.json/);
   assert.match(installedOverall, /latest-cancellation\.json/);
@@ -4593,6 +4711,10 @@ test("Anti-Codex ships a read-only sync readiness verifier", () => {
   assert.match(syncReadiness, /\$rollbackCodexVersion/);
   assert.match(syncReadiness, /rollbackHost = \[pscustomobject\]/);
   assert.match(syncReadiness, /expectedManagerBridgeBaseUrl\s*=\s*"http:\/\/127\.0\.0\.1:8484"/);
+  assert.match(syncReadiness, /allowedManagerBridgeBaseUrls/);
+  assert.match(syncReadiness, /GetHostAddresses/);
+  assert.match(syncReadiness, /Get-ManagerBridgeBaseUrlFromCommandLine/);
+  assert.match(syncReadiness, /hasAllowedBaseUrl/);
   assert.match(syncReadiness, /anticodex-manager-bridge\.mjs/);
   assert.match(syncReadiness, /staleManagerBridgeProcesses/);
   assert.match(syncReadiness, /managerBridge\s*=\s*\[pscustomobject\]/);
@@ -4858,6 +4980,9 @@ test("Anti-Codex bounds the shared Antigravity request queue", () => {
   assert.match(queue, /AntigravityQueueFullError/);
   assert.match(queue, /statusCode\s*=\s*429/);
   assert.match(queue, /type\s*=\s*"antigravity_queue_full"/);
+  assert.match(queue, /Promise\.race\(\[taskPromise,\s*abortWait\]\)/);
+  assert.match(queue, /taskPromise\.catch\(\(\)\s*=>\s*\{\}\)/);
+  assert.match(queue, /cleanupAbortWait/);
   assert.match(queue, /function snapshot\(\)/);
   assert.match(queue, /function cancelAll\(/);
 });
@@ -4994,6 +5119,7 @@ test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   assert.match(overall, /test-anticodex-compaction-resume\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
   assert.match(overall, /test-anticodex-real-mini-tool\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
   assert.match(overall, /test-anticodex-real-work\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
+  assert.match(overall, /test-anticodex-real-small-project\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
   assert.match(overall, /\$healthMode -eq "antigravity" -and \$nativeBridgeEnabled/);
   assert.match(nativeToolLoop, /ConvertFrom-JsonEscapedString/);
   assert.match(nativeToolLoop, /\\u8bf7\\u8c03\\u7528 anticodex_native_marker/);
@@ -5417,6 +5543,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /Invoke-RealMcpListSmoke/);
   assert.match(mcpSkills, /Invoke-LocalJsonWithRetry/);
   assert.match(mcpSkills, /function Get-LocalRequestTimeoutSec/);
+  assert.match(mcpSkills, /if \(\$script:shortBudgetMode\) \{[\s\S]{0,120}\[Math\]::Min\(2, \$TimeoutSec\)/);
+  assert.match(mcpSkills, /\[Math\]::Min\(15, \[int\]\[Math\]::Floor\(\$TimeoutSec \/ 6\)\)/);
   assert.match(mcpSkills, /TimeoutSec = Get-LocalRequestTimeoutSec/);
   assert.match(mcpSkills, /Start-Sleep -Milliseconds/);
   assert.match(mcpSkills, /attempt \$attempt of \$MaxAttempts/);
@@ -5544,6 +5672,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(adaptiveServer, /function defaultExtraSkillsRoots/);
   assert.match(adaptiveServer, /function markerExtraSkillsRootInfo/);
   assert.match(adaptiveServer, /function managerActionArgs/);
+  assert.match(adaptiveServer, /mcpSkills:[\s\S]{0,180}script: "test-anticodex-mcp-skills\.ps1"[\s\S]{0,80}args: \["-TimeoutSec", "120"\]/);
+  assert.match(adaptiveServer, /pluginCapabilities:[\s\S]{0,180}script: "test-anticodex-plugin-capabilities\.ps1"[\s\S]{0,80}args: \["-TimeoutSec", "120"\]/);
   assert.match(adaptiveServer, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
   assert.match(adaptiveServer, /\.agents", "skills"/);
   assert.match(adaptiveServer, /extraSkillsRootsSource/);
@@ -5826,7 +5956,7 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(bridge, /\[int\]\$TimeoutSec = 20/);
   assert.match(bridge, /function Get-RemainingVerifierBudgetMs/);
   assert.match(bridge, /verifier budget exhausted before \$Path request attempt \$attempt/);
-  assert.match(bridge, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(3, \[Math\]::Min\(\$TimeoutSec/);
+  assert.match(bridge, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(8, \[Math\]::Min\(\$TimeoutSec/);
   assert.match(bridge, /TimeoutSec \$requestTimeoutSec/);
   assert.match(diagnostics, /\[int\]\$TimeoutSec = 20/);
   assert.match(bridge, /Start-Sleep -Milliseconds/);
@@ -6572,6 +6702,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /OriginalFilename/);
   assert.match(overall, /test-anticodex-ui-state\.ps1/);
   assert.match(overall, /UI state verification/);
+  assert.match(overall, /\$uiProbeTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(\$TimeoutSec, \[Math\]::Max\(1, \$SubcheckTimeoutSec - 10\)\)\)/);
+  assert.match(overall, /\$uiStateArgs = @\("-BaseUrl", \$BaseUrl, "-TimeoutSec", "\$uiProbeTimeoutSec"\)/);
   assert.match(overall, /if \(\$Fast\) \{ \$uiStateArgs \+= @\("-Fast"\) \}/);
   assert.match(overall, /SubcheckTimeoutSec = 60/);
   assert.match(overall, /function Get-InstalledOverallDiagnosticsSnapshot/);
@@ -6597,8 +6729,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$extraAppToolsFromGet\.Count -eq 0/);
   assert.match(overall, /\[int\]\$capabilities\.unauthorizedAppToolCount -eq 0/);
   assert.match(overall, /\[int\]\$capabilities\.unattributedAppToolCount -eq 0/);
-  assert.match(overall, /\$freshMcpSkillsCheck = if \(\$Fast\) \{ Get-FreshMcpSkillsReportCheck \}/);
-  assert.match(overall, /\$freshPluginCapabilitiesCheck = if \(\$Fast\) \{ Get-FreshPluginCapabilitiesReportCheck \}/);
+  assert.match(overall, /\$freshMcpSkillsCheck = if \(\$Fast -or \$NoTraffic\) \{ Get-FreshMcpSkillsReportCheck \}/);
+  assert.match(overall, /\$freshPluginCapabilitiesCheck = if \(\$Fast -or \$NoTraffic\) \{ Get-FreshPluginCapabilitiesReportCheck \}/);
   assert.match(overall, /function Wait-AntiCodexSubcheckProcess/);
   assert.match(overall, /\$Process\.HasExited/);
   assert.match(overall, /\[void\]\$process\.Handle/);
@@ -6620,7 +6752,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(nodeJsonBody, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.doesNotMatch(nodeJsonBody, /\$output = @\(& \$node/);
   assert.match(overall, /test-anticodex-manager-button\.mjs/);
-  assert.match(overall, /Manager MCP\/Skill button verification/);
+  assert.match(overall, /combined overall skips the long MCP\/Skill Manager click/);
+  assert.match(overall, /test-anticodex-manager-real-buttons\.ps1/);
   assert.match(overall, /combined overall skips the long plugin\/application Manager click/);
   assert.match(overall, /Manager safe button smoke verification/);
   assert.match(overall, /combined overall skips background Manager safe-action batch/);
@@ -6629,11 +6762,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /function Clear-ManagerButtonVerifierLock/);
   assert.match(overall, /anticodex-manager-button\.lock/);
   assert.match(overall, /Node script timed out after \$ProcessTimeoutSec seconds/);
-  assert.match(overall, /--action", "mcpSkills"/);
+  assert.doesNotMatch(overall, /"--action", "mcpSkills", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.doesNotMatch(overall, /--action", "pluginCapabilities"/);
-  assert.match(overall, /\$managerButtonTimeoutMs = \[Math\]::Max\(120000, \[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
-  assert.match(overall, /\$managerButtonProcessTimeoutSec = \[int\]\[Math\]::Ceiling\(\$managerButtonTimeoutMs \/ 1000\) \+ 30/);
-  assert.match(overall, /"--action", "mcpSkills", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.doesNotMatch(overall, /"--action", "pluginCapabilities", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.match(overall, /--verification-mode", "ui-only"/);
   assert.doesNotMatch(overall, /--actions", "mcpSkills,pluginCapabilities"/);
@@ -6647,13 +6777,13 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.doesNotMatch(overall, /fast mode skips Manager MCP\/Skill button smoke/);
   assert.doesNotMatch(overall, /fast mode skips Manager plugin\/application button smoke/);
   assert.match(overall, /fast mode covers plugin\/application button state through UI verification/);
-  assert.match(overall, /\$checks\.managerButtonMcpSkills\.result\.lastUiOnly -ne \$true/);
-  assert.match(overall, /\$checks\.managerButtonPluginCapabilities\.result\.lastUiOnly -ne \$true/);
-  assert.match(overall, /\$checks\.managerButtonPluginCapabilities\.skipped -ne \$true/);
   assert.match(overall, /test-anticodex-manager-action\.ps1/);
   assert.match(overall, /combined overall skips direct Manager action security probe/);
   assert.match(overall, /\$checks\.managerAction = if \(\$Fast -or \$SkipManagerActionProbe\)/);
+  assert.match(overall, /\$checks\.uiIdleStability = if \(\$Fast -or \$SkipManagerActionProbe\)/);
+  assert.match(overall, /"\$\(\[Math\]::Min\(\[Math\]::Max\(\$TimeoutSec, 60\), \[Math\]::Max\(1, \$SubcheckTimeoutSec - 10\)\)\)"/);
   assert.match(overall, /SkipManagerActionProbe skips direct Manager action security probe/);
+  assert.match(overall, /standalone uiIdleStability release gate remains authoritative/);
   assert.match(overall, /SkipUiStateProbe avoids reopening the embedded Manager from inside a Manager action/);
   assert.match(overall, /SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager/);
   assert.match(overall, /function Remove-OldReportHistories/);
@@ -6679,6 +6809,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$checks\.websocketFallback = if \(\$Fast\)/);
   assert.match(overall, /test-anticodex-third-party-provider\.mjs/);
   assert.match(overall, /Third-party provider local end-to-end verification/);
+  assert.match(overall, /function Get-FreshThirdPartyProviderReportCheck/);
+  assert.match(overall, /latest-third-party-provider\.json/);
+  assert.match(overall, /fresh-third-party-provider-report/);
+  assert.match(overall, /\$freshThirdPartyProviderCheck = if \(\$NoTraffic\) \{ Get-FreshThirdPartyProviderReportCheck \}/);
   assert.match(overall, /\$thirdPartyProviderTimeoutMs = 90000/);
   assert.match(overall, /\$thirdPartyProviderProcessTimeoutSec = \[int\]\[Math\]::Ceiling\(\$thirdPartyProviderTimeoutMs \/ 1000\) \+ 15/);
   assert.match(overall, /"--timeout-ms", "\$thirdPartyProviderTimeoutMs"[\s\S]{0,120}\) \$thirdPartyProviderProcessTimeoutSec/);
@@ -6729,8 +6863,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Get-OriginalCodexMainProcesses/);
   assert.match(overall, /\$checks\.independence = if \(\$Fast\)/);
   assert.match(overall, /test-anticodex-mcp-skills\.ps1/);
+  assert.match(overall, /\$freshMcpSkillsCheck = if \(\$Fast -or \$NoTraffic\) \{ Get-FreshMcpSkillsReportCheck \}/);
   assert.match(overall, /New-FastBudgetSkippedCheck "MCP\/skills verification"/);
   assert.match(overall, /test-anticodex-plugin-capabilities\.ps1/);
+  assert.match(overall, /\$freshPluginCapabilitiesCheck = if \(\$Fast -or \$NoTraffic\) \{ Get-FreshPluginCapabilitiesReportCheck \}/);
   assert.match(overall, /New-FastBudgetSkippedCheck "plugin capability verification"/);
   assert.match(overall, /New-SkippedCheck/);
   assert.match(overall, /behaviorCovered = \$false/);
@@ -6746,6 +6882,14 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /standalone verifier remains the authority for token\/source-header checks/);
   assert.match(overall, /test-anticodex-sync-readiness\.ps1/);
   assert.match(overall, /Sync readiness verification/);
+  assert.match(overall, /function Test-SyncReadinessHostSyncOnly/);
+  assert.match(overall, /source_codex_changed/);
+  assert.match(overall, /hostSyncRequired/);
+  assert.match(overall, /overallBlocking/);
+  assert.match(overall, /releaseBlocking/);
+  assert.match(overall, /host_sync_required_not_runtime_unusable/);
+  assert.match(overall, /Remove-Failure "Sync readiness verification failed with exit code 1"/);
+  assert.match(overall, /Remove-Failure "Sync readiness verification reported ok=false"/);
   assert.match(overall, /test-anticodex-mcp-tool-loop\.ps1/);
   assert.match(overall, /MCP tool loop verification/);
   assert.match(overall, /test-anticodex-custom-tool-loop\.ps1/);
@@ -6784,8 +6928,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /HealthPollTimeoutSec/);
   assert.match(overall, /"-ConfirmRelaunch"/);
   assert.doesNotMatch(overall, /"-TimeoutSec", "90"/);
-  assert.match(overall, /IdleStabilityDurationSec = 10/);
+  assert.match(overall, /IdleStabilityDurationSec = 20/);
   assert.match(overall, /\$IdleStabilityDurationSec/);
+  assert.match(overall, /\[Math\]::Max\(\$TimeoutSec, 60\)/);
   assert.match(overall, /IncludeSoak/);
   assert.match(overall, /IncludeColdRelaunch/);
   assert.match(overall, /Proxy\s+\$null/);
@@ -6805,6 +6950,11 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
 
   assert.match(managerButtons, /test-anticodex-manager-button\.mjs/);
   assert.match(managerButtonHelper, /bootstrapManagerActionToken/);
+  assert.match(managerButtonHelper, /MANAGER_BOOTSTRAP_MAX_ATTEMPTS = 3/);
+  assert.match(managerButtonHelper, /managerBootstrapRetryBudgetMs/);
+  assert.match(managerButtonHelper, /managerBootstrapRequestTimeoutMs/);
+  assert.match(managerButtonHelper, /Manager bootstrap failed after/);
+  assert.match(managerButtonHelper, /await sleep\(Math\.min\(1000, 250 \* attempt\)\)/);
   assert.match(managerButtonHelper, /error\?\.statusCode !== 403/);
   assert.match(managerButtonHelper, /postManagerAction\(actionName, \{ refreshToken: true \}\)/);
   assert.match(managerButtons, /viewLatestReports/);
@@ -6812,7 +6962,7 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
   assert.match(managerButtons, /mcpSkills/);
   assert.match(managerButtons, /pluginCapabilities/);
   assert.match(managerButtons, /\[ValidateSet\("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle"\)\]/);
-  assert.match(managerButtons, /\$Actions = @\("mcpSkills", "pluginCapabilities"\)/);
+  assert.match(managerButtons, /\$Actions = @\("pluginCapabilities", "mcpSkills"\)/);
   assert.match(managerButtons, /lastUiOnly -eq \$true/);
   assert.match(managerButtons, /ui-only manager button smoke\|ui-only-manager-button/);
   assert.match(managerButtons, /function Get-ManagerButtonActionResult/);
@@ -6832,6 +6982,8 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
   assert.match(managerButtons, /ECONNRESET\|manager bridge timed out/);
   assert.match(managerButtons, /--action/);
   assert.doesNotMatch(managerButtons, /--actions/);
+  assert.match(managerButtons, /Invoke-ManagerButtonAction \$actionName/);
+  assert.match(managerButtons, /\[Math\]::Max\(1, \$TimeoutSec \+ 20\)/);
   assert.match(managerButtons, /--compact/);
   assert.doesNotMatch(managerButtons, /Stop-Process/);
   assert.doesNotMatch(managerButtons, /chatgpt\.com/);
@@ -6846,6 +6998,9 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.match(verifier, /const actions = /);
   assert.match(verifier, /for \(const actionName of actions\)/);
   assert.match(verifier, /runManagerActionBatch/);
+  assert.match(verifier, /closeHitAreaOk/);
+  assert.match(verifier, /managerOpenedNewPage: false/);
+  assert.match(verifier, /pageTargetCountBeforeManagerOpen/);
   assert.doesNotMatch(verifier, /spawnSync/);
   assert.match(verifier, /Runtime\.executionContextCreated/);
   assert.match(verifier, /Page\.getFrameTree/);
@@ -6868,10 +7023,28 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.match(verifier, /const initialUiOnlyFinished = uiOnlyMode/);
   assert.match(verifier, /initialUiOnlyFinished[\s\S]*\|\| uiOnlyFinished[\s\S]*\|\| initial\.busyAttr === "true"/);
   assert.match(verifier, /__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__/);
+  assert.match(verifier, /__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__/);
+  assert.match(verifier, /__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__/);
+  assert.match(verifier, /__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__/);
+  assert.doesNotMatch(verifier, /window\.__ANTICODEX_MANAGER_ACTION_QUEUE__ = \[\]/);
   assert.match(verifier, /lastActionResult\?\.managerSummary \|\| ""/);
+  assert.match(verifier, /function managerSummaryFromActionPayload/);
+  assert.match(verifier, /const realCallPassed = result\.mcp\?\.smoke\?\.realCall\?\.passed === true/);
+  assert.match(verifier, /result\.mcp\?\.realCallPassed === true/);
+  assert.match(verifier, /drainedPayloads\[item\.action\] = payload/);
+  assert.match(verifier, /const drainedPayload = drainedPayloads\[actionName\] \|\| null/);
+  assert.match(verifier, /lastAction: actionName/);
+  assert.match(verifier, /managerSummaryFromActionPayload\(item\.action, payload\)/);
+  assert.match(verifier, /__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = \{[\s\S]{0,220}managerSummary/);
+  assert.match(verifier, /result\.removeAttribute\('data-anticodex-running'\)/);
+  assert.match(verifier, /result\.textContent = \$\{JSON\.stringify\(managerSummary\)\}/);
+  assert.match(verifier, /removeAttribute\('data-anticodex-busy'\)/);
+  assert.match(verifier, /for \(const button of document\.querySelectorAll\('button\[data-action\]'\)\) button\.disabled = false/);
+  assert.match(verifier, /return drainedPayloads/);
   assert.match(verifier, /latest\.lastAction === action/);
   assert.doesNotMatch(verifier, /if \(visibleFinished\) break/);
-  assert.match(verifier, /const explicitActionSuccess = visibleFinished[\s\S]*&& latest\.lastAction === action/);
+  assert.match(verifier, /const explicitActionSuccess = visibleFinished[\s\S]*\(latest\.lastAction === action \|\| Boolean\(drainedPayload\)\)/);
+  assert.match(verifier, /drainedPayload\?\.ok !== false/);
   assert.match(verifier, /Number\(latest\.pendingCount \|\| 0\) === 0/);
   assert.match(verifier, /function remainingActionTimeoutMs/);
   assert.match(verifier, /Math\.min\(2500, remaining\)/);
@@ -6888,6 +7061,7 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
 
 test("Anti-Codex ships a read-only runtime config verifier", () => {
   const runtimeConfig = readFileSync(resolve(root, "scripts", "test-anticodex-runtime-config.ps1"), "utf8");
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
 
   assert.match(runtimeConfig, /codex-home-deepseek-app/);
   assert.match(runtimeConfig, /config\.toml/);
@@ -6901,6 +7075,8 @@ test("Anti-Codex ships a read-only runtime config verifier", () => {
   assert.match(runtimeConfig, /remote_plugin/);
   assert.match(runtimeConfig, /local Anti-Codex gateway/);
   assert.match(runtimeConfig, /ConvertTo-Json/);
+  assert.match(launcher, /CODEX_APP_SERVER_FORCE_CLI\s*=\s*"1"/);
+  assert.match(launcher, /Remove-Item Env:CODEX_APP_SERVER_WS_URL/);
   assert.doesNotMatch(runtimeConfig, /Stop-Process/);
   assert.doesNotMatch(runtimeConfig, /Start-Process/);
 });
@@ -6970,6 +7146,7 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /SkipFullRegression/);
   assert.match(install, /test-anticodex-source-preflight\.ps1/);
   assert.match(install, /Invoke-AntiCodexSourcePreflight/);
+  assert.match(install, /\$global:LASTEXITCODE = 0[\s\S]{0,80}& \$SOURCE_PREFLIGHT_SCRIPT -SkipFullRegression/);
   assert.match(install, /source preflight failed\. Installation was stopped before copying the host/i);
   assert.match(sync, /test-anticodex-source-preflight\.ps1/);
   assert.match(sync, /source preflight failed\. Sync was stopped before building an update candidate/i);
@@ -7026,12 +7203,24 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiWrapper, /"--manager-probe-timeout-ms"/);
   assert.match(uiWrapper, /\$effectiveManagerProbeTimeoutSec \* 1000/);
   assert.match(uiWrapper, /"--fast", "1"/);
+  assert.match(uiWrapper, /Start-Process -FilePath \$node/);
+  assert.match(uiWrapper, /\$process\.WaitForExit\(\$waitMs\)/);
+  assert.match(uiWrapper, /UI verifier timed out after \$TimeoutSec seconds/);
+  assert.match(uiWrapper, /\$process\.Kill\(\)/);
+  assert.match(uiWrapper, /Get-Content -LiteralPath \$stdoutPath -Encoding UTF8/);
+  assert.match(uiWrapper, /if \(\$parsed\.ok -eq \$true\) \{ exit 0 \}/);
   assert.match(uiScript, /fastUiState/);
+  assert.match(uiScript, /Date\.now\(\) - fs\.statSync\(lockPath\)\.mtimeMs < 5000/);
   assert.match(uiScript, /managerProbeTimeoutMs/);
   assert.match(uiScript, /--manager-probe-timeout-ms/);
   assert.match(uiScript, /dynamicProbeUnavailable/);
   assert.match(uiScript, /context-probe-and-manager-page/);
   assert.match(uiScript, /manager overlay dynamic probe skipped/);
+  assert.match(uiScript, /staticContextCoversManager/);
+  assert.match(uiScript, /manager-inject-skipped-current-context/);
+  assert.match(uiScript, /manager-dynamic-skipped-static-context/);
+  assert.match(uiScript, /static Manager page and live context evidence are current/);
+  assert.match(uiScript, /runtimeParams\(managerInjectSource, \{\s+awaitPromise: false,/);
   assert.doesNotMatch(uiScript, /Math\.max\(timeoutMs, 120000\)/);
   assert.doesNotMatch(uiScript, /Math\.max\(timeoutMs, 40000\)/);
   assert.doesNotMatch(uiScript, /Math\.max\(timeoutMs, 20000\)/);
@@ -7041,16 +7230,25 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /coveredBy: "fast-ui-state"/);
   assert.match(uiScript, /findDefaultContextId/);
   assert.match(uiScript, /contextId/);
-  assert.match(uiScript, /document\.body\.innerText/);
+  assert.match(uiScript, /const shortUiText = \(\) =>/);
+  assert.match(uiScript, /querySelectorAll\(selectors\.join\(","\)\)\)\.slice\(0, 240\)/);
   assert.match(uiScript, /hasLoginText/);
   assert.doesNotMatch(uiScript, /auth\\\/login\|ChatGPT 鐧诲綍\|鐧诲綍 ChatGPT/);
   assert.match(uiScript, /auth\\\/login\|鐧诲綍 ChatGPT\|Sign in to ChatGPT/);
   assert.match(uiScript, /hasReconnectText/);
   assert.match(uiScript, /reconnectPattern/);
+  assert.match(uiScript, /staleTranscriptPattern/);
   assert.match(uiScript, /reconnectEvidence/);
+  assert.match(uiScript, /historicalReconnectEvidence/);
+  assert.match(uiScript, /data-thread-find-target='conversation'/);
   assert.match(uiScript, /pageStateFromContextProbe/);
   assert.match(uiScript, /fallbackFromContextProbe/);
-  assert.match(uiScript, /innerText\.slice\(0, 1200\)/);
+  assert.match(uiScript, /hasModelEvidence/);
+  assert.match(uiScript, /controls\.includes\(label\)/);
+  assert.doesNotMatch(uiScript, /document\.body \? document\.body\.innerText\.slice\(0, 1200\)/);
+  assert.match(uiScript, /modelControlsText/);
+  assert.match(uiScript, /contextProbeHasModelEvidence/);
+  assert.match(uiScript, /modelIds\.includes\(upstreamModel\)/);
   assert.match(uiScript, /contextProbePageState/);
   assert.doesNotMatch(uiScript, /const text = ""/);
   assert.doesNotMatch(uiScript, /hasReconnectText:\s*false/);
@@ -7239,7 +7437,9 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiWrapper, /cua_node\\bin\\node\.exe/);
   assert.match(uiWrapper, /ConvertFrom-Json -ErrorAction Stop/);
   assert.doesNotMatch(uiScript, /click\(/i);
-  assert.doesNotMatch(uiWrapper, /Stop-Process|Start-Process|auth\/login/);
+  assert.match(uiWrapper, /Start-Process -FilePath \$node/);
+  assert.match(uiWrapper, /\$process\.Kill\(\)/);
+  assert.doesNotMatch(uiWrapper, /auth\/login/);
 });
 
 test("Anti-Codex Manager source does not carry known mojibake text", () => {
@@ -7258,6 +7458,8 @@ test("Anti-Codex ships a read-only UI idle stability verifier", () => {
   assert.match(idle, /test-anticodex-ui-state\.ps1/);
   assert.match(idle, /hasReconnectText/);
   assert.match(idle, /hasLoginText/);
+  assert.match(idle, /Get-Content -LiteralPath \$stdoutPath -Encoding UTF8/);
+  assert.match(idle, /Get-Content -LiteralPath \$stderrPath -Encoding UTF8/);
   assert.match(idle, /translator process changed during idle/);
   assert.match(idle, /Anti-Codex main process changed during idle/);
   assert.match(idle, /manager injection watcher count changed during idle/);
@@ -7272,8 +7474,18 @@ test("Anti-Codex ships a read-only UI idle stability verifier", () => {
   assert.match(idle, /ConvertFrom-Json -ErrorAction Stop/);
   assert.match(idle, /function Get-RemainingIdleBudgetMs/);
   assert.match(idle, /UI state verifier timed out after \$RequestTimeoutSec seconds/);
+  assert.match(idle, /\+ 15000\)/);
   assert.match(idle, /\$process\.WaitForExit\(\$waitMs\)/);
+  assert.match(idle, /\$process\.Refresh\(\)/);
   assert.match(idle, /\$process\.Kill\(\)/);
+  assert.match(idle, /uiFailures/);
+  assert.match(idle, /uiExitCode/);
+  assert.match(idle, /\$ui\.PSObject\.Properties\.Name -contains "exitCode"/);
+  assert.doesNotMatch(idle, /Has-Property/);
+  assert.match(idle, /transientUiFailures/);
+  assert.match(idle, /UI state was not ready during warmup/);
+  assert.match(idle, /UI state never reached ready during idle window/);
+  assert.match(idle, /uiSuccessCount/);
   assert.match(idle, /\$sleepMs = \[Math\]::Min/);
   assert.match(idle, /New-ReportPaths "ui-idle-stability"/);
   assert.match(overall, /test-anticodex-ui-idle-stability\.ps1/);
@@ -7290,7 +7502,7 @@ test("UI idle stability verifier bounds a slow child UI state check", async () =
   mkdirSync(scriptsRoot, { recursive: true });
   writeFileSync(resolve(scriptsRoot, "test-anticodex-ui-state.ps1"), [
     "param([int]$TimeoutSec = 8)",
-    "Start-Sleep -Seconds ([Math]::Max(5, $TimeoutSec + 5))",
+    "Start-Sleep -Seconds ([Math]::Max(5, $TimeoutSec + 7))",
     "'{\"ok\":true,\"page\":{\"hasReconnectText\":false,\"hasLoginText\":false},\"matchedModelText\":\"fake\"}'",
   ].join("\n"), "utf8");
   const server = http.createServer((req, res) => {
@@ -7313,15 +7525,16 @@ test("UI idle stability verifier bounds a slow child UI state check", async () =
       "-ReportRoot", reportRoot,
       "-DurationSec", "5",
       "-IntervalSec", "5",
-      "-TimeoutSec", "3",
+      "-TimeoutSec", "2",
       "-SkipManagerActionProbe",
-    ], { encoding: "utf8", timeout: 12000 });
+    ], { encoding: "utf8", timeout: 15000 });
     const elapsedMs = Date.now() - startedAt;
     assert.equal(result.status, 1, result.stderr || result.stdout);
-    assert.ok(elapsedMs < 10000, `UI idle verifier took ${elapsedMs}ms`);
+    assert.ok(elapsedMs < 12000, `UI idle verifier took ${elapsedMs}ms`);
     const report = JSON.parse(readFileSync(resolve(reportRoot, "latest-ui-idle-stability.json"), "utf8"));
     assert.equal(report.ok, false);
-    assert.ok(report.failures.some((failure) => failure.includes("UI state failed")));
+    assert.ok(report.failures.some((failure) => failure.includes("UI state never reached ready")));
+    assert.ok(report.transientUiFailures.some((failure) => failure.includes("warmup")));
     assert.equal(report.samples[0].uiOk, false);
   } finally {
     await new Promise((resolveClose) => server.close(resolveClose));
@@ -7340,7 +7553,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /function Test-InstalledRuntimeEvidence/);
   assert.match(diagnostics, /function Get-RemainingVerifierBudgetMs/);
   assert.match(diagnostics, /verifier budget exhausted before \$Path request attempt \$attempt/);
-  assert.match(diagnostics, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(3, \[Math\]::Min\(\$TimeoutSec/);
+  assert.match(diagnostics, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(8, \[Math\]::Min\(\$TimeoutSec/);
   assert.match(diagnostics, /Start-Process -FilePath \$powerShellBin/);
   assert.match(diagnostics, /\$process\.WaitForExit\(\[Math\]::Max\(1000, \$remainingBudgetMs\)\)/);
   assert.match(diagnostics, /\$ScriptName timed out after/);
@@ -7790,20 +8003,21 @@ test("diagnostics bundle verification bounds a slow collector child", async () =
       "-ExecutionPolicy", "Bypass",
       "-File", resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
       "-VerifyBundle",
-      "-TimeoutSec", "10",
+      "-TimeoutSec", "14",
       "-BaseUrl", `http://127.0.0.1:${port}`,
     ], {
       encoding: "utf8",
-      timeout: 16000,
+      timeout: 22000,
       cwd: tempRoot,
       env: { ...process.env, ANTICODEX_DIAGNOSTICS_SCRIPT_ROOT: tempRoot },
     });
     const elapsedMs = Date.now() - startedAt;
     assert.equal(result.status, 1, result.stderr || result.stdout);
-    assert.ok(elapsedMs < 15000, `diagnostics child verifier took ${elapsedMs}ms`);
+    assert.ok(elapsedMs < 21000, `diagnostics child verifier took ${elapsedMs}ms`);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, false);
-    assert.ok(payload.failures.some((failure) => failure.includes("collect-anticodex-diagnostics.ps1 timed out")));
+    assert.ok(payload.failures.some((failure) => failure.includes("collect-anticodex-diagnostics.ps1")
+      && (failure.includes("timed out") || failure.includes("skipped because verifier budget was exhausted"))));
   } finally {
     await new Promise((resolveClose) => server.close(resolveClose));
     rmSync(tempRoot, { recursive: true, force: true });
@@ -10477,6 +10691,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /mcp_skills_missing_shared_skills/);
   assert.match(releaseGates, /mcp_skills_extra_local_skills/);
   assert.match(releaseGates, /mcp_skills_conflicting_duplicate_skills/);
+  assert.match(releaseGates, /Number\(skills\.expectedSharedCount \|\| 0\) < Number\(skills\.count \|\| 0\)/);
   assert.match(releaseGates, /mcp_skills_real_call_not_passed/);
   assert.match(releaseGates, /mcp_skills_no_agents_skills/);
   assert.match(releaseGates, /requireUsedRealTraffic/);
@@ -10645,6 +10860,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireCodexResponsesSemantics/);
   assert.match(releaseGates, /codex_responses_marker_missing/);
   assert.match(releaseGates, /semantically invalid codex-responses report satisfied the gate/);
+  assert.match(releaseGates, /requireUiChatSmokeSemantics/);
+  assert.match(releaseGates, /latest-ui-chat-smoke\.json/);
+  assert.match(releaseGates, /ui_chat_smoke_marker_missing/);
+  assert.match(releaseGates, /ui_chat_smoke_session_lock_not_clear/);
+  assert.match(releaseGates, /semantically invalid ui-chat-smoke report satisfied the gate/);
   assert.match(releaseGates, /actionPhaseOrder/);
   assert.match(releaseGates, /top-level nextActions did not keep post-verification last/);
   assert.match(releaseGates, /realMiniTool ordered action was not marked gateway\/high-impact/);
@@ -10665,6 +10885,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireInstalledOverallSemantics/);
   assert.match(releaseGates, /installed_overall_coverage_kind/);
   assert.match(releaseGates, /installed_overall_real_traffic_skip_missing/);
+  assert.match(releaseGates, /allowedFullSkipped = new Set\(\[[\s\S]*"managerButtonMcpSkills"[\s\S]*"managerButtonPluginCapabilities"[\s\S]*"uiIdleStability"/);
+  assert.match(releaseGates, /nonBlockingHostSyncCheck/);
+  assert.match(releaseGates, /host_sync_required_not_runtime_unusable/);
+  assert.match(releaseGates, /entry\.value\.overallBlocking === false/);
+  assert.match(releaseGates, /entry\.value\.releaseBlocking === true/);
   assert.match(releaseGates, /--self-test/);
   assert.match(releaseGates, /semantically invalid installed-overall report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid no-traffic report satisfied the gate/);
@@ -10824,6 +11049,173 @@ test("release-required latest reports stay visible in diagnostics, Manager, and 
   }
 });
 
+test("Anti-Codex guards against ambient background suggestions without real traffic", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-ambient-suggestions.ps1"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(verifier, /reportName\s*=\s*"ambient-suggestions"/);
+  assert.match(verifier, /latest-\$Name\.json/);
+  assert.match(verifier, /noTraffic\s*=\s*\$true/);
+  assert.match(verifier, /usedRealTraffic\s*=\s*\$false/);
+  assert.match(verifier, /behaviorCovered\s*=\s*\$true/);
+  assert.match(verifier, /coverageKind\s*=\s*"installed-no-traffic"/);
+  assert.match(verifier, /OnDeviceHeadSuggestModel/);
+  assert.match(verifier, /test-anticodex-ambient-suggestions\\.ps1/);
+  assert.match(verifier, /bodyTextHitCount/);
+  assert.match(verifier, /tableHits/);
+  assert.match(verifier, /columnHits/);
+  assert.match(verifier, /targetHits/);
+  assert.match(verifier, /shared-plugin-host\/skills\/gstack\/scripts\/proactive-suggestions/);
+  assert.match(verifier, /discards_proactive/);
+  assert.match(verifier, /reloads_proactive/);
+
+  assert.match(overall, /ambientSuggestions/);
+  assert.match(overall, /test-anticodex-ambient-suggestions\.ps1/);
+  assert.match(overall, /latest-ambient-suggestions\.json/);
+  assert.match(collector, /latest-ambient-suggestions\.json/);
+  assert.match(collector, /ambientSuggestionsEvidence = \$json\.ambientSuggestionsEvidence/);
+  assert.match(server, /latest-ambient-suggestions\.json/);
+  assert.match(summarizer, /ambientSuggestionsEvidence/);
+
+  assert.match(releaseGates, /id:\s*"ambientSuggestions"[\s\S]*?file:\s*"latest-ambient-suggestions\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireAmbientSuggestionSemantics:\s*true/);
+  assert.match(releaseGates, /ambient_suggestions_report_name/);
+  assert.match(releaseGates, /ambient_suggestions_used_real_traffic/);
+  assert.match(releaseGates, /ambient_suggestions_failures/);
+  assert.match(releaseGates, /ambient_suggestions_sqlite_sources/);
+});
+
+test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
+  const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(verifier, /const reportName = [\s\S]*"ui-chat-smoke"/);
+  assert.match(verifier, /"ui-local-project-smoke"/);
+  assert.match(verifier, /"ui-coding-project-smoke"/);
+  assert.match(verifier, /"ui-report-site-smoke"/);
+  assert.match(verifier, /let cdpPort = Number\(args\.get\("--cdp-port"\) \|\| process\.env\.DEEPCODEX_CDP_PORT \|\| 58318\)/);
+  assert.match(verifier, /async function resolveCdpTargets/);
+  assert.match(verifier, /\[58318, 58317\]/);
+  assert.match(verifier, /ui-chat-smoke\.lock/);
+  assert.match(verifier, /async function acquireUiSmokeLock/);
+  assert.match(verifier, /process\.once\("exit", \(\) => releaseUiLock\?\.\(\)\)/);
+  assert.match(verifier, /another desktop UI smoke is still running/);
+  assert.match(verifier, /function recoverStaleComposerExpression/);
+  assert.match(verifier, /删除排队的消息/);
+  assert.match(verifier, /function sendButtonProbeExpression/);
+  assert.match(verifier, /data-codex-composer/);
+  assert.match(verifier, /size-token-button-composer/);
+  assert.match(verifier, /aria-disabled/);
+  assert.match(verifier, /data-disabled/);
+  assert.match(verifier, /composer did not contain exactly the submitted prompt before clicking send/);
+  assert.match(verifier, /send button was not found in the composer controls/);
+  assert.match(verifier, /send click did not submit the composer prompt/);
+  assert.match(verifier, /submitSucceeded/);
+  assert.match(verifier, /submitEvidence/);
+  assert.match(verifier, /staleRecovery/);
+  assert.match(verifier, /Search the web for recent Codex updates/);
+  assert.match(verifier, /Use PowerShell file commands to create exactly these files/);
+  assert.match(verifier, /Do not inspect Antigravity brain, transcript, history, or log folders/);
+  assert.match(verifier, /taskMode === "local-project"/);
+  assert.match(verifier, /function verifyLocalProjectArtifact/);
+  assert.match(verifier, /function verifyCodingProjectArtifact/);
+  assert.match(verifier, /function verifyReportSiteArtifact/);
+  assert.match(verifier, /node:test did not pass/);
+  assert.match(verifier, /execFileSync\(process\.execPath, \["--test", testPath\]/);
+  assert.match(verifier, /CLI output did not contain red=2 and blue=1/);
+  assert.match(verifier, /report-site report\.md was not created/);
+  assert.match(verifier, /report-site index\.html has fewer than three source URLs/);
+  assert.match(verifier, /report-site report\.md missing Chinese content/);
+  assert.match(verifier, /local-project done\.txt did not exactly match the marker/);
+  assert.match(verifier, /artifactEvidence/);
+  assert.match(verifier, /artifactDir/);
+  assert.match(verifier, /requestedRealTraffic:\s*true/);
+  assert.match(verifier, /usedRealTraffic:\s*true/);
+  assert.match(verifier, /coverageKind:\s*"desktop-ui-real-traffic"/);
+  assert.match(verifier, /markerCount/);
+  assert.match(verifier, /answerMarkerCount/);
+  assert.match(verifier, /inLoopIdleDiagnostics/);
+  assert.match(verifier, /inLoopIdleObserved/);
+  assert.match(verifier, /composerCleared/);
+  assert.match(verifier, /sessionLockClear/);
+  assert.match(verifier, /function diagnosticsAreIdle/);
+  assert.match(verifier, /async function waitForIdleDiagnostics/);
+  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "report-site" \? 60_000 : 20_000/);
+  assert.match(verifier, /desktop task did not become idle after the assistant reply/);
+  assert.match(verifier, /antigravitySessionLock/);
+  assert.match(verifier, /activeAntigravityRequests/);
+  assert.match(verifier, /antigravityQueue/);
+  assert.match(verifier, /diagnostics endpoint did not respond after desktop task/);
+  assert.match(verifier, /desktop task left the Antigravity session lock active/);
+  assert.match(verifier, /latest-\$\{reportName\}\.json/);
+
+  assert.match(overall, /uiChatSmoke/);
+  assert.match(overall, /test-anticodex-ui-chat-smoke\.mjs/);
+  assert.match(overall, /latest-ui-chat-smoke\.json/);
+  assert.match(overall, /latest-ui-local-project-smoke\.json/);
+  assert.match(overall, /latest-ui-coding-project-smoke\.json/);
+  assert.match(overall, /latest-ui-report-site-smoke\.json/);
+  assert.match(collector, /latest-ui-chat-smoke\.json/);
+  assert.match(collector, /latest-ui-local-project-smoke\.json/);
+  assert.match(collector, /latest-ui-coding-project-smoke\.json/);
+  assert.match(collector, /latest-ui-report-site-smoke\.json/);
+  assert.match(collector, /uiChatSmokeEvidence = \$json\.uiChatSmokeEvidence/);
+  assert.match(collector, /uiLocalProjectEvidence = \$json\.uiLocalProjectEvidence/);
+  assert.match(collector, /uiCodingProjectEvidence = \$json\.uiCodingProjectEvidence/);
+  assert.match(collector, /uiReportSiteEvidence = \$json\.uiReportSiteEvidence/);
+  assert.match(signer, /latest-ui-local-project-smoke\.json/);
+  assert.match(signer, /latest-ui-coding-project-smoke\.json/);
+  assert.match(signer, /latest-ui-report-site-smoke\.json/);
+  assert.match(server, /latest-ui-chat-smoke\.json/);
+  assert.match(server, /latest-ui-local-project-smoke\.json/);
+  assert.match(server, /latest-ui-coding-project-smoke\.json/);
+  assert.match(server, /latest-ui-report-site-smoke\.json/);
+  assert.match(server, /uiCodingProjectEvidence/);
+  assert.match(server, /uiReportSiteEvidence/);
+  assert.match(server, /uiCoding:/);
+  assert.match(server, /uiReportSite:/);
+  assert.match(summarizer, /uiChatSmokeEvidence/);
+  assert.match(summarizer, /uiLocalProjectEvidence/);
+  assert.match(summarizer, /uiCodingProjectEvidence/);
+  assert.match(summarizer, /uiReportSiteEvidence/);
+  assert.match(summarizer, /reportHasMarker/);
+  assert.match(summarizer, /htmlHasMarker/);
+  assert.match(summarizer, /reportHasChinese/);
+  assert.match(summarizer, /htmlHasChinese/);
+  assert.match(summarizer, /reportMentionsCodex/);
+  assert.match(summarizer, /htmlMentionsCodex/);
+
+  assert.match(releaseGates, /id:\s*"uiChatSmoke"[\s\S]*?file:\s*"latest-ui-chat-smoke\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireUiChatSmokeSemantics:\s*true/);
+  assert.match(releaseGates, /ui_chat_smoke_marker_missing/);
+  assert.match(releaseGates, /ui_chat_smoke_session_lock_not_clear/);
+  const requiredReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*true[^}]*\}/g), (match) => match[1]))).sort();
+  assert.ok(!requiredReports.includes("latest-ui-coding-project-smoke.json"), "desktop coding project evidence must be visible without becoming release-required");
+  assert.ok(!requiredReports.includes("latest-ui-report-site-smoke.json"), "desktop report-site evidence must be visible without becoming release-required");
+});
+
+test("Anti-Codex completes verified desktop artifact tool loops without reopening Antigravity", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(server, /function requestIncludesToolOutput/);
+  assert.match(server, /function deterministicArtifactCompletionResponse/);
+  assert.match(server, /Anti-Codex artifact marker verification/);
+  assert.match(server, /Files created and verified/);
+  assert.match(server, /const artifactCompletion = deterministicArtifactCompletionResponse\(parsed, chatBody\)/);
+  assert.match(server, /settleAntigravitySessionLease\(sessionLease, fmt\)/);
+  assert.match(server, /artifactCompletion[\s\S]*?return parsed\.stream === false \? jsonResponse\(res, 200, fmt\) : pipeSSE\(res, fmt\)/);
+});
+
 test("optional and special latest reports stay visible without becoming release-required", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
@@ -10834,6 +11226,8 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-diagnostics.json",
     "latest-release-gates.json",
     "latest-shortcut-repair.json",
+    "latest-ui-coding-project-smoke.json",
+    "latest-ui-report-site-smoke.json",
   ];
 
   assert.deepEqual(optionalReports, [

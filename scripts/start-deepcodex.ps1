@@ -28,11 +28,14 @@ $TRANSLATOR_URL = if ($env:TRANSLATOR_URL) { $env:TRANSLATOR_URL } else { "http:
 $TRANSLATOR_LOG = if ($env:TRANSLATOR_LOG) { $env:TRANSLATOR_LOG } else { Join-Path $DEEPCODEX_STATE_ROOT "adaptive-translator.log" }
 $TRANSLATOR_ERR_LOG = if ($env:TRANSLATOR_ERR_LOG) { $env:TRANSLATOR_ERR_LOG } else { Join-Path $DEEPCODEX_STATE_ROOT "adaptive-translator.err.log" }
 $TRANSLATOR_START_LOG = Join-Path $DEEPCODEX_STATE_ROOT "adaptive-translator-start.log"
-$TRANSLATOR_HEALTH_TIMEOUT_MS = if ($env:TRANSLATOR_HEALTH_TIMEOUT_MS) { [int]$env:TRANSLATOR_HEALTH_TIMEOUT_MS } else { 4000 }
+$TRANSLATOR_HEALTH_TIMEOUT_MS = if ($env:TRANSLATOR_HEALTH_TIMEOUT_MS) { [int]$env:TRANSLATOR_HEALTH_TIMEOUT_MS } else { 12000 }
 $TRANSLATOR_HEALTH_FAILURE_THRESHOLD = if ($env:TRANSLATOR_HEALTH_FAILURE_THRESHOLD) { [int]$env:TRANSLATOR_HEALTH_FAILURE_THRESHOLD } else { 3 }
 $TRANSLATOR_HEALTH_RETRY_DELAY_MS = if ($env:TRANSLATOR_HEALTH_RETRY_DELAY_MS) { [int]$env:TRANSLATOR_HEALTH_RETRY_DELAY_MS } else { 1000 }
 $ANTICODEX_TRANSLATOR_BUSY_PATH = if ($env:ANTICODEX_TRANSLATOR_BUSY_PATH) { $env:ANTICODEX_TRANSLATOR_BUSY_PATH } else { Join-Path $DEEPCODEX_STATE_ROOT "translator-busy.json" }
 $ANTICODEX_TRANSLATOR_BUSY_MAX_AGE_SECONDS = if ($env:ANTICODEX_TRANSLATOR_BUSY_MAX_AGE_SECONDS) { [int]$env:ANTICODEX_TRANSLATOR_BUSY_MAX_AGE_SECONDS } else { 900 }
+$ANTICODEX_TRANSLATOR_BUSY_HEALTH_GRACE_SECONDS = if ($env:ANTICODEX_TRANSLATOR_BUSY_HEALTH_GRACE_SECONDS) { [int]$env:ANTICODEX_TRANSLATOR_BUSY_HEALTH_GRACE_SECONDS } else { 900 }
+$ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH = if ($env:ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH) { $env:ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH } else { Join-Path $DEEPCODEX_STATE_ROOT "translator-restart.lock" }
+$ANTICODEX_TRANSLATOR_RESTART_LOCK_MAX_AGE_SECONDS = if ($env:ANTICODEX_TRANSLATOR_RESTART_LOCK_MAX_AGE_SECONDS) { [int]$env:ANTICODEX_TRANSLATOR_RESTART_LOCK_MAX_AGE_SECONDS } else { 180 }
 $DEEP_CODEX_ENV_FILE = if ($env:DEEP_CODEX_ENV_FILE) { $env:DEEP_CODEX_ENV_FILE } else { Join-Path $DEEPCODEX_STATE_ROOT ".deepcodex.env" }
 $SETUP_OUT_LOG = Join-Path $DEEPCODEX_STATE_ROOT ".deepcodex-setup-last.out.log"
 $SETUP_ERR_LOG = Join-Path $DEEPCODEX_STATE_ROOT ".deepcodex-setup-last.err.log"
@@ -133,6 +136,7 @@ $env:CODEX_HOME = $CODEX_HOME_DIR
 $env:GLOBAL_CODEX_HOME = $GLOBAL_CODEX_HOME
 $env:DEEPCODEX_SHARED_CODEX_HOME = $GLOBAL_CODEX_HOME
 $TRANSLATOR_PROC = $null
+$PRESERVE_TRANSLATOR_ON_EXIT = $false
 $DEEPCODEX_START_MUTEX = $null
 $DEEPCODEX_START_MUTEX_HELD = $false
 $ANTIGRAVITY_DESKTOP_HELPER = Join-Path $PSScriptRoot "antigravity-desktop.ps1"
@@ -274,9 +278,8 @@ function Set-AntiCodexTranslatorEndpointDefaults {
     } else {
         $script:TRANSLATOR_URL = $env:TRANSLATOR_URL
     }
-    # Listen on all interfaces so 127.0.0.1 always reaches the management page
     if (-not $env:TRANSLATOR_LISTEN_HOST) {
-        $env:TRANSLATOR_LISTEN_HOST = "0.0.0.0"
+        $env:TRANSLATOR_LISTEN_HOST = "127.0.0.1"
     }
 }
 
@@ -519,6 +522,67 @@ function Test-TranslatorBusyMarker {
         if ($pidValue -le 0) { return $true }
     } catch {}
     return $false
+}
+
+function Get-TranslatorBusyMarkerAgeSeconds {
+    if (-not (Test-Path -LiteralPath $ANTICODEX_TRANSLATOR_BUSY_PATH -PathType Leaf)) { return $null }
+    try {
+        $item = Get-Item -LiteralPath $ANTICODEX_TRANSLATOR_BUSY_PATH -ErrorAction Stop
+        return [int]([DateTime]::UtcNow - $item.LastWriteTimeUtc).TotalSeconds
+    } catch {
+        return $null
+    }
+}
+
+function Test-TranslatorBusyRestartGraceActive {
+    $ageSeconds = Get-TranslatorBusyMarkerAgeSeconds
+    if ($null -eq $ageSeconds) { return $false }
+    return $ageSeconds -le [Math]::Max(1, $ANTICODEX_TRANSLATOR_BUSY_HEALTH_GRACE_SECONDS)
+}
+
+function Test-TranslatorRestartLockActive {
+    if (-not (Test-Path -LiteralPath $ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH -PathType Leaf)) { return $false }
+    try {
+        $item = Get-Item -LiteralPath $ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH -ErrorAction Stop
+        return (([DateTime]::UtcNow - $item.LastWriteTimeUtc).TotalSeconds -le [Math]::Max(1, $ANTICODEX_TRANSLATOR_RESTART_LOCK_MAX_AGE_SECONDS))
+    } catch {
+        return $false
+    }
+}
+
+function Get-TranslatorDiagnosticsSnapshot {
+    $response = $null
+    $reader = $null
+    try {
+        $request = [System.Net.WebRequest]::Create("$TRANSLATOR_URL/anticodex/diagnostics")
+        $request.Proxy = $null
+        $request.Timeout = $TRANSLATOR_HEALTH_TIMEOUT_MS
+        $response = $request.GetResponse()
+        if ([int]$response.StatusCode -ne 200) { return $null }
+        $reader = New-Object IO.StreamReader($response.GetResponseStream())
+        return ($reader.ReadToEnd() | ConvertFrom-Json)
+    } catch {
+        return $null
+    } finally {
+        if ($reader) { $reader.Dispose() }
+        if ($response) { $response.Dispose() }
+    }
+}
+
+function Test-TranslatorDiagnosticsBusy {
+    $diagnostics = Get-TranslatorDiagnosticsSnapshot
+    if (-not $diagnostics -or -not $diagnostics.ok) { return $false }
+    $activeRequests = 0
+    $queueRunning = $false
+    $queueQueued = 0
+    $lockActive = $false
+    $lockQueued = 0
+    try { $activeRequests = [int]$diagnostics.activeAntigravityRequests.active } catch {}
+    try { $queueRunning = [bool]$diagnostics.antigravityQueue.running } catch {}
+    try { $queueQueued = [int]$diagnostics.antigravityQueue.queued } catch {}
+    try { $lockActive = [bool]$diagnostics.antigravitySessionLock.active } catch {}
+    try { $lockQueued = [int]$diagnostics.antigravitySessionLock.queued } catch {}
+    return ($activeRequests -gt 0 -or $queueRunning -or $queueQueued -gt 0 -or ($lockActive -and $lockQueued -gt 0))
 }
 
 function Write-TranslatorStartLog {
@@ -779,9 +843,16 @@ function Ensure-TranslatorRunning {
         [string]$FallbackRuntimeBin
     )
     if (Test-TranslatorHealthWithGrace) { return $true }
-    if (Test-TranslatorBusyMarker) {
-        Write-TranslatorStartLog "translator health unavailable while Antigravity request is busy; restart skipped"
+    if (Test-TranslatorRestartLockActive) {
+        Write-TranslatorStartLog "translator restart lock is active; watchdog restart skipped"
         return $true
+    }
+    if ((Test-TranslatorBusyMarker) -or (Test-TranslatorDiagnosticsBusy)) {
+        if (Test-TranslatorBusyRestartGraceActive) {
+            Write-TranslatorStartLog "translator health unavailable while Antigravity request is busy; restart skipped within busy grace"
+            return $true
+        }
+        Write-TranslatorStartLog "translator health unavailable while busy grace expired; forcing restart"
     }
 
     Write-TranslatorStartLog "translator health lost; restarting"
@@ -796,6 +867,8 @@ function Ensure-TranslatorRunning {
             Write-TranslatorStartLog "dedicated translator still starting after watchdog restart"
         } else {
             Write-TranslatorStartLog "dedicated translator failed during watchdog restart; falling back to $FallbackRuntimeBin"
+            Stop-StaleDeepCodexTranslator
+            Stop-DeepCodexTranslatorOnPort $TRANSLATOR_PORT
             $script:TRANSLATOR_PROC = Start-TranslatorProcess $FallbackRuntimeBin
         }
     }
@@ -806,6 +879,8 @@ function Ensure-TranslatorRunning {
         if ((-not $fallbackTried) -and ($PrimaryRuntimeBin -ne $FallbackRuntimeBin) -and $script:TRANSLATOR_PROC -and $script:TRANSLATOR_PROC.HasExited) {
             $fallbackTried = $true
             Write-TranslatorStartLog "watchdog fallback to $FallbackRuntimeBin"
+            Stop-StaleDeepCodexTranslator
+            Stop-DeepCodexTranslatorOnPort $TRANSLATOR_PORT
             $script:TRANSLATOR_PROC = Start-TranslatorProcess $FallbackRuntimeBin
         }
         Start-Sleep -Seconds 1
@@ -1246,7 +1321,7 @@ function tomlString(value) {
   return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-let defaultModel = isAntigravityMode === "True" ? "gemini-pro-agent" : "gpt-5.5";
+let defaultModel = isAntigravityMode === "True" ? "gemini-3-flash-agent" : "gpt-5.5";
 if (isAntigravityMode === "True") {
   try {
     const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8").replace(/^\uFEFF/, ""));
@@ -1523,6 +1598,18 @@ if ($TranslatorOnly) {
     New-Item -ItemType Directory -Path $DEEPCODEX_STATE_ROOT, $DEEPCODEX_PROJECTS_ROOT -Force | Out-Null
     Set-DeepCodexRouteIsolation
 
+    if ((Test-TranslatorRestartLockActive) -and $env:ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER -ne "1") {
+        Write-TranslatorStartLog "translator-only start found restart lock; waiting for existing restart owner"
+        for ($i = 0; $i -lt 30; $i++) {
+            if (Test-TranslatorHealth) {
+                Write-Host "Anti-Codex translator is ready at $TRANSLATOR_URL."
+                exit 0
+            }
+            if (-not (Test-TranslatorRestartLockActive)) { break }
+            Start-Sleep -Seconds 1
+        }
+    }
+
     if ($USES_ANTIGRAVITY_UPSTREAM) {
         Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
         $env:OPENAI_API_KEY = $LOCAL_CODEX_API_KEY
@@ -1556,6 +1643,8 @@ if ($TranslatorOnly) {
                 Write-TranslatorStartLog "dedicated translator still starting; waiting for health"
             } else {
                 Write-TranslatorStartLog "dedicated translator exited before health; falling back to $NODE_BIN"
+                Stop-StaleDeepCodexTranslator
+                Stop-DeepCodexTranslatorOnPort $TRANSLATOR_PORT
                 $TRANSLATOR_PROC = Start-TranslatorProcess $NODE_BIN
             }
         }
@@ -1568,6 +1657,8 @@ if ($TranslatorOnly) {
         if ((-not $fallbackTried) -and ($TRANSLATOR_NODE_BIN -ne $NODE_BIN) -and $TRANSLATOR_PROC -and $TRANSLATOR_PROC.HasExited) {
             $fallbackTried = $true
             Write-TranslatorStartLog "dedicated translator exited while waiting; falling back to $NODE_BIN"
+            Stop-StaleDeepCodexTranslator
+            Stop-DeepCodexTranslatorOnPort $TRANSLATOR_PORT
             $TRANSLATOR_PROC = Start-TranslatorProcess $NODE_BIN
         }
         Start-Sleep -Seconds 1
@@ -1698,6 +1789,8 @@ if (-not (Test-TranslatorHealth)) {
             Write-TranslatorStartLog "dedicated translator still starting; waiting for health"
         } else {
             Write-TranslatorStartLog "dedicated translator exited before health; falling back to $NODE_BIN"
+            Stop-StaleDeepCodexTranslator
+            Stop-DeepCodexTranslatorOnPort $TRANSLATOR_PORT
             $TRANSLATOR_PROC = Start-TranslatorProcess $NODE_BIN
         }
     }
@@ -1710,6 +1803,8 @@ for ($i = 0; $i -lt 45; $i++) {
     if ((-not $fallbackTried) -and ($TRANSLATOR_NODE_BIN -ne $NODE_BIN) -and $TRANSLATOR_PROC -and $TRANSLATOR_PROC.HasExited) {
         $fallbackTried = $true
         Write-TranslatorStartLog "dedicated translator exited while waiting; falling back to $NODE_BIN"
+        Stop-StaleDeepCodexTranslator
+        Stop-DeepCodexTranslatorOnPort $TRANSLATOR_PORT
         $TRANSLATOR_PROC = Start-TranslatorProcess $NODE_BIN
     }
     Start-Sleep -Seconds 1
@@ -1724,6 +1819,7 @@ Write-LaunchStage "translator-ready" $launchStageTimer
 
 if ($TranslatorOnly) {
     Write-Host "Anti-Codex translator is ready at $TRANSLATOR_URL."
+    $PRESERVE_TRANSLATOR_ON_EXIT = $true
     exit 0
 }
 
@@ -1809,6 +1905,8 @@ $env:CODEX_HOME = $CODEX_HOME_DIR
 if (-not (Protect-AntiCodexLogDb)) {
     throw "Anti-Codex log database guard failed; refusing to continue startup."
 }
+$env:CODEX_APP_SERVER_FORCE_CLI = "1"
+Remove-Item Env:CODEX_APP_SERVER_WS_URL -ErrorAction SilentlyContinue
 $env:LANG = "zh_CN.UTF-8"
 $env:LC_ALL = "zh_CN.UTF-8"
 $codexArgs = @(
@@ -2089,11 +2187,13 @@ try {
         }
     }
 } finally {
-    if ($TRANSLATOR_PROC -and -not $TRANSLATOR_PROC.HasExited) {
-        try { $TRANSLATOR_PROC.Kill() } catch {}
+    if (-not $PRESERVE_TRANSLATOR_ON_EXIT) {
+        if ($TRANSLATOR_PROC -and -not $TRANSLATOR_PROC.HasExited) {
+            try { $TRANSLATOR_PROC.Kill() } catch {}
+        }
+        Stop-StaleDeepCodexTranslator
+        Stop-DeepCodexOwnedProcesses -KeepProcessIds @($PID, $launcherPid)
     }
-    Stop-StaleDeepCodexTranslator
-    Stop-DeepCodexOwnedProcesses -KeepProcessIds @($PID, $launcherPid)
     if ($DEEPCODEX_START_MUTEX_HELD -and $DEEPCODEX_START_MUTEX) {
         try { $DEEPCODEX_START_MUTEX.ReleaseMutex() } catch {}
     }

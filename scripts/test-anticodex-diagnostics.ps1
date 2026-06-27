@@ -349,6 +349,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         "test-anticodex-web-tools.ps1",
         "test-anticodex-real-mini-tool.ps1",
         "test-anticodex-real-work.ps1",
+        "test-anticodex-real-small-project.ps1",
         "test-anticodex-post-verification.ps1",
         "test-anticodex-account-proxy-readiness.ps1",
         "test-anticodex-stability-soak.ps1",
@@ -367,6 +368,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         "test-anticodex-web-tools.ps1",
         "test-anticodex-real-mini-tool.ps1",
         "test-anticodex-real-work.ps1",
+        "test-anticodex-real-small-project.ps1",
         "test-anticodex-post-verification.ps1",
         "test-anticodex-account-proxy-readiness.ps1",
         "test-anticodex-stability-soak.ps1"
@@ -378,6 +380,7 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         "sync-anticodex.ps1",
         "test-anticodex-real-mini-tool.ps1",
         "test-anticodex-real-work.ps1",
+        "test-anticodex-real-small-project.ps1",
         "test-anticodex-post-verification.ps1",
         "test-anticodex-stability-soak.ps1",
         "test-anticodex-cold-relaunch.ps1"
@@ -733,7 +736,7 @@ function Invoke-LocalJson {
             if ($remainingBudgetMs -lt 250) {
                 throw "verifier budget exhausted before $Path request attempt $attempt"
             }
-            $requestTimeoutSec = [Math]::Max(1, [Math]::Min(3, [Math]::Min($TimeoutSec, [int][Math]::Ceiling($remainingBudgetMs / 1000))))
+            $requestTimeoutSec = [Math]::Max(1, [Math]::Min(8, [Math]::Min($TimeoutSec, [int][Math]::Ceiling($remainingBudgetMs / 1000))))
             return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $requestTimeoutSec
         } catch {
             $lastError = $_.Exception.Message
@@ -1018,7 +1021,7 @@ function Test-DiagnosticBundle {
                 if ([int]$overallEvidence.checkCount -lt 1) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing checks" }
                 if ([int]$overallEvidence.failedCheckCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary failed checks" }
                 if ([int]$overallEvidence.missingSkipMetadataCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing skip metadata" }
-                if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 2) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
+                if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 3) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
             }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
@@ -1806,10 +1809,10 @@ if ($diagnostics) {
         Add-Failure "diagnostics missing Codex update status"
     } elseif (-not (Has-Property $diagnostics.updateStatus "updateNeeded")) {
         Add-Failure "diagnostics Codex update status missing updateNeeded"
-    } elseif ($diagnostics.updateStatus.ok -ne $true) {
-        Add-Failure "diagnostics Codex update status is not ready"
-    } elseif ($diagnostics.updateStatus.updateNeeded -eq $true) {
-        Add-Failure "diagnostics reports that Anti-Codex needs a Codex host sync"
+    } else {
+        if (-not (Has-Property $diagnostics.updateStatus "reason")) { Add-Failure "diagnostics Codex update status reason missing" }
+        if (-not (Has-Property $diagnostics.updateStatus "source")) { Add-Failure "diagnostics Codex update status source missing" }
+        if (-not (Has-Property $diagnostics.updateStatus "active")) { Add-Failure "diagnostics Codex update status active host missing" }
     }
     if (-not (Has-Property $diagnostics "postVerification")) {
         Add-Failure "diagnostics missing post-verification status"

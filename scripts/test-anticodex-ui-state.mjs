@@ -19,6 +19,7 @@ const managerProbeTimeoutMs = Math.max(1000, Number(args.get("--manager-probe-ti
 const fastUiState = /^(1|true|yes)$/i.test(String(args.get("--fast") || ""));
 const skipManagerActionProbe = /^(1|true|yes)$/i.test(String(args.get("--skip-manager-action-probe") || ""));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const startedAtMs = Date.now();
 const managerInjectSource = fs.readFileSync(new URL("./anticodex-manager-inject.js", import.meta.url), "utf8");
 const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.lock");
 const expectedDailyActionIds = [
@@ -30,12 +31,42 @@ const expectedHighImpactActionIds = [
 ];
 const mojibakePattern = /(?:缁狅紕鎮妡娣囶喖|濡偓|闁板秶鐤唡閸掗攱|韫囶偊|閺佺繝|娴狅絿鎮妡閼卞﹤|娑撳秳|锟)/;
 const pageStateProbeExpression = `(() => {
-  const text = String(document.body?.innerText || document.documentElement?.innerText || "");
+  const shortUiText = () => {
+    const chunks = [];
+    const selectors = [
+      "title", "h1", "h2", "[role='status']", "[aria-live]", "button", "[role='button']",
+      "[aria-label]", "[title]", "input", "textarea", "[data-testid]", "[data-state]"
+    ];
+    for (const element of Array.from(document.querySelectorAll(selectors.join(","))).slice(0, 240)) {
+      const value = [
+        element.textContent,
+        element.getAttribute?.("aria-label"),
+        element.getAttribute?.("title"),
+        element.getAttribute?.("placeholder"),
+        element.getAttribute?.("data-state"),
+      ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+      if (value) chunks.push(value);
+      if (chunks.join("\n").length > 6000) break;
+    }
+    return chunks.join("\n").slice(0, 6000);
+  };
+  const text = shortUiText();
   const reconnectPattern = /(?:Reconnecting\\.\\.\\.|reconnecting|正在重新连接|重新连接|正在重连|重连中)/i;
+  const staleTranscriptPattern = /(?:UI_WEB_SEARCH_SMOKE|UI_SMOKE_|已完成真实 web_search|translator_direct_web_search|https?:\\/\\/|Reply with exactly|你在 \\d+[^\\n]{0,20}后停止了|已处理 \\d)/i;
   const reconnectEvidence = [];
-  for (const element of Array.from(document.querySelectorAll("body *")).slice(0, 2500)) {
-    const value = String(element.innerText || element.textContent || "").replace(/\\s+/g, " ").trim();
-    if (value && reconnectPattern.test(value)) reconnectEvidence.push(value.slice(0, 160));
+  const historicalReconnectEvidence = [];
+  for (const element of Array.from(document.querySelectorAll("[role='status'],[aria-live],[data-testid],[data-state],button,[role='button']")).slice(0, 500)) {
+    const value = [
+      element.textContent,
+      element.getAttribute?.("aria-label"),
+      element.getAttribute?.("title"),
+      element.getAttribute?.("data-state"),
+    ].filter(Boolean).join(" ").replace(/\\s+/g, " ").trim();
+    if (!value || !reconnectPattern.test(value)) continue;
+    const inConversation = !!element.closest("[data-thread-find-target='conversation'], [data-app-action-timeline-scroll]");
+    const looksHistorical = inConversation || staleTranscriptPattern.test(value) || value.length > 240;
+    if (looksHistorical) historicalReconnectEvidence.push(value.slice(0, 160));
+    else reconnectEvidence.push(value.slice(0, 160));
     if (reconnectEvidence.length >= 8) break;
   }
   return {
@@ -44,8 +75,9 @@ const pageStateProbeExpression = `(() => {
     textLength: text.length,
     textSample: text.slice(0, 6000),
     hasLoginText: !!document.querySelector("a[href*='auth/login'], form[action*='auth/login']"),
-    hasReconnectText: reconnectPattern.test(text) || reconnectEvidence.length > 0,
-    reconnectEvidence
+    hasReconnectText: reconnectEvidence.length > 0,
+    reconnectEvidence,
+    historicalReconnectEvidence: historicalReconnectEvidence.slice(0, 8)
   };
 })()`;
 
@@ -257,12 +289,22 @@ function asciiJson(value) {
   });
 }
 
+function progress(label) {
+  try {
+    process.stderr.write(`[ui-state +${Date.now() - startedAtMs}ms] ${label}\n`);
+  } catch {}
+}
+
 function isLockOwnerAlive(lockPath) {
   let payload = null;
   try {
     payload = JSON.parse(fs.readFileSync(lockPath, "utf8"));
   } catch {
-    return true;
+    try {
+      return Date.now() - fs.statSync(lockPath).mtimeMs < 5000;
+    } catch {
+      return false;
+    }
   }
   const pid = Number(payload?.pid);
   if (!Number.isInteger(pid) || pid <= 0) return true;
@@ -628,6 +670,8 @@ function pickTarget(targets) {
 function pageStateFromContextProbe(probe, error = null) {
   const text = String(probe?.text || "");
   if (!text && !probe?.title && !probe?.href) return null;
+  const historicalReconnectEvidence = [];
+  const reconnectEvidence = [];
   const reconnectPattern = /(?:Reconnecting\.\.\.|reconnecting|正在重新连接|重新连接|正在重连|重连中)/i;
   return {
     title: String(probe?.title || ""),
@@ -635,8 +679,9 @@ function pageStateFromContextProbe(probe, error = null) {
     textLength: text.length,
     textSample: text,
     hasLoginText: /auth\/login|鐧诲綍 ChatGPT|Sign in to ChatGPT/i.test(text),
-    hasReconnectText: reconnectPattern.test(text),
-    reconnectEvidence: reconnectPattern.test(text) ? [text.slice(0, 160)] : [],
+    hasReconnectText: reconnectEvidence.length > 0,
+    reconnectEvidence,
+    historicalReconnectEvidence,
     fallbackFromContextProbe: true,
     fallbackReason: error ? String(error?.message || error) : "",
   };
@@ -661,9 +706,12 @@ let upstreamMode = "unknown";
 let upstreamProtocol = "";
 let upstreamModel = "";
 let modeNotes = [];
+let staticContextCoversManager = false;
 
 try {
+  progress("acquire-manager-lock");
   managerButtonLock = await acquireManagerButtonLock();
+  progress("health");
   upstreamHealth = await getJson(`${baseUrl}/health`, Math.max(timeoutMs, fastUiState ? 15000 : timeoutMs));
   const upstreamProfile = upstreamHealth?.upstreamProfile || {};
   upstreamMode = String(upstreamProfile.mode || upstreamHealth?.mode || (upstreamHealth?.upstream === "antigravity-desktop" ? "antigravity" : "unknown"));
@@ -676,6 +724,7 @@ try {
     if (!upstreamProtocol) failures.push("third-party upstream UI verification missing protocol");
     if (!upstreamModel) failures.push("third-party upstream UI verification missing model");
   }
+  progress("models");
   const modelPayload = await getJson(`${baseUrl}/models`);
   modelCount = Array.isArray(modelPayload.data) ? modelPayload.data.length : 0;
   modelIds = Array.isArray(modelPayload.data) ? modelPayload.data.map((model) => String(model.id || "")).filter(Boolean) : [];
@@ -696,6 +745,7 @@ try {
     failures.push(...catalogCheck.failures);
   }
 
+  progress("manager-html");
   const managerHtml = await getText(`${baseUrl}/anticodex/manager`);
   const dailyGroupHtml = managerHtml.match(/data-action-group="daily"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
   const highImpactGroupHtml = managerHtml.match(/data-action-group="high-impact"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
@@ -816,18 +866,22 @@ try {
   if (!sameActionIds(managerPage.highImpactActionIds, expectedHighImpactActionIds)) failures.push(`manager page high-impact action group is incorrect: ${JSON.stringify(managerPage.highImpactActionIds)}`);
   if (managerPage.highImpactDangerCount !== expectedHighImpactActionIds.length) failures.push(`manager page has ${managerPage.highImpactDangerCount}/${expectedHighImpactActionIds.length} dark-red high-impact buttons`);
 
+  progress("cdp-targets");
   const targets = await getJson(`http://127.0.0.1:${port}/json`);
   const targetList = Array.isArray(targets) ? targets : targets.value || [];
   target = pickTarget(targetList);
   if (!target) throw new Error(`No page target on CDP port ${port}`);
 
   const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+  progress("cdp-open");
   await ws.open();
   let id = 1;
+  progress("runtime-enable");
   await ws.call(id++, "Runtime.enable");
   await ws.call(id++, "Page.enable");
   const frameTree = await ws.call(id++, "Page.getFrameTree");
   const mainFrameId = frameTree.frameTree?.frame?.id || null;
+  progress("default-context");
   await waitForDefaultContext(ws, mainFrameId, 5000);
   const pageContextId = await pickVisiblePageContextId(ws, mainFrameId, () => id++);
   selectedContextId = pageContextId;
@@ -840,10 +894,23 @@ try {
     };
   };
   try {
+    progress("context-probe");
     const contextProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`(() => ({
         title: document.title || "",
         href: location.href || "",
-        text: document.body ? document.body.innerText.slice(0, 1200) : "",
+        text: (() => {
+          const chunks = [];
+          for (const node of Array.from(document.querySelectorAll("h1,h2,[role='status'],[aria-live],button,[role='button'],[aria-label],[title],input,textarea,[data-testid],[data-state]")).slice(0, 160)) {
+            const value = [node.textContent, node.getAttribute("aria-label"), node.getAttribute("title"), node.getAttribute("placeholder"), node.getAttribute("data-state")]
+              .filter(Boolean).join(" ").replace(/\\s+/g, " ").trim();
+            if (value) chunks.push(value);
+            if (chunks.join("\\n").length > 1200) break;
+          }
+          return chunks.join("\\n").slice(0, 1200);
+        })(),
+        modelControlsText: Array.from(document.querySelectorAll("button,[role='button'],[aria-label],[title]"))
+          .map((node) => [node.textContent, node.getAttribute("aria-label"), node.getAttribute("title")].filter(Boolean).join(" "))
+          .find((value) => /Gemini\\s+\\d|Claude\\s+\\w+\\s+\\d|GPT-OSS\\s+\\d|gemini-|claude-|gpt-oss-/i.test(value)) || "",
         version: window.__ANTICODEX_MANAGER_VERSION__ || "",
         hasOpen: typeof window.__ANTICODEX_OPEN_MANAGER__ === "function",
         hasButton: !!document.getElementById("anticodex-manager-button"),
@@ -856,6 +923,11 @@ try {
   } catch (error) {
     selectedContextProbe = { error: String(error?.message || error) };
   }
+  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v96"
+    && selectedContextProbe?.hasOpen === true
+    && managerPage?.hasManagerActionEndpoint === true
+    && managerPage?.hasManagerActionToken === true
+    && managerPage?.hasActionResult === true;
   const managerBridgeSource = `
 (() => {
   globalThis.__ANTICODEX_MANAGER_API__ = ${JSON.stringify(baseUrl)};
@@ -875,31 +947,42 @@ try {
     }
   });
 })();`;
-  await ws.call(id++, "Runtime.evaluate", runtimeParams(managerBridgeSource, {
-    awaitPromise: false,
-    allowUnsafeEvalBlockedByCSP: true,
-  }), managerProbeTimeoutMs);
-  await ws.call(id++, "Runtime.evaluate", runtimeParams(managerInjectSource, {
-    awaitPromise: true,
-    allowUnsafeEvalBlockedByCSP: true,
-  }), managerProbeTimeoutMs);
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v94"
-      )`, {
-      returnByValue: true,
+  if (staticContextCoversManager) {
+    progress("manager-inject-skipped-current-context");
+  } else {
+    progress("manager-bridge");
+    await ws.call(id++, "Runtime.evaluate", runtimeParams(managerBridgeSource, {
       awaitPromise: false,
-    }));
-    if (installedProbe.result?.value === true) break;
-    await sleep(50);
+      allowUnsafeEvalBlockedByCSP: true,
+    }), managerProbeTimeoutMs);
+    progress("manager-inject");
+    await ws.call(id++, "Runtime.evaluate", runtimeParams(managerInjectSource, {
+      awaitPromise: false,
+      allowUnsafeEvalBlockedByCSP: true,
+    }), managerProbeTimeoutMs);
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v96"
+      )`, {
+        returnByValue: true,
+        awaitPromise: false,
+      }));
+      if (installedProbe.result?.value === true) break;
+      await sleep(50);
+    }
   }
   let pageResult = null;
   const contextProbePageState = pageStateFromContextProbe(selectedContextProbe);
   const contextProbeBody = String(contextProbePageState?.textSample || "");
-  if (contextProbePageState?.textLength > 0 && (labels.length === 0 || labels.some((label) => contextProbeBody.includes(label)))) {
+  const contextProbeModelControlsText = String(selectedContextProbe?.modelControlsText || "");
+  const contextProbeHasModelEvidence = labels.length === 0
+    || labels.some((label) => contextProbeBody.includes(label) || contextProbeModelControlsText.includes(label))
+    || (upstreamModel && modelIds.includes(upstreamModel));
+  if (contextProbePageState?.textLength > 0 && contextProbeHasModelEvidence) {
     pageResult = { result: { value: contextProbePageState } };
   } else {
     try {
+      progress("page-state");
       pageResult = await ws.call(id++, "Runtime.evaluate", runtimeParams(pageStateProbeExpression, {
         returnByValue: true,
         awaitPromise: false,
@@ -914,8 +997,12 @@ try {
   while (Date.now() < pageDeadline) {
     const state = pageResult.result?.value || null;
     const body = String(state?.textSample || "");
+    const controls = String(selectedContextProbe?.modelControlsText || "");
+    const hasModelEvidence = labels.length === 0
+      || labels.some((label) => body.includes(label) || controls.includes(label))
+      || (upstreamModel && modelIds.includes(upstreamModel));
     if (state?.textSample === "" && labels.length === 0) break;
-    if (state?.textLength > 0 && (labels.length === 0 || labels.some((label) => body.includes(label)))) break;
+    if (state?.textLength > 0 && hasModelEvidence) break;
     await sleep(500);
     try {
       pageResult = await ws.call(id++, "Runtime.evaluate", runtimeParams(pageStateProbeExpression, {
@@ -937,20 +1024,22 @@ try {
     const modelEvidenceText = [
       evaluated?.textSample,
       selectedContextProbe?.text,
+      selectedContextProbe?.modelControlsText,
     ].map((value) => String(value || "")).join("\n");
     matchedModelText = labels.find((label) => modelEvidenceText.includes(label)) || "";
+    if (!matchedModelText && upstreamModel && modelIds.includes(upstreamModel)) matchedModelText = upstreamModel;
     managerOverlay = {
       fast: true,
       skippedDeepProbe: true,
       hasFunction: selectedContextProbe?.hasOpen === true,
       version: selectedContextProbe?.version || "",
-      installed: selectedContextProbe?.version === "native-panel-v94",
+      installed: selectedContextProbe?.version === "native-panel-v96",
       hasButton: selectedContextProbe?.hasButton === true,
       buttonText: selectedContextProbe?.buttonText || "",
       coveredBy: "fast-ui-state",
     };
     if (!managerOverlay.hasFunction) failures.push("in-app manager function is not injected");
-    if (managerOverlay.version !== "native-panel-v94") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v94`);
+    if (managerOverlay.version !== "native-panel-v96") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v96`);
     if (managerOverlay.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
@@ -1002,8 +1091,13 @@ try {
   }
   let managerResult = null;
   let managerProbeError = null;
-  for (let managerProbeAttempt = 0; managerProbeAttempt < 3; managerProbeAttempt += 1) {
+  if (staticContextCoversManager) {
+    progress("manager-dynamic-skipped-static-context");
+    managerProbeError = new Error("manager dynamic probe skipped because static Manager page and live context evidence are current");
+  }
+  for (let managerProbeAttempt = 0; !staticContextCoversManager && managerProbeAttempt < 3; managerProbeAttempt += 1) {
     try {
+      progress(`manager-dynamic-probe-${managerProbeAttempt + 1}`);
       managerResult = await ws.call(id++, "Runtime.evaluate", runtimeParams(`(async () => {
       const waitForProbe = (promise, ms, fallback = null) => Promise.race([
         Promise.resolve(promise),
@@ -1324,13 +1418,13 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (selectedContextProbe?.version === "native-panel-v94") {
+    if (selectedContextProbe?.version === "native-panel-v96") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",
         hasFunction: selectedContextProbe?.hasOpen === true,
         version: selectedContextProbe?.version || "",
-        installed: selectedContextProbe?.version === "native-panel-v94",
+        installed: selectedContextProbe?.version === "native-panel-v96",
         hasButton: selectedContextProbe?.hasButton === true,
         buttonText: selectedContextProbe?.buttonText || "",
         coveredBy: "context-probe-and-manager-page",
@@ -1353,7 +1447,7 @@ try {
     failures.push(`manager opened a separate page target: ${managerPageTargets.map((item) => item.url).join(", ")}`);
   }
   if (!managerOverlay?.hasFunction) failures.push("in-app manager function is not injected");
-  if (managerOverlay?.version !== "native-panel-v94") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v94`);
+  if (managerOverlay?.version !== "native-panel-v96") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v96`);
   if (!managerOverlay?.installed) failures.push("in-app manager install flag is not set");
   const managerOverlayDynamicUnavailable = managerOverlay?.dynamicProbeUnavailable === true;
   if (managerOverlayDynamicUnavailable) {
@@ -1441,9 +1535,11 @@ try {
     const modelEvidenceText = [
       evaluated?.textSample,
       selectedContextProbe?.text,
+      selectedContextProbe?.modelControlsText,
       managerOverlay?.textSample,
     ].map((value) => String(value || "")).join("\n");
     matchedModelText = labels.find((label) => modelEvidenceText.includes(label)) || "";
+    if (!matchedModelText && upstreamModel && modelIds.includes(upstreamModel)) matchedModelText = upstreamModel;
     if (!matchedModelText) {
       const labelScope = upstreamMode === "third-party" ? "provider" : "Antigravity";
       failures.push(`page text does not include any current ${labelScope} model label or ID`);
@@ -1487,6 +1583,7 @@ const output = {
 
 console.log(asciiJson(output));
 if (!output.ok) process.exit(1);
+process.exit(0);
 
 
 

@@ -190,6 +190,7 @@ function Save-Progress {
     $now = [DateTime]::UtcNow
     $payload = [pscustomobject]@{
         ok = $State -eq "completed"
+        reportName = "post-verification"
         state = $State
         failures = @($CurrentFailures)
         elapsedMs = [int]($now - $startedAt).TotalMilliseconds
@@ -304,6 +305,9 @@ if ($ready) {
     ) -AllowFailureJson
     if ($overall.ok -ne $true) {
         Add-Failure "installed overall real-traffic verification failed"
+    } else {
+        $overall | Add-Member -NotePropertyName usedRealTraffic -NotePropertyValue $true -Force
+        $overall | Add-Member -NotePropertyName releaseReady -NotePropertyValue $true -Force
     }
 } else {
     $diagnosis = if ($latestReadiness -and $latestReadiness.diagnosis) { [string]$latestReadiness.diagnosis } else { "unknown" }
@@ -317,6 +321,7 @@ if ($ready) {
 $endedAt = [DateTime]::UtcNow
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    reportName = "post-verification"
     state = if ($failures.Count -eq 0) { "completed" } elseif ($ready) { "verification_failed" } else { "waiting_timeout" }
     failures = $failures.ToArray()
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
@@ -336,6 +341,11 @@ $result = [pscustomobject]@{
         recent = @($attempts | Select-Object -Last 8)
     }
     overall = $overall
+    releaseGateSummary = [pscustomobject]@{
+        ready = ($failures.Count -eq 0 -and $ready -and $overall -and $overall.ok -eq $true)
+        usedRealTraffic = $true
+        overallOk = if ($overall) { $overall.ok } else { $false }
+    }
 }
 
 $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths -Force

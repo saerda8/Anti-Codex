@@ -115,7 +115,7 @@ if ($manager) {
     $corsHeader = $manager.Headers["Access-Control-Allow-Origin"]
     if ($corsHeader) { Add-Failure "manager page exposes access-control-allow-origin: $corsHeader" }
     $managerHtml = [string]$manager.Content
-    $match = [regex]::Match($managerHtml, 'const managerActionToken="([^"]+)"')
+    $match = [regex]::Match($managerHtml, '(?:const|let)\s+managerActionToken\s*=\s*"([^"]+)"')
     if ($match.Success) {
         $token = $match.Groups[1].Value
     } else {

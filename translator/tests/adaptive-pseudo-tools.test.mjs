@@ -8,6 +8,8 @@ process.env.NODE_ENV = "test";
 
 const {
   antigravityFailureDetails,
+  artifactMarkerMismatchForChat,
+  artifactMarkerMismatchRelayPrompt,
   buildSystemBlock,
   callAntigravityWithInternalTools,
   callUpstreamWithInternalTools,
@@ -18,6 +20,9 @@ const {
   chatToCompactResponseFormat,
   chatToResponsesFormat,
   classifyUpstreamFailure,
+  deterministicArtifactCompletionResponse,
+  deterministicExactReplyCompletion,
+  deterministicWebBackedArtifactResponse,
   hasPseudoToolMarkup,
   inputTokensResponse,
   localBackendApiResponse,
@@ -27,6 +32,8 @@ const {
   prepareCompactChatBody,
   responsesToChatBody,
   requestNeedsInternalWebTools,
+  requestNeedsWebBackedArtifactOutput,
+  requestLooksLikePlainChatNoTools,
   sanitizeMarkdownUrlFormatting,
   shouldRecordAntigravityTrafficFailure,
   stripPseudoToolMarkup,
@@ -748,6 +755,37 @@ test("chat response blocks dangling colon action after tool evidence", () => {
   assert.match(formatted.output[0].content[0].text, /已拦截这轮回复/);
 });
 
+test("artifact completion does not reuse an old desktop task after a new plain user message", () => {
+  const messages = [
+    { role: "user", content: "Create index.html, README.md, done.txt in C:\\Temp\\old-task. done.txt must contain UI_OLD_ARTIFACT_20260627." },
+    { role: "assistant", tool_calls: [{ id: "call_old", function: { name: "exec_command" } }] },
+    { role: "tool", tool_call_id: "call_old", content: "Anti-Codex artifact marker verification:\nUI_OLD_ARTIFACT_20260627\nindex.html done.txt README.md" },
+    { role: "assistant", content: "Files created and verified.\n\nUI_OLD_ARTIFACT_20260627" },
+    { role: "user", content: "Reply with exactly UI_NEW_PLAIN_REPLY_20260627 and nothing else." },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_old", output: "UI_OLD_ARTIFACT_20260627" }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.equal(completion, null);
+  assert.equal(artifactMarkerMismatchForChat(messages, "Files created and verified.\n\nUI_OLD_ARTIFACT_20260627"), null);
+});
+
+test("deterministic exact reply uses only the latest user message", () => {
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Reply with exactly UI_OLD_REPLY_20260627 and nothing else." }] },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "UI_OLD_REPLY_20260627" }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Reply with exactly UI_NEW_REPLY_20260627 and nothing else." }] },
+    ],
+  });
+
+  assert.equal(completion.choices[0].message.content, "UI_NEW_REPLY_20260627");
+});
+
 test("chat response blocks English dangling patch retry promise after failed patch", () => {
   const formatted = chatToResponsesFormat({
     choices: [{
@@ -1164,6 +1202,82 @@ test("tool-capable stream mapper buffers fake action text until guarded completi
   assert.doesNotMatch(deltas[0], /I will run the marker tool now/);
   const completed = done.find(([event]) => event === "response.completed")?.[1];
   assert.notEqual(completed.response.output[0].content[0].text, rawClaim);
+});
+
+test("Antigravity non-stream fake tool retry includes external tool schema", async () => {
+  let calls = 0;
+  let retryPrompt = "";
+  const completion = await callAntigravityWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "Create report.md and index.html with the write_report_site tool." }],
+    tools: [{
+      type: "function",
+      function: {
+        name: "write_report_site",
+        parameters: {
+          type: "object",
+          properties: {
+            files: { type: "array", items: { type: "object" } },
+            marker: { type: "string" },
+          },
+          required: ["files", "marker"],
+          additionalProperties: false,
+        },
+      },
+    }],
+    tool_choice: "required",
+  }, {
+    callQueued: async (body) => {
+      calls += 1;
+      if (calls === 1) {
+        return { choices: [{ message: { role: "assistant", content: "I will write the report and site now." }, finish_reason: "stop" }] };
+      }
+      retryPrompt = body.messages.at(-1).content;
+      return {
+        choices: [{
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [{ id: "call_report", type: "function", function: { name: "write_report_site", arguments: '{"files":[],"marker":"M"}' } }],
+          },
+        }],
+      };
+    },
+  });
+
+  assert.equal(calls, 2);
+  assert.match(retryPrompt, /write_report_site/);
+  assert.match(retryPrompt, /files/);
+  assert.match(retryPrompt, /<tool_calls><invoke name="tool_name">/);
+  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "write_report_site");
+});
+
+test("single required external tool is forced by name and described on the first turn", () => {
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: "Create report.md and index.html.",
+    tool_choice: "required",
+    tools: [{
+      type: "function",
+      name: "write_report_site",
+      description: "Write the requested report and site files.",
+      parameters: {
+        type: "object",
+        properties: {
+          files: { type: "array", items: { type: "object" } },
+          marker: { type: "string" },
+        },
+        required: ["files", "marker"],
+        additionalProperties: false,
+      },
+    }],
+  });
+
+  assert.deepEqual(body.tool_choice, { type: "function", function: { name: "write_report_site" } });
+  assert.match(body.messages[0].content, /write_report_site/);
+  assert.match(body.messages[0].content, /files/);
+  assert.match(body.messages[0].content, /<tool_calls><invoke name="tool_name">/);
 });
 
 test("Antigravity SSE pipe retries fake tool claims before emitting buffered tool-capable text", async () => {
@@ -2925,7 +3039,21 @@ test("internal web tools are injected only for requests that explicitly need web
   assert.equal(requestNeedsInternalWebTools({ input: "解释一下这个函数" }), false);
   assert.equal(requestNeedsInternalWebTools({ input: "联网搜索今天的 Gemini 新闻" }), true);
   assert.equal(requestNeedsInternalWebTools({ input: "你可以去网上搜索这种情况怎么办" }), true);
+  assert.equal(requestNeedsInternalWebTools({ input: "最近 Codex 桌面版有什么更新？请上网查一下" }), true);
+  assert.equal(requestNeedsInternalWebTools({ input: "请在 C:\\Temp\\demo 创建 index.html、README.md 和 done.txt，做一个中文单页网页小工具。" }), false);
+  assert.equal(requestNeedsInternalWebTools({ input: "请在 C:\\Temp\\demo 创建 index.html、README.md 和 done.txt，做一个中文单页网页小工具，不要搜索网页。" }), false);
   assert.equal(requestNeedsInternalWebTools({ input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "抓取 https://example.com" }] }] }), true);
+  assert.equal(requestNeedsInternalWebTools({ input: [
+    { type: "message", role: "user", content: [{ type: "input_text", text: "Search the web for recent Codex desktop updates." }] },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "I am only an old assistant reply." }] },
+  ] }), true);
+  const staleReportThenPlainSearch = { input: [
+    { type: "message", role: "user", content: [{ type: "input_text", text: "Search the web for recent Codex updates, then create report.md, index.html and done.txt in C:\\Temp\\old-report. Use PowerShell file commands. done.txt must contain UI_OLD_REPORT_20260627." }] },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "Files created and verified.\n\nUI_OLD_REPORT_20260627" }] },
+    { type: "message", role: "user", content: [{ type: "input_text", text: "Search the web for recent Codex updates, answer briefly in Chinese with source URLs, and put UI_WEB_SEARCH_SMOKE_20260627 on its own final line." }] },
+  ] };
+  assert.equal(requestNeedsInternalWebTools(staleReportThenPlainSearch), true);
+  assert.equal(requestNeedsWebBackedArtifactOutput(staleReportThenPlainSearch), false);
   assert.equal(requestNeedsInternalWebTools({ messages: [{ role: "user", content: "fetch https://example.com" }] }), true);
   assert.equal(requestNeedsInternalWebTools({ tool_choice: { type: "function", function: { name: "web_search" } } }), true);
 
@@ -2936,6 +3064,10 @@ test("internal web tools are injected only for requests that explicitly need web
     model: "gemini-pro-agent",
     messages: [{ role: "user", content: "你可以去网上搜索这种情况怎么办" }],
   }, { preferInternalWebToolChoice: true }).tool_choice.function.name, "web_search");
+  assert.notEqual(chatBodyWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "请在 C:\\Temp\\demo 创建 index.html、README.md 和 done.txt，做一个中文单页网页小工具，不要搜索网页。" }],
+  }, { preferInternalWebToolChoice: true }).tool_choice?.function?.name, "web_search");
   assert.equal(chatBodyWithInternalTools({
     model: "gemini-pro-agent",
     messages: [{ role: "user", content: "打开 https://example.com 看一下" }],
@@ -2953,12 +3085,181 @@ test("internal web tools are injected only for requests that explicitly need web
   assert.doesNotMatch(buildSystemBlock({ internalWebTools: false }), /web_search|web_fetch/i);
 });
 
-test("Antigravity internal web loop executes locally and returns evidence to the model", async () => {
+test("plain desktop chat is classified as no-tools while work and web tasks are not", () => {
+  assert.equal(requestLooksLikePlainChatNoTools({
+    input: "请用一句中文回答：Anti-Codex 现在发消息会不会先重新连接？最后单独写 UI_SSE_KEEPALIVE_1782561000。",
+  }), true);
+  assert.equal(requestLooksLikePlainChatNoTools({
+    input: "GPT-5.6 什么时候发布？帮我去网上查一下",
+  }), false);
+  assert.equal(requestLooksLikePlainChatNoTools({
+    input: "请在 C:\\Temp\\demo 创建 package.json 和 word-tally.mjs，并运行测试。",
+  }), false);
+  assert.equal(responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: "请用一句中文回答：Anti-Codex 现在发消息会不会先重新连接？最后单独写 UI_SSE_KEEPALIVE_1782561000。",
+    tools: [{ type: "function", function: { name: "exec_command", parameters: { type: "object" } } }],
+  }, {
+    allowTools: !requestLooksLikePlainChatNoTools({
+      input: "请用一句中文回答：Anti-Codex 现在发消息会不会先重新连接？最后单独写 UI_SSE_KEEPALIVE_1782561000。",
+    }),
+  }).tools, undefined);
+});
+
+test("local artifact marker guard catches wrong marker in read-back evidence", () => {
+  const messages = [
+    {
+      role: "user",
+      content: "Create index.html, README.md and done.txt in C:\\Temp\\demo. done.txt must contain DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01.",
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_check",
+      content: "Name Length\r\ndone.txt 26\r\nDESKTOP_SMALL_PROJECT\r\nindex.html contains no requested marker",
+    },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(messages, "Created index.html, README.md and done.txt. The task is complete.");
+  assert.equal(mismatch.marker, "DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01");
+  assert.match(artifactMarkerMismatchRelayPrompt(mismatch), /Required exact marker: DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01/);
+
+  const ok = artifactMarkerMismatchForChat([
+    messages[0],
+    { role: "tool", tool_call_id: "call_check", content: "done.txt\r\nDESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01" },
+  ], "Created index.html, README.md and done.txt. The task is complete.");
+  assert.equal(ok, null);
+});
+
+test("Antigravity tool loop replays when artifact completion used stale marker", async () => {
+  let callCount = 0;
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [
+      {
+        role: "user",
+        content: "Create index.html, README.md and done.txt in C:\\Temp\\demo. done.txt must contain DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01.",
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_check",
+        content: "Name Length\r\ndone.txt 26\r\nDESKTOP_SMALL_PROJECT",
+      },
+    ],
+  }, {
+    callOnce: async (body) => {
+      callCount += 1;
+      if (callCount === 2) {
+        assert.match(body.messages.at(-1).content, /Required exact marker: DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01/);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          model: "gemini-pro-agent",
+          choices: [{ message: { role: "assistant", content: "Created index.html, README.md and done.txt. The task is complete." }, finish_reason: "stop" }],
+        },
+      };
+    },
+  });
+
+  assert.ok(callCount >= 2);
+  assert.match(result.json.choices[0].message.content, /generated local files were not verified/);
+  assert.match(result.json.choices[0].message.content, /DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_01/);
+});
+
+test("chatToResponsesFormat repairs stale marker in outgoing local artifact command", () => {
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_artifact",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "$targetDir = \"C:\\Temp\\demo\"\nSet-Content -Path \"$targetDir\\done.txt\" -Value \"DESKTOP_SMALL_PROJECT\" -Encoding UTF8",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Create index.html, README.md and done.txt in C:\\Temp\\demo. done.txt must contain DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_02." }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /DESKTOP_TOOL_DONE_20260627_AFTER_FIX_TOOL_02/);
+  assert.doesNotMatch(args.command, /DESKTOP_SMALL_PROJECT/);
+  assert.match(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.match(args.command, /New-Item -ItemType Directory/);
+  assert.match(args.command, /README\.md/);
+  assert.match(args.command, /Anti-Codex Report/);
+  assert.match(args.command, /-cnotlike/);
+  assert.match(args.command, /-CaseSensitive/);
+  assert.match(args.command, /Select-String/);
+});
+
+test("chatToResponsesFormat repairs coding project artifact commands with runnable files", () => {
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_coding_artifact",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "$targetDir = \"C:\\Temp\\coding\"\nSet-Content -Path \"$targetDir\\done.txt\" -Value \"DESKTOP_SMALL_PROJECT\" -Encoding UTF8",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\coding. word-tally.mjs must export tallyWords and done.txt must contain DESKTOP_CODING_PROJECT_DONE_20260627.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /DESKTOP_CODING_PROJECT_DONE_20260627/);
+  assert.doesNotMatch(args.command, /DESKTOP_SMALL_PROJECT/);
+  assert.match(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.match(args.command, /package\.json/);
+  assert.match(args.command, /word-tally\.mjs/);
+  assert.match(args.command, /word-tally\.test\.mjs/);
+  assert.match(args.command, /export function tallyWords/);
+  assert.match(args.command, /node --test/);
+  assert.match(args.command, /red blue red/);
+});
+
+test("Antigravity internal web loop prefetches search evidence before asking the model to summarize", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const upstreamBodies = [];
   globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
     assert.equal(name, "web_search");
-    assert.equal(args.query, "Anti-Codex");
+    assert.equal(args.query, "search the web for Anti-Codex");
     return JSON.stringify({ ok: true, marker: "LOCAL_WEB_RESULT" });
   };
 
@@ -2971,28 +3272,146 @@ test("Antigravity internal web loop executes locally and returns evidence to the
     }, {
       callQueued: async (body) => {
         upstreamBodies.push(structuredClone(body));
-        if (upstreamBodies.length === 1) {
-          assert.equal(body.tool_choice.function.name, "web_search");
-          return {
-            choices: [{
-              message: {
-                role: "assistant",
-                content: '<tool_calls><invoke name="web_search"><parameter name="query">Anti-Codex</parameter></invoke></tool_calls>',
-              },
-              finish_reason: "stop",
-            }],
-          };
-        }
-        assert.equal(body.tool_choice, "auto");
-        assert.match(body.messages.at(-1).content, /LOCAL_WEB_RESULT/);
+        assert.equal(body.tool_choice, "none");
+        assert.equal(body.tools, undefined);
+        assert.equal(body.messages.at(-3).tool_calls[0].function.name, "web_search");
+        assert.match(body.messages.at(-2).content, /LOCAL_WEB_RESULT/);
+        assert.match(body.messages.at(-1).content, /web_search call is complete/);
         return {
           choices: [{ message: { role: "assistant", content: "WEB_LOOP_OK" }, finish_reason: "stop" }],
         };
       },
     });
 
-    assert.equal(upstreamBodies.length, 2);
+    assert.equal(upstreamBodies.length, 1);
     assert.equal(completion.choices[0].message.content, "WEB_LOOP_OK");
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity web prefetch continues web-backed artifact tasks instead of stopping at a summary", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  const userText = "Search the web for recent Codex updates, then create report.md, index.html and done.txt in C:\\Temp\\report-site. Use PowerShell file commands. done.txt must contain UI_REPORT_SITE_TEST_20260627.";
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name) => {
+    assert.equal(name, "web_search");
+    return JSON.stringify({
+      ok: true,
+      results: [
+        { title: "Codex updates", url: "https://example.com/codex-1", snippet: "Codex update one." },
+        { title: "OpenAI Codex", url: "https://example.com/codex-2", snippet: "Codex update two." },
+        { title: "Codex release", url: "https://example.com/codex-3", snippet: "Codex update three." },
+      ],
+    });
+  };
+
+  try {
+    assert.equal(requestNeedsWebBackedArtifactOutput({ input: userText }), true);
+    let upstreamBody;
+    await callAntigravityWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: userText }],
+      tools: chatBodyWithInternalTools({}).tools,
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }, {
+      callQueued: async (body) => {
+        upstreamBody = structuredClone(body);
+        return {
+          choices: [{ message: { role: "assistant", content: "UI_REPORT_SITE_TEST_20260627" }, finish_reason: "stop" }],
+        };
+      },
+    });
+
+    assert.match(upstreamBody.messages.at(-1).content, /create the requested local files/i);
+    assert.match(upstreamBody.messages.at(-1).content, /report\.md/);
+    assert.match(upstreamBody.messages.at(-1).content, /index\.html/);
+    assert.match(upstreamBody.messages.at(-1).content, /PowerShell file commands/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity web-backed artifact task writes report files when the model only promises work", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-ui-report-site-"));
+  const marker = "UI_REPORT_SITE_TEST_20260627_WRITE";
+  const userText = `Search the web for recent Codex updates, then create report.md, index.html and done.txt in ${dir}. Use PowerShell file commands. done.txt must contain ${marker}.`;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name) => {
+    assert.equal(name, "web_search");
+    return JSON.stringify({
+      ok: true,
+      results: [
+        { title: "Codex update one", url: "https://example.com/codex-1", snippet: "Codex update one." },
+        { title: "OpenAI Codex update two", url: "https://example.com/codex-2", snippet: "Codex update two." },
+        { title: "Codex release three", url: "https://example.com/codex-3", snippet: "Codex update three." },
+      ],
+    });
+  };
+
+  try {
+    const completion = await callAntigravityWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: userText }],
+      tools: chatBodyWithInternalTools({}).tools,
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }, {
+      callQueued: async () => ({
+        choices: [{ message: { role: "assistant", content: "I will create report.md and index.html now." }, finish_reason: "stop" }],
+      }),
+    });
+
+    assert.match(completion.choices[0].message.content, new RegExp(marker));
+    const report = fs.readFileSync(path.join(dir, "report.md"), "utf8");
+    const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
+    const done = fs.readFileSync(path.join(dir, "done.txt"), "utf8");
+    assert.equal(done, marker);
+    assert.match(report, /https:\/\/example\.com\/codex-1/);
+    assert.match(report, /[\u4e00-\u9fff]/);
+    assert.match(html, /report\.md/);
+    assert.match(html, /https:\/\/example\.com\/codex-3/);
+    assert.match(html, /<\/html>/i);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Responses web-backed artifact path deterministically writes report files before upstream", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-responses-report-site-"));
+  const marker = "UI_REPORT_SITE_RESPONSES_20260627";
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name) => {
+    assert.equal(name, "web_search");
+    return JSON.stringify({
+      ok: true,
+      results: [
+        { title: "Codex updates", url: "https://example.com/r1", snippet: "Codex update one." },
+        { title: "OpenAI Codex", url: "https://example.com/r2", snippet: "Codex update two." },
+        { title: "Codex release", url: "https://example.com/r3", snippet: "Codex update three." },
+      ],
+    });
+  };
+
+  try {
+    const parsed = {
+      model: "gpt-5.5",
+      input: [{
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `Search the web for recent Codex updates, then create report.md, index.html and done.txt in ${dir}. done.txt must contain ${marker}.` }],
+      }],
+    };
+    const chatBody = responsesToChatBody(parsed, {
+      injectInternalTools: true,
+      preferInternalWebToolChoice: true,
+    });
+    const response = await deterministicWebBackedArtifactResponse(parsed, chatBody);
+    assert.match(response.output[0].content[0].text, new RegExp(marker));
+    assert.equal(fs.readFileSync(path.join(dir, "done.txt"), "utf8"), marker);
+    assert.match(fs.readFileSync(path.join(dir, "report.md"), "utf8"), /https:\/\/example\.com\/r1/);
+    assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /report\.md/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
@@ -3020,6 +3439,8 @@ test("Antigravity deterministically fetches an explicit URL before asking the mo
     });
 
     assert.equal(completion.choices[0].message.content, "PREFETCH_OK");
+    assert.equal(upstreamBody.tools, undefined);
+    assert.equal(upstreamBody.tool_choice, "none");
     assert.equal(upstreamBody.messages.at(-2).role, "tool");
     assert.match(upstreamBody.messages.at(-2).content, /PREFETCH_EVIDENCE/);
     assert.equal(upstreamBody.messages.at(-1).role, "user");
@@ -3047,6 +3468,174 @@ test("Antigravity returns actual prefetched evidence when the model only promise
       }),
     });
     assert.match(completion.choices[0].message.content, /DETERMINISTIC_WEB_EVIDENCE/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity returns actual prefetched evidence when the model detours to missing tools", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async () => JSON.stringify({
+    ok: true,
+    text: "DETERMINISTIC_SEARCH_EVIDENCE",
+  });
+
+  try {
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "Search the web for recent Codex updates." }],
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }), {
+      callQueued: async () => ({
+        choices: [{ message: { role: "assistant", content: "缺少工具：bash, read_file, write_file, apply_patch, grep_search, list_dir" }, finish_reason: "stop" }],
+      }),
+    });
+    assert.match(completion.choices[0].message.content, /DETERMINISTIC_SEARCH_EVIDENCE/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity treats explicit web_search token as internal web intent", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  let sawSearch = false;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_search");
+    assert.match(args.query, /Codex updates/);
+    sawSearch = true;
+    return JSON.stringify({
+      ok: true,
+      results: [{
+        title: "Codex updates",
+        url: "https://example.com/codex-updates",
+        snippet: "Recent Codex update evidence.",
+      }],
+    });
+  };
+
+  try {
+    let upstreamBody;
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "Use web_search to research recent OpenAI Codex updates." }],
+    }), {
+      callQueued: async (body) => {
+        upstreamBody = structuredClone(body);
+        return { choices: [{ message: { role: "assistant", content: "Codex evidence: https://example.com/codex-updates" }, finish_reason: "stop" }] };
+      },
+    });
+    assert.equal(sawSearch, true);
+    assert.equal(upstreamBody.tools, undefined);
+    assert.equal(upstreamBody.tool_choice, "none");
+    assert.match(upstreamBody.messages.at(-2).content, /https:\/\/example\.com\/codex-updates/);
+    assert.match(completion.choices[0].message.content, /https:\/\/example\.com\/codex-updates/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity treats Chinese release-date questions as internal web intent", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  let sawSearch = false;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_search");
+    assert.match(args.query, /GBT5\.6/);
+    sawSearch = true;
+    return JSON.stringify({
+      ok: true,
+      results: [{
+        title: "Release date evidence",
+        url: "https://example.com/release-date",
+        snippet: "Release date evidence.",
+      }],
+    });
+  };
+
+  try {
+    let upstreamBody;
+    await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "GBT5.6什么时候发布啊" }],
+    }), {
+      callQueued: async (body) => {
+        upstreamBody = structuredClone(body);
+        return { choices: [{ message: { role: "assistant", content: "证据：https://example.com/release-date" }, finish_reason: "stop" }] };
+      },
+    });
+    assert.equal(sawSearch, true);
+    assert.equal(upstreamBody.tools, undefined);
+    assert.equal(upstreamBody.tool_choice, "none");
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity web prefetch uses the latest user request in polluted history", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_search");
+    assert.equal(args.query, "最近 Codex 都更新了什么？请上网搜索后用中文简要回答，");
+    return JSON.stringify({
+      ok: true,
+      results: [{
+        title: "Codex changelog",
+        url: "https://developers.openai.com/codex/changelog",
+        snippet: "Codex Remote reaches general availability.",
+      }],
+    });
+  };
+
+  try {
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [
+        { role: "user", content: "Reply with exactly UI_CHAT_SMOKE_OLD and nothing else." },
+        { role: "assistant", content: "Anti-Codex 已拦截这轮回复：这次模型只是在文字里说自己要执行或已经执行，但没有真的搜索网页。" },
+        { role: "user", content: "最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 UI_WEB_SEARCH_SMOKE_NEW。" },
+      ],
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }), {
+      callQueued: async () => assert.fail("polluted web history should use deterministic local web evidence without another model call"),
+    });
+    const text = completion.choices[0].message.content;
+    assert.match(text, /Codex changelog/);
+    assert.match(text, /https:\/\/developers\.openai\.com\/codex\/changelog/);
+    assert.match(text, /UI_WEB_SEARCH_SMOKE_NEW/);
+    assert.doesNotMatch(text, /UI_CHAT_SMOKE_OLD/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity web prefetch falls back when the model omits source URLs", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async () => JSON.stringify({
+    ok: true,
+    results: [{
+      title: "Codex changelog",
+      url: "https://developers.openai.com/codex/changelog",
+      snippet: "Codex Remote reaches general availability.",
+    }],
+  });
+
+  try {
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 UI_WEB_SEARCH_SMOKE_URL。" }],
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }), {
+      callQueued: async () => ({
+        choices: [{ message: { role: "assistant", content: "Codex Remote 已经 GA，CLI 也更新了。" }, finish_reason: "stop" }],
+      }),
+    });
+    const text = completion.choices[0].message.content;
+    assert.match(text, /https:\/\/developers\.openai\.com\/codex\/changelog/);
+    assert.match(text, /UI_WEB_SEARCH_SMOKE_URL/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;

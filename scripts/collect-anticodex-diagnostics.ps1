@@ -213,6 +213,11 @@ function Read-JsonSummary {
             modelCount = $json.modelCount
             models = @($json.models | ForEach-Object { [string]$_ })
             modelThinkingEvidence = $json.modelThinkingEvidence
+            ambientSuggestionsEvidence = $json.ambientSuggestionsEvidence
+            uiChatSmokeEvidence = $json.uiChatSmokeEvidence
+            uiLocalProjectEvidence = $json.uiLocalProjectEvidence
+            uiCodingProjectEvidence = $json.uiCodingProjectEvidence
+            uiReportSiteEvidence = $json.uiReportSiteEvidence
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
             toolBridgeEvidence = $json.toolBridgeEvidence
@@ -367,8 +372,13 @@ $latestReports = @(
     "latest-account-proxy-readiness.json",
     "latest-post-verification.json",
     "latest-codex-responses.json",
+    "latest-ui-chat-smoke.json",
+    "latest-ui-local-project-smoke.json",
+    "latest-ui-coding-project-smoke.json",
+    "latest-ui-report-site-smoke.json",
     "latest-real-work.json",
     "latest-real-mini-tool.json",
+    "latest-real-small-project.json",
     "latest-native-tool-loop.json",
     "latest-tool-loop.json",
     "latest-native-multi-tool-loop.json",
@@ -393,6 +403,7 @@ $latestReports = @(
     "latest-shortcut-repair.json",
     "latest-model-routing.json",
     "latest-model-thinking.json",
+    "latest-ambient-suggestions.json",
     "latest-log-db-guard.json",
     "latest-ui-idle-stability.json"
 )

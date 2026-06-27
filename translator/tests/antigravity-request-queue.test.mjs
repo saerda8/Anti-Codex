@@ -75,6 +75,29 @@ test("Antigravity request queue releases the next task after a failure", async (
   assert.deepEqual(order, ["first", "second"]);
 });
 
+test("Antigravity request queue releases the next task when active work ignores abort", async () => {
+  const queue = createAntigravityRequestQueue();
+  const controller = new AbortController();
+  const order = [];
+
+  const first = queue.run(async () => {
+    order.push("first:start");
+    await new Promise(() => {});
+  }, { signal: controller.signal });
+  const second = queue.run(async () => {
+    order.push("second:start");
+    return "ok";
+  });
+
+  await Promise.resolve();
+  controller.abort(new DOMException("active stream idle timeout", "TimeoutError"));
+
+  await assert.rejects(first, /active stream idle timeout/);
+  assert.equal(await second, "ok");
+  assert.deepEqual(order, ["first:start", "second:start"]);
+  assert.deepEqual(queue.snapshot().running, false);
+});
+
 test("Antigravity request queue rejects overflow without disturbing accepted work", async () => {
   const queue = createAntigravityRequestQueue({ maxQueued: 1 });
   let releaseFirst;

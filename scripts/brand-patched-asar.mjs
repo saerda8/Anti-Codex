@@ -333,13 +333,13 @@ function patchBrowserWindowIcon(text) {
 }
 
 function patchLocalModelAvailability(text) {
-  const source = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`;return ([\w$]+)\.forEach/;
+  const source = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`(?=[,;])/;
   const match = source.exec(text);
   if (!match) {
-    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1;return [\w$]+\.forEach/.test(text)) return text;
+    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1(?=[,;])/.test(text)) return text;
     throw new Error("Local model availability filter pattern not found");
   }
-  const replacement = `let ${match[1]}=[],${match[2]}=null,${match[3]}=!1;return ${match[6]}.forEach`;
+  const replacement = `let ${match[1]}=[],${match[2]}=null,${match[3]}=!1`;
   return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
 }
 
@@ -636,8 +636,8 @@ function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/model-list-filter-") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`;return [\w$]+\.forEach/.test(text) ||
-        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1;return [\w$]+\.forEach/.test(text)) {
+    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
+        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1(?=[,;])/.test(text)) {
       return [rel, patchLocalModelAvailability];
     }
   }
@@ -645,8 +645,8 @@ function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/models-and-reasoning-efforts-") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`;return [\w$]+\.forEach/.test(text) ||
-        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1;return [\w$]+\.forEach/.test(text)) {
+    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
+        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1(?=[,;])/.test(text)) {
       return [rel, patchLocalModelAvailability];
     }
   }

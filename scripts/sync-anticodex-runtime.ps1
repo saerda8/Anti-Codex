@@ -15,6 +15,9 @@ if (-not $SourceRoot) { $SourceRoot = Split-Path -Parent $scriptRoot }
 $sourceRootFull = [IO.Path]::GetFullPath($SourceRoot)
 $targetRuntimeFull = [IO.Path]::GetFullPath($TargetRuntime)
 $expectedRuntime = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime"))
+$antiCodexStateRoot = Join-Path $env:APPDATA "anticodex"
+$translatorRestartLockPath = Join-Path $antiCodexStateRoot "translator-restart.lock"
+$translatorRestartLockCreated = $false
 if ($targetRuntimeFull -ne $expectedRuntime) {
     throw "Refusing to sync Anti-Codex runtime outside $expectedRuntime"
 }
@@ -38,6 +41,7 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-custom-tool-loop.ps1",
     "scripts\test-anticodex-diagnostics.ps1",
     "scripts\test-anticodex-installed-overall.ps1",
+    "scripts\test-anticodex-ambient-suggestions.ps1",
     "scripts\test-anticodex-local-connectors.mjs",
     "scripts\test-anticodex-manager-action.ps1",
     "scripts\test-anticodex-manager-button.mjs",
@@ -57,6 +61,8 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-real-third-party-provider.mjs",
     "scripts\test-anticodex-real-work.ps1",
     "scripts\test-anticodex-real-mini-tool.ps1",
+    "scripts\test-anticodex-real-report-site.ps1",
+    "scripts\test-anticodex-real-small-project.ps1",
     "scripts\test-anticodex-source-preflight.ps1",
     "scripts\test-anticodex-stability-soak.ps1",
     "scripts\test-anticodex-sync-readiness.ps1",
@@ -66,6 +72,7 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-ui-state.mjs",
     "scripts\test-anticodex-ui-state.ps1",
     "scripts\test-anticodex-ui-idle-stability.ps1",
+    "scripts\test-anticodex-ui-chat-smoke.mjs",
     "scripts\test-anticodex-web-tools.ps1",
     "translator\adaptive-server.mjs",
     "translator\antigravity-agentapi.mjs",
@@ -141,6 +148,20 @@ function Get-AntiCodexTranslatorProcesses {
 function Stop-AntiCodexTranslator {
     $stopped = 0
     foreach ($process in @(Get-AntiCodexTranslatorProcesses)) {
+        try {
+            Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+            $stopped += 1
+        } catch {}
+    }
+    return $stopped
+}
+
+function Stop-ExtraAntiCodexTranslators {
+    param([int]$KeepPid)
+    if ($KeepPid -le 0) { return 0 }
+    $stopped = 0
+    foreach ($process in @(Get-AntiCodexTranslatorProcesses)) {
+        if ([int]$process.ProcessId -eq $KeepPid) { continue }
         try {
             Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
             $stopped += 1
@@ -267,8 +288,13 @@ if (-not $BaseUrl) {
 }
 
 $stoppedTranslatorCount = 0
+$stoppedExtraTranslatorCount = 0
 $launchExitCode = $null
 if (-not $NoRestart) {
+    New-Item -ItemType Directory -Path $antiCodexStateRoot -Force | Out-Null
+    [IO.File]::WriteAllText($translatorRestartLockPath, "sync-anticodex-runtime restart in progress $([DateTime]::UtcNow.ToString("o"))", [Text.Encoding]::UTF8)
+    $translatorRestartLockCreated = $true
+    $env:ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER = "1"
     $stoppedTranslatorCount = Stop-AntiCodexTranslator
     Start-Sleep -Milliseconds 500
     $healthAfterSupervisor = Wait-AntiCodexHealth -Seconds ([Math]::Min(15, [Math]::Max(5, $TimeoutSec)))
@@ -311,6 +337,12 @@ if ($health) {
     $sessionLockProbe = Wait-AntiCodexSessionLock -Seconds ([Math]::Max(5, $TimeoutSec))
     $diagnostics = $sessionLockProbe.diagnostics
     $sessionLockPresent = $sessionLockProbe.present -eq $true
+    if ($diagnostics -and $diagnostics.process -and $diagnostics.process.pid) {
+        $stoppedExtraTranslatorCount = Stop-ExtraAntiCodexTranslators -KeepPid ([int]$diagnostics.process.pid)
+    }
+}
+if ($translatorRestartLockCreated) {
+    Remove-Item -LiteralPath $translatorRestartLockPath -Force -ErrorAction SilentlyContinue
 }
 
 $result = [pscustomobject]@{
@@ -320,6 +352,7 @@ $result = [pscustomobject]@{
     baseUrl = $BaseUrl
     restarted = -not [bool]$NoRestart
     stoppedTranslatorCount = $stoppedTranslatorCount
+    stoppedExtraTranslatorCount = $stoppedExtraTranslatorCount
     launchExitCode = $launchExitCode
     elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
     health = [pscustomobject]@{

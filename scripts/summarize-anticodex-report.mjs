@@ -120,9 +120,9 @@ const managerButtonResults = Object.entries(managerResults).map(([action, entry]
       hit: item?.hit === true,
       target: asString(item?.target),
     })) : [],
-    managerOpenedNewPage: result && has(result, "managerOpenedNewPage") ? !!result.managerOpenedNewPage : null,
-    pageTargetCountBeforeManagerOpen: result && has(result, "pageTargetCountBeforeManagerOpen") ? result.pageTargetCountBeforeManagerOpen : null,
-    pageTargetCountAfterManagerOpen: result && has(result, "pageTargetCountAfterManagerOpen") ? result.pageTargetCountAfterManagerOpen : null,
+    managerOpenedNewPage: has(value, "managerOpenedNewPage") ? !!value.managerOpenedNewPage : (result && has(result, "managerOpenedNewPage") ? !!result.managerOpenedNewPage : null),
+    pageTargetCountBeforeManagerOpen: has(value, "pageTargetCountBeforeManagerOpen") ? value.pageTargetCountBeforeManagerOpen : (result && has(result, "pageTargetCountBeforeManagerOpen") ? result.pageTargetCountBeforeManagerOpen : null),
+    pageTargetCountAfterManagerOpen: has(value, "pageTargetCountAfterManagerOpen") ? value.pageTargetCountAfterManagerOpen : (result && has(result, "pageTargetCountAfterManagerOpen") ? result.pageTargetCountAfterManagerOpen : null),
   };
 });
 
@@ -135,6 +135,12 @@ const isReleaseGateReport = report?.reportName === "release-gates" || /latest-re
 const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-db-guard\.json$/i.test(path) || has(report, "triggerPresent") || has(report, "protected");
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
+const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
+const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
+const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
+const isUiLocalProjectSmokeReport = report?.reportName === "ui-local-project-smoke" || /latest-ui-local-project-smoke\.json$/i.test(path);
+const isUiCodingProjectSmokeReport = report?.reportName === "ui-coding-project-smoke" || /latest-ui-coding-project-smoke\.json$/i.test(path);
+const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
   : null;
@@ -371,6 +377,115 @@ const summary = {
     missingReasoningLevelCount: thinkingModels.filter((item) => !item || !item.reasoning_level).length,
     reasoningLevels: Array.from(new Set(thinkingModels.map((item) => item?.reasoning_level).filter(Boolean).map(String))).sort(),
   } : null,
+  ambientSuggestionsEvidence: isAmbientSuggestionsReport ? {
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    sqliteCheckCount: Array.isArray(report.sqliteChecks) ? report.sqliteChecks.length : 0,
+    sqliteSourceHitCount: Array.isArray(report.sqliteChecks)
+      ? report.sqliteChecks.reduce((sum, item) => sum
+        + (Array.isArray(item?.tableHits) ? item.tableHits.length : 0)
+        + (Array.isArray(item?.columnHits) ? item.columnHits.length : 0)
+        + (Array.isArray(item?.targetHits) ? item.targetHits.length : 0), 0)
+      : 0,
+    bodyTextHitCount: Array.isArray(report.sqliteChecks)
+      ? report.sqliteChecks.reduce((sum, item) => sum + Number(item?.bodyTextHitCount || 0), 0)
+      : 0,
+    unallowedNameCount: [
+      ...(Array.isArray(report.nameScans?.codexHome?.entries) ? report.nameScans.codexHome.entries : []),
+      ...(Array.isArray(report.nameScans?.installRoot?.entries) ? report.nameScans.installRoot.entries : []),
+    ].filter((item) => item?.allowed !== true).length,
+    chromiumHeadSuggestFileCount: Number.isFinite(Number(report.chromiumOnDeviceHeadSuggestModel?.fileCount)) ? Number(report.chromiumOnDeviceHeadSuggestModel.fileCount) : null,
+  } : null,
+  uiChatSmokeEvidence: isUiChatSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockActive: report.antigravitySessionLock && has(report.antigravitySessionLock, "active") ? !!report.antigravitySessionLock.active : null,
+    sessionLockQueued: report.antigravitySessionLock && has(report.antigravitySessionLock, "queued") ? report.antigravitySessionLock.queued : null,
+  } : null,
+  uiWebSearchSmokeEvidence: isUiWebSearchSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    hasSourceUrls: /https?:\/\//i.test(asString(report.lastSample)),
+  } : null,
+  uiLocalProjectEvidence: isUiLocalProjectSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    artifactDir: asString(report.artifactDir),
+    artifactFiles: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.files || null : null,
+    artifactDoneExact: report.artifactEvidence && has(report.artifactEvidence, "doneExact") ? !!report.artifactEvidence.doneExact : null,
+    artifactIndexHasMarker: report.artifactEvidence && has(report.artifactEvidence, "indexHasMarker") ? !!report.artifactEvidence.indexHasMarker : null,
+    artifactReadmeNonEmpty: report.artifactEvidence && has(report.artifactEvidence, "readmeNonEmpty") ? !!report.artifactEvidence.readmeNonEmpty : null,
+  } : null,
+  uiCodingProjectEvidence: isUiCodingProjectSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    artifactDir: asString(report.artifactDir),
+    artifactFiles: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.files || null : null,
+    artifactDoneExact: report.artifactEvidence && has(report.artifactEvidence, "doneExact") ? !!report.artifactEvidence.doneExact : null,
+    exportsFunction: report.artifactEvidence && has(report.artifactEvidence, "exportsFunction") ? !!report.artifactEvidence.exportsFunction : null,
+    testPassed: report.artifactEvidence && has(report.artifactEvidence, "testPassed") ? !!report.artifactEvidence.testPassed : null,
+    cliPassed: report.artifactEvidence && has(report.artifactEvidence, "cliPassed") ? !!report.artifactEvidence.cliPassed : null,
+    cliJson: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.cliJson || null : null,
+  } : null,
+  uiReportSiteEvidence: isUiReportSiteSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    artifactDir: asString(report.artifactDir),
+    artifactFiles: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.files || null : null,
+    artifactDoneExact: report.artifactEvidence && has(report.artifactEvidence, "doneExact") ? !!report.artifactEvidence.doneExact : null,
+    reportHasMarker: report.artifactEvidence && has(report.artifactEvidence, "reportHasMarker") ? !!report.artifactEvidence.reportHasMarker : null,
+    htmlHasMarker: report.artifactEvidence && has(report.artifactEvidence, "htmlHasMarker") ? !!report.artifactEvidence.htmlHasMarker : null,
+    reportHasChinese: report.artifactEvidence && has(report.artifactEvidence, "reportHasChinese") ? !!report.artifactEvidence.reportHasChinese : null,
+    htmlHasChinese: report.artifactEvidence && has(report.artifactEvidence, "htmlHasChinese") ? !!report.artifactEvidence.htmlHasChinese : null,
+    reportMentionsCodex: report.artifactEvidence && has(report.artifactEvidence, "reportMentionsCodex") ? !!report.artifactEvidence.reportMentionsCodex : null,
+    htmlMentionsCodex: report.artifactEvidence && has(report.artifactEvidence, "htmlMentionsCodex") ? !!report.artifactEvidence.htmlMentionsCodex : null,
+    reportUrlCount: report.artifactEvidence && has(report.artifactEvidence, "reportUrlCount") ? report.artifactEvidence.reportUrlCount : null,
+    htmlUrlCount: report.artifactEvidence && has(report.artifactEvidence, "htmlUrlCount") ? report.artifactEvidence.htmlUrlCount : null,
+    sharedUrlCount: report.artifactEvidence && has(report.artifactEvidence, "sharedUrlCount") ? report.artifactEvidence.sharedUrlCount : null,
+    htmlComplete: report.artifactEvidence && has(report.artifactEvidence, "htmlComplete") ? !!report.artifactEvidence.htmlComplete : null,
+    htmlLinksReport: report.artifactEvidence && has(report.artifactEvidence, "htmlLinksReport") ? !!report.artifactEvidence.htmlLinksReport : null,
+  } : null,
   skipRequests: boolField(report, "skipRequests"),
   modelRoutingEvidence: has(report, "skipRequests") || modelRoutingResults.length ? {
     mode: asString(report.mode),
@@ -461,7 +576,7 @@ const summary = {
     skippedCheckCount: skippedCheckEntries.length,
     skippedChecks: skippedCheckEntries.map((entry) => entry.id).sort(),
     missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
-    realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork").map((entry) => entry.id).sort(),
+    realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork" || entry.id === "realSmallProject").map((entry) => entry.id).sort(),
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),

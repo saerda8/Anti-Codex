@@ -7,13 +7,15 @@ export function createAntigravitySessionLock(options = {}) {
   const maxQueued = Number.isFinite(configuredMaxQueued)
     ? Math.max(1, Math.floor(configuredMaxQueued))
     : 32;
-  const ttlMs = Math.max(1_000, Number(options.ttlMs ?? 10 * 60 * 1000) || 10 * 60 * 1000);
+  const ttlMs = Math.max(1_000, Number(options.ttlMs ?? 60 * 1000) || 60 * 1000);
   const queue = [];
   let active = null;
   let accepted = 0;
   let rejected = 0;
   let continued = 0;
   let expired = 0;
+  let responseCancelled = 0;
+  let idleReleased = 0;
 
   function acquire({ previousResponseId = "", signal } = {}) {
     if (signal?.aborted) return Promise.reject(abortReason(signal));
@@ -99,6 +101,27 @@ export function createAntigravitySessionLock(options = {}) {
     processNext();
   }
 
+  function releaseResponseId(responseId, { reason = "response_cancel" } = {}) {
+    const id = String(responseId || "");
+    if (!id || !active?.responseIds?.has(id)) {
+      return {
+        ok: true,
+        reason,
+        released: false,
+        snapshot: snapshot(),
+      };
+    }
+    responseCancelled += 1;
+    releaseEntry(active);
+    return {
+      ok: true,
+      reason,
+      released: true,
+      responseId: id,
+      snapshot: snapshot(),
+    };
+  }
+
   function processNext() {
     while (!active && queue.length > 0) {
       const next = queue.shift();
@@ -124,7 +147,39 @@ export function createAntigravitySessionLock(options = {}) {
       rejected,
       continued,
       expired,
+      responseCancelled,
+      idleReleased,
+      activeAgeMs: active ? Date.now() - active.createdAt : 0,
+      activeContinuedAgeMs: active?.continuedAt ? Date.now() - active.continuedAt : 0,
     };
+  }
+
+  function releaseIdleContinuation({ maxIdleMs = ttlMs, reason = "idle_continuation" } = {}) {
+    const maxIdle = Math.max(1, Number(maxIdleMs) || ttlMs);
+    if (!active || active.responseIds.size === 0 || !active.continuedAt) {
+      return { ok: true, reason, released: false, snapshot: snapshot() };
+    }
+    const idleMs = Date.now() - active.continuedAt;
+    if (idleMs < maxIdle) {
+      return { ok: true, reason, released: false, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
+    }
+    idleReleased += 1;
+    releaseEntry(active);
+    return { ok: true, reason, released: true, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
+  }
+
+  function releaseIdleActive({ maxIdleMs = ttlMs, reason = "idle_active_session" } = {}) {
+    const maxIdle = Math.max(1, Number(maxIdleMs) || ttlMs);
+    if (!active || active.responseIds.size > 0) {
+      return { ok: true, reason, released: false, snapshot: snapshot() };
+    }
+    const idleMs = Date.now() - active.createdAt;
+    if (idleMs < maxIdle) {
+      return { ok: true, reason, released: false, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
+    }
+    idleReleased += 1;
+    releaseEntry(active);
+    return { ok: true, reason, released: true, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
   }
 
   function cancelAll() {
@@ -160,7 +215,7 @@ export function createAntigravitySessionLock(options = {}) {
     };
   }
 
-  return { acquire, snapshot, cancelAll, reset };
+  return { acquire, snapshot, cancelAll, reset, releaseResponseId, releaseIdleContinuation, releaseIdleActive };
 }
 
 function cryptoRandomId() {

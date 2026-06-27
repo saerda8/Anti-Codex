@@ -1,7 +1,15 @@
 model_reasoning_effort = "high"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
+model = "gemini-3-flash-agent"
 cli_auth_credentials_store = "file"
 model_catalog_json = "__DEEPCODEX_MODEL_CATALOG__"
 chatgpt_base_url = "http://127.0.0.1:8282/backend-api/"
 openai_base_url = "http://127.0.0.1:8282"
+
+[features]
+responses_websockets = false
+responses_websockets_v2 = false
+plugins = false
+plugin_sharing = false
+remote_plugin = false

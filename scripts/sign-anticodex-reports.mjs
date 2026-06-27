@@ -43,8 +43,12 @@ const defaultReports = [
   "latest-compaction-resume.json",
   "latest-cancellation.json",
   "latest-web-tools.json",
+  "latest-ui-local-project-smoke.json",
+  "latest-ui-coding-project-smoke.json",
+  "latest-ui-report-site-smoke.json",
   "latest-real-mini-tool.json",
   "latest-real-work.json",
+  "latest-real-small-project.json",
   "latest-stability-soak.json",
 ];
 const reportNames = names.length > 0 ? names : defaultReports;

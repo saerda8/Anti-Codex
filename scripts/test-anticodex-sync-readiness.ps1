@@ -253,7 +253,7 @@ if (-not (Has-Text $managerInjectScript "__ANTICODEX_MANAGER_API__")) { Add-Fail
 if (-not (Has-Text $managerInjectScript "apiCandidates")) { Add-Failure "manager injection missing gateway URL fallback candidates" }
 if (Has-Text $managerInjectScript 'createElement\("button"\)[\s\S]{0,500}anticodex-manager-button') { Add-Failure "manager injection still creates the removed floating Manager button" }
 if (-not (Has-Text $managerInjectScript "anticodex-panel")) { Add-Failure "manager injection missing embedded manager panel" }
-if (-not (Has-Text $managerInjectScript "native-panel-v94")) { Add-Failure "manager injection did not bump native panel version" }
+if (-not (Has-Text $managerInjectScript "native-panel-v96")) { Add-Failure "manager injection did not bump native panel version" }
 if (-not (Has-Text $managerInjectScript 'accountSwitch')) { Add-Failure "manager injection is missing the Antigravity account switch action" }
 if (-not (Has-Text $managerInjectScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager injection missing CDP action bridge support" }
 if (-not (Has-Text $managerInjectScript "/anticodex/manager/action-script")) { Add-Failure "manager injection missing script-based action endpoint" }
@@ -267,7 +267,7 @@ if (-not (Has-Text $cdpInjectScript "ANTICODEX_MANAGER_SNAPSHOT")) { Add-Failure
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_MANAGER_ACTION_QUEUE__")) { Add-Failure "manager bridge missing CDP action queue" }
 if (-not (Has-Text $managerBridgeScript "splice\(0\)")) { Add-Failure "manager bridge missing action queue drain" }
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager bridge missing page action function" }
-if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v94"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
+if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v96"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
 if (Has-Text $managerOpenInjectScript "/anticodex/manager/inject\.js") { Add-Failure "manager open injection still depends on the old web script loader" }
 if (Has-Text $managerOpenInjectScript 'createElement\("script"\)') { Add-Failure "manager open injection still creates a separate script tag" }
 if (-not (Has-Text $runtimeStartScript "ANTICODEX_NATIVE_TOOL_BRIDGE")) { Add-Failure "runtime launcher missing Antigravity native bridge default guard" }
@@ -352,6 +352,25 @@ $expectedShortcutIconLocation = "$activeHostIcon,0"
 $expectedDesktopShortcutIconLocation = if (Test-Path -LiteralPath $desktopShortcutIcon) { "$desktopShortcutIcon,0" } else { $expectedShortcutIconLocation }
 $desktopIconRequiredFrameSizes = @(16, 24, 32, 48, 64, 128, 256)
 $expectedManagerBridgeBaseUrl = "http://127.0.0.1:8484"
+$allowedManagerBridgeBaseUrls = [System.Collections.Generic.List[string]]::new()
+$allowedManagerBridgeBaseUrls.Add($expectedManagerBridgeBaseUrl) | Out-Null
+$allowedManagerBridgeBaseUrls.Add("http://localhost:8484") | Out-Null
+try {
+    $localIpv4Addresses = @([System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | Where-Object {
+        $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork
+    } | ForEach-Object { $_.IPAddressToString })
+    foreach ($ip in $localIpv4Addresses) {
+        if ($ip -and -not $allowedManagerBridgeBaseUrls.Contains("http://$ip`:8484")) {
+            $allowedManagerBridgeBaseUrls.Add("http://$ip`:8484") | Out-Null
+        }
+    }
+} catch {}
+function Get-ManagerBridgeBaseUrlFromCommandLine {
+    param([string]$CommandLine)
+    $match = [regex]::Match($CommandLine, '--base-url\s+(\S+)')
+    if (-not $match.Success) { return "" }
+    return $match.Groups[1].Value.TrimEnd("/")
+}
 $managerBridgeProcesses = @()
 $managerBridgeProcessSummary = @()
 $staleManagerBridgeProcesses = @()
@@ -361,13 +380,17 @@ try {
     })
     $managerBridgeProcessSummary = @($managerBridgeProcesses | ForEach-Object {
         $commandLine = [string]$_.CommandLine
+        $bridgeBaseUrl = Get-ManagerBridgeBaseUrlFromCommandLine $commandLine
+        $hasAllowedBaseUrl = $allowedManagerBridgeBaseUrls.Contains($bridgeBaseUrl)
         [pscustomobject]@{
             pid = [int]$_.ProcessId
-            hasExpectedBaseUrl = ($commandLine -match "--base-url\s+$([regex]::Escape($expectedManagerBridgeBaseUrl))(\s|$)")
+            baseUrl = $bridgeBaseUrl
+            hasExpectedBaseUrl = $hasAllowedBaseUrl
+            hasAllowedBaseUrl = $hasAllowedBaseUrl
             commandLine = $commandLine
         }
     })
-    $staleManagerBridgeProcesses = @($managerBridgeProcessSummary | Where-Object { $_.hasExpectedBaseUrl -ne $true })
+    $staleManagerBridgeProcesses = @($managerBridgeProcessSummary | Where-Object { $_.hasAllowedBaseUrl -ne $true })
     if ($staleManagerBridgeProcesses.Count -gt 0) {
         Add-Failure "manager bridge has stale base-url process(es): $((@($staleManagerBridgeProcesses | ForEach-Object { $_.pid }) -join ', '))"
     }
@@ -868,6 +891,7 @@ $result = [pscustomobject]@{
         forbiddenDesktopHelperShortcuts = $forbiddenDesktopHelperShortcuts
         managerBridge = [pscustomobject]@{
             expectedBaseUrl = $expectedManagerBridgeBaseUrl
+            allowedBaseUrls = @($allowedManagerBridgeBaseUrls)
             processCount = $managerBridgeProcesses.Count
             staleProcessCount = $staleManagerBridgeProcesses.Count
             processes = $managerBridgeProcessSummary

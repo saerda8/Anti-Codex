@@ -25,6 +25,7 @@ function Invoke-AntiCodexSourcePreflight {
     if (-not (Test-Path -LiteralPath $SOURCE_PREFLIGHT_SCRIPT -PathType Leaf)) {
         throw "Anti-Codex source preflight is missing: $SOURCE_PREFLIGHT_SCRIPT"
     }
+    $global:LASTEXITCODE = 0
     & $SOURCE_PREFLIGHT_SCRIPT -SkipFullRegression | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Anti-Codex source preflight failed. Installation was stopped before copying the host."

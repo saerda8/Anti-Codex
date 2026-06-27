@@ -218,7 +218,7 @@ async function runAction(action) {
       timeout: 180000,
       headers: {
         "content-type": "application/json",
-        "x-anticodex-manager-token": bootstrap.token,
+        "x-anticodex-manager-token": token,
         origin: baseUrl,
         referer: `${baseUrl}/anticodex/manager`,
       },

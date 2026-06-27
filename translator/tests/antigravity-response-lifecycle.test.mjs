@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 
 import { createAntigravityRequestRegistry } from "../antigravity-request-registry.mjs";
 import { pipeAntigravityResponseAsSSE } from "../adaptive-server.mjs";
@@ -99,6 +100,44 @@ test("Antigravity response forwards a real text delta before the upstream stream
     response.event("response.completed").data.response.output[0].content[0].text,
     "live answer",
   );
+});
+
+test("Antigravity streamed response keeps the SSE connection active before first text", async () => {
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+
+  await pipeAntigravityResponseAsSSE(
+    { headers: {}, path: "/responses" },
+    response,
+    { model: "gemini-pro-agent", messages: [{ role: "user", content: "silent first" }] },
+    { model: "gemini-pro-agent", stream: true, input: "silent first" },
+    null,
+    {
+      registry,
+      streamKeepAliveMs: 10,
+      streamIdleTimeoutMs: 250,
+      streamUpstream: async function* (_body, options) {
+        await new Promise((resolve) => setTimeout(resolve, 35));
+        yield {
+          type: "done",
+          completion: {
+            id: options.responseId,
+            created: options.created,
+            object: "chat.completion",
+            model: "gemini-pro-agent",
+            choices: [{ message: { role: "assistant", content: "late answer" }, finish_reason: "stop" }],
+            usage: {},
+          },
+        };
+      },
+    },
+  );
+
+  assert.ok(
+    response.rawChunks.some((chunk) => chunk.startsWith(": anticodex-keepalive ")),
+    "SSE keepalive comment should be emitted while upstream is silent",
+  );
+  assert.equal(response.event("response.completed").data.response.output[0].content[0].text, "late answer");
 });
 
 test("Antigravity streamed response records model route metadata", async () => {
@@ -464,6 +503,70 @@ test("cancelling an active Antigravity response aborts the turn and emits respon
   assert.equal(response.events.some((event) => event.name === "response.completed"), false);
 });
 
+test("closing an Antigravity streaming client aborts the upstream turn", async () => {
+  const request = new FakeRequest();
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+  let observedSignal = null;
+
+  const running = pipeAntigravityResponseAsSSE(
+    request,
+    response,
+    { model: "gemini-pro-agent", messages: [{ role: "user", content: "wait" }] },
+    { model: "gemini-pro-agent", stream: true, input: "wait" },
+    null,
+    {
+      registry,
+      streamUpstream: async function* (_body, options) {
+        observedSignal = options.signal;
+        await new Promise((resolve, reject) => {
+          options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+        });
+      },
+    },
+  );
+
+  await response.waitForEvent("response.created");
+  response.emit("close");
+  await running;
+
+  assert.equal(observedSignal.aborted, true);
+  assert.equal(registry.snapshot().active, 0);
+  assert.equal(response.event("response.cancelled").data.response.id, response.event("response.created").data.response.id);
+  assert.equal(response.events.some((event) => event.name === "response.completed"), false);
+});
+
+test("Antigravity stream idle timeout fails locally even if upstream ignores abort", async () => {
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+  let observedSignal = null;
+
+  await pipeAntigravityResponseAsSSE(
+    { headers: {}, path: "/responses" },
+    response,
+    { model: "gemini-pro-agent", messages: [{ role: "user", content: "hang" }] },
+    { model: "gemini-pro-agent", stream: true, input: "hang" },
+    null,
+    {
+      registry,
+      streamIdleTimeoutMs: 25,
+      streamUpstream: async function* (_body, options) {
+        observedSignal = options.signal;
+        await new Promise(() => {});
+        yield { type: "text_delta", delta: "unreachable" };
+      },
+    },
+  );
+
+  const failed = response.event("response.failed").data.response;
+  assert.equal(failed.error.type, "antigravity_stream_idle_timeout");
+  assert.equal(observedSignal.aborted, true);
+  assert.equal(registry.snapshot().active, 0);
+  assert.equal(response.ended, true);
+  assert.equal(response.events.some((event) => event.name === "response.completed"), false);
+  assert.equal(response.events.some((event) => event.name === "response.cancelled"), false);
+});
+
 test("cancellation wins if the upstream turn resolves during the cancel race", async () => {
   const response = new FakeResponse();
   const registry = createAntigravityRequestRegistry();
@@ -712,9 +815,48 @@ test("Antigravity queued streamed response can be cancelled before entering upst
   assert.equal(second.events.some((event) => event.name === "response.completed"), false);
 });
 
-class FakeResponse {
+test("Antigravity streamed response has a total timeout even while events keep arriving", async () => {
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+
+  await pipeAntigravityResponseAsSSE(
+    { headers: {}, path: "/responses" },
+    response,
+    { model: "gemini-pro-agent", messages: [{ role: "user", content: "never finish" }] },
+    { model: "gemini-pro-agent", stream: true, input: "never finish" },
+    null,
+    {
+      registry,
+      streamIdleTimeoutMs: 5_000,
+      streamTotalTimeoutMs: 50,
+      streamUpstream: async function* () {
+        while (true) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          yield { type: "text_delta", delta: "." };
+        }
+      },
+    },
+  );
+
+  const failed = response.event("response.failed").data.response;
+  assert.equal(failed.error.type, "antigravity_stream_total_timeout");
+  assert.equal(registry.snapshot().active, 0);
+  assert.equal(response.ended, true);
+});
+
+class FakeRequest extends EventEmitter {
   constructor() {
+    super();
+    this.headers = {};
+    this.path = "/responses";
+  }
+}
+
+class FakeResponse extends EventEmitter {
+  constructor() {
+    super();
     this.events = [];
+    this.rawChunks = [];
     this.waiters = new Map();
   }
 
@@ -724,6 +866,7 @@ class FakeResponse {
   }
 
   write(chunk) {
+    this.rawChunks.push(String(chunk));
     const match = String(chunk).match(/^event: ([^\n]+)\ndata: (.+)\n\n$/s);
     if (!match) return true;
     const event = { name: match[1], data: JSON.parse(match[2]) };

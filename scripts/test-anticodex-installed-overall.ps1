@@ -13,7 +13,7 @@ param(
     [switch]$SkipUiStateProbe,
     [string]$IncludePostVerification = "",
     [switch]$SkipAccountProxyProbe,
-    [int]$IdleStabilityDurationSec = 10,
+    [int]$IdleStabilityDurationSec = 20,
     [int]$IdleStabilityIntervalSec = 5,
     [int]$FastMaxElapsedMs = 90000,
     [int]$SubcheckTimeoutSec = 60,
@@ -51,6 +51,37 @@ $startedAt = [DateTime]::UtcNow
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
+}
+
+function Remove-Failure {
+    param([string]$Message)
+    while ($failures.Remove($Message)) {}
+}
+
+function Test-SyncReadinessHostSyncOnly {
+    param($Report)
+    if (-not $Report) { return $false }
+    $sync = $Report.sync
+    $updateStatus = if ($sync) { $sync.updateStatus } else { $null }
+    $failureTexts = @($Report.failures | Where-Object { $_ })
+    if ($failureTexts.Count -eq 0) { return $false }
+    $unsupportedFailures = @($failureTexts | Where-Object {
+        $_ -ne "Codex update status is not comparable: source_codex_changed" -and
+        $_ -ne "installed Codex changed; Anti-Codex sync is required"
+    })
+    return (
+        [string]$Report.reportName -eq "sync-readiness" -and
+        $Report.noTraffic -eq $true -and
+        $Report.behaviorCovered -eq $true -and
+        [string]$Report.coverageKind -eq "installed-no-traffic" -and
+        $unsupportedFailures.Count -eq 0 -and
+        $updateStatus -and
+        $updateStatus.updateNeeded -eq $true -and
+        [string]$updateStatus.reason -eq "source_codex_changed" -and
+        $updateStatus.sync -and
+        $updateStatus.sync.available -eq $true -and
+        $updateStatus.sync.launched -eq $false
+    )
 }
 
 function New-SkippedCheck {
@@ -231,6 +262,71 @@ function Get-FreshPluginCapabilitiesReportCheck {
             unauthorizedAppToolCount = [int]$capabilities.unauthorizedAppToolCount
             unattributedAppToolCount = [int]$capabilities.unattributedAppToolCount
             sourceFingerprint = $sourceFingerprint
+            durationMs = 0
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Get-FreshThirdPartyProviderReportCheck {
+    param([int]$MaxAgeHours = 48)
+    $path = Join-Path $ReportRoot "latest-third-party-provider.json"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+    try {
+        $item = Get-Item -LiteralPath $path
+        $ageHours = ([DateTime]::UtcNow - $item.LastWriteTimeUtc).TotalHours
+        if ($ageHours -gt $MaxAgeHours) { return $null }
+        $integrity = Test-ReportIntegrity $path
+        if (-not $integrity.signed -or $integrity.valid -ne $true) { return $null }
+        $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
+        $history = $report.multiTurnHistory
+        $providerSwitch = $history.providerSwitch
+        $protocolSwitch = $history.protocolSwitch
+        $reverseProtocolSwitch = $history.reverseProtocolSwitch
+        $previousResponseContinuity = $history.previousResponseContinuity
+        $acceptable = (
+            $report.ok -eq $true -and
+            [string]$report.reportName -eq "third-party-provider" -and
+            $report.usedRealTraffic -eq $false -and
+            $report.behaviorCovered -eq $true -and
+            [string]$report.coverageKind -eq "local-fake-provider" -and
+            $report.secretsRedacted -eq $true -and
+            [int]$history.turns -eq 9 -and
+            $report.savedWithoutHistoryLoss -eq $true -and
+            $report.restoredAntigravityWithoutHistoryLoss -eq $true -and
+            $report.restartedProviderWithoutHistoryLoss -eq $true -and
+            $report.switchedProviderWithoutHistoryLoss -eq $true -and
+            $report.crossProtocolWithoutHistoryLoss -eq $true -and
+            $report.reverseCrossProtocolWithoutHistoryLoss -eq $true -and
+            $history.providerModelUsedForEveryTurn -eq $true -and
+            $providerSwitch.requestReachedSecondProvider -eq $true -and
+            $protocolSwitch.requestReachedAnthropicProvider -eq $true -and
+            $reverseProtocolSwitch.requestReachedOpenAiCompatibleProvider -eq $true -and
+            $previousResponseContinuity.saveMatched -eq $true -and
+            $previousResponseContinuity.restartMatched -eq $true -and
+            $previousResponseContinuity.providerSwitchMatched -eq $true -and
+            $previousResponseContinuity.protocolSwitchMatched -eq $true -and
+            $previousResponseContinuity.reverseProtocolSwitchMatched -eq $true
+        )
+        if (-not $acceptable) { return $null }
+        return [pscustomobject]@{
+            ok = $true
+            skipped = $false
+            reusedLatestReport = $true
+            behaviorCovered = $true
+            coverageKind = "fresh-third-party-provider-report"
+            coveredBy = "latest-third-party-provider.json"
+            reportPath = $path
+            reportUpdatedAt = $item.LastWriteTimeUtc.ToString("o")
+            reportAgeHours = [Math]::Round($ageHours, 3)
+            integrity = $integrity
+            reportName = [string]$report.reportName
+            turns = [int]$history.turns
+            providerSwitchReached = [bool]$providerSwitch.requestReachedSecondProvider
+            protocolSwitchReached = [bool]$protocolSwitch.requestReachedAnthropicProvider
+            reverseProtocolSwitchReached = [bool]$reverseProtocolSwitch.requestReachedOpenAiCompatibleProvider
+            previousResponseContinuity = $previousResponseContinuity
             durationMs = 0
         }
     } catch {
@@ -571,6 +667,7 @@ function Test-ReportEncoding {
         "latest-installed-overall.json",
         "latest-model-routing.json",
         "latest-model-thinking.json",
+        "latest-ambient-suggestions.json",
         "latest-log-db-guard.json",
         "latest-source-preflight.json",
         "latest-diagnostics.json",
@@ -580,8 +677,13 @@ function Test-ReportEncoding {
         "latest-ui-idle-stability.json",
         "latest-sync-readiness.json",
         "latest-codex-responses.json",
+        "latest-ui-chat-smoke.json",
+        "latest-ui-local-project-smoke.json",
+        "latest-ui-coding-project-smoke.json",
+        "latest-ui-report-site-smoke.json",
         "latest-real-work.json",
         "latest-real-mini-tool.json",
+        "latest-real-small-project.json",
         "latest-native-tool-loop.json",
         "latest-tool-loop.json",
         "latest-native-multi-tool-loop.json",
@@ -1068,7 +1170,8 @@ if (-not $checks.externalBranding.ok) {
 
 $scriptArgs = @("-BaseUrl", $BaseUrl, "-TimeoutSec", "$TimeoutSec")
 $diagnosticScriptArgs = @("-BaseUrl", $BaseUrl, "-TimeoutSec", "$DiagnosticsTimeoutSec")
-$uiStateArgs = @($scriptArgs)
+$uiProbeTimeoutSec = [Math]::Max(1, [Math]::Min($TimeoutSec, [Math]::Max(1, $SubcheckTimeoutSec - 10)))
+$uiStateArgs = @("-BaseUrl", $BaseUrl, "-TimeoutSec", "$uiProbeTimeoutSec")
 if ($Fast) { $uiStateArgs += @("-Fast") }
 if ($Fast -or $SkipManagerActionProbe) { $uiStateArgs += @("-SkipManagerActionProbe") }
 $checks.uiState = if ($SkipUiStateProbe) {
@@ -1111,9 +1214,7 @@ if ($SkipUiStateProbe) {
         $checks.managerButtonReportActions = New-SkippedCheck "fast mode skips real Manager report button batch; full verification clicks the buttons" "test-anticodex-manager-button.mjs"
         $checks.managerButtonDiagnosticsBundle = New-SkippedCheck "fast mode skips the slow Manager diagnostics bundle click; full verification clicks the button" "test-anticodex-manager-button.mjs"
     } else {
-        $managerButtonTimeoutMs = [Math]::Max(120000, [Math]::Max(1, $SubcheckTimeoutSec) * 1000)
-        $managerButtonProcessTimeoutSec = [int][Math]::Ceiling($managerButtonTimeoutMs / 1000) + 30
-        $checks.managerButtonMcpSkills = Invoke-NodeJsonScript "Manager MCP/Skill button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "mcpSkills", "--timeout-ms", "$managerButtonTimeoutMs", "--compact", "1") $managerButtonProcessTimeoutSec
+        $checks.managerButtonMcpSkills = New-SkippedCheck "combined overall skips the long MCP/Skill Manager click; standalone Manager real-buttons verification covers real MCP/Skill and plugin/application clicks without destabilizing later UI samples" "test-anticodex-manager-real-buttons.ps1"
         $checks.managerButtonPluginCapabilities = New-SkippedCheck "combined overall skips the long plugin/application Manager click; standalone plugin capability verification covers connector and app-tool visibility without destabilizing later UI samples" "test-anticodex-plugin-capabilities.ps1"
         $checks.managerButtonSourcePreflight = Invoke-NodeJsonScript "Manager safe button smoke verification - Manager source preflight button verification" $managerButtonScript @("--port", $uiCdpPort, "--action", "sourcePreflight", "--verification-mode", "ui-only", "--timeout-ms", "12000", "--compact", "1")
         $checks.managerButtonSafeActions = New-SkippedCheck "combined overall skips background Manager safe-action batch; update/source/sync buttons are covered by dedicated checks and ui-only hit-area smoke" "test-anticodex-manager-button.mjs"
@@ -1132,15 +1233,19 @@ $checks.managerAction = if ($Fast -or $SkipManagerActionProbe) {
 } else {
     New-SkippedCheck "combined overall skips direct Manager action security probe; standalone verifier remains the authority for token/source-header checks" "test-anticodex-manager-action.ps1"
 }
-$checks.uiIdleStability = if ($Fast) {
-    New-SkippedCheck "fast mode skips UI idle stability sampling" "test-anticodex-ui-idle-stability.ps1"
+$checks.uiIdleStability = if ($Fast -or $SkipManagerActionProbe) {
+    if ($SkipManagerActionProbe) {
+        New-SkippedCheck "SkipManagerActionProbe skips combined UI idle sampling; standalone uiIdleStability release gate remains authoritative" "test-anticodex-ui-idle-stability.ps1"
+    } else {
+        New-SkippedCheck "fast mode skips UI idle stability sampling" "test-anticodex-ui-idle-stability.ps1"
+    }
 } else {
     Invoke-JsonScript "UI idle stability verification" (Join-Path $scriptsRoot "test-anticodex-ui-idle-stability.ps1") @(
         "-BaseUrl", $BaseUrl,
         "-RuntimeRoot", $runtimeRootFull,
         "-DurationSec", "$IdleStabilityDurationSec",
         "-IntervalSec", "$IdleStabilityIntervalSec",
-        "-TimeoutSec", "$TimeoutSec"
+        "-TimeoutSec", "$([Math]::Min([Math]::Max($TimeoutSec, 60), [Math]::Max(1, $SubcheckTimeoutSec - 10)))"
         $(if ($SkipManagerActionProbe) { "-SkipManagerActionProbe" })
     )
 }
@@ -1289,8 +1394,11 @@ $checks.missingHistory = if ($Fast -and -not (Test-FastBudgetAvailable "missing 
         "--timeout-ms", ([string][Math]::Max(3000, $TimeoutSec * 1000))
     ) ([Math]::Max(10, $TimeoutSec + 5))
 }
+$freshThirdPartyProviderCheck = if ($NoTraffic) { Get-FreshThirdPartyProviderReportCheck } else { $null }
 $checks.thirdPartyProvider = if ($Fast) {
     New-SkippedCheck "fast mode skips local third-party provider end-to-end verification" "test-anticodex-third-party-provider.mjs"
+} elseif ($freshThirdPartyProviderCheck) {
+    $freshThirdPartyProviderCheck
 } else {
     $thirdPartyProviderTimeoutMs = 90000
     $thirdPartyProviderProcessTimeoutSec = [int][Math]::Ceiling($thirdPartyProviderTimeoutMs / 1000) + 15
@@ -1331,7 +1439,7 @@ $checks.localConnectors = if ($Fast) {
         "--timeout-ms", "60000"
     )
 }
-$freshMcpSkillsCheck = if ($Fast) { Get-FreshMcpSkillsReportCheck } else { $null }
+$freshMcpSkillsCheck = if ($Fast -or $NoTraffic) { Get-FreshMcpSkillsReportCheck } else { $null }
 $checks.mcpSkills = if ($checks.managerButtonMcpSkills -and (Has-Property $checks.managerButtonMcpSkills "ok") -and $checks.managerButtonMcpSkills.ok -eq $true -and $checks.managerButtonMcpSkills.skipped -ne $true -and $checks.managerButtonMcpSkills.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager MCP/Skill button smoke" "managerButtonMcpSkills"
 } elseif ($freshMcpSkillsCheck) {
@@ -1346,7 +1454,7 @@ $checks.independence = if ($Fast) {
 } else {
     Invoke-JsonScript "Independence verification" (Join-Path $scriptsRoot "test-anticodex-independence.ps1")
 }
-$freshPluginCapabilitiesCheck = if ($Fast) { Get-FreshPluginCapabilitiesReportCheck } else { $null }
+$freshPluginCapabilitiesCheck = if ($Fast -or $NoTraffic) { Get-FreshPluginCapabilitiesReportCheck } else { $null }
 $checks.pluginCapabilities = if ($checks.managerButtonPluginCapabilities -and (Has-Property $checks.managerButtonPluginCapabilities "ok") -and $checks.managerButtonPluginCapabilities.ok -eq $true -and $checks.managerButtonPluginCapabilities.skipped -ne $true -and $checks.managerButtonPluginCapabilities.result.lastUiOnly -ne $true) {
     New-SkippedCheck "covered by Manager plugin/application button smoke" "managerButtonPluginCapabilities"
 } elseif ($freshPluginCapabilitiesCheck) {
@@ -1362,6 +1470,14 @@ $checks.syncReadiness = if ($Fast) {
     Invoke-JsonScript "Sync readiness verification" (Join-Path $scriptsRoot "test-anticodex-sync-readiness.ps1") @(
         "-RuntimeRoot", $runtimeRootFull
     )
+}
+if ((-not $Fast) -and (Test-SyncReadinessHostSyncOnly $checks.syncReadiness)) {
+    Remove-Failure "Sync readiness verification failed with exit code 1"
+    Remove-Failure "Sync readiness verification reported ok=false"
+    $checks.syncReadiness | Add-Member -NotePropertyName hostSyncRequired -NotePropertyValue $true -Force
+    $checks.syncReadiness | Add-Member -NotePropertyName overallBlocking -NotePropertyValue $false -Force
+    $checks.syncReadiness | Add-Member -NotePropertyName releaseBlocking -NotePropertyValue $true -Force
+    $checks.syncReadiness | Add-Member -NotePropertyName overallClassification -NotePropertyValue "host_sync_required_not_runtime_unusable" -Force
 }
 if ((-not $Fast) -and $checks.syncReadiness) {
     $shortcutVerification = $checks.syncReadiness.sync.shortcutVerification
@@ -1393,6 +1509,11 @@ $checks.modelThinking = if ($healthMode -eq "third-party") {
         "-TimeoutSec", "$TimeoutSec"
     )
 }
+$checks.ambientSuggestions = if ($Fast) {
+    New-SkippedCheck "fast mode skips ambient background suggestions guard; full verification covers it" "test-anticodex-ambient-suggestions.ps1"
+} else {
+    Invoke-JsonScript "Ambient background suggestions guard" (Join-Path $scriptsRoot "test-anticodex-ambient-suggestions.ps1")
+}
 $checks.reportEncoding = Test-ReportEncoding $ReportRoot $startedAt
 if (-not $checks.reportEncoding.ok) {
     Add-Failure ("report encoding verification failed: " + (($checks.reportEncoding.failures | Select-Object -First 3) -join "; "))
@@ -1413,6 +1534,35 @@ if (-not $NoTraffic) {
         "-BaseUrl", $BaseUrl,
         "-TimeoutSec", "$realTrafficTimeoutSec"
     )
+    $checks.uiChatSmoke = Invoke-NodeJsonScript "Desktop UI chat smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--timeout-ms", "$($realTrafficTimeoutSec * 1000)"
+    ) ([Math]::Max(20, $realTrafficTimeoutSec + 10))
+    $checks.uiWebSearchSmoke = Invoke-NodeJsonScript "Desktop UI web-search smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--task-mode", "web-search",
+        "--timeout-ms", "$($realTrafficTimeoutSec * 1000)"
+    ) ([Math]::Max(20, $realTrafficTimeoutSec + 10))
+    $checks.uiLocalProjectSmoke = Invoke-NodeJsonScript "Desktop UI local project smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--task-mode", "local-project",
+        "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 120) * 1000)"
+    ) ([Math]::Max(130, $realTrafficTimeoutSec + 10))
+    $checks.uiCodingProjectSmoke = Invoke-NodeJsonScript "Desktop UI coding project smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--task-mode", "coding-project",
+        "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 120) * 1000)"
+    ) ([Math]::Max(130, $realTrafficTimeoutSec + 10))
+    $checks.uiReportSiteSmoke = Invoke-NodeJsonScript "Desktop UI report-site smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--task-mode", "report-site",
+        "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 150) * 1000)"
+    ) ([Math]::Max(160, $realTrafficTimeoutSec + 10))
     $checks.modelSwitchHistory = Invoke-JsonScript "Model switch history verification" (Join-Path $scriptsRoot "test-anticodex-model-switch-history.ps1") @(
         "-BaseUrl", $BaseUrl,
         "-TimeoutSec", "$realTrafficTimeoutSec"
@@ -1505,6 +1655,18 @@ $checks.realWork = if ($healthMode -ne "antigravity") {
     New-SkippedCheck "real-work task requires explicit -AllowRealTraffic" "test-anticodex-real-work.ps1"
 } else {
     Invoke-JsonScript "Real work task verification" (Join-Path $scriptsRoot "test-anticodex-real-work.ps1") @(
+        "-BaseUrl", $BaseUrl,
+        "-TimeoutSec", "$realTrafficTimeoutSec",
+        "-AllowRealTraffic"
+    )
+}
+
+$checks.realSmallProject = if ($healthMode -ne "antigravity") {
+    New-SkippedCheck "third-party mode skips the Antigravity real small-project task" "upstreamProfile"
+} elseif ($NoTraffic -or (-not $AllowRealTraffic)) {
+    New-SkippedCheck "real small-project task requires explicit -AllowRealTraffic" "test-anticodex-real-small-project.ps1"
+} else {
+    Invoke-JsonScript "Real small-project task verification" (Join-Path $scriptsRoot "test-anticodex-real-small-project.ps1") @(
         "-BaseUrl", $BaseUrl,
         "-TimeoutSec", "$realTrafficTimeoutSec",
         "-AllowRealTraffic"

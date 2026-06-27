@@ -112,7 +112,10 @@ function Invoke-LocalJsonPost {
 }
 
 function Get-LocalRequestTimeoutSec {
-    return [Math]::Max(1, [Math]::Min(2, $TimeoutSec))
+    if ($script:shortBudgetMode) {
+        return [Math]::Max(1, [Math]::Min(2, $TimeoutSec))
+    }
+    return [Math]::Max(3, [Math]::Min(15, [int][Math]::Floor($TimeoutSec / 6)))
 }
 
 function Invoke-LocalJsonWithRetry {
