@@ -6,6 +6,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -16,6 +17,8 @@ for (let i = 2; i < process.argv.length; i += 1) {
   }
 }
 
+const scriptRoot = dirname(fileURLToPath(import.meta.url));
+const sourceRoot = resolve(scriptRoot, "..");
 let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT || 58318);
 const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
@@ -34,6 +37,8 @@ const reportName = taskMode === "web-search"
       ? "ui-complex-project-smoke"
     : taskMode === "report-site"
       ? "ui-report-site-smoke"
+    : taskMode === "repo-file-edit"
+      ? "ui-repo-file-edit-smoke"
     : taskMode === "local-project"
       ? "ui-local-project-smoke"
       : "ui-chat-smoke";
@@ -47,6 +52,8 @@ const markerPrefix = taskMode === "web-search"
     ? "UI_COMPLEX_PROJECT_SMOKE"
   : taskMode === "report-site"
     ? "UI_REPORT_SITE_SMOKE"
+  : taskMode === "repo-file-edit"
+    ? "UI_REPO_FILE_EDIT_SMOKE"
   : taskMode === "local-project"
     ? "UI_LOCAL_PROJECT_SMOKE"
     : "UI_CHAT_SMOKE";
@@ -67,6 +74,9 @@ const artifactDir = args.get("--artifact-dir")
         : "desktop-visible-small-project",
     marker.toLowerCase().replace(/[^a-z0-9_-]+/g, "-"),
   );
+const repoFileEditDir = resolve(args.get("--repo-file-edit-dir") || join(sourceRoot, "scripts", "fixtures", "desktop-coworker-live"));
+const repoFileEditTarget = resolve(repoFileEditDir, "acceptance-target.mjs");
+const repoFileEditTest = resolve(repoFileEditDir, "acceptance-target.test.mjs");
 let promptText = String(args.get("--prompt") || (taskMode === "web-search"
   ? `最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 ${marker}。`
   : taskMode === "local-project"
@@ -89,6 +99,9 @@ if (!args.get("--prompt") && taskMode === "complex-project") {
 }
 if (!args.get("--prompt") && taskMode === "report-site") {
   promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell file commands to create exactly these files: report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
+}
+if (!args.get("--prompt") && taskMode === "repo-file-edit") {
+  promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Do not edit any other source file. Run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
 }
 if (args.get("--prompt") && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
@@ -307,6 +320,89 @@ function fileExists(path) {
   } catch {
     return false;
   }
+}
+
+function prepareRepoFileEditFixture() {
+  mkdirSync(repoFileEditDir, { recursive: true });
+  writeFileSync(repoFileEditTarget, [
+    'export function normalizeStatus(input = "") {',
+    "  return String(input).trim();",
+    "}",
+    "",
+    "export function summarizeStatuses(values = []) {",
+    "  const counts = {};",
+    "  for (const value of values) {",
+    "    const key = normalizeStatus(value);",
+    "    if (!key) continue;",
+    "    counts[key] = (counts[key] || 0) + 1;",
+    "  }",
+    "  return counts;",
+    "}",
+    "",
+  ].join("\n"), "utf8");
+  writeFileSync(repoFileEditTest, [
+    'import test from "node:test";',
+    'import assert from "node:assert/strict";',
+    'import { normalizeStatus, summarizeStatuses } from "./acceptance-target.mjs";',
+    "",
+    'test("normalizes status values for report grouping", () => {',
+    '  assert.equal(normalizeStatus(" OK "), "ok");',
+    '  assert.equal(normalizeStatus("Needs Review"), "needs-review");',
+    '  assert.equal(normalizeStatus("blocked_by_proxy"), "blocked-by-proxy");',
+    '  assert.equal(normalizeStatus("  __Needs!! Review__  "), "needs-review");',
+    '  assert.equal(normalizeStatus("***Blocked_by Proxy!!"), "blocked-by-proxy");',
+    "});",
+    "",
+    'test("summarizes normalized status values", () => {',
+    '  assert.deepEqual(summarizeStatuses([" OK ", "ok", "Needs Review", "", "blocked_by_proxy"]), {',
+    "    ok: 2,",
+    '    "needs-review": 1,',
+    '    "blocked-by-proxy": 1,',
+    "  });",
+    "});",
+    "",
+  ].join("\n"), "utf8");
+}
+
+function verifyRepoFileEditFixture() {
+  const evidence = {
+    dir: repoFileEditDir,
+    target: repoFileEditTarget,
+    test: repoFileEditTest,
+    files: {
+      target: fileExists(repoFileEditTarget),
+      test: fileExists(repoFileEditTest),
+    },
+    sourceLength: 0,
+    testPassed: false,
+    testOutput: "",
+    testError: "",
+    sourceHasLowercase: false,
+    sourceHandlesInvalidChars: false,
+    sourceTrimsHyphens: false,
+  };
+  if (evidence.files.target) {
+    const source = readFileSync(repoFileEditTarget, "utf8");
+    evidence.sourceLength = source.length;
+    evidence.sourceHasLowercase = /\.toLowerCase\s*\(/.test(source);
+    evidence.sourceHandlesInvalidChars = /\[\^a-z0-9/.test(source) || /replace\s*\([^)]*[^a-z0-9]/i.test(source);
+    evidence.sourceTrimsHyphens = /\^-/.test(source) || /-+\$/.test(source) || /while\s*\(/.test(source);
+  }
+  if (evidence.files.target && evidence.files.test) {
+    try {
+      evidence.testOutput = execFileSync(process.execPath, ["--test", repoFileEditTest], {
+        cwd: sourceRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      evidence.testPassed = true;
+    } catch (error) {
+      evidence.testOutput = String(error?.stdout || "");
+      evidence.testError = String(error?.stderr || error?.message || error || "");
+      evidence.testPassed = false;
+    }
+  }
+  return evidence;
 }
 
 function verifyLocalProjectArtifact(dir, expectedMarker) {
@@ -746,9 +842,16 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       near: item.near,
       score: item.score,
     } : null;
+    const composerText = composer?.innerText || '';
+    const normalizeInsertedText = (value) => String(value || '')
+      .replaceAll(String.fromCharCode(13) + String.fromCharCode(10), String.fromCharCode(10))
+      .replaceAll(String.fromCharCode(13), String.fromCharCode(10))
+      .replace(new RegExp(String.fromCharCode(10) + "{2,}", "g"), String.fromCharCode(10))
+      .trim();
     return {
-      composer: composer?.innerText || '',
-      composerMatches: (composer?.innerText || '').trim() === expected.trim(),
+      composer: composerText,
+      composerMatches: composerText.trim() === expected.trim()
+        || normalizeInsertedText(composerText) === normalizeInsertedText(expected),
       hasSendButton: Boolean(selected),
       clicked: Boolean(${click ? "true" : "false"} && selected),
       selected: summarize(selected),
@@ -997,6 +1100,12 @@ async function main() {
     if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
       throw new Error(`desktop backend was not idle before submit after stale recovery: ${initialIdle.lastError || "busy"}`);
     }
+    if (taskMode === "repo-file-edit") {
+      prepareRepoFileEditFixture();
+      artifactEvidence = verifyRepoFileEditFixture();
+      if (artifactEvidence?.testPassed === true) failures.push("repo-file-edit fixture was not reset to a failing state before submit");
+      artifactEvidence = null;
+    }
     if (isolateChat) {
       await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
       await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
@@ -1235,6 +1344,17 @@ async function main() {
       if (taskMode === "free-chat") {
         const normalizedAnswer = answerSample.replace(/完全访问|输出|暂无产物|来源|暂无来源|Gemini[^\n]*/g, "").trim();
         if (!composer.includes(promptText) && /[\u4e00-\u9fff]/.test(normalizedAnswer) && !/正在思考|已处理|停止了|重新连接/.test(normalizedAnswer)) break;
+      } else if (taskMode === "repo-file-edit") {
+        artifactEvidence = verifyRepoFileEditFixture();
+        if (artifactEvidence?.testPassed === true && !composer.includes(promptText)) {
+          try {
+            const loopDiagnostics = await httpJson(`${baseUrl}/anticodex/diagnostics`);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              break;
+            }
+          } catch {}
+        }
       } else if (answerMarkerCount >= 1 && !composer.includes(marker)) {
         try {
           const loopDiagnostics = await httpJson(`${baseUrl}/anticodex/diagnostics`);
@@ -1248,15 +1368,16 @@ async function main() {
     }
     if (!clicked) failures.push("send button was not clicked");
     if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
-    if (taskMode !== "free-chat" && answerMarkerCount < 1) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
-    if (taskMode !== "free-chat" && composer.includes(marker)) failures.push("composer still contains the submitted prompt");
+    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && answerMarkerCount < 1) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
+    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && composer.includes(marker)) failures.push("composer still contains the submitted prompt");
     if (taskMode === "free-chat") {
       if (composer.includes(promptText)) failures.push("composer still contains the submitted prompt");
       if (!answerSample.trim()) failures.push("assistant free-chat reply was not observed in the desktop UI");
-      const hasSubstantiveFreeChatAnswer = /https?:\/\/|GPT|GBT|OpenAI|release|Release/i.test(answerSample)
-        || (/(发布|模型|官方)/.test(answerSample) && answerSample.length > 80);
-      if (!hasSubstantiveFreeChatAnswer && /正在思考|已处理|停止了|重新连接|处理中|正在运行|暂无产物|暂无来源/.test(answerSample)) failures.push("free-chat answer only showed transient thinking/tool state");
-      if (!/(发布|GPT|GBT|OpenAI|模型|没有|暂无|未知|预计|官方)/.test(answerSample)) failures.push("free-chat answer did not contain a final user-facing answer");
+      const answerWithoutChrome = answerSample.replace(/\n+完全访问[\s\S]*$/u, "").trim();
+      const hasSubstantiveFreeChatAnswer = /https?:\/\/|GPT|GBT|OpenAI|release|Release|ping/i.test(answerWithoutChrome)
+        || (/(发布|模型|官方)/.test(answerWithoutChrome) && answerWithoutChrome.length > 80);
+      if (!hasSubstantiveFreeChatAnswer && /正在思考|已处理|停止了|重新连接|处理中|正在运行/.test(answerWithoutChrome)) failures.push("free-chat answer only showed transient thinking/tool state");
+      if (!/(发布|GPT|GBT|OpenAI|模型|没有|暂无|未知|预计|官方|ping)/i.test(answerWithoutChrome)) failures.push("free-chat answer did not contain a final user-facing answer");
     }
     if (taskMode === "web-search" && answerSample) lastSample = answerSample;
     if (taskMode === "web-search") {
@@ -1266,6 +1387,12 @@ async function main() {
       if (/无法直接实时检索|未提供\s*`?web_search|缺少工具|Anti-Codex 已拦截/i.test(lastSample)) {
         failures.push("web-search answer still contained a missing-tool or blocked-response detour");
       }
+    }
+    if (taskMode === "repo-file-edit") {
+      artifactEvidence = verifyRepoFileEditFixture();
+      if (!artifactEvidence?.files?.target) failures.push("repo-file-edit target file was not present");
+      if (!artifactEvidence?.files?.test) failures.push("repo-file-edit test file was not present");
+      if (artifactEvidence?.testPassed !== true) failures.push("repo-file-edit node:test did not pass after the desktop task");
     }
     if (taskMode === "local-project") {
       artifactEvidence = verifyLocalProjectArtifact(artifactDir, marker);
@@ -1335,7 +1462,7 @@ async function main() {
     failures.push(error instanceof Error ? error.message : String(error));
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? 60_000 : 20_000;
+  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "repo-file-edit" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
     : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
@@ -1364,7 +1491,9 @@ async function main() {
     elapsedMs: Date.now() - startedAt,
     failures,
     marker,
-    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+    artifactDir: taskMode === "repo-file-edit"
+      ? repoFileEditDir
+      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
     artifactEvidence,
     cdpPort,
     baseUrl,
@@ -1410,7 +1539,9 @@ main().catch((error) => {
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
-    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+    artifactDir: taskMode === "repo-file-edit"
+      ? repoFileEditDir
+      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
   };
   writeReport(payload);
   console.log(JSON.stringify(payload));

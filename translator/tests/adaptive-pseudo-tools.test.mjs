@@ -3106,6 +3106,40 @@ test("plain desktop chat is classified as no-tools while work and web tasks are 
   }).tools, undefined);
 });
 
+test("artifact completion does not reuse stale marker for a newer project edit task", () => {
+  const messages = [
+    {
+      role: "user",
+      content: "Create a tiny Node.js CLI project in C:\\Temp\\multi. done.txt must contain UI_MULTI_TURN_PROJECT_SMOKE_20260627.",
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_old_check",
+      content: "Anti-Codex artifact marker verification:\nUI_MULTI_TURN_PROJECT_SMOKE_20260627\nword-tally.mjs done.txt",
+    },
+    {
+      role: "assistant",
+      content: "Files created and verified.\n\nUI_MULTI_TURN_PROJECT_SMOKE_20260627",
+    },
+    {
+      role: "user",
+      content: "In the local project G:\\Trae-Project\\Anti-Codex\\deepcodex, edit only this file: scripts\\fixtures\\desktop-coworker-live\\acceptance-target.mjs. Run the failing test after editing.",
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_project_read",
+      content: "Get-Content scripts\\fixtures\\desktop-coworker-live\\acceptance-target.test.mjs\n---\nexport function normalizeStatus(input = \"\") { return String(input).trim(); }",
+    },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_project_read", output: messages.at(-1).content }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.equal(completion, null);
+});
+
 test("local artifact marker guard catches wrong marker in read-back evidence", () => {
   const messages = [
     {

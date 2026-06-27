@@ -141,6 +141,7 @@ const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" ||
 const isUiLocalProjectSmokeReport = report?.reportName === "ui-local-project-smoke" || /latest-ui-local-project-smoke\.json$/i.test(path);
 const isUiCodingProjectSmokeReport = report?.reportName === "ui-coding-project-smoke" || /latest-ui-coding-project-smoke\.json$/i.test(path);
 const isUiMultiTurnProjectSmokeReport = report?.reportName === "ui-multi-turn-project-smoke" || /latest-ui-multi-turn-project-smoke\.json$/i.test(path);
+const isUiRepoFileEditSmokeReport = report?.reportName === "ui-repo-file-edit-smoke" || /latest-ui-repo-file-edit-smoke\.json$/i.test(path);
 const isUiComplexProjectSmokeReport = report?.reportName === "ui-complex-project-smoke" || /latest-ui-complex-project-smoke\.json$/i.test(path);
 const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
@@ -485,6 +486,24 @@ const summary = {
     testPassed: report.artifactEvidence && has(report.artifactEvidence, "testPassed") ? !!report.artifactEvidence.testPassed : null,
     cliPassed: report.artifactEvidence && has(report.artifactEvidence, "cliPassed") ? !!report.artifactEvidence.cliPassed : null,
     cliJson: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.cliJson || null : null,
+  } : null,
+  uiRepoFileEditEvidence: isUiRepoFileEditSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    artifactDir: asString(report.artifactDir),
+    artifactFiles: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.files || null : null,
+    testPassed: report.artifactEvidence && has(report.artifactEvidence, "testPassed") ? !!report.artifactEvidence.testPassed : null,
+    sourceHasLowercase: report.artifactEvidence && has(report.artifactEvidence, "sourceHasLowercase") ? !!report.artifactEvidence.sourceHasLowercase : null,
+    sourceHandlesInvalidChars: report.artifactEvidence && has(report.artifactEvidence, "sourceHandlesInvalidChars") ? !!report.artifactEvidence.sourceHandlesInvalidChars : null,
+    sourceTrimsHyphens: report.artifactEvidence && has(report.artifactEvidence, "sourceTrimsHyphens") ? !!report.artifactEvidence.sourceTrimsHyphens : null,
   } : null,
   uiComplexProjectEvidence: isUiComplexProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

@@ -219,6 +219,7 @@ function Read-JsonSummary {
             uiLocalProjectEvidence = $json.uiLocalProjectEvidence
             uiCodingProjectEvidence = $json.uiCodingProjectEvidence
             uiMultiTurnProjectEvidence = $json.uiMultiTurnProjectEvidence
+            uiRepoFileEditEvidence = $json.uiRepoFileEditEvidence
             uiComplexProjectEvidence = $json.uiComplexProjectEvidence
             uiReportSiteEvidence = $json.uiReportSiteEvidence
             skipRequests = $json.skipRequests
@@ -381,6 +382,7 @@ $latestReports = @(
     "latest-ui-local-project-smoke.json",
     "latest-ui-coding-project-smoke.json",
     "latest-ui-multi-turn-project-smoke.json",
+    "latest-ui-repo-file-edit-smoke.json",
     "latest-ui-complex-project-smoke.json",
     "latest-ui-report-site-smoke.json",
     "latest-real-work.json",

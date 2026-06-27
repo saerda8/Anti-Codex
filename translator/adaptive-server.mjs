@@ -2523,6 +2523,7 @@ function latestManagerReportItem(label, fileName) {
     const isUiWebSearchSmokeReport = fileName === "latest-ui-web-search-smoke.json" || report?.reportName === "ui-web-search-smoke";
     const isUiCodingProjectSmokeReport = fileName === "latest-ui-coding-project-smoke.json" || report?.reportName === "ui-coding-project-smoke";
     const isUiMultiTurnProjectSmokeReport = fileName === "latest-ui-multi-turn-project-smoke.json" || report?.reportName === "ui-multi-turn-project-smoke";
+    const isUiRepoFileEditSmokeReport = fileName === "latest-ui-repo-file-edit-smoke.json" || report?.reportName === "ui-repo-file-edit-smoke";
     const isUiComplexProjectSmokeReport = fileName === "latest-ui-complex-project-smoke.json" || report?.reportName === "ui-complex-project-smoke";
     const isUiReportSiteSmokeReport = fileName === "latest-ui-report-site-smoke.json" || report?.reportName === "ui-report-site-smoke";
     const optionalBool = (value) => typeof value === "boolean" ? value : null;
@@ -2557,6 +2558,16 @@ function latestManagerReportItem(label, fileName) {
         cliPassed: optionalBool(uiArtifactEvidence?.cliPassed),
         cliJson: uiArtifactEvidence?.cliJson && typeof uiArtifactEvidence.cliJson === "object" ? uiArtifactEvidence.cliJson : null,
         turnCount: Array.isArray(report?.turnEvidence) ? report.turnEvidence.length : null,
+        composerCleared: optionalBool(report?.composerCleared),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
+    } : null;
+    const uiRepoFileEditEvidence = isUiRepoFileEditSmokeReport ? {
+        artifactDir: shortSafeText(report?.artifactDir || "", ""),
+        artifactFiles: uiArtifactEvidence?.files && typeof uiArtifactEvidence.files === "object" ? uiArtifactEvidence.files : null,
+        testPassed: optionalBool(uiArtifactEvidence?.testPassed),
+        sourceHasLowercase: optionalBool(uiArtifactEvidence?.sourceHasLowercase),
+        sourceHandlesInvalidChars: optionalBool(uiArtifactEvidence?.sourceHandlesInvalidChars),
+        sourceTrimsHyphens: optionalBool(uiArtifactEvidence?.sourceTrimsHyphens),
         composerCleared: optionalBool(report?.composerCleared),
         sessionLockClear: optionalBool(report?.sessionLockClear),
     } : null;
@@ -2636,6 +2647,7 @@ function latestManagerReportItem(label, fileName) {
         uiWebSearchSmokeEvidence,
         uiCodingProjectEvidence,
         uiMultiTurnProjectEvidence,
+        uiRepoFileEditEvidence,
         uiComplexProjectEvidence,
         uiReportSiteEvidence,
         logDbGuardEvidence: isLogDbGuardReport ? {
@@ -3123,6 +3135,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
         latestManagerReportItem("Desktop multi-turn project", "latest-ui-multi-turn-project-smoke.json"),
+        latestManagerReportItem("Desktop repo file edit", "latest-ui-repo-file-edit-smoke.json"),
         latestManagerReportItem("桌面复杂项目验收", "latest-ui-complex-project-smoke.json"),
         latestManagerReportItem("桌面调研报告验收", "latest-ui-report-site-smoke.json"),
         latestManagerReportItem("真实工作任务", "latest-real-work.json"),
@@ -3859,6 +3872,10 @@ function latestReportsSummary(result){
     if(item.uiMultiTurnProjectEvidence){
       const evidence=item.uiMultiTurnProjectEvidence;
       lines.push("  uiMultiTurn: first="+(evidence.firstDoneExact?"true":"false")+" / followup="+(evidence.followupExact?"true":"false")+" / unique="+(evidence.exportsUniqueWords?"true":"false")+" / turns="+(evidence.turnCount??"unknown")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
+    }
+    if(item.uiRepoFileEditEvidence){
+      const evidence=item.uiRepoFileEditEvidence;
+      lines.push("  uiRepoEdit: test="+(evidence.testPassed?"true":"false")+" / lowercase="+(evidence.sourceHasLowercase?"true":"false")+" / invalidChars="+(evidence.sourceHandlesInvalidChars?"true":"false")+" / trimHyphens="+(evidence.sourceTrimsHyphens?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
     }
     if(item.uiComplexProjectEvidence){
       const evidence=item.uiComplexProjectEvidence;
@@ -6521,34 +6538,41 @@ function userTextLooksLikeToolRelayContinuation(userText = "") {
     return /(?:tool call is complete|web_search call is complete|web_fetch call is complete|continue (?:the )?(?:same|current) task|this is not the final answer|Anti-Codex blocked|Anti-Codex artifact marker verification|继续当前任务|继续同一任务|这不是最终回答)/i.test(userText);
 }
 
+function artifactMarkerRequirementFromUserText(userText = "") {
+    if (!userText || !userTextLooksLikeArtifactRequest(userText)) return null;
+    const markers = userText.match(/\b[A-Z][A-Z0-9_]{10,}\b/g) || [];
+    const marker = markers.at(-1);
+    if (!marker) return null;
+    const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
+    const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
+    const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
+    const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
+    const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
+    const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
+    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject };
+}
+
 function artifactMarkerRequirementFromChat(messages = []) {
-    let lastToolIndex = -1;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-        if (messages[index]?.role === "tool") {
-            lastToolIndex = index;
-            break;
-        }
-    }
     for (let index = messages.length - 1; index >= 0; index -= 1) {
         const message = messages[index];
         if (message?.role !== "user") continue;
         const userText = textFromMessageContent(message.content);
         if (!userText) continue;
-        const artifactRequest = userTextLooksLikeArtifactRequest(userText);
-        if (!artifactRequest) {
-            if (index > lastToolIndex && !userTextLooksLikeToolRelayContinuation(userText)) return null;
-            continue;
-        }
-        const markers = userText.match(/\b[A-Z][A-Z0-9_]{10,}\b/g) || [];
-        const marker = markers.at(-1);
-        if (!marker) continue;
-        const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
-        const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
-        const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
-        const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
-        const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
-        const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-        return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject };
+        if (userTextLooksLikeToolRelayContinuation(userText)) continue;
+        return artifactMarkerRequirementFromUserText(userText);
+    }
+    return null;
+}
+
+function artifactMarkerRequirementFromChatIncludingRelay(messages = []) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message?.role !== "user") continue;
+        const userText = textFromMessageContent(message.content);
+        if (!userText) continue;
+        const requirement = artifactMarkerRequirementFromUserText(userText);
+        if (requirement) return requirement;
+        if (!userTextLooksLikeToolRelayContinuation(userText)) return null;
     }
     return null;
 }
@@ -6560,7 +6584,7 @@ function assistantTextLooksLikeArtifactCompletion(text) {
 }
 
 function artifactMarkerMismatchForChat(messages = [], assistantText = "") {
-    const requirement = artifactMarkerRequirementFromChat(messages);
+    const requirement = artifactMarkerRequirementFromChatIncludingRelay(messages);
     if (!requirement) return null;
     if (!assistantTextLooksLikeArtifactCompletion(assistantText)) return null;
     const evidenceText = chatToolEvidenceText(messages);
@@ -6847,19 +6871,7 @@ function artifactMarkerRequirementFromOriginalRequest(originalRequest = {}) {
         }
     }
     if (!userText && Array.isArray(request?.messages)) userText = latestUserTextFromChatMessages(request.messages);
-    if (!userText) return null;
-    const artifactRequest = userTextLooksLikeArtifactRequest(userText);
-    if (!artifactRequest) return null;
-    const markers = userText.match(/\b[A-Z][A-Z0-9_]{10,}\b/g) || [];
-    const marker = markers.at(-1);
-    if (!marker) return null;
-    const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
-    const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
-    const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
-    const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
-    const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
-    const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject };
+    return artifactMarkerRequirementFromUserText(userText);
 }
 
 function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {

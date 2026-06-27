@@ -126,6 +126,7 @@ const gateDefinitions = [
   { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
   { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requireCodingProject: true } },
   { id: "uiMultiTurnProjectSmoke", group: "real-traffic", file: "latest-ui-multi-turn-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-multi-turn-project-smoke", taskMode: "multi-turn-project", prefix: "ui_multi_turn_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt", "followupTxt", "changelogMd"], requireMultiTurnProject: true } },
+  { id: "uiRepoFileEditSmoke", group: "real-traffic", file: "latest-ui-repo-file-edit-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-repo-file-edit-smoke", taskMode: "repo-file-edit", prefix: "ui_repo_file_edit_smoke", requiredFiles: ["target", "test"], markerOptional: true, requireRepoFileEdit: true } },
   { id: "uiComplexProjectSmoke", group: "real-traffic", file: "latest-ui-complex-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-complex-project-smoke", taskMode: "complex-project", prefix: "ui_complex_project_smoke", requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"], requireSourceJsonUrls: 3, requireCodingProject: true, requireReportSite: true } },
   { id: "uiReportSiteSmoke", group: "real-traffic", file: "latest-ui-report-site-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-report-site-smoke", taskMode: "report-site", prefix: "ui_report_site_smoke", requiredFiles: ["reportMd", "indexHtml", "doneTxt"], requireReportSite: true } },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
@@ -503,7 +504,7 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push(`${prefix}_behavior_not_covered`);
       if (report.coverageKind !== "desktop-ui-real-traffic") semanticFailures.push(`${prefix}_coverage_kind`);
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push(`${prefix}_failures`);
-      if (!marker || Number(report.answerMarkerCount || 0) < 1) semanticFailures.push(`${prefix}_marker_missing`);
+      if (!spec.markerOptional && (!marker || Number(report.answerMarkerCount || 0) < 1)) semanticFailures.push(`${prefix}_marker_missing`);
       if (report.clicked !== true) semanticFailures.push(`${prefix}_not_sent`);
       if (report.composerCleared !== true) semanticFailures.push(`${prefix}_composer_not_cleared`);
       if (report.activeReconnectSeen === true) semanticFailures.push(`${prefix}_active_reconnect_seen`);
@@ -511,7 +512,7 @@ function summarizeGate(definition) {
       for (const fileKey of spec.requiredFiles || []) {
         if (files[fileKey] !== true) semanticFailures.push(`${prefix}_${fileKey}_missing`);
       }
-      if ((spec.requiredFiles || []).length > 0 && !spec.requireMultiTurnProject && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
+      if ((spec.requiredFiles || []).length > 0 && !spec.requireMultiTurnProject && !spec.requireRepoFileEdit && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
       if (spec.requireSourceUrls && !/https?:\/\//i.test(lastSample)) semanticFailures.push(`${prefix}_source_urls_missing`);
       if (spec.requireSourceJsonUrls && Number(artifact.sourceUrlCount || 0) < spec.requireSourceJsonUrls) semanticFailures.push(`${prefix}_source_json_urls_missing`);
       if (spec.requireCodingProject) {
@@ -531,6 +532,12 @@ function summarizeGate(definition) {
         if (turns.length < 2) semanticFailures.push(`${prefix}_turns_missing`);
         if (turns.some((turn) => !turn || turn.clicked !== true || turn.submitSucceeded !== true || Number(turn.answerMarkerCount || 0) < 1)) semanticFailures.push(`${prefix}_turn_submit_missing`);
         if (turns.some((turn) => turn?.activeReconnectSeen === true)) semanticFailures.push(`${prefix}_turn_reconnect_seen`);
+      }
+      if (spec.requireRepoFileEdit) {
+        if (artifact.testPassed !== true) semanticFailures.push(`${prefix}_tests_not_passed`);
+        if (artifact.sourceHasLowercase !== true) semanticFailures.push(`${prefix}_lowercase_missing`);
+        if (artifact.sourceHandlesInvalidChars !== true) semanticFailures.push(`${prefix}_invalid_char_handling_missing`);
+        if (artifact.sourceTrimsHyphens !== true) semanticFailures.push(`${prefix}_hyphen_trim_missing`);
       }
       if (spec.requireReportSite) {
         if (artifact.reportHasChinese !== true) semanticFailures.push(`${prefix}_report_chinese_missing`);
@@ -1264,6 +1271,7 @@ const realTrafficRefreshOrder = [
   ["uiLocalProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode local-project --timeout-ms 120000"],
   ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],
   ["uiMultiTurnProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode multi-turn-project --timeout-ms 240000"],
+  ["uiRepoFileEditSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode repo-file-edit --timeout-ms 240000"],
   ["uiComplexProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode complex-project --timeout-ms 180000"],
   ["uiReportSiteSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode report-site --timeout-ms 150000"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
@@ -1951,6 +1959,7 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-ui-local-project-smoke.json", invalidUiTaskReport("ui-local-project-smoke", "local-project", "UI_LOCAL_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-coding-project-smoke.json", invalidUiTaskReport("ui-coding-project-smoke", "coding-project", "UI_CODING_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-multi-turn-project-smoke.json", invalidUiTaskReport("ui-multi-turn-project-smoke", "multi-turn-project", "UI_MULTI_TURN_PROJECT_MARKER"));
+    writeFakeLatestReport("latest-ui-repo-file-edit-smoke.json", invalidUiTaskReport("ui-repo-file-edit-smoke", "repo-file-edit", "UI_REPO_FILE_EDIT_MARKER"));
     writeFakeLatestReport("latest-ui-complex-project-smoke.json", invalidUiTaskReport("ui-complex-project-smoke", "complex-project", "UI_COMPLEX_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-report-site-smoke.json", invalidUiTaskReport("ui-report-site-smoke", "report-site", "UI_REPORT_SITE_MARKER"));
 
@@ -2535,6 +2544,25 @@ if (args.has("--self-test")) {
       "ui_multi_turn_project_smoke_tests_not_passed",
       "ui_multi_turn_project_smoke_cli_not_passed",
       "ui_multi_turn_project_smoke_turns_missing",
+    ]);
+    semanticFailures.uiRepoFileEditSmoke = assertSemanticFailures("uiRepoFileEditSmoke", "self-test failed: semantically invalid ui-repo-file-edit-smoke report satisfied the gate", [
+      "ui_repo_file_edit_smoke_report_name",
+      "ui_repo_file_edit_smoke_task_mode",
+      "ui_repo_file_edit_smoke_real_traffic_not_requested",
+      "ui_repo_file_edit_smoke_real_traffic_missing",
+      "ui_repo_file_edit_smoke_behavior_not_covered",
+      "ui_repo_file_edit_smoke_coverage_kind",
+      "ui_repo_file_edit_smoke_failures",
+      "ui_repo_file_edit_smoke_not_sent",
+      "ui_repo_file_edit_smoke_composer_not_cleared",
+      "ui_repo_file_edit_smoke_active_reconnect_seen",
+      "ui_repo_file_edit_smoke_session_lock_not_clear",
+      "ui_repo_file_edit_smoke_target_missing",
+      "ui_repo_file_edit_smoke_test_missing",
+      "ui_repo_file_edit_smoke_tests_not_passed",
+      "ui_repo_file_edit_smoke_lowercase_missing",
+      "ui_repo_file_edit_smoke_invalid_char_handling_missing",
+      "ui_repo_file_edit_smoke_hyphen_trim_missing",
     ]);
     semanticFailures.uiComplexProjectSmoke = assertSemanticFailures("uiComplexProjectSmoke", "self-test failed: semantically invalid ui-complex-project-smoke report satisfied the gate", [
       "ui_complex_project_smoke_report_name",

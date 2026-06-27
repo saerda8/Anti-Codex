@@ -682,6 +682,7 @@ function Test-ReportEncoding {
         "latest-ui-local-project-smoke.json",
         "latest-ui-coding-project-smoke.json",
         "latest-ui-multi-turn-project-smoke.json",
+        "latest-ui-repo-file-edit-smoke.json",
         "latest-ui-complex-project-smoke.json",
         "latest-ui-report-site-smoke.json",
         "latest-real-work.json",
@@ -1560,6 +1561,12 @@ if (-not $NoTraffic) {
         "--task-mode", "coding-project",
         "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 120) * 1000)"
     ) ([Math]::Max(130, $realTrafficTimeoutSec + 10))
+    $checks.uiRepoFileEditSmoke = Invoke-NodeJsonScript "Desktop UI repo file edit smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--task-mode", "repo-file-edit",
+        "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 240) * 1000)"
+    ) ([Math]::Max(250, $realTrafficTimeoutSec + 10))
     $checks.uiReportSiteSmoke = Invoke-NodeJsonScript "Desktop UI report-site smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
         "--base-url", $BaseUrl,
         "--report-root", $ReportRoot,
