@@ -95,7 +95,7 @@ Status: mostly_complete_for_v1
 - Antigravity-mode startup now treats the original Codex config as import-only: shared MCP/config blocks may be copied into Anti-Codex's own config, but plugin registration restoration and permission defaults no longer write back to the original global Codex config.
 
 ### Phase 5: Installed-Build Verification
-Status: completed_for_autonomous_v1_checks; pending_next_development_batch_deploy
+Status: completed_for_current_release_acceptance; later entries record the same-runtime desktop, installed, post-verification, release-gate, soak, and cold-relaunch evidence
 - Run unit and protocol contract tests.
 - Verify model menu and selected model in the actual desktop UI.
 - Verify Chinese, long context, MCP/skills, tools, and cancellation.
