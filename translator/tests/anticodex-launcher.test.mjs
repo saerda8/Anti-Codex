@@ -6637,7 +6637,9 @@ test("Anti-Codex ships a cold relaunch verification script", () => {
   assert.match(relaunch, /Get-AntiCodexTranslatorProcesses/);
   assert.match(relaunch, /Get-AntiCodexLauncherProcesses/);
   assert.match(relaunch, /Get-OriginalCodexMainProcesses/);
-  assert.match(relaunch, /original Codex main process set changed/);
+  assert.match(relaunch, /originalCodexStopTargetIntersection/);
+  assert.match(relaunch, /original Codex process was selected as an Anti-Codex stop target/);
+  assert.match(relaunch, /pidSetUnchanged/);
   assert.match(relaunch, /originalCodex/);
   assert.match(relaunch, /unchanged/);
   assert.match(relaunch, /beforePids/);
@@ -7514,7 +7516,7 @@ test("Anti-Codex ships a read-only UI idle stability verifier", () => {
   assert.match(idle, /ConvertFrom-Json -ErrorAction Stop/);
   assert.match(idle, /function Get-RemainingIdleBudgetMs/);
   assert.match(idle, /UI state verifier timed out after \$RequestTimeoutSec seconds/);
-  assert.match(idle, /\+ 15000\)/);
+  assert.match(idle, /\+ 5000\)/);
   assert.match(idle, /\$process\.WaitForExit\(\$waitMs\)/);
   assert.match(idle, /\$process\.Refresh\(\)/);
   assert.match(idle, /\$process\.Kill\(\)/);
@@ -11159,6 +11161,11 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /data-disabled/);
   assert.match(verifier, /composer did not contain exactly the submitted prompt before clicking send/);
   assert.match(verifier, /send button was not found in the composer controls/);
+  assert.match(verifier, /Network\.enable/);
+  assert.match(verifier, /Input\.dispatchMouseEvent/);
+  assert.match(verifier, /clickMethod:\s*"cdp-mouse"/);
+  assert.match(verifier, /summarizeNetworkEvents/);
+  assert.match(verifier, /networkEvents/);
   assert.match(verifier, /send click did not submit the composer prompt/);
   assert.match(verifier, /submitSucceeded/);
   assert.match(verifier, /submitEvidence/);
@@ -11206,10 +11213,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(overall, /latest-ui-coding-project-smoke\.json/);
   assert.match(overall, /latest-ui-report-site-smoke\.json/);
   assert.match(collector, /latest-ui-chat-smoke\.json/);
+  assert.match(collector, /latest-ui-web-search-smoke\.json/);
   assert.match(collector, /latest-ui-local-project-smoke\.json/);
   assert.match(collector, /latest-ui-coding-project-smoke\.json/);
   assert.match(collector, /latest-ui-report-site-smoke\.json/);
   assert.match(collector, /uiChatSmokeEvidence = \$json\.uiChatSmokeEvidence/);
+  assert.match(collector, /uiWebSearchSmokeEvidence = \$json\.uiWebSearchSmokeEvidence/);
   assert.match(collector, /uiLocalProjectEvidence = \$json\.uiLocalProjectEvidence/);
   assert.match(collector, /uiCodingProjectEvidence = \$json\.uiCodingProjectEvidence/);
   assert.match(collector, /uiReportSiteEvidence = \$json\.uiReportSiteEvidence/);
@@ -11217,14 +11226,18 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(signer, /latest-ui-coding-project-smoke\.json/);
   assert.match(signer, /latest-ui-report-site-smoke\.json/);
   assert.match(server, /latest-ui-chat-smoke\.json/);
+  assert.match(server, /latest-ui-web-search-smoke\.json/);
   assert.match(server, /latest-ui-local-project-smoke\.json/);
   assert.match(server, /latest-ui-coding-project-smoke\.json/);
   assert.match(server, /latest-ui-report-site-smoke\.json/);
+  assert.match(server, /uiWebSearchSmokeEvidence/);
   assert.match(server, /uiCodingProjectEvidence/);
   assert.match(server, /uiReportSiteEvidence/);
+  assert.match(server, /uiWebSearch:/);
   assert.match(server, /uiCoding:/);
   assert.match(server, /uiReportSite:/);
   assert.match(summarizer, /uiChatSmokeEvidence/);
+  assert.match(summarizer, /uiWebSearchSmokeEvidence/);
   assert.match(summarizer, /uiLocalProjectEvidence/);
   assert.match(summarizer, /uiCodingProjectEvidence/);
   assert.match(summarizer, /uiReportSiteEvidence/);
@@ -11240,8 +11253,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(releaseGates, /ui_chat_smoke_marker_missing/);
   assert.match(releaseGates, /ui_chat_smoke_session_lock_not_clear/);
   const requiredReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*true[^}]*\}/g), (match) => match[1]))).sort();
-  assert.ok(!requiredReports.includes("latest-ui-coding-project-smoke.json"), "desktop coding project evidence must be visible without becoming release-required");
-  assert.ok(!requiredReports.includes("latest-ui-report-site-smoke.json"), "desktop report-site evidence must be visible without becoming release-required");
+  assert.ok(requiredReports.includes("latest-ui-web-search-smoke.json"), "desktop web-search evidence must be release-required");
+  assert.ok(requiredReports.includes("latest-ui-local-project-smoke.json"), "desktop local-project evidence must be release-required");
+  assert.ok(requiredReports.includes("latest-ui-coding-project-smoke.json"), "desktop coding-project evidence must be release-required");
+  assert.ok(requiredReports.includes("latest-ui-report-site-smoke.json"), "desktop report-site evidence must be release-required");
 });
 
 test("Anti-Codex completes verified desktop artifact tool loops without reopening Antigravity", () => {

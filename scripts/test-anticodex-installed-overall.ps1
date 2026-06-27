@@ -678,6 +678,7 @@ function Test-ReportEncoding {
         "latest-sync-readiness.json",
         "latest-codex-responses.json",
         "latest-ui-chat-smoke.json",
+        "latest-ui-web-search-smoke.json",
         "latest-ui-local-project-smoke.json",
         "latest-ui-coding-project-smoke.json",
         "latest-ui-report-site-smoke.json",

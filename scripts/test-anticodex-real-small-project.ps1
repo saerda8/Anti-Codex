@@ -23,12 +23,14 @@ function Resolve-NodeRuntime {
 }
 
 function Resolve-BaseUrl {
-    if ($BaseUrl) { return $BaseUrl.TrimEnd("/") }
-    $resolver = Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1"
-    if (Test-Path -LiteralPath $resolver -PathType Leaf) {
-        return [string](& $resolver)
+    if (-not $BaseUrl) {
+        $resolver = Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1"
+        if (Test-Path -LiteralPath $resolver -PathType Leaf) {
+            return [string](& $resolver)
+        }
+        return "http://127.0.0.1:8484"
     }
-    return "http://127.0.0.1:8484"
+    return $BaseUrl.TrimEnd("/")
 }
 
 function Save-Report {

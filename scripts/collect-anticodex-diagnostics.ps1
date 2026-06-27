@@ -215,6 +215,7 @@ function Read-JsonSummary {
             modelThinkingEvidence = $json.modelThinkingEvidence
             ambientSuggestionsEvidence = $json.ambientSuggestionsEvidence
             uiChatSmokeEvidence = $json.uiChatSmokeEvidence
+            uiWebSearchSmokeEvidence = $json.uiWebSearchSmokeEvidence
             uiLocalProjectEvidence = $json.uiLocalProjectEvidence
             uiCodingProjectEvidence = $json.uiCodingProjectEvidence
             uiReportSiteEvidence = $json.uiReportSiteEvidence
@@ -373,6 +374,7 @@ $latestReports = @(
     "latest-post-verification.json",
     "latest-codex-responses.json",
     "latest-ui-chat-smoke.json",
+    "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",
     "latest-ui-coding-project-smoke.json",
     "latest-ui-report-site-smoke.json",

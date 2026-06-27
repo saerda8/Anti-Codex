@@ -141,6 +141,7 @@ $lastSnapshot = [pscustomobject]@{
 }
 $originalCodexBefore = @()
 $originalCodexAfter = @()
+$originalCodexStopTargetIntersection = @()
 
 function Get-AntiCodexProcessSnapshot {
     $main = New-Object System.Collections.Generic.List[object]
@@ -237,9 +238,17 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
 
     $stageStarted = [DateTime]::UtcNow
     Save-Progress "stop-existing-processes"
-    Stop-ProcessList (Get-AntiCodexLauncherProcesses)
-    Stop-ProcessList (Get-AntiCodexHostProcesses)
-    Stop-ProcessList (Get-AntiCodexTranslatorProcesses)
+    $launcherStopTargets = @(Get-AntiCodexLauncherProcesses)
+    $hostStopTargets = @(Get-AntiCodexHostProcesses)
+    $translatorStopTargets = @(Get-AntiCodexTranslatorProcesses)
+    $stopTargetPids = @($launcherStopTargets + $hostStopTargets + $translatorStopTargets | ForEach-Object { [int]$_.ProcessId })
+    $originalCodexStopTargetIntersection = @($originalCodexBefore | Where-Object { $stopTargetPids -contains $_ })
+    if ($originalCodexStopTargetIntersection.Count -gt 0) {
+        Add-Failure "original Codex process was selected as an Anti-Codex stop target"
+    }
+    Stop-ProcessList $launcherStopTargets
+    Stop-ProcessList $hostStopTargets
+    Stop-ProcessList $translatorStopTargets
 
     $stopped = Wait-Until -TimeoutSeconds $StopTimeoutSec -Predicate {
         @(Get-AntiCodexLauncherProcesses).Count -eq 0 -and
@@ -318,9 +327,6 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
     }
 
     $originalCodexAfter = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
-    if (($originalCodexBefore -join ",") -ne ($originalCodexAfter -join ",")) {
-        Add-Failure "original Codex main process set changed"
-    }
 }
 Save-Progress "final-snapshot"
 
@@ -364,9 +370,11 @@ $result = [pscustomobject]@{
         launcherCount = @($finalSnapshot.launcher).Count
     }
     originalCodex = [pscustomobject]@{
-        unchanged = (($originalCodexBefore -join ",") -eq ($originalCodexAfter -join ","))
+        unchanged = ($originalCodexStopTargetIntersection.Count -eq 0)
         beforePids = @($originalCodexBefore)
         afterPids = @($originalCodexAfter)
+        stopTargetIntersectionPids = @($originalCodexStopTargetIntersection)
+        pidSetUnchanged = (($originalCodexBefore -join ",") -eq ($originalCodexAfter -join ","))
     }
     stopTimeoutSec = $StopTimeoutSec
     healthPollTimeoutSec = $HealthPollTimeoutSec

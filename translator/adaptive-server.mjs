@@ -2520,10 +2520,18 @@ function latestManagerReportItem(label, fileName) {
     const isMissingHistoryReport = fileName === "latest-missing-history.json" || report?.reportName === "missing-history";
     const isAccountProxyReport = fileName === "latest-account-proxy-readiness.json" || report?.reportName === "account-proxy-readiness";
     const uiArtifactEvidence = report?.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : null;
+    const isUiWebSearchSmokeReport = fileName === "latest-ui-web-search-smoke.json" || report?.reportName === "ui-web-search-smoke";
     const isUiCodingProjectSmokeReport = fileName === "latest-ui-coding-project-smoke.json" || report?.reportName === "ui-coding-project-smoke";
     const isUiReportSiteSmokeReport = fileName === "latest-ui-report-site-smoke.json" || report?.reportName === "ui-report-site-smoke";
     const optionalBool = (value) => typeof value === "boolean" ? value : null;
     const optionalInt = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+    const uiWebSearchSmokeEvidence = isUiWebSearchSmokeReport ? {
+        clicked: optionalBool(report?.clicked),
+        composerCleared: optionalBool(report?.composerCleared),
+        activeReconnectSeen: optionalBool(report?.activeReconnectSeen),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
+        hasSourceUrls: /https?:\/\//i.test(shortSafeText(report?.lastSample || "", "")),
+    } : null;
     const uiCodingProjectEvidence = isUiCodingProjectSmokeReport ? {
         artifactDir: shortSafeText(report?.artifactDir || "", ""),
         artifactFiles: uiArtifactEvidence?.files && typeof uiArtifactEvidence.files === "object" ? uiArtifactEvidence.files : null,
@@ -2591,6 +2599,7 @@ function latestManagerReportItem(label, fileName) {
             reusedFromPreviousReport: typeof report.sourceSnapshot.reusedFromPreviousReport === "boolean" ? report.sourceSnapshot.reusedFromPreviousReport : null,
             refreshSkippedReason: shortSafeText(report.sourceSnapshot.refreshSkippedReason || "", ""),
         } : null,
+        uiWebSearchSmokeEvidence,
         uiCodingProjectEvidence,
         uiReportSiteEvidence,
         logDbGuardEvidence: isLogDbGuardReport ? {
@@ -3074,6 +3083,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("验证后完整检查", "latest-post-verification.json"),
         latestManagerReportItem("普通聊天流式", "latest-codex-responses.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
+        latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
         latestManagerReportItem("桌面调研报告验收", "latest-ui-report-site-smoke.json"),
@@ -3799,6 +3809,10 @@ function latestReportsSummary(result){
       lines.push("  accountProxy: detail="+(evidence.diagnosisDetail||"unknown")+" / action="+(evidence.suggestedAction||"none")+" / localProxyBypassed="+(evidence.localProxyBypassed?"true":"false"));
       lines.push("  accountProxy phase: account="+(phase.accountOk?"ok":"check")+" / refresh="+(phase.refreshOk?"ok":"check")+" / models="+(phase.modelCount??"unknown")+" / real="+(phase.realRequestAttempted?(phase.realRequestOk?"ok":"check"):"not-attempted"));
       lines.push("  accountProxy logs: source="+(signals.sourcePresent?"present":"missing")+" / fresh="+(signals.sourceFresh?"true":"false")+" / scanned="+(signals.tailLinesScanned??"unknown")+" / verify="+(signals.verificationRequiredCount??0)+" / network="+(signals.generalNetworkFailureCount??0));
+    }
+    if(item.uiWebSearchSmokeEvidence){
+      const evidence=item.uiWebSearchSmokeEvidence;
+      lines.push("  uiWebSearch: clicked="+(evidence.clicked?"true":"false")+" / urls="+(evidence.hasSourceUrls?"true":"false")+" / reconnect="+(evidence.activeReconnectSeen?"seen":"clear")+" / session="+(evidence.sessionLockClear?"clear":"check"));
     }
     if(item.uiCodingProjectEvidence){
       const evidence=item.uiCodingProjectEvidence;

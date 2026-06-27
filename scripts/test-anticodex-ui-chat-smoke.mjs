@@ -138,6 +138,7 @@ class LocalWebSocket {
     this.url = new URL(url);
     this.nextId = 1;
     this.callbacks = new Map();
+    this.events = [];
     this.buffer = Buffer.alloc(0);
   }
 
@@ -223,9 +224,38 @@ class LocalWebSocket {
       if (message.id && this.callbacks.has(message.id)) {
         this.callbacks.get(message.id).resolve(message);
         this.callbacks.delete(message.id);
+      } else if (message.method) {
+        this.events.push(message);
+        if (this.events.length > 200) this.events.shift();
       }
     }
   }
+}
+
+function summarizeNetworkEvents(events) {
+  return events
+    .filter((event) => String(event.method || "").startsWith("Network."))
+    .map((event) => {
+      const params = event.params || {};
+      const request = params.request || {};
+      const response = params.response || {};
+      return {
+        method: event.method,
+        requestId: params.requestId || null,
+        url: request.url || response.url || params.url || null,
+        type: params.type || null,
+        status: response.status || null,
+        errorText: params.errorText || null,
+        websocketRequestId: params.requestId || null,
+        websocketMessage: params.response?.payloadData ? String(params.response.payloadData).slice(0, 500) : null,
+      };
+    })
+    .filter((event) => {
+      const text = `${event.url || ""} ${event.websocketMessage || ""}`;
+      return /responses|chat\/completions|backend-api|websocket|codex/i.test(text)
+        || /Network\.webSocket|Network\.eventSource|Network\.loadingFailed/.test(event.method);
+    })
+    .slice(-80);
 }
 
 function writeReport(payload) {
@@ -559,6 +589,7 @@ async function resolveCdpTargets() {
 async function main() {
   const failures = [];
   let target = null;
+  let ws = null;
   let prep = null;
   let clicked = false;
   let count = 0;
@@ -583,10 +614,11 @@ async function main() {
     const targets = await resolveCdpTargets();
     target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
-    const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+    ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();
     await ws.send("Runtime.enable");
     await ws.send("DOM.enable");
+    await ws.send("Network.enable");
     await ws.send("Input.setIgnoreInputEvents", { ignore: false });
     await ws.send("Runtime.evaluate", { expression: "document.querySelector('.anticodex-close')?.click()", awaitPromise: true });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
@@ -656,13 +688,30 @@ async function main() {
     } else if (prep?.hasSendButton !== true) {
       failures.push("send button was not found in the composer controls");
     } else {
+      const rect = prep?.selected?.rect || null;
+      if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
+        failures.push("send button coordinates were not available");
+      } else {
+        const x = rect.x + (rect.w / 2);
+        const y = rect.y + (rect.h / 2);
+        await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+        await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+        await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+        clicked = true;
+      }
       const click = await ws.send("Runtime.evaluate", {
-        expression: sendButtonProbeExpression(promptText, { click: true }),
+        expression: sendButtonProbeExpression(promptText),
         returnByValue: true,
         awaitPromise: true,
       });
-      submitEvidence = click.result?.result?.value || null;
-      clicked = submitEvidence?.clicked === true;
+      submitEvidence = {
+        ...(click.result?.result?.value || {}),
+        clicked,
+        clickMethod: "cdp-mouse",
+        clickPoint: prep?.selected?.rect
+          ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
+          : null,
+      };
       const submitDeadline = Date.now() + 4_000;
       while (Date.now() < submitDeadline) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
@@ -839,6 +888,7 @@ async function main() {
     activeAntigravityRequests: activeRequests,
     antigravityQueue: queue,
     responsesWebSocket: diagnostics?.responsesWebSocket || null,
+    networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
   };
   releaseUiLock?.();
   releaseUiLock = null;
