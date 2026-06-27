@@ -1445,7 +1445,8 @@ function collectOrderedNextActions(failureReasons) {
       return leftRank - rightRank || left.order - right.order;
     })
     .map(({ order, ...item }) => item);
-  if (items.some((item) => item.requiresGatewayStart === true) && !items.some((item) => item.id === "startGatewayTranslatorOnly")) {
+  const requiredGatewayStartNeeded = items.some((item) => item.requiresGatewayStart === true && (item.requiredForRelease === true || item.requiredForShort === true));
+  if (requiredGatewayStartNeeded && !items.some((item) => item.id === "startGatewayTranslatorOnly")) {
     items.unshift(action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", {
       requiresGatewayStart: true,
       reason: "local_gateway_required",
@@ -3173,6 +3174,26 @@ if (args.has("--self-test")) {
     if (approvalPlan.reportOnlyCount < 1) throw new Error("self-test failed: approval plan did not count report-only actions");
     if (approvalPlan.requiresGatewayStartCount < 1 || approvalPlan.requiresRealTrafficCount < 1 || approvalPlan.highImpactCount < 1 || approvalPlan.firstBlockedAction !== "startGatewayTranslatorOnly") {
       throw new Error("self-test failed: approval plan did not summarize gateway, real-traffic, and high-impact actions");
+    }
+    const optionalOnlySummary = summarizeNextActions([{
+      id: "providerAntigravityReturnOptional",
+      requiredForRelease: false,
+      requiredForShort: false,
+      orderedActions: [
+        action("providerAntigravityReturnOptional", "optional-antigravity-return", "echo optional-return", {
+          requiresGatewayStart: true,
+          requiresRealTraffic: true,
+          highImpact: true,
+          blockedUntilExplicitUserApproval: true,
+        }),
+      ],
+    }]);
+    if (optionalOnlySummary.allActions.some((item) => item.id === "startGatewayTranslatorOnly")) {
+      throw new Error("self-test failed: optional-only nextActions should not prepend gateway start as a required blocker");
+    }
+    const optionalOnlyPlan = summarizeApprovalPlan(optionalOnlySummary.allActions);
+    if (optionalOnlyPlan.firstBlockedAction !== "providerAntigravityReturnOptional") {
+      throw new Error("self-test failed: optional-only approval plan should point at the optional action itself");
     }
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");
