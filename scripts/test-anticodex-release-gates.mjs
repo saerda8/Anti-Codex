@@ -125,6 +125,7 @@ const gateDefinitions = [
   { id: "uiWebSearchSmoke", group: "real-traffic", file: "latest-ui-web-search-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-web-search-smoke", taskMode: "web-search", prefix: "ui_web_search_smoke", requireSourceUrls: true } },
   { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
   { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requireCodingProject: true } },
+  { id: "uiMultiTurnProjectSmoke", group: "real-traffic", file: "latest-ui-multi-turn-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-multi-turn-project-smoke", taskMode: "multi-turn-project", prefix: "ui_multi_turn_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt", "followupTxt", "changelogMd"], requireMultiTurnProject: true } },
   { id: "uiComplexProjectSmoke", group: "real-traffic", file: "latest-ui-complex-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-complex-project-smoke", taskMode: "complex-project", prefix: "ui_complex_project_smoke", requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"], requireSourceJsonUrls: 3, requireCodingProject: true, requireReportSite: true } },
   { id: "uiReportSiteSmoke", group: "real-traffic", file: "latest-ui-report-site-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-report-site-smoke", taskMode: "report-site", prefix: "ui_report_site_smoke", requiredFiles: ["reportMd", "indexHtml", "doneTxt"], requireReportSite: true } },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
@@ -510,13 +511,26 @@ function summarizeGate(definition) {
       for (const fileKey of spec.requiredFiles || []) {
         if (files[fileKey] !== true) semanticFailures.push(`${prefix}_${fileKey}_missing`);
       }
-      if ((spec.requiredFiles || []).length > 0 && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
+      if ((spec.requiredFiles || []).length > 0 && !spec.requireMultiTurnProject && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
       if (spec.requireSourceUrls && !/https?:\/\//i.test(lastSample)) semanticFailures.push(`${prefix}_source_urls_missing`);
       if (spec.requireSourceJsonUrls && Number(artifact.sourceUrlCount || 0) < spec.requireSourceJsonUrls) semanticFailures.push(`${prefix}_source_json_urls_missing`);
       if (spec.requireCodingProject) {
         if (artifact.exportsFunction !== true) semanticFailures.push(`${prefix}_export_missing`);
         if (artifact.testPassed !== true) semanticFailures.push(`${prefix}_tests_not_passed`);
         if (artifact.cliPassed !== true) semanticFailures.push(`${prefix}_cli_not_passed`);
+      }
+      if (spec.requireMultiTurnProject) {
+        const turns = Array.isArray(report.turnEvidence) ? report.turnEvidence : [];
+        if (artifact.firstDoneExact !== true) semanticFailures.push(`${prefix}_first_done_marker_mismatch`);
+        if (artifact.followupExact !== true) semanticFailures.push(`${prefix}_followup_marker_mismatch`);
+        if (artifact.changelogHasFinalMarker !== true) semanticFailures.push(`${prefix}_changelog_marker_missing`);
+        if (artifact.exportsTallyWords !== true) semanticFailures.push(`${prefix}_tally_export_missing`);
+        if (artifact.exportsUniqueWords !== true) semanticFailures.push(`${prefix}_unique_export_missing`);
+        if (artifact.testPassed !== true) semanticFailures.push(`${prefix}_tests_not_passed`);
+        if (artifact.cliPassed !== true) semanticFailures.push(`${prefix}_cli_not_passed`);
+        if (turns.length < 2) semanticFailures.push(`${prefix}_turns_missing`);
+        if (turns.some((turn) => !turn || turn.clicked !== true || turn.submitSucceeded !== true || Number(turn.answerMarkerCount || 0) < 1)) semanticFailures.push(`${prefix}_turn_submit_missing`);
+        if (turns.some((turn) => turn?.activeReconnectSeen === true)) semanticFailures.push(`${prefix}_turn_reconnect_seen`);
       }
       if (spec.requireReportSite) {
         if (artifact.reportHasChinese !== true) semanticFailures.push(`${prefix}_report_chinese_missing`);
@@ -1249,6 +1263,7 @@ const realTrafficRefreshOrder = [
   ["uiWebSearchSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode web-search --timeout-ms 90000"],
   ["uiLocalProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode local-project --timeout-ms 120000"],
   ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],
+  ["uiMultiTurnProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode multi-turn-project --timeout-ms 240000"],
   ["uiComplexProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode complex-project --timeout-ms 180000"],
   ["uiReportSiteSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode report-site --timeout-ms 150000"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
@@ -1935,6 +1950,7 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-ui-web-search-smoke.json", invalidUiTaskReport("ui-web-search-smoke", "web-search", "UI_WEB_SEARCH_MARKER"));
     writeFakeLatestReport("latest-ui-local-project-smoke.json", invalidUiTaskReport("ui-local-project-smoke", "local-project", "UI_LOCAL_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-coding-project-smoke.json", invalidUiTaskReport("ui-coding-project-smoke", "coding-project", "UI_CODING_PROJECT_MARKER"));
+    writeFakeLatestReport("latest-ui-multi-turn-project-smoke.json", invalidUiTaskReport("ui-multi-turn-project-smoke", "multi-turn-project", "UI_MULTI_TURN_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-complex-project-smoke.json", invalidUiTaskReport("ui-complex-project-smoke", "complex-project", "UI_COMPLEX_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-report-site-smoke.json", invalidUiTaskReport("ui-report-site-smoke", "report-site", "UI_REPORT_SITE_MARKER"));
 
@@ -2491,6 +2507,34 @@ if (args.has("--self-test")) {
       "ui_coding_project_smoke_export_missing",
       "ui_coding_project_smoke_tests_not_passed",
       "ui_coding_project_smoke_cli_not_passed",
+    ]);
+    semanticFailures.uiMultiTurnProjectSmoke = assertSemanticFailures("uiMultiTurnProjectSmoke", "self-test failed: semantically invalid ui-multi-turn-project-smoke report satisfied the gate", [
+      "ui_multi_turn_project_smoke_report_name",
+      "ui_multi_turn_project_smoke_task_mode",
+      "ui_multi_turn_project_smoke_real_traffic_not_requested",
+      "ui_multi_turn_project_smoke_real_traffic_missing",
+      "ui_multi_turn_project_smoke_behavior_not_covered",
+      "ui_multi_turn_project_smoke_coverage_kind",
+      "ui_multi_turn_project_smoke_failures",
+      "ui_multi_turn_project_smoke_marker_missing",
+      "ui_multi_turn_project_smoke_not_sent",
+      "ui_multi_turn_project_smoke_composer_not_cleared",
+      "ui_multi_turn_project_smoke_active_reconnect_seen",
+      "ui_multi_turn_project_smoke_session_lock_not_clear",
+      "ui_multi_turn_project_smoke_packageJson_missing",
+      "ui_multi_turn_project_smoke_wordTally_missing",
+      "ui_multi_turn_project_smoke_testFile_missing",
+      "ui_multi_turn_project_smoke_doneTxt_missing",
+      "ui_multi_turn_project_smoke_followupTxt_missing",
+      "ui_multi_turn_project_smoke_changelogMd_missing",
+      "ui_multi_turn_project_smoke_first_done_marker_mismatch",
+      "ui_multi_turn_project_smoke_followup_marker_mismatch",
+      "ui_multi_turn_project_smoke_changelog_marker_missing",
+      "ui_multi_turn_project_smoke_tally_export_missing",
+      "ui_multi_turn_project_smoke_unique_export_missing",
+      "ui_multi_turn_project_smoke_tests_not_passed",
+      "ui_multi_turn_project_smoke_cli_not_passed",
+      "ui_multi_turn_project_smoke_turns_missing",
     ]);
     semanticFailures.uiComplexProjectSmoke = assertSemanticFailures("uiComplexProjectSmoke", "self-test failed: semantically invalid ui-complex-project-smoke report satisfied the gate", [
       "ui_complex_project_smoke_report_name",
@@ -3184,10 +3228,11 @@ if (args.has("--self-test")) {
       .map((item) => item.id);
     if (missingShortWithoutActions.length) throw new Error(`self-test failed: short failed gates missing next actions: ${missingShortWithoutActions.join(",")}`);
     if (!sortedActions.some((item) => item.id === "managerRealButtons" && String(item.guidance || "").includes("local_gateway_required"))) throw new Error("self-test failed: nextActions did not preserve gate guidance");
-    if (!sortedActions.some((item) => item.id === "accountProxyReadiness" && String(item.guidance || "").includes("real_traffic_evidence_stale"))) throw new Error("self-test failed: real-traffic nextActions did not preserve gate guidance");
+    if (!allSortedActions.some((item) => item.id === "accountProxyReadiness" && String(item.guidance || "").includes("real_traffic_evidence_stale"))) throw new Error("self-test failed: real-traffic nextActions did not preserve gate guidance");
     if (!allSortedActions.some((item) => item.id === "realThirdPartyProviderOptional" && item.phase === "optional-real-provider" && item.blockedUntilExplicitUserApproval === true)) throw new Error("self-test failed: optional real-provider nextAction missing approval block");
     if (!allSortedActions.some((item) => item.id === "providerAntigravityReturnOptional" && item.phase === "optional-antigravity-return" && item.requiresGatewayStart === true && item.requiresRealTraffic === true && item.highImpact === true && item.blockedUntilExplicitUserApproval === true && String(item.guidance || "").includes("optional_antigravity_return_required"))) throw new Error("self-test failed: optional Antigravity-return nextAction missing approval block");
-    if (sortedActionIds.indexOf("accountProxyReadiness") < 0 || sortedActionIds.indexOf("postVerification") < 0 || sortedActionIds.indexOf("accountProxyReadiness") > sortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
+    const allSortedActionIds = allSortedActions.map((item) => item.id);
+    if (allSortedActionIds.indexOf("accountProxyReadiness") < 0 || allSortedActionIds.indexOf("postVerification") < 0 || allSortedActionIds.indexOf("accountProxyReadiness") > allSortedActionIds.indexOf("postVerification")) throw new Error("self-test failed: top-level nextActions did not keep post-verification last");
     const truncatedActions = summarizeNextActions(Array.from({ length: 40 }, (_, index) => ({
       id: `overflow${index}`,
       orderedActions: [action(`overflow${index}`, "real-traffic-low-state", `echo overflow-${index}`, { requiresGatewayStart: true, requiresRealTraffic: true })],

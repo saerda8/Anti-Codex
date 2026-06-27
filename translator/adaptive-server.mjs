@@ -2522,6 +2522,7 @@ function latestManagerReportItem(label, fileName) {
     const uiArtifactEvidence = report?.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : null;
     const isUiWebSearchSmokeReport = fileName === "latest-ui-web-search-smoke.json" || report?.reportName === "ui-web-search-smoke";
     const isUiCodingProjectSmokeReport = fileName === "latest-ui-coding-project-smoke.json" || report?.reportName === "ui-coding-project-smoke";
+    const isUiMultiTurnProjectSmokeReport = fileName === "latest-ui-multi-turn-project-smoke.json" || report?.reportName === "ui-multi-turn-project-smoke";
     const isUiComplexProjectSmokeReport = fileName === "latest-ui-complex-project-smoke.json" || report?.reportName === "ui-complex-project-smoke";
     const isUiReportSiteSmokeReport = fileName === "latest-ui-report-site-smoke.json" || report?.reportName === "ui-report-site-smoke";
     const optionalBool = (value) => typeof value === "boolean" ? value : null;
@@ -2541,6 +2542,21 @@ function latestManagerReportItem(label, fileName) {
         testPassed: optionalBool(uiArtifactEvidence?.testPassed),
         cliPassed: optionalBool(uiArtifactEvidence?.cliPassed),
         cliJson: uiArtifactEvidence?.cliJson && typeof uiArtifactEvidence.cliJson === "object" ? uiArtifactEvidence.cliJson : null,
+        composerCleared: optionalBool(report?.composerCleared),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
+    } : null;
+    const uiMultiTurnProjectEvidence = isUiMultiTurnProjectSmokeReport ? {
+        artifactDir: shortSafeText(report?.artifactDir || "", ""),
+        artifactFiles: uiArtifactEvidence?.files && typeof uiArtifactEvidence.files === "object" ? uiArtifactEvidence.files : null,
+        firstDoneExact: optionalBool(uiArtifactEvidence?.firstDoneExact),
+        followupExact: optionalBool(uiArtifactEvidence?.followupExact),
+        changelogHasFinalMarker: optionalBool(uiArtifactEvidence?.changelogHasFinalMarker),
+        exportsTallyWords: optionalBool(uiArtifactEvidence?.exportsTallyWords),
+        exportsUniqueWords: optionalBool(uiArtifactEvidence?.exportsUniqueWords),
+        testPassed: optionalBool(uiArtifactEvidence?.testPassed),
+        cliPassed: optionalBool(uiArtifactEvidence?.cliPassed),
+        cliJson: uiArtifactEvidence?.cliJson && typeof uiArtifactEvidence.cliJson === "object" ? uiArtifactEvidence.cliJson : null,
+        turnCount: Array.isArray(report?.turnEvidence) ? report.turnEvidence.length : null,
         composerCleared: optionalBool(report?.composerCleared),
         sessionLockClear: optionalBool(report?.sessionLockClear),
     } : null;
@@ -2619,6 +2635,7 @@ function latestManagerReportItem(label, fileName) {
         } : null,
         uiWebSearchSmokeEvidence,
         uiCodingProjectEvidence,
+        uiMultiTurnProjectEvidence,
         uiComplexProjectEvidence,
         uiReportSiteEvidence,
         logDbGuardEvidence: isLogDbGuardReport ? {
@@ -3105,6 +3122,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
+        latestManagerReportItem("Desktop multi-turn project", "latest-ui-multi-turn-project-smoke.json"),
         latestManagerReportItem("桌面复杂项目验收", "latest-ui-complex-project-smoke.json"),
         latestManagerReportItem("桌面调研报告验收", "latest-ui-report-site-smoke.json"),
         latestManagerReportItem("真实工作任务", "latest-real-work.json"),
@@ -3837,6 +3855,10 @@ function latestReportsSummary(result){
     if(item.uiCodingProjectEvidence){
       const evidence=item.uiCodingProjectEvidence;
       lines.push("  uiCoding: done="+(evidence.doneExact?"true":"false")+" / export="+(evidence.exportsFunction?"true":"false")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
+    }
+    if(item.uiMultiTurnProjectEvidence){
+      const evidence=item.uiMultiTurnProjectEvidence;
+      lines.push("  uiMultiTurn: first="+(evidence.firstDoneExact?"true":"false")+" / followup="+(evidence.followupExact?"true":"false")+" / unique="+(evidence.exportsUniqueWords?"true":"false")+" / turns="+(evidence.turnCount??"unknown")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
     }
     if(item.uiComplexProjectEvidence){
       const evidence=item.uiComplexProjectEvidence;
@@ -6482,6 +6504,15 @@ function chatToolEvidenceText(messages = []) {
         .join("\n");
 }
 
+function escapeRegExp(value = "") {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function evidenceContainsExactMarker(evidenceText = "", marker = "") {
+    if (!marker) return false;
+    return new RegExp(`(^|[^A-Z0-9_])${escapeRegExp(marker)}([^A-Z0-9_]|$)`).test(String(evidenceText || ""));
+}
+
 function userTextLooksLikeArtifactRequest(userText = "") {
     return /(?:index\.html|readme\.md|done\.txt|\.html|\.md|PowerShell|Set-Content|WriteAllText|AppData|Roaming|reports|create|generate|write|marker|artifact|file|directory|folder)/i.test(userText);
 }
@@ -6513,10 +6544,11 @@ function artifactMarkerRequirementFromChat(messages = []) {
         if (!marker) continue;
         const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
         const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
+        const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
         const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
-        const codingProject = complexProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
+        const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
         const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-        return { marker, userText, targetPath, codingProject, reportSite, complexProject };
+        return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject };
     }
     return null;
 }
@@ -6532,18 +6564,21 @@ function artifactMarkerMismatchForChat(messages = [], assistantText = "") {
     if (!requirement) return null;
     if (!assistantTextLooksLikeArtifactCompletion(assistantText)) return null;
     const evidenceText = chatToolEvidenceText(messages);
-    if (evidenceText.includes(requirement.marker)) return null;
+    if (evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     return { ...requirement, evidenceText };
 }
 
 function artifactMarkerMismatchRelayPrompt(mismatch) {
     const marker = mismatch?.marker || "";
+    const requiredFiles = mismatch?.multiTurnProject
+        ? "For the multi-turn project, modify word-tally.mjs, update word-tally.test.mjs, create followup.txt and CHANGELOG.md, then read the files back."
+        : "Fix done.txt so it contains the exact marker and make sure index.html also contains that exact marker.";
     return [
         "Anti-Codex blocked this completion because the local artifact verification did not prove the exact user marker was written.",
         `Required exact marker: ${marker}`,
         "This is not the final answer. Continue the same task now:",
         "1. Inspect the generated files.",
-        `2. Fix done.txt so it contains exactly ${marker} and make sure index.html also contains that exact marker.`,
+        `2. ${requiredFiles}`,
         "3. Read the files back and only finish after the tool output shows the required exact marker.",
         "Do not reuse an older marker from conversation history.",
     ].join("\n");
@@ -6571,7 +6606,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
     const evidenceText = chatToolEvidenceText(messages);
-    if (!evidenceText.includes(requirement.marker)) return null;
+    if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     const artifactEvidence = /Anti-Codex artifact marker verification|index\.html|README\.md|done\.txt|Get-ChildItem|Select-String|WriteAllText|Set-Content/i.test(evidenceText);
     if (!artifactEvidence) return null;
     return makeTextCompletion(
@@ -6820,10 +6855,11 @@ function artifactMarkerRequirementFromOriginalRequest(originalRequest = {}) {
     if (!marker) return null;
     const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
     const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
+    const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
     const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
-    const codingProject = complexProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
+    const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
     const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-    return { marker, userText, targetPath, codingProject, reportSite, complexProject };
+    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject };
 }
 
 function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
@@ -6831,6 +6867,7 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
     const pathLiteral = psSingleQuoted(targetPath);
     const codingProjectLiteral = options?.codingProject ? "$true" : "$false";
     const complexProjectLiteral = options?.complexProject ? "$true" : "$false";
+    const multiTurnProjectLiteral = options?.multiTurnProject ? "$true" : "$false";
     return [
         "",
         "# Anti-Codex exact artifact marker guard",
@@ -6838,6 +6875,7 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         `$__antiCodexArtifactDir = ${pathLiteral}`,
         `$__antiCodexCodingProject = ${codingProjectLiteral}`,
         `$__antiCodexComplexProject = ${complexProjectLiteral}`,
+        `$__antiCodexMultiTurnProject = ${multiTurnProjectLiteral}`,
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name targetDir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name dir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if ($__antiCodexArtifactDir) {",
@@ -6891,6 +6929,83 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "    try {",
         "      node --test .\\codex-update-analyzer.test.mjs",
         "      node .\\codex-update-analyzer.mjs .\\sources.json",
+        "    } finally {",
+        "      Pop-Location",
+        "    }",
+        "  } elseif ($__antiCodexMultiTurnProject) {",
+        "    $__packagePath = Join-Path $__antiCodexArtifactDir 'package.json'",
+        "    $__sourcePath = Join-Path $__antiCodexArtifactDir 'word-tally.mjs'",
+        "    $__testPath = Join-Path $__antiCodexArtifactDir 'word-tally.test.mjs'",
+        "    $__followupPath = Join-Path $__antiCodexArtifactDir 'followup.txt'",
+        "    $__changelogPath = Join-Path $__antiCodexArtifactDir 'CHANGELOG.md'",
+        "    [System.IO.File]::WriteAllText($__packagePath, '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test word-tally.test.mjs\"}}', [System.Text.Encoding]::UTF8)",
+        "    if ($__antiCodexArtifactMarker -like '*_FIRST') {",
+        "      [System.IO.File]::WriteAllText($__sourcePath, @'",
+        "export function tallyWords(text = \"\") {",
+        "  const counts = {};",
+        "  for (const word of String(text).toLowerCase().match(/[a-z0-9]+/g) || []) {",
+        "    counts[word] = (counts[word] || 0) + 1;",
+        "  }",
+        "  return counts;",
+        "}",
+        "",
+        "if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, \"/\"))) {",
+        "  console.log(JSON.stringify(tallyWords(process.argv.slice(2).join(\" \"))));",
+        "}",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "      [System.IO.File]::WriteAllText($__testPath, @'",
+        "import test from \"node:test\";",
+        "import assert from \"node:assert/strict\";",
+        "import { tallyWords } from \"./word-tally.mjs\";",
+        "",
+        "test(\"counts repeated words\", () => {",
+        "  const counts = tallyWords(\"red blue red\");",
+        "  assert.equal(counts.red, 2);",
+        "  assert.equal(counts.blue, 1);",
+        "});",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "      [System.IO.File]::WriteAllText($__donePath, $__antiCodexArtifactMarker, [System.Text.Encoding]::UTF8)",
+        "    } else {",
+        "      if (-not (Test-Path -LiteralPath $__donePath)) { [System.IO.File]::WriteAllText($__donePath, ($__antiCodexArtifactMarker + '_FIRST'), [System.Text.Encoding]::UTF8) }",
+        "      [System.IO.File]::WriteAllText($__sourcePath, @'",
+        "export function tallyWords(text = \"\") {",
+        "  const counts = {};",
+        "  for (const word of String(text).toLowerCase().match(/[a-z0-9]+/g) || []) {",
+        "    counts[word] = (counts[word] || 0) + 1;",
+        "  }",
+        "  return counts;",
+        "}",
+        "",
+        "export function uniqueWords(text = \"\") {",
+        "  return Array.from(new Set(String(text).toLowerCase().match(/[a-z0-9]+/g) || [])).sort();",
+        "}",
+        "",
+        "if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, \"/\"))) {",
+        "  console.log(JSON.stringify(tallyWords(process.argv.slice(2).join(\" \"))));",
+        "}",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "      [System.IO.File]::WriteAllText($__testPath, @'",
+        "import test from \"node:test\";",
+        "import assert from \"node:assert/strict\";",
+        "import { tallyWords, uniqueWords } from \"./word-tally.mjs\";",
+        "",
+        "test(\"counts repeated words\", () => {",
+        "  const counts = tallyWords(\"red blue red\");",
+        "  assert.equal(counts.red, 2);",
+        "  assert.equal(counts.blue, 1);",
+        "});",
+        "",
+        "test(\"returns sorted unique words\", () => {",
+        "  assert.deepEqual(uniqueWords(\"red blue red\"), [\"blue\", \"red\"]);",
+        "});",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "      [System.IO.File]::WriteAllText($__followupPath, $__antiCodexArtifactMarker, [System.Text.Encoding]::UTF8)",
+        "      [System.IO.File]::WriteAllText($__changelogPath, (\"# Changelog`r`n`r`n- Added uniqueWords follow-up for $__antiCodexArtifactMarker.`r`n\"), [System.Text.Encoding]::UTF8)",
+        "    }",
+        "    Push-Location $__antiCodexArtifactDir",
+        "    try {",
+        "      node --test .\\word-tally.test.mjs",
+        "      node .\\word-tally.mjs 'red blue red green'",
         "    } finally {",
         "      Pop-Location",
         "    }",
@@ -6964,11 +7079,14 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.command !== "string") return args;
     let command = parsed.command;
-    const touchesArtifact = /(?:done\.txt|index\.html|README\.md|package\.json|word-tally|codex-update-analyzer|sources\.json|report\.md|Set-Content|WriteAllText|AppData|Roaming|desktop-visible-small-project|desktop-visible-coding-project|desktop-visible-complex-project)/i.test(command);
+    const touchesArtifact = /(?:done\.txt|index\.html|README\.md|package\.json|word-tally|uniqueWords|followup\.txt|CHANGELOG\.md|codex-update-analyzer|sources\.json|report\.md|Set-Content|WriteAllText|AppData|Roaming|desktop-visible-small-project|desktop-visible-coding-project|desktop-visible-multi-turn-project|desktop-visible-complex-project)/i.test(command);
     if (!touchesArtifact) return args;
     command = command.replace(/\bDESKTOP_SMALL_PROJECT\b/g, requirement.marker);
-    if (!command.includes("Anti-Codex exact artifact marker guard")) {
-        command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject });
+    const hasCurrentArtifactGuard = command.includes("Anti-Codex exact artifact marker guard")
+        && command.includes(requirement.marker)
+        && (!requirement.multiTurnProject || command.includes("$__antiCodexMultiTurnProject = $true"));
+    if (!hasCurrentArtifactGuard) {
+        command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject, multiTurnProject: requirement.multiTurnProject });
     }
     return JSON.stringify({ ...parsed, command });
 }

@@ -3130,6 +3130,39 @@ test("local artifact marker guard catches wrong marker in read-back evidence", (
   assert.equal(ok, null);
 });
 
+test("local artifact marker guard does not accept prefix-only multi-turn evidence", () => {
+  const messages = [
+    {
+      role: "user",
+      content: "Create a tiny Node.js CLI project in C:\\Temp\\multi. done.txt must contain UI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST.",
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_first",
+      content: "Anti-Codex artifact marker verification:\r\nUI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST\r\nword-tally.mjs word-tally.test.mjs done.txt",
+    },
+    {
+      role: "assistant",
+      content: "Files created and verified.\n\nUI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST",
+    },
+    {
+      role: "user",
+      content: "Continue the same project in C:\\Temp\\multi. Modify word-tally.mjs so it also exports uniqueWords(text). Create CHANGELOG.md and followup.txt containing exactly UI_MULTI_TURN_PROJECT_SMOKE_20260627.",
+    },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(messages, "Files created and verified.\n\nUI_MULTI_TURN_PROJECT_SMOKE_20260627");
+  assert.equal(mismatch.marker, "UI_MULTI_TURN_PROJECT_SMOKE_20260627");
+  assert.equal(mismatch.multiTurnProject, true);
+  assert.match(artifactMarkerMismatchRelayPrompt(mismatch), /followup\.txt and CHANGELOG\.md/);
+
+  const deterministic = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_first", output: "UI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST" }],
+  }, { model: "gemini-pro-agent", messages });
+  assert.equal(deterministic, null);
+});
+
 test("Antigravity tool loop replays when artifact completion used stale marker", async () => {
   let callCount = 0;
   const result = await callUpstreamWithInternalTools({

@@ -28,6 +28,8 @@ const reportName = taskMode === "web-search"
     ? "ui-free-chat-smoke"
     : taskMode === "coding-project"
       ? "ui-coding-project-smoke"
+    : taskMode === "multi-turn-project"
+      ? "ui-multi-turn-project-smoke"
     : taskMode === "complex-project"
       ? "ui-complex-project-smoke"
     : taskMode === "report-site"
@@ -39,6 +41,8 @@ const markerPrefix = taskMode === "web-search"
   ? "UI_WEB_SEARCH_SMOKE"
   : taskMode === "coding-project"
     ? "UI_CODING_PROJECT_SMOKE"
+  : taskMode === "multi-turn-project"
+    ? "UI_MULTI_TURN_PROJECT_SMOKE"
   : taskMode === "complex-project"
     ? "UI_COMPLEX_PROJECT_SMOKE"
   : taskMode === "report-site"
@@ -54,6 +58,8 @@ const artifactDir = args.get("--artifact-dir")
     reportRoot,
     taskMode === "coding-project"
       ? "desktop-visible-coding-project"
+      : taskMode === "multi-turn-project"
+        ? "desktop-visible-multi-turn-project"
       : taskMode === "complex-project"
         ? "desktop-visible-complex-project"
       : taskMode === "report-site"
@@ -74,6 +80,9 @@ if (!args.get("--prompt") && taskMode === "local-project") {
 }
 if (!args.get("--prompt") && taskMode === "coding-project") {
   promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export a tallyWords(text) function and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}.`;
+}
+if (!args.get("--prompt") && taskMode === "multi-turn-project") {
+  promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export tallyWords(text) and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}_FIRST. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}_FIRST.`;
 }
 if (!args.get("--prompt") && taskMode === "complex-project") {
   promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search. codex-update-analyzer.mjs must export summarizeSources(sources) and when run as a CLI read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3, then reply with ${marker}.`;
@@ -393,6 +402,80 @@ function verifyCodingProjectArtifact(dir, expectedMarker) {
   return evidence;
 }
 
+function verifyMultiTurnProjectArtifact(dir, firstMarker, finalMarker) {
+  if (!dir) return null;
+  const packagePath = join(dir, "package.json");
+  const cliPath = join(dir, "word-tally.mjs");
+  const testPath = join(dir, "word-tally.test.mjs");
+  const donePath = join(dir, "done.txt");
+  const followupPath = join(dir, "followup.txt");
+  const changelogPath = join(dir, "CHANGELOG.md");
+  const evidence = {
+    dir,
+    files: {
+      packageJson: fileExists(packagePath),
+      wordTally: fileExists(cliPath),
+      testFile: fileExists(testPath),
+      doneTxt: fileExists(donePath),
+      followupTxt: fileExists(followupPath),
+      changelogMd: fileExists(changelogPath),
+    },
+    firstDoneExact: false,
+    followupExact: false,
+    changelogHasFinalMarker: false,
+    exportsTallyWords: false,
+    exportsUniqueWords: false,
+    testPassed: false,
+    cliPassed: false,
+    cliJson: null,
+    testOutput: "",
+    cliOutput: "",
+    error: "",
+  };
+  try {
+    if (evidence.files.doneTxt) {
+      const text = readFileSync(donePath, "utf8").replace(/^\uFEFF/, "");
+      evidence.firstDoneExact = text === firstMarker;
+    }
+    if (evidence.files.followupTxt) {
+      const text = readFileSync(followupPath, "utf8").replace(/^\uFEFF/, "");
+      evidence.followupExact = text === finalMarker;
+    }
+    if (evidence.files.changelogMd) {
+      evidence.changelogHasFinalMarker = readFileSync(changelogPath, "utf8").includes(finalMarker);
+    }
+    if (evidence.files.wordTally) {
+      const source = readFileSync(cliPath, "utf8");
+      evidence.exportsTallyWords = /export\s+function\s+tallyWords/.test(source);
+      evidence.exportsUniqueWords = /export\s+function\s+uniqueWords/.test(source);
+    }
+    if (evidence.files.testFile) {
+      evidence.testOutput = execFileSync(process.execPath, ["--test", testPath], {
+        cwd: dir,
+        encoding: "utf8",
+        timeout: 20_000,
+        windowsHide: true,
+      });
+      evidence.testPassed = true;
+    }
+    if (evidence.files.wordTally) {
+      evidence.cliOutput = execFileSync(process.execPath, [cliPath, "red blue red green"], {
+        cwd: dir,
+        encoding: "utf8",
+        timeout: 10_000,
+        windowsHide: true,
+      }).trim();
+      evidence.cliJson = JSON.parse(evidence.cliOutput);
+      evidence.cliPassed = Number(evidence.cliJson?.red) === 2
+        && Number(evidence.cliJson?.blue) === 1
+        && Number(evidence.cliJson?.green) === 1;
+    }
+  } catch (error) {
+    evidence.error = error instanceof Error ? error.message : String(error);
+  }
+  return evidence;
+}
+
 function uniqueUrls(text) {
   return Array.from(new Set(String(text || "").match(/https?:\/\/[^\s"'<>),;]+/gi) || []));
 }
@@ -697,6 +780,174 @@ async function resolveCdpTargets() {
   throw new Error(`Anti-Codex CDP target was not reachable on ${candidates.join(" or ")}: ${lastError || "unknown error"}`);
 }
 
+async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
+  const failures = [];
+  let clicked = false;
+  let submitSucceeded = false;
+  let prep = null;
+  let submitEvidence = null;
+  let composer = "";
+  let count = 0;
+  let answerMarkerCount = 0;
+  let lastSample = "";
+  let answerSample = "";
+  let activeReconnectSeen = false;
+  const activeReconnectEvidence = [];
+  let inLoopIdleDiagnostics = null;
+
+  const clear = await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const composer = document.querySelector('.ProseMirror');
+      if (!composer) return null;
+      const rect = composer.getBoundingClientRect();
+      composer.focus();
+      document.execCommand('selectAll');
+      document.execCommand('delete');
+      composer.innerHTML = '<p><br></p>';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const point = clear.result?.result?.value;
+  if (!point) throw new Error("Anti-Codex composer was not found");
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
+  await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const composer = document.querySelector('.ProseMirror');
+      if (!composer) return null;
+      composer.focus();
+      document.execCommand('selectAll');
+      document.execCommand('delete');
+      composer.innerHTML = '<p><br></p>';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      return composer.innerText || '';
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  await ws.send("Input.insertText", { text: prompt });
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+  const state = await ws.send("Runtime.evaluate", {
+    expression: sendButtonProbeExpression(prompt),
+    returnByValue: true,
+  });
+  prep = state.result?.result?.value || null;
+  if (prep?.composerMatches !== true) {
+    failures.push("composer did not contain exactly the submitted prompt before clicking send");
+  } else if (prep?.hasSendButton !== true) {
+    failures.push("send button was not found in the composer controls");
+  } else {
+    const rect = prep?.selected?.rect || null;
+    if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
+      failures.push("send button coordinates were not available");
+    } else {
+      const x = rect.x + (rect.w / 2);
+      const y = rect.y + (rect.h / 2);
+      await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+      await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+      await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+      clicked = true;
+    }
+    const click = await ws.send("Runtime.evaluate", {
+      expression: sendButtonProbeExpression(prompt),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    submitEvidence = {
+      ...(click.result?.result?.value || {}),
+      clicked,
+      clickMethod: "cdp-mouse",
+      clickPoint: prep?.selected?.rect
+        ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
+        : null,
+    };
+    const submitDeadline = Date.now() + 4_000;
+    while (Date.now() < submitDeadline) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+      const submitted = await ws.send("Runtime.evaluate", {
+        expression: `(() => {
+          const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+          return { composer: composer?.innerText || '' };
+        })()`,
+        returnByValue: true,
+      });
+      const submittedComposer = String(submitted.result?.result?.value?.composer || "");
+      if (!submittedComposer.includes(prompt) && !submittedComposer.includes(expectedMarker)) {
+        submitSucceeded = true;
+        break;
+      }
+    }
+    if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
+  }
+  if (clicked) {
+    const deadline = Date.now() + waitMs;
+    while (Date.now() < deadline) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
+      const stateAfter = await ws.send("Runtime.evaluate", {
+        expression: `(() => {
+          const text = document.body.innerText;
+          const composer = document.querySelector('.ProseMirror');
+          return { text, composer: composer?.innerText || '' };
+        })()`,
+        returnByValue: true,
+      });
+      const value = stateAfter.result?.result?.value || {};
+      const text = String(value.text || "");
+      composer = String(value.composer || "");
+      count = expectedMarker ? (text.match(new RegExp(expectedMarker, "g")) || []).length : 0;
+      lastSample = text.slice(-1200);
+      const promptIndex = text.lastIndexOf(prompt);
+      answerSample = promptIndex >= 0 ? text.slice(promptIndex + prompt.length) : lastSample;
+      if (activeReconnectPattern.test(answerSample)) {
+        activeReconnectSeen = true;
+        if (activeReconnectEvidence.length < 5) {
+          const compact = answerSample.replace(/\s+/g, " ").trim();
+          const match = compact.match(activeReconnectPattern);
+          const at = match ? compact.indexOf(match[0]) : 0;
+          activeReconnectEvidence.push(compact.slice(Math.max(0, at - 80), at + 180));
+        }
+      }
+      answerMarkerCount = expectedMarker && answerSample ? (answerSample.match(new RegExp(expectedMarker, "g")) || []).length : 0;
+      if (answerMarkerCount >= 1 && !composer.includes(expectedMarker)) {
+        try {
+          const loopDiagnostics = await httpJson(`${baseUrl}/anticodex/diagnostics`);
+          if (diagnosticsAreIdle(loopDiagnostics)) {
+            inLoopIdleDiagnostics = loopDiagnostics;
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+  if (!clicked) failures.push("send button was not clicked");
+  if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
+  if (answerMarkerCount < 1) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
+  if (composer.includes(expectedMarker)) failures.push("composer still contains the submitted prompt");
+  return {
+    ok: failures.length === 0,
+    failures,
+    prompt,
+    marker: expectedMarker,
+    prep,
+    submitEvidence,
+    submitSucceeded,
+    clicked,
+    markerCount: count,
+    answerMarkerCount,
+    activeReconnectSeen,
+    activeReconnectEvidence,
+    inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
+    inLoopIdleDiagnostics,
+    composerCleared: !composer.includes(expectedMarker),
+    composer,
+    lastSample,
+    answerSample,
+  };
+}
+
 async function main() {
   const failures = [];
   let target = null;
@@ -752,6 +1003,117 @@ async function main() {
       await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
       await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
+    }
+
+    if (taskMode === "multi-turn-project") {
+      const firstMarker = `${marker}_FIRST`;
+      const followupPrompt = `Continue the same project in ${artifactDir}. Do not start over and do not inspect Antigravity brain, transcript, history, or log folders. Modify word-tally.mjs so it also exports uniqueWords(text), returning sorted unique words. Update word-tally.test.mjs to keep the original tallyWords assertion and add a node:test assertion that uniqueWords("red blue red") returns ["blue","red"]. Create CHANGELOG.md mentioning the new uniqueWords follow-up and the exact marker ${marker}. Create followup.txt containing exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red green", verify red=2 blue=1 green=1, then reply with ${marker}.`;
+      const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs);
+      failures.push(...turn1.failures.map((failure) => `turn1: ${failure}`));
+      const firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
+      const turn2 = await submitDesktopPromptAndWait(ws, followupPrompt, marker, timeoutMs);
+      failures.push(...turn2.failures.map((failure) => `turn2: ${failure}`));
+      artifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
+      if (!artifactEvidence?.files?.packageJson) failures.push("multi-turn package.json was not created");
+      if (!artifactEvidence?.files?.wordTally) failures.push("multi-turn word-tally.mjs was not created");
+      if (!artifactEvidence?.files?.testFile) failures.push("multi-turn word-tally.test.mjs was not created");
+      if (!artifactEvidence?.files?.doneTxt) failures.push("multi-turn done.txt was not created");
+      if (!artifactEvidence?.files?.followupTxt) failures.push("multi-turn followup.txt was not created");
+      if (!artifactEvidence?.files?.changelogMd) failures.push("multi-turn CHANGELOG.md was not created");
+      if (artifactEvidence?.files?.doneTxt && artifactEvidence.firstDoneExact !== true) failures.push("multi-turn done.txt did not preserve the first-turn marker");
+      if (artifactEvidence?.files?.followupTxt && artifactEvidence.followupExact !== true) failures.push("multi-turn followup.txt did not exactly match the final marker");
+      if (artifactEvidence?.files?.changelogMd && artifactEvidence.changelogHasFinalMarker !== true) failures.push("multi-turn CHANGELOG.md missing final marker");
+      if (artifactEvidence?.files?.wordTally && artifactEvidence.exportsTallyWords !== true) failures.push("multi-turn project did not export tallyWords");
+      if (artifactEvidence?.files?.wordTally && artifactEvidence.exportsUniqueWords !== true) failures.push("multi-turn project did not export uniqueWords");
+      if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) failures.push("multi-turn node:test did not pass");
+      if (artifactEvidence?.files?.wordTally && artifactEvidence.cliPassed !== true) failures.push("multi-turn CLI output did not contain red=2 blue=1 green=1");
+
+      clicked = turn1.clicked === true && turn2.clicked === true;
+      prep = turn1.prep;
+      submitEvidence = turn2.submitEvidence;
+      submitSucceeded = turn1.submitSucceeded === true && turn2.submitSucceeded === true;
+      count = Number(turn1.markerCount || 0) + Number(turn2.markerCount || 0);
+      answerMarkerCount = Number(turn2.answerMarkerCount || 0);
+      composer = turn2.composer || "";
+      lastSample = turn2.lastSample || turn1.lastSample || "";
+      answerSample = turn2.answerSample || "";
+      activeReconnectSeen = turn1.activeReconnectSeen === true || turn2.activeReconnectSeen === true;
+      activeReconnectEvidence.push(...(turn1.activeReconnectEvidence || []), ...(turn2.activeReconnectEvidence || []));
+      inLoopIdleDiagnostics = turn2.inLoopIdleDiagnostics || turn1.inLoopIdleDiagnostics || null;
+
+      const idleResult = inLoopIdleDiagnostics
+        ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
+        : await waitForIdleDiagnostics(baseUrl, 60_000);
+      diagnostics = idleResult.diagnostics;
+      if (!diagnostics) {
+        failures.push(`diagnostics endpoint did not respond after desktop task: ${idleResult.lastError || "unknown error"}`);
+      } else if (!diagnosticsAreIdle(diagnostics)) {
+        failures.push("desktop task did not become idle after the assistant reply");
+      }
+      const sessionLock = diagnostics?.antigravitySessionLock || null;
+      const activeRequests = diagnostics?.activeAntigravityRequests || null;
+      const queue = diagnostics?.antigravityQueue || null;
+      if (sessionLock?.active === true) failures.push("desktop task left the Antigravity session lock active");
+      if (Number(sessionLock?.queued || 0) > 0) failures.push("desktop task left queued Antigravity sessions");
+      if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
+      if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
+      const payload = {
+        ok: failures.length === 0,
+        reportName,
+        requestedRealTraffic: true,
+        usedRealTraffic: true,
+        behaviorCovered: true,
+        coverageKind: "desktop-ui-real-traffic",
+        taskMode,
+        promptText,
+        turnPrompts: [promptText, followupPrompt],
+        elapsedMs: Date.now() - startedAt,
+        failures,
+        marker,
+        firstMarker,
+        artifactDir,
+        firstArtifactEvidence,
+        artifactEvidence,
+        turnEvidence: [turn1, turn2].map((turn) => ({
+          ok: turn.ok,
+          marker: turn.marker,
+          clicked: turn.clicked,
+          submitSucceeded: turn.submitSucceeded,
+          answerMarkerCount: turn.answerMarkerCount,
+          composerCleared: turn.composerCleared,
+          activeReconnectSeen: turn.activeReconnectSeen,
+          inLoopIdleObserved: turn.inLoopIdleObserved,
+          failures: turn.failures,
+        })),
+        cdpPort,
+        baseUrl,
+        target: target ? { id: target.id, title: target.title, url: target.url } : null,
+        prep,
+        submitEvidence,
+        submitSucceeded,
+        staleRecovery,
+        initialIdleObserved: Boolean(initialIdle?.diagnostics),
+        clicked,
+        markerCount: count,
+        answerMarkerCount,
+        activeReconnectSeen,
+        activeReconnectEvidence,
+        inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
+        composerCleared: !composer.includes(marker),
+        sessionLockClear: sessionLock ? sessionLock.active !== true && Number(sessionLock.queued || 0) === 0 : false,
+        lastSample,
+        antigravitySessionLock: sessionLock,
+        activeAntigravityRequests: activeRequests,
+        antigravityQueue: queue,
+        responsesWebSocket: diagnostics?.responsesWebSocket || null,
+        networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
+      };
+      releaseUiLock?.();
+      releaseUiLock = null;
+      writeReport(payload);
+      console.log(JSON.stringify(payload));
+      if (!payload.ok) process.exit(1);
+      process.exit(0);
     }
 
     const clear = await ws.send("Runtime.evaluate", {
@@ -973,7 +1335,7 @@ async function main() {
     failures.push(error instanceof Error ? error.message : String(error));
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "complex-project" || taskMode === "report-site" ? 60_000 : 20_000;
+  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
     : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
@@ -1002,7 +1364,7 @@ async function main() {
     elapsedMs: Date.now() - startedAt,
     failures,
     marker,
-    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
     artifactEvidence,
     cdpPort,
     baseUrl,
@@ -1048,7 +1410,7 @@ main().catch((error) => {
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
-    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
   };
   writeReport(payload);
   console.log(JSON.stringify(payload));
