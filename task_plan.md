@@ -2,7 +2,7 @@
 
 ## Current Status
 - Current immediate-usability status: green. The installed Anti-Codex runtime answers desktop UI chat, keeps the Antigravity session lock clear, passes the real small-project verifier, and now passes full installed no-traffic overall in about 118s with `ok:true`. The passive release gate is also clean for short readiness (`shortReady:true`).
-- Current release blockers: not yet 100%. Passive release gates now show only two required blockers: `syncReadiness` (`source_codex_changed`, explicit host sync required) and stale `postVerification`. Optional real-provider, provider-to-Antigravity return, soak, and cold relaunch evidence remain optional misses.
+- Current release blockers: none in the latest strict required gate. The latest release-gate report has `releaseReady:true`, `shortReady:true`, no missing required gates, no damaged reports, and installed runtime sync satisfied. Optional real third-party-provider and provider-to-Antigravity-return checks remain explicit opt-in items because they require external provider/API authorization.
 - Primary external-tool transport: native Antigravity MCP with same-Cascade continuation. External MCP permission interactions are answered automatically as soon as the structured waiting event appears, before Codex executes the tool.
 - Prompt-mediated tool transport is now a compatibility fallback only. It is used when native MCP fails before any Codex-visible event, or when `ANTICODEX_NATIVE_TOOL_BRIDGE=0` explicitly disables the native bridge.
 - Current installed proof: diagnostics require `toolBridge.mode:"native-mcp-same-cascade"`, `nativeBridgeDefaultEnabled:true`, `nativeAntigravityToolEvents:true`, and `nativeMcpPermissionMode:"automatic-before-codex-execution"`.
