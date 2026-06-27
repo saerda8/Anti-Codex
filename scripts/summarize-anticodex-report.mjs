@@ -120,9 +120,9 @@ const managerButtonResults = Object.entries(managerResults).map(([action, entry]
       hit: item?.hit === true,
       target: asString(item?.target),
     })) : [],
-    managerOpenedNewPage: has(value, "managerOpenedNewPage") ? !!value.managerOpenedNewPage : (result && has(result, "managerOpenedNewPage") ? !!result.managerOpenedNewPage : null),
-    pageTargetCountBeforeManagerOpen: has(value, "pageTargetCountBeforeManagerOpen") ? value.pageTargetCountBeforeManagerOpen : (result && has(result, "pageTargetCountBeforeManagerOpen") ? result.pageTargetCountBeforeManagerOpen : null),
-    pageTargetCountAfterManagerOpen: has(value, "pageTargetCountAfterManagerOpen") ? value.pageTargetCountAfterManagerOpen : (result && has(result, "pageTargetCountAfterManagerOpen") ? result.pageTargetCountAfterManagerOpen : null),
+    managerOpenedNewPage: has(value, "managerOpenedNewPage") ? !!value.managerOpenedNewPage : (payload && has(payload, "managerOpenedNewPage") ? !!payload.managerOpenedNewPage : (result && has(result, "managerOpenedNewPage") ? !!result.managerOpenedNewPage : null)),
+    pageTargetCountBeforeManagerOpen: has(value, "pageTargetCountBeforeManagerOpen") ? value.pageTargetCountBeforeManagerOpen : (payload && has(payload, "pageTargetCountBeforeManagerOpen") ? payload.pageTargetCountBeforeManagerOpen : (result && has(result, "pageTargetCountBeforeManagerOpen") ? result.pageTargetCountBeforeManagerOpen : null)),
+    pageTargetCountAfterManagerOpen: has(value, "pageTargetCountAfterManagerOpen") ? value.pageTargetCountAfterManagerOpen : (payload && has(payload, "pageTargetCountAfterManagerOpen") ? payload.pageTargetCountAfterManagerOpen : (result && has(result, "pageTargetCountAfterManagerOpen") ? result.pageTargetCountAfterManagerOpen : null)),
   };
 });
 

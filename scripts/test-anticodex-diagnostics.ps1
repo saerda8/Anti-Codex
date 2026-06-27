@@ -776,7 +776,8 @@ function Invoke-JsonScript {
             try { $process.Kill() } catch {}
             throw "$ScriptName timed out after $([int]($remainingBudgetMs / 1000)) seconds while waiting for child process"
         }
-        $exitCode = $process.ExitCode
+        try { $process.Refresh() } catch {}
+        $exitCode = if ($null -ne $process.ExitCode) { [int]$process.ExitCode } else { $null }
         $output = @()
         if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue) }
         if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue) }
@@ -785,13 +786,20 @@ function Invoke-JsonScript {
     }
     $lines = @($output | ForEach-Object { [string]$_ })
     $jsonLine = @($lines | Where-Object { $_.TrimStart().StartsWith("{") } | Select-Object -Last 1)
-    if ($exitCode -ne 0) {
-        throw "$ScriptName failed with exit code $exitCode. $($lines -join "`n")"
-    }
     if (-not $jsonLine) {
         throw "$ScriptName did not emit a JSON result."
     }
-    return ($jsonLine | ConvertFrom-Json)
+    $payload = $jsonLine | ConvertFrom-Json
+    if ($null -eq $exitCode -and $payload.ok -eq $true) {
+        $exitCode = 0
+    }
+    if ($null -eq $exitCode) {
+        throw "$ScriptName failed with unknown exit code. $($lines -join "`n")"
+    }
+    if ($exitCode -ne 0) {
+        throw "$ScriptName failed with exit code $exitCode. $($lines -join "`n")"
+    }
+    return $payload
 }
 
 function Resolve-InstalledScriptRoot {
@@ -1375,7 +1383,8 @@ function Test-DiagnosticBundle {
             if (-not (Has-Property $releaseGatesSummary "releaseGateFailureReasons")) { Add-Failure "release-gates summary missing failure reason details" }
             Test-ReleaseGateApprovalAndOfflineEvidence $releaseGatesSummary
             if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
-            if (@($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
+            $syncReadinessReason = @($releaseGatesSummary.releaseGateFailureReasons | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFromHistory -eq $true } | Select-Object -First 1)[0]
+            if ($syncReadinessReason -and @($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
                 Add-Failure "release-gates summary missing sync-readiness selected history report"
             }
             Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence

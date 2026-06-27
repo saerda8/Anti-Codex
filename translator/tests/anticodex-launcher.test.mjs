@@ -7586,6 +7586,7 @@ test("UI idle stability verifier bounds a slow child UI state check", async () =
 
 test("Anti-Codex ships a read-only diagnostics verifier", () => {
   const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
 
   assert.match(diagnostics, /\/anticodex\/diagnostics/);
   assert.match(diagnostics, /\[switch\]\$VerifyBundle/);
@@ -7598,6 +7599,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(8, \[Math\]::Min\(\$TimeoutSec/);
   assert.match(diagnostics, /Start-Process -FilePath \$powerShellBin/);
   assert.match(diagnostics, /\$process\.WaitForExit\(\[Math\]::Max\(1000, \$remainingBudgetMs\)\)/);
+  assert.match(diagnostics, /\$process\.Refresh\(\)/);
+  assert.match(diagnostics, /\$payload\.ok -eq \$true/);
+  assert.match(diagnostics, /failed with unknown exit code/);
   assert.match(diagnostics, /\$ScriptName timed out after/);
   assert.match(diagnostics, /ANTICODEX_DIAGNOSTICS_SCRIPT_ROOT/);
   assert.ok((diagnostics.match(/Test-ReleaseGateApprovalAndOfflineEvidence \$releaseGatesSummary/g) || []).length >= 2);
@@ -7688,6 +7692,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing optional marker/);
   assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
   assert.match(diagnostics, /selectedFromHistory -eq \$true/);
+  assert.match(diagnostics, /\$syncReadinessReason/);
   assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report detail/);
   assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report mtime/);
   assert.match(diagnostics, /release-gates group \$groupName missing required gate \$groupMissingRequiredId absent from top-level missingRequired/);
@@ -7935,6 +7940,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /exceeds its configured limit/);
   assert.match(diagnostics, /tool output\|messages\|input_items\|Return exactly this/);
   assert.doesNotMatch(diagnostics, /Stop-Process|auth\/login/);
+  assert.match(collector, /noTraffic = \$json\.noTraffic/);
 });
 
 function minimalDiagnosticsReleaseGateSummary(overrides = {}) {

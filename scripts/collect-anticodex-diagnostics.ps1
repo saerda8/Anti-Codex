@@ -231,6 +231,7 @@ function Read-JsonSummary {
             skipped = $json.skipped
             reason = $json.reason
             coveredBy = $json.coveredBy
+            noTraffic = $json.noTraffic
             behaviorCovered = $json.behaviorCovered
             coverageKind = $json.coverageKind
             usedRealTraffic = $json.usedRealTraffic
