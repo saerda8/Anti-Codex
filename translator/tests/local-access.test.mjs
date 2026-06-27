@@ -94,20 +94,20 @@ test("responses websocket attempts are audited without prompt data", () => {
 
   const attempt = recordResponsesWebSocketAttempt(req, {
     kind: "upgrade",
-    status: 501,
-    responseType: "unsupported_websocket",
+    status: 101,
+    responseType: "accepted_idle_websocket",
     pathname: "/v1/responses",
   });
   const audit = responsesWebSocketAuditSnapshot();
 
   assert.equal(audit.supported, false);
-  assert.equal(audit.fallbackStatus, 501);
-  assert.equal(audit.fallbackType, "unsupported_websocket");
+  assert.equal(audit.fallbackStatus, 101);
+  assert.equal(audit.fallbackType, "accepted_idle_websocket");
   assert.equal(audit.attempts, before + 1);
   assert.equal(audit.lastUpgrade.path, "/v1/responses");
   assert.equal(audit.lastUpgrade.query, true);
-  assert.equal(audit.lastUpgrade.status, 501);
-  assert.equal(audit.lastUpgrade.responseType, "unsupported_websocket");
+  assert.equal(audit.lastUpgrade.status, 101);
+  assert.equal(audit.lastUpgrade.responseType, "accepted_idle_websocket");
   assert.equal(audit.lastUpgrade.secWebSocketProtocol, "codex.responses.v1");
   assert.equal(audit.lastUpgrade.userAgent, "Codex-Test");
   assert.deepEqual(attempt, audit.lastUpgrade);
@@ -574,7 +574,7 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(payload.nativeToolCapability.nativeBridgeDefaultEnabled, true);
   assert.equal(payload.nativeToolCapability.nativeAntigravityToolEvents, true);
   assert.equal(payload.responsesWebSocket.supported, false);
-  assert.equal(payload.responsesWebSocket.fallbackType, "unsupported_websocket");
+  assert.equal(payload.responsesWebSocket.fallbackType, "accepted_idle_websocket");
   assert.equal(payload.updateStatus.updateNeeded, false);
   assert.equal(payload.updateStatus.sync.available, true);
   assert.equal(payload.postVerification.present, true);

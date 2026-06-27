@@ -3291,6 +3291,41 @@ test("Antigravity internal web loop prefetches search evidence before asking the
   }
 });
 
+test("Antigravity internal web loop prefetches explicit search even without injected tools", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  const upstreamBodies = [];
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_search");
+    assert.match(args.query, /recent Codex updates/);
+    return JSON.stringify({ ok: true, results: [{ title: "Codex update", url: "https://example.com/codex", snippet: "Codex news" }] });
+  };
+
+  try {
+    const completion = await callAntigravityWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "Search the web for recent Codex updates and answer with source URLs." }],
+    }, {
+      callQueued: async (body) => {
+        upstreamBodies.push(structuredClone(body));
+        assert.equal(body.tool_choice, "none");
+        assert.equal(body.tools, undefined);
+        assert.equal(body.messages.at(-3).tool_calls[0].function.name, "web_search");
+        assert.match(body.messages.at(-2).content, /https:\/\/example\.com\/codex/);
+        return {
+          choices: [{ message: { role: "assistant", content: "Codex update summary: https://example.com/codex" }, finish_reason: "stop" }],
+        };
+      },
+    });
+
+    assert.equal(upstreamBodies.length, 1);
+    assert.equal(completion._internalWebEvidence, true);
+    assert.match(completion.choices[0].message.content, /https:\/\/example\.com\/codex/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
 test("Antigravity web prefetch continues web-backed artifact tasks instead of stopping at a summary", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const userText = "Search the web for recent Codex updates, then create report.md, index.html and done.txt in C:\\Temp\\report-site. Use PowerShell file commands. done.txt must contain UI_REPORT_SITE_TEST_20260627.";
@@ -3636,6 +3671,42 @@ test("Antigravity web prefetch falls back when the model omits source URLs", asy
     const text = completion.choices[0].message.content;
     assert.match(text, /https:\/\/developers\.openai\.com\/codex\/changelog/);
     assert.match(text, /UI_WEB_SEARCH_SMOKE_URL/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity web prefetch falls back when the model returns a no-tool blocker", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async () => JSON.stringify({
+    ok: true,
+    results: [{
+      title: "Codex update source",
+      url: "https://example.com/codex-update",
+      snippet: "Codex update evidence.",
+    }],
+  });
+
+  try {
+    const completion = await callAntigravityWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "Search the web for recent Codex updates and answer with source URLs. Put UI_WEB_SEARCH_BLOCKER_DONE on the final line." }],
+    }, {
+      callQueued: async () => ({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: "Anti-Codex 已拦截这轮回复：这次模型只是在文字里说自己要执行或已经执行，但没有真的读文件、运行命令、安装依赖、启动服务、生成文件、移动文件或搜索网页。",
+          },
+          finish_reason: "stop",
+        }],
+      }),
+    });
+    const text = completion.choices[0].message.content;
+    assert.match(text, /https:\/\/example\.com\/codex-update/);
+    assert.match(text, /UI_WEB_SEARCH_BLOCKER_DONE/);
+    assert.doesNotMatch(text, /没有真的读文件/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;

@@ -128,6 +128,16 @@ test("Antigravity idle lock reap is allowed while later requests are queued", ()
   assert.match(server, /res\.on\?\.\("close", abortStreaming\)/);
 });
 
+test("translator ignores benign local connection resets instead of exiting", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(server, /function isBenignLocalConnectionError/);
+  assert.match(server, /ECONNRESET/);
+  assert.match(server, /connection_reset_ignored/);
+  assert.match(server, /server\.on\("clientError"/);
+  assert.doesNotMatch(server, /if \(isBenignLocalConnectionError\(error\)\)[\s\S]{0,240}process\.exit\(1\)/);
+});
+
 test("Antigravity system prompt requires local artifact verification before completion", () => {
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
@@ -142,13 +152,14 @@ test("Antigravity system prompt requires local artifact verification before comp
   assert.match(server, /This source-file restriction does not apply to user-requested one-off artifact directories outside the current source repo/);
 });
 
-test("Antigravity routes explicit desktop web searches through deterministic internal search", () => {
+test("Antigravity routes explicit desktop web searches through stable internal search", () => {
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   assert.match(server, /preferredInternalWebToolName\(parsed\) === "web_search"/);
   assert.match(server, /deterministicInternalWebSearchResponse\(parsed,\s*chatBody,\s*routing\)/);
-  assert.doesNotMatch(server, /preferredInternalWebToolName\(parsed\) === "web_search" && chatBodyHasWebDetourPollution/);
-  assert.match(server, /webEvidenceFallbackText\(result,\s*userText,\s*"translator_direct_web_search_before_model"\)/);
+  assert.match(server, /deterministicInternalWebSearchChatCompletion\(parsed,\s*chatBody\)/);
+  assert.match(server, /已完成联网搜索。下面是基于搜索结果整理的简要回答/);
+  assert.match(server, /if \(directSearch\) \{\s*lines\.length = 0;/);
 });
 
 test("Anti-Codex launcher selects isolated Antigravity mode", () => {
@@ -162,7 +173,9 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /RedirectStandardError/);
   assert.match(launcher, /function Find-AntiCodexLocalAddress/);
   assert.match(launcher, /return "127\.0\.0\.1"/);
-  assert.match(launcher, /TRANSLATOR_LISTEN_HOST\s*=\s*Find-AntiCodexLocalAddress/);
+  assert.match(launcher, /TRANSLATOR_LISTEN_HOST\s*=\s*"127\.0\.0\.1"/);
+  assert.match(launcher, /TRANSLATOR_HOST\s*=\s*"127\.0\.0\.1"/);
+  assert.match(launcher, /TRANSLATOR_URL\s*=\s*"http:\/\/\$\(\$env:TRANSLATOR_HOST\):\$\(\$env:TRANSLATOR_PORT\)"/);
   assert.doesNotMatch(launcher, /Get-NetIPAddress/);
   assert.match(launcher, /TRANSLATOR_HOST/);
   assert.match(launcher, /TRANSLATOR_URL/);
@@ -277,6 +290,27 @@ test("translator watchdog tolerates transient health stalls before restarting", 
   assert.match(ensureFunction, /translator health lost; restarting/i);
 });
 
+test("Anti-Codex watchdog health URL follows the translator listen host", () => {
+  const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  const endpointStart = sharedLauncher.indexOf("function Set-AntiCodexTranslatorEndpointDefaults");
+  const endpointEnd = sharedLauncher.indexOf("\nSet-AntiCodexTranslatorEndpointDefaults", endpointStart);
+  const endpointDefaults = endpointStart >= 0 && endpointEnd > endpointStart
+    ? sharedLauncher.slice(endpointStart, endpointEnd)
+    : "";
+
+  assert.ok(endpointDefaults, "missing Anti-Codex endpoint default function");
+  assert.match(sharedLauncher, /function Get-AntiCodexTranslatorGatewayHost/);
+  assert.match(sharedLauncher, /function Test-AntiCodexTranslatorUrlMatchesListenHost/);
+  assert.match(endpointDefaults, /TRANSLATOR_LISTEN_HOST\s*=\s*"127\.0\.0\.1"/);
+  assert.match(endpointDefaults, /Get-AntiCodexTranslatorGatewayHost \$env:TRANSLATOR_LISTEN_HOST/);
+  assert.match(endpointDefaults, /Test-AntiCodexTranslatorUrlMatchesListenHost \$env:TRANSLATOR_URL \$env:TRANSLATOR_LISTEN_HOST/);
+  assert.doesNotMatch(
+    endpointDefaults,
+    /Find-AntiCodexLocalAddress[\s\S]{0,160}TRANSLATOR_URL/,
+    "watchdog health must not use a LAN host while the translator listens on loopback",
+  );
+});
+
 test("Anti-Codex startup installs a logs_2 sqlite TRACE write guard", () => {
   const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
   const guardPath = resolve(root, "scripts", "protect-anticodex-log-db.mjs");
@@ -348,7 +382,8 @@ test("shared launcher skips DeepSeek key setup in Antigravity mode", () => {
   assert.match(launcher, /OPENAI_API_KEY:\s*localApiKey/);
   assert.match(launcher, /\$env:OPENAI_API_KEY\s*=\s*\$LOCAL_CODEX_API_KEY/);
   assert.match(launcher, /\$env:CODEX_API_KEY\s*=\s*\$LOCAL_CODEX_API_KEY/);
-  assert.doesNotMatch(launcher, /\$env:TRANSLATOR_HOST\s*=\s*["']127\.0\.0\.1["']/);
+  assert.match(launcher, /\$env:TRANSLATOR_HOST\s*=\s*\$gatewayHost/);
+  assert.match(launcher, /Test-AntiCodexTranslatorUrlMatchesListenHost/);
   assert.match(launcher, /TRANSLATOR_LISTEN_HOST/);
   assert.match(launcher, /\.Proxy\s*=\s*\$null/);
   assert.match(launcher, /responses_websockets/);
@@ -1626,7 +1661,11 @@ test("Antigravity mode builds the model catalog from the signed-in desktop accou
 
 test("translator-only recovery keeps lightweight snapshots fresh even when DEEPCODEX_SKIP_PLUGIN_SYNC=1", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
-  const translatorOnlyBlock = launcher.match(/if \(\$TranslatorOnly\) \{[\s\S]*?Write-Host "Anti-Codex translator is ready/)?.[0];
+  const translatorOnlyStart = launcher.indexOf("if ($TranslatorOnly) {");
+  const translatorOnlyEnd = launcher.indexOf("\nSet-DeepCodexRouteIsolation", translatorOnlyStart + 1);
+  const translatorOnlyBlock = translatorOnlyStart >= 0 && translatorOnlyEnd > translatorOnlyStart
+    ? launcher.slice(translatorOnlyStart, translatorOnlyEnd)
+    : "";
 
   assert.ok(translatorOnlyBlock, "missing translator-only startup block");
   assert.match(launcher, /function Find-AntiCodexLocalAddress/);
@@ -7092,8 +7131,9 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(websocket, /function Invoke-WebSocketUpgradeProbeWithRetry/);
   assert.match(websocket, /failed after \$MaxAttempts attempts/);
   assert.match(websocket, /probeResults/);
-  assert.match(websocket, /HTTP\/1\\\.1 501/);
-  assert.match(websocket, /unsupported_websocket/);
+  assert.match(websocket, /HTTP\/1\\\.1 101/);
+  assert.match(websocket, /acceptedIdleWebsocket/);
+  assert.match(websocket, /accepted_idle_websocket/);
   assert.match(websocket, /\/anticodex\/diagnostics/);
   assert.match(websocket, /responsesWebSocket/);
   assert.match(websocket, /lastUpgrade/);

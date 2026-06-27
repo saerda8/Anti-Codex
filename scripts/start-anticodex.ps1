@@ -85,7 +85,7 @@ $env:CODEX_HOME = $env:CODEX_HOME_DIR
 $env:GLOBAL_CODEX_HOME = Join-Path $env:USERPROFILE ".codex"
 $env:DEEPCODEX_SHARED_CODEX_HOME = $env:GLOBAL_CODEX_HOME
 $env:TRANSLATOR_PORT = "8484"
-$env:TRANSLATOR_LISTEN_HOST = Find-AntiCodexLocalAddress
+$env:TRANSLATOR_LISTEN_HOST = "127.0.0.1"
 $env:DEEPCODEX_CDP_PORT = "58318"
 $env:DEEPCODEX_DISABLE_GPU = "1"
 $env:DEEPCODEX_DISPLAY_NAME = "Anti-Codex"
@@ -140,7 +140,7 @@ if ((-not $SkipUpdateCheck) -and (Test-Path -LiteralPath $updateChecker -PathTyp
 $env:DEEPCODEX_PROJECTS_ROOT = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "anticodex"
 
 # Set the local URL after the fast already-running path.
-$env:TRANSLATOR_HOST = Find-AntiCodexLocalAddress
+$env:TRANSLATOR_HOST = "127.0.0.1"
 $env:TRANSLATOR_URL = "http://$($env:TRANSLATOR_HOST):$($env:TRANSLATOR_PORT)"
 
 if ($env:DEEPCODEX_WORKSPACE) {

@@ -263,23 +263,54 @@ function Find-AntiCodexLocalAddress {
     return "127.0.0.1"
 }
 
+function Get-AntiCodexTranslatorGatewayHost {
+    param([string]$ListenHost)
+    $hostName = if ($ListenHost) { $ListenHost.Trim() } else { "127.0.0.1" }
+    if (-not $hostName -or $hostName -eq "0.0.0.0" -or $hostName -eq "::") {
+        return "127.0.0.1"
+    }
+    if ($hostName -eq "localhost" -or $hostName -eq "::1") {
+        return "127.0.0.1"
+    }
+    return $hostName
+}
+
+function Test-AntiCodexTranslatorUrlMatchesListenHost {
+    param(
+        [string]$Url,
+        [string]$ListenHost
+    )
+    if (-not $Url) { return $false }
+    try {
+        $uri = [Uri]$Url
+        $gatewayHost = Get-AntiCodexTranslatorGatewayHost $ListenHost
+        if ($gatewayHost -eq "127.0.0.1") {
+            return @("127.0.0.1", "localhost", "::1") -contains $uri.Host
+        }
+        return $uri.Host -eq $gatewayHost
+    } catch {
+        return $false
+    }
+}
+
 function Set-AntiCodexTranslatorEndpointDefaults {
     if (-not $IS_ANTIGRAVITY_MODE) { return }
     if (-not $env:TRANSLATOR_PORT) {
         $script:TRANSLATOR_PORT = 8484
         $env:TRANSLATOR_PORT = "8484"
     }
-    if (-not $env:TRANSLATOR_HOST) {
-        $env:TRANSLATOR_HOST = Find-AntiCodexLocalAddress
+    if (-not $env:TRANSLATOR_LISTEN_HOST) {
+        $env:TRANSLATOR_LISTEN_HOST = "127.0.0.1"
     }
-    if (-not $env:TRANSLATOR_URL) {
+    $gatewayHost = Get-AntiCodexTranslatorGatewayHost $env:TRANSLATOR_LISTEN_HOST
+    if (-not $env:TRANSLATOR_HOST -or -not (Test-AntiCodexTranslatorUrlMatchesListenHost "http://$($env:TRANSLATOR_HOST):$($env:TRANSLATOR_PORT)" $env:TRANSLATOR_LISTEN_HOST)) {
+        $env:TRANSLATOR_HOST = $gatewayHost
+    }
+    if (-not $env:TRANSLATOR_URL -or -not (Test-AntiCodexTranslatorUrlMatchesListenHost $env:TRANSLATOR_URL $env:TRANSLATOR_LISTEN_HOST)) {
         $script:TRANSLATOR_URL = "http://$($env:TRANSLATOR_HOST):$($env:TRANSLATOR_PORT)"
         $env:TRANSLATOR_URL = $script:TRANSLATOR_URL
     } else {
         $script:TRANSLATOR_URL = $env:TRANSLATOR_URL
-    }
-    if (-not $env:TRANSLATOR_LISTEN_HOST) {
-        $env:TRANSLATOR_LISTEN_HOST = "127.0.0.1"
     }
 }
 

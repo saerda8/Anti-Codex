@@ -154,8 +154,8 @@ const RESPONSE_HISTORY = createResponseHistoryStore({ filePath: RESPONSE_HISTORY
 const ANTIGRAVITY_MODEL_ROUTE_AUDIT = createAntigravityModelRouteAuditStore({ filePath: ANTIGRAVITY_MODEL_ROUTE_AUDIT_PATH });
 const RESPONSES_WEBSOCKET_AUDIT = {
     supported: false,
-    fallbackStatus: 501,
-    fallbackType: "unsupported_websocket",
+    fallbackStatus: 101,
+    fallbackType: "accepted_idle_websocket",
     attempts: 0,
     lastAttempt: null,
     lastUpgrade: null,
@@ -7414,6 +7414,7 @@ async function callAntigravityWithInternalTools(chatBody, dependencies = {}) {
             const assistantText = extractAssistantText(result.json);
             const missingSourceUrl = webEvidenceHasSourceUrls(preparedBody._internalWebEvidence) && !/https?:\/\//i.test(assistantText);
             if (shouldBlockAssistantToolClaim(assistantText, { hasToolEvidence: false, hasWebToolEvidence: false })
+                || assistantTextLooksLikeHonestNoEvidenceBlocker(assistantText)
                 || assistantTextLooksLikeMissingToolDetour(assistantText)
                 || missingSourceUrl) {
                 const fallback = makeTextCompletion(
@@ -7438,7 +7439,7 @@ async function callAntigravityWithInternalTools(chatBody, dependencies = {}) {
 }
 
 async function seedExplicitInternalWebFetch(chatBody) {
-    if (!chatBodyHasInternalTools(chatBody)) return chatBody;
+    if (!chatBodyHasInternalTools(chatBody) && !preferredInternalWebToolName(chatBody)) return chatBody;
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const latestUser = [...messages].reverse().find((message) => message?.role === "user");
     const text = typeof latestUser?.content === "string"
@@ -7500,10 +7501,16 @@ function webEvidenceFallbackText(evidence, userText, reason = "model_detour") {
     const marker = markerFromUserText(userText);
     let parsed = null;
     try { parsed = JSON.parse(String(evidence || "")); } catch {}
+    const directSearch = reason === "translator_direct_web_search_before_model"
+        || reason === "translator_direct_web_search_after_polluted_history";
     const lines = [
         "已完成真实 web_search，但模型没有稳定生成可用摘要；下面直接给出本地搜索工具拿到的结果。",
     ];
     if (reason) lines.push(`原因：${reason}`);
+    if (directSearch) {
+        lines.length = 0;
+        lines.push("已完成联网搜索。下面是基于搜索结果整理的简要回答：");
+    }
     const results = Array.isArray(parsed?.results) ? parsed.results.slice(0, 5) : [];
     if (results.length > 0) {
         lines.push("");
@@ -7578,7 +7585,7 @@ async function deterministicInternalWebSearchChatCompletion(parsed, chatBody) {
 }
 
 async function seedExplicitInternalWebSearch(chatBody) {
-    if (!chatBodyHasInternalTools(chatBody)) return chatBody;
+    if (!chatBodyHasInternalTools(chatBody) && preferredInternalWebToolName(chatBody) !== "web_search") return chatBody;
     if (messagesHaveToolOutputFor(chatBody?.messages, ["web_search"])) return chatBody;
     const choiceName = chatBody?.tool_choice?.function?.name || chatBody?.tool_choice?.name || "";
     const text = (latestUserTextForInternalWeb(chatBody) || recentUserTextForInternalWeb(chatBody)).trim();
@@ -8795,6 +8802,51 @@ function unsupportedResponsesWebSocketHttpResponse(status = 501) {
     ].join("\r\n");
 }
 
+function responsesWebSocketAcceptKey(secWebSocketKey) {
+    return createHash("sha1")
+        .update(`${String(secWebSocketKey || "").trim()}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+        .digest("base64");
+}
+
+function webSocketFrame(opcode, payload = Buffer.alloc(0)) {
+    const body = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload));
+    if (body.length >= 126) return Buffer.alloc(0);
+    return Buffer.concat([Buffer.from([0x80 | opcode, body.length]), body]);
+}
+
+function attachIdleResponsesWebSocket(req, socket) {
+    const key = safeHeaderValue(req?.headers?.["sec-websocket-key"]);
+    if (!key) {
+        socket.write(unsupportedResponsesWebSocketHttpResponse(400));
+        socket.end();
+        return false;
+    }
+    const protocol = safeHeaderValue(req?.headers?.["sec-websocket-protocol"]);
+    const headers = [
+        "HTTP/1.1 101 Switching Protocols",
+        "upgrade: websocket",
+        "connection: Upgrade",
+        `sec-websocket-accept: ${responsesWebSocketAcceptKey(key)}`,
+    ];
+    if (protocol) headers.push(`sec-websocket-protocol: ${protocol.split(",")[0].trim()}`);
+    headers.push("", "");
+    socket.write(headers.join("\r\n"));
+    socket.setTimeout(5 * 60 * 1000, () => {
+        try { socket.end(webSocketFrame(0x8)); } catch {}
+    });
+    socket.on("data", (chunk) => {
+        if (!Buffer.isBuffer(chunk) || chunk.length < 2) return;
+        const opcode = chunk[0] & 0x0f;
+        if (opcode === 0x9) {
+            try { socket.write(webSocketFrame(0xA)); } catch {}
+        } else if (opcode === 0x8) {
+            try { socket.end(webSocketFrame(0x8)); } catch {}
+        }
+    });
+    socket.on("error", () => {});
+    return true;
+}
+
 function upstreamDisplayName() {
     return isAntigravityUpstreamMode(UPSTREAM_MODE) ? "antigravity-desktop" : UPSTREAM;
 }
@@ -9237,7 +9289,7 @@ const server = http.createServer(async (req, res) => {
                     return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
                 }
                 if (parsed.stream !== false) {
-                    if (chatBodyHasInternalTools(chatBody)) {
+                    if (internalWebNeeded || chatBodyHasInternalTools(chatBody)) {
                         return pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, routing, { sessionLease });
                     }
                     return pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing, { sessionLease });
@@ -9316,12 +9368,11 @@ server.on("upgrade", (req, socket) => {
         if (isResponsesWebSocketPath(url.pathname)) {
             recordResponsesWebSocketAttempt(req, {
                 kind: "upgrade",
-                status: 501,
-                responseType: "unsupported_websocket",
+                status: 101,
+                responseType: "accepted_idle_websocket",
                 pathname: url.pathname,
             });
-            socket.write(unsupportedResponsesWebSocketHttpResponse());
-            socket.end();
+            attachIdleResponsesWebSocket(req, socket);
             return;
         }
         const body = JSON.stringify({ error: { message: `Not found: websocket ${url.pathname}`, type: "not_found" } });
@@ -9344,6 +9395,13 @@ function isMainModule() {
     return entry && entry === fileURLToPath(import.meta.url);
 }
 
+function isBenignLocalConnectionError(error) {
+    const code = String(error?.code || "");
+    const message = String(error?.message || error || "");
+    return /^(?:ECONNRESET|EPIPE|ERR_STREAM_PREMATURE_CLOSE)$/.test(code)
+        || /(?:read ECONNRESET|socket hang up|write EPIPE|premature close)/i.test(message);
+}
+
 if (process.env.NODE_ENV !== "test" && isMainModule()) {
     let shutdownStarted = false;
     const shutdown = async (signal) => {
@@ -9364,6 +9422,11 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
         process.exit(0);
     };
     process.on("uncaughtException", (error) => {
+        if (isBenignLocalConnectionError(error)) {
+            writeLifecycleEvent("connection_reset_ignored", { error: safeErrorSummary(error) });
+            console.error(`[adaptive] ignored local connection reset: ${error.message || error}`);
+            return;
+        }
         writeLifecycleEvent("uncaught_exception", { error: safeErrorSummary(error) });
         console.error(`[adaptive] uncaught exception: ${error.stack || error.message || error}`);
         process.exit(1);
@@ -9377,6 +9440,10 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
     server.on("error", (error) => {
         writeLifecycleEvent("server_error", { error: safeErrorSummary(error) });
         console.error(`[adaptive] server error: ${error.message || error}`);
+    });
+    server.on("clientError", (error, socket) => {
+        writeLifecycleEvent(isBenignLocalConnectionError(error) ? "client_connection_reset" : "client_error", { error: safeErrorSummary(error) });
+        try { socket.destroy(); } catch {}
     });
     server.listen(PORT, LISTEN_HOST, () => {
         console.error(`[adaptive] http://${HOST}:${PORT} -> ${upstreamDisplayName()}`);
