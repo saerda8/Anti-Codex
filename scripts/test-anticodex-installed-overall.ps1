@@ -681,6 +681,7 @@ function Test-ReportEncoding {
         "latest-ui-web-search-smoke.json",
         "latest-ui-local-project-smoke.json",
         "latest-ui-coding-project-smoke.json",
+        "latest-ui-complex-project-smoke.json",
         "latest-ui-report-site-smoke.json",
         "latest-real-work.json",
         "latest-real-mini-tool.json",

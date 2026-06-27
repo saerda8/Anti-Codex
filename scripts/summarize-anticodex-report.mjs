@@ -140,6 +140,7 @@ const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
 const isUiLocalProjectSmokeReport = report?.reportName === "ui-local-project-smoke" || /latest-ui-local-project-smoke\.json$/i.test(path);
 const isUiCodingProjectSmokeReport = report?.reportName === "ui-coding-project-smoke" || /latest-ui-coding-project-smoke\.json$/i.test(path);
+const isUiComplexProjectSmokeReport = report?.reportName === "ui-complex-project-smoke" || /latest-ui-complex-project-smoke\.json$/i.test(path);
 const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -459,6 +460,31 @@ const summary = {
     testPassed: report.artifactEvidence && has(report.artifactEvidence, "testPassed") ? !!report.artifactEvidence.testPassed : null,
     cliPassed: report.artifactEvidence && has(report.artifactEvidence, "cliPassed") ? !!report.artifactEvidence.cliPassed : null,
     cliJson: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.cliJson || null : null,
+  } : null,
+  uiComplexProjectEvidence: isUiComplexProjectSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    artifactDir: asString(report.artifactDir),
+    artifactFiles: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.files || null : null,
+    artifactDoneExact: report.artifactEvidence && has(report.artifactEvidence, "doneExact") ? !!report.artifactEvidence.doneExact : null,
+    exportsFunction: report.artifactEvidence && has(report.artifactEvidence, "exportsFunction") ? !!report.artifactEvidence.exportsFunction : null,
+    testPassed: report.artifactEvidence && has(report.artifactEvidence, "testPassed") ? !!report.artifactEvidence.testPassed : null,
+    cliPassed: report.artifactEvidence && has(report.artifactEvidence, "cliPassed") ? !!report.artifactEvidence.cliPassed : null,
+    cliJson: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.cliJson || null : null,
+    sourceUrlCount: report.artifactEvidence && has(report.artifactEvidence, "sourceUrlCount") ? report.artifactEvidence.sourceUrlCount : null,
+    reportUrlCount: report.artifactEvidence && has(report.artifactEvidence, "reportUrlCount") ? report.artifactEvidence.reportUrlCount : null,
+    htmlUrlCount: report.artifactEvidence && has(report.artifactEvidence, "htmlUrlCount") ? report.artifactEvidence.htmlUrlCount : null,
+    sharedUrlCount: report.artifactEvidence && has(report.artifactEvidence, "sharedUrlCount") ? report.artifactEvidence.sharedUrlCount : null,
+    htmlComplete: report.artifactEvidence && has(report.artifactEvidence, "htmlComplete") ? !!report.artifactEvidence.htmlComplete : null,
+    htmlLinksReport: report.artifactEvidence && has(report.artifactEvidence, "htmlLinksReport") ? !!report.artifactEvidence.htmlLinksReport : null,
   } : null,
   uiReportSiteEvidence: isUiReportSiteSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

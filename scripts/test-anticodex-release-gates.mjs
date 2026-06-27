@@ -125,6 +125,7 @@ const gateDefinitions = [
   { id: "uiWebSearchSmoke", group: "real-traffic", file: "latest-ui-web-search-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-web-search-smoke", taskMode: "web-search", prefix: "ui_web_search_smoke", requireSourceUrls: true } },
   { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
   { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requireCodingProject: true } },
+  { id: "uiComplexProjectSmoke", group: "real-traffic", file: "latest-ui-complex-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-complex-project-smoke", taskMode: "complex-project", prefix: "ui_complex_project_smoke", requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"], requireSourceJsonUrls: 3, requireCodingProject: true, requireReportSite: true } },
   { id: "uiReportSiteSmoke", group: "real-traffic", file: "latest-ui-report-site-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-report-site-smoke", taskMode: "report-site", prefix: "ui_report_site_smoke", requiredFiles: ["reportMd", "indexHtml", "doneTxt"], requireReportSite: true } },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
   { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "native" },
@@ -511,6 +512,7 @@ function summarizeGate(definition) {
       }
       if ((spec.requiredFiles || []).length > 0 && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
       if (spec.requireSourceUrls && !/https?:\/\//i.test(lastSample)) semanticFailures.push(`${prefix}_source_urls_missing`);
+      if (spec.requireSourceJsonUrls && Number(artifact.sourceUrlCount || 0) < spec.requireSourceJsonUrls) semanticFailures.push(`${prefix}_source_json_urls_missing`);
       if (spec.requireCodingProject) {
         if (artifact.exportsFunction !== true) semanticFailures.push(`${prefix}_export_missing`);
         if (artifact.testPassed !== true) semanticFailures.push(`${prefix}_tests_not_passed`);
@@ -1247,6 +1249,7 @@ const realTrafficRefreshOrder = [
   ["uiWebSearchSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode web-search --timeout-ms 90000"],
   ["uiLocalProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode local-project --timeout-ms 120000"],
   ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],
+  ["uiComplexProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode complex-project --timeout-ms 180000"],
   ["uiReportSiteSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode report-site --timeout-ms 150000"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
   ["customToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-custom-tool-loop.ps1 -TimeoutSec 90"],
@@ -1932,6 +1935,7 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-ui-web-search-smoke.json", invalidUiTaskReport("ui-web-search-smoke", "web-search", "UI_WEB_SEARCH_MARKER"));
     writeFakeLatestReport("latest-ui-local-project-smoke.json", invalidUiTaskReport("ui-local-project-smoke", "local-project", "UI_LOCAL_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-coding-project-smoke.json", invalidUiTaskReport("ui-coding-project-smoke", "coding-project", "UI_CODING_PROJECT_MARKER"));
+    writeFakeLatestReport("latest-ui-complex-project-smoke.json", invalidUiTaskReport("ui-complex-project-smoke", "complex-project", "UI_COMPLEX_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-report-site-smoke.json", invalidUiTaskReport("ui-report-site-smoke", "report-site", "UI_REPORT_SITE_MARKER"));
 
     writeFakeLatestReport("latest-tool-loop.json", {
@@ -2487,6 +2491,41 @@ if (args.has("--self-test")) {
       "ui_coding_project_smoke_export_missing",
       "ui_coding_project_smoke_tests_not_passed",
       "ui_coding_project_smoke_cli_not_passed",
+    ]);
+    semanticFailures.uiComplexProjectSmoke = assertSemanticFailures("uiComplexProjectSmoke", "self-test failed: semantically invalid ui-complex-project-smoke report satisfied the gate", [
+      "ui_complex_project_smoke_report_name",
+      "ui_complex_project_smoke_task_mode",
+      "ui_complex_project_smoke_real_traffic_not_requested",
+      "ui_complex_project_smoke_real_traffic_missing",
+      "ui_complex_project_smoke_behavior_not_covered",
+      "ui_complex_project_smoke_coverage_kind",
+      "ui_complex_project_smoke_failures",
+      "ui_complex_project_smoke_marker_missing",
+      "ui_complex_project_smoke_not_sent",
+      "ui_complex_project_smoke_composer_not_cleared",
+      "ui_complex_project_smoke_active_reconnect_seen",
+      "ui_complex_project_smoke_session_lock_not_clear",
+      "ui_complex_project_smoke_packageJson_missing",
+      "ui_complex_project_smoke_analyzer_missing",
+      "ui_complex_project_smoke_testFile_missing",
+      "ui_complex_project_smoke_sourcesJson_missing",
+      "ui_complex_project_smoke_reportMd_missing",
+      "ui_complex_project_smoke_indexHtml_missing",
+      "ui_complex_project_smoke_doneTxt_missing",
+      "ui_complex_project_smoke_done_marker_mismatch",
+      "ui_complex_project_smoke_source_json_urls_missing",
+      "ui_complex_project_smoke_export_missing",
+      "ui_complex_project_smoke_tests_not_passed",
+      "ui_complex_project_smoke_cli_not_passed",
+      "ui_complex_project_smoke_report_chinese_missing",
+      "ui_complex_project_smoke_html_chinese_missing",
+      "ui_complex_project_smoke_report_codex_missing",
+      "ui_complex_project_smoke_html_codex_missing",
+      "ui_complex_project_smoke_report_urls_missing",
+      "ui_complex_project_smoke_html_urls_missing",
+      "ui_complex_project_smoke_shared_urls_missing",
+      "ui_complex_project_smoke_html_not_complete",
+      "ui_complex_project_smoke_html_report_link_missing",
     ]);
     semanticFailures.uiReportSiteSmoke = assertSemanticFailures("uiReportSiteSmoke", "self-test failed: semantically invalid ui-report-site-smoke report satisfied the gate", [
       "ui_report_site_smoke_report_name",

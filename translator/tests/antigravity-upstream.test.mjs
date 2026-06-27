@@ -166,10 +166,12 @@ test("chatMessagesToPrompt ends stale tool history with the current plain user t
     { role: "user", content: "Reply with exactly UI_NEW_PLAIN_REPLY_20260627 and nothing else." },
   ]);
 
-  assert.match(prompt, /\[TOOL_RESULT\]/);
+  assert.doesNotMatch(prompt, /\[TOOL_RESULT\]/);
+  assert.doesNotMatch(prompt, /UI_OLD_REPORT_20260627/);
+  assert.doesNotMatch(prompt, /Get-ChildItem old/);
   assert.match(prompt, /\[LATEST_USER_MESSAGE\]\nReply with exactly UI_NEW_PLAIN_REPLY_20260627 and nothing else\./);
   assert.match(prompt, /Answer the LATEST_USER_MESSAGE now/);
-  assert.ok(prompt.lastIndexOf("UI_NEW_PLAIN_REPLY_20260627") > prompt.lastIndexOf("UI_OLD_REPORT_20260627"));
+  assert.ok(prompt.includes("UI_NEW_PLAIN_REPLY_20260627"));
 });
 
 test("chatMessagesToPrompt preserves custom and MCP tool results for continuation", () => {

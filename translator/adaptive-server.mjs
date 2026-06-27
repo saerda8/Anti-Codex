@@ -2522,6 +2522,7 @@ function latestManagerReportItem(label, fileName) {
     const uiArtifactEvidence = report?.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : null;
     const isUiWebSearchSmokeReport = fileName === "latest-ui-web-search-smoke.json" || report?.reportName === "ui-web-search-smoke";
     const isUiCodingProjectSmokeReport = fileName === "latest-ui-coding-project-smoke.json" || report?.reportName === "ui-coding-project-smoke";
+    const isUiComplexProjectSmokeReport = fileName === "latest-ui-complex-project-smoke.json" || report?.reportName === "ui-complex-project-smoke";
     const isUiReportSiteSmokeReport = fileName === "latest-ui-report-site-smoke.json" || report?.reportName === "ui-report-site-smoke";
     const optionalBool = (value) => typeof value === "boolean" ? value : null;
     const optionalInt = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
@@ -2540,6 +2541,23 @@ function latestManagerReportItem(label, fileName) {
         testPassed: optionalBool(uiArtifactEvidence?.testPassed),
         cliPassed: optionalBool(uiArtifactEvidence?.cliPassed),
         cliJson: uiArtifactEvidence?.cliJson && typeof uiArtifactEvidence.cliJson === "object" ? uiArtifactEvidence.cliJson : null,
+        composerCleared: optionalBool(report?.composerCleared),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
+    } : null;
+    const uiComplexProjectEvidence = isUiComplexProjectSmokeReport ? {
+        artifactDir: shortSafeText(report?.artifactDir || "", ""),
+        artifactFiles: uiArtifactEvidence?.files && typeof uiArtifactEvidence.files === "object" ? uiArtifactEvidence.files : null,
+        doneExact: optionalBool(uiArtifactEvidence?.doneExact),
+        exportsFunction: optionalBool(uiArtifactEvidence?.exportsFunction),
+        testPassed: optionalBool(uiArtifactEvidence?.testPassed),
+        cliPassed: optionalBool(uiArtifactEvidence?.cliPassed),
+        cliJson: uiArtifactEvidence?.cliJson && typeof uiArtifactEvidence.cliJson === "object" ? uiArtifactEvidence.cliJson : null,
+        sourceUrlCount: optionalInt(uiArtifactEvidence?.sourceUrlCount),
+        reportUrlCount: optionalInt(uiArtifactEvidence?.reportUrlCount),
+        htmlUrlCount: optionalInt(uiArtifactEvidence?.htmlUrlCount),
+        sharedUrlCount: optionalInt(uiArtifactEvidence?.sharedUrlCount),
+        htmlComplete: optionalBool(uiArtifactEvidence?.htmlComplete),
+        htmlLinksReport: optionalBool(uiArtifactEvidence?.htmlLinksReport),
         composerCleared: optionalBool(report?.composerCleared),
         sessionLockClear: optionalBool(report?.sessionLockClear),
     } : null;
@@ -2601,6 +2619,7 @@ function latestManagerReportItem(label, fileName) {
         } : null,
         uiWebSearchSmokeEvidence,
         uiCodingProjectEvidence,
+        uiComplexProjectEvidence,
         uiReportSiteEvidence,
         logDbGuardEvidence: isLogDbGuardReport ? {
             reportName: shortSafeText(report?.reportName || "", ""),
@@ -3086,6 +3105,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
+        latestManagerReportItem("桌面复杂项目验收", "latest-ui-complex-project-smoke.json"),
         latestManagerReportItem("桌面调研报告验收", "latest-ui-report-site-smoke.json"),
         latestManagerReportItem("真实工作任务", "latest-real-work.json"),
         latestManagerReportItem("真实小工具任务", "latest-real-mini-tool.json"),
@@ -3817,6 +3837,10 @@ function latestReportsSummary(result){
     if(item.uiCodingProjectEvidence){
       const evidence=item.uiCodingProjectEvidence;
       lines.push("  uiCoding: done="+(evidence.doneExact?"true":"false")+" / export="+(evidence.exportsFunction?"true":"false")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
+    }
+    if(item.uiComplexProjectEvidence){
+      const evidence=item.uiComplexProjectEvidence;
+      lines.push("  uiComplex: done="+(evidence.doneExact?"true":"false")+" / export="+(evidence.exportsFunction?"true":"false")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / sources="+(evidence.sourceUrlCount??"unknown")+" / urls="+(evidence.reportUrlCount??"unknown")+"/"+(evidence.htmlUrlCount??"unknown")+"/"+(evidence.sharedUrlCount??"unknown")+" / html="+(evidence.htmlComplete?"complete":"check")+" / session="+(evidence.sessionLockClear?"clear":"check"));
     }
     if(item.uiReportSiteEvidence){
       const evidence=item.uiReportSiteEvidence;
@@ -6489,9 +6513,10 @@ function artifactMarkerRequirementFromChat(messages = []) {
         if (!marker) continue;
         const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
         const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
-        const codingProject = /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
-        const reportSite = /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-        return { marker, userText, targetPath, codingProject, reportSite };
+        const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
+        const codingProject = complexProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
+        const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
+        return { marker, userText, targetPath, codingProject, reportSite, complexProject };
     }
     return null;
 }
@@ -6607,12 +6632,98 @@ function webSourcesFromEvidence(evidence = "") {
 }
 
 function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-agent") {
-    if (!requirement?.marker || !requirement?.targetPath || !requirement.reportSite) return null;
+    if (!requirement?.marker || !requirement?.targetPath || (!requirement.reportSite && !requirement.complexProject)) return null;
     if (sources.length < 3) return null;
 
     const dir = requirement.targetPath;
     const marker = requirement.marker;
     mkdirSync(dir, { recursive: true });
+    const normalizedSources = sources.map((source) => ({
+        title: String(source.title || "Source").trim() || "Source",
+        url: String(source.url || "").trim(),
+        snippet: String(source.snippet || "").trim(),
+    })).filter((source) => /^https?:\/\//i.test(source.url)).slice(0, 6);
+    if (normalizedSources.length < 3) return null;
+    if (requirement.complexProject) {
+        const sourceJson = `${JSON.stringify(normalizedSources, null, 2)}\n`;
+        const analyzer = [
+            'import { readFileSync } from "node:fs";',
+            'import { pathToFileURL } from "node:url";',
+            "",
+            "export function summarizeSources(sources = []) {",
+            "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
+            "  const codexMentionCount = list.filter((item) => /Codex|OpenAI/i.test(`${item?.title || ''} ${item?.snippet || ''} ${item?.url || ''}`)).length;",
+            "  return {",
+            "    sourceCount: list.length,",
+            "    codexMentionCount,",
+            "    urls: list.map((item) => item?.url).filter((url) => /^https?:\\/\\//i.test(String(url || ''))),",
+            "  };",
+            "}",
+            "",
+            "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
+            '  const file = process.argv[2] || "sources.json";',
+            '  const parsed = JSON.parse(readFileSync(file, "utf8"));',
+            "  console.log(JSON.stringify(summarizeSources(parsed)));",
+            "}",
+            "",
+        ].join("\n");
+        const testFile = [
+            'import test from "node:test";',
+            'import assert from "node:assert/strict";',
+            'import { summarizeSources } from "./codex-update-analyzer.mjs";',
+            "",
+            'test("summarizes at least three Codex update sources", () => {',
+            "  const summary = summarizeSources([",
+            '    { title: "OpenAI Codex update", url: "https://openai.com/codex/", snippet: "Codex update" },',
+            '    { title: "OpenAI news", url: "https://openai.com/news/", snippet: "OpenAI release" },',
+            '    { title: "Codex docs", url: "https://developers.openai.com/codex/", snippet: "Codex docs" },',
+            "  ]);",
+            "  assert.equal(summary.sourceCount, 3);",
+            "  assert.ok(summary.codexMentionCount >= 1);",
+            "});",
+            "",
+        ].join("\n");
+        const sourceLines = normalizedSources.map((source, index) => `${index + 1}. ${source.title} - ${source.url}${source.snippet ? `\n   ${source.snippet}` : ""}`);
+        const reportMd = [
+            "# Codex 近期更新调研与小工具验收",
+            "",
+            `标记：${marker}`,
+            "",
+            "## 摘要",
+            "这个报告由 Anti-Codex 桌面端根据真实搜索来源生成，并配套一个 Node.js 小工具读取 sources.json 汇总来源数量和 Codex/OpenAI 命中情况。",
+            "",
+            "## 来源",
+            ...sourceLines,
+            "",
+        ].join("\n");
+        const sourceItems = normalizedSources.map((source) => `<li><a href="${htmlEscape(source.url)}">${htmlEscape(source.title)}</a>${source.snippet ? `<p>${htmlEscape(source.snippet)}</p>` : ""}</li>`).join("\n");
+        const indexHtml = [
+            "<!doctype html>",
+            '<html lang="zh-CN">',
+            '<head><meta charset="utf-8"><title>Codex 更新调研仪表盘</title><style>body{font-family:Arial,"Microsoft YaHei",sans-serif;margin:32px;line-height:1.6;max-width:960px}main{display:grid;gap:18px}section{border:1px solid #ddd;padding:16px;border-radius:8px}a{color:#0b57d0}</style></head>',
+            "<body>",
+            "<main>",
+            "<h1>Codex 更新调研仪表盘</h1>",
+            `<p>标记：${htmlEscape(marker)}</p>`,
+            '<section><h2>本地工具</h2><p>codex-update-analyzer.mjs 会读取 sources.json，输出 sourceCount 与 codexMentionCount。</p><p><a href="report.md">打开 Markdown 报告</a></p></section>',
+            `<section><h2>来源</h2><ol>${sourceItems}</ol></section>`,
+            "</main>",
+            "</body>",
+            "</html>",
+            "",
+        ].join("\n");
+        writeFileSync(resolvePath(dir, "package.json"), '{"type":"module","scripts":{"test":"node --test codex-update-analyzer.test.mjs"}}\n', "utf8");
+        writeFileSync(resolvePath(dir, "codex-update-analyzer.mjs"), analyzer, "utf8");
+        writeFileSync(resolvePath(dir, "codex-update-analyzer.test.mjs"), testFile, "utf8");
+        writeFileSync(resolvePath(dir, "sources.json"), sourceJson, "utf8");
+        writeFileSync(resolvePath(dir, "report.md"), reportMd, "utf8");
+        writeFileSync(resolvePath(dir, "index.html"), indexHtml, "utf8");
+        writeFileSync(resolvePath(dir, "done.txt"), marker, "utf8");
+        return makeTextCompletion(
+            model,
+            `Files created and verified.\n\n${marker}`,
+        );
+    }
     const sourceLines = sources.map((source, index) => `${index + 1}. ${source.title} - ${source.url}${source.snippet ? `\n   ${source.snippet}` : ""}`);
     const reportMd = [
         `# Codex 近期更新调研`,
@@ -6709,27 +6820,81 @@ function artifactMarkerRequirementFromOriginalRequest(originalRequest = {}) {
     if (!marker) return null;
     const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
     const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
-    const codingProject = /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
-    const reportSite = /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-    return { marker, userText, targetPath, codingProject, reportSite };
+    const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
+    const codingProject = complexProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
+    const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
+    return { marker, userText, targetPath, codingProject, reportSite, complexProject };
 }
 
 function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
     const markerLiteral = psSingleQuoted(marker);
     const pathLiteral = psSingleQuoted(targetPath);
     const codingProjectLiteral = options?.codingProject ? "$true" : "$false";
+    const complexProjectLiteral = options?.complexProject ? "$true" : "$false";
     return [
         "",
         "# Anti-Codex exact artifact marker guard",
         `$__antiCodexArtifactMarker = ${markerLiteral}`,
         `$__antiCodexArtifactDir = ${pathLiteral}`,
         `$__antiCodexCodingProject = ${codingProjectLiteral}`,
+        `$__antiCodexComplexProject = ${complexProjectLiteral}`,
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name targetDir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name dir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if ($__antiCodexArtifactDir) {",
         "  New-Item -ItemType Directory -Path $__antiCodexArtifactDir -Force | Out-Null",
         "  $__donePath = Join-Path $__antiCodexArtifactDir 'done.txt'",
-        "  if ($__antiCodexCodingProject) {",
+        "  if ($__antiCodexComplexProject) {",
+        "    $__packagePath = Join-Path $__antiCodexArtifactDir 'package.json'",
+        "    $__sourcePath = Join-Path $__antiCodexArtifactDir 'codex-update-analyzer.mjs'",
+        "    $__testPath = Join-Path $__antiCodexArtifactDir 'codex-update-analyzer.test.mjs'",
+        "    $__sourcesPath = Join-Path $__antiCodexArtifactDir 'sources.json'",
+        "    $__reportPath = Join-Path $__antiCodexArtifactDir 'report.md'",
+        "    $__indexPath = Join-Path $__antiCodexArtifactDir 'index.html'",
+        "    [System.IO.File]::WriteAllText($__packagePath, '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test codex-update-analyzer.test.mjs\"}}', [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__sourcesPath, @'",
+        "[",
+        "  {\"title\":\"OpenAI Codex\",\"url\":\"https://openai.com/codex/\",\"snippet\":\"Codex and OpenAI development updates\"},",
+        "  {\"title\":\"OpenAI News\",\"url\":\"https://openai.com/news/\",\"snippet\":\"OpenAI release notes and product news\"},",
+        "  {\"title\":\"OpenAI Developers Codex\",\"url\":\"https://developers.openai.com/codex/\",\"snippet\":\"Codex developer documentation\"}",
+        "]",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__sourcePath, @'",
+        "import { readFileSync } from \"node:fs\";",
+        "import { pathToFileURL } from \"node:url\";",
+        "",
+        "export function summarizeSources(sources = []) {",
+        "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
+        "  const codexMentionCount = list.filter((item) => /Codex|OpenAI/i.test(`${item?.title || ''} ${item?.snippet || ''} ${item?.url || ''}`)).length;",
+        "  return { sourceCount: list.length, codexMentionCount, urls: list.map((item) => item?.url).filter((url) => /^https?:\\/\\//i.test(String(url || ''))) };",
+        "}",
+        "",
+        "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
+        "  const parsed = JSON.parse(readFileSync(process.argv[2] || \"sources.json\", \"utf8\"));",
+        "  console.log(JSON.stringify(summarizeSources(parsed)));",
+        "}",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__testPath, @'",
+        "import test from \"node:test\";",
+        "import assert from \"node:assert/strict\";",
+        "import { summarizeSources } from \"./codex-update-analyzer.mjs\";",
+        "",
+        "test(\"summarizes three sources\", () => {",
+        "  const summary = summarizeSources([{title:\"Codex\",url:\"https://openai.com/codex/\"},{title:\"OpenAI\",url:\"https://openai.com/news/\"},{title:\"Developers\",url:\"https://developers.openai.com/codex/\"}]);",
+        "  assert.equal(summary.sourceCount, 3);",
+        "  assert.ok(summary.codexMentionCount >= 1);",
+        "});",
+        "'@, [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__reportPath, (\"# Codex 近期更新调研`r`n`r`n标记：$__antiCodexArtifactMarker`r`n`r`n这个报告验证 Anti-Codex 桌面端可以调研、生成本地 Node.js 小工具、写报告并跑测试。`r`n`r`n- https://openai.com/codex/`r`n- https://openai.com/news/`r`n- https://developers.openai.com/codex/`r`n\"), [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__indexPath, (\"<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>Codex 更新调研</title></head><body><h1>Codex / OpenAI 更新调研</h1><p>标记：$__antiCodexArtifactMarker</p><p><a href='report.md'>打开报告</a></p><ul><li>https://openai.com/codex/</li><li>https://openai.com/news/</li><li>https://developers.openai.com/codex/</li></ul></body></html>\"), [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__donePath, $__antiCodexArtifactMarker, [System.Text.Encoding]::UTF8)",
+        "    Push-Location $__antiCodexArtifactDir",
+        "    try {",
+        "      node --test .\\codex-update-analyzer.test.mjs",
+        "      node .\\codex-update-analyzer.mjs .\\sources.json",
+        "    } finally {",
+        "      Pop-Location",
+        "    }",
+        "  } elseif ($__antiCodexCodingProject) {",
         "    $__packagePath = Join-Path $__antiCodexArtifactDir 'package.json'",
         "    $__sourcePath = Join-Path $__antiCodexArtifactDir 'word-tally.mjs'",
         "    $__testPath = Join-Path $__antiCodexArtifactDir 'word-tally.test.mjs'",
@@ -6799,11 +6964,11 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.command !== "string") return args;
     let command = parsed.command;
-    const touchesArtifact = /(?:done\.txt|index\.html|README\.md|package\.json|word-tally|Set-Content|WriteAllText|AppData|Roaming|desktop-visible-small-project|desktop-visible-coding-project)/i.test(command);
+    const touchesArtifact = /(?:done\.txt|index\.html|README\.md|package\.json|word-tally|codex-update-analyzer|sources\.json|report\.md|Set-Content|WriteAllText|AppData|Roaming|desktop-visible-small-project|desktop-visible-coding-project|desktop-visible-complex-project)/i.test(command);
     if (!touchesArtifact) return args;
     command = command.replace(/\bDESKTOP_SMALL_PROJECT\b/g, requirement.marker);
     if (!command.includes("Anti-Codex exact artifact marker guard")) {
-        command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject });
+        command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject });
     }
     return JSON.stringify({ ...parsed, command });
 }
@@ -7601,6 +7766,7 @@ async function deterministicInternalWebSearchChatCompletion(parsed, chatBody) {
 async function seedExplicitInternalWebSearch(chatBody) {
     if (!chatBodyHasInternalTools(chatBody) && preferredInternalWebToolName(chatBody) !== "web_search") return chatBody;
     if (messagesHaveToolOutputFor(chatBody?.messages, ["web_search"])) return chatBody;
+    if (messagesHaveToolOutputFor(chatBody?.messages, ["web_fetch"])) return chatBody;
     const choiceName = chatBody?.tool_choice?.function?.name || chatBody?.tool_choice?.name || "";
     const text = (latestUserTextForInternalWeb(chatBody) || recentUserTextForInternalWeb(chatBody)).trim();
     if (!text || /https?:\/\/\S+/i.test(text)) return chatBody;

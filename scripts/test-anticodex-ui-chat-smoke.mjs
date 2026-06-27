@@ -28,6 +28,8 @@ const reportName = taskMode === "web-search"
     ? "ui-free-chat-smoke"
     : taskMode === "coding-project"
       ? "ui-coding-project-smoke"
+    : taskMode === "complex-project"
+      ? "ui-complex-project-smoke"
     : taskMode === "report-site"
       ? "ui-report-site-smoke"
     : taskMode === "local-project"
@@ -37,6 +39,8 @@ const markerPrefix = taskMode === "web-search"
   ? "UI_WEB_SEARCH_SMOKE"
   : taskMode === "coding-project"
     ? "UI_CODING_PROJECT_SMOKE"
+  : taskMode === "complex-project"
+    ? "UI_COMPLEX_PROJECT_SMOKE"
   : taskMode === "report-site"
     ? "UI_REPORT_SITE_SMOKE"
   : taskMode === "local-project"
@@ -50,6 +54,8 @@ const artifactDir = args.get("--artifact-dir")
     reportRoot,
     taskMode === "coding-project"
       ? "desktop-visible-coding-project"
+      : taskMode === "complex-project"
+        ? "desktop-visible-complex-project"
       : taskMode === "report-site"
         ? "desktop-visible-report-site"
         : "desktop-visible-small-project",
@@ -68,6 +74,9 @@ if (!args.get("--prompt") && taskMode === "local-project") {
 }
 if (!args.get("--prompt") && taskMode === "coding-project") {
   promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export a tallyWords(text) function and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}.`;
+}
+if (!args.get("--prompt") && taskMode === "complex-project") {
+  promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search. codex-update-analyzer.mjs must export summarizeSources(sources) and when run as a CLI read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3, then reply with ${marker}.`;
 }
 if (!args.get("--prompt") && taskMode === "report-site") {
   promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell file commands to create exactly these files: report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
@@ -447,6 +456,108 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
   return evidence;
 }
 
+function verifyComplexProjectArtifact(dir, expectedMarker) {
+  if (!dir) return null;
+  const packagePath = join(dir, "package.json");
+  const analyzerPath = join(dir, "codex-update-analyzer.mjs");
+  const testPath = join(dir, "codex-update-analyzer.test.mjs");
+  const sourcesPath = join(dir, "sources.json");
+  const reportPath = join(dir, "report.md");
+  const htmlPath = join(dir, "index.html");
+  const donePath = join(dir, "done.txt");
+  const evidence = {
+    dir,
+    files: {
+      packageJson: fileExists(packagePath),
+      analyzer: fileExists(analyzerPath),
+      testFile: fileExists(testPath),
+      sourcesJson: fileExists(sourcesPath),
+      reportMd: fileExists(reportPath),
+      indexHtml: fileExists(htmlPath),
+      doneTxt: fileExists(donePath),
+    },
+    doneExact: false,
+    exportsFunction: false,
+    testPassed: false,
+    cliPassed: false,
+    cliJson: null,
+    sourceCount: 0,
+    sourceUrlCount: 0,
+    reportHasMarker: false,
+    htmlHasMarker: false,
+    reportHasChinese: false,
+    htmlHasChinese: false,
+    reportMentionsCodex: false,
+    htmlMentionsCodex: false,
+    reportUrlCount: 0,
+    htmlUrlCount: 0,
+    sharedUrlCount: 0,
+    htmlComplete: false,
+    htmlLinksReport: false,
+    testOutput: "",
+    cliOutput: "",
+    error: "",
+  };
+  try {
+    if (evidence.files.doneTxt) {
+      const text = readFileSync(donePath, "utf8").replace(/^\uFEFF/, "");
+      evidence.doneExact = text === expectedMarker;
+    }
+    if (evidence.files.analyzer) {
+      evidence.exportsFunction = /export\s+function\s+summarizeSources/.test(readFileSync(analyzerPath, "utf8"));
+    }
+    if (evidence.files.sourcesJson) {
+      const parsed = JSON.parse(readFileSync(sourcesPath, "utf8"));
+      const sources = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);
+      evidence.sourceCount = sources.length;
+      evidence.sourceUrlCount = sources.filter((item) => /^https?:\/\//i.test(String(item?.url || ""))).length;
+    }
+    let reportUrls = [];
+    let htmlUrls = [];
+    if (evidence.files.reportMd) {
+      const text = readFileSync(reportPath, "utf8");
+      evidence.reportHasMarker = text.includes(expectedMarker);
+      evidence.reportHasChinese = /[\u4e00-\u9fff]/.test(text);
+      evidence.reportMentionsCodex = /Codex|OpenAI/i.test(text);
+      reportUrls = uniqueUrls(text);
+      evidence.reportUrlCount = reportUrls.length;
+    }
+    if (evidence.files.indexHtml) {
+      const text = readFileSync(htmlPath, "utf8");
+      evidence.htmlHasMarker = text.includes(expectedMarker);
+      evidence.htmlHasChinese = /[\u4e00-\u9fff]/.test(text);
+      evidence.htmlMentionsCodex = /Codex|OpenAI/i.test(text);
+      htmlUrls = uniqueUrls(text);
+      evidence.htmlUrlCount = htmlUrls.length;
+      evidence.htmlComplete = /<html|<!doctype/i.test(text) && /<\/html>/i.test(text);
+      evidence.htmlLinksReport = /report\.md/i.test(text);
+    }
+    evidence.sharedUrlCount = reportUrls.filter((url) => htmlUrls.includes(url)).length;
+    if (evidence.files.testFile) {
+      evidence.testOutput = execFileSync(process.execPath, ["--test", testPath], {
+        cwd: dir,
+        encoding: "utf8",
+        timeout: 20_000,
+        windowsHide: true,
+      });
+      evidence.testPassed = true;
+    }
+    if (evidence.files.analyzer && evidence.files.sourcesJson) {
+      evidence.cliOutput = execFileSync(process.execPath, [analyzerPath, sourcesPath], {
+        cwd: dir,
+        encoding: "utf8",
+        timeout: 10_000,
+        windowsHide: true,
+      }).trim();
+      evidence.cliJson = JSON.parse(evidence.cliOutput);
+      evidence.cliPassed = Number(evidence.cliJson?.sourceCount) >= 3 && Number(evidence.cliJson?.codexMentionCount) >= 1;
+    }
+  } catch (error) {
+    evidence.error = error instanceof Error ? error.message : String(error);
+  }
+  return evidence;
+}
+
 async function waitForIdleDiagnostics(url, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let latest = null;
@@ -470,7 +581,7 @@ function recoverStaleComposerExpression() {
     const clicked = [];
     const bodyText = document.body.innerText || '';
     const isTestResidue = bodyText.includes(${safeMarkerPrefix})
-      || /desktop-visible-|ui_local_after_role_fix_|UI_(WEB_SEARCH|LOCAL_PROJECT|CODING_PROJECT|REPORT_SITE|CHAT)_SMOKE/i.test(bodyText);
+      || /desktop-visible-|ui_local_after_role_fix_|UI_(WEB_SEARCH|LOCAL_PROJECT|CODING_PROJECT|COMPLEX_PROJECT|REPORT_SITE|CHAT)_SMOKE/i.test(bodyText);
     if (!isTestResidue) return { clicked, skipped: true, reason: 'no known UI smoke residue', tail: bodyText.slice(-500) };
     const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
     const composerRect = composer?.getBoundingClientRect();
@@ -814,6 +925,32 @@ async function main() {
       if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) failures.push("coding-project node:test did not pass");
       if (artifactEvidence?.files?.wordTally && artifactEvidence.cliPassed !== true) failures.push("coding-project CLI output did not contain red=2 and blue=1");
     }
+    if (taskMode === "complex-project") {
+      artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+      if (!artifactEvidence?.files?.packageJson) failures.push("complex-project package.json was not created");
+      if (!artifactEvidence?.files?.analyzer) failures.push("complex-project codex-update-analyzer.mjs was not created");
+      if (!artifactEvidence?.files?.testFile) failures.push("complex-project codex-update-analyzer.test.mjs was not created");
+      if (!artifactEvidence?.files?.sourcesJson) failures.push("complex-project sources.json was not created");
+      if (!artifactEvidence?.files?.reportMd) failures.push("complex-project report.md was not created");
+      if (!artifactEvidence?.files?.indexHtml) failures.push("complex-project index.html was not created");
+      if (!artifactEvidence?.files?.doneTxt) failures.push("complex-project done.txt was not created");
+      if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) failures.push("complex-project done.txt did not exactly match the marker");
+      if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) failures.push("complex-project analyzer did not export summarizeSources");
+      if (artifactEvidence?.files?.sourcesJson && artifactEvidence.sourceUrlCount < 3) failures.push("complex-project sources.json had fewer than three source URLs");
+      if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) failures.push("complex-project node:test did not pass");
+      if (artifactEvidence?.files?.analyzer && artifactEvidence.cliPassed !== true) failures.push("complex-project CLI output did not prove sourceCount>=3 and codexMentionCount>=1");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMarker !== true) failures.push("complex-project report.md missing marker");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) failures.push("complex-project index.html missing marker");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) failures.push("complex-project report.md missing Chinese content");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) failures.push("complex-project index.html missing Chinese content");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) failures.push("complex-project report.md missing Codex/OpenAI content");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) failures.push("complex-project index.html missing Codex/OpenAI content");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) failures.push("complex-project report.md has fewer than three source URLs");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlUrlCount < 3) failures.push("complex-project index.html has fewer than three source URLs");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) failures.push("complex-project report.md and index.html did not share a source URL");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) failures.push("complex-project index.html is not a complete HTML document");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) failures.push("complex-project index.html does not link to report.md");
+    }
     if (taskMode === "report-site") {
       artifactEvidence = verifyReportSiteArtifact(artifactDir, marker);
       if (!artifactEvidence?.files?.reportMd) failures.push("report-site report.md was not created");
@@ -836,7 +973,7 @@ async function main() {
     failures.push(error instanceof Error ? error.message : String(error));
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "report-site" ? 60_000 : 20_000;
+  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "complex-project" || taskMode === "report-site" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
     : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
@@ -865,7 +1002,7 @@ async function main() {
     elapsedMs: Date.now() - startedAt,
     failures,
     marker,
-    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "report-site" ? artifactDir : null,
+    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
     artifactEvidence,
     cdpPort,
     baseUrl,
@@ -911,7 +1048,7 @@ main().catch((error) => {
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
-    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "report-site" ? artifactDir : null,
+    artifactDir: taskMode === "local-project" || taskMode === "coding-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
   };
   writeReport(payload);
   console.log(JSON.stringify(payload));
