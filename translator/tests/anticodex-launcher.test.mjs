@@ -11398,7 +11398,9 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(server, /files have already been inspected/);
   assert.match(server, /latest-ui-complex-project-smoke\.json/);
   assert.match(server, /latest-ui-report-site-smoke\.json/);
+  assert.match(server, /uiChatSmokeEvidence/);
   assert.match(server, /uiWebSearchSmokeEvidence/);
+  assert.match(server, /uiLocalProjectEvidence/);
   assert.match(server, /uiCodingProjectEvidence/);
   assert.match(server, /uiMultiTurnProjectEvidence/);
   assert.match(server, /uiRepoFileEditEvidence/);
@@ -11407,7 +11409,9 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(server, /inputsLocked=/);
   assert.match(server, /uiComplexProjectEvidence/);
   assert.match(server, /uiReportSiteEvidence/);
+  assert.match(server, /uiChat:/);
   assert.match(server, /uiWebSearch:/);
+  assert.match(server, /uiLocalProject:/);
   assert.match(server, /uiCoding:/);
   assert.match(server, /uiMultiTurn:/);
   assert.match(server, /uiRepoMulti:/);

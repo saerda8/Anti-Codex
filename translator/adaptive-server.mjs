@@ -2586,7 +2586,9 @@ function latestManagerReportItem(label, fileName) {
     const isMissingHistoryReport = fileName === "latest-missing-history.json" || report?.reportName === "missing-history";
     const isAccountProxyReport = fileName === "latest-account-proxy-readiness.json" || report?.reportName === "account-proxy-readiness";
     const uiArtifactEvidence = report?.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : null;
+    const isUiChatSmokeReport = fileName === "latest-ui-chat-smoke.json" || report?.reportName === "ui-chat-smoke";
     const isUiWebSearchSmokeReport = fileName === "latest-ui-web-search-smoke.json" || report?.reportName === "ui-web-search-smoke";
+    const isUiLocalProjectSmokeReport = fileName === "latest-ui-local-project-smoke.json" || report?.reportName === "ui-local-project-smoke";
     const isUiCodingProjectSmokeReport = fileName === "latest-ui-coding-project-smoke.json" || report?.reportName === "ui-coding-project-smoke";
     const isUiMultiTurnProjectSmokeReport = fileName === "latest-ui-multi-turn-project-smoke.json" || report?.reportName === "ui-multi-turn-project-smoke";
     const isUiRepoFileEditSmokeReport = fileName === "latest-ui-repo-file-edit-smoke.json" || report?.reportName === "ui-repo-file-edit-smoke";
@@ -2595,12 +2597,29 @@ function latestManagerReportItem(label, fileName) {
     const isUiReportSiteSmokeReport = fileName === "latest-ui-report-site-smoke.json" || report?.reportName === "ui-report-site-smoke";
     const optionalBool = (value) => typeof value === "boolean" ? value : null;
     const optionalInt = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+    const uiChatSmokeEvidence = isUiChatSmokeReport ? {
+        clicked: optionalBool(report?.clicked),
+        composerCleared: optionalBool(report?.composerCleared),
+        activeReconnectSeen: optionalBool(report?.activeReconnectSeen),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
+        marker: shortSafeText(report?.marker || "", ""),
+    } : null;
     const uiWebSearchSmokeEvidence = isUiWebSearchSmokeReport ? {
         clicked: optionalBool(report?.clicked),
         composerCleared: optionalBool(report?.composerCleared),
         activeReconnectSeen: optionalBool(report?.activeReconnectSeen),
         sessionLockClear: optionalBool(report?.sessionLockClear),
         hasSourceUrls: /https?:\/\//i.test(shortSafeText(report?.lastSample || "", "")),
+    } : null;
+    const uiLocalProjectEvidence = isUiLocalProjectSmokeReport ? {
+        artifactDir: shortSafeText(report?.artifactDir || "", ""),
+        artifactFiles: uiArtifactEvidence?.files && typeof uiArtifactEvidence.files === "object" ? uiArtifactEvidence.files : null,
+        doneExact: optionalBool(uiArtifactEvidence?.doneExact),
+        indexHasMarker: optionalBool(uiArtifactEvidence?.indexHasMarker),
+        readmeNonEmpty: optionalBool(uiArtifactEvidence?.readmeNonEmpty),
+        composerCleared: optionalBool(report?.composerCleared),
+        activeReconnectSeen: optionalBool(report?.activeReconnectSeen),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
     } : null;
     const uiCodingProjectEvidence = isUiCodingProjectSmokeReport ? {
         artifactDir: shortSafeText(report?.artifactDir || "", ""),
@@ -2731,7 +2750,9 @@ function latestManagerReportItem(label, fileName) {
             reusedFromPreviousReport: typeof report.sourceSnapshot.reusedFromPreviousReport === "boolean" ? report.sourceSnapshot.reusedFromPreviousReport : null,
             refreshSkippedReason: shortSafeText(report.sourceSnapshot.refreshSkippedReason || "", ""),
         } : null,
+        uiChatSmokeEvidence,
         uiWebSearchSmokeEvidence,
+        uiLocalProjectEvidence,
         uiCodingProjectEvidence,
         uiMultiTurnProjectEvidence,
         uiRepoFileEditEvidence,
@@ -3950,9 +3971,17 @@ function latestReportsSummary(result){
       lines.push("  accountProxy phase: account="+(phase.accountOk?"ok":"check")+" / refresh="+(phase.refreshOk?"ok":"check")+" / models="+(phase.modelCount??"unknown")+" / real="+(phase.realRequestAttempted?(phase.realRequestOk?"ok":"check"):"not-attempted"));
       lines.push("  accountProxy logs: source="+(signals.sourcePresent?"present":"missing")+" / fresh="+(signals.sourceFresh?"true":"false")+" / scanned="+(signals.tailLinesScanned??"unknown")+" / verify="+(signals.verificationRequiredCount??0)+" / network="+(signals.generalNetworkFailureCount??0));
     }
+    if(item.uiChatSmokeEvidence){
+      const evidence=item.uiChatSmokeEvidence;
+      lines.push("  uiChat: clicked="+(evidence.clicked?"true":"false")+" / reconnect="+(evidence.activeReconnectSeen?"seen":"clear")+" / session="+(evidence.sessionLockClear?"clear":"check")+" / marker="+(evidence.marker||"unknown"));
+    }
     if(item.uiWebSearchSmokeEvidence){
       const evidence=item.uiWebSearchSmokeEvidence;
       lines.push("  uiWebSearch: clicked="+(evidence.clicked?"true":"false")+" / urls="+(evidence.hasSourceUrls?"true":"false")+" / reconnect="+(evidence.activeReconnectSeen?"seen":"clear")+" / session="+(evidence.sessionLockClear?"clear":"check"));
+    }
+    if(item.uiLocalProjectEvidence){
+      const evidence=item.uiLocalProjectEvidence;
+      lines.push("  uiLocalProject: done="+(evidence.doneExact?"true":"false")+" / index="+(evidence.indexHasMarker?"true":"false")+" / readme="+(evidence.readmeNonEmpty?"true":"false")+" / reconnect="+(evidence.activeReconnectSeen?"seen":"clear")+" / session="+(evidence.sessionLockClear?"clear":"check"));
     }
     if(item.uiCodingProjectEvidence){
       const evidence=item.uiCodingProjectEvidence;
@@ -6737,8 +6766,10 @@ function artifactMarkerRequirementFromChat(messages = []) {
         if (message?.role !== "user") continue;
         const userText = textFromMessageContent(message.content);
         if (!userText) continue;
+        const requirement = artifactMarkerRequirementFromUserText(userText);
+        if (requirement) return requirement;
         if (userTextLooksLikeToolRelayContinuation(userText)) continue;
-        return artifactMarkerRequirementFromUserText(userText);
+        return null;
     }
     return null;
 }
@@ -6802,6 +6833,17 @@ function requestIncludesToolOutput(originalRequest = {}) {
         && request.input.some(item => item?.type === "function_call_output" || item?.type === "custom_tool_call_output");
 }
 
+function latestRequestInputIsToolOutput(originalRequest = {}) {
+    const request = originalRequestFromArg(originalRequest);
+    if (!Array.isArray(request?.input) || request.input.length === 0) return false;
+    for (let index = request.input.length - 1; index >= 0; index -= 1) {
+        const item = request.input[index];
+        if (!item || typeof item !== "object") continue;
+        return item.type === "function_call_output" || item.type === "custom_tool_call_output";
+    }
+    return false;
+}
+
 function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody = null) {
     if (!requestIncludesToolOutput(originalRequest)) return null;
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
@@ -6827,7 +6869,7 @@ function chatBodyHasShellCommandTool(chatBody = null) {
 }
 
 function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody = null) {
-    if (requestIncludesToolOutput(originalRequest)) return null;
+    if (latestRequestInputIsToolOutput(originalRequest)) return null;
     if (!chatBodyHasShellCommandTool(chatBody)) return null;
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const requirement = artifactMarkerRequirementFromChat(messages)

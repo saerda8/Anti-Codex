@@ -3655,6 +3655,33 @@ test("local coding project artifact requests start with a real shell tool call",
   assert.match(args.command, /red blue red/);
 });
 
+test("multi-turn local project follow-up starts with the latest artifact tool call", () => {
+  const firstPrompt = "Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\multi. done.txt must contain UI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST.";
+  const followupPrompt = "Continue the same project in C:\\Temp\\multi. Modify word-tally.mjs so it also exports uniqueWords(text). Update word-tally.test.mjs and create CHANGELOG.md plus followup.txt containing exactly UI_MULTI_TURN_PROJECT_SMOKE_20260627.";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: firstPrompt }] },
+      { type: "function_call", call_id: "call_first", name: "shell_command", arguments: "{}" },
+      { type: "function_call_output", call_id: "call_first", output: "UI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: followupPrompt }] },
+    ],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+
+  const completion = deterministicArtifactToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /UI_MULTI_TURN_PROJECT_SMOKE_20260627/);
+  assert.match(args.command, /\$__antiCodexMultiTurnProject = \$true/);
+  assert.match(args.command, /export function uniqueWords/);
+  assert.match(args.command, /followup\.txt/);
+  assert.match(args.command, /CHANGELOG\.md/);
+});
+
 test("repo file edit smoke markers do not trigger local artifact marker guard", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",
