@@ -9762,7 +9762,6 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
                 const payload = pendingPayloads.shift();
                 await relayResponsesHttpToWebSocket({ pathname, payload, socket, headers: relayHeaders, signal: relayAbort.signal });
             }
-            if (!closed && pendingPayloads.length === 0) closeSocket();
         } catch (error) {
             if (relayAbort.signal.aborted) return;
             try {

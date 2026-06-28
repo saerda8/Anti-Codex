@@ -7199,7 +7199,8 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(server, /for await \(const chunk of response\.body\)/);
   assert.match(server, /decoder\.decode\(chunk, \{ stream: true \}\)/);
   assert.match(server, /socket\.write\(webSocketFrame\(0x9, "anticodex"\)\)/);
-  assert.match(server, /if \(!closed && pendingPayloads\.length === 0\) closeSocket\(\)/);
+  assert.doesNotMatch(server, /pendingPayloads\.length === 0\)\s*closeSocket\(\)/);
+  assert.match(server, /socket\.setTimeout\(5 \* 60 \* 1000/);
   assert.doesNotMatch(server, /const text = await response\.text\(\);\s*if \(!response\.ok\)/);
   assert.doesNotMatch(server, /await relayResponsesHttpToWebSocket\(\{ pathname, payload: frame\.payload\.toString\("utf8"\), socket \}\);\s*if \(!closed\) socket\.end/);
   assert.doesNotMatch(websocket, /Stop-Process/);
