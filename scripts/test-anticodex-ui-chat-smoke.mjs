@@ -1371,7 +1371,6 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         break;
       }
     }
-    if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
   }
   if (clicked) {
     const deadline = Date.now() + waitMs;
@@ -1432,6 +1431,10 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     }
   }
   if (!clicked) failures.push("send button was not clicked");
+  if (!submitSucceeded && answerMarkerCount >= 1 && !composer.includes(expectedMarker)) {
+    submitSucceeded = true;
+  }
+  if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
   if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
   if (answerMarkerCount < 1 && !artifactCompletionObserved) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
   if (composer.includes(expectedMarker)) failures.push("composer still contains the submitted prompt");

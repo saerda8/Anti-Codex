@@ -5826,14 +5826,17 @@ function clipRestoredToolCall(item) {
 function textFromMessageContent(content) {
     if (typeof content === "string") return content;
     if (Array.isArray(content)) {
-        return content.map(part => typeof part === "string" ? part : part?.text || "").filter(Boolean).join("\n");
+        return content.map(part => typeof part === "string"
+            ? part
+            : part?.text || part?.input_text || part?.output_text || part?.content || "")
+            .filter(Boolean)
+            .join("\n");
     }
     return "";
 }
 
 function latestUserTextFromRequest(originalRequest = {}) {
     const request = originalRequestFromArg(originalRequest);
-    if (Array.isArray(request?.messages)) return latestUserTextFromChatMessages(request.messages);
     if (typeof request?.input === "string") return request.input;
     if (Array.isArray(request?.input)) {
         for (let index = request.input.length - 1; index >= 0; index -= 1) {
@@ -5842,6 +5845,7 @@ function latestUserTextFromRequest(originalRequest = {}) {
             if (item?.role === "user") return textFromMessageContent(item.content);
         }
     }
+    if (Array.isArray(request?.messages)) return latestUserTextFromChatMessages(request.messages);
     return "";
 }
 
@@ -8445,12 +8449,14 @@ function releaseIdleAntigravitySessionLockIfSafe(reason = "idle_session_reap") {
         const released = ANTIGRAVITY_SESSION_LOCK.releaseIdleActive({
             reason,
             maxIdleMs,
+            cancelQueued: Number(lock.queued || 0) > 0,
         });
         return { attempted: true, reason, released, lock, activeRequests, queue, busy };
     }
     const released = ANTIGRAVITY_SESSION_LOCK.releaseIdleContinuation({
         reason,
         maxIdleMs,
+        cancelQueued: Number(lock.queued || 0) > 0,
     });
     return { attempted: true, reason, released, lock, activeRequests, queue, busy };
 }
@@ -9440,11 +9446,12 @@ function responsesWebSocketRelayHeaders(req) {
     return headers;
 }
 
-async function relayResponsesHttpToWebSocket({ pathname, payload, socket, headers }) {
+async function relayResponsesHttpToWebSocket({ pathname, payload, socket, headers, signal }) {
     const response = await fetch(`http://${LISTEN_HOST}:${PORT}${pathname}`, {
         method: "POST",
         headers: headers || { "content-type": "application/json" },
         body: payload,
+        signal,
     });
     if (!response.ok) {
         const text = await response.text();
@@ -9522,11 +9529,13 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
     let draining = false;
     let pingInterval = null;
     const relayHeaders = responsesWebSocketRelayHeaders(req);
+    const relayAbort = new AbortController();
 
     const closeSocket = (payload = Buffer.alloc(0)) => {
         if (closed) return;
         closed = true;
         if (pingInterval) clearInterval(pingInterval);
+        try { relayAbort.abort(); } catch {}
         try { socket.end(webSocketFrame(0x8, payload)); } catch {}
     };
 
@@ -9536,9 +9545,10 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
         try {
             while (!closed && pendingPayloads.length > 0) {
                 const payload = pendingPayloads.shift();
-                await relayResponsesHttpToWebSocket({ pathname, payload, socket, headers: relayHeaders });
+                await relayResponsesHttpToWebSocket({ pathname, payload, socket, headers: relayHeaders, signal: relayAbort.signal });
             }
         } catch (error) {
+            if (relayAbort.signal.aborted) return;
             try {
                 socket.write(webSocketFrame(0x1, JSON.stringify({ type: "error", error: { message: String(error?.message || error) } })));
             } catch {}
@@ -9582,8 +9592,11 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
     socket.on("close", () => {
         closed = true;
         if (pingInterval) clearInterval(pingInterval);
+        try { relayAbort.abort(); } catch {}
     });
-    socket.on("error", () => {});
+    socket.on("error", () => {
+        try { relayAbort.abort(); } catch {}
+    });
     return true;
 }
 

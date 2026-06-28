@@ -150,6 +150,27 @@ test("Antigravity session lock can release an idle active session without contin
   secondLease.release();
 });
 
+test("Antigravity idle active release can cancel stale queued sessions", async () => {
+  const lock = createAntigravitySessionLock({ ttlMs: 5000 });
+  await lock.acquire();
+  const queued = lock.acquire();
+  const queuedRejected = assert.rejects(queued, /idle session release cancelled queued requests/);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const released = lock.releaseIdleActive({
+    maxIdleMs: 1,
+    reason: "test_idle_active_cancel_queue",
+    cancelQueued: true,
+  });
+
+  assert.equal(released.ok, true);
+  assert.equal(released.released, true);
+  assert.equal(released.queuedCancelled, 1);
+  assert.equal(lock.snapshot().active, false);
+  assert.equal(lock.snapshot().queued, 0);
+  await queuedRejected;
+});
+
 test("Antigravity session lock rejects overflow without releasing the active session", async () => {
   const lock = createAntigravitySessionLock({ maxQueued: 1 });
   const first = await lock.acquire();

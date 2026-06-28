@@ -264,6 +264,7 @@ test("translator watchdog tolerates transient health stalls before restarting", 
   assert.match(sharedLauncher, /function Test-TranslatorBusyMarker/);
   assert.match(sharedLauncher, /function Test-TranslatorBusyRestartGraceActive/);
   assert.match(sharedLauncher, /function Test-TranslatorRestartLockActive/);
+  assert.match(sharedLauncher, /function Wait-TranslatorRestartLockOwnerHealth/);
   assert.match(sharedLauncher, /function Test-TranslatorDiagnosticsBusy/);
   assert.match(sharedLauncher, /\/anticodex\/diagnostics/);
   assert.match(sharedLauncher, /activeAntigravityRequests\.active/);
@@ -273,7 +274,7 @@ test("translator watchdog tolerates transient health stalls before restarting", 
   assert.match(ensureFunction, /Test-TranslatorHealthWithGrace/);
   assert.ok(
     ensureFunction.indexOf("Test-TranslatorRestartLockActive") < ensureFunction.indexOf("translator health lost; restarting"),
-    "watchdog must honor a sync restart lock before restarting",
+    "watchdog must check a sync restart lock before restarting",
   );
   assert.ok(
     ensureFunction.indexOf("Test-TranslatorBusyMarker") < ensureFunction.indexOf("translator health lost; restarting"),
@@ -288,7 +289,9 @@ test("translator watchdog tolerates transient health stalls before restarting", 
     "busy marker check must happen before stopping translator processes",
   );
   assert.match(ensureFunction, /restart skipped within busy grace/i);
-  assert.match(ensureFunction, /translator restart lock is active; watchdog restart skipped/i);
+  assert.match(ensureFunction, /translator restart lock is active; waiting for restart owner health/i);
+  assert.match(ensureFunction, /Wait-TranslatorRestartLockOwnerHealth 8/);
+  assert.match(ensureFunction, /translator restart lock did not restore health; forcing restart/i);
   assert.match(ensureFunction, /Stop-StaleDeepCodexTranslator[\s\S]{0,160}Start-TranslatorProcess \$FallbackRuntimeBin/);
   assert.match(ensureFunction, /busy grace expired; forcing restart/i);
   assert.match(ensureFunction, /translator health lost; restarting/i);
@@ -7168,6 +7171,9 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(server, /"session_id"/);
   assert.match(server, /"x-codex-window-id"/);
   assert.match(server, /const relayHeaders = responsesWebSocketRelayHeaders\(req\)/);
+  assert.match(server, /const relayAbort = new AbortController\(\)/);
+  assert.match(server, /signal: relayAbort\.signal/);
+  assert.match(server, /relayAbort\.abort\(\)/);
   assert.match(server, /headers: relayHeaders/);
   assert.match(server, /RESET_CANCELLED_RESPONSE_IDS/);
   assert.match(server, /RESET_CANCELLED_REQUEST_FINGERPRINTS/);

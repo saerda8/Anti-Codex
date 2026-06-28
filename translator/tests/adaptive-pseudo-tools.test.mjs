@@ -786,6 +786,20 @@ test("deterministic exact reply uses only the latest user message", () => {
   assert.equal(completion.choices[0].message.content, "UI_NEW_REPLY_20260627");
 });
 
+test("deterministic exact reply prefers current responses input over restored messages", () => {
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "user", content: [{ type: "input_text", text: "Reply with exactly UI_RESTORED_REPLY_20260627 and nothing else." }] },
+    ],
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Reply with exactly UI_CURRENT_REPLY_20260627 and nothing else." }] },
+    ],
+  });
+
+  assert.equal(completion.choices[0].message.content, "UI_CURRENT_REPLY_20260627");
+});
+
 test("chat response blocks English dangling patch retry promise after failed patch", () => {
   const formatted = chatToResponsesFormat({
     choices: [{
@@ -1960,6 +1974,46 @@ test("restored history preserves durable tool facts before pruning noisy probes"
   assert.match(joined, /tool-state: Read command succeeded: docker exec app cat \/workspace\/qwen-cli\/package\.json/);
   assert.match(joined, /tool-state: Command failed, do not assume success: docker exec app npm run build -> Error: missing script build/);
   assert.match(joined, /继续看 qwen-cli/);
+});
+
+test("restored history tells scoped fixture tasks to recover from failed apply_patch without searching transcripts", () => {
+  const input = [
+    { type: "message", role: "user", content: [{ type: "input_text", text: "Work only inside C:\\Temp\\fixture. Implement status-dashboard.mjs and run status-dashboard.test.mjs." }] },
+    { type: "custom_tool_call", call_id: "patch_bad", name: "apply_patch", input: "*** Begin Patch\n*** Update File: C:\\Temp\\fixture\\status-dashboard.mjs\n*** End Patch" },
+    { type: "custom_tool_call_output", call_id: "patch_bad", output: "apply_patch verification failed: invalid hunk at line 4, expected lines not found" },
+    { type: "message", role: "user", content: [{ type: "input_text", text: "继续修，不要查历史" }] },
+  ];
+
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input,
+  }, { allowTools: false, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  assert.match(joined, /apply_patch failed because the patch body or context was invalid/);
+  assert.match(joined, /Do not search prior transcripts, Antigravity brain/);
+  assert.match(joined, /Scoped fixture\/generated task recovery/);
+  assert.match(joined, /use shell\/PowerShell file writes only inside the scoped directory/);
+});
+
+test("restored desktop shell history keeps missing README pending after tests pass", () => {
+  const input = [
+    { type: "context_compaction", summary: "Anti-Codex durable environment facts from verified tool results:\n- workspace: stale first listing" },
+    { type: "message", role: "user", content: [{ type: "input_text", text: "Work only inside C:\\Temp\\desktop-coworker-project. Create README.md and fix status-dashboard.mjs, then run node --test status-dashboard.test.mjs." }] },
+    { type: "function_call", call_id: "test_ok", name: "shell_command", arguments: JSON.stringify({ command: "node --test status-dashboard.test.mjs", workdir: "C:\\Temp\\desktop-coworker-project" }) },
+    { type: "function_call_output", call_id: "test_ok", output: "Exit code: 0\nWall time: 0.3 seconds\nOutput:\npass 2\nfail 0" },
+  ];
+
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input,
+  }, { allowTools: false, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  assert.match(joined, /Build\/install command succeeded: node --test status-dashboard\.test\.mjs/);
+  assert.match(joined, /there is still no successful tool evidence that README\.md was created/);
+  assert.match(joined, /before rereading tests, running git status, calling get_goal/);
+  assert.doesNotMatch(joined, /stale first listing/);
 });
 
 test("restored history task ledger preserves explicit task target and pending action", () => {
@@ -3319,6 +3373,45 @@ test("chatToResponsesFormat repairs coding project artifact commands with runnab
   assert.match(args.command, /export function tallyWords/);
   assert.match(args.command, /node --test/);
   assert.match(args.command, /red blue red/);
+});
+
+test("repo file edit smoke markers do not trigger local artifact marker guard", () => {
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_repo_multi",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "Set-Content -Path \"C:\\Temp\\fixture\\status-dashboard.mjs\" -Value \"export function normalizeStatus(){}\"",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Work only inside C:\\Temp\\fixture. Implement status-dashboard.mjs and run status-dashboard.test.mjs. Put exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_20260627 on the final line.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /status-dashboard\.mjs/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.doesNotMatch(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_20260627/);
 });
 
 test("Antigravity internal web loop prefetches search evidence before asking the model to summarize", async () => {

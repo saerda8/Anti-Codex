@@ -581,6 +581,17 @@ function Test-TranslatorRestartLockActive {
     }
 }
 
+function Wait-TranslatorRestartLockOwnerHealth {
+    param([int]$Seconds = 8)
+    $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $Seconds))
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if (Test-TranslatorHealth) { return $true }
+        if (-not (Test-TranslatorRestartLockActive)) { return $false }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
 function Get-TranslatorDiagnosticsSnapshot {
     $response = $null
     $reader = $null
@@ -875,8 +886,12 @@ function Ensure-TranslatorRunning {
     )
     if (Test-TranslatorHealthWithGrace) { return $true }
     if (Test-TranslatorRestartLockActive) {
-        Write-TranslatorStartLog "translator restart lock is active; watchdog restart skipped"
-        return $true
+        Write-TranslatorStartLog "translator restart lock is active; waiting for restart owner health"
+        if (Wait-TranslatorRestartLockOwnerHealth 8) {
+            Write-TranslatorStartLog "translator restart lock owner restored health"
+            return $true
+        }
+        Write-TranslatorStartLog "translator restart lock did not restore health; forcing restart"
     }
     if ((Test-TranslatorBusyMarker) -or (Test-TranslatorDiagnosticsBusy)) {
         if (Test-TranslatorBusyRestartGraceActive) {

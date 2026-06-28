@@ -101,6 +101,16 @@ export function createAntigravitySessionLock(options = {}) {
     processNext();
   }
 
+  function cancelQueuedEntries(reason) {
+    const queued = queue.splice(0, queue.length);
+    const error = new DOMException(reason || "Anti-Codex Antigravity queued session was cancelled.", "AbortError");
+    for (const entry of queued) {
+      entry.cleanup?.();
+      entry.reject(error);
+    }
+    return queued.length;
+  }
+
   function releaseResponseId(responseId, { reason = "response_cancel" } = {}) {
     const id = String(responseId || "");
     if (!id || !active?.responseIds?.has(id)) {
@@ -154,7 +164,7 @@ export function createAntigravitySessionLock(options = {}) {
     };
   }
 
-  function releaseIdleContinuation({ maxIdleMs = ttlMs, reason = "idle_continuation" } = {}) {
+  function releaseIdleContinuation({ maxIdleMs = ttlMs, reason = "idle_continuation", cancelQueued = false } = {}) {
     const maxIdle = Math.max(1, Number(maxIdleMs) || ttlMs);
     if (!active || active.responseIds.size === 0) {
       return { ok: true, reason, released: false, snapshot: snapshot() };
@@ -164,11 +174,12 @@ export function createAntigravitySessionLock(options = {}) {
       return { ok: true, reason, released: false, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
     }
     idleReleased += 1;
+    const queuedCancelled = cancelQueued ? cancelQueuedEntries(`Anti-Codex idle session release cancelled queued continuation requests: ${reason}`) : 0;
     releaseEntry(active);
-    return { ok: true, reason, released: true, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
+    return { ok: true, reason, released: true, queuedCancelled, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
   }
 
-  function releaseIdleActive({ maxIdleMs = ttlMs, reason = "idle_active_session" } = {}) {
+  function releaseIdleActive({ maxIdleMs = ttlMs, reason = "idle_active_session", cancelQueued = false } = {}) {
     const maxIdle = Math.max(1, Number(maxIdleMs) || ttlMs);
     if (!active || active.responseIds.size > 0) {
       return { ok: true, reason, released: false, snapshot: snapshot() };
@@ -178,8 +189,9 @@ export function createAntigravitySessionLock(options = {}) {
       return { ok: true, reason, released: false, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
     }
     idleReleased += 1;
+    const queuedCancelled = cancelQueued ? cancelQueuedEntries(`Anti-Codex idle session release cancelled queued requests: ${reason}`) : 0;
     releaseEntry(active);
-    return { ok: true, reason, released: true, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
+    return { ok: true, reason, released: true, queuedCancelled, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
   }
 
   function cancelAll() {
