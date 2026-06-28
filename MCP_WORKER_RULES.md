@@ -16,6 +16,7 @@ Read it before every worker task. Update it after every worker failure before re
 9. Parallel workers require separate worktrees. Otherwise dispatch workers serially.
 10. A worker report is untrusted until `git status`, changed-file scope, diff, syntax, and tests are reviewed.
 11. For injected UI version changes, review persistent `window.__ANTICODEX_*` timers, observers, promises, and caches. A new version must explicitly dispose incompatible globals left by the previous version.
+12. Treat MiMo with the same autonomy risk as DeepSeek. Either give it an isolated worktree and explicit permission to complete the task, or give it a narrow writable scope with one observable output; do not rely on a shared-worktree "read-only" prompt as a safety boundary.
 
 ## Time Rules
 
