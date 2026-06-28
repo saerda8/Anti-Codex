@@ -17,10 +17,13 @@ export function createAntigravitySessionLock(options = {}) {
   let responseCancelled = 0;
   let idleReleased = 0;
 
-  function acquire({ previousResponseId = "", signal } = {}) {
+  function acquire({ previousResponseId = "", continuationCallIds = [], signal } = {}) {
     if (signal?.aborted) return Promise.reject(abortReason(signal));
     const previousId = String(previousResponseId || "");
-    if (active && previousId && active.responseIds.has(previousId)) {
+    const callIds = normalizeStringSet(continuationCallIds);
+    const matchesActiveResponse = active && previousId && active.responseIds.has(previousId);
+    const matchesActiveToolCall = active && callIds.size > 0 && intersects(active.callIds, callIds);
+    if (matchesActiveResponse || matchesActiveToolCall) {
       continued += 1;
       return Promise.resolve(createLease(active));
     }
@@ -59,6 +62,7 @@ export function createAntigravitySessionLock(options = {}) {
     return {
       id: cryptoRandomId(),
       responseIds: new Set(),
+      callIds: new Set(),
       timer: null,
       createdAt: Date.now(),
       continuedAt: null,
@@ -69,9 +73,10 @@ export function createAntigravitySessionLock(options = {}) {
     let released = false;
     return {
       id: entry.id,
-      continueWith(responseId) {
+      continueWith(responseId, callIds = []) {
         if (!responseId || active !== entry) return false;
         entry.responseIds.add(String(responseId));
+        for (const callId of normalizeStringSet(callIds)) entry.callIds.add(callId);
         entry.continuedAt = Date.now();
         refreshExpiry(entry);
         return true;
@@ -151,6 +156,7 @@ export function createAntigravitySessionLock(options = {}) {
     return {
       active: Boolean(active),
       activeResponseIds: active ? [...active.responseIds] : [],
+      activeCallIds: active ? [...active.callIds] : [],
       queued: queue.length,
       maxQueued,
       accepted,
@@ -232,4 +238,21 @@ export function createAntigravitySessionLock(options = {}) {
 
 function cryptoRandomId() {
   return `ag_session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeStringSet(values) {
+  const set = new Set();
+  const list = Array.isArray(values) ? values : [values];
+  for (const value of list) {
+    const text = String(value || "").trim();
+    if (text) set.add(text);
+  }
+  return set;
+}
+
+function intersects(left = new Set(), right = new Set()) {
+  for (const value of right) {
+    if (left.has(value)) return true;
+  }
+  return false;
 }

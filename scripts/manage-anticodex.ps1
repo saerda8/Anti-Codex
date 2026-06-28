@@ -870,8 +870,8 @@ function Get-ManagerStatus {
     if ($diagnostics -and $diagnostics.toolBridge) {
         $bridgeMode = [string]$diagnostics.toolBridge.mode
         $nativeDefault = $diagnostics.toolBridge.nativeBridgeDefaultEnabled -eq $true
-        $toolOwner = if ($bridgeMode -eq "codex-owned-tools-prompt-mediated") {
-            "原生工具桥已手动关闭；当前使用兼容模式"
+        $toolOwner = if ($bridgeMode -eq "codex-owned-tools-model-only") {
+            "Codex 负责工具，Antigravity 只负责模型"
         } elseif ($nativeDefault) {
             "Antigravity 原生 MCP 工具桥已开启；权限自动处理"
         } else {

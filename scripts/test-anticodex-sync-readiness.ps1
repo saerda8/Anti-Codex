@@ -271,7 +271,7 @@ if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===
 if (Has-Text $managerOpenInjectScript "/anticodex/manager/inject\.js") { Add-Failure "manager open injection still depends on the old web script loader" }
 if (Has-Text $managerOpenInjectScript 'createElement\("script"\)') { Add-Failure "manager open injection still creates a separate script tag" }
 if (-not (Has-Text $runtimeStartScript "ANTICODEX_NATIVE_TOOL_BRIDGE")) { Add-Failure "runtime launcher missing Antigravity native bridge default guard" }
-if (-not (Has-Text $runtimeStartScript 'ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"1"')) { Add-Failure "runtime launcher does not enable the auto-approved Antigravity native bridge by default" }
+if (-not (Has-Text $runtimeStartScript 'ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"0"')) { Add-Failure "runtime launcher does not keep Antigravity coworker/tool bridge disabled by default" }
 if (-not (Has-Text $validatorScript "resources\\codex\.exe")) { Add-Failure "candidate validator missing bundled Codex CLI check" }
 if (-not (Has-Text $validatorScript "resources\\icon\.ico")) { Add-Failure "candidate validator missing host icon check" }
 if (-not (Has-Text $validatorScript "--version")) { Add-Failure "candidate validator missing CLI version probe" }

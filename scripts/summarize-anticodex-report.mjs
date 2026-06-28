@@ -142,6 +142,7 @@ const isUiLocalProjectSmokeReport = report?.reportName === "ui-local-project-smo
 const isUiCodingProjectSmokeReport = report?.reportName === "ui-coding-project-smoke" || /latest-ui-coding-project-smoke\.json$/i.test(path);
 const isUiMultiTurnProjectSmokeReport = report?.reportName === "ui-multi-turn-project-smoke" || /latest-ui-multi-turn-project-smoke\.json$/i.test(path);
 const isUiRepoFileEditSmokeReport = report?.reportName === "ui-repo-file-edit-smoke" || /latest-ui-repo-file-edit-smoke\.json$/i.test(path);
+const isUiRepoMultiFileEditSmokeReport = report?.reportName === "ui-repo-multi-file-edit-smoke" || /latest-ui-repo-multi-file-edit-smoke\.json$/i.test(path);
 const isUiComplexProjectSmokeReport = report?.reportName === "ui-complex-project-smoke" || /latest-ui-complex-project-smoke\.json$/i.test(path);
 const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
@@ -504,6 +505,34 @@ const summary = {
     sourceHasLowercase: report.artifactEvidence && has(report.artifactEvidence, "sourceHasLowercase") ? !!report.artifactEvidence.sourceHasLowercase : null,
     sourceHandlesInvalidChars: report.artifactEvidence && has(report.artifactEvidence, "sourceHandlesInvalidChars") ? !!report.artifactEvidence.sourceHandlesInvalidChars : null,
     sourceTrimsHyphens: report.artifactEvidence && has(report.artifactEvidence, "sourceTrimsHyphens") ? !!report.artifactEvidence.sourceTrimsHyphens : null,
+  } : null,
+  uiRepoMultiFileEditEvidence: isUiRepoMultiFileEditSmokeReport ? {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    clicked: boolField(report, "clicked"),
+    markerCount: has(report, "markerCount") ? report.markerCount : null,
+    answerMarkerCount: has(report, "answerMarkerCount") ? report.answerMarkerCount : null,
+    composerCleared: boolField(report, "composerCleared"),
+    activeReconnectSeen: boolField(report, "activeReconnectSeen"),
+    sessionLockClear: boolField(report, "sessionLockClear"),
+    artifactDir: asString(report.artifactDir),
+    artifactFiles: report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence.files || null : null,
+    exportsNormalizeStatus: report.artifactEvidence && has(report.artifactEvidence, "exportsNormalizeStatus") ? !!report.artifactEvidence.exportsNormalizeStatus : null,
+    exportsSummarizeRecords: report.artifactEvidence && has(report.artifactEvidence, "exportsSummarizeRecords") ? !!report.artifactEvidence.exportsSummarizeRecords : null,
+    exportsRenderSummaryHtml: report.artifactEvidence && has(report.artifactEvidence, "exportsRenderSummaryHtml") ? !!report.artifactEvidence.exportsRenderSummaryHtml : null,
+    sourceChangedFromFixture: report.artifactEvidence && has(report.artifactEvidence, "sourceChangedFromFixture") ? !!report.artifactEvidence.sourceChangedFromFixture : null,
+    testUnchanged: report.artifactEvidence && has(report.artifactEvidence, "testUnchanged") ? !!report.artifactEvidence.testUnchanged : null,
+    dataUnchanged: report.artifactEvidence && has(report.artifactEvidence, "dataUnchanged") ? !!report.artifactEvidence.dataUnchanged : null,
+    testPassed: report.artifactEvidence && has(report.artifactEvidence, "testPassed") ? !!report.artifactEvidence.testPassed : null,
+    cliPassed: report.artifactEvidence && has(report.artifactEvidence, "cliPassed") ? !!report.artifactEvidence.cliPassed : null,
+    htmlComplete: report.artifactEvidence && has(report.artifactEvidence, "htmlComplete") ? !!report.artifactEvidence.htmlComplete : null,
+    htmlHasChinese: report.artifactEvidence && has(report.artifactEvidence, "htmlHasChinese") ? !!report.artifactEvidence.htmlHasChinese : null,
+    htmlMentionsStatuses: report.artifactEvidence && has(report.artifactEvidence, "htmlMentionsStatuses") ? !!report.artifactEvidence.htmlMentionsStatuses : null,
+    htmlAvoidsObjectObject: report.artifactEvidence && has(report.artifactEvidence, "htmlAvoidsObjectObject") ? !!report.artifactEvidence.htmlAvoidsObjectObject : null,
+    readmeHasChinese: report.artifactEvidence && has(report.artifactEvidence, "readmeHasChinese") ? !!report.artifactEvidence.readmeHasChinese : null,
+    readmeMentionsCommand: report.artifactEvidence && has(report.artifactEvidence, "readmeMentionsCommand") ? !!report.artifactEvidence.readmeMentionsCommand : null,
   } : null,
   uiComplexProjectEvidence: isUiComplexProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

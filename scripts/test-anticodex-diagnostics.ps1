@@ -942,26 +942,38 @@ function Test-DiagnosticBundle {
             if (-not $bridgeEvidence) {
                 Add-Failure "diagnostic tool-bridge summary missing toolBridgeEvidence"
             } else {
-                if ($bridgeEvidence.mode -ne "native-mcp-same-cascade") { Add-Failure "diagnostic tool-bridge summary missing native MCP same-Cascade mode" }
-                if ($bridgeEvidence.transport -ne "desktop-cascade") { Add-Failure "diagnostic tool-bridge summary missing desktop-cascade transport" }
-                if ($bridgeEvidence.localAdapter -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing prompt fallback adapter" }
-                if ($bridgeEvidence.nativeAntigravityToolEvents -ne $true) { Add-Failure "diagnostic tool-bridge summary missing native tool events" }
-                if ($bridgeEvidence.nativeMcpDiscoveryVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing MCP discovery proof" }
-                if ($bridgeEvidence.nativeBridgeDefaultEnabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing default native bridge proof" }
-                if ($bridgeEvidence.acceptsExternalToolDefinitions -ne $true) { Add-Failure "diagnostic tool-bridge summary missing external tool definition proof" }
-                if ($bridgeEvidence.compatibilityBridge -ne "native_mcp_same_cascade") { Add-Failure "diagnostic tool-bridge summary missing compatibility bridge proof" }
+                $summaryNativeBridge = $bridgeEvidence.nativeBridgeDefaultEnabled -eq $true
+                if ($summaryNativeBridge) {
+                    if ($bridgeEvidence.mode -ne "native-mcp-same-cascade") { Add-Failure "diagnostic tool-bridge summary missing native MCP same-Cascade mode" }
+                    if ($bridgeEvidence.localAdapter -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing prompt fallback adapter" }
+                    if ($bridgeEvidence.nativeAntigravityToolEvents -ne $true) { Add-Failure "diagnostic tool-bridge summary missing native tool events" }
+                    if ($bridgeEvidence.nativeMcpDiscoveryVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing MCP discovery proof" }
+                    if ($bridgeEvidence.acceptsExternalToolDefinitions -ne $true) { Add-Failure "diagnostic tool-bridge summary missing external tool definition proof" }
+                    if ($bridgeEvidence.compatibilityBridge -ne "native_mcp_same_cascade") { Add-Failure "diagnostic tool-bridge summary missing compatibility bridge proof" }
+                    if ($bridgeEvidence.externalToolDefinitionsField -ne "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl") { Add-Failure "diagnostic tool-bridge summary missing external tool definitions field" }
+                    if ($bridgeEvidence.externalToolDefinitionsUsable -ne $true) { Add-Failure "diagnostic tool-bridge summary missing usable external tool definitions proof" }
+                    if ($bridgeEvidence.schemaLikeRequestAcceptance -ne "verified-native-mcp-initialize-and-tools-list") { Add-Failure "diagnostic tool-bridge summary missing schema-like request acceptance proof" }
+                    if ($bridgeEvidence.nativeMcpToolCallStatus -ne "verified-tools-call-after-automatic-permission") { Add-Failure "diagnostic tool-bridge summary missing native MCP tool call proof" }
+                    if ($bridgeEvidence.nativeMcpApprovalProtocolVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing approval protocol proof" }
+                    if ($bridgeEvidence.nativeMcpPermissionMode -ne "automatic-before-codex-execution") { Add-Failure "diagnostic tool-bridge summary missing automatic permission mode" }
+                    if ($bridgeEvidence.sameCascadeResumeProbeVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing same-Cascade resume proof" }
+                    if ($bridgeEvidence.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing Codex tool bridge proof" }
+                } else {
+                    if ($bridgeEvidence.mode -ne "codex-owned-tools-model-only") { Add-Failure "diagnostic tool-bridge summary missing model-only Codex-owned mode" }
+                    if ($bridgeEvidence.localAdapter -ne "codex-owned-tools-model-only") { Add-Failure "diagnostic tool-bridge summary missing model-only local adapter" }
+                    if ($bridgeEvidence.nativeAntigravityToolEvents -ne $false) { Add-Failure "diagnostic tool-bridge summary unexpectedly reports native tool events" }
+                    if ($bridgeEvidence.acceptsExternalToolDefinitions -ne $false) { Add-Failure "diagnostic tool-bridge summary unexpectedly exposes external tool definitions" }
+                    if ($bridgeEvidence.compatibilityBridge -ne "codex_owned_model_only_tool_bridge") { Add-Failure "diagnostic tool-bridge summary missing model-only compatibility bridge proof" }
+                    if ($bridgeEvidence.externalToolDefinitionsUsable -ne $false) { Add-Failure "diagnostic tool-bridge summary unexpectedly marks external tool definitions usable" }
+                    if ($bridgeEvidence.schemaLikeRequestAcceptance -ne "disabled-by-default-model-only") { Add-Failure "diagnostic tool-bridge summary missing disabled model-only schema marker" }
+                    if ($bridgeEvidence.nativeMcpPermissionMode -ne "disabled-with-native-bridge") { Add-Failure "diagnostic tool-bridge summary missing disabled native permission marker" }
+                    if ($bridgeEvidence.codexToolBridge -ne "codex-owned-tools-model-only") { Add-Failure "diagnostic tool-bridge summary missing model-only Codex tool bridge proof" }
+                }
+                if ($bridgeEvidence.transport -notin @("cli", "native", "desktop-cascade")) { Add-Failure "diagnostic tool-bridge summary has unexpected model transport" }
                 if (-not $bridgeEvidence.requestEnvelope) { Add-Failure "diagnostic tool-bridge summary missing request envelope" }
-                if ($bridgeEvidence.externalToolDefinitionsField -ne "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl") { Add-Failure "diagnostic tool-bridge summary missing external tool definitions field" }
-                if ($bridgeEvidence.externalToolDefinitionsUsable -ne $true) { Add-Failure "diagnostic tool-bridge summary missing usable external tool definitions proof" }
-                if ($bridgeEvidence.schemaLikeRequestAcceptance -ne "verified-native-mcp-initialize-and-tools-list") { Add-Failure "diagnostic tool-bridge summary missing schema-like request acceptance proof" }
-                if ($bridgeEvidence.nativeMcpToolCallStatus -ne "verified-tools-call-after-automatic-permission") { Add-Failure "diagnostic tool-bridge summary missing native MCP tool call proof" }
-                if ($bridgeEvidence.nativeMcpApprovalProtocolVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing approval protocol proof" }
-                if ($bridgeEvidence.nativeMcpPermissionMode -ne "automatic-before-codex-execution") { Add-Failure "diagnostic tool-bridge summary missing automatic permission mode" }
-                if ($bridgeEvidence.sameCascadeResumeProbeVerified -ne $true) { Add-Failure "diagnostic tool-bridge summary missing same-Cascade resume proof" }
                 if ($bridgeEvidence.antigravityOwnedToolsDisabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing owned tools disabled proof" }
                 if ($bridgeEvidence.permissionPromptsDisabled -ne $true) { Add-Failure "diagnostic tool-bridge summary missing permission prompts disabled proof" }
                 if ([int]$bridgeEvidence.disabledToolCount -lt 1) { Add-Failure "diagnostic tool-bridge summary missing disabled tool count" }
-                if ($bridgeEvidence.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") { Add-Failure "diagnostic tool-bridge summary missing Codex tool bridge proof" }
             }
         }
         $uiIdleSummary = @($summary | Where-Object { $_.file -eq "latest-ui-idle-stability.json" } | Select-Object -First 1)[0]
@@ -1716,12 +1728,19 @@ if ($diagnostics) {
         if ($diagnostics.toolBridge.nativeAntigravityToolEvents -ne $false) { Add-Failure "third-party diagnostics unexpectedly reports native Antigravity tool events" }
         if ($diagnostics.toolBridge.acceptsExternalToolDefinitions -ne $true) { Add-Failure "third-party diagnostics should accept external tool definitions" }
     } else {
-        if ($diagnostics.toolBridge.mode -ne "native-mcp-same-cascade") { Add-Failure "diagnostics tool bridge mode is not native-mcp-same-cascade" }
-        if ($diagnostics.toolBridge.transport -ne "desktop-cascade") { Add-Failure "diagnostics tool bridge transport is not desktop-cascade" }
-        if ($diagnostics.toolBridge.nativeBridgeDefaultEnabled -ne $true) { Add-Failure "diagnostics should enable the native bridge by default" }
-        if ($diagnostics.toolBridge.nativeAntigravityToolEvents -ne $true) { Add-Failure "diagnostics should confirm native Antigravity tool events" }
-        if ($diagnostics.toolBridge.acceptsExternalToolDefinitions -ne $true) { Add-Failure "diagnostics should confirm native external tool definitions" }
-        if ($diagnostics.toolBridge.verifier -ne "test-anticodex-native-tool-loop.ps1") { Add-Failure "diagnostics missing native tool loop verifier name" }
+        $nativeBridgeEnabled = $diagnostics.toolBridge.nativeBridgeDefaultEnabled -eq $true
+        if ($nativeBridgeEnabled) {
+            if ($diagnostics.toolBridge.mode -ne "native-mcp-same-cascade") { Add-Failure "diagnostics tool bridge mode is not native-mcp-same-cascade while native bridge is enabled" }
+            if ($diagnostics.toolBridge.nativeAntigravityToolEvents -ne $true) { Add-Failure "diagnostics should confirm native Antigravity tool events while native bridge is enabled" }
+            if ($diagnostics.toolBridge.acceptsExternalToolDefinitions -ne $true) { Add-Failure "diagnostics should confirm native external tool definitions while native bridge is enabled" }
+            if ($diagnostics.toolBridge.verifier -ne "test-anticodex-native-tool-loop.ps1") { Add-Failure "diagnostics missing native tool loop verifier name" }
+        } else {
+            if ($diagnostics.toolBridge.mode -ne "codex-owned-tools-model-only") { Add-Failure "diagnostics tool bridge mode is not codex-owned-tools-model-only by default" }
+            if ($diagnostics.toolBridge.nativeAntigravityToolEvents -ne $false) { Add-Failure "diagnostics should not report native Antigravity tool events by default" }
+            if ($diagnostics.toolBridge.acceptsExternalToolDefinitions -ne $false) { Add-Failure "diagnostics should not expose native external tool definitions by default" }
+            if ($diagnostics.toolBridge.verifier -ne "test-anticodex-tool-loop.ps1") { Add-Failure "diagnostics missing Codex-owned tool loop verifier name" }
+        }
+        if ($diagnostics.toolBridge.transport -notin @("cli", "native", "desktop-cascade")) { Add-Failure "diagnostics tool bridge transport is not a known model transport" }
         if ($diagnostics.toolBridge.nativeVerifier -ne "test-anticodex-native-tool-loop.ps1") { Add-Failure "diagnostics missing native tool loop verifier name" }
     }
     if (-not (Has-Property $diagnostics "localFeatures")) {
@@ -1894,15 +1913,17 @@ if ($diagnostics) {
             Add-Failure "diagnostics.tools missing bridge field"
         } else {
             $bridge = [string]$tools.bridge
-            $expectedBridge = if ($diagnosticMode -eq "third-party") { "provider_native_or_compat" } else { "native_mcp_same_cascade" }
+            $expectedBridge = if ($diagnosticMode -eq "third-party") { "provider_native_or_compat" } elseif ($diagnostics.toolBridge.nativeBridgeDefaultEnabled -eq $true) { "native_mcp_same_cascade" } else { "codex_owned_model_only_tool_bridge" }
             if ($bridge -ne $expectedBridge) {
                 Add-Failure "diagnostics.tools.bridge is '$bridge', expected '$expectedBridge'"
             }
         }
         if (-not (Has-Property $tools "description")) {
             Add-Failure "diagnostics.tools missing description field"
-        } elseif ($diagnosticMode -eq "antigravity" -and ([string]$tools.description) -notmatch "automatically approved") {
+        } elseif ($diagnosticMode -eq "antigravity" -and $diagnostics.toolBridge.nativeBridgeDefaultEnabled -eq $true -and ([string]$tools.description) -notmatch "automatically approved") {
             Add-Failure "diagnostics.tools.description missing automatic native permission handling"
+        } elseif ($diagnosticMode -eq "antigravity" -and $diagnostics.toolBridge.nativeBridgeDefaultEnabled -ne $true -and ([string]$tools.description) -notmatch "model text only") {
+            Add-Failure "diagnostics.tools.description missing model-only tool boundary"
         }
         if (-not (Has-Property $tools "antigravityMode")) {
             Add-Failure "diagnostics.tools missing antigravityMode field"

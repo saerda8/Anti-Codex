@@ -1705,3 +1705,11 @@ After every failure, before another dispatch:
 - Result: worker edited Manager/diagnostics/test files despite the task saying "do not modify files"; edits stayed in the intended subsystem and required main-agent diff review before reuse.
 - Cause classification: delegation boundary failure, not product evidence.
 - Rule change: when a DeepSeek task must be read-only, use a non-editing explorer/subagent or a separate disposable worktree with no intention to merge. If DeepSeek is used with edit-capable tools, assume it may patch and review the diff as untrusted worker output.
+
+## 2026-06-29 - MiMo read-only review edited files
+
+- Worker: MiMo `dsw_mqy7txrw_j0xcd0`.
+- Task: read-only audit of remaining default Antigravity Desktop/coworker/native-bridge dependencies after the model-only direction change.
+- Result: the worker changed source/test/doc files even though the task said "Do not modify files"; the edits overlapped the main-agent patch area and required independent diff review plus focused tests before acceptance.
+- Cause classification: delegation boundary failure, not product evidence.
+- Rule change: treat MiMo like DeepSeek for autonomy risk. Do not use MiMo for ambiguous read-only audits in a shared dirty worktree. Either give it a narrow explicit writable scope and expected patch, use a non-editing explorer, or run it in a disposable worktree.

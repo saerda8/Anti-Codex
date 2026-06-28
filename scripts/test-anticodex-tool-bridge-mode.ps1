@@ -88,26 +88,42 @@ if ($diagnostics) {
         Add-Failure "diagnostics missing toolBridge section"
     } else {
         $bridge = $diagnostics.toolBridge
-        if ($bridge.mode -ne "native-mcp-same-cascade") {
-            Add-Failure "toolBridge.mode is '$($bridge.mode)', expected 'native-mcp-same-cascade'"
+        $nativeBridgeEnabled = $bridge.nativeBridgeDefaultEnabled -eq $true
+        if ($nativeBridgeEnabled) {
+            if ($bridge.mode -ne "native-mcp-same-cascade") {
+                Add-Failure "toolBridge.mode is '$($bridge.mode)', expected 'native-mcp-same-cascade' when native bridge is explicitly enabled"
+            }
+            if ($bridge.localAdapter -ne "native-mcp-same-cascade-with-prompt-fallback") {
+                Add-Failure "toolBridge.localAdapter is '$($bridge.localAdapter)', expected native MCP with prompt fallback when native bridge is enabled"
+            }
+            if ($bridge.nativeAntigravityToolEvents -ne $true) {
+                Add-Failure "toolBridge should confirm native Antigravity tool events when native bridge is enabled"
+            }
+            if ($bridge.acceptsExternalToolDefinitions -ne $true) {
+                Add-Failure "toolBridge should confirm native external tool definitions when native bridge is enabled"
+            }
+            if ($bridge.verifier -ne "test-anticodex-native-tool-loop.ps1") {
+                Add-Failure "toolBridge verifier should be test-anticodex-native-tool-loop.ps1 when native bridge is enabled"
+            }
+        } else {
+            if ($bridge.mode -ne "codex-owned-tools-model-only") {
+                Add-Failure "toolBridge.mode is '$($bridge.mode)', expected 'codex-owned-tools-model-only' by default"
+            }
+            if ($bridge.localAdapter -ne "codex-owned-tools-model-only") {
+                Add-Failure "toolBridge.localAdapter is '$($bridge.localAdapter)', expected model-only Codex-owned tools by default"
+            }
+            if ($bridge.nativeAntigravityToolEvents -ne $false) {
+                Add-Failure "toolBridge should not expose native Antigravity tool events by default"
+            }
+            if ($bridge.acceptsExternalToolDefinitions -ne $false) {
+                Add-Failure "toolBridge should not expose external tool definitions to Antigravity by default"
+            }
+            if ($bridge.verifier -ne "test-anticodex-tool-loop.ps1") {
+                Add-Failure "toolBridge verifier should be test-anticodex-tool-loop.ps1 by default"
+            }
         }
-        if ($bridge.transport -ne "desktop-cascade") {
-            Add-Failure "toolBridge.transport is '$($bridge.transport)', expected 'desktop-cascade'"
-        }
-        if ($bridge.localAdapter -ne "native-mcp-same-cascade-with-prompt-fallback") {
-            Add-Failure "toolBridge.localAdapter is '$($bridge.localAdapter)', expected native MCP with prompt fallback"
-        }
-        if ($bridge.nativeBridgeDefaultEnabled -ne $true) {
-            Add-Failure "toolBridge should enable the native bridge by default"
-        }
-        if ($bridge.nativeAntigravityToolEvents -ne $true) {
-            Add-Failure "toolBridge should confirm native Antigravity tool events"
-        }
-        if ($bridge.acceptsExternalToolDefinitions -ne $true) {
-            Add-Failure "toolBridge should confirm native external tool definitions"
-        }
-        if ($bridge.verifier -ne "test-anticodex-native-tool-loop.ps1") {
-            Add-Failure "toolBridge verifier should be test-anticodex-native-tool-loop.ps1"
+        if ($bridge.transport -notin @("cli", "native", "desktop-cascade")) {
+            Add-Failure "toolBridge.transport is '$($bridge.transport)', expected model transport cli/native/desktop-cascade"
         }
         if ($bridge.nativeVerifier -ne "test-anticodex-native-tool-loop.ps1") {
             Add-Failure "toolBridge native verifier should remain available"
@@ -117,8 +133,8 @@ if ($diagnostics) {
     if (-not (Has-Property $diagnostics "tools")) {
         Add-Failure "diagnostics missing backward-compatible tools section"
     } else {
-        if ($diagnostics.tools.bridge -ne "native_mcp_same_cascade") {
-            Add-Failure "diagnostics.tools.bridge is '$($diagnostics.tools.bridge)', expected 'native_mcp_same_cascade'"
+        if ($diagnostics.tools.bridge -notin @("codex_owned_model_only_tool_bridge", "native_mcp_same_cascade")) {
+            Add-Failure "diagnostics.tools.bridge is '$($diagnostics.tools.bridge)', expected Codex-owned model-only or explicit native MCP"
         }
         if ($diagnostics.tools.antigravityMode -ne $true) {
             Add-Failure "diagnostics.tools.antigravityMode should be true"
@@ -129,26 +145,51 @@ if ($diagnostics) {
         Add-Failure "diagnostics missing nativeToolCapability section"
     } else {
         $native = $diagnostics.nativeToolCapability
-        if ($native.transport -ne "desktop-cascade") {
-            Add-Failure "nativeToolCapability.transport is '$($native.transport)', expected 'desktop-cascade'"
+        $nativeBridgeEnabled = $native.nativeBridgeDefaultEnabled -eq $true
+        if ($native.transport -notin @("cli", "native", "desktop-cascade")) {
+            Add-Failure "nativeToolCapability.transport is '$($native.transport)', expected model transport cli/native/desktop-cascade"
         }
-        if ($native.externalToolDefinitionsField -ne "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl") {
-            Add-Failure "nativeToolCapability external tool definition field mismatch"
-        }
-        if ($native.acceptsExternalToolDefinitions -ne $true) {
-            Add-Failure "nativeToolCapability should confirm external tool definitions are accepted"
-        }
-        if ($native.externalToolDefinitionsUsable -ne $true) {
-            Add-Failure "nativeToolCapability should confirm external tool definitions are usable"
-        }
-        if ($native.schemaLikeRequestAcceptance -ne "verified-native-mcp-initialize-and-tools-list") {
-            Add-Failure "nativeToolCapability schema-like request status is '$($native.schemaLikeRequestAcceptance)'"
-        }
-        if ($native.nativeBridgeDefaultEnabled -ne $true) {
-            Add-Failure "nativeToolCapability should enable the native bridge by default"
-        }
-        if ($native.nativeAntigravityToolEvents -ne $true) {
-            Add-Failure "nativeToolCapability should confirm native Antigravity tool events"
+        if ($nativeBridgeEnabled) {
+            if ($native.externalToolDefinitionsField -ne "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl") {
+                Add-Failure "nativeToolCapability external tool definition field mismatch"
+            }
+            if ($native.acceptsExternalToolDefinitions -ne $true) {
+                Add-Failure "nativeToolCapability should confirm external tool definitions are accepted when native bridge is enabled"
+            }
+            if ($native.externalToolDefinitionsUsable -ne $true) {
+                Add-Failure "nativeToolCapability should confirm external tool definitions are usable when native bridge is enabled"
+            }
+            if ($native.schemaLikeRequestAcceptance -ne "verified-native-mcp-initialize-and-tools-list") {
+                Add-Failure "nativeToolCapability schema-like request status is '$($native.schemaLikeRequestAcceptance)'"
+            }
+            if ($native.nativeAntigravityToolEvents -ne $true) {
+                Add-Failure "nativeToolCapability should confirm native Antigravity tool events when native bridge is enabled"
+            }
+            if ($native.nativeMcpPermissionMode -ne "automatic-before-codex-execution") {
+                Add-Failure "nativeToolCapability should auto-handle permission before Codex execution when native bridge is enabled"
+            }
+            if ($native.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") {
+                Add-Failure "nativeToolCapability codexToolBridge is '$($native.codexToolBridge)'"
+            }
+        } else {
+            if ($native.acceptsExternalToolDefinitions -ne $false) {
+                Add-Failure "nativeToolCapability should not expose external tool definitions by default"
+            }
+            if ($native.externalToolDefinitionsUsable -ne $false) {
+                Add-Failure "nativeToolCapability should not mark external tool definitions usable by default"
+            }
+            if ($native.schemaLikeRequestAcceptance -ne "disabled-by-default-model-only") {
+                Add-Failure "nativeToolCapability schema-like request status is '$($native.schemaLikeRequestAcceptance)', expected disabled-by-default-model-only"
+            }
+            if ($native.nativeAntigravityToolEvents -ne $false) {
+                Add-Failure "nativeToolCapability should not confirm native Antigravity tool events by default"
+            }
+            if ($native.nativeMcpPermissionMode -ne "disabled-with-native-bridge") {
+                Add-Failure "nativeToolCapability should report disabled native permission mode by default"
+            }
+            if ($native.codexToolBridge -ne "codex-owned-tools-model-only") {
+                Add-Failure "nativeToolCapability codexToolBridge is '$($native.codexToolBridge)'"
+            }
         }
         if ($native.antigravityOwnedToolsDisabled -ne $true) {
             Add-Failure "nativeToolCapability should confirm Antigravity-owned tools are disabled"
@@ -158,12 +199,6 @@ if ($diagnostics) {
         }
         if ([int]$native.disabledToolCount -lt 10) {
             Add-Failure "nativeToolCapability disabledToolCount is unexpectedly low: $($native.disabledToolCount)"
-        }
-        if ($native.nativeMcpPermissionMode -ne "automatic-before-codex-execution") {
-            Add-Failure "nativeToolCapability should auto-handle permission before Codex execution"
-        }
-        if ($native.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") {
-            Add-Failure "nativeToolCapability codexToolBridge is '$($native.codexToolBridge)'"
         }
     }
 

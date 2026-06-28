@@ -50,43 +50,46 @@ export function antigravityNativeToolCapabilitySummary(options = {}) {
     options.nativeBridgeEnabled
       ?? options.env?.ANTICODEX_NATIVE_TOOL_BRIDGE
       ?? process.env.ANTICODEX_NATIVE_TOOL_BRIDGE,
-    true,
+    false,
   );
+  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
   const toolConfig = antigravityModelOnlyToolConfig();
   const disabledKeys = Object.entries(toolConfig)
     .filter(([, value]) => value?.forceDisable === true || value?.enabled === false)
     .map(([key]) => key)
     .sort();
   return {
-    transport: "desktop-cascade",
-    requestEnvelope: "StartCascade.customAgentSpec + SendUserCascadeMessage.cascadeConfig.plannerConfig",
+    transport,
+    requestEnvelope: nativeBridgeEnabled
+      ? "StartCascade.customAgentSpec + SendUserCascadeMessage.cascadeConfig.plannerConfig"
+      : "model-only Antigravity text turn; Codex owns tools",
     modelField: "planModel",
     toolConfigField: "toolConfig",
     externalToolDefinitionsField: "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl",
-    acceptsExternalToolDefinitions: true,
-    schemaLikeRequestAcceptance: "verified-native-mcp-initialize-and-tools-list",
-    externalToolDefinitionsUsable: true,
+    acceptsExternalToolDefinitions: nativeBridgeEnabled,
+    schemaLikeRequestAcceptance: nativeBridgeEnabled ? "verified-native-mcp-initialize-and-tools-list" : "disabled-by-default-model-only",
+    externalToolDefinitionsUsable: nativeBridgeEnabled,
     nativeBridgeDefaultEnabled: nativeBridgeEnabled,
     nativeAntigravityToolEvents: nativeBridgeEnabled,
-    nativeMcpDiscoveryVerified: true,
+    nativeMcpDiscoveryVerified: nativeBridgeEnabled,
     nativeMcpToolCallStatus: nativeBridgeEnabled
       ? "verified-tools-call-after-automatic-permission"
       : "available-explicit-fallback",
-    nativeMcpApprovalProtocolVerified: true,
+    nativeMcpApprovalProtocolVerified: nativeBridgeEnabled,
     nativeMcpPermissionMode: nativeBridgeEnabled
       ? "automatic-before-codex-execution"
       : "disabled-with-native-bridge",
-    sameCascadeResumeProbeVerified: true,
+    sameCascadeResumeProbeVerified: nativeBridgeEnabled,
     antigravityOwnedToolsDisabled: true,
     disabledToolCount: disabledKeys.length,
     disabledToolKeys: disabledKeys,
     permissionPromptsDisabled: toolConfig.askPermission?.enabled === false,
     codexToolBridge: nativeBridgeEnabled
       ? "native-mcp-same-cascade-with-prompt-fallback"
-      : "codex-owned-tools-prompt-mediated-native-disabled",
+      : "codex-owned-tools-model-only",
     reason: nativeBridgeEnabled
       ? "StartCascade accepts a local MCP customization server. A live harmless probe verified MCP initialize/tools/list, the structured waiting event, tools/call, and same-Cascade continuation. External MCP permission interactions are automatically approved as soon as the waiting event appears, before Codex executes the tool; protocol failures before any Codex-visible event fall back to the prompt bridge."
-      : "The native MCP bridge was explicitly disabled. Codex-owned tools use the prompt-mediated compatibility bridge until native MCP is enabled again.",
+      : "The native MCP bridge is disabled by default. Anti-Codex/Codex owns tools, MCP, files, task state, and verification; Antigravity supplies model text only.",
   };
 }
 
@@ -425,6 +428,40 @@ export function createDesktopConnectionCache({ discover = discoverDesktopConnect
 
 const DESKTOP_CONNECTION_CACHE = createDesktopConnectionCache();
 
+function antigravityGeminiDir(env = process.env) {
+  if (env.GEMINI_DIR) return env.GEMINI_DIR;
+  const home = env.USERPROFILE || env.HOME || homedir();
+  return join(home, ".gemini");
+}
+
+export function antigravityCliIsolationEnv(env = process.env) {
+  const profileRoot = env.ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT
+    || env.ANTICODEX_ANTIGRAVITY_CLI_HOME
+    || "";
+  const next = {};
+  if (profileRoot) {
+    next.HOME = profileRoot;
+    next.USERPROFILE = profileRoot;
+    next.GEMINI_DIR = env.ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR || join(profileRoot, ".gemini");
+    next.ANTIGRAVITY_CLI_CONVERSATIONS_DIR = env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR
+      || join(next.GEMINI_DIR, "antigravity-cli", "conversations");
+  }
+  if (env.ANTICODEX_ANTIGRAVITY_CLI_HOME) next.HOME = env.ANTICODEX_ANTIGRAVITY_CLI_HOME;
+  if (env.ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE) next.USERPROFILE = env.ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE;
+  if (env.ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR) {
+    next.GEMINI_DIR = env.ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR;
+    next.ANTIGRAVITY_CLI_CONVERSATIONS_DIR = env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR
+      || join(next.GEMINI_DIR, "antigravity-cli", "conversations");
+  }
+  if (env.ANTICODEX_ANTIGRAVITY_CLI_CONVERSATIONS_DIR) {
+    next.ANTIGRAVITY_CLI_CONVERSATIONS_DIR = env.ANTICODEX_ANTIGRAVITY_CLI_CONVERSATIONS_DIR;
+  }
+  if (env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR) {
+    next.ANTIGRAVITY_CLI_CONVERSATIONS_DIR = env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR;
+  }
+  return next;
+}
+
 export function defaultAgentApiCommand(env = process.env) {
   if (env.ANTIGRAVITY_AGENTAPI_BIN) return { command: env.ANTIGRAVITY_AGENTAPI_BIN, argsPrefix: [] };
   if (platform() === "win32") {
@@ -649,7 +686,7 @@ export function resolveAntigravityModel(payload, requestedModel) {
 
 export function discoverProjectId(cwd, env = process.env) {
   if (env.ANTIGRAVITY_PROJECT_ID) return env.ANTIGRAVITY_PROJECT_ID;
-  const projectsDir = join(homedir(), ".gemini", "config", "projects");
+  const projectsDir = join(antigravityGeminiDir(env), "config", "projects");
   if (!existsSync(projectsDir)) return "";
   const target = normalizePath(cwd);
   const projects = readdirSync(projectsDir)
@@ -700,7 +737,12 @@ export async function runAntigravityTextTurn(prompt, options = {}) {
   const result = await runProcess(invocation.command, invocation.args, {
     cwd,
     timeoutMs: timeoutMs + 5000,
-    env: { ...process.env, ...options.env, ...invocation.env },
+    env: {
+      ...process.env,
+      ...options.env,
+      ...antigravityCliIsolationEnv({ ...process.env, ...options.env }),
+      ...invocation.env,
+    },
     captureStdout: false,
   });
   try {
@@ -713,7 +755,11 @@ export async function runAntigravityTextTurn(prompt, options = {}) {
     const conversationId = extractCreatedConversationId(logText);
     if (stdout) return { conversationId, text: stdout, trajectory: null };
     if (!conversationId) throw new Error("Antigravity CLI completed without a conversation id.");
-    const text = await readCliConversationText(conversationId, options.env);
+    const text = await readCliConversationText(conversationId, {
+      ...process.env,
+      ...options.env,
+      ...antigravityCliIsolationEnv({ ...process.env, ...options.env }),
+    });
     if (!text) throw new Error("Antigravity completed without a readable assistant response.");
     return { conversationId, text, trajectory: null };
   } finally {

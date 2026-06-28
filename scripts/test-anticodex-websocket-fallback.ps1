@@ -91,19 +91,19 @@ try {
         $probeUrl = "$($BaseUrl.TrimEnd('/'))$probePath"
         $response = Invoke-WebSocketUpgradeProbeWithRetry $probeUrl
         $statusLine = Get-StatusLine $response
-        $acceptedIdleWebsocket = ($response -match "^HTTP/1\.1 101\b")
+        $acceptedRelayWebsocket = ($response -match "^HTTP/1\.1 101\b")
 
         $probeResults.Add([pscustomobject]@{
             path = $probePath
             url = $probeUrl
             statusLine = $statusLine
-            acceptedIdleWebsocket = $acceptedIdleWebsocket
+            acceptedRelayWebsocket = $acceptedRelayWebsocket
         }) | Out-Null
 
         if (-not $response) {
             Add-Failure "websocket upgrade for $probePath returned an empty response"
-        } elseif (-not $acceptedIdleWebsocket) {
-            Add-Failure "websocket upgrade for $probePath returned unexpected status: $statusLine"
+        } elseif (-not $acceptedRelayWebsocket) {
+            Add-Failure "websocket upgrade for $probePath should return 101 relay websocket, got: $statusLine"
         }
     }
 
@@ -115,13 +115,13 @@ try {
         } else {
             if ($ws.supported -ne $false) { Add-Failure "diagnostics should report responses websocket unsupported" }
             if ($ws.fallbackStatus -ne 101) { Add-Failure "diagnostics fallbackStatus is $($ws.fallbackStatus), expected 101" }
-            if ($ws.fallbackType -ne "accepted_idle_websocket") { Add-Failure "diagnostics fallbackType is $($ws.fallbackType)" }
+            if ($ws.fallbackType -ne "http_relay_websocket") { Add-Failure "diagnostics fallbackType is $($ws.fallbackType)" }
             if (-not $ws.lastUpgrade) {
                 Add-Failure "diagnostics missing last websocket upgrade attempt"
             } else {
                 if ($ws.lastUpgrade.path -ne "/codex/responses") { Add-Failure "diagnostics lastUpgrade path is $($ws.lastUpgrade.path)" }
                 if ($ws.lastUpgrade.status -ne 101) { Add-Failure "diagnostics lastUpgrade status is $($ws.lastUpgrade.status)" }
-                if ($ws.lastUpgrade.responseType -ne "accepted_idle_websocket") { Add-Failure "diagnostics lastUpgrade responseType is $($ws.lastUpgrade.responseType)" }
+                if ($ws.lastUpgrade.responseType -ne "http_relay_websocket") { Add-Failure "diagnostics lastUpgrade responseType is $($ws.lastUpgrade.responseType)" }
                 if ($ws.lastUpgrade.kind -ne "upgrade") { Add-Failure "diagnostics lastUpgrade kind is $($ws.lastUpgrade.kind)" }
                 if ($ws.lastUpgrade.secWebSocketProtocol -ne "codex.responses.v1") {
                     Add-Failure "diagnostics lastUpgrade secWebSocketProtocol is $($ws.lastUpgrade.secWebSocketProtocol)"
@@ -142,7 +142,7 @@ $result = [pscustomobject]@{
     probeUrls = @($probeResults | ForEach-Object { $_.url })
     probeResults = $probeResults.ToArray()
     statusLine = Get-StatusLine $response
-    acceptedIdleWebsocket = ($response -match "^HTTP/1\.1 101\b")
+    acceptedRelayWebsocket = ($response -match "^HTTP/1\.1 101\b")
     diagnostics = if ($diagnostics) { $diagnostics.responsesWebSocket } else { $null }
 }
 

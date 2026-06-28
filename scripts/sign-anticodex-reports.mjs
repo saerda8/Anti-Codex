@@ -47,6 +47,7 @@ const defaultReports = [
   "latest-ui-coding-project-smoke.json",
   "latest-ui-multi-turn-project-smoke.json",
   "latest-ui-repo-file-edit-smoke.json",
+  "latest-ui-repo-multi-file-edit-smoke.json",
   "latest-ui-complex-project-smoke.json",
   "latest-ui-report-site-smoke.json",
   "latest-real-mini-tool.json",

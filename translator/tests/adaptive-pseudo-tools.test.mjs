@@ -21,11 +21,17 @@ const {
   chatToResponsesFormat,
   classifyUpstreamFailure,
   deterministicArtifactCompletionResponse,
+  deterministicAmbientSuggestionsCompletion,
+  deterministicBackgroundRolloutAnalysisCompletion,
   deterministicExactReplyCompletion,
+  deterministicRepoFileEditCompletionResponse,
+  deterministicRepoFileEditToolCallCompletion,
+  deterministicTaskTitleCompletion,
   deterministicWebBackedArtifactResponse,
   hasPseudoToolMarkup,
   inputTokensResponse,
   localBackendApiResponse,
+  applyResponsesEndTurnHint,
   normalizeCompactSummary,
   parsePseudoToolCalls,
   pipeAntigravityResponseAsSSE,
@@ -395,6 +401,22 @@ test("system prompt does not expose legacy DeepCodex product identity", () => {
 
   assert.doesNotMatch(block, /DeepCodex/);
   assert.match(block, /Anti-Codex/);
+});
+
+test("adaptive system prompt carries the Chinese visible-reply language rule", () => {
+  const block = buildSystemBlock();
+
+  assert.match(block, /Language rule:/);
+  assert.match(block, /use Simplified Chinese for user-visible answers/);
+  assert.match(block, /progress narration/);
+
+  const body = responsesToChatBody({
+    input: "请用中文回答：Anti-Codex 是否能正常回复？",
+  }, { extraSystem: block });
+
+  const systemMessages = body.messages.filter((message) => message.role === "system");
+  assert.ok(systemMessages.some((message) => /Language rule:/.test(message.content)));
+  assert.ok(systemMessages.some((message) => /use Simplified Chinese for user-visible answers/.test(message.content)));
 });
 
 test("chat response trusts current internal tool evidence", () => {
@@ -2182,10 +2204,74 @@ test("restored custom tool bodies are clipped to avoid prompt-cache churn", () =
     ],
   }, { allowTools: false, injectInternalTools: false });
 
-  const args = JSON.parse(body.messages[0].tool_calls[0].function.arguments);
+  const toolMessage = body.messages.find(message => Array.isArray(message.tool_calls) && message.tool_calls[0]?.function?.name === "apply_patch");
+  assert.ok(toolMessage);
+  const args = JSON.parse(toolMessage.tool_calls[0].function.arguments);
   assert.ok(args.content.length < largePatch.length);
   assert.match(args.content, /older custom tool body clipped/);
-  assert.equal(body.messages[1].content, "apply_patch verification failed: expected lines not found");
+  assert.ok(body.messages.some(message => message.role === "tool" && message.content === "apply_patch verification failed: expected lines not found"));
+});
+
+test("repo multi-file README step rewrites forbidden listing detours to the requested file write", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_123 on the final line and stop.`;
+  const request = {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } }],
+  };
+  const routing = { shell_command: { codexName: "shell_command", type: "function" } };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: "call_detour",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: String.raw`Get-ChildItem -Path C:\Users\XD\.gemini\antigravity\brain -Recurse` }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const toolCall = formatted.output.find(item => item.type === "function_call");
+  assert.ok(toolCall);
+  const args = JSON.parse(toolCall.arguments);
+  assert.match(args.command, /README\.md/);
+  assert.match(args.command, /desktop-coworker-project\\README\.md/);
+  assert.match(args.command, /WriteAllText/);
+  assert.doesNotMatch(args.command, /Get-ChildItem|antigravity\\brain/i);
+  assert.doesNotMatch(args.command, /This is step/);
+});
+
+test("streaming repo multi-file README step buffers and repairs tool arguments before done", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_456 on the final line and stop.`;
+  const request = {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } }],
+  };
+  const routing = { shell_command: { codexName: "shell_command", type: "function" } };
+  const mapper = new ChatToResponsesStreamMapper(request, "gpt-5.5", routing);
+  const deltaEvents = mapper.pushToolCallDelta({
+    index: 0,
+    id: "call_stream_detour",
+    function: {
+      name: "shell_command",
+      arguments: JSON.stringify({ command: String.raw`Get-Content -Path C:\Users\XD\.gemini\antigravity\brain\x` }),
+    },
+  }, 0);
+
+  assert.equal(deltaEvents.some(([name]) => name === "response.function_call_arguments.delta"), false);
+  const doneEvents = mapper.complete("tool_calls");
+  const done = doneEvents.find(([name]) => name === "response.function_call_arguments.done")?.[1];
+  assert.ok(done);
+  const args = JSON.parse(done.arguments);
+  assert.match(args.command, /README\.md/);
+  assert.match(args.command, /desktop-coworker-project\\README\.md/);
+  assert.match(args.command, /WriteAllText/);
+  assert.doesNotMatch(args.command, /Get-Content|antigravity\\brain/i);
+  assert.doesNotMatch(args.command, /This is step/);
 });
 
 test("restored long source outputs are folded but important errors are preserved", () => {
@@ -3158,6 +3244,165 @@ test("plain desktop chat is classified as no-tools while work and web tasks are 
       input: "请用一句中文回答：Anti-Codex 现在发消息会不会先重新连接？最后单独写 UI_SSE_KEEPALIVE_1782561000。",
     }),
   }).tools, undefined);
+});
+
+test("local project edit requests get a hard external-tool instruction", () => {
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "In the local project G:\\Trae-Project\\Anti-Codex\\deepcodex, edit only this file: G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\fixtures\\desktop-coworker-live\\acceptance-target.mjs. Run: node --test G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\fixtures\\desktop-coworker-live\\acceptance-target.test.mjs.",
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  assert.match(body.messages[0].content, /Local project edit requirement/);
+  assert.match(body.messages[0].content, /Directory listing alone is not progress/);
+  assert.match(body.messages[0].content, /file was changed and the requested test passed/);
+});
+
+test("background rollout analysis is answered locally without model work", () => {
+  const completion = deterministicBackgroundRolloutAnalysisCompletion({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Analyze this rollout and produce JSON with `raw_memory`, `rollout_summary`, and `rollout_slug` (use empty string when unknown).\n\nrollout_context:\n- rollout_path: C:\\Users\\XD\\AppData\\Roaming\\anticodex\\codex-home-deepseek-app\\sessions\\rollout.jsonl",
+      }],
+    }],
+  }, { model: "gemini-pro-agent", messages: [] });
+
+  assert.deepEqual(JSON.parse(completion.choices[0].message.content), {
+    raw_memory: "",
+    rollout_summary: "",
+    rollout_slug: "",
+  });
+});
+
+test("ambient desktop suggestions are answered locally without model work", () => {
+  const completion = deterministicAmbientSuggestionsCompletion({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "# Overview\n\nGenerate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: G:\\Trae-Project\\Anti-Codex\\deepcodex\n\n# Response format\n\nEach suggestion must include:\n- title\n- description\n- prompt\n- appId\n- write the prompt as something that should launch as a new Codex thread in this project",
+      }],
+    }],
+  }, { model: "gemini-pro-agent", messages: [] });
+
+  assert.deepEqual(JSON.parse(completion.choices[0].message.content), []);
+});
+
+test("desktop task-title requests are answered locally without model work", () => {
+  const completion = deterministicTaskTitleCompletion({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "You are a helpful assistant. You will be presented with a user prompt, and your job is to provide a short title for a task that will be created from that prompt.\n\nUser prompt:\nReply with exactly UI_CHAT_SMOKE_12345 and nothing else.",
+      }],
+    }],
+  }, { model: "gemini-pro-agent", messages: [] });
+
+  assert.equal(completion.choices[0].message.role, "assistant");
+  assert.match(completion.choices[0].message.content, /UI_CHAT_SMOKE_12345|Reply/);
+  assert.doesNotMatch(completion.choices[0].message.content, /Generating Task Titles/i);
+});
+
+test("local deterministic background replies consume desktop continuation without forcing another turn", () => {
+  const sessionId = `ambient-session-${Date.now()}-${Math.random()}`;
+  applyResponsesEndTurnHint({}, {
+    path: "/responses/compact",
+    headers: { session_id: sessionId, "x-codex-window-id": "window:1" },
+  }, {}, { allowEndTurnFalse: true });
+
+  const ambientFmt = { id: "resp_ambient", output: [] };
+  applyResponsesEndTurnHint(ambientFmt, {
+    path: "/responses",
+    headers: { session_id: sessionId, "x-codex-window-id": "window:2" },
+  }, {}, { allowEndTurnFalse: false });
+
+  assert.equal(ambientFmt.end_turn, undefined);
+
+  const nextFmt = { id: "resp_next", output: [] };
+  applyResponsesEndTurnHint(nextFmt, {
+    path: "/responses",
+    headers: { session_id: sessionId, "x-codex-window-id": "window:3" },
+  }, {}, { allowEndTurnFalse: true });
+
+  assert.equal(nextFmt.end_turn, undefined);
+});
+
+test("repo file edit smoke uses a real shell tool call before completion", () => {
+  const marker = "UI_REPO_FILE_EDIT_SMOKE_1782630926326";
+  const prompt = `In the local project G:\\Trae-Project\\Anti-Codex\\deepcodex, edit only this file: G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\fixtures\\desktop-coworker-live\\acceptance-target.mjs. The test file already exists at G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\fixtures\\desktop-coworker-live\\acceptance-target.test.mjs and currently fails. Implement normalizeStatus(input). Then run: node --test G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\fixtures\\desktop-coworker-live\\acceptance-target.test.mjs. Put exactly ${marker} on the final line.`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+  };
+  const chatBody = responsesToChatBody({
+    ...request,
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  const initial = deterministicRepoFileEditToolCallCompletion(request, chatBody);
+  assert.ok(initial);
+  assert.equal(initial.choices[0].message.tool_calls[0].function.name, "shell_command");
+  assert.match(initial.choices[0].message.tool_calls[0].function.arguments, /WriteAllText/);
+  assert.match(initial.choices[0].message.tool_calls[0].function.arguments, /node --test/);
+
+  const staleReadOnly = deterministicRepoFileEditToolCallCompletion({
+    ...request,
+    input: [
+      ...request.input,
+      { type: "function_call_output", call_id: "call_read_only", output: "Exit code: 0\nOutput:\nGet-Content acceptance-target.test.mjs" },
+    ],
+  }, {
+    ...chatBody,
+    messages: [
+      ...chatBody.messages,
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_read_only", type: "function", function: { name: "shell_command", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "call_read_only", content: "Exit code: 0\nOutput:\nGet-Content acceptance-target.test.mjs" },
+    ],
+  });
+  assert.match(staleReadOnly.choices[0].message.tool_calls[0].function.arguments, /WriteAllText/);
+
+  const withoutEvidence = deterministicRepoFileEditCompletionResponse(request, chatBody);
+  assert.equal(withoutEvidence, null);
+
+  const completed = deterministicRepoFileEditCompletionResponse({
+    ...request,
+    input: [
+      ...request.input,
+      { type: "function_call_output", call_id: "call_repo_edit", output: `Exit code: 0\nOutput:\n\u2139 tests 2\n\u2139 pass 2\n\u2139 fail 0\n${marker}` },
+    ],
+  }, {
+    model: "gemini-pro-agent",
+    messages: [
+      ...chatBody.messages,
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_repo_edit", type: "function", function: { name: "shell_command", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "call_repo_edit", content: `Exit code: 0\nOutput:\n\u2139 tests 2\n\u2139 pass 2\n\u2139 fail 0\n${marker}` },
+    ],
+  });
+  assert.match(completed.choices[0].message.content, new RegExp(marker));
 });
 
 test("artifact completion does not reuse stale marker for a newer project edit task", () => {

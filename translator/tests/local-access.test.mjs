@@ -9,6 +9,7 @@ process.env.NODE_ENV = "test";
 const {
   HOST,
   LISTEN_HOST,
+  assembleResponsesWebSocketPayloads,
   antigravityAccountFallbackSnapshot,
   antigravityTrafficSnapshot,
   antigravityFailureDetails,
@@ -27,6 +28,8 @@ const {
   unsupportedResponsesWebSocketResponse,
   visibleModelPayload,
   recordResponsesWebSocketAttempt,
+  RESPONSES_WEBSOCKET_PING_INTERVAL_MS,
+  parseClientWebSocketFrames,
   responsesWebSocketAuditSnapshot,
   shouldRecordAntigravityTrafficFailure,
 } = await import("../adaptive-server.mjs");
@@ -95,23 +98,55 @@ test("responses websocket attempts are audited without prompt data", () => {
   const attempt = recordResponsesWebSocketAttempt(req, {
     kind: "upgrade",
     status: 101,
-    responseType: "accepted_idle_websocket",
+    responseType: "http_relay_websocket",
     pathname: "/v1/responses",
   });
   const audit = responsesWebSocketAuditSnapshot();
 
   assert.equal(audit.supported, false);
   assert.equal(audit.fallbackStatus, 101);
-  assert.equal(audit.fallbackType, "accepted_idle_websocket");
+  assert.equal(audit.fallbackType, "http_relay_websocket");
   assert.equal(audit.attempts, before + 1);
   assert.equal(audit.lastUpgrade.path, "/v1/responses");
   assert.equal(audit.lastUpgrade.query, true);
   assert.equal(audit.lastUpgrade.status, 101);
-  assert.equal(audit.lastUpgrade.responseType, "accepted_idle_websocket");
+  assert.equal(audit.lastUpgrade.responseType, "http_relay_websocket");
   assert.equal(audit.lastUpgrade.secWebSocketProtocol, "codex.responses.v1");
   assert.equal(audit.lastUpgrade.userAgent, "Codex-Test");
   assert.deepEqual(attempt, audit.lastUpgrade);
   assert.equal(JSON.stringify(audit).includes("hidden"), false);
+});
+
+test("responses websocket ping interval stays below the desktop retry window", () => {
+  assert.equal(Number.isInteger(RESPONSES_WEBSOCKET_PING_INTERVAL_MS), true);
+  assert.ok(
+    RESPONSES_WEBSOCKET_PING_INTERVAL_MS <= 3_000,
+    "desktop retries around six seconds, so local websocket heartbeats must arrive sooner",
+  );
+  assert.equal(responsesWebSocketAuditSnapshot().pingIntervalMs, RESPONSES_WEBSOCKET_PING_INTERVAL_MS);
+});
+
+function maskedClientFrame({ fin = true, opcode = 0x1, payload = "" } = {}) {
+  const body = Buffer.from(payload);
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const length = body.length;
+  const header = length < 126
+    ? Buffer.from([(fin ? 0x80 : 0) | opcode, 0x80 | length])
+    : Buffer.from([(fin ? 0x80 : 0) | opcode, 0x80 | 126, (length >> 8) & 0xff, length & 0xff]);
+  const masked = Buffer.from(body);
+  for (let i = 0; i < masked.length; i += 1) masked[i] ^= mask[i % 4];
+  return Buffer.concat([header, mask, masked]);
+}
+
+test("responses websocket relay assembles fragmented client text frames before forwarding", () => {
+  const first = parseClientWebSocketFrames(maskedClientFrame({ fin: false, opcode: 0x1, payload: "{\"input\":" }));
+  const state = {};
+
+  assert.equal(first.frames[0].fin, false);
+  assert.deepEqual(assembleResponsesWebSocketPayloads(first.frames, state), []);
+
+  const second = parseClientWebSocketFrames(maskedClientFrame({ fin: true, opcode: 0x0, payload: "\"hello\"}" }));
+  assert.deepEqual(assembleResponsesWebSocketPayloads(second.frames, state), ["{\"input\":\"hello\"}"]);
 });
 
 test("translator health separates process health from Antigravity account readiness", () => {
@@ -567,14 +602,14 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(Object.hasOwn(payload.paths, "codexHome"), true);
   assert.equal(Object.hasOwn(payload.paths, "sharedCodexHome"), true);
   assert.equal(payload.modelRoutes.latest.internalModel, "MODEL_PLACEHOLDER_M20");
-  assert.equal(payload.toolBridge.mode, "native-mcp-same-cascade");
-  assert.equal(payload.nativeToolCapability.transport, "desktop-cascade");
-  assert.equal(payload.nativeToolCapability.acceptsExternalToolDefinitions, true);
-  assert.equal(payload.nativeToolCapability.externalToolDefinitionsUsable, true);
-  assert.equal(payload.nativeToolCapability.nativeBridgeDefaultEnabled, true);
-  assert.equal(payload.nativeToolCapability.nativeAntigravityToolEvents, true);
+  assert.equal(payload.toolBridge.mode, "codex-owned-tools-model-only");
+  assert.equal(payload.nativeToolCapability.transport, "cli");
+  assert.equal(payload.nativeToolCapability.acceptsExternalToolDefinitions, false);
+  assert.equal(payload.nativeToolCapability.externalToolDefinitionsUsable, false);
+  assert.equal(payload.nativeToolCapability.nativeBridgeDefaultEnabled, false);
+  assert.equal(payload.nativeToolCapability.nativeAntigravityToolEvents, false);
   assert.equal(payload.responsesWebSocket.supported, false);
-  assert.equal(payload.responsesWebSocket.fallbackType, "accepted_idle_websocket");
+  assert.equal(payload.responsesWebSocket.fallbackType, "http_relay_websocket");
   assert.equal(payload.updateStatus.updateNeeded, false);
   assert.equal(payload.updateStatus.sync.available, true);
   assert.equal(payload.postVerification.present, true);
@@ -612,17 +647,17 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(["fresh", "stale", "missing", "invalid"].includes(payload.localFeatures.snapshotStatus.state), true);
   assert.equal(typeof payload.antigravityRetries.count, "number");
   assert.equal(payload.antigravityRetries.latest, null);
-  assert.equal(payload.toolBridge.transport, "desktop-cascade");
-  assert.equal(payload.toolBridge.localAdapter, "native-mcp-same-cascade-with-prompt-fallback");
-  assert.equal(payload.toolBridge.nativeAntigravityToolEvents, true);
-  assert.equal(payload.toolBridge.acceptsExternalToolDefinitions, true);
-  assert.equal(payload.toolBridge.verifier, "test-anticodex-native-tool-loop.ps1");
+  assert.equal(payload.toolBridge.transport, "cli");
+  assert.equal(payload.toolBridge.localAdapter, "codex-owned-tools-model-only");
+  assert.equal(payload.toolBridge.nativeAntigravityToolEvents, false);
+  assert.equal(payload.toolBridge.acceptsExternalToolDefinitions, false);
+  assert.equal(payload.toolBridge.verifier, "test-anticodex-tool-loop.ps1");
   assert.equal(payload.toolBridge.nativeVerifier, "test-anticodex-native-tool-loop.ps1");
   assert.equal(JSON.stringify(payload).includes("Return exactly this"), false);
   assert.equal(JSON.stringify(payload).includes("tool output"), false);
 });
 
-test("diagnostics exposes the native default and automatic permission handling clearly", () => {
+test("diagnostics exposes the model-only default and keeps native bridge opt-in", () => {
   const payload = diagnosticsPayload({
     health: translatorHealthPayload({
       upstream: "antigravity-desktop",
@@ -641,23 +676,23 @@ test("diagnostics exposes the native default and automatic permission handling c
     routeAudit: { count: 0, latest: null, entries: [] },
   });
 
-  assert.equal(payload.toolBridge.mode, "native-mcp-same-cascade");
-  assert.equal(payload.toolBridge.transport, "desktop-cascade");
-  assert.equal(payload.nativeToolCapability.codexToolBridge, "native-mcp-same-cascade-with-prompt-fallback");
+  assert.equal(payload.toolBridge.mode, "codex-owned-tools-model-only");
+  assert.equal(payload.toolBridge.transport, "cli");
+  assert.equal(payload.nativeToolCapability.codexToolBridge, "codex-owned-tools-model-only");
   assert.equal(payload.nativeToolCapability.permissionPromptsDisabled, true);
-  assert.equal(payload.nativeToolCapability.nativeMcpPermissionMode, "automatic-before-codex-execution");
-  assert.equal(payload.nativeToolCapability.schemaLikeRequestAcceptance, "verified-native-mcp-initialize-and-tools-list");
-  assert.equal(payload.toolBridge.localAdapter, "native-mcp-same-cascade-with-prompt-fallback");
-  assert.equal(payload.toolBridge.nativeBridgeDefaultEnabled, true);
-  assert.equal(payload.toolBridge.nativeAntigravityToolEvents, true);
-  assert.equal(payload.toolBridge.acceptsExternalToolDefinitions, true);
-  assert.equal(payload.tools.bridge, "native_mcp_same_cascade");
+  assert.equal(payload.nativeToolCapability.nativeMcpPermissionMode, "disabled-with-native-bridge");
+  assert.equal(payload.nativeToolCapability.schemaLikeRequestAcceptance, "disabled-by-default-model-only");
+  assert.equal(payload.toolBridge.localAdapter, "codex-owned-tools-model-only");
+  assert.equal(payload.toolBridge.nativeBridgeDefaultEnabled, false);
+  assert.equal(payload.toolBridge.nativeAntigravityToolEvents, false);
+  assert.equal(payload.toolBridge.acceptsExternalToolDefinitions, false);
+  assert.equal(payload.tools.bridge, "codex_owned_model_only_tool_bridge");
   assert.equal(payload.tools.antigravityMode, true);
   assert.equal(payload.tools.injectInternalTools, true);
-  assert.equal(payload.tools.nativeAntigravityToolEvents, true);
-  assert.equal(payload.tools.acceptsExternalToolDefinitions, true);
-  assert.match(payload.tools.description, /automatically approved/i);
-  assert.match(payload.tools.description, /prompt bridge/i);
+  assert.equal(payload.tools.nativeAntigravityToolEvents, false);
+  assert.equal(payload.tools.acceptsExternalToolDefinitions, false);
+  assert.match(payload.tools.description, /model text only/i);
+  assert.match(payload.tools.description, /Anti-Codex\/Codex owns tools/i);
 });
 
 test("diagnostics marks local feature snapshots fresh or stale using the startup age contract", () => {

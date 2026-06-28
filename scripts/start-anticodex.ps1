@@ -44,7 +44,9 @@ function Test-AntiCodexTranslatorMatchesConfiguredUpstream {
     if (-not $health -or -not $health.ok) { return $false }
     $profile = $health.upstreamProfile
     if ($UsesAntigravity) {
-        return [string]$profile.mode -eq "antigravity"
+        $expectedTransport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "cli" }
+        $actualTransport = if ($profile -and ($profile.PSObject.Properties.Name -contains "transport")) { [string]$profile.transport } else { "" }
+        return ([string]$profile.mode -eq "antigravity") -and ($actualTransport -eq $expectedTransport)
     }
     if ([string]$profile.mode -ne "third-party") { return $false }
     if ([string]$profile.protocol -ne [string]$env:UPSTREAM_PROTOCOL) { return $false }
@@ -114,7 +116,15 @@ if ($antiCodexUsesAntigravity) {
     $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
     Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
     $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-    $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "1"
+    if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
+        $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
+    }
+    if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $env:DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+    }
+    if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
+        $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
+    }
 }
 $translatorLoopbackUrl = "http://127.0.0.1:$($env:TRANSLATOR_PORT)"
 

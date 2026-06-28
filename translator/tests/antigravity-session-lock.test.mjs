@@ -31,6 +31,29 @@ test("Antigravity session lock lets the same tool continuation pass while blocki
   secondLease.release();
 });
 
+test("Antigravity session lock lets tool output continue by call id when previous response id is missing", async () => {
+  const lock = createAntigravitySessionLock();
+  const first = await lock.acquire();
+  first.continueWith("resp_tool_1", ["call_write_project"]);
+
+  let secondStarted = false;
+  const second = lock.acquire().then((lease) => {
+    secondStarted = true;
+    return lease;
+  });
+
+  await Promise.resolve();
+  assert.equal(secondStarted, false);
+
+  const continuation = await lock.acquire({ continuationCallIds: ["call_write_project"] });
+  continuation.release();
+
+  const secondLease = await second;
+  assert.equal(secondStarted, true);
+  secondLease.release();
+});
+
+
 test("Antigravity session lock releases queued sessions when a tool continuation expires", async () => {
   const lock = createAntigravitySessionLock({ ttlMs: 1000 });
   const first = await lock.acquire();

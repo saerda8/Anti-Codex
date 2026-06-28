@@ -47,7 +47,9 @@ const NATIVE_CONTINUATIONS = new Map();
 
 const ANTIGRAVITY_PROMPT_HEADER = [
   "[INSTRUCTION]",
+  "Default to Simplified Chinese for visible user-facing replies when the user's language or UI locale is Chinese.",
   "Answer in the same language as the latest user message unless the user explicitly asks for another language.",
+  "If the latest user message contains Chinese, the final visible answer must be Simplified Chinese, including summaries after tool use.",
   "You are running inside Anti-Codex, a Codex-style desktop coworker powered by Antigravity.",
 ].join("\n");
 
@@ -58,7 +60,7 @@ export function isAntigravityNativeToolBridgeEnabled(options = {}) {
   }
   return parseBooleanFlag(
     options.env?.ANTICODEX_NATIVE_TOOL_BRIDGE ?? process.env.ANTICODEX_NATIVE_TOOL_BRIDGE,
-    true,
+    false,
   );
 }
 
@@ -170,7 +172,7 @@ export function makeAntigravityCompletion(model, text, options = {}) {
 }
 
 export async function callAntigravityUpstream(chatBody, options = {}) {
-  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "native").toLowerCase();
+  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
   const nativeToolsEnabled = transport !== "cli"
     && Array.isArray(chatBody?.tools)
     && chatBody.tools.length > 0
@@ -234,8 +236,49 @@ export async function callAntigravityUpstream(chatBody, options = {}) {
 }
 
 export async function* streamAntigravityUpstream(chatBody, options = {}) {
+  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
   const reasoningEffort = chatBody?.reasoning?.effort ?? chatBody?.reasoning_effort;
   const resumed = takeNativeContinuation(chatBody?.messages);
+  if (transport === "cli" && !resumed) {
+    const prompt = chatMessagesToPrompt(chatBody?.messages, {
+      reasoningEffort,
+      tools: chatBody?.tools,
+      maxChars: options.maxChars ?? options.env?.ANTICODEX_PROMPT_MAX_CHARS,
+      toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
+    });
+    if (!prompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
+    const runTurn = options.runTurn ?? runAntigravityTextTurn;
+    const result = await runTurn(prompt, {
+      cwd: options.cwd ?? process.env.ANTICODEX_WORKSPACE ?? process.cwd(),
+      env: options.env,
+      model: antigravityModelFor(chatBody?.model),
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    if (options.signal?.aborted) return;
+    const text = result.text ?? "";
+    if (text) yield { type: "text_delta", delta: text };
+    if (typeof options.onModelRouted === "function") {
+      options.onModelRouted({
+        requestId: options.responseId,
+        transport: "cli",
+        requestedModel: chatBody?.model,
+        resolvedModel: result.model ?? antigravityModelFor(chatBody?.model),
+        displayName: normalizeAntigravityDisplayName(result.model ?? antigravityModelFor(chatBody?.model), result.displayName),
+        internalModel: result.internalModel,
+        cascadeId: result.cascadeId ?? result.conversationId,
+        status: "success",
+      });
+    }
+    yield {
+      type: "done",
+      completion: makeAntigravityCompletion(chatBody?.model, text, {
+        id: options.responseId,
+        created: options.created,
+      }),
+    };
+    return;
+  }
   const nativeToolsEnabled = Array.isArray(chatBody?.tools)
     && chatBody.tools.length > 0
     && isAntigravityNativeToolBridgeEnabled(options);

@@ -1,13 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   antigravityAccountSnapshot,
   antigravityCliArgs,
+  antigravityCliIsolationEnv,
   antigravityNativeToolCapabilitySummary,
   antigravityModelOnlyToolConfig,
   createDesktopConnectionCache,
   defaultAntigravityCliCommand,
+  discoverProjectId,
   extractAssistantText,
   extractPendingNativeToolCalls,
   buildAntigravityMcpApprovalInteraction,
@@ -210,41 +215,41 @@ test("antigravityModelOnlyToolConfig disables Antigravity-owned tools and permis
   assert.equal(config.invokeSubagent.enabled, false);
 });
 
-test("antigravity native tool capability summary reports the auto-approved native default", () => {
+test("antigravity native tool capability summary reports the model-only default", () => {
   const summary = antigravityNativeToolCapabilitySummary({ env: {} });
 
-  assert.equal(summary.transport, "desktop-cascade");
-  assert.match(summary.requestEnvelope, /StartCascade\.customAgentSpec/);
+  assert.equal(summary.transport, "cli");
+  assert.match(summary.requestEnvelope, /model-only Antigravity text turn/);
   assert.equal(summary.modelField, "planModel");
   assert.equal(summary.toolConfigField, "toolConfig");
   assert.equal(summary.externalToolDefinitionsField, "StartCascade.customAgentSpec.customizationConfig.customizationServerUrl");
-  assert.equal(summary.acceptsExternalToolDefinitions, true);
-  assert.equal(summary.schemaLikeRequestAcceptance, "verified-native-mcp-initialize-and-tools-list");
-  assert.equal(summary.externalToolDefinitionsUsable, true);
-  assert.equal(summary.nativeBridgeDefaultEnabled, true);
-  assert.equal(summary.nativeAntigravityToolEvents, true);
-  assert.equal(summary.nativeMcpDiscoveryVerified, true);
-  assert.equal(summary.nativeMcpToolCallStatus, "verified-tools-call-after-automatic-permission");
-  assert.equal(summary.nativeMcpApprovalProtocolVerified, true);
-  assert.equal(summary.nativeMcpPermissionMode, "automatic-before-codex-execution");
-  assert.equal(summary.sameCascadeResumeProbeVerified, true);
-  assert.equal(summary.antigravityOwnedToolsDisabled, true);
-  assert.equal(summary.permissionPromptsDisabled, true);
-  assert.equal(summary.codexToolBridge, "native-mcp-same-cascade-with-prompt-fallback");
-  assert.ok(summary.disabledToolCount >= 10);
-  assert.ok(summary.disabledToolKeys.includes("askPermission"));
-  assert.match(summary.reason, /automatically approved/i);
-  assert.match(summary.reason, /same-Cascade continuation/i);
-});
-
-test("antigravity native tool capability summary reports the explicit prompt-bridge opt-out", () => {
-  const summary = antigravityNativeToolCapabilitySummary({ nativeBridgeEnabled: false });
-
+  assert.equal(summary.acceptsExternalToolDefinitions, false);
+  assert.equal(summary.schemaLikeRequestAcceptance, "disabled-by-default-model-only");
+  assert.equal(summary.externalToolDefinitionsUsable, false);
   assert.equal(summary.nativeBridgeDefaultEnabled, false);
   assert.equal(summary.nativeAntigravityToolEvents, false);
+  assert.equal(summary.nativeMcpDiscoveryVerified, false);
   assert.equal(summary.nativeMcpToolCallStatus, "available-explicit-fallback");
-  assert.equal(summary.codexToolBridge, "codex-owned-tools-prompt-mediated-native-disabled");
-  assert.match(summary.reason, /explicitly disabled/i);
+  assert.equal(summary.nativeMcpApprovalProtocolVerified, false);
+  assert.equal(summary.nativeMcpPermissionMode, "disabled-with-native-bridge");
+  assert.equal(summary.sameCascadeResumeProbeVerified, false);
+  assert.equal(summary.antigravityOwnedToolsDisabled, true);
+  assert.equal(summary.permissionPromptsDisabled, true);
+  assert.equal(summary.codexToolBridge, "codex-owned-tools-model-only");
+  assert.ok(summary.disabledToolCount >= 10);
+  assert.ok(summary.disabledToolKeys.includes("askPermission"));
+  assert.match(summary.reason, /model text only/i);
+});
+
+test("antigravity native tool capability summary reports explicit native opt-in", () => {
+  const summary = antigravityNativeToolCapabilitySummary({ nativeBridgeEnabled: true, transport: "desktop-cascade" });
+
+  assert.equal(summary.transport, "desktop-cascade");
+  assert.equal(summary.nativeBridgeDefaultEnabled, true);
+  assert.equal(summary.nativeAntigravityToolEvents, true);
+  assert.equal(summary.nativeMcpToolCallStatus, "verified-tools-call-after-automatic-permission");
+  assert.equal(summary.codexToolBridge, "native-mcp-same-cascade-with-prompt-fallback");
+  assert.match(summary.reason, /automatically approved/i);
 });
 
 test("extractPendingNativeToolCalls reads structured waiting MCP steps and filters names", () => {
@@ -448,6 +453,31 @@ test("defaultAntigravityCliCommand honors the configured standalone CLI", () => 
   });
 });
 
+test("antigravityCliIsolationEnv builds an Anti-Codex-owned CLI profile boundary", () => {
+  const env = antigravityCliIsolationEnv({
+    ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT: "G:\\AntiCodexProfiles\\ag-account-b",
+  });
+
+  assert.equal(env.HOME, "G:\\AntiCodexProfiles\\ag-account-b");
+  assert.equal(env.USERPROFILE, "G:\\AntiCodexProfiles\\ag-account-b");
+  assert.equal(env.GEMINI_DIR, "G:\\AntiCodexProfiles\\ag-account-b\\.gemini");
+  assert.equal(env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR, "G:\\AntiCodexProfiles\\ag-account-b\\.gemini\\antigravity-cli\\conversations");
+});
+
+test("antigravityCliIsolationEnv allows explicit home and conversation overrides", () => {
+  const env = antigravityCliIsolationEnv({
+    ANTICODEX_ANTIGRAVITY_CLI_HOME: "G:\\anti-home",
+    ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE: "G:\\anti-user",
+    ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR: "G:\\anti-gemini",
+    ANTICODEX_ANTIGRAVITY_CLI_CONVERSATIONS_DIR: "G:\\anti-conversations",
+  });
+
+  assert.equal(env.HOME, "G:\\anti-home");
+  assert.equal(env.USERPROFILE, "G:\\anti-user");
+  assert.equal(env.GEMINI_DIR, "G:\\anti-gemini");
+  assert.equal(env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR, "G:\\anti-conversations");
+});
+
 test("antigravityCliArgs keeps every flag before the positional prompt", () => {
   assert.deepEqual(antigravityCliArgs({
     model: "gemini-3.5-flash-low",
@@ -476,6 +506,30 @@ test("windowsAntigravityCliInvocation transfers the prompt through a UTF-8 file"
   assert.match(invocation.args.at(-1), /ReadAllText/);
   assert.equal(invocation.env.ANTICODEX_AG_CLI, "C:\\tools\\antigravity.exe");
   assert.equal(invocation.env.ANTICODEX_AG_PROMPT_FILE, "C:\\temp\\prompt.txt");
+});
+
+test("discoverProjectId reads the isolated Gemini directory from the CLI environment", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-ag-cli-profile-"));
+  try {
+    const workspace = join(root, "workspace");
+    const projects = join(root, ".gemini", "config", "projects");
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(projects, { recursive: true });
+    writeFileSync(join(projects, "project.json"), JSON.stringify({
+      id: "anti-codex-account-b-project",
+      projectResources: {
+        resources: [{
+          gitFolder: {
+            folderUri: `file:///${workspace.replace(/\\/g, "/")}`,
+          },
+        }],
+      },
+    }), "utf8");
+
+    assert.equal(discoverProjectId(workspace, { GEMINI_DIR: join(root, ".gemini") }), "anti-codex-account-b-project");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("extractCreatedConversationId reads the standalone CLI log", () => {

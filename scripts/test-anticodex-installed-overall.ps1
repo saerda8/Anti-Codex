@@ -683,6 +683,7 @@ function Test-ReportEncoding {
         "latest-ui-coding-project-smoke.json",
         "latest-ui-multi-turn-project-smoke.json",
         "latest-ui-repo-file-edit-smoke.json",
+        "latest-ui-repo-multi-file-edit-smoke.json",
         "latest-ui-complex-project-smoke.json",
         "latest-ui-report-site-smoke.json",
         "latest-real-work.json",
@@ -1344,14 +1345,23 @@ $checks.toolBridgeMode = if ($healthMode -eq "third-party") {
         $fastDiagnostics = Get-InstalledOverallDiagnosticsSnapshot
         $fastBridge = $fastDiagnostics.toolBridge
         $fastNative = $fastDiagnostics.nativeToolCapability
-        $fastToolBridgeOk = $fastDiagnostics.object -eq "anticodex.diagnostics" `
+        $fastNativeBridge = $fastBridge.nativeBridgeDefaultEnabled -eq $true
+        $fastModelOnlyOk = $fastDiagnostics.object -eq "anticodex.diagnostics" `
+            -and $fastBridge.mode -eq "codex-owned-tools-model-only" `
+            -and $fastBridge.nativeBridgeDefaultEnabled -eq $false `
+            -and $fastBridge.nativeAntigravityToolEvents -eq $false `
+            -and $fastBridge.acceptsExternalToolDefinitions -eq $false `
+            -and $fastNative.codexToolBridge -eq "codex-owned-tools-model-only" `
+            -and $fastNative.permissionPromptsDisabled -eq $true
+        $fastNativeOk = $fastDiagnostics.object -eq "anticodex.diagnostics" `
+            -and $fastNativeBridge `
             -and $fastBridge.mode -eq "native-mcp-same-cascade" `
-            -and $fastBridge.nativeBridgeDefaultEnabled -eq $true `
             -and $fastNative.nativeMcpDiscoveryVerified -eq $true `
             -and $fastNative.nativeMcpPermissionMode -eq "automatic-before-codex-execution" `
             -and $fastNative.permissionPromptsDisabled -eq $true
+        $fastToolBridgeOk = $fastModelOnlyOk -or $fastNativeOk
         if (-not $fastToolBridgeOk) {
-            Add-Failure "Fast tool bridge verification reported an incomplete native MCP bridge"
+            Add-Failure "Fast tool bridge verification reported neither default model-only Codex tools nor explicit native MCP opt-in"
         }
         [pscustomobject]@{
             ok = $fastToolBridgeOk
@@ -1567,6 +1577,12 @@ if (-not $NoTraffic) {
         "--task-mode", "repo-file-edit",
         "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 240) * 1000)"
     ) ([Math]::Max(250, $realTrafficTimeoutSec + 10))
+    $checks.uiRepoMultiFileEditSmoke = Invoke-NodeJsonScript "Desktop UI repo multi-file edit smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
+        "--base-url", $BaseUrl,
+        "--report-root", $ReportRoot,
+        "--task-mode", "repo-multi-file-edit",
+        "--timeout-ms", "$([Math]::Max($realTrafficTimeoutSec, 300) * 1000)"
+    ) ([Math]::Max(310, $realTrafficTimeoutSec + 10))
     $checks.uiReportSiteSmoke = Invoke-NodeJsonScript "Desktop UI report-site smoke verification" (Join-Path $scriptsRoot "test-anticodex-ui-chat-smoke.mjs") @(
         "--base-url", $BaseUrl,
         "--report-root", $ReportRoot,

@@ -4,9 +4,9 @@
 - Current immediate-usability status: green. The installed Anti-Codex runtime answers desktop UI chat, keeps the Antigravity session lock clear, passes the real small-project verifier, and now passes full installed no-traffic overall in about 118s with `ok:true`. The passive release gate is also clean for short readiness (`shortReady:true`).
 - Current release blockers: none in the latest strict required gate. The latest release-gate report has `releaseReady:true`, `shortReady:true`, no missing required gates, no damaged reports, and installed runtime sync satisfied. Optional real third-party-provider and provider-to-Antigravity-return checks remain explicit opt-in items because they require external provider/API authorization.
 - Current ambient-suggestions status: guarded and release-required. The latest installed no-traffic check scanned Anti-Codex state/config/local SQLite/install paths, found no unexpected ambient/proactive suggestion sources, and recorded `usedRealTraffic:false`; benign Chromium/devtools suggestion assets remain allowlisted as non-model background suggestion evidence.
-- Primary external-tool transport: native Antigravity MCP with same-Cascade continuation. External MCP permission interactions are answered automatically as soon as the structured waiting event appears, before Codex executes the tool.
-- Prompt-mediated tool transport is now a compatibility fallback only. It is used when native MCP fails before any Codex-visible event, or when `ANTICODEX_NATIVE_TOOL_BRIDGE=0` explicitly disables the native bridge.
-- Current installed proof: diagnostics require `toolBridge.mode:"native-mcp-same-cascade"`, `nativeBridgeDefaultEnabled:true`, `nativeAntigravityToolEvents:true`, and `nativeMcpPermissionMode:"automatic-before-codex-execution"`.
+- Primary external-tool transport: Codex-owned tools through Anti-Codex. Antigravity is model entitlement/model text only by default; its coworker/tool execution path is not part of the default user flow.
+- Native Antigravity MCP / same-Cascade continuation is legacy opt-in diagnostic coverage only. It must stay off unless explicitly enabled with `ANTICODEX_NATIVE_TOOL_BRIDGE=1`.
+- Current installed proof should prioritize `upstreamProfile.transport` plus real desktop task results. Tool-bridge diagnostics must not imply Antigravity coworker/tool authority when the default bridge is disabled.
 - Recent deployment note: most core runtime hardening has already been deployed and verified in the installed Anti-Codex runtime. For new source changes, deploy only when the change is intentionally ready for an installed sync/verification pass.
 - Current source-development batch completed: shared Codex guidance inheritance, two-observation account-change confirmation, bounded/exclusive Antigravity request scheduling, graceful shutdown cancellation, transactional/concurrency-safe local snapshots, lightweight routine startup, Manager diagnostics, exact model-name verification, rollback safety, shortcut/icon identity checks, shortcut repair evidence, and embedded Manager close-hit-area hardening.
 - Latest source gate passed: full translator regression 585 tests total, 551 passed, 34 skipped, 0 failed; touched Manager/shortcut PowerShell scripts parsed successfully; Manager button self-test passed.
@@ -24,12 +24,14 @@
 - Current branding residue update: user-visible legacy DeepCodex wording in the shared launcher prompts and fallback third-party setup UI has been replaced with Anti-Codex branding. The restored-history target-hint extractor now keeps real `deepcodex\...` paths but no longer injects bare `deepcodex-*` legacy brand tokens into model-visible compaction context. Internal compatibility names such as `DEEPCODEX_*`, `start-deepcodex.ps1`, `deepcodex-translator.exe`, local state paths, and Antigravity `CORTEX_*` protocol constants remain intentionally unchanged.
 
 ## Goal
-Build an independent Anti-Codex desktop client that preserves Codex desktop capabilities while using the signed-in Antigravity account, with stable model selection, protocol compatibility, process isolation, account switching after restart, and predictable recovery.
+Build an independent Anti-Codex desktop client that is best understood as a separate Codex copy plus an Antigravity-entitlement model adapter, similar in spirit to a cc-switch style model bridge. Anti-Codex should preserve native Codex desktop capabilities and tool behavior while using Antigravity only for model capacity, with process/account isolation, stable model selection, and predictable recovery.
 
 ## Baseline Principles
 - Do not modify or depend on the running state of the original Codex installation.
 - Treat Codex app-server behavior and schemas as the client contract.
-- Treat Antigravity Desktop/CLI discovery as an adapter boundary, not as UI automation.
+- Treat Antigravity Desktop/CLI discovery as a model adapter boundary, not as a coworker, tool executor, or UI automation layer.
+- Prefer carrying forward native Codex client/tool behavior instead of rebuilding tool features in the Antigravity adapter. Host sync should be treated as a guarded Codex client copy/incremental patch flow plus Anti-Codex branding, isolation, and model-adapter changes.
+- Until dual Antigravity account isolation is implemented, do not run Antigravity coworker/native tool-bridge traffic as part of default testing or release gates; it can share the same account as MCP and interfere with the user's separate Antigravity usage.
 - Preserve the native Codex event, tool, MCP, skill, cancellation, compaction, and session semantics; a visual shell is not an acceptable deliverable.
 - Model names and IDs must come from the active Antigravity account and must be provably used by the execution layer.
 - No feature is complete until installed-build validation passes.
@@ -44,7 +46,7 @@ Status: completed_for_v1_transport
 - Identify reconnect causes from app-server and gateway logs.
 - Compare Antigravity Desktop HTTP service, CLI, and persistent-process options.
 - Decide the supported v1 architecture and explicit unsupported surfaces.
-- Chosen v1 transport: Antigravity Desktop local Cascade service, with CLI retained only as fallback.
+- Current v1 transport direction: model-only Antigravity transport. CLI is the stability default when available; desktop/Cascade may be used only as a model-text channel with Antigravity tools/coworker behavior disabled.
 
 ### Phase 2: Stable Gateway Core
 Status: mostly_complete_for_v1
@@ -52,7 +54,7 @@ Status: mostly_complete_for_v1
 - Add deterministic startup/readiness/shutdown behavior.
 - Implement the required HTTP and websocket contracts or disable them before client startup.
 - Make plugin endpoints schema-correct or cleanly unavailable without retry storms.
-- Keep the native desktop-service route as default and verify it through installed Anti-Codex startup.
+- Keep the model-only route as default and verify it through installed Anti-Codex startup and result-based desktop tasks.
 - Completed for current bridge: real SSE text deltas, final completion gating, cancellation, local-health startup recovery, and no websocket reconnect storm in the tested HTTP path.
 
 ### Phase 3: Model and Session Contract
@@ -142,7 +144,7 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Completed current checks: installed ASAR inspection proves the app-name patch, removed dynamic Codex app-name setter, tray tooltip source, `AntiCodex` app user model ID, and window title patch. Windows process inspection shows Anti-Codex and original Codex as separate visible windows.
 - Completed current checks: installed overall verification after the latest deployment passed with eight models, account/proxy readiness, MCP/skills, plugin capability grading, tool-loop continuation, single true Anti-Codex main window, one translator, one launcher, and original Codex isolation.
 - Completed current checks: installed overall verification now also reads the real Anti-Codex UI through CDP and fails on ChatGPT login text, reconnect text, missing `Anti-Codex` page title, or missing current Antigravity model label/ID.
-- Completed current checks: installed overall verification now includes `/anticodex/diagnostics`, proving local troubleshooting data is available without exposing prompts, messages, tool outputs, or input items. The diagnostics payload now exposes the default tool bridge as `toolBridge.mode:"codex-owned-tools-prompt-mediated"` with `nativeBridgeDefaultEnabled:false`.
+- Completed current checks: installed overall verification now includes `/anticodex/diagnostics`, proving local troubleshooting data is available without exposing prompts, messages, tool outputs, or input items. The diagnostics payload now exposes the default tool bridge as `toolBridge.mode:"codex-owned-tools-model-only"` with `nativeBridgeDefaultEnabled:false`.
 - Completed current checks: installed overall verification now also includes `test-anticodex-tool-bridge-mode.ps1`. The verifier treats native MCP as an opt-in diagnostic path and the normal Codex-owned tool loop as the default health proof.
 - Completed current checks: local connector projection scrubs cached ChatGPT install URLs; installed verification after translator restart showed zero `chatgpt.com` install URLs across 1494 connector entries.
 - Completed current checks: installed overall verification now also includes external branding proof. Latest installed run passed with `Anti-Codex.exe`, `MainWindowTitle: Anti-Codex`, executable metadata `Anti-Codex`, eight models, MCP/skills, plugin capability grading, diagnostics, UI state, tool loop, and account/proxy readiness.
@@ -190,7 +192,7 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Historical boundary resolved again: verified native MCP was demoted from default to opt-in because Antigravity's native permission UI is hostile to the intended Anti-Codex experience. The Codex-owned prompt-mediated bridge is the stable default until the native event protocol can be used without Antigravity approval prompts.
 - Antigravity's public Python SDK cannot become the primary transport because it requires a Gemini API key or Vertex credentials instead of using the signed-in Antigravity account allowance.
 - Desktop Cascade exposes internal structured tool types, but arbitrary custom tool definitions are gated to SDK executables and are not accepted from the ordinary account-backed Cascade client path.
-- Antigravity CLI/SQLite remains emergency fallback only; the default execution path is the desktop Cascade service.
+- Antigravity CLI/SQLite is now an accepted stability path for model text. Desktop Cascade is not the default coworker path; if used, it must stay model-only with Anti-Codex owning tools and task execution.
 - Actual account switching and a real external proxy-off drill require the user's signed-in account/proxy controls; the one-click refresh path, transient proxy/network recovery behavior, and installed account/proxy diagnostic evidence collector are implemented.
 - The circuit breaker covers repeated transient failures, and the account/proxy readiness verifier now classifies the observed failure type; a real proxy-off/on drill is still the only way to observe the exact errors produced by the user's proxy stack.
 - Antigravity CLI worker and DeepSeek worker remain useful for narrow assistance, but their edits must be treated as untrusted; this run had one Antigravity worker failure and one DeepSeek scope overrun that required main-agent cleanup/review.
@@ -230,7 +232,7 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Verified: installed overall passed after deploying the audit and fixing direct invocation of the overall script's dynamic gateway resolver.
 - Completed: live native-tool schema probe now distinguishes HTTP acceptance from usable native tool events. Current desktop Cascade accepts several schema-like fields without rejection, but trajectory summaries show no native tool-event steps.
 - Verified: installed tool-bridge verifier passed with the refined diagnostics, the live schema probe passed with `nativeToolEventEvidence:false`, and installed overall passed after restarting the translator.
-- Remaining non-native boundary: Responses WebSocket remains an explicit verified `501` fallback. Antigravity native MCP same-Cascade continuation is verified but opt-in only; default tool handling stays on the Codex-owned prompt-mediated bridge.
+- Remaining non-native boundary: Responses WebSocket remains an explicit verified `501` fallback. Antigravity native MCP same-Cascade continuation is verified but opt-in only; default tool handling stays in Anti-Codex/Codex, with Antigravity supplying model text only.
 - Completed: bounded three-attempt transient recovery was deployed and the installed overall verifier passed in about 103 seconds with no reconnect/login text, stable UI/translator PIDs, all tool-loop variants, compaction, cancellation, MCP/skills, eight live models, and original Codex isolation.
 - Completed: privacy-safe retry observability is available through local diagnostics. It exposes coarse retry metadata without prompts, messages, input items, responses, or tool outputs; the final installed overall verifier passed in about 109 seconds with zero retries observed.
 - Completed: startup now detects when installed Codex has changed and offers a one-click guarded sync. Normal launches reuse a version-bound cached result, while sync readiness and diagnostics expose whether an update is required.

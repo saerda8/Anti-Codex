@@ -133,7 +133,7 @@ if (!args.get("--prompt") && taskMode === "repo-file-edit") {
   promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Do not start with Get-ChildItem, dir, ls, or another directory listing. You already have the required behavior: implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Your first tool action must modify ${repoFileEditTarget}. Do not edit any other source file. Then run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
 }
 if (!args.get("--prompt") && taskMode === "repo-multi-file-edit") {
-  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. Do not edit files outside it. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. The acceptance test and data file are read-only; do not chmod, unlock, edit, rewrite, or replace them. Your first filesystem-changing action must be exactly this shell command: ${repoMultiFileReadmeCommand}. Do not run Get-ChildItem, Get-Content, node --test, or any other command before that README write. Then complete ${repoMultiFileSource}: it must export normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). renderSummaryHtml must return a complete fully offline HTML document containing the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked. To avoid Windows console mojibake, you may write 状态仪表盘 as JavaScript escapes \\u72b6\\u6001\\u4eea\\u8868\\u76d8 inside JS strings. Running node ${repoMultiFileSource} ${repoMultiFileData} must print summary JSON and write status-dashboard.html in the same directory. Keep the implementation and HTML small; do not add external fonts, http/https URLs, link tags, preconnect links, animations, or large decorative CSS. Do not edit ${repoMultiFileTest} or change the meaning of ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after both commands pass, README.md exists, and status-dashboard.html contains 状态仪表盘 and contains no http/https URLs or <link tags. Put exactly ${marker} on the final line and stop.`;
+  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. This is step 1 of 2. Your first and only tool action for this step must write ${repoMultiFileReadme}. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. Use a direct PowerShell or Node file-write command from the prompt details; do not inspect the directory first. Do not edit, replace, or delete ${repoMultiFileSource}, ${repoMultiFileTest}, or ${repoMultiFileData} for any reason. Do not run git status, Get-ChildItem, Get-Content, dir, ls, cat, or node --test in this step. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
 }
 if (args.get("--prompt") && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
@@ -587,12 +587,17 @@ function verifyRepoFileEditFixture() {
 }
 
 function prepareRepoMultiFileEditFixture() {
+  try {
+    makeWritable(repoMultiFileSource);
+    makeWritable(repoMultiFileTest);
+    makeWritable(repoMultiFileData);
+    makeWritable(repoMultiFileReadme);
+    makeWritable(repoMultiFileHtml);
+  } catch (err) {}
+  try {
+    rmSync(repoMultiFileEditDir, { recursive: true, force: true });
+  } catch (err) {}
   mkdirSync(repoMultiFileEditDir, { recursive: true });
-  makeWritable(repoMultiFileSource);
-  makeWritable(repoMultiFileTest);
-  makeWritable(repoMultiFileData);
-  makeWritable(repoMultiFileReadme);
-  makeWritable(repoMultiFileHtml);
   repoMultiFileExpectedData = `${JSON.stringify([
     { id: 1, title: "Gateway ready", status: " OK " },
     { id: 2, title: "Connector review", status: "Needs Review" },
@@ -665,6 +670,7 @@ function prepareRepoMultiFileEditFixture() {
   rmSync(repoMultiFileHtml, { force: true });
   makeReadOnly(repoMultiFileTest);
   makeReadOnly(repoMultiFileData);
+  makeReadOnly(repoMultiFileSource);
 }
 
 function verifyRepoMultiFileEditFixture() {
@@ -686,6 +692,7 @@ function verifyRepoMultiFileEditFixture() {
     exportsSummarizeRecords: false,
     exportsRenderSummaryHtml: false,
     sourceChangedFromFixture: false,
+    sourceUnchanged: true,
     testUnchanged: false,
     dataUnchanged: false,
     testPassed: false,
@@ -702,16 +709,65 @@ function verifyRepoMultiFileEditFixture() {
     readmeHasChinese: false,
     readmeMentionsCommand: false,
   };
-  try {
-    if (evidence.files.source) {
+  const errors = [];
+  if (evidence.files.source) {
+    try {
       const source = readFileSync(repoMultiFileSource, "utf8");
+      evidence.sourceContent = source;
       evidence.exportsNormalizeStatus = /export\s+function\s+normalizeStatus/.test(source);
       evidence.exportsSummarizeRecords = /export\s+function\s+summarizeRecords/.test(source);
       evidence.exportsRenderSummaryHtml = /export\s+function\s+renderSummaryHtml/.test(source);
       evidence.sourceChangedFromFixture = source !== repoMultiFileBaselineSource;
+      evidence.sourceUnchanged = !evidence.sourceChangedFromFixture;
+    } catch (error) {
+      errors.push(String(error?.message || error || ""));
     }
-    if (evidence.files.test) {
-      evidence.testUnchanged = sameTextIgnoringNewlineStyle(readFileSync(repoMultiFileTest, "utf8"), repoMultiFileExpectedTest);
+  }
+  if (evidence.files.test) {
+    try {
+      const testContent = readFileSync(repoMultiFileTest, "utf8");
+      evidence.testContentActual = testContent;
+      evidence.testContentExpected = repoMultiFileExpectedTest;
+      evidence.testUnchanged = sameTextIgnoringNewlineStyle(testContent, repoMultiFileExpectedTest);
+    } catch (error) {
+      errors.push(String(error?.message || error || ""));
+    }
+  }
+  if (evidence.files.data) {
+    try {
+      const dataContent = readFileSync(repoMultiFileData, "utf8");
+      evidence.dataContentActual = dataContent;
+      evidence.dataContentExpected = repoMultiFileExpectedData;
+      evidence.dataUnchanged = sameTextIgnoringNewlineStyle(dataContent, repoMultiFileExpectedData);
+    } catch (error) {
+      errors.push(String(error?.message || error || ""));
+    }
+  }
+  if (evidence.files.readme) {
+    try {
+      const readme = readFileSync(repoMultiFileReadme, "utf8");
+      evidence.readmeContent = readme;
+      evidence.readmeHasChinese = /使用说明/.test(readme);
+      evidence.readmeMentionsCommand = /node\s+status-dashboard\.mjs\s+status-data\.json/i.test(readme);
+    } catch (error) {
+      errors.push(String(error?.message || error || ""));
+    }
+  }
+  if (evidence.files.html) {
+    try {
+      const html = readFileSync(repoMultiFileHtml, "utf8");
+      evidence.htmlContent = html;
+      evidence.htmlComplete = /<html|<!doctype/i.test(html) && /<\/html>/i.test(html);
+      evidence.htmlHasChinese = /状态仪表盘/.test(html);
+      evidence.htmlMentionsStatuses = /ok/i.test(html) && /needs-review/i.test(html) && /blocked/i.test(html);
+      evidence.htmlAvoidsObjectObject = !/\[object Object\]/.test(html);
+      evidence.htmlOffline = !/(https?:\/\/|<link\b|preconnect|fonts\.googleapis|fonts\.gstatic)/i.test(html);
+    } catch (error) {
+      errors.push(String(error?.message || error || ""));
+    }
+  }
+  if (evidence.files.test) {
+    try {
       evidence.testOutput = execFileSync(process.execPath, ["--test", repoMultiFileTest], {
         cwd: sourceRoot,
         encoding: "utf8",
@@ -720,9 +776,12 @@ function verifyRepoMultiFileEditFixture() {
         windowsHide: true,
       });
       evidence.testPassed = true;
+    } catch (error) {
+      errors.push(String(error?.stderr || error?.message || error || ""));
     }
-    if (evidence.files.source && evidence.files.data) {
-      evidence.dataUnchanged = sameTextIgnoringNewlineStyle(readFileSync(repoMultiFileData, "utf8"), repoMultiFileExpectedData);
+  }
+  if (evidence.files.source && evidence.files.data) {
+    try {
       evidence.cliOutput = execFileSync(process.execPath, [repoMultiFileSource, repoMultiFileData], {
         cwd: repoMultiFileEditDir,
         encoding: "utf8",
@@ -735,25 +794,32 @@ function verifyRepoMultiFileEditFixture() {
         && Number(evidence.cliJson?.["needs-review"]) === 1
         && Number(evidence.cliJson?.blocked) === 1;
       evidence.files.html = fileExists(repoMultiFileHtml);
+      if (evidence.files.html) {
+        try {
+          const html = readFileSync(repoMultiFileHtml, "utf8");
+          evidence.htmlContent = html;
+          evidence.htmlComplete = /<html|<!doctype/i.test(html) && /<\/html>/i.test(html);
+          evidence.htmlHasChinese = /状态仪表盘/.test(html);
+          evidence.htmlMentionsStatuses = /ok/i.test(html) && /needs-review/i.test(html) && /blocked/i.test(html);
+          evidence.htmlAvoidsObjectObject = !/\[object Object\]/.test(html);
+          evidence.htmlOffline = !/(https?:\/\/|<link\b|preconnect|fonts\.googleapis|fonts\.gstatic)/i.test(html);
+        } catch (error) {
+          errors.push(String(error?.message || error || ""));
+        }
+      }
+    } catch (error) {
+      errors.push(String(error?.stderr || error?.message || error || ""));
     }
-    if (evidence.files.html) {
-      const html = readFileSync(repoMultiFileHtml, "utf8");
-      evidence.htmlComplete = /<html|<!doctype/i.test(html) && /<\/html>/i.test(html);
-      evidence.htmlHasChinese = /状态仪表盘/.test(html);
-      evidence.htmlMentionsStatuses = /ok/i.test(html) && /needs-review/i.test(html) && /blocked/i.test(html);
-      evidence.htmlAvoidsObjectObject = !/\[object Object\]/.test(html);
-      evidence.htmlOffline = !/(https?:\/\/|<link\b|preconnect|fonts\.googleapis|fonts\.gstatic)/i.test(html);
-    }
-    evidence.files.readme = fileExists(repoMultiFileReadme);
-    if (evidence.files.readme) {
-      const readme = readFileSync(repoMultiFileReadme, "utf8");
-      evidence.readmeHasChinese = /使用说明/.test(readme);
-      evidence.readmeMentionsCommand = /node\s+status-dashboard\.mjs\s+status-data\.json/i.test(readme);
-    }
-  } catch (error) {
-    evidence.error = String(error?.stderr || error?.message || error || "");
   }
+  evidence.error = errors.filter(Boolean).join("\n").slice(0, 4000);
   return evidence;
+}
+
+function repoMultiFileArtifactCompleteForWait(evidence, phase = "full") {
+  const failures = phase === "readme"
+    ? collectRepoMultiFileReadmeFailures(evidence)
+    : collectRepoMultiFileEditFailures(evidence);
+  return failures.length === 0;
 }
 
 function collectRepoMultiFileEditFailures(artifactEvidence) {
@@ -781,6 +847,21 @@ function collectRepoMultiFileEditFailures(artifactEvidence) {
   return localFailures;
 }
 
+function collectRepoMultiFileReadmeFailures(artifactEvidence) {
+  const localFailures = [];
+  if (!artifactEvidence?.files?.readme) localFailures.push("repo-multi-file-edit README.md was not created");
+  if (artifactEvidence?.files?.readme && artifactEvidence.readmeHasChinese !== true) localFailures.push("repo-multi-file-edit README missing Chinese content");
+  if (artifactEvidence?.files?.readme && artifactEvidence.readmeMentionsCommand !== true) localFailures.push("repo-multi-file-edit README missing CLI command");
+  if (artifactEvidence?.sourceChangedFromFixture !== false) localFailures.push("repo-multi-file-edit modified the source during README step");
+  if (artifactEvidence?.testUnchanged !== true) localFailures.push("repo-multi-file-edit modified the acceptance test during README step");
+  if (artifactEvidence?.dataUnchanged !== true) localFailures.push("repo-multi-file-edit modified the input data during README step");
+  return localFailures;
+}
+
+function buildRepoMultiFileImplementationPrompt(currentFailures = []) {
+  return `Continue the same fixture task in ${repoMultiFileEditDir}. This is step 2 of 2. README.md should already exist. Do not edit ${repoMultiFileTest}. Do not edit, chmod, unlock, rewrite, or replace ${repoMultiFileData}. Rewrite only ${repoMultiFileSource} to implement normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). normalizeStatus must trim, lowercase, replace any run of non-alphanumeric characters with one hyphen, collapse repeated hyphens, and trim leading/trailing hyphens. summarizeRecords must return counts with ok=2, needs-review=1, blocked=1 for ${repoMultiFileData}. renderSummaryHtml must return a complete offline HTML document containing the Chinese title 状态仪表盘 plus ok, needs-review, and blocked. The CLI must read ${repoMultiFileData}, print summary JSON, and write ${repoMultiFileHtml}. The HTML must contain no http/https URLs, no <link tags, and no preconnect. Current verifier failures to fix: ${currentFailures.join("; ") || "source/html/test/CLI not completed yet"}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after both commands pass and ${repoMultiFileHtml} exists. Put exactly ${marker} on the final line and stop.`;
+}
+
 function buildRepoMultiFileRepairPrompt(currentFailures, evidence) {
   const error = String(evidence?.error || "").slice(0, 1600);
   const mostlyWorking = evidence?.testPassed === true && evidence?.cliPassed === true;
@@ -788,7 +869,7 @@ function buildRepoMultiFileRepairPrompt(currentFailures, evidence) {
     && currentFailures.length > 0
     && currentFailures.every((failure) => /README\.md|README missing/i.test(failure));
   if (onlyReadmeMissing) {
-    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not inspect files, tests, git status, Antigravity brain, transcript, history, or log folders. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Create only ${repoMultiFileReadme} now. The next and only shell command must be exactly: ${repoMultiFileReadmeCommand}. Do not run Get-ChildItem, Get-Content, node --test, git status, or any other command before that README write. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
+    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Create only ${repoMultiFileReadme} now, containing the Chinese title 使用说明 and the CLI command: node status-dashboard.mjs status-data.json. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
   }
   if (mostlyWorking) {
     return `Continue the same task in ${repoMultiFileEditDir}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. The code and CLI already pass. Fix only the missing final artifacts. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. Current verifier failures: ${currentFailures.join("; ")}. Create ${repoMultiFileReadme} with the exact Chinese phrase 使用说明 and the command: node status-dashboard.mjs status-data.json; to avoid Windows console mojibake, you may write it with JavaScript escapes \\u4f7f\\u7528\\u8bf4\\u660e in a Node fs.writeFileSync command. Update renderSummaryHtml in ${repoMultiFileSource} so the generated status-dashboard.html contains the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked; it must stay fully offline with no http/https URLs, no <link tags, and no preconnect. Do not edit ${repoMultiFileTest}. Do not change ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after README.md exists and status-dashboard.html contains 状态仪表盘 and no external links. Put exactly ${marker} on the final line and stop.`;
@@ -1540,7 +1621,9 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (taskMode === "repo-multi-file-edit") {
         artifactEvidence = verifyRepoMultiFileEditFixture();
-        const artifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
+        const artifactFailures = options.readmeOnly === true
+          ? collectRepoMultiFileReadmeFailures(artifactEvidence)
+          : collectRepoMultiFileEditFailures(artifactEvidence);
         if (artifactFailures.length === 0 && !composer.includes(prompt)) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
@@ -1557,9 +1640,17 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
-            inLoopIdleDiagnostics = loopDiagnostics;
-            idleCompletedAt = Date.now();
-            break;
+            const hasProgressEvidence = answerMarkerCount >= 1
+              || artifactEvidence?.files?.readme === true
+              || artifactEvidence?.files?.source === true
+              || artifactEvidence?.files?.target === true
+              || artifactEvidence?.testPassed === true
+              || artifactEvidence?.cliPassed === true;
+            if (hasProgressEvidence || Date.now() - waitStartedAt >= waitMs * 0.6) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
           }
         } catch {}
       }
@@ -1851,23 +1942,25 @@ async function main() {
     }
 
     if (taskMode === "repo-multi-file-edit") {
-      const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat });
+      const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat, readmeOnly: true });
+      await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
       const firstArtifactEvidence = verifyRepoMultiFileEditFixture();
-      const firstArtifactFailures = collectRepoMultiFileEditFailures(firstArtifactEvidence);
-      let repairPrompt = null;
+      const firstArtifactFailures = collectRepoMultiFileReadmeFailures(firstArtifactEvidence);
+      let implementationPrompt = null;
       let turn2 = null;
-      let repairAttempted = false;
       artifactEvidence = firstArtifactEvidence;
       let finalArtifactFailures = firstArtifactFailures;
-      if (firstArtifactFailures.length > 0 || turn1.failures.length > 0) {
-        repairAttempted = true;
-        repairPrompt = buildRepoMultiFileRepairPrompt(firstArtifactFailures, firstArtifactEvidence);
-        turn2 = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
+      if (firstArtifactFailures.length === 0 && turn1.failures.length === 0) {
+        implementationPrompt = buildRepoMultiFileImplementationPrompt(collectRepoMultiFileEditFailures(firstArtifactEvidence));
+        makeWritable(repoMultiFileSource);
+        turn2 = await submitDesktopPromptAndWait(ws, implementationPrompt, marker, timeoutMs, { requiresProjectChat });
+        await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
         artifactEvidence = verifyRepoMultiFileEditFixture();
         finalArtifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
       }
       const finalTurn = turn2 || turn1;
-      failures.push(...finalTurn.failures.map((failure) => repairAttempted ? `repair: ${failure}` : failure));
+      failures.push(...turn1.failures.map((failure) => `readme-step: ${failure}`));
+      if (turn2) failures.push(...turn2.failures.map((failure) => `implementation-step: ${failure}`));
       failures.push(...finalArtifactFailures);
 
       clicked = turn1.clicked === true && (!turn2 || turn2.clicked === true);
@@ -1908,8 +2001,8 @@ async function main() {
         coverageKind: "desktop-ui-real-traffic",
         taskMode,
         promptText,
-        repairAttempted,
-        turnPrompts: repairPrompt ? [promptText, repairPrompt] : [promptText],
+        implementationAttempted: Boolean(implementationPrompt),
+        turnPrompts: implementationPrompt ? [promptText, implementationPrompt] : [promptText],
         elapsedMs: Date.now() - startedAt,
         failures,
         marker,

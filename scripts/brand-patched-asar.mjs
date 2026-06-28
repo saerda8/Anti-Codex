@@ -344,6 +344,7 @@ function patchLocalModelAvailability(text) {
 }
 
 function patchLocalPluginCatalog(text) {
+  // Isolation patch only: disable the remote marketplace catalog, not installed local plugins.
   const source = /function ([\w$]+)\(([\w$]+),([\w$]+)\)\{return \2\.sendRequest\(`plugin\/list`,\3\)\}/;
   const installed = /var ([\w$]+)=[\w$]+=>[\w$]+\.sendRequest\(`plugin\/installed`,\{\}\);/;
   const match = source.exec(text) || installed.exec(text);
@@ -356,6 +357,7 @@ function patchLocalPluginCatalog(text) {
 }
 
 function patchElectronLocalPluginCatalog(text) {
+  // Keep Codex's installed-plugin path local; do not reimplement per-plugin behavior here.
   const start = "async listPlugins(";
   const end = "async addMarketplace(";
   const startIndex = text.indexOf(start);
@@ -372,6 +374,7 @@ function patchElectronLocalPluginCatalog(text) {
 }
 
 function patchWebviewLocalPluginCatalog(text) {
+  // Route the webview marketplace list through the local installed-plugin API.
   const source = /"list-plugins":([\w$]+)\(\(([\w$]+),([\w$]+)\)=>\2\.sendRequest\(`plugin\/list`,\3\)\)/;
   const match = source.exec(text);
   if (!match) {
@@ -709,6 +712,26 @@ function findWebviewLocalPluginCatalogPatch(fd, header, dataOffset) {
   throw new Error("Could not find webview plugin catalog route");
 }
 
+function patchRetryStreamErrorVisibility(text) {
+  if (text.includes("case`error`:if(n.willRetry){break}else if(")) return text;
+  const search = "case`error`:if(n.willRetry){let e=lw(n.message);uw(a,{type:`stream-error`,id:n.id,content:e==null?n.message:`Reconnecting ${e.attempt}/${e.maxAttempts}`,additionalDetails:n.additionalDetails??null,reconnectAttempt:e?.attempt??null,reconnectMaxAttempts:e?.maxAttempts??null})}else if(";
+  const replacement = "case`error`:if(n.willRetry){break}else if(";
+  return replacePadded(text, search, replacement);
+}
+
+function findRetryStreamErrorVisibilityPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (text.includes("case`error`:if(n.willRetry){let e=lw(n.message);uw(a,{type:`stream-error`") ||
+        text.includes("case`error`:if(n.willRetry){break}else if(")) {
+      return [rel, patchRetryStreamErrorVisibility];
+    }
+  }
+  throw new Error("Could not find webview retry stream-error reducer");
+}
+
 
 const fd = fs.openSync(asarPath, "r+");
 const sizeBuf = Buffer.alloc(16);
@@ -742,6 +765,7 @@ const patchSpecs = [
   ["local-plugin-catalog", () => findLocalPluginCatalogPatch(fd, header, dataOffset)],
   ["electron-local-plugin-catalog", () => findElectronLocalPluginCatalogPatch(fd, header, dataOffset)],
   ["webview-local-plugin-catalog", () => findWebviewLocalPluginCatalogPatch(fd, header, dataOffset)],
+  ["retry-stream-error-visibility", () => findRetryStreamErrorVisibilityPatch(fd, header, dataOffset)],
 ];
 
 const written = [];
@@ -760,6 +784,7 @@ const criticalPatchNames = new Set([
   "local-plugin-catalog",
   "electron-local-plugin-catalog",
   "webview-local-plugin-catalog",
+  "retry-stream-error-visibility",
 ]);
 for (const [name, findPatch] of patchSpecs) {
   try {

@@ -38,10 +38,16 @@ test("ordinary responses websocket requests are not treated as prewarm", () => {
 
 test("responses route handles generate=false before chat conversion and upstream work", () => {
   const source = readFileSync(new URL("../adaptive-server.mjs", import.meta.url), "utf8");
-  const prewarmBranch = source.indexOf("deterministicWebSocketPrewarmResponse(parsed)");
-  const chatConversion = source.indexOf("const chatBody = responsesToChatBody(parsed");
+  const routeStart = source.indexOf('if (req.method === "POST" && RESPONSES_PATHS.has(url.pathname))');
+  assert.ok(routeStart >= 0, "missing POST Responses route");
+  const route = source.slice(routeStart);
+  const resetCancellation = route.indexOf("resetCancelledPreviousResponseFailure(parsed)");
+  const prewarmBranch = route.indexOf("deterministicWebSocketPrewarmResponse(parsed)");
+  const chatConversion = route.indexOf("const chatBody = responsesToChatBody(parsed");
 
+  assert.ok(resetCancellation >= 0, "missing reset cancellation branch");
   assert.ok(prewarmBranch >= 0, "missing local websocket prewarm branch");
   assert.ok(chatConversion >= 0, "missing Responses chat conversion");
+  assert.ok(resetCancellation < prewarmBranch, "cancelled reset replay must be rejected before local prewarm");
   assert.ok(prewarmBranch < chatConversion, "websocket prewarm must finish before chat conversion and upstream work");
 });

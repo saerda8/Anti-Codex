@@ -14,6 +14,15 @@ import {
   streamAntigravityUpstream,
 } from "../antigravity-upstream.mjs";
 
+const nativeBridgeEnv = {
+  ANTICODEX_NATIVE_TOOL_BRIDGE: "1",
+  ANTICODEX_ANTIGRAVITY_TRANSPORT: "desktop-cascade",
+};
+
+const desktopStreamEnv = {
+  ANTICODEX_ANTIGRAVITY_TRANSPORT: "desktop-cascade",
+};
+
 test("antigravityPromptLimits defaults to long-context-friendly configurable guards", () => {
   assert.deepEqual(antigravityPromptLimits({ env: {} }), {
     promptMaxChars: 4_000_000,
@@ -36,8 +45,9 @@ test("isAntigravityUpstreamMode only enables the explicit Antigravity route", ()
   assert.equal(isAntigravityUpstreamMode("chat"), false);
 });
 
-test("isAntigravityNativeToolBridgeEnabled defaults to native tools and honors an explicit opt-out", () => {
-  assert.equal(isAntigravityNativeToolBridgeEnabled({ env: {} }), true);
+test("isAntigravityNativeToolBridgeEnabled defaults to model-only and honors explicit opt-in/out", () => {
+  assert.equal(isAntigravityNativeToolBridgeEnabled({ env: {} }), false);
+  assert.equal(isAntigravityNativeToolBridgeEnabled({ env: { ANTICODEX_NATIVE_TOOL_BRIDGE: "1" } }), true);
   assert.equal(isAntigravityNativeToolBridgeEnabled({ env: { ANTICODEX_NATIVE_TOOL_BRIDGE: "0" } }), false);
   assert.equal(isAntigravityNativeToolBridgeEnabled({ nativeToolsEnabled: false }), false);
 });
@@ -62,7 +72,10 @@ test("chatMessagesToPrompt keeps a language-following instruction", () => {
     { role: "user", content: [{ type: "text", text: "你是什么模型？" }] },
   ]);
 
+  assert.match(prompt, /Default to Simplified Chinese/);
   assert.match(prompt, /Answer in the same language as the latest user message/);
+  assert.match(prompt, /final visible answer must be Simplified Chinese/);
+  assert.match(prompt, /\[LANGUAGE\]\nThe latest user message is Chinese/);
   assert.match(prompt, /\[USER\]\n你是什么模型？/);
 });
 
@@ -274,6 +287,7 @@ test("native tool continuation is abandoned when a new plain user message follow
     messages: [{ role: "user", content: "Create the old report." }],
     tools,
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge: oldBridge,
     runTurnStreamed: async function* () {
       yield {
@@ -306,6 +320,7 @@ test("native tool continuation is abandoned when a new plain user message follow
     ],
     tools,
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge: {
       customAgentSpec: { name: "fresh" },
       tools: [{ name: "shell_command" }],
@@ -608,6 +623,7 @@ test("callAntigravityUpstream reports resolved model route metadata", async () =
 
   assert.equal(completion.id, "route-response-id");
   assert.equal(route.requestId, "route-response-id");
+  assert.equal(route.transport, "cli");
   assert.equal(route.requestedModel, "gemini-3.1-pro-low");
   assert.equal(route.resolvedModel, "gemini-3.1-pro-low");
   assert.equal(route.displayName, "Gemini 3.1 Pro (Low)");
@@ -790,7 +806,7 @@ test("streamAntigravityUpstream yields text_delta events normalized", async () =
   const events = [];
   for await (const event of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream },
   )) {
     events.push(event);
   }
@@ -802,6 +818,43 @@ test("streamAntigravityUpstream yields text_delta events normalized", async () =
   assert.equal(events[2].completion.choices[0].message.content, "Hello World");
 });
 
+test("streamAntigravityUpstream honors cli transport without opening native Cascade", async () => {
+  let cliPrompt = "";
+  let nativeCalled = false;
+  const routes = [];
+  const events = [];
+
+  for await (const event of streamAntigravityUpstream(
+    { model: "gemini-3.5-flash-low", messages: [{ role: "user", content: "中文回答" }] },
+    {
+      env: { ANTICODEX_ANTIGRAVITY_TRANSPORT: "cli" },
+      responseId: "resp_cli_stream",
+      created: 123,
+      onModelRouted: (route) => routes.push(route),
+      runTurn: async (prompt, options) => {
+        cliPrompt = prompt;
+        assert.equal(options.model, "gemini-3.5-flash-low");
+        return { conversationId: "cli-conversation-1", model: options.model, text: "CLI稳定模式正常" };
+      },
+      runTurnStreamed: async function* () {
+        nativeCalled = true;
+        yield { type: "done", result: { text: "native should not run" } };
+      },
+    },
+  )) {
+    events.push(event);
+  }
+
+  assert.equal(nativeCalled, false);
+  assert.match(cliPrompt, /中文回答/);
+  assert.equal(routes[0].transport, "cli");
+  assert.equal(routes[0].cascadeId, "cli-conversation-1");
+  assert.equal(events[0].type, "text_delta");
+  assert.equal(events[0].delta, "CLI稳定模式正常");
+  assert.equal(events[1].completion.id, "resp_cli_stream");
+  assert.equal(events[1].completion.choices[0].message.content, "CLI稳定模式正常");
+});
+
 test("streamAntigravityUpstream yields text_replace events normalized", async () => {
   const mockStream = async function* () {
     yield { type: "text_replace", text: "Replaced text" };
@@ -811,7 +864,7 @@ test("streamAntigravityUpstream yields text_replace events normalized", async ()
   const events = [];
   for await (const event of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream },
   )) {
     events.push(event);
   }
@@ -830,6 +883,7 @@ test("streamAntigravityUpstream creates done completion with fixed id and create
   for await (const event of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
     {
+      env: desktopStreamEnv,
       runTurnStreamed: mockStream,
       responseId: "fixed-response-id",
       created: 987654321,
@@ -852,7 +906,7 @@ test("streamAntigravityUpstream uses chatBody model for completion", async () =>
   const events = [];
   for await (const event of streamAntigravityUpstream(
     { model: "claude-sonnet-4-6", messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream },
   )) {
     events.push(event);
   }
@@ -872,7 +926,7 @@ test("streamAntigravityUpstream passes signal and onCascadeStarted to runTurnStr
 
   for await (const _ of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockRunTurn, signal, onCascadeStarted },
+    { env: desktopStreamEnv, runTurnStreamed: mockRunTurn, signal, onCascadeStarted },
   )) {
     // consume
   }
@@ -893,7 +947,7 @@ test("streamAntigravityUpstream stops yielding after abort", async () => {
 
   const iter = streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream, signal: controller.signal },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream, signal: controller.signal },
   );
 
   const first = await iter.next();
@@ -915,7 +969,7 @@ test("streamAntigravityUpstream does not retry on upstream error", async () => {
 
   const iter = streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream },
   );
 
   await assert.rejects(
@@ -945,7 +999,7 @@ test("streamAntigravityUpstream retries transient errors before any event emitte
   const events = [];
   for await (const event of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream, retryDelayMs: 1 },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream, retryDelayMs: 1 },
   )) {
     events.push(event);
   }
@@ -968,7 +1022,7 @@ test("streamAntigravityUpstream can recover on the third total attempt", async (
   const events = [];
   for await (const event of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream, retryDelayMs: 1, onRetry: (retry) => retries.push(retry) },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream, retryDelayMs: 1, onRetry: (retry) => retries.push(retry) },
   )) {
     events.push(event);
   }
@@ -996,7 +1050,7 @@ test("streamAntigravityUpstream may retry after an internal event that was not e
   const events = [];
   for await (const event of streamAntigravityUpstream(
     { messages: [{ role: "user", content: "hi" }] },
-    { runTurnStreamed: mockStream, retryDelayMs: 1 },
+    { env: desktopStreamEnv, runTurnStreamed: mockStream, retryDelayMs: 1 },
   )) {
     events.push(event);
   }
@@ -1020,7 +1074,7 @@ test("streamAntigravityUpstream does not retry if event already emitted", async 
     async () => {
       for await (const event of streamAntigravityUpstream(
         { messages: [{ role: "user", content: "hi" }] },
-        { runTurnStreamed: mockStream, retryDelayMs: 1 },
+        { env: desktopStreamEnv, runTurnStreamed: mockStream, retryDelayMs: 1 },
       )) {
         events.push(event);
       }
@@ -1044,7 +1098,7 @@ test("streamAntigravityUpstream stops after three total attempts", async () => {
     async () => {
       for await (const _ of streamAntigravityUpstream(
         { messages: [{ role: "user", content: "hi" }] },
-        { runTurnStreamed: mockStream, retryDelayMs: 1 },
+        { env: desktopStreamEnv, runTurnStreamed: mockStream, retryDelayMs: 1 },
       )) {
         // consume
       }
@@ -1069,7 +1123,7 @@ test("streamAntigravityUpstream does not retry if aborted during retry delay", a
   const promise = (async () => {
     for await (const _ of streamAntigravityUpstream(
       { messages: [{ role: "user", content: "hi" }] },
-      { runTurnStreamed: mockStream, signal: controller.signal, retryDelayMs: 50 },
+      { env: desktopStreamEnv, runTurnStreamed: mockStream, signal: controller.signal, retryDelayMs: 50 },
     )) {
       // consume
     }
@@ -1093,7 +1147,7 @@ test("streamAntigravityUpstream does not retry when disableRetry is true", async
     async () => {
       for await (const _ of streamAntigravityUpstream(
         { messages: [{ role: "user", content: "hi" }] },
-        { runTurnStreamed: mockStream, disableRetry: true, retryDelayMs: 1 },
+        { env: desktopStreamEnv, runTurnStreamed: mockStream, disableRetry: true, retryDelayMs: 1 },
       )) {
         // consume
       }
@@ -1116,7 +1170,7 @@ test("streamAntigravityUpstream does not retry on non-transient error", async ()
     async () => {
       for await (const _ of streamAntigravityUpstream(
         { messages: [{ role: "user", content: "hi" }] },
-        { runTurnStreamed: mockStream, retryDelayMs: 1 },
+        { env: desktopStreamEnv, runTurnStreamed: mockStream, retryDelayMs: 1 },
       )) {
         // consume
       }
@@ -1146,6 +1200,7 @@ test("streamAntigravityUpstream normalizes mismatched displayName in route audit
   for await (const event of streamAntigravityUpstream(
     { model: "gemini-3.5-flash-low", messages: [{ role: "user", content: "hi" }] },
     {
+      env: desktopStreamEnv,
       runTurnStreamed: mockStream,
       responseId: "stream-route-norm-id",
       onModelRouted: (entry) => { route = entry; },
@@ -1186,6 +1241,7 @@ test("streamAntigravityUpstream converts a native MCP call into a Chat tool comp
       },
     }],
   }, {
+    env: nativeBridgeEnv,
     responseId: "chatcmpl_native_tool",
     created: 123,
     nativeToolBridge,
@@ -1237,6 +1293,7 @@ test("streamAntigravityUpstream falls back to the prompt bridge when native MCP 
       },
     }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     disableRetry: true,
     runTurnStreamed: async function* (prompt, options) {
@@ -1274,6 +1331,7 @@ test("callAntigravityUpstream uses the native streamed tool path for non-stream 
       tools: [{ type: "function", function: { name: "marker_tool", parameters: { type: "object" } } }],
     },
     {
+      env: nativeBridgeEnv,
       nativeToolBridge,
       runTurnStreamed: async function* (prompt, turnOptions) {
         capturedPrompt = prompt;
@@ -1318,6 +1376,7 @@ test("streamAntigravityUpstream resumes a retained native Cascade with the match
     messages: [{ role: "user", content: "Read README.md" }],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       yield { type: "tool_call", calls: continuation.pendingCalls, continuation };
@@ -1374,6 +1433,7 @@ test("streamAntigravityUpstream evicts abandoned native continuations after TTL"
     messages: [{ role: "user", content: "Read README.md" }],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     nativeContinuationTtlMs: 20,
     runTurnStreamed: async function* () {
@@ -1402,6 +1462,7 @@ test("streamAntigravityUpstream evicts abandoned native continuations after TTL"
     ],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       freshTurnCount += 1;
@@ -1438,6 +1499,7 @@ test("streamAntigravityUpstream clears retained native continuations when resume
     messages: [{ role: "user", content: "Read README.md" }],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       yield {
@@ -1476,6 +1538,7 @@ test("streamAntigravityUpstream clears retained native continuations when resume
     ],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       freshTurnCount += 1;
@@ -1510,6 +1573,7 @@ test("streamAntigravityUpstream retries same-Cascade resume after pre-event tran
     messages: [{ role: "user", content: "Read README.md" }],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       yield {
@@ -1575,6 +1639,7 @@ test("streamAntigravityUpstream does not retry same-Cascade resume after a visib
     messages: [{ role: "user", content: "Read README.md" }],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       yield {
@@ -1633,6 +1698,7 @@ test("streamAntigravityUpstream forwards user text after a native tool result in
     messages: [{ role: "user", content: "Record X" }],
     tools: [{ type: "function", function: { name: "marker_tool", parameters: { type: "object" } } }],
   }, {
+    env: nativeBridgeEnv,
     nativeToolBridge,
     runTurnStreamed: async function* () {
       yield {

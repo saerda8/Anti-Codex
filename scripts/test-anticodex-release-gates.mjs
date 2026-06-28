@@ -127,6 +127,7 @@ const gateDefinitions = [
   { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requireCodingProject: true } },
   { id: "uiMultiTurnProjectSmoke", group: "real-traffic", file: "latest-ui-multi-turn-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-multi-turn-project-smoke", taskMode: "multi-turn-project", prefix: "ui_multi_turn_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt", "followupTxt", "changelogMd"], requireMultiTurnProject: true } },
   { id: "uiRepoFileEditSmoke", group: "real-traffic", file: "latest-ui-repo-file-edit-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-repo-file-edit-smoke", taskMode: "repo-file-edit", prefix: "ui_repo_file_edit_smoke", requiredFiles: ["target", "test"], markerOptional: true, requireRepoFileEdit: true } },
+  { id: "uiRepoMultiFileEditSmoke", group: "real-traffic", file: "latest-ui-repo-multi-file-edit-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-repo-multi-file-edit-smoke", taskMode: "repo-multi-file-edit", prefix: "ui_repo_multi_file_edit_smoke", requiredFiles: ["source", "test", "data", "readme", "html"], markerOptional: true, requireRepoMultiFileEdit: true } },
   { id: "uiComplexProjectSmoke", group: "real-traffic", file: "latest-ui-complex-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-complex-project-smoke", taskMode: "complex-project", prefix: "ui_complex_project_smoke", requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"], requireSourceJsonUrls: 3, requireCodingProject: true, requireReportSite: true } },
   { id: "uiReportSiteSmoke", group: "real-traffic", file: "latest-ui-report-site-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-report-site-smoke", taskMode: "report-site", prefix: "ui_report_site_smoke", requiredFiles: ["reportMd", "indexHtml", "doneTxt"], requireReportSite: true } },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
@@ -512,7 +513,7 @@ function summarizeGate(definition) {
       for (const fileKey of spec.requiredFiles || []) {
         if (files[fileKey] !== true) semanticFailures.push(`${prefix}_${fileKey}_missing`);
       }
-      if ((spec.requiredFiles || []).length > 0 && !spec.requireMultiTurnProject && !spec.requireRepoFileEdit && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
+      if ((spec.requiredFiles || []).length > 0 && !spec.requireMultiTurnProject && !spec.requireRepoFileEdit && !spec.requireRepoMultiFileEdit && artifact.doneExact !== true) semanticFailures.push(`${prefix}_done_marker_mismatch`);
       if (spec.requireSourceUrls && !/https?:\/\//i.test(lastSample)) semanticFailures.push(`${prefix}_source_urls_missing`);
       if (spec.requireSourceJsonUrls && Number(artifact.sourceUrlCount || 0) < spec.requireSourceJsonUrls) semanticFailures.push(`${prefix}_source_json_urls_missing`);
       if (spec.requireCodingProject) {
@@ -538,6 +539,22 @@ function summarizeGate(definition) {
         if (artifact.sourceHasLowercase !== true) semanticFailures.push(`${prefix}_lowercase_missing`);
         if (artifact.sourceHandlesInvalidChars !== true) semanticFailures.push(`${prefix}_invalid_char_handling_missing`);
         if (artifact.sourceTrimsHyphens !== true) semanticFailures.push(`${prefix}_hyphen_trim_missing`);
+      }
+      if (spec.requireRepoMultiFileEdit) {
+        if (artifact.exportsNormalizeStatus !== true) semanticFailures.push(`${prefix}_normalize_export_missing`);
+        if (artifact.exportsSummarizeRecords !== true) semanticFailures.push(`${prefix}_summary_export_missing`);
+        if (artifact.exportsRenderSummaryHtml !== true) semanticFailures.push(`${prefix}_html_export_missing`);
+        if (artifact.sourceChangedFromFixture !== true) semanticFailures.push(`${prefix}_source_unchanged`);
+        if (artifact.testUnchanged !== true) semanticFailures.push(`${prefix}_test_modified`);
+        if (artifact.dataUnchanged !== true) semanticFailures.push(`${prefix}_data_modified`);
+        if (artifact.testPassed !== true) semanticFailures.push(`${prefix}_tests_not_passed`);
+        if (artifact.cliPassed !== true) semanticFailures.push(`${prefix}_cli_not_passed`);
+        if (artifact.htmlComplete !== true) semanticFailures.push(`${prefix}_html_not_complete`);
+        if (artifact.htmlHasChinese !== true) semanticFailures.push(`${prefix}_html_chinese_missing`);
+        if (artifact.htmlMentionsStatuses !== true) semanticFailures.push(`${prefix}_html_statuses_missing`);
+        if (artifact.htmlAvoidsObjectObject !== true) semanticFailures.push(`${prefix}_html_object_leak`);
+        if (artifact.readmeHasChinese !== true) semanticFailures.push(`${prefix}_readme_chinese_missing`);
+        if (artifact.readmeMentionsCommand !== true) semanticFailures.push(`${prefix}_readme_command_missing`);
       }
       if (spec.requireReportSite) {
         if (artifact.reportHasChinese !== true) semanticFailures.push(`${prefix}_report_chinese_missing`);
@@ -918,21 +935,30 @@ function summarizeGate(definition) {
       const toolBridge = report.toolBridge || {};
       const compatibilityTools = report.compatibilityTools || {};
       const nativeToolCapability = report.nativeToolCapability || {};
-      if (toolBridge.mode !== "native-mcp-same-cascade") semanticFailures.push("tool_bridge_mode_not_native_mcp_same_cascade");
-      if (toolBridge.transport !== "desktop-cascade") semanticFailures.push("tool_bridge_transport_not_desktop_cascade");
-      if (toolBridge.localAdapter !== "native-mcp-same-cascade-with-prompt-fallback") semanticFailures.push("tool_bridge_local_adapter");
-      if (toolBridge.nativeAntigravityToolEvents !== true) semanticFailures.push("tool_bridge_native_events");
-      if (toolBridge.nativeMcpDiscoveryVerified !== true) semanticFailures.push("tool_bridge_mcp_discovery");
-      if (toolBridge.nativeBridgeDefaultEnabled !== true) semanticFailures.push("tool_bridge_default_disabled");
-      if (toolBridge.acceptsExternalToolDefinitions !== true) semanticFailures.push("tool_bridge_external_tool_definitions");
-      if (compatibilityTools.bridge !== "native_mcp_same_cascade") semanticFailures.push("tool_bridge_compatibility_bridge");
-      if (nativeToolCapability.nativeMcpApprovalProtocolVerified !== true) semanticFailures.push("tool_bridge_approval_protocol");
-      if (nativeToolCapability.nativeMcpPermissionMode !== "automatic-before-codex-execution") semanticFailures.push("tool_bridge_permission_mode");
-      if (nativeToolCapability.sameCascadeResumeProbeVerified !== true) semanticFailures.push("tool_bridge_same_cascade_resume");
+      const nativeBridgeEnabled = toolBridge.nativeBridgeDefaultEnabled === true;
+      const modelOnlyOk = toolBridge.mode === "codex-owned-tools-model-only"
+        && toolBridge.nativeBridgeDefaultEnabled === false
+        && toolBridge.nativeAntigravityToolEvents === false
+        && toolBridge.acceptsExternalToolDefinitions === false
+        && compatibilityTools.bridge === "codex_owned_model_only_tool_bridge"
+        && nativeToolCapability.codexToolBridge === "codex-owned-tools-model-only"
+        && nativeToolCapability.nativeMcpPermissionMode === "disabled-with-native-bridge";
+      const nativeOk = nativeBridgeEnabled
+        && toolBridge.mode === "native-mcp-same-cascade"
+        && toolBridge.localAdapter === "native-mcp-same-cascade-with-prompt-fallback"
+        && toolBridge.nativeAntigravityToolEvents === true
+        && toolBridge.nativeMcpDiscoveryVerified === true
+        && toolBridge.acceptsExternalToolDefinitions === true
+        && compatibilityTools.bridge === "native_mcp_same_cascade"
+        && nativeToolCapability.nativeMcpApprovalProtocolVerified === true
+        && nativeToolCapability.nativeMcpPermissionMode === "automatic-before-codex-execution"
+        && nativeToolCapability.sameCascadeResumeProbeVerified === true
+        && nativeToolCapability.codexToolBridge === "native-mcp-same-cascade-with-prompt-fallback";
+      if (!modelOnlyOk && !nativeOk) semanticFailures.push("tool_bridge_not_model_only_or_explicit_native");
+      if (!["cli", "native", "desktop-cascade", "upstream-provider"].includes(String(toolBridge.transport || ""))) semanticFailures.push("tool_bridge_transport_invalid");
       if (nativeToolCapability.antigravityOwnedToolsDisabled !== true) semanticFailures.push("tool_bridge_owned_tools_enabled");
       if (nativeToolCapability.permissionPromptsDisabled !== true) semanticFailures.push("tool_bridge_permission_prompts_enabled");
       if (Number(nativeToolCapability.disabledToolCount || 0) < 1) semanticFailures.push("tool_bridge_disabled_tool_count");
-      if (nativeToolCapability.codexToolBridge !== "native-mcp-same-cascade-with-prompt-fallback") semanticFailures.push("tool_bridge_codex_bridge");
     }
     if (definition.requireModelThinkingSemantics) {
       const models = Array.isArray(report.models) ? report.models : [];
@@ -1272,6 +1298,7 @@ const realTrafficRefreshOrder = [
   ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],
   ["uiMultiTurnProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode multi-turn-project --timeout-ms 240000"],
   ["uiRepoFileEditSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode repo-file-edit --timeout-ms 240000"],
+  ["uiRepoMultiFileEditSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode repo-multi-file-edit --timeout-ms 300000"],
   ["uiComplexProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode complex-project --timeout-ms 180000"],
   ["uiReportSiteSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode report-site --timeout-ms 150000"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
@@ -1960,6 +1987,7 @@ if (args.has("--self-test")) {
     writeFakeLatestReport("latest-ui-coding-project-smoke.json", invalidUiTaskReport("ui-coding-project-smoke", "coding-project", "UI_CODING_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-multi-turn-project-smoke.json", invalidUiTaskReport("ui-multi-turn-project-smoke", "multi-turn-project", "UI_MULTI_TURN_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-repo-file-edit-smoke.json", invalidUiTaskReport("ui-repo-file-edit-smoke", "repo-file-edit", "UI_REPO_FILE_EDIT_MARKER"));
+    writeFakeLatestReport("latest-ui-repo-multi-file-edit-smoke.json", invalidUiTaskReport("ui-repo-multi-file-edit-smoke", "repo-multi-file-edit", "UI_REPO_MULTI_FILE_EDIT_MARKER"));
     writeFakeLatestReport("latest-ui-complex-project-smoke.json", invalidUiTaskReport("ui-complex-project-smoke", "complex-project", "UI_COMPLEX_PROJECT_MARKER"));
     writeFakeLatestReport("latest-ui-report-site-smoke.json", invalidUiTaskReport("ui-report-site-smoke", "report-site", "UI_REPORT_SITE_MARKER"));
 
@@ -2228,12 +2256,9 @@ if (args.has("--self-test")) {
       "expected_no_real_traffic",
       "expected_behavior_covered",
       "expected_no_real_traffic_coverage_kind",
-      "tool_bridge_mode_not_native_mcp_same_cascade",
-      "tool_bridge_transport_not_desktop_cascade",
-      "tool_bridge_permission_mode",
-      "tool_bridge_same_cascade_resume",
+      "tool_bridge_not_model_only_or_explicit_native",
+      "tool_bridge_transport_invalid",
       "tool_bridge_owned_tools_enabled",
-      "tool_bridge_codex_bridge",
     ]);
     semanticFailures.modelRouting = assertSemanticFailures("modelRouting", "self-test failed: semantically invalid model-routing report satisfied the gate", [
       "model_routing_skip_requests_not_true",
@@ -2563,6 +2588,38 @@ if (args.has("--self-test")) {
       "ui_repo_file_edit_smoke_lowercase_missing",
       "ui_repo_file_edit_smoke_invalid_char_handling_missing",
       "ui_repo_file_edit_smoke_hyphen_trim_missing",
+    ]);
+    semanticFailures.uiRepoMultiFileEditSmoke = assertSemanticFailures("uiRepoMultiFileEditSmoke", "self-test failed: semantically invalid ui-repo-multi-file-edit-smoke report satisfied the gate", [
+      "ui_repo_multi_file_edit_smoke_report_name",
+      "ui_repo_multi_file_edit_smoke_task_mode",
+      "ui_repo_multi_file_edit_smoke_real_traffic_not_requested",
+      "ui_repo_multi_file_edit_smoke_real_traffic_missing",
+      "ui_repo_multi_file_edit_smoke_behavior_not_covered",
+      "ui_repo_multi_file_edit_smoke_coverage_kind",
+      "ui_repo_multi_file_edit_smoke_failures",
+      "ui_repo_multi_file_edit_smoke_not_sent",
+      "ui_repo_multi_file_edit_smoke_composer_not_cleared",
+      "ui_repo_multi_file_edit_smoke_active_reconnect_seen",
+      "ui_repo_multi_file_edit_smoke_session_lock_not_clear",
+      "ui_repo_multi_file_edit_smoke_source_missing",
+      "ui_repo_multi_file_edit_smoke_test_missing",
+      "ui_repo_multi_file_edit_smoke_data_missing",
+      "ui_repo_multi_file_edit_smoke_readme_missing",
+      "ui_repo_multi_file_edit_smoke_html_missing",
+      "ui_repo_multi_file_edit_smoke_normalize_export_missing",
+      "ui_repo_multi_file_edit_smoke_summary_export_missing",
+      "ui_repo_multi_file_edit_smoke_html_export_missing",
+      "ui_repo_multi_file_edit_smoke_source_unchanged",
+      "ui_repo_multi_file_edit_smoke_test_modified",
+      "ui_repo_multi_file_edit_smoke_data_modified",
+      "ui_repo_multi_file_edit_smoke_tests_not_passed",
+      "ui_repo_multi_file_edit_smoke_cli_not_passed",
+      "ui_repo_multi_file_edit_smoke_html_not_complete",
+      "ui_repo_multi_file_edit_smoke_html_chinese_missing",
+      "ui_repo_multi_file_edit_smoke_html_statuses_missing",
+      "ui_repo_multi_file_edit_smoke_html_object_leak",
+      "ui_repo_multi_file_edit_smoke_readme_chinese_missing",
+      "ui_repo_multi_file_edit_smoke_readme_command_missing",
     ]);
     semanticFailures.uiComplexProjectSmoke = assertSemanticFailures("uiComplexProjectSmoke", "self-test failed: semantically invalid ui-complex-project-smoke report satisfied the gate", [
       "ui_complex_project_smoke_report_name",

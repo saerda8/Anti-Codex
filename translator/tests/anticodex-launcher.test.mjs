@@ -174,7 +174,10 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
 
   assert.match(launcher, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
-  assert.match(launcher, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
+  assert.match(launcher, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']cli["']/i);
+  assert.match(launcher, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
+  assert.match(launcher, /antigravity-cli-profile/);
+  assert.match(launcher, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']0["']/i);
   assert.match(launcher, /anticodex-launcher\.out\.log/);
   assert.match(launcher, /anticodex-launcher\.err\.log/);
   assert.match(launcher, /RedirectStandardOutput/);
@@ -191,6 +194,8 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /\$runningMain = Get-RunningAntiCodexMain -MainExecutable \$mainExecutable/);
   assert.match(launcher, /\$translatorLoopbackUrl = "http:\/\/127\.0\.0\.1:\$\(\$env:TRANSLATOR_PORT\)"/);
   assert.match(launcher, /Test-AntiCodexTranslatorHealth \$translatorLoopbackUrl/);
+  assert.match(launcher, /profile\.transport/);
+  assert.match(launcher, /expectedTransport/);
   assert.match(launcher, /DEEPCODEX_STATE_ROOT/);
   assert.match(launcher, /function Resolve-AntiCodexInstallRoot/);
   assert.doesNotMatch(launcher, /Split-Path -Leaf \$scriptParent\) -ieq "runtime"/);
@@ -1439,6 +1444,9 @@ test("Anti-Codex shell loads installed local plugins without ChatGPT catalog syn
   const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
 
   assert.match(brander, /patchLocalPluginCatalog/);
+  assert.match(brander, /disable the remote marketplace catalog, not installed local plugins/);
+  assert.match(brander, /do not reimplement per-plugin behavior here/);
+  assert.match(brander, /local installed-plugin API/);
   assert.match(brander, /app-server-manager-signals-/);
   assert.match(brander, /plugin\/installed/);
   assert.match(brander, /"local-plugin-catalog"/);
@@ -4680,8 +4688,8 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const diagnosticsFunc = server.match(/function diagnosticsPayload\(\{[\s\S]*?return \{[\s\S]*?\n    \};/)?.[0];
   assert.ok(diagnosticsFunc, "missing diagnosticsPayload return");
-  assert.match(diagnosticsFunc, /localFeatures:\s*localFeatureSummary\(\{\s*includeProjection:\s*true\s*\}\)/);
-  assert.match(diagnosticsFunc, /logDbGuard:\s*logDbGuardStatus\(\)/);
+  assert.match(diagnosticsFunc, /localFeatures:\s*fast\s*\?\s*\{\s*skipped:\s*true,\s*reason:\s*"fast_diagnostics"\s*\}\s*:\s*localFeatureSummary\(\{\s*includeProjection:\s*true\s*\}\)/);
+  assert.match(diagnosticsFunc, /logDbGuard:\s*fast\s*\?\s*\{\s*skipped:\s*true,\s*reason:\s*"fast_diagnostics"\s*\}\s*:\s*logDbGuardStatus\(\)/);
   assert.match(diagnosticsFunc, /installedChecks/);
   assert.match(diagnosticsFunc, /sourcePreflight/);
   assert.match(diagnosticsFunc, /syncReadinessEvidence/);
@@ -4807,7 +4815,7 @@ test("Anti-Codex ships a read-only sync readiness verifier", () => {
   assert.match(syncReadiness, /startMenuMainShortcutTarget/);
   assert.match(syncReadiness, /desktopMainShortcutTarget/);
   assert.match(syncReadiness, /ANTICODEX_NATIVE_TOOL_BRIDGE/);
-  assert.match(syncReadiness, /auto-approved Antigravity native bridge by default/);
+  assert.match(syncReadiness, /coworker\/tool bridge disabled by default/);
   assert.match(syncReadiness, /resources\\codex\.exe/);
   assert.match(syncReadiness, /--version/);
   assert.match(syncReadiness, /ProductName/);
@@ -6015,8 +6023,9 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   const start = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
 
   assert.match(bridge, /\/anticodex\/diagnostics/);
+  assert.match(bridge, /codex-owned-tools-model-only/);
+  assert.match(bridge, /codex_owned_model_only_tool_bridge/);
   assert.match(bridge, /native-mcp-same-cascade/);
-  assert.match(bridge, /desktop-cascade/);
   assert.match(bridge, /automatic-before-codex-execution/);
   assert.match(bridge, /nativeBridgeDefaultEnabled/);
   assert.match(bridge, /nativeAntigravityToolEvents/);
@@ -6024,7 +6033,10 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(bridge, /test-anticodex-native-tool-loop\.ps1/);
   assert.match(bridge, /test-anticodex-native-tool-loop\.ps1/);
   assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE/);
-  assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"1"/);
+  assert.match(start, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*"cli"/);
+  assert.match(start, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
+  assert.match(start, /antigravity-cli-profile/);
+  assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"0"/);
   assert.match(overall, /ANTICODEX_NATIVE_TOOL_BRIDGE -eq "1"/);
   assert.match(diagnostics, /toolBridge\.mode/);
   assert.match(diagnostics, /native Antigravity tool events/i);
@@ -6615,7 +6627,10 @@ test("Anti-Codex ships a translator-only recovery verification script", () => {
   assert.match(recovery, /LocalApplicationData/);
   assert.match(recovery, /Get-Command "powershell\.exe"/);
   assert.match(recovery, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
-  assert.match(recovery, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
+  assert.match(recovery, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']cli["']/i);
+  assert.match(recovery, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']0["']/i);
+  assert.match(recovery, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
+  assert.doesNotMatch(recovery, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
   assert.match(recovery, /CODEX_HOME_DIR\s*=\s*\$codexHome/);
   assert.match(recovery, /\$health\.modelCount/);
   assert.match(recovery, /antigravity-desktop/);
@@ -10779,9 +10794,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /model_thinking_supports_thinking/);
   assert.match(releaseGates, /model_thinking_budget/);
   assert.match(releaseGates, /requireToolBridgeSemantics/);
-  assert.match(releaseGates, /tool_bridge_mode_not_native_mcp_same_cascade/);
-  assert.match(releaseGates, /tool_bridge_permission_mode/);
-  assert.match(releaseGates, /tool_bridge_same_cascade_resume/);
+  assert.match(releaseGates, /tool_bridge_not_model_only_or_explicit_native/);
+  assert.match(releaseGates, /codex-owned-tools-model-only/);
+  assert.match(releaseGates, /codex_owned_model_only_tool_bridge/);
   assert.match(releaseGates, /requireUiIdleSemantics/);
   assert.match(releaseGates, /ui_idle_reconnect_text/);
   assert.match(releaseGates, /ui_idle_login_text/);
@@ -11014,7 +11029,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /sync-readiness host-sync samples were not normalized/);
   assert.match(releaseGates, /host_sync_required/);
   assert.match(releaseGates, /semantically invalid cold-relaunch report satisfied the gate/);
-  assert.match(releaseGates, /tool_bridge_codex_bridge/);
+  assert.match(releaseGates, /tool_bridge_not_model_only_or_explicit_native/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);

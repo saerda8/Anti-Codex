@@ -155,8 +155,7 @@ const ANTIGRAVITY_MODEL_ROUTE_AUDIT = createAntigravityModelRouteAuditStore({ fi
 const RESET_CANCELLED_RESPONSE_IDS = new Map();
 const RESET_CANCELLED_REQUEST_FINGERPRINTS = new Map();
 const RESET_CANCELLED_RESPONSE_TTL_MS = 5 * 60 * 1000;
-const RESET_PREVIOUS_RESPONSE_COOLDOWN_MS = 60 * 1000;
-let LAST_ANTIGRAVITY_SESSION_RESET = null;
+const RESPONSES_WEBSOCKET_PING_INTERVAL_MS = 2_000;
 const RESPONSES_WEBSOCKET_AUDIT = {
     supported: false,
     fallbackStatus: 101,
@@ -165,6 +164,13 @@ const RESPONSES_WEBSOCKET_AUDIT = {
     lastAttempt: null,
     lastUpgrade: null,
     lastHttpPrewarm: null,
+    clientFrames: 0,
+    clientPayloads: 0,
+    relayAttempts: 0,
+    relayFailures: 0,
+    lastClientFrame: null,
+    lastClientPayload: null,
+    lastRelay: null,
 };
 const ANTIGRAVITY_RETRY_AUDIT = {
     count: 0,
@@ -1215,6 +1221,7 @@ function diagnosticsPayload({
     responsesWebSocket = responsesWebSocketAuditSnapshot(),
     nativeToolCapability = antigravityNativeToolCapabilitySummary({
         nativeBridgeEnabled: isAntigravityNativeToolBridgeEnabled(),
+        transport: process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT || "cli",
     }),
     lifecycle = latestLifecycleStatus(),
     updateStatus = readJsonIfPresent(ANTICODEX_STATE_ROOT
@@ -1311,15 +1318,15 @@ function diagnosticsPayload({
         tools: {
             bridge: toolBridge.mode === "native-mcp-same-cascade"
                 ? "native_mcp_same_cascade"
-                : (toolBridge.mode === "codex-owned-tools-prompt-mediated" ? "codex_owned_prompt_tool_bridge" : "provider_native_or_compat"),
-            antigravityMode: toolBridge.transport === "desktop-cascade",
+                : (toolBridge.mode === "codex-owned-tools-model-only" ? "codex_owned_model_only_tool_bridge" : "provider_native_or_compat"),
+            antigravityMode: antigravity,
             injectInternalTools: toolsToInject(PROFILE).length > 0,
             nativeAntigravityToolEvents: toolBridge.nativeAntigravityToolEvents,
             acceptsExternalToolDefinitions: toolBridge.acceptsExternalToolDefinitions,
             description: toolBridge.mode === "native-mcp-same-cascade"
                 ? "Antigravity receives Codex tool schemas through a local native MCP customization server. Permission interactions are automatically approved before Codex executes the tool, results resume the same Cascade, and protocol failures before any Codex-visible event fall back to the prompt bridge."
-                : (toolBridge.mode === "codex-owned-tools-prompt-mediated"
-                    ? "The native MCP bridge was explicitly disabled. Anti-Codex keeps tool execution on the Codex side and sends the prompt-mediated compatibility protocol to Antigravity."
+                : (toolBridge.mode === "codex-owned-tools-model-only"
+                    ? "The native MCP bridge is disabled by default. Anti-Codex/Codex owns tools, MCP, files, task state, and verification; Antigravity supplies model text only."
                     : "Tools are sent as native Chat function calls to the upstream."),
         },
         limits: {
@@ -1838,18 +1845,21 @@ function recordAntigravityRetry(retry) {
 function antigravityToolBridgeSummary(upstreamMode = UPSTREAM_MODE) {
     const antigravity = isAntigravityUpstreamMode(upstreamMode);
     const nativeBridgeEnabled = antigravity && isAntigravityNativeToolBridgeEnabled();
+    const transport = antigravity
+        ? String(process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT || "cli").toLowerCase()
+        : "upstream-provider";
     return {
         mode: antigravity
-            ? (nativeBridgeEnabled ? "native-mcp-same-cascade" : "codex-owned-tools-prompt-mediated")
+            ? (nativeBridgeEnabled ? "native-mcp-same-cascade" : "codex-owned-tools-model-only")
             : "provider-native-or-compat",
-        transport: antigravity ? "desktop-cascade" : "upstream-provider",
+        transport,
         localAdapter: antigravity
-            ? (nativeBridgeEnabled ? "native-mcp-same-cascade-with-prompt-fallback" : "codex-owned-tools-prompt-mediated-native-disabled")
+            ? (nativeBridgeEnabled ? "native-mcp-same-cascade-with-prompt-fallback" : "codex-owned-tools-model-only")
             : null,
         nativeAntigravityToolEvents: nativeBridgeEnabled,
-        nativeMcpDiscoveryVerified: antigravity,
+        nativeMcpDiscoveryVerified: nativeBridgeEnabled,
         nativeBridgeDefaultEnabled: nativeBridgeEnabled,
-        acceptsExternalToolDefinitions: true,
+        acceptsExternalToolDefinitions: nativeBridgeEnabled,
         verifier: antigravity
             ? (nativeBridgeEnabled ? "test-anticodex-native-tool-loop.ps1" : "test-anticodex-tool-loop.ps1")
             : null,
@@ -1868,10 +1878,18 @@ function responsesWebSocketAuditSnapshot() {
         supported: RESPONSES_WEBSOCKET_AUDIT.supported,
         fallbackStatus: RESPONSES_WEBSOCKET_AUDIT.fallbackStatus,
         fallbackType: RESPONSES_WEBSOCKET_AUDIT.fallbackType,
+        pingIntervalMs: RESPONSES_WEBSOCKET_PING_INTERVAL_MS,
         attempts: RESPONSES_WEBSOCKET_AUDIT.attempts,
         lastAttempt: RESPONSES_WEBSOCKET_AUDIT.lastAttempt ? { ...RESPONSES_WEBSOCKET_AUDIT.lastAttempt } : null,
         lastUpgrade: RESPONSES_WEBSOCKET_AUDIT.lastUpgrade ? { ...RESPONSES_WEBSOCKET_AUDIT.lastUpgrade } : null,
         lastHttpPrewarm: RESPONSES_WEBSOCKET_AUDIT.lastHttpPrewarm ? { ...RESPONSES_WEBSOCKET_AUDIT.lastHttpPrewarm } : null,
+        clientFrames: RESPONSES_WEBSOCKET_AUDIT.clientFrames,
+        clientPayloads: RESPONSES_WEBSOCKET_AUDIT.clientPayloads,
+        relayAttempts: RESPONSES_WEBSOCKET_AUDIT.relayAttempts,
+        relayFailures: RESPONSES_WEBSOCKET_AUDIT.relayFailures,
+        lastClientFrame: RESPONSES_WEBSOCKET_AUDIT.lastClientFrame ? { ...RESPONSES_WEBSOCKET_AUDIT.lastClientFrame } : null,
+        lastClientPayload: RESPONSES_WEBSOCKET_AUDIT.lastClientPayload ? { ...RESPONSES_WEBSOCKET_AUDIT.lastClientPayload } : null,
+        lastRelay: RESPONSES_WEBSOCKET_AUDIT.lastRelay ? { ...RESPONSES_WEBSOCKET_AUDIT.lastRelay } : null,
     };
 }
 
@@ -1903,6 +1921,48 @@ function recordResponsesWebSocketAttempt(req, {
     if (kind === "upgrade") RESPONSES_WEBSOCKET_AUDIT.lastUpgrade = attempt;
     if (kind === "http-prewarm") RESPONSES_WEBSOCKET_AUDIT.lastHttpPrewarm = attempt;
     return attempt;
+}
+
+function summarizeResponsesWebSocketPayload(payload) {
+    const text = Buffer.isBuffer(payload) ? payload.toString("utf8") : String(payload || "");
+    const summary = {
+        at: new Date().toISOString(),
+        bytes: Buffer.byteLength(text),
+        json: false,
+        type: "",
+        model: "",
+        stream: null,
+        inputType: "",
+        inputItems: null,
+        messageCount: null,
+        latestUserChars: null,
+    };
+    try {
+        const parsed = JSON.parse(text);
+        summary.json = true;
+        summary.type = safeHeaderValue(parsed?.type || parsed?.object || "");
+        summary.model = safeHeaderValue(parsed?.model || "");
+        summary.stream = typeof parsed?.stream === "boolean" ? parsed.stream : null;
+        if (Array.isArray(parsed?.input)) {
+            summary.inputType = "array";
+            summary.inputItems = parsed.input.length;
+            for (let index = parsed.input.length - 1; index >= 0; index -= 1) {
+                const item = parsed.input[index];
+                if (item?.role !== "user") continue;
+                const content = Array.isArray(item.content)
+                    ? item.content.map(part => part?.text || part?.input_text || "").join("")
+                    : String(item.content || "");
+                summary.latestUserChars = content.length;
+                break;
+            }
+        } else {
+            summary.inputType = typeof parsed?.input;
+        }
+        if (Array.isArray(parsed?.messages)) summary.messageCount = parsed.messages.length;
+    } catch {
+        summary.inputType = "non-json";
+    }
+    return summary;
 }
 
 function loadProfileFromFile() {
@@ -4442,7 +4502,7 @@ async function load(){
   const snapshotStateText=snapshotStatus.state==="fresh"?"\\u65b0\\u9c9c":(snapshotStatus.state==="stale"?"\\u5df2\\u8fc7\\u671f":(snapshotStatus.state==="invalid"?"\\u6807\\u8bb0\\u65e0\\u6548":"\\u6807\\u8bb0\\u7f3a\\u5931"));
   const snapshotAgeText=Number.isFinite(Number(snapshotStatus.ageHours))?Number(snapshotStatus.ageHours).toFixed(1)+" \\u5c0f\\u65f6":"\\u672a\\u77e5";
   const snapshotRefreshText=snapshotStatus.staleReason==="source_changed"?"\\u539f\\u751f Codex \\u672c\\u5730\\u529f\\u80fd\\u5df2\\u53d8\\u5316\\uff0c\\u8bf7\\u70b9\\u201c\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd\\u201d":(snapshotStatus.stale?"\\u5feb\\u7167\\u5df2\\u8fc7\\u671f\\u6216\\u7f3a\\u5931\\uff0c\\u8bf7\\u70b9\\u201c\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd\\u201d":"\\u5f53\\u524d\\u65e0\\u9700\\u5237\\u65b0");
-  kv("tools",[["模式",diag.toolBridge?.mode==="codex-owned-tools-prompt-mediated"?"Codex 负责工具，Antigravity 只负责模型":(diag.toolBridge?.mode||"未知")],["Skill",lf.skills?.count??"未知"],["MCP",lf.mcp?.count??"未知"],["快照",("连接器 "+(lf.snapshots?.connectorDirectoryFiles??"未知")+" / 应用工具 "+(lf.snapshots?.appToolsCacheFiles??"未知"))],["原生桥默认",zhBool(diag.toolBridge?.nativeBridgeDefaultEnabled)],["排队",String(q.queued??0)+" / "+String(q.maxQueued??0)],["运行中",zhBool(q.running)],["活跃请求",diag.activeAntigravityRequests?.active??0]]);
+  kv("tools",[["模式",diag.toolBridge?.mode==="codex-owned-tools-model-only"?"Codex 负责工具，Antigravity 只负责模型":(diag.toolBridge?.mode||"未知")],["Skill",lf.skills?.count??"未知"],["MCP",lf.mcp?.count??"未知"],["快照",("连接器 "+(lf.snapshots?.connectorDirectoryFiles??"未知")+" / 应用工具 "+(lf.snapshots?.appToolsCacheFiles??"未知"))],["原生桥默认",zhBool(diag.toolBridge?.nativeBridgeDefaultEnabled)],["排队",String(q.queued??0)+" / "+String(q.maxQueued??0)],["运行中",zhBool(q.running)],["活跃请求",diag.activeAntigravityRequests?.active??0]]);
   const pluginRows=asArray(pluginList,"plugins");
   const installedRows=asArray(installedPlugins);
   const connectorRows=asArray(connectors,"connectors");
@@ -4942,6 +5002,7 @@ function currentUpstreamHealthProfile() {
     if (isAntigravityUpstreamMode(UPSTREAM_MODE)) {
         return {
             mode: "antigravity",
+            transport: String(process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT || "cli").toLowerCase(),
             model: PROFILE?.defaultModel || PROFILE?.model || "",
             provider: PROFILE?.provider || "antigravity",
         };
@@ -5947,7 +6008,7 @@ function commandLooksLikeRead(cmd) {
 }
 
 function commandLooksLikeWrite(cmd) {
-    return /\b(apply_patch|cat\s*>|Set-Content|Out-File|Copy-Item|Move-Item|mkdir|New-Item|touch)\b/i.test(cmd);
+    return /\b(apply_patch|cat\s*>|Set-Content|Out-File|WriteAllText|AppendAllText|Copy-Item|Move-Item|mkdir|New-Item|touch)\b/i.test(cmd);
 }
 
 function commandLooksLikeBuildOrInstall(cmd) {
@@ -7202,6 +7263,11 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
 }
 
 function repairLocalArtifactToolArguments(args, codexName, originalRequest = null) {
+    const scopedFixture = scopedFixtureFirstWriteRequirementFromOriginalRequest(originalRequest);
+    if (scopedFixture && /(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) {
+        const repaired = repairScopedFixtureFirstWriteToolArguments(args, scopedFixture);
+        if (repaired) return repaired;
+    }
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return args;
     if (!/(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) return args;
@@ -7219,6 +7285,43 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
         command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject, multiTurnProject: requirement.multiTurnProject });
     }
     return JSON.stringify({ ...parsed, command });
+}
+
+function scopedFixtureFirstWriteRequirementFromOriginalRequest(originalRequest = null) {
+    const text = latestUserTextFromRequest(originalRequest);
+    if (!text || !/first and only tool action|first tool action|step 1 of 2/i.test(text)) return null;
+    if (!/README\.md/i.test(text) || !/desktop-coworker-project|fixture directory/i.test(text)) return null;
+    const readmeMatches = Array.from(text.matchAll(/([A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*README\.md)/ig));
+    const readmeMatch = readmeMatches.at(-1);
+    if (!readmeMatch?.[1]) return null;
+    const marker = String(text.match(/\bUI_[A-Z0-9_]+_\d+\b/)?.[0] || "").trim();
+    return { readmePath: readmeMatch[1], marker };
+}
+
+function scopedFixtureReadmePowerShellCommand(readmePath) {
+    const escapedPath = String(readmePath || "").replace(/'/g, "''");
+    return [
+        `$p='${escapedPath}'`,
+        "$content = \"# 使用说明`r`n`r`nnode status-dashboard.mjs status-data.json`r`n\"",
+        "[System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($p)) | Out-Null",
+        "[System.IO.File]::WriteAllText($p, $content, [System.Text.UTF8Encoding]::new($false))",
+        "Write-Output 'README.md created'",
+    ].join("; ");
+}
+
+function repairScopedFixtureFirstWriteToolArguments(args, requirement) {
+    let parsed = null;
+    try { parsed = JSON.parse(args || "{}"); } catch { return null; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const key = typeof parsed.command === "string" ? "command" : (typeof parsed.cmd === "string" ? "cmd" : "");
+    if (!key) return null;
+    const command = String(parsed[key] || "");
+    const readmePath = String(requirement?.readmePath || "");
+    const touchesReadme = readmePath && command.toLowerCase().includes(readmePath.toLowerCase());
+    const writesReadme = touchesReadme && commandLooksLikeWrite(command);
+    const forbiddenDetour = /(?:\\\.gemini\\antigravity\\brain|[\\\/]\.gemini[\\\/]antigravity[\\\/]brain|Antigravity\\s+(?:brain|transcript|history|log)|system_generated|Get-ChildItem|Get-Content|\bdir\b|\bls\b|\bcat\b|\bgit\s+status\b)/i.test(command);
+    if (writesReadme && !forbiddenDetour) return null;
+    return JSON.stringify({ ...parsed, [key]: scopedFixtureReadmePowerShellCommand(readmePath) });
 }
 
 function assistantTextLooksLikeLongContextMarkerEcho(text) {
@@ -7367,13 +7470,15 @@ function blockedToolClaimMessageFor(text, context = {}) {
 
 function localProjectEditToolInstructionForBody(body) {
     const userText = latestUserTextFromChatMessages(Array.isArray(body?.messages) ? body.messages : []);
-    if (!/(?:edit only this file|local project|acceptance-target|\.test\.mjs|node --test|modify|fix|implement)/i.test(userText)) return "";
+    if (!/(?:edit only this file|local project|fixture directory|acceptance-target|status-dashboard|README\.md|\.test\.mjs|node --test|modify|fix|implement)/i.test(userText)) return "";
     if (!/[A-Za-z]:\\|\/[^ \n\r]+/.test(userText)) return "";
     return [
         "",
         "Local project edit requirement:",
         "- This is a real file-edit task. Directory listing alone is not progress.",
         "- If the user already provided the target file and required behavior, do not start with a directory listing; modify the target file first.",
+        "- If the user explicitly asks to create a named file first, the first tool action must write that named file. Do not list or read the directory before that write.",
+        "- If the user forbids reading, listing, or inspecting files, respect that constraint and write only the requested file from the provided prompt details.",
         "- If the target file and test are already named, use tools now to read the file if needed, modify the requested file, and run the requested test.",
         "- Do not finish with only a promise, plan, status note, or repeated listing. The final answer is allowed only after tool evidence shows the file was changed and the requested test passed.",
     ].join("\n");
@@ -8117,6 +8222,29 @@ function deterministicAmbientSuggestionsCompletion(originalRequest = {}, chatBod
     );
 }
 
+function requestLooksLikeTaskTitleGeneration(originalRequest = {}, chatBody = null) {
+    const latestText = latestUserTextFromRequest(originalRequest) || latestUserTextFromChatMessages(chatBody?.messages || []);
+    const text = String(latestText || "");
+    return /provide a short title for a task/i.test(text)
+        && /User prompt:/i.test(text);
+}
+
+function deterministicTaskTitleCompletion(originalRequest = {}, chatBody = null) {
+    if (!requestLooksLikeTaskTitleGeneration(originalRequest, chatBody)) return null;
+    const latestText = latestUserTextFromRequest(originalRequest) || latestUserTextFromChatMessages(chatBody?.messages || []);
+    const prompt = String(latestText || "").split(/User prompt:/i).pop()?.trim() || "New task";
+    const firstLine = prompt.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "New task";
+    const cleaned = firstLine
+        .replace(/^Reply with exactly\s+/i, "")
+        .replace(/\s+and nothing else\.?$/i, "")
+        .replace(/[^\p{L}\p{N}\s_.:-]+/gu, "")
+        .trim();
+    return makeTextCompletion(
+        chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+        (cleaned || "New task").slice(0, 80),
+    );
+}
+
 function makeToolCallCompletion(model, name, args = {}) {
     return {
         id: `chatcmpl_${Date.now()}`,
@@ -8515,7 +8643,6 @@ function releaseAntigravitySessionLease(lease) {
 
 function rememberResetCancelledResponseIds(ids, reason = "manager_action") {
     const now = Date.now();
-    LAST_ANTIGRAVITY_SESSION_RESET = { at: now, reason };
     for (const [id, record] of RESET_CANCELLED_RESPONSE_IDS) {
         if (!record || now - Number(record.at || 0) > RESET_CANCELLED_RESPONSE_TTL_MS) {
             RESET_CANCELLED_RESPONSE_IDS.delete(id);
@@ -8572,17 +8699,6 @@ function resetCancelledPreviousResponseFailure(parsed) {
     if (!id) return null;
     const record = RESET_CANCELLED_RESPONSE_IDS.get(id);
     const now = Date.now();
-    if (!record && LAST_ANTIGRAVITY_SESSION_RESET && now - Number(LAST_ANTIGRAVITY_SESSION_RESET.at || 0) <= RESET_PREVIOUS_RESPONSE_COOLDOWN_MS) {
-        return {
-            status: 409,
-            type: "anticodex_session_reset",
-            message: "This Anti-Codex continuation arrived immediately after a local session reset. Start a fresh turn instead of replaying the old response.",
-            retryable: false,
-            previousResponseId: id,
-            resetReason: LAST_ANTIGRAVITY_SESSION_RESET.reason || "manager_action",
-            resetCooldown: true,
-        };
-    }
     if (!record) return null;
     if (now - Number(record.at || 0) > RESET_CANCELLED_RESPONSE_TTL_MS) {
         RESET_CANCELLED_RESPONSE_IDS.delete(id);
@@ -9167,6 +9283,7 @@ class ChatToResponsesStreamMapper {
         this.model = model || this.original.model || "gpt-5.5";
         this.routing = routing;
         this.bufferTextDeltas = options.bufferTextDeltas ?? (Array.isArray(this.original?.tools) && this.original.tools.length > 0);
+        this.bufferToolArguments = Boolean(scopedFixtureFirstWriteRequirementFromOriginalRequest(this.original));
         this.responseId = responseId();
         this.messageId = messageId();
         this.created = Math.floor(Date.now() / 1000);
@@ -9297,7 +9414,7 @@ class ChatToResponsesStreamMapper {
                 item,
             }]);
         }
-        if (tc.route?.type !== "custom" && tc.opened && tc.emitted < tc.arguments.length) {
+        if (tc.route?.type !== "custom" && tc.opened && !this.bufferToolArguments && tc.emitted < tc.arguments.length) {
             const argDelta = tc.arguments.slice(tc.emitted);
             tc.emitted = tc.arguments.length;
             events.push(["response.function_call_arguments.delta", {
@@ -9334,7 +9451,8 @@ class ChatToResponsesStreamMapper {
                 items.push([tc.outputIndex, { type: "message", id: messageId(), role: "assistant", status: "completed", content: [{ type: "output_text", text: invalidCustomToolMessage(tc.name), annotations: [] }] }]);
                 continue;
             }
-            const args = unwrapCustomArguments(tc.arguments, tc.route);
+            let args = unwrapCustomArguments(tc.arguments, tc.route);
+            if (tc.route?.type !== "custom") args = repairLocalArtifactToolArguments(args, tc.name, this.original);
             const item = tc.route?.type === "custom"
                 ? { id: tc.itemId, type: "custom_tool_call", status: "completed", call_id: tc.callId, name: tc.name, input: args }
                 : { id: tc.itemId, type: "function_call", status: "completed", call_id: tc.callId, name: tc.name, arguments: args };
@@ -9384,8 +9502,9 @@ class ChatToResponsesStreamMapper {
                 events.push(["response.output_item.done", { type: "response.output_item.done", output_index: tc.outputIndex, item }]);
                 continue;
             }
-            const args = unwrapCustomArguments(tc.arguments, tc.route);
+            let args = unwrapCustomArguments(tc.arguments, tc.route);
             const isCustom = tc.route?.type === "custom";
+            if (!isCustom) args = repairLocalArtifactToolArguments(args, tc.name, this.original);
             const item = isCustom
                 ? { id: tc.itemId, type: "custom_tool_call", status: "completed", call_id: tc.callId, name: tc.name, input: args }
                 : { id: tc.itemId, type: "function_call", status: "completed", call_id: tc.callId, name: tc.name, arguments: args };
@@ -9618,6 +9737,7 @@ function parseClientWebSocketFrames(buffer) {
     while (buffer.length - offset >= 2) {
         const first = buffer[offset];
         const second = buffer[offset + 1];
+        const fin = (first & 0x80) !== 0;
         const opcode = first & 0x0f;
         const masked = (second & 0x80) !== 0;
         let length = second & 0x7f;
@@ -9643,10 +9763,41 @@ function parseClientWebSocketFrames(buffer) {
             payload = Buffer.from(payload);
             for (let i = 0; i < payload.length; i += 1) payload[i] ^= mask[i % 4];
         }
-        frames.push({ opcode, payload });
+        frames.push({ fin, opcode, payload });
         offset = frameEnd;
     }
     return { frames, rest: buffer.slice(offset) };
+}
+
+function assembleResponsesWebSocketPayloads(frames = [], state = {}) {
+    const payloads = [];
+    if (!Array.isArray(state.fragments)) state.fragments = [];
+    for (const frame of frames) {
+        if (!frame || !Buffer.isBuffer(frame.payload)) continue;
+        if (frame.opcode === 0x1 || frame.opcode === 0x2) {
+            if (frame.fin && state.fragments.length === 0) {
+                payloads.push(frame.payload.toString("utf8"));
+                continue;
+            }
+            state.fragments = [frame.payload];
+            state.fragmentOpcode = frame.opcode;
+            if (frame.fin) {
+                payloads.push(Buffer.concat(state.fragments).toString("utf8"));
+                state.fragments = [];
+                state.fragmentOpcode = null;
+            }
+            continue;
+        }
+        if (frame.opcode === 0x0 && state.fragments.length > 0) {
+            state.fragments.push(frame.payload);
+            if (frame.fin) {
+                payloads.push(Buffer.concat(state.fragments).toString("utf8"));
+                state.fragments = [];
+                state.fragmentOpcode = null;
+            }
+        }
+    }
+    return payloads;
 }
 
 function responsesWebSocketRelayHeaders(req) {
@@ -9668,14 +9819,37 @@ function responsesWebSocketRelayHeaders(req) {
 }
 
 async function relayResponsesHttpToWebSocket({ pathname, payload, socket, headers, signal }) {
+    const relayStartedAtMs = Date.now();
+    RESPONSES_WEBSOCKET_AUDIT.relayAttempts += 1;
+    RESPONSES_WEBSOCKET_AUDIT.lastRelay = {
+        at: new Date(relayStartedAtMs).toISOString(),
+        path: pathname,
+        requestBytes: Buffer.byteLength(String(payload || "")),
+        status: null,
+        ok: null,
+        sentEvents: 0,
+        eventTypes: {},
+        lastEvents: [],
+        outputItemTypes: {},
+        textDeltaChars: 0,
+        toolCallNames: [],
+        elapsedMs: null,
+        error: null,
+    };
     const response = await fetch(`http://${LISTEN_HOST}:${PORT}${pathname}`, {
         method: "POST",
         headers: headers || { "content-type": "application/json" },
         body: payload,
         signal,
     });
+    RESPONSES_WEBSOCKET_AUDIT.lastRelay.status = response.status;
+    RESPONSES_WEBSOCKET_AUDIT.lastRelay.ok = response.ok;
+    RESPONSES_WEBSOCKET_AUDIT.lastRelay.error = null;
     if (!response.ok) {
         const text = await response.text();
+        RESPONSES_WEBSOCKET_AUDIT.relayFailures += 1;
+        RESPONSES_WEBSOCKET_AUDIT.lastRelay.error = safeHeaderValue(text || `HTTP ${response.status}`);
+        RESPONSES_WEBSOCKET_AUDIT.lastRelay.elapsedMs = Date.now() - relayStartedAtMs;
         socket.write(webSocketFrame(0x1, JSON.stringify({
             type: "error",
             error: {
@@ -9687,19 +9861,48 @@ async function relayResponsesHttpToWebSocket({ pathname, payload, socket, header
     }
 
     let sent = 0;
+    let lastProgressData = "";
+    let lastProgressReplayAt = 0;
+    const writeRelayEvent = (data) => {
+        if (!data || socket.destroyed || socket.writableEnded) return false;
+        socket.write(webSocketFrame(0x1, data));
+        sent += 1;
+        if (RESPONSES_WEBSOCKET_AUDIT.lastRelay) RESPONSES_WEBSOCKET_AUDIT.lastRelay.sentEvents = sent;
+        return true;
+    };
     const sendEventBlock = (part) => {
         const dataLines = [];
+        let sawComment = false;
         for (const line of String(part || "").split(/\r?\n/)) {
             const trimmed = line.trim();
+            if (trimmed.startsWith(":")) sawComment = true;
             if (!trimmed.startsWith("data:")) continue;
             dataLines.push(trimmed.slice(5).trimStart());
         }
         const data = dataLines.join("\n").trim();
-        if (!data || data === "[DONE]") return;
-        if (!socket.destroyed && !socket.writableEnded) {
-            socket.write(webSocketFrame(0x1, data));
-            sent += 1;
+        if ((!data || data === "[DONE]") && sawComment && lastProgressData && Date.now() - lastProgressReplayAt >= RESPONSES_WEBSOCKET_PING_INTERVAL_MS) {
+            lastProgressReplayAt = Date.now();
+            writeRelayEvent(lastProgressData);
+            return;
         }
+        if (!data || data === "[DONE]") return;
+        try {
+            const parsed = JSON.parse(data);
+            const type = String(parsed?.type || "");
+            const audit = RESPONSES_WEBSOCKET_AUDIT.lastRelay;
+            if (audit && type) {
+                audit.eventTypes[type] = Number(audit.eventTypes[type] || 0) + 1;
+                audit.lastEvents.push(type);
+                if (audit.lastEvents.length > 12) audit.lastEvents.shift();
+                const itemType = parsed?.item?.type;
+                if (itemType) audit.outputItemTypes[itemType] = Number(audit.outputItemTypes[itemType] || 0) + 1;
+                if (type === "response.output_text.delta") audit.textDeltaChars += String(parsed?.delta || "").length;
+                const toolName = parsed?.name || parsed?.item?.name;
+                if (toolName && audit.toolCallNames.length < 12 && !audit.toolCallNames.includes(toolName)) audit.toolCallNames.push(String(toolName));
+            }
+            if (type === "response.in_progress") lastProgressData = data;
+        } catch {}
+        writeRelayEvent(data);
     };
 
     if (!response.body) {
@@ -9725,6 +9928,7 @@ async function relayResponsesHttpToWebSocket({ pathname, payload, socket, header
     }
     carry += decoder.decode();
     if (carry.trim()) sendEventBlock(carry);
+    if (RESPONSES_WEBSOCKET_AUDIT.lastRelay) RESPONSES_WEBSOCKET_AUDIT.lastRelay.elapsedMs = Date.now() - relayStartedAtMs;
 }
 
 function attachResponsesWebSocket(req, socket, pathname = "/responses") {
@@ -9747,6 +9951,7 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
     let buffer = Buffer.alloc(0);
     let closed = false;
     const pendingPayloads = [];
+    const fragmentedPayloadState = {};
     let draining = false;
     let pingInterval = null;
     const relayHeaders = responsesWebSocketRelayHeaders(req);
@@ -9756,26 +9961,32 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
         if (closed) return;
         closed = true;
         if (pingInterval) clearInterval(pingInterval);
-        try { relayAbort.abort(); } catch {}
         try { socket.end(webSocketFrame(0x8, payload)); } catch {}
     };
 
     const drainResponsesWebSocketQueue = async () => {
-        if (draining || closed) return;
+        if (draining) return;
         draining = true;
         try {
-            while (!closed && pendingPayloads.length > 0) {
+            while (pendingPayloads.length > 0) {
                 const payload = pendingPayloads.shift();
                 await relayResponsesHttpToWebSocket({ pathname, payload, socket, headers: relayHeaders, signal: relayAbort.signal });
             }
         } catch (error) {
             if (relayAbort.signal.aborted) return;
+            RESPONSES_WEBSOCKET_AUDIT.relayFailures += 1;
+            RESPONSES_WEBSOCKET_AUDIT.lastRelay = {
+                ...(RESPONSES_WEBSOCKET_AUDIT.lastRelay || {}),
+                at: RESPONSES_WEBSOCKET_AUDIT.lastRelay?.at || new Date().toISOString(),
+                ok: false,
+                error: safeHeaderValue(error?.message || error),
+            };
             try {
                 socket.write(webSocketFrame(0x1, JSON.stringify({ type: "error", error: { message: String(error?.message || error) } })));
             } catch {}
         } finally {
             draining = false;
-            if (!closed && pendingPayloads.length > 0) void drainResponsesWebSocketQueue();
+            if (pendingPayloads.length > 0) void drainResponsesWebSocketQueue();
         }
     };
 
@@ -9785,7 +9996,7 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
     pingInterval = setInterval(() => {
         if (closed || socket.destroyed || socket.writableEnded) return;
         try { socket.write(webSocketFrame(0x9, "anticodex")); } catch {}
-    }, 15_000);
+    }, RESPONSES_WEBSOCKET_PING_INTERVAL_MS);
     pingInterval.unref?.();
     socket.on("data", async (chunk) => {
         if (!Buffer.isBuffer(chunk) || closed) return;
@@ -9800,12 +10011,23 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
         }
         buffer = parsed.rest;
         for (const frame of parsed.frames) {
+            RESPONSES_WEBSOCKET_AUDIT.clientFrames += 1;
+            RESPONSES_WEBSOCKET_AUDIT.lastClientFrame = {
+                at: new Date().toISOString(),
+                opcode: frame.opcode,
+                fin: frame.fin,
+                bytes: frame.payload.length,
+            };
             if (frame.opcode === 0x9) {
                 try { socket.write(webSocketFrame(0xA, frame.payload)); } catch {}
             } else if (frame.opcode === 0x8) {
                 closeSocket(frame.payload);
-            } else if (frame.opcode === 0x1 || frame.opcode === 0x2) {
-                pendingPayloads.push(frame.payload.toString("utf8"));
+            } else if (frame.opcode === 0x0 || frame.opcode === 0x1 || frame.opcode === 0x2) {
+                for (const payload of assembleResponsesWebSocketPayloads([frame], fragmentedPayloadState)) {
+                    RESPONSES_WEBSOCKET_AUDIT.clientPayloads += 1;
+                    RESPONSES_WEBSOCKET_AUDIT.lastClientPayload = summarizeResponsesWebSocketPayload(payload);
+                    pendingPayloads.push(payload);
+                }
                 void drainResponsesWebSocketQueue();
             }
         }
@@ -9813,10 +10035,10 @@ function attachResponsesWebSocket(req, socket, pathname = "/responses") {
     socket.on("close", () => {
         closed = true;
         if (pingInterval) clearInterval(pingInterval);
-        try { relayAbort.abort(); } catch {}
     });
     socket.on("error", () => {
-        try { relayAbort.abort(); } catch {}
+        closed = true;
+        if (pingInterval) clearInterval(pingInterval);
     });
     return true;
 }
@@ -10193,6 +10415,13 @@ const server = http.createServer(async (req, res) => {
 
             const compact = url.pathname.endsWith("/compact");
             if (compact) { parsed.stream = false; parsed.store = false; }
+            const antigravityMode = isAntigravityUpstreamMode(UPSTREAM_MODE);
+            if (antigravityMode) {
+                const resetCancelledFailure = resetCancelledPreviousResponseFailure(parsed);
+                if (resetCancelledFailure) {
+                    return failWithDetails(res, resetCancelledFailure.status, resetCancelledFailure);
+                }
+            }
             const websocketPrewarm = deterministicWebSocketPrewarmResponse(parsed);
             if (websocketPrewarm) {
                 RESPONSE_HISTORY.remember(websocketPrewarm, parsed);
@@ -10200,16 +10429,11 @@ const server = http.createServer(async (req, res) => {
                     ? jsonResponse(res, 200, websocketPrewarm)
                     : pipeSSE(res, websocketPrewarm);
             }
-            const antigravityMode = isAntigravityUpstreamMode(UPSTREAM_MODE);
             if (antigravityMode) {
                 const readinessFailure = antigravityReadinessFailure(ANTIGRAVITY_READINESS?.getSnapshot());
                 if (readinessFailure) {
                     recordAntigravityTrafficFailure(readinessFailure);
                     return failWithDetails(res, readinessFailure.status, readinessFailure);
-                }
-                const resetCancelledFailure = resetCancelledPreviousResponseFailure(parsed);
-                if (resetCancelledFailure) {
-                    return failWithDetails(res, resetCancelledFailure.status, resetCancelledFailure);
                 }
             }
 
@@ -10232,6 +10456,13 @@ const server = http.createServer(async (req, res) => {
                 const ambientSuggestions = deterministicAmbientSuggestionsCompletion(parsed, chatBody);
                 if (ambientSuggestions) {
                     const fmt = chatToResponsesFormat(ambientSuggestions, parsed, routing, { strictTools: true });
+                    applyResponsesEndTurnHint(fmt, req, parsed, { allowEndTurnFalse: false });
+                    RESPONSE_HISTORY.remember(fmt, parsed);
+                    return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
+                }
+                const taskTitle = deterministicTaskTitleCompletion(parsed, chatBody);
+                if (taskTitle) {
+                    const fmt = chatToResponsesFormat(taskTitle, parsed, routing, { strictTools: true });
                     applyResponsesEndTurnHint(fmt, req, parsed, { allowEndTurnFalse: false });
                     RESPONSE_HISTORY.remember(fmt, parsed);
                     return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
@@ -10467,4 +10698,4 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
     });
 }
 
-export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, MAX_TOOL_LOOPS };
+export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, MAX_TOOL_LOOPS };

@@ -22,7 +22,13 @@ $DEEPCODEX_STATE_ROOT = if ($env:DEEPCODEX_STATE_ROOT) {
 $CODEX_HOME_DIR = if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $DEEPCODEX_STATE_ROOT "codex-home-deepseek-app" }
 $ELECTRON_USER_DATA = if ($env:ELECTRON_USER_DATA) { $env:ELECTRON_USER_DATA } else { Join-Path $CODEX_HOME_DIR "electron-user-data-adaptive" }
 $DEEPCODEX_PROJECTS_ROOT = if ($env:DEEPCODEX_PROJECTS_ROOT) { $env:DEEPCODEX_PROJECTS_ROOT } else { Join-Path ([Environment]::GetFolderPath("MyDocuments")) "deepcodex" }
-$DEEPCODEX_WORKSPACE = if ($env:DEEPCODEX_WORKSPACE) { $env:DEEPCODEX_WORKSPACE } else { "" }
+$DEEPCODEX_WORKSPACE = if ($env:DEEPCODEX_WORKSPACE) {
+    $env:DEEPCODEX_WORKSPACE
+} elseif ($env:ANTICODEX_WORKSPACE) {
+    $env:ANTICODEX_WORKSPACE
+} else {
+    ""
+}
 $TRANSLATOR_PORT = if ($env:TRANSLATOR_PORT) { [int]$env:TRANSLATOR_PORT } else { 8282 }
 $TRANSLATOR_URL = if ($env:TRANSLATOR_URL) { $env:TRANSLATOR_URL } else { "http://127.0.0.1:$TRANSLATOR_PORT" }
 $TRANSLATOR_LOG = if ($env:TRANSLATOR_LOG) { $env:TRANSLATOR_LOG } else { Join-Path $DEEPCODEX_STATE_ROOT "adaptive-translator.log" }
@@ -85,7 +91,15 @@ if ($IS_ANTICODEX_INSTALL_ROOT -and (Test-Path -LiteralPath $ANTICODEX_UPSTREAM_
             $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
             Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
             $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-            $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "1"
+            if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
+                $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
+            }
+            if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+                $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+            }
+            if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
+                $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
+            }
         }
     } catch {
         throw "Anti-Codex upstream profile could not be read; refusing silent Antigravity fallback. $($_.Exception.Message)"
@@ -95,8 +109,14 @@ $IS_ANTIGRAVITY_MODE = $env:TRANSLATOR_UPSTREAM_MODE -eq "antigravity" -or $IS_A
 if ($IS_ANTIGRAVITY_MODE -and -not $env:TRANSLATOR_UPSTREAM_MODE) {
     $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
 }
+if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
+    $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
+}
+if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+    $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+}
 if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
-    $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "1"
+    $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
 }
 $USES_ANTIGRAVITY_UPSTREAM = $env:TRANSLATOR_UPSTREAM_MODE -eq "antigravity"
 
@@ -121,7 +141,15 @@ function Update-AntiCodexUpstreamEnvironment {
             Remove-Item Env:UPSTREAM_PROTOCOL -ErrorAction SilentlyContinue
             Remove-Item Env:UPSTREAM_MODEL -ErrorAction SilentlyContinue
             $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-            $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "1"
+            if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
+                $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
+            }
+            if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+                $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+            }
+            if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
+                $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
+            }
             $script:USES_ANTIGRAVITY_UPSTREAM = $true
         }
     } catch {
@@ -1490,9 +1518,10 @@ fs.writeFileSync(configPath, `${lines.join("\n").replace(/\n+$/g, "")}\n`, "utf8
 }
 
 function Ensure-DeepCodexUiStateDefaults {
-    Invoke-NodeStdin -Arguments @((Join-Path $CODEX_HOME_DIR ".codex-global-state.json")) -Script @'
+    Invoke-NodeStdin -Arguments @((Join-Path $CODEX_HOME_DIR ".codex-global-state.json"), $DEEPCODEX_WORKSPACE) -Script @'
 const fs = require("fs");
-const [statePath] = process.argv.slice(2);
+const path = require("path");
+const [statePath, workspaceArg = ""] = process.argv.slice(2);
 let state = {};
 try { state = JSON.parse(fs.readFileSync(statePath, "utf8")); } catch {}
 state["electron-persisted-atom-state"] ||= {};
@@ -1507,6 +1536,29 @@ if (atom["skip-full-access-confirm"] === undefined) {
 atom["agent-mode-by-host-id"] ||= {};
 if (!atom["agent-mode-by-host-id"].local || atom["agent-mode-by-host-id"].local === "read-only") {
   atom["agent-mode-by-host-id"].local = "auto";
+}
+const workspace = workspaceArg.trim() ? path.resolve(workspaceArg.trim()) : "";
+if (workspace) {
+  const unique = (items) => {
+    const result = [];
+    const seen = new Set();
+    for (const item of items) {
+      if (typeof item !== "string" || !item.trim()) continue;
+      const key = item.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+    }
+    return result;
+  };
+  state["electron-saved-workspace-roots"] = unique([workspace, ...(Array.isArray(state["electron-saved-workspace-roots"]) ? state["electron-saved-workspace-roots"] : [])]);
+  state["active-workspace-roots"] = [workspace];
+  const labels = state["electron-workspace-root-labels"] && typeof state["electron-workspace-root-labels"] === "object"
+    ? { ...state["electron-workspace-root-labels"] }
+    : {};
+  labels[workspace] ||= path.basename(workspace) || workspace;
+  state["electron-workspace-root-labels"] = labels;
+  state["project-order"] = unique([workspace, ...(Array.isArray(state["project-order"]) ? state["project-order"] : [])]);
 }
 atom["heartbeat-thread-permissions-by-id"] ||= {};
 const permissions = atom["heartbeat-thread-permissions-by-id"];
