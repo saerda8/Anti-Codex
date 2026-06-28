@@ -24,6 +24,7 @@ const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "
 const diagnosticsUrl = `${baseUrl}/anticodex/diagnostics?fast=1`;
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
+const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "response-history.json");
 const taskMode = String(args.get("--task-mode") || "exact-marker");
 const isolateChat = args.has("--same-chat") ? false : true;
 const reportName = taskMode === "web-search"
@@ -101,6 +102,7 @@ const repoMultiFileTest = resolve(repoMultiFileEditDir, "status-dashboard.test.m
 const repoMultiFileData = resolve(repoMultiFileEditDir, "status-data.json");
 const repoMultiFileReadme = resolve(repoMultiFileEditDir, "README.md");
 const repoMultiFileHtml = resolve(repoMultiFileEditDir, "status-dashboard.html");
+const repoMultiFileReadmeCommand = `node -e "require('node:fs').writeFileSync(${JSON.stringify(repoMultiFileReadme)}, '# \\\\u4f7f\\\\u7528\\\\u8bf4\\\\u660e\\n\\nnode status-dashboard.mjs status-data.json\\n', 'utf8')"`;
 let repoMultiFileBaselineSource = "";
 let repoMultiFileExpectedTest = "";
 let repoMultiFileExpectedData = "";
@@ -128,10 +130,10 @@ if (!args.get("--prompt") && taskMode === "report-site") {
   promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell file commands to create exactly these files: report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
 }
 if (!args.get("--prompt") && taskMode === "repo-file-edit") {
-  promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Do not edit any other source file. Run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
+  promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Do not start with Get-ChildItem, dir, ls, or another directory listing. You already have the required behavior: implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Your first tool action must modify ${repoFileEditTarget}. Do not edit any other source file. Then run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
 }
 if (!args.get("--prompt") && taskMode === "repo-multi-file-edit") {
-  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. Do not edit files outside it. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. The acceptance test and data file are read-only; do not chmod, unlock, edit, rewrite, or replace them. Your first filesystem-changing action must create README.md with the exact Chinese phrase 使用说明 and this command: node status-dashboard.mjs status-data.json; after writing it, read it back before touching the source file. You may write 使用说明 using escapes \\u4f7f\\u7528\\u8bf4\\u660e in a Node fs.writeFileSync command. Then complete ${repoMultiFileSource}: it must export normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). renderSummaryHtml must return a complete fully offline HTML document containing the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked. To avoid Windows console mojibake, you may write 状态仪表盘 as JavaScript escapes \\u72b6\\u6001\\u4eea\\u8868\\u76d8 inside JS strings. Running node ${repoMultiFileSource} ${repoMultiFileData} must print summary JSON and write status-dashboard.html in the same directory. Keep the implementation and HTML small; do not add external fonts, http/https URLs, link tags, preconnect links, animations, or large decorative CSS. Do not edit ${repoMultiFileTest} or change the meaning of ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after both commands pass, README.md exists, and status-dashboard.html contains 状态仪表盘 and contains no http/https URLs or <link tags. Put exactly ${marker} on the final line and stop.`;
+  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. Do not edit files outside it. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. The acceptance test and data file are read-only; do not chmod, unlock, edit, rewrite, or replace them. Your first filesystem-changing action must be exactly this shell command: ${repoMultiFileReadmeCommand}. Do not run Get-ChildItem, Get-Content, node --test, or any other command before that README write. Then complete ${repoMultiFileSource}: it must export normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). renderSummaryHtml must return a complete fully offline HTML document containing the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked. To avoid Windows console mojibake, you may write 状态仪表盘 as JavaScript escapes \\u72b6\\u6001\\u4eea\\u8868\\u76d8 inside JS strings. Running node ${repoMultiFileSource} ${repoMultiFileData} must print summary JSON and write status-dashboard.html in the same directory. Keep the implementation and HTML small; do not add external fonts, http/https URLs, link tags, preconnect links, animations, or large decorative CSS. Do not edit ${repoMultiFileTest} or change the meaning of ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after both commands pass, README.md exists, and status-dashboard.html contains 状态仪表盘 and contains no http/https URLs or <link tags. Put exactly ${marker} on the final line and stop.`;
 }
 if (args.get("--prompt") && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
@@ -400,6 +402,33 @@ function writeReport(payload) {
   }
 }
 
+function responseHistoryContains(text) {
+  if (!text) return false;
+  try {
+    return readFileSync(responseHistoryPath, "utf8").includes(text);
+  } catch {
+    return false;
+  }
+}
+
+function responseHistoryHasToolOutputMarker(text) {
+  if (!text) return false;
+  try {
+    const history = JSON.parse(readFileSync(responseHistoryPath, "utf8"));
+    for (const entry of Array.isArray(history?.entries) ? history.entries : []) {
+      const items = [
+        ...(Array.isArray(entry?.inputItems) ? entry.inputItems : []),
+        ...(Array.isArray(entry?.contextItems) ? entry.contextItems : []),
+      ];
+      for (const item of items) {
+        if (item?.type !== "function_call_output" && item?.type !== "custom_tool_call_output") continue;
+        if (JSON.stringify(item).includes(text)) return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 function diagnosticsAreIdle(diagnostics) {
   if (!diagnostics) return false;
   const sessionLock = diagnostics.antigravitySessionLock || null;
@@ -409,6 +438,45 @@ function diagnosticsAreIdle(diagnostics) {
     && Number(sessionLock?.queued || 0) === 0
     && Number(activeRequests?.active || 0) === 0
     && queue?.running !== true;
+}
+
+async function waitForDesktopToolTurnSettled(ws, marker, waitMs = 120_000) {
+  const deadline = Date.now() + waitMs;
+  let lastUi = null;
+  let lastDiagnostics = null;
+  while (Date.now() < deadline) {
+    const ui = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const visible = (element) => {
+          if (!(element instanceof HTMLElement)) return false;
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
+        const labels = buttons.map((button) => \`\${button.getAttribute('aria-label') || ''} \${button.innerText || ''}\`.trim());
+        const busy = labels.some((label) => /^(?:停止|Stop)$/i.test(label))
+          || buttons.some((button) => /正在思考|Thinking/i.test(button.innerText || ''));
+        return { busy, labels: labels.filter(Boolean).slice(-20) };
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    lastUi = ui.result?.result?.value || null;
+    try {
+      lastDiagnostics = await httpJson(diagnosticsUrl);
+    } catch {}
+    if (responseHistoryHasToolOutputMarker(marker) && lastUi?.busy !== true && diagnosticsAreIdle(lastDiagnostics)) {
+      return { ok: true, historyToolOutputSeen: true, ui: lastUi, diagnostics: lastDiagnostics };
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
+  }
+  return {
+    ok: false,
+    historyToolOutputSeen: responseHistoryHasToolOutputMarker(marker),
+    ui: lastUi,
+    diagnostics: lastDiagnostics,
+  };
 }
 
 function fileExists(path) {
@@ -720,7 +788,7 @@ function buildRepoMultiFileRepairPrompt(currentFailures, evidence) {
     && currentFailures.length > 0
     && currentFailures.every((failure) => /README\.md|README missing/i.test(failure));
   if (onlyReadmeMissing) {
-    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not inspect files, tests, git status, Antigravity brain, transcript, history, or log folders. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Create only ${repoMultiFileReadme} now with UTF-8 content containing the exact Chinese phrase 使用说明 and this command: node status-dashboard.mjs status-data.json. To avoid Windows console mojibake, use one Node fs.writeFileSync command with \\u4f7f\\u7528\\u8bf4\\u660e if needed. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
+    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not inspect files, tests, git status, Antigravity brain, transcript, history, or log folders. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Create only ${repoMultiFileReadme} now. The next and only shell command must be exactly: ${repoMultiFileReadmeCommand}. Do not run Get-ChildItem, Get-Content, node --test, git status, or any other command before that README write. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
   }
   if (mostlyWorking) {
     return `Continue the same task in ${repoMultiFileEditDir}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. The code and CLI already pass. Fix only the missing final artifacts. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. Current verifier failures: ${currentFailures.join("; ")}. Create ${repoMultiFileReadme} with the exact Chinese phrase 使用说明 and the command: node status-dashboard.mjs status-data.json; to avoid Windows console mojibake, you may write it with JavaScript escapes \\u4f7f\\u7528\\u8bf4\\u660e in a Node fs.writeFileSync command. Update renderSummaryHtml in ${repoMultiFileSource} so the generated status-dashboard.html contains the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked; it must stay fully offline with no http/https URLs, no <link tags, and no preconnect. Do not edit ${repoMultiFileTest}. Do not change ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after README.md exists and status-dashboard.html contains 状态仪表盘 and no external links. Put exactly ${marker} on the final line and stop.`;
@@ -1076,6 +1144,40 @@ async function waitForIdleDiagnostics(url, timeoutMs = 20_000) {
   return { diagnostics: latest, lastError };
 }
 
+async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  while (Date.now() < deadline) {
+    const state = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const visible = (element) => {
+          if (!(element instanceof HTMLElement)) return false;
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+        const bodyText = document.body.innerText || '';
+        const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
+        const labels = buttons.map((button) => String(button.getAttribute('aria-label') || button.textContent || '').trim()).filter(Boolean);
+        const hasStop = labels.some((label) => /^(?:Stop|停止)$|正在思考|running|thinking/i.test(label));
+        const hasForegroundStop = buttons.some((button) => /bg-token-foreground/.test(String(button.className || ''))
+          && /size-token-button-composer/.test(String(button.className || ''))
+          && /停止|Stop|正在思考|running|thinking/i.test(bodyText));
+        return { composerPresent: Boolean(composer), hasStop, hasForegroundStop, labels: labels.slice(-16) };
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest = state.result?.result?.value || null;
+    if (latest?.composerPresent && latest.hasStop !== true && latest.hasForegroundStop !== true) {
+      return { ok: true, state: latest };
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+  }
+  return { ok: false, state: latest };
+}
+
 function recoverStaleComposerExpression() {
   const safeMarkerPrefix = JSON.stringify(markerPrefix);
   return `(() => {
@@ -1185,6 +1287,44 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
         .map(summarize),
     };
   })()`;
+}
+
+async function waitForComposerPromptReady(ws, prompt, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  while (Date.now() < deadline) {
+    const state = await ws.send("Runtime.evaluate", {
+      expression: sendButtonProbeExpression(prompt),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest = state.result?.result?.value || null;
+    if (latest?.composerMatches === true && latest?.hasSendButton === true) return latest;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  }
+  return latest;
+}
+
+async function waitForComposerSubmitted(ws, prompt, marker, timeoutMs = 4_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+    const submitted = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+        return { composer: composer?.innerText || '' };
+      })()`,
+      returnByValue: true,
+    });
+    const submittedComposer = String(submitted.result?.result?.value?.composer || "");
+    if (!submittedComposer.includes(prompt) && !submittedComposer.includes(marker)) return true;
+  }
+  return false;
+}
+
+async function pressComposerEnter(ws) {
+  await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
 }
 
 function newChatClickExpression(projectName = "") {
@@ -1315,12 +1455,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     awaitPromise: true,
   });
   await ws.send("Input.insertText", { text: prompt });
-  await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
-  const state = await ws.send("Runtime.evaluate", {
-    expression: sendButtonProbeExpression(prompt),
-    returnByValue: true,
-  });
-  prep = state.result?.result?.value || null;
+  prep = await waitForComposerPromptReady(ws, prompt, 5_000);
   const projectlessComposer = options.requiresProjectChat === true
     && Array.isArray(prep?.nearbyButtons)
     && prep.nearbyButtons.some((button) => /Choose project/i.test(`${button?.label || ""} ${button?.aria || ""}`));
@@ -1355,24 +1490,17 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
         : null,
     };
-    const submitDeadline = Date.now() + 4_000;
-    while (Date.now() < submitDeadline) {
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
-      const submitted = await ws.send("Runtime.evaluate", {
-        expression: `(() => {
-          const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
-          return { composer: composer?.innerText || '' };
-        })()`,
-        returnByValue: true,
-      });
-      const submittedComposer = String(submitted.result?.result?.value?.composer || "");
-      if (!submittedComposer.includes(prompt) && !submittedComposer.includes(expectedMarker)) {
-        submitSucceeded = true;
-        break;
+    submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
+    if (!submitSucceeded) {
+      await pressComposerEnter(ws);
+      submitEvidence.enterFallback = true;
+      submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
+      if (submitSucceeded) {
+        submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
       }
     }
   }
-  if (clicked) {
+  if (clicked && submitSucceeded) {
     const deadline = Date.now() + waitMs;
     const waitStartedAt = Date.now();
     const idleBreakAfterMs = Math.max(5_000, Number(options.idleBreakAfterMs || 12_000));
@@ -1507,7 +1635,7 @@ async function main() {
     });
     staleRecovery = stale.result?.result?.value || null;
     if (Array.isArray(staleRecovery?.clicked) && staleRecovery.clicked.length > 0) {
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+      staleRecovery.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, 20_000);
     }
     try {
       backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
@@ -1563,7 +1691,7 @@ async function main() {
         await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
         newChatEvidence = { ...(newChatEvidence || {}), fallbackShortcut: true };
       }
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
+      newChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
     }
 
     if (taskMode === "multi-turn-project") {
@@ -1571,8 +1699,26 @@ async function main() {
       const followupPrompt = `Continue the same project in ${artifactDir}. Do not start over and do not inspect Antigravity brain, transcript, history, or log folders. Modify word-tally.mjs so it also exports uniqueWords(text), returning sorted unique words. Update word-tally.test.mjs to keep the original tallyWords assertion and add a node:test assertion that uniqueWords("red blue red") returns ["blue","red"]. Create CHANGELOG.md mentioning the new uniqueWords follow-up and the exact marker ${marker}. Create followup.txt containing exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red green", verify red=2 blue=1 green=1, then reply with ${marker}.`;
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs, { requiresProjectChat });
       failures.push(...turn1.failures.map((failure) => `turn1: ${failure}`));
+      const turn1Settled = await waitForDesktopToolTurnSettled(ws, firstMarker, Math.min(timeoutMs, 120_000));
+      if (turn1Settled.ok !== true) {
+        failures.push("turn1: desktop tool result did not settle into response history before the follow-up");
+      }
       const firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
-      const turn2 = await submitDesktopPromptAndWait(ws, followupPrompt, marker, timeoutMs, { requiresProjectChat });
+      const turn2 = turn1Settled.ok === true
+        ? await submitDesktopPromptAndWait(ws, followupPrompt, marker, timeoutMs, { requiresProjectChat })
+        : {
+          ok: false,
+          failures: ["follow-up was not submitted because turn1 tool output was not settled"],
+          clicked: false,
+          submitSucceeded: false,
+          markerCount: 0,
+          answerMarkerCount: 0,
+          composer: "",
+          lastSample: turn1.lastSample || "",
+          answerSample: "",
+          activeReconnectSeen: false,
+          activeReconnectEvidence: [],
+        };
       failures.push(...turn2.failures.map((failure) => `turn2: ${failure}`));
       artifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
       if (!artifactEvidence?.files?.packageJson) failures.push("multi-turn package.json was not created");
@@ -1634,6 +1780,7 @@ async function main() {
         firstMarker,
         artifactDir,
         firstArtifactEvidence,
+        turn1Settled,
         artifactEvidence,
         turnEvidence: [turn1, turn2].map((turn) => ({
           ok: turn.ok,
@@ -1826,12 +1973,7 @@ async function main() {
       awaitPromise: true,
     });
     await ws.send("Input.insertText", { text: promptText });
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
-    const state = await ws.send("Runtime.evaluate", {
-      expression: sendButtonProbeExpression(promptText),
-      returnByValue: true,
-    });
-    prep = state.result?.result?.value || null;
+    prep = await waitForComposerPromptReady(ws, promptText, 5_000);
     if (prep?.composerMatches !== true) {
       failures.push("composer did not contain exactly the submitted prompt before clicking send");
     } else if (prep?.hasSendButton !== true) {
@@ -1861,25 +2003,18 @@ async function main() {
           ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
           : null,
       };
-      const submitDeadline = Date.now() + 4_000;
-      while (Date.now() < submitDeadline) {
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
-        const submitted = await ws.send("Runtime.evaluate", {
-          expression: `(() => {
-            const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
-            return { composer: composer?.innerText || '' };
-          })()`,
-          returnByValue: true,
-        });
-        const submittedComposer = String(submitted.result?.result?.value?.composer || "");
-        if (!submittedComposer.includes(promptText) && !submittedComposer.includes(marker)) {
-          submitSucceeded = true;
-          break;
+      submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, 4_000);
+      if (!submitSucceeded) {
+        await pressComposerEnter(ws);
+        submitEvidence.enterFallback = true;
+        submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, 4_000);
+        if (submitSucceeded) {
+          submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
         }
       }
       if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
     }
-    if (clicked) {
+    if (clicked && submitSucceeded) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
@@ -1915,7 +2050,7 @@ async function main() {
         if (!composer.includes(promptText) && /[\u4e00-\u9fff]/.test(normalizedAnswer) && !/正在思考|已处理|停止了|重新连接/.test(normalizedAnswer)) break;
       } else if (taskMode === "repo-file-edit") {
         artifactEvidence = verifyRepoFileEditFixture();
-        if (artifactEvidence?.testPassed === true && !composer.includes(promptText)) {
+        if (!composer.includes(promptText) && artifactEvidence?.testPassed === true) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -1958,9 +2093,11 @@ async function main() {
       }
     }
     if (taskMode === "repo-file-edit") {
+      const responseHistoryMarkerSeen = responseHistoryContains(marker);
       artifactEvidence = verifyRepoFileEditFixture();
       if (!artifactEvidence?.files?.target) failures.push("repo-file-edit target file was not present");
       if (!artifactEvidence?.files?.test) failures.push("repo-file-edit test file was not present");
+      if (!responseHistoryMarkerSeen) failures.push("repo-file-edit prompt marker was not observed in response history after desktop submit");
       if (artifactEvidence?.testPassed !== true) failures.push("repo-file-edit node:test did not pass after the desktop task");
     }
     if (taskMode === "repo-multi-file-edit") {
@@ -2102,6 +2239,8 @@ async function main() {
     clicked,
     markerCount: count,
     answerMarkerCount,
+    responseHistoryMarkerSeen: responseHistoryContains(marker),
+    responseHistoryPath,
     activeReconnectSeen,
     activeReconnectEvidence,
     inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),

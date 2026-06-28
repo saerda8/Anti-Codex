@@ -118,6 +118,10 @@ test("Antigravity idle lock reap is allowed while later requests are queued", ()
   assert.match(server, /Promise\.race\(\[upstreamRun,\s*streamIdleWait\]\)/);
   assert.match(server, /releaseIdleActive/);
   assert.match(server, /Number\(lock\.queued\s*\|\|\s*0\)\s*>\s*0/);
+  assert.match(server, /pendingNewSession = options\?\.pendingNewSession === true/);
+  assert.match(server, /Number\(lock\.queued \|\| 0\) > 0 \|\| pendingNewSession/);
+  assert.match(server, /pendingNewAntigravitySession/);
+  assert.match(server, /toolOutputCallIdsFromRequest\(parsed\)\.length === 0/);
   assert.match(server, /Math\.min\(ANTIGRAVITY_IDLE_SESSION_RELEASE_MS,\s*ANTIGRAVITY_QUEUED_IDLE_SESSION_RELEASE_MS\)/);
   assert.doesNotMatch(
     server,
@@ -417,6 +421,16 @@ test("Anti-Codex shell blocks ChatGPT login UI routes", () => {
   assert.match(brander, /"auth-requirement"/);
   assert.match(brander, /"app-route-gate"/);
   assert.match(brander, /criticalPatchNames/);
+});
+
+test("Anti-Codex shell hides retry stream errors from chat", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+
+  assert.match(brander, /function patchRetryStreamErrorVisibility/);
+  assert.match(brander, /case`error`:if\(n\.willRetry\)\{break\}else if\(/);
+  assert.match(brander, /findRetryStreamErrorVisibilityPatch/);
+  assert.match(brander, /retry-stream-error-visibility/);
+  assert.match(brander, /criticalPatchNames[\s\S]*retry-stream-error-visibility/);
 });
 
 test("plugin UI unlock is guarded as an unsafe debug-only path", () => {
@@ -7157,7 +7171,7 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(websocket, /failed after \$MaxAttempts attempts/);
   assert.match(websocket, /probeResults/);
   assert.match(websocket, /HTTP\/1\\\.1 101/);
-  assert.match(websocket, /acceptedIdleWebsocket/);
+  assert.match(websocket, /acceptedRelayWebsocket/);
   assert.match(websocket, /http_relay_websocket/);
   assert.match(websocket, /\/anticodex\/diagnostics/);
   assert.match(websocket, /responsesWebSocket/);
@@ -7165,16 +7179,10 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(websocket, /secWebSocketProtocol/);
   assert.match(websocket, /TcpClient/);
   assert.match(websocket, /ConvertTo-Json/);
-  assert.match(server, /const pendingPayloads = \[\]/);
-  assert.match(server, /drainResponsesWebSocketQueue/);
   assert.match(server, /function responsesWebSocketRelayHeaders\(req\)/);
   assert.match(server, /"session_id"/);
   assert.match(server, /"x-codex-window-id"/);
-  assert.match(server, /const relayHeaders = responsesWebSocketRelayHeaders\(req\)/);
-  assert.match(server, /const relayAbort = new AbortController\(\)/);
-  assert.match(server, /signal: relayAbort\.signal/);
-  assert.match(server, /relayAbort\.abort\(\)/);
-  assert.match(server, /headers: relayHeaders/);
+  assert.match(server, /attachResponsesWebSocket\(req, socket, url\.pathname\)/);
   assert.match(server, /RESET_CANCELLED_RESPONSE_IDS/);
   assert.match(server, /RESET_CANCELLED_REQUEST_FINGERPRINTS/);
   assert.match(server, /RESET_PREVIOUS_RESPONSE_COOLDOWN_MS/);
@@ -7187,10 +7195,11 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(server, /resetCooldown:\s*true/);
   assert.match(server, /resetFingerprint:\s*true/);
   assert.match(server, /anticodex_session_reset/);
-  assert.match(server, /pendingPayloads\.push\(frame\.payload\.toString\("utf8"\)\)/);
+  assert.match(server, /responseType:\s*"http_relay_websocket"/);
   assert.match(server, /for await \(const chunk of response\.body\)/);
   assert.match(server, /decoder\.decode\(chunk, \{ stream: true \}\)/);
   assert.match(server, /socket\.write\(webSocketFrame\(0x9, "anticodex"\)\)/);
+  assert.match(server, /if \(!closed && pendingPayloads\.length === 0\) closeSocket\(\)/);
   assert.doesNotMatch(server, /const text = await response\.text\(\);\s*if \(!response\.ok\)/);
   assert.doesNotMatch(server, /await relayResponsesHttpToWebSocket\(\{ pathname, payload: frame\.payload\.toString\("utf8"\), socket \}\);\s*if \(!closed\) socket\.end/);
   assert.doesNotMatch(websocket, /Stop-Process/);
@@ -11241,6 +11250,11 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /networkEvents/);
   assert.match(verifier, /send click did not submit the composer prompt/);
   assert.match(verifier, /submitSucceeded/);
+  assert.match(verifier, /async function waitForComposerPromptReady/);
+  assert.match(verifier, /async function waitForComposerSubmitted/);
+  assert.match(verifier, /async function pressComposerEnter/);
+  assert.match(verifier, /enterFallback/);
+  assert.match(verifier, /if \(clicked && submitSucceeded\)/);
   assert.match(verifier, /submitEvidence/);
   assert.match(verifier, /staleRecovery/);
   assert.match(verifier, /Search the web for recent Codex updates/);
@@ -11280,8 +11294,14 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /diagnostics endpoint did not respond after desktop task/);
   assert.match(verifier, /desktop task left the Antigravity session lock active/);
   assert.match(verifier, /latest-\$\{reportName\}\.json/);
+  assert.match(verifier, /function responseHistoryHasToolOutputMarker/);
+  assert.match(verifier, /function waitForDesktopToolTurnSettled/);
+  assert.match(verifier, /desktop tool result did not settle into response history before the follow-up/);
+  assert.match(verifier, /follow-up was not submitted because turn1 tool output was not settled/);
   assert.match(verifier, /taskMode === "complex-project"/);
   assert.match(verifier, /taskMode === "repo-file-edit"/);
+  assert.match(verifier, /Do not start with Get-ChildItem/);
+  assert.match(verifier, /Your first tool action must modify/);
   assert.match(verifier, /taskMode === "repo-multi-file-edit"/);
   assert.match(verifier, /ui-complex-project-smoke/);
   assert.match(verifier, /repo-file-edit node:test did not pass after the desktop task/);
@@ -11299,7 +11319,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /do not add external fonts/);
   assert.match(verifier, /onlyReadmeMissing/);
   assert.match(verifier, /Create only \$\{repoMultiFileReadme\} now/);
+  assert.match(verifier, /The next and only shell command must/);
   assert.match(verifier, /idleBreakAfterMs/);
+  assert.match(verifier, /artifactEvidence\?\.testPassed === true/);
+  assert.doesNotMatch(verifier, /taskMode === "repo-file-edit" \? 30_000 : 12_000/);
   assert.match(verifier, /codex-update-analyzer\.mjs/);
   assert.match(verifier, /sources\.json/);
   assert.match(verifier, /summarizeSources/);
@@ -11346,6 +11369,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(server, /latest-ui-multi-turn-project-smoke\.json/);
   assert.match(server, /latest-ui-repo-file-edit-smoke\.json/);
   assert.match(server, /latest-ui-repo-multi-file-edit-smoke\.json/);
+  assert.match(server, /Local project edit requirement/);
+  assert.match(server, /do not start with a directory listing/);
+  assert.match(server, /Repeated directory listings are not progress/);
+  assert.match(server, /files have already been inspected/);
   assert.match(server, /latest-ui-complex-project-smoke\.json/);
   assert.match(server, /latest-ui-report-site-smoke\.json/);
   assert.match(server, /uiWebSearchSmokeEvidence/);
