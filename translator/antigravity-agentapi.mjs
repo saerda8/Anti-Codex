@@ -517,27 +517,16 @@ export function antigravityCliArgs({ model, prompt, timeoutMs, logPath }) {
 
 export function windowsAntigravityCliInvocation({
   cliCommand,
+  argsPrefix = [],
   model,
   timeoutMs,
   logPath,
-  promptPath,
+  prompt,
 }) {
-  const script = [
-    "$ErrorActionPreference = 'Stop'",
-    "$prompt = [IO.File]::ReadAllText($env:ANTICODEX_AG_PROMPT_FILE, [Text.Encoding]::UTF8)",
-    "& $env:ANTICODEX_AG_CLI --log-file $env:ANTICODEX_AG_LOG --model $env:ANTICODEX_AG_MODEL --print-timeout $env:ANTICODEX_AG_TIMEOUT --print $prompt",
-    "exit $LASTEXITCODE",
-  ].join("; ");
   return {
-    command: "powershell.exe",
-    args: ["-NoProfile", "-NonInteractive", "-Command", script],
-    env: {
-      ANTICODEX_AG_CLI: cliCommand,
-      ANTICODEX_AG_MODEL: model,
-      ANTICODEX_AG_TIMEOUT: `${Math.max(1, Math.ceil(timeoutMs / 1000))}s`,
-      ANTICODEX_AG_LOG: logPath,
-      ANTICODEX_AG_PROMPT_FILE: promptPath,
-    },
+    command: cliCommand,
+    args: [...argsPrefix, ...antigravityCliArgs({ model, prompt, timeoutMs, logPath })],
+    env: {},
   };
 }
 
@@ -724,10 +713,11 @@ export async function runAntigravityTextTurn(prompt, options = {}) {
   const invocation = platform() === "win32"
     ? windowsAntigravityCliInvocation({
         cliCommand: commandSpec.command,
+        argsPrefix: commandSpec.argsPrefix,
         model,
         timeoutMs,
         logPath,
-        promptPath,
+        prompt,
       })
     : {
         command: commandSpec.command,

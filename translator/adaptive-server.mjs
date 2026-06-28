@@ -6818,6 +6818,33 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     );
 }
 
+function chatBodyHasShellCommandTool(chatBody = null) {
+    return Array.isArray(chatBody?.tools)
+        && chatBody.tools.some(tool => {
+            const name = tool?.function?.name || tool?.name || "";
+            return /^(?:shell_command|exec_command)$/.test(name);
+        });
+}
+
+function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody = null) {
+    if (requestIncludesToolOutput(originalRequest)) return null;
+    if (!chatBodyHasShellCommandTool(chatBody)) return null;
+    const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
+    const requirement = artifactMarkerRequirementFromChat(messages)
+        || artifactMarkerRequirementFromOriginalRequest(originalRequest);
+    if (!requirement?.marker || !requirement?.targetPath) return null;
+    const command = artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, {
+        codingProject: requirement.codingProject,
+        complexProject: requirement.complexProject,
+        multiTurnProject: requirement.multiTurnProject,
+    });
+    return makeToolCallCompletion(
+        chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+        "shell_command",
+        { command },
+    );
+}
+
 function htmlEscape(value = "") {
     return String(value)
         .replace(/&/g, "&amp;")
@@ -10502,6 +10529,13 @@ const server = http.createServer(async (req, res) => {
                     RESPONSE_HISTORY.remember(fmt, parsed);
                     return jsonResponse(res, 200, fmt);
                 }
+                const artifactToolCall = deterministicArtifactToolCallCompletion(parsed, chatBody);
+                if (artifactToolCall) {
+                    const fmt = chatToResponsesFormat(artifactToolCall, parsed, routing, { strictTools: true });
+                    applyResponsesEndTurnHint(fmt, req, parsed, { allowEndTurnFalse: true });
+                    RESPONSE_HISTORY.remember(fmt, parsed);
+                    return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
+                }
                 const pendingNewAntigravitySession = chatBodyNeedsAntigravitySessionLock(chatBody)
                     && toolOutputCallIdsFromRequest(parsed).length === 0;
                 releaseIdleAntigravitySessionLockIfSafe("before_request_idle_reap", {
@@ -10698,4 +10732,4 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
     });
 }
 
-export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, MAX_TOOL_LOOPS };
+export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicArtifactToolCallCompletion, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, MAX_TOOL_LOOPS };

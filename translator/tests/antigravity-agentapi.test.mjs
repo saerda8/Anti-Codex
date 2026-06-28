@@ -493,19 +493,24 @@ test("antigravityCliArgs keeps every flag before the positional prompt", () => {
   ]);
 });
 
-test("windowsAntigravityCliInvocation transfers the prompt through a UTF-8 file", () => {
+test("windowsAntigravityCliInvocation avoids the PowerShell native command wrapper", () => {
   const invocation = windowsAntigravityCliInvocation({
     cliCommand: "C:\\tools\\antigravity.exe",
     model: "gemini-3.5-flash-low",
     timeoutMs: 120000,
     logPath: "C:\\temp\\anti.log",
-    promptPath: "C:\\temp\\prompt.txt",
+    prompt: "hello",
   });
 
-  assert.equal(invocation.command, "powershell.exe");
-  assert.match(invocation.args.at(-1), /ReadAllText/);
-  assert.equal(invocation.env.ANTICODEX_AG_CLI, "C:\\tools\\antigravity.exe");
-  assert.equal(invocation.env.ANTICODEX_AG_PROMPT_FILE, "C:\\temp\\prompt.txt");
+  assert.equal(invocation.command, "C:\\tools\\antigravity.exe");
+  assert.deepEqual(invocation.args, [
+    "--log-file", "C:\\temp\\anti.log",
+    "--model", "gemini-3.5-flash-low",
+    "--print-timeout", "120s",
+    "--print",
+    "hello",
+  ]);
+  assert.deepEqual(invocation.env, {});
 });
 
 test("discoverProjectId reads the isolated Gemini directory from the CLI environment", () => {

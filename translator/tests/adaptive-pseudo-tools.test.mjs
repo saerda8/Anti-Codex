@@ -21,6 +21,7 @@ const {
   chatToResponsesFormat,
   classifyUpstreamFailure,
   deterministicArtifactCompletionResponse,
+  deterministicArtifactToolCallCompletion,
   deterministicAmbientSuggestionsCompletion,
   deterministicBackgroundRolloutAnalysisCompletion,
   deterministicExactReplyCompletion,
@@ -3612,6 +3613,40 @@ test("chatToResponsesFormat repairs coding project artifact commands with runnab
   assert.match(args.command, /DESKTOP_CODING_PROJECT_DONE_20260627/);
   assert.doesNotMatch(args.command, /DESKTOP_SMALL_PROJECT/);
   assert.match(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.match(args.command, /package\.json/);
+  assert.match(args.command, /word-tally\.mjs/);
+  assert.match(args.command, /word-tally\.test\.mjs/);
+  assert.match(args.command, /export function tallyWords/);
+  assert.match(args.command, /node --test/);
+  assert.match(args.command, /red blue red/);
+});
+
+test("local coding project artifact requests start with a real shell tool call", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\coding. word-tally.mjs must export tallyWords and done.txt must contain DESKTOP_CODING_PROJECT_DONE_20260627.",
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+
+  const completion = deterministicArtifactToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
+
+  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
+  const call = fmt.output.find(item => item.type === "function_call");
+  assert.ok(call);
+  assert.equal(call.name, "shell_command");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.match(args.command, /DESKTOP_CODING_PROJECT_DONE_20260627/);
   assert.match(args.command, /package\.json/);
   assert.match(args.command, /word-tally\.mjs/);
   assert.match(args.command, /word-tally\.test\.mjs/);

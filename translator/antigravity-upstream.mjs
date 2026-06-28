@@ -40,6 +40,7 @@ function shouldFallbackNativeToolBridge(error) {
 
 const DEFAULT_TOOL_OUTPUT_MAX_CHARS = 1_000_000;
 const DEFAULT_PROMPT_MAX_CHARS = 4_000_000;
+const DEFAULT_CLI_PROMPT_ARG_MAX_CHARS = 24_000;
 const DEFAULT_RETRY_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 1500;
 const NATIVE_CONTINUATION_TTL_MS = 10 * 60 * 1000;
@@ -74,6 +75,27 @@ export function antigravityPromptLimits(options = {}) {
       options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS ?? process.env.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
       DEFAULT_TOOL_OUTPUT_MAX_CHARS,
     ),
+  };
+}
+
+export function antigravityPromptMaxCharsForTransport(transport, options = {}) {
+  const baseMax = antigravityPromptLimits(options).promptMaxChars;
+  if (String(transport ?? "").toLowerCase() !== "cli") return baseMax;
+  const cliMax = positiveInteger(
+    options.cliPromptArgMaxChars
+      ?? options.env?.ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS
+      ?? process.env.ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS,
+    DEFAULT_CLI_PROMPT_ARG_MAX_CHARS,
+  );
+  return Math.min(baseMax, cliMax);
+}
+
+export function resolveAntigravityTransportForPrompt(transport, _prompt, _options = {}) {
+  const requestedTransport = String(transport ?? "cli").toLowerCase();
+  return {
+    transport: requestedTransport,
+    requestedTransport,
+    fallbackReason: "",
   };
 }
 
@@ -172,7 +194,17 @@ export function makeAntigravityCompletion(model, text, options = {}) {
 }
 
 export async function callAntigravityUpstream(chatBody, options = {}) {
-  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
+  const requestedTransport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
+  const reasoningEffort = chatBody?.reasoning?.effort ?? chatBody?.reasoning_effort;
+  const prompt = chatMessagesToPrompt(chatBody?.messages, {
+    reasoningEffort,
+    tools: chatBody?.tools,
+    maxChars: antigravityPromptMaxCharsForTransport(requestedTransport, options),
+    toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
+  });
+  if (!prompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
+  const transportDecision = resolveAntigravityTransportForPrompt(requestedTransport, prompt, options);
+  const transport = transportDecision.transport;
   const nativeToolsEnabled = transport !== "cli"
     && Array.isArray(chatBody?.tools)
     && chatBody.tools.length > 0
@@ -184,14 +216,6 @@ export async function callAntigravityUpstream(chatBody, options = {}) {
     throw new Error("Antigravity native tool turn ended without a completion.");
   }
 
-  const reasoningEffort = chatBody?.reasoning?.effort ?? chatBody?.reasoning_effort;
-  const prompt = chatMessagesToPrompt(chatBody?.messages, {
-    reasoningEffort,
-    tools: chatBody?.tools,
-    maxChars: options.maxChars ?? options.env?.ANTICODEX_PROMPT_MAX_CHARS,
-    toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
-  });
-  if (!prompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
   const completionId = options.responseId ?? `chatcmpl_${randomUUID().replaceAll("-", "")}`;
   const turnOptions = {
     cwd: options.cwd ?? process.env.ANTICODEX_WORKSPACE ?? process.cwd(),
@@ -227,6 +251,8 @@ export async function callAntigravityUpstream(chatBody, options = {}) {
       internalModel: result.internalModel,
       cascadeId: result.cascadeId ?? result.conversationId,
       status: "success",
+      requestedTransport: transportDecision.requestedTransport,
+      fallbackReason: transportDecision.fallbackReason,
     });
   }
   return makeAntigravityCompletion(chatBody?.model, result.text, {
@@ -236,17 +262,19 @@ export async function callAntigravityUpstream(chatBody, options = {}) {
 }
 
 export async function* streamAntigravityUpstream(chatBody, options = {}) {
-  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
+  const requestedTransport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
   const reasoningEffort = chatBody?.reasoning?.effort ?? chatBody?.reasoning_effort;
   const resumed = takeNativeContinuation(chatBody?.messages);
+  const prompt = chatMessagesToPrompt(chatBody?.messages, {
+    reasoningEffort,
+    tools: chatBody?.tools,
+    maxChars: antigravityPromptMaxCharsForTransport(requestedTransport, options),
+    toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
+  });
+  if (!prompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
+  const transportDecision = resolveAntigravityTransportForPrompt(requestedTransport, prompt, options);
+  const transport = resumed ? requestedTransport : transportDecision.transport;
   if (transport === "cli" && !resumed) {
-    const prompt = chatMessagesToPrompt(chatBody?.messages, {
-      reasoningEffort,
-      tools: chatBody?.tools,
-      maxChars: options.maxChars ?? options.env?.ANTICODEX_PROMPT_MAX_CHARS,
-      toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
-    });
-    if (!prompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
     const runTurn = options.runTurn ?? runAntigravityTextTurn;
     const result = await runTurn(prompt, {
       cwd: options.cwd ?? process.env.ANTICODEX_WORKSPACE ?? process.cwd(),
@@ -268,6 +296,8 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
         internalModel: result.internalModel,
         cascadeId: result.cascadeId ?? result.conversationId,
         status: "success",
+        requestedTransport: transportDecision.requestedTransport,
+        fallbackReason: transportDecision.fallbackReason,
       });
     }
     yield {
@@ -292,14 +322,16 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
     });
     ownsNativeToolBridge = true;
   }
-  const prompt = chatMessagesToPrompt(chatBody?.messages, {
-    reasoningEffort,
-    tools: chatBody?.tools,
-    nativeTools: Boolean(nativeToolBridge),
-    maxChars: options.maxChars ?? options.env?.ANTICODEX_PROMPT_MAX_CHARS,
-    toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
-  });
-  if (!prompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
+  const nativePrompt = nativeToolBridge
+    ? chatMessagesToPrompt(chatBody?.messages, {
+        reasoningEffort,
+        tools: chatBody?.tools,
+        nativeTools: true,
+        maxChars: options.maxChars ?? options.env?.ANTICODEX_PROMPT_MAX_CHARS,
+        toolOutputMaxChars: options.toolOutputMaxChars ?? options.env?.ANTICODEX_TOOL_OUTPUT_MAX_CHARS,
+      })
+    : prompt;
+  if (!nativePrompt) throw new Error("Anti-Codex could not find any text to send to Antigravity.");
 
   const turnOptions = {
     cwd: options.cwd ?? process.env.ANTICODEX_WORKSPACE ?? process.cwd(),
@@ -332,7 +364,7 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
               followUpPrompt: resumed.followUpPrompt,
               cancelOnError: false,
             })
-          : runTurnStreamed(prompt, turnOptions);
+          : runTurnStreamed(nativePrompt, turnOptions);
         for await (const event of events) {
         if (options.signal?.aborted) {
           return;
@@ -381,6 +413,8 @@ export async function* streamAntigravityUpstream(chatBody, options = {}) {
               internalModel: event.result?.internalModel,
               cascadeId: event.result?.cascadeId ?? event.result?.conversationId,
               status: "success",
+              requestedTransport: transportDecision.requestedTransport,
+              fallbackReason: transportDecision.fallbackReason,
             });
           }
           yield {

@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 
 import {
   antigravityPromptLimits,
+  antigravityPromptMaxCharsForTransport,
   antigravityModelFor,
   chatMessagesToPrompt,
   isAntigravityAccountVerificationRequired,
   isAntigravityNativeToolBridgeEnabled,
   isAntigravityUpstreamMode,
   makeAntigravityCompletion,
+  resolveAntigravityTransportForPrompt,
   shouldRetryAntigravityFailure,
   callAntigravityUpstream,
   streamAntigravityUpstream,
@@ -37,6 +39,36 @@ test("antigravityPromptLimits defaults to long-context-friendly configurable gua
     promptMaxChars: 6_000_000,
     toolOutputMaxChars: 2_000_000,
   });
+});
+
+test("antigravityPromptMaxCharsForTransport caps CLI prompts to Windows-safe argv size", () => {
+  assert.equal(antigravityPromptMaxCharsForTransport("desktop-cascade", {
+    env: {
+      ANTICODEX_PROMPT_MAX_CHARS: "6000000",
+      ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS: "120",
+    },
+  }), 6_000_000);
+  assert.equal(antigravityPromptMaxCharsForTransport("cli", {
+    env: {
+      ANTICODEX_PROMPT_MAX_CHARS: "6000000",
+      ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS: "120",
+    },
+  }), 120);
+});
+
+test("resolveAntigravityTransportForPrompt keeps CLI model-only transport for long prompts", () => {
+  assert.deepEqual(
+    resolveAntigravityTransportForPrompt("cli", "short", {
+      env: { ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS: "12" },
+    }),
+    { transport: "cli", requestedTransport: "cli", fallbackReason: "" },
+  );
+  assert.deepEqual(
+    resolveAntigravityTransportForPrompt("cli", "this prompt is too long", {
+      env: { ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS: "12" },
+    }),
+    { transport: "cli", requestedTransport: "cli", fallbackReason: "" },
+  );
 });
 import { antigravityProfileFromCatalog } from "../adaptive-server.mjs";
 
@@ -631,6 +663,34 @@ test("callAntigravityUpstream reports resolved model route metadata", async () =
   assert.equal(route.cascadeId, "cascade_route_1");
 });
 
+test("callAntigravityUpstream does not auto-switch long CLI prompts to desktop Cascade", async () => {
+  let route = null;
+  let promptLength = 0;
+  const completion = await callAntigravityUpstream({
+    model: "gemini-3.5-flash-low",
+    messages: [{ role: "user", content: "long ".repeat(200) }],
+  }, {
+    env: {
+      ANTICODEX_ANTIGRAVITY_TRANSPORT: "cli",
+      ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS: "240",
+    },
+    responseId: "long-cli-response",
+    onModelRouted: (entry) => { route = entry; },
+    runTurn: async (prompt, options) => {
+      promptLength = prompt.length;
+      assert.equal(options.model, "gemini-3.5-flash-low");
+      return { conversationId: "cli-long-conversation", model: options.model, text: "long cli ok" };
+    },
+  });
+
+  assert.ok(promptLength <= 240);
+  assert.equal(route.transport, "cli");
+  assert.equal(route.requestedTransport, "cli");
+  assert.equal(route.fallbackReason, "");
+  assert.equal(route.cascadeId, "cli-long-conversation");
+  assert.equal(completion.choices[0].message.content, "long cli ok");
+});
+
 test("callAntigravityUpstream normalizes mismatched displayName in route audit", async () => {
   let route = null;
   const mockRunTurn = async () => {
@@ -853,6 +913,44 @@ test("streamAntigravityUpstream honors cli transport without opening native Casc
   assert.equal(events[0].delta, "CLI稳定模式正常");
   assert.equal(events[1].completion.id, "resp_cli_stream");
   assert.equal(events[1].completion.choices[0].message.content, "CLI稳定模式正常");
+});
+
+test("streamAntigravityUpstream keeps long CLI prompts on runTurn instead of native stream", async () => {
+  let nativeCalled = false;
+  let promptLength = 0;
+  const routes = [];
+  const events = [];
+
+  for await (const event of streamAntigravityUpstream(
+    { model: "gemini-3.5-flash-low", messages: [{ role: "user", content: "long ".repeat(200) }] },
+    {
+      env: {
+        ANTICODEX_ANTIGRAVITY_TRANSPORT: "cli",
+        ANTICODEX_ANTIGRAVITY_CLI_PROMPT_ARG_MAX_CHARS: "240",
+      },
+      responseId: "long-cli-stream",
+      onModelRouted: (route) => routes.push(route),
+      runTurn: async (prompt, options) => {
+        promptLength = prompt.length;
+        return { conversationId: "cli-long-stream", model: options.model, text: "stream long cli ok" };
+      },
+      runTurnStreamed: async function* () {
+        nativeCalled = true;
+        yield { type: "done", result: { text: "native should not run" } };
+      },
+    },
+  )) {
+    events.push(event);
+  }
+
+  assert.ok(promptLength <= 240);
+  assert.equal(nativeCalled, false);
+  assert.equal(routes[0].transport, "cli");
+  assert.equal(routes[0].requestedTransport, "cli");
+  assert.equal(routes[0].fallbackReason, "");
+  assert.equal(routes[0].cascadeId, "cli-long-stream");
+  assert.equal(events[0].delta, "stream long cli ok");
+  assert.equal(events[1].completion.id, "long-cli-stream");
 });
 
 test("streamAntigravityUpstream yields text_replace events normalized", async () => {
