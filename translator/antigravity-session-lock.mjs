@@ -156,10 +156,10 @@ export function createAntigravitySessionLock(options = {}) {
 
   function releaseIdleContinuation({ maxIdleMs = ttlMs, reason = "idle_continuation" } = {}) {
     const maxIdle = Math.max(1, Number(maxIdleMs) || ttlMs);
-    if (!active || active.responseIds.size === 0 || !active.continuedAt) {
+    if (!active || active.responseIds.size === 0) {
       return { ok: true, reason, released: false, snapshot: snapshot() };
     }
-    const idleMs = Date.now() - active.continuedAt;
+    const idleMs = Date.now() - (active.continuedAt || active.createdAt);
     if (idleMs < maxIdle) {
       return { ok: true, reason, released: false, idleMs, maxIdleMs: maxIdle, snapshot: snapshot() };
     }

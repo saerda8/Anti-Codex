@@ -536,6 +536,58 @@ test("closing an Antigravity streaming client aborts the upstream turn", async (
   assert.equal(response.events.some((event) => event.name === "response.completed"), false);
 });
 
+test("closing a tool-capable Antigravity streaming client lets the upstream turn finish", async () => {
+  const request = new FakeRequest();
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+  let observedSignal = null;
+  let releaseDone;
+  const doneGate = new Promise((resolve) => { releaseDone = resolve; });
+
+  const running = pipeAntigravityResponseAsSSE(
+    request,
+    response,
+    {
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: "write a file" }],
+      tools: [{ type: "function", function: { name: "shell", parameters: { type: "object", properties: {} } } }],
+    },
+    { model: "gemini-pro-agent", stream: true, input: "write a file" },
+    null,
+    {
+      registry,
+      streamUpstream: async function* (_body, options) {
+        observedSignal = options.signal;
+        await doneGate;
+        yield {
+          type: "done",
+          completion: {
+            id: options.responseId,
+            created: options.created,
+            object: "chat.completion",
+            model: "gemini-pro-agent",
+            choices: [{ message: { role: "assistant", content: "done" }, finish_reason: "stop" }],
+            usage: {},
+          },
+        };
+      },
+    },
+  );
+
+  await response.waitForEvent("response.created");
+  response.emit("close");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(observedSignal.aborted, false);
+  releaseDone();
+  await running;
+
+  assert.equal(observedSignal.aborted, false);
+  assert.equal(registry.snapshot().active, 0);
+  assert.equal(response.events.some((event) => event.name === "response.cancelled"), false);
+  assert.equal(response.events.some((event) => event.name === "response.completed"), false);
+});
+
 test("Antigravity stream idle timeout fails locally even if upstream ignores abort", async () => {
   const response = new FakeResponse();
   const registry = createAntigravityRequestRegistry();

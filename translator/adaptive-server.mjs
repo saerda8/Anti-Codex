@@ -152,10 +152,15 @@ const ANTIGRAVITY_FAILURE_CIRCUIT = createAntigravityFailureCircuit({
 });
 const RESPONSE_HISTORY = createResponseHistoryStore({ filePath: RESPONSE_HISTORY_PATH });
 const ANTIGRAVITY_MODEL_ROUTE_AUDIT = createAntigravityModelRouteAuditStore({ filePath: ANTIGRAVITY_MODEL_ROUTE_AUDIT_PATH });
+const RESET_CANCELLED_RESPONSE_IDS = new Map();
+const RESET_CANCELLED_REQUEST_FINGERPRINTS = new Map();
+const RESET_CANCELLED_RESPONSE_TTL_MS = 5 * 60 * 1000;
+const RESET_PREVIOUS_RESPONSE_COOLDOWN_MS = 60 * 1000;
+let LAST_ANTIGRAVITY_SESSION_RESET = null;
 const RESPONSES_WEBSOCKET_AUDIT = {
     supported: false,
     fallbackStatus: 101,
-    fallbackType: "accepted_idle_websocket",
+    fallbackType: "http_relay_websocket",
     attempts: 0,
     lastAttempt: null,
     lastUpgrade: null,
@@ -1219,6 +1224,7 @@ function diagnosticsPayload({
     installedChecks = latestInstalledCheckStatus(),
     shortcutRepair = latestShortcutRepairStatus(),
     sourcePreflight = latestSourcePreflightStatus(),
+    fast = false,
 } = {}) {
     const latestRoutes = Array.isArray(routeAudit?.entries)
         ? routeAudit.entries.slice(0, 10)
@@ -1265,8 +1271,8 @@ function diagnosticsPayload({
             latest: routeAudit?.latest || null,
             recent: latestRoutes,
         },
-        localFeatures: localFeatureSummary({ includeProjection: true }),
-        logDbGuard: logDbGuardStatus(),
+        localFeatures: fast ? { skipped: true, reason: "fast_diagnostics" } : localFeatureSummary({ includeProjection: true }),
+        logDbGuard: fast ? { skipped: true, reason: "fast_diagnostics" } : logDbGuardStatus(),
         toolBridge,
         nativeToolCapability,
         lifecycle,
@@ -1283,7 +1289,7 @@ function diagnosticsPayload({
         installedChecks,
         shortcutRepair,
         sourcePreflight,
-        syncReadinessEvidence: latestManagerReportItem("Sync readiness", "latest-sync-readiness.json").syncReadinessEvidence,
+        syncReadinessEvidence: fast ? null : latestManagerReportItem("Sync readiness", "latest-sync-readiness.json").syncReadinessEvidence,
         antigravityRetries: {
             count: ANTIGRAVITY_RETRY_AUDIT.count,
             latest: ANTIGRAVITY_RETRY_AUDIT.latest,
@@ -2524,6 +2530,7 @@ function latestManagerReportItem(label, fileName) {
     const isUiCodingProjectSmokeReport = fileName === "latest-ui-coding-project-smoke.json" || report?.reportName === "ui-coding-project-smoke";
     const isUiMultiTurnProjectSmokeReport = fileName === "latest-ui-multi-turn-project-smoke.json" || report?.reportName === "ui-multi-turn-project-smoke";
     const isUiRepoFileEditSmokeReport = fileName === "latest-ui-repo-file-edit-smoke.json" || report?.reportName === "ui-repo-file-edit-smoke";
+    const isUiRepoMultiFileEditSmokeReport = fileName === "latest-ui-repo-multi-file-edit-smoke.json" || report?.reportName === "ui-repo-multi-file-edit-smoke";
     const isUiComplexProjectSmokeReport = fileName === "latest-ui-complex-project-smoke.json" || report?.reportName === "ui-complex-project-smoke";
     const isUiReportSiteSmokeReport = fileName === "latest-ui-report-site-smoke.json" || report?.reportName === "ui-report-site-smoke";
     const optionalBool = (value) => typeof value === "boolean" ? value : null;
@@ -2568,6 +2575,26 @@ function latestManagerReportItem(label, fileName) {
         sourceHasLowercase: optionalBool(uiArtifactEvidence?.sourceHasLowercase),
         sourceHandlesInvalidChars: optionalBool(uiArtifactEvidence?.sourceHandlesInvalidChars),
         sourceTrimsHyphens: optionalBool(uiArtifactEvidence?.sourceTrimsHyphens),
+        composerCleared: optionalBool(report?.composerCleared),
+        sessionLockClear: optionalBool(report?.sessionLockClear),
+    } : null;
+    const uiRepoMultiFileEditEvidence = isUiRepoMultiFileEditSmokeReport ? {
+        artifactDir: shortSafeText(report?.artifactDir || "", ""),
+        artifactFiles: uiArtifactEvidence?.files && typeof uiArtifactEvidence.files === "object" ? uiArtifactEvidence.files : null,
+        exportsNormalizeStatus: optionalBool(uiArtifactEvidence?.exportsNormalizeStatus),
+        exportsSummarizeRecords: optionalBool(uiArtifactEvidence?.exportsSummarizeRecords),
+        exportsRenderSummaryHtml: optionalBool(uiArtifactEvidence?.exportsRenderSummaryHtml),
+        sourceChangedFromFixture: optionalBool(uiArtifactEvidence?.sourceChangedFromFixture),
+        testUnchanged: optionalBool(uiArtifactEvidence?.testUnchanged),
+        dataUnchanged: optionalBool(uiArtifactEvidence?.dataUnchanged),
+        testPassed: optionalBool(uiArtifactEvidence?.testPassed),
+        cliPassed: optionalBool(uiArtifactEvidence?.cliPassed),
+        htmlComplete: optionalBool(uiArtifactEvidence?.htmlComplete),
+        htmlHasChinese: optionalBool(uiArtifactEvidence?.htmlHasChinese),
+        htmlMentionsStatuses: optionalBool(uiArtifactEvidence?.htmlMentionsStatuses),
+        htmlAvoidsObjectObject: optionalBool(uiArtifactEvidence?.htmlAvoidsObjectObject),
+        readmeHasChinese: optionalBool(uiArtifactEvidence?.readmeHasChinese),
+        readmeMentionsCommand: optionalBool(uiArtifactEvidence?.readmeMentionsCommand),
         composerCleared: optionalBool(report?.composerCleared),
         sessionLockClear: optionalBool(report?.sessionLockClear),
     } : null;
@@ -2648,6 +2675,7 @@ function latestManagerReportItem(label, fileName) {
         uiCodingProjectEvidence,
         uiMultiTurnProjectEvidence,
         uiRepoFileEditEvidence,
+        uiRepoMultiFileEditEvidence,
         uiComplexProjectEvidence,
         uiReportSiteEvidence,
         logDbGuardEvidence: isLogDbGuardReport ? {
@@ -3136,6 +3164,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
         latestManagerReportItem("Desktop multi-turn project", "latest-ui-multi-turn-project-smoke.json"),
         latestManagerReportItem("Desktop repo file edit", "latest-ui-repo-file-edit-smoke.json"),
+        latestManagerReportItem("Desktop repo multi-file edit", "latest-ui-repo-multi-file-edit-smoke.json"),
         latestManagerReportItem("桌面复杂项目验收", "latest-ui-complex-project-smoke.json"),
         latestManagerReportItem("桌面调研报告验收", "latest-ui-report-site-smoke.json"),
         latestManagerReportItem("真实工作任务", "latest-real-work.json"),
@@ -3877,6 +3906,10 @@ function latestReportsSummary(result){
       const evidence=item.uiRepoFileEditEvidence;
       lines.push("  uiRepoEdit: test="+(evidence.testPassed?"true":"false")+" / lowercase="+(evidence.sourceHasLowercase?"true":"false")+" / invalidChars="+(evidence.sourceHandlesInvalidChars?"true":"false")+" / trimHyphens="+(evidence.sourceTrimsHyphens?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
     }
+    if(item.uiRepoMultiFileEditEvidence){
+      const evidence=item.uiRepoMultiFileEditEvidence;
+      lines.push("  uiRepoMulti: sourceChanged="+(evidence.sourceChangedFromFixture?"true":"false")+" / inputsLocked="+(evidence.testUnchanged&&evidence.dataUnchanged?"true":"false")+" / exports="+(evidence.exportsNormalizeStatus&&evidence.exportsSummarizeRecords&&evidence.exportsRenderSummaryHtml?"true":"false")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / html="+(evidence.htmlComplete&&evidence.htmlHasChinese&&evidence.htmlMentionsStatuses&&evidence.htmlAvoidsObjectObject?"true":"false")+" / readme="+(evidence.readmeHasChinese&&evidence.readmeMentionsCommand?"true":"false")+" / session="+(evidence.sessionLockClear?"clear":"check"));
+    }
     if(item.uiComplexProjectEvidence){
       const evidence=item.uiComplexProjectEvidence;
       lines.push("  uiComplex: done="+(evidence.doneExact?"true":"false")+" / export="+(evidence.exportsFunction?"true":"false")+" / test="+(evidence.testPassed?"true":"false")+" / cli="+(evidence.cliPassed?"true":"false")+" / sources="+(evidence.sourceUrlCount??"unknown")+" / urls="+(evidence.reportUrlCount??"unknown")+"/"+(evidence.htmlUrlCount??"unknown")+"/"+(evidence.sharedUrlCount??"unknown")+" / html="+(evidence.htmlComplete?"complete":"check")+" / session="+(evidence.sessionLockClear?"clear":"check"));
@@ -4584,10 +4617,14 @@ function buildSystemBlock(options = {}) {
     lines.push("Local artifact completion rule:");
     lines.push("- When the user asks you to create or edit local files, preserve exact user-provided strings, markers, file names, and paths byte-for-byte. Do not shorten or substitute marker strings.");
     lines.push("- If the user lists required UI features, files, marker text, or acceptance criteria, treat them as a checklist.");
+    lines.push("- If the user explicitly says to create one required file first, create that file before inspecting or changing later checklist items unless a safety blocker makes that impossible.");
     lines.push("- After writing local files for a task, run a follow-up read/check command before claiming completion. Verify required files exist and required exact marker strings and feature keywords are present.");
     lines.push("- If verification fails, fix the files and verify again before giving a final answer. Do not reply with \"completed\" merely because a write command exited successfully.");
-    lines.push("- For user-requested one-off artifact directories outside the current source repo, prefer shell/PowerShell file writes over apply_patch, especially for generated reports, HTML pages, scripts, and other large artifacts; still verify the exact content afterward.");
-    lines.push("- Do not retry a failing apply_patch for a one-off user artifact more than once. Switch to shell/PowerShell file writing, then read/check the files.");
+    lines.push("- Passing code tests does not complete a task while any explicitly required file or deliverable is still missing. Create the missing deliverable immediately; do not reread already-passing tests, run git status, or call goal/status tools as a substitute.");
+    lines.push("- Do not call get_goal for an ordinary file or coding task unless the user explicitly asked to create, inspect, or manage a persistent goal.");
+    lines.push("- For user-requested one-off artifact directories outside the current source repo, or explicit fixture/temp/example output directories inside a repo, use shell/PowerShell file writes instead of apply_patch, especially for generated reports, HTML pages, scripts, and other large artifacts; still verify the exact content afterward.");
+    lines.push("- Do not use apply_patch for fixture/temp/example/generated directory tasks unless the user explicitly asks for a patch. If you already called apply_patch and it failed there, stop retrying it and switch to shell/PowerShell file writing, then read/check the files.");
+    lines.push("- Do not inspect unrelated assistant history, Antigravity brain, transcript, or log folders to learn how to complete the current file task. Use the current files, tests, and tool errors as source of truth.");
 
     lines.push("");
     lines.push("Local file reading efficiency rule:");
@@ -4639,6 +4676,7 @@ function buildSystemBlock(options = {}) {
     lines.push("- Use npm.cmd, npx.cmd, pnpm.cmd, or yarn.cmd explicitly; for long-running tools prefer cmd.exe /d /s /c \"npx.cmd ...\".");
     lines.push("- Do not prepend C:\\Program Files\\nodejs to PATH to find these commands. Anti-Codex already provides command shims at the front of PATH.");
     lines.push("- If an existing command uses Start-Process -FilePath \"npx\" or \"npm\", rewrite it to the .cmd executable before running.");
+    lines.push("- When reading or writing files that contain Chinese or other non-ASCII text, avoid copying mojibake from PowerShell display output. Use UTF-8 file APIs, Node.js fs read/write, or JavaScript Unicode escapes such as \\u72b6\\u6001; do not edit tests or expected files to match garbled console text.");
 
     lines.push("");
     lines.push("Freeform patch tool rule:");
@@ -4649,9 +4687,10 @@ function buildSystemBlock(options = {}) {
     lines.push("- Never use narrative hunk headers such as \"*** Update Projections\", ordinary unified-diff headers such as \"--- a/file\" or \"+++ b/file\", line-number replacement instructions, or Markdown prose inside the patch body.");
     lines.push("- Every apply_patch body must end with a final line exactly equal to \"*** End Patch\".");
     lines.push("- Never call apply_patch with {}, an empty content string, or explanatory text instead of a patch.");
-    lines.push("- Use apply_patch for source-code edits in the active project tree. Do not use apply_patch as the first choice for large one-off user artifacts such as reports, generated HTML, markdown deliverables, or files in user-specified output directories.");
+    lines.push("- Use apply_patch for source-code edits in the active project tree. Do not use apply_patch for large one-off user artifacts such as reports, generated HTML, markdown deliverables, or files in user-specified fixture/temp/example/generated output directories.");
     lines.push("- If an apply_patch call fails because the patch body is missing or invalid, immediately regenerate one valid full patch once for source-code edits, or stop and explain the blocker.");
-    lines.push("- Do not bypass apply_patch by writing or rewriting source files with shell commands merely because apply_patch formatting failed. This source-file restriction does not apply to user-requested one-off artifact directories outside the current source repo.");
+    lines.push("- Do not bypass apply_patch by writing or rewriting ordinary source files with shell commands merely because apply_patch formatting failed.");
+    lines.push("- Exception: if the user explicitly scoped the task to a fixture/temp/example/generated directory, use shell/PowerShell file writing inside that scoped directory and then verify with read/test commands.");
 
     lines.push("");
     lines.push("Markdown formatting rule:");
@@ -5876,12 +5915,14 @@ function isVolatileRestoredMessage(item) {
 }
 
 function parseRestoredCommandArgs(item) {
-    if (!item || typeof item !== "object" || item.type !== "function_call" || item.name !== "exec_command") return "";
+    if (!item || typeof item !== "object" || item.type !== "function_call" || !["exec_command", "shell_command"].includes(item.name)) return "";
     const raw = item.arguments;
     if (typeof raw !== "string") return "";
     try {
         const parsed = JSON.parse(raw);
-        return typeof parsed?.cmd === "string" ? parsed.cmd : "";
+        if (typeof parsed?.cmd === "string") return parsed.cmd;
+        if (typeof parsed?.command === "string") return parsed.command;
+        return "";
     } catch {
         return raw;
     }
@@ -5915,7 +5956,7 @@ function commandLooksLikeStatusProbe(cmd) {
 }
 
 function parseExitCode(output) {
-    const match = String(output || "").match(/Process exited with code\s+(-?\d+)/i);
+    const match = String(output || "").match(/(?:Process exited with code|Exit code:)\s*(-?\d+)/i);
     return match ? Number(match[1]) : null;
 }
 
@@ -5999,11 +6040,40 @@ function toolOutputLooksSuccessful(output, parsedOutput) {
     return Boolean(text) && !toolOutputLooksFailed(text, parsedOutput);
 }
 
+function restoredInputLooksLikeScopedGeneratedTask(input) {
+    if (!Array.isArray(input)) return false;
+    const text = input
+        .map(item => {
+            if (!item || typeof item !== "object") return "";
+            if (item.type === "message" || item.role === "user") return textFromMessageContent(item.content);
+            if (typeof item.input === "string") return item.input;
+            if (typeof item.arguments === "string") return item.arguments;
+            return "";
+        })
+        .join("\n");
+    return /\b(fixture|temp|example|generated|desktop-coworker|acceptance-target)\b|小项目|验收|临时目录|示例目录/i.test(text);
+}
+
+function outputLooksLikePatchFormatFailure(output) {
+    return /apply_patch verification failed|invalid hunk|invalid patch|SyntaxError|lark|grammar|valid hunk headers|expected lines|last line of the patch/i.test(String(output || ""));
+}
+
 function collectDurableToolFacts(input) {
     if (!Array.isArray(input)) return [];
     const calls = new Map();
     const toolCalls = new Map();
     const facts = new Map();
+    const scopedGeneratedTask = restoredInputLooksLikeScopedGeneratedTask(input);
+    const restoredTaskText = input
+        .map(item => {
+            if (!item || typeof item !== "object") return "";
+            if (item.type === "message" || item.role === "user") return textFromMessageContent(item.content);
+            return "";
+        })
+        .join("\n");
+    const requiresReadme = /\bREADME\.md\b/i.test(restoredTaskText);
+    let readmeWriteObserved = false;
+    let requestedTestPassed = false;
     function addFact(kind, fact) {
         const text = quoteFactValue(fact, 240);
         if (!text) return;
@@ -6014,7 +6084,7 @@ function collectDurableToolFacts(input) {
 
     for (const item of input) {
         if (!item || typeof item !== "object") continue;
-        if (item.type === "function_call" && item.name === "exec_command") {
+        if (item.type === "function_call" && ["exec_command", "shell_command"].includes(item.name)) {
             const callId = item.call_id || item.id;
             if (callId) calls.set(callId, parseRestoredCommandArgs(item));
             if (callId) toolCalls.set(callId, { name: item.name, arguments: item.arguments, input: item.input, type: item.type });
@@ -6035,6 +6105,21 @@ function collectDurableToolFacts(input) {
         const ok = exitCode === 0;
         const failed = exitCode !== null && exitCode !== 0;
         const lines = extractCleanOutputLines(output);
+        const toolInput = `${toolCall?.arguments || ""}\n${toolCall?.input || ""}\n${cmd}`;
+
+        if (ok && /\bREADME\.md\b/i.test(toolInput) && (commandLooksLikeWrite(cmd) || toolCall?.name === "apply_patch")) {
+            readmeWriteObserved = true;
+        }
+        if (ok && /\bnode\b[\s\S]{0,80}(?:--test|\.test\.mjs)\b/i.test(cmd)) {
+            requestedTestPassed = true;
+        }
+
+        if (toolCall?.type === "custom_tool_call" && toolCall.name === "apply_patch" && outputLooksLikePatchFormatFailure(output)) {
+            addFact("tool-state", "apply_patch failed because the patch body or context was invalid. Do not search prior transcripts, Antigravity brain, web, or environment history. Continue from the current workspace files and the current user task.");
+            if (scopedGeneratedTask) {
+                addFact("tool-state", "Scoped fixture/generated task recovery: stop retrying apply_patch, use shell/PowerShell file writes only inside the scoped directory, then run the requested readbacks/tests before claiming completion.");
+            }
+        }
 
         if (ok && commandLooksLikeListing(cmd)) {
             const pathFacts = extractLikelyPathFacts(lines);
@@ -6073,6 +6158,10 @@ function collectDurableToolFacts(input) {
                 addFact("tool-state", `Tool ${name} failed, do not assume success${args ? ` (${args})` : ""}: ${quoteFactValue(failureLine, 120)}`);
             }
         }
+    }
+
+    if (scopedGeneratedTask && requiresReadme && requestedTestPassed && !readmeWriteObserved) {
+        addFact("tool-state", "The requested code test passed, but there is still no successful tool evidence that README.md was created. Create README.md now before rereading tests, running git status, calling get_goal, or claiming completion.");
     }
 
     return Array.from(facts.entries())
@@ -6131,8 +6220,8 @@ function injectTaskLedgerFacts(input) {
 function injectDurableToolFacts(input) {
     const facts = collectDurableToolFacts(input);
     if (!facts.length) return input;
-    const alreadyPresent = input.some(item => item?.type === "context_compaction" && /(?:Anti-Codex|DeepCodex) durable environment facts/.test(readableCompactionText(item)));
-    if (alreadyPresent) return input;
+    const withoutStaleFacts = input.filter(item => !(item?.type === "context_compaction"
+        && /(?:Anti-Codex|DeepCodex) durable environment facts/.test(readableCompactionText(item))));
     return [
         {
             type: "context_compaction",
@@ -6142,7 +6231,7 @@ function injectDurableToolFacts(input) {
                 "Use these facts before guessing environment details. If a later probe contradicts them, verify with a tool call before changing course.",
             ].join("\n"),
         },
-        ...input,
+        ...withoutStaleFacts,
     ];
 }
 
@@ -6543,6 +6632,7 @@ function artifactMarkerRequirementFromUserText(userText = "") {
     const markers = userText.match(/\b[A-Z][A-Z0-9_]{10,}\b/g) || [];
     const marker = markers.at(-1);
     if (!marker) return null;
+    if (/^UI_REPO_(?:FILE|MULTI_FILE)_EDIT_SMOKE_/i.test(marker)) return null;
     const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
     const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
     const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
@@ -8199,11 +8289,134 @@ function releaseAntigravitySessionLease(lease) {
     try { lease?.release?.(); } catch {}
 }
 
-function attachAntigravityStreamingClientAbort(req, res, controller) {
+function rememberResetCancelledResponseIds(ids, reason = "manager_action") {
+    const now = Date.now();
+    LAST_ANTIGRAVITY_SESSION_RESET = { at: now, reason };
+    for (const [id, record] of RESET_CANCELLED_RESPONSE_IDS) {
+        if (!record || now - Number(record.at || 0) > RESET_CANCELLED_RESPONSE_TTL_MS) {
+            RESET_CANCELLED_RESPONSE_IDS.delete(id);
+        }
+    }
+    for (const [fingerprint, record] of RESET_CANCELLED_REQUEST_FINGERPRINTS) {
+        if (!record || now - Number(record.at || 0) > RESET_CANCELLED_RESPONSE_TTL_MS) {
+            RESET_CANCELLED_REQUEST_FINGERPRINTS.delete(fingerprint);
+        }
+    }
+    for (const id of ids || []) {
+        const key = String(id || "").trim();
+        if (key) RESET_CANCELLED_RESPONSE_IDS.set(key, { at: now, reason });
+    }
+}
+
+function rememberResetCancelledRequestFingerprints(entries, reason = "manager_action") {
+    const now = Date.now();
+    for (const entry of entries || []) {
+        const fingerprint = String(entry?.fingerprint || "").trim();
+        if (fingerprint) RESET_CANCELLED_REQUEST_FINGERPRINTS.set(fingerprint, { at: now, reason });
+    }
+}
+
+function resetReplayFingerprint(parsed) {
+    const input = Array.isArray(parsed?.input)
+        ? parsed.input
+        : (typeof parsed?.input === "string" ? parsed.input : []);
+    const metadata = parsed?.metadata && typeof parsed.metadata === "object" ? parsed.metadata : {};
+    const payload = {
+        model: parsed?.model || "",
+        previous_response_id: parsed?.previous_response_id || "",
+        metadata,
+        input,
+    };
+    return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function resetCancelledPreviousResponseFailure(parsed) {
+    const id = String(parsed?.previous_response_id || "").trim();
+    const fingerprint = resetReplayFingerprint(parsed);
+    const fingerprintRecord = RESET_CANCELLED_REQUEST_FINGERPRINTS.get(fingerprint);
+    if (fingerprintRecord && Date.now() - Number(fingerprintRecord.at || 0) <= RESET_CANCELLED_RESPONSE_TTL_MS) {
+        return {
+            status: 409,
+            type: "anticodex_session_reset",
+            message: "This stale Anti-Codex request was cancelled by a local session reset. Start a fresh turn instead of replaying the old request.",
+            retryable: false,
+            previousResponseId: id || null,
+            resetReason: fingerprintRecord.reason || "manager_action",
+            resetFingerprint: true,
+        };
+    }
+    if (!id) return null;
+    const record = RESET_CANCELLED_RESPONSE_IDS.get(id);
+    const now = Date.now();
+    if (!record && LAST_ANTIGRAVITY_SESSION_RESET && now - Number(LAST_ANTIGRAVITY_SESSION_RESET.at || 0) <= RESET_PREVIOUS_RESPONSE_COOLDOWN_MS) {
+        return {
+            status: 409,
+            type: "anticodex_session_reset",
+            message: "This Anti-Codex continuation arrived immediately after a local session reset. Start a fresh turn instead of replaying the old response.",
+            retryable: false,
+            previousResponseId: id,
+            resetReason: LAST_ANTIGRAVITY_SESSION_RESET.reason || "manager_action",
+            resetCooldown: true,
+        };
+    }
+    if (!record) return null;
+    if (now - Number(record.at || 0) > RESET_CANCELLED_RESPONSE_TTL_MS) {
+        RESET_CANCELLED_RESPONSE_IDS.delete(id);
+        return null;
+    }
+    return {
+        status: 409,
+        type: "anticodex_session_reset",
+        message: "This stale Anti-Codex continuation was cancelled by a local session reset. Start a fresh turn instead of replaying the old response.",
+        retryable: false,
+        previousResponseId: id,
+        resetReason: record.reason || "manager_action",
+    };
+}
+
+function resetAntigravityProcessManagerState(reason = "manager_action") {
+    if (!CODEX_HOME_DIR) return { ok: true, skipped: true, reason: "missing_codex_home" };
+    const processManagerPath = resolvePath(CODEX_HOME_DIR, "process_manager", "chat_processes.json");
+    if (!existsSync(processManagerPath)) return { ok: true, skipped: true, reason: "missing_chat_processes", path: processManagerPath };
+    try {
+        const raw = readFileSync(processManagerPath, "utf8");
+        let entries = [];
+        try {
+            const parsed = JSON.parse(raw);
+            entries = Array.isArray(parsed) ? parsed : [];
+        } catch {}
+        const backupPath = `${processManagerPath}.before-reset-${Date.now()}.bak`;
+        writeFileSync(backupPath, raw, "utf8");
+        writeFileSync(processManagerPath, "[]\n", "utf8");
+        return {
+            ok: true,
+            reason,
+            path: processManagerPath,
+            backupPath,
+            cleared: entries.length,
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            reason,
+            path: processManagerPath,
+            error: String(error?.message || error),
+        };
+    }
+}
+
+function attachAntigravityStreamingClientAbort(req, res, controller, options = {}) {
+    const abortOnDisconnect = options.abortOnDisconnect !== false;
+    const onDisconnect = typeof options.onDisconnect === "function" ? options.onDisconnect : null;
     let responseEnded = false;
+    let disconnected = false;
     const abortStreaming = () => {
-        if (responseEnded || controller.signal.aborted) return;
-        controller.abort(new DOMException("Anti-Codex streaming client disconnected.", "AbortError"));
+        if (responseEnded || disconnected) return;
+        disconnected = true;
+        onDisconnect?.();
+        if (abortOnDisconnect && !controller.signal.aborted) {
+            controller.abort(new DOMException("Anti-Codex streaming client disconnected.", "AbortError"));
+        }
     };
     const cleanup = () => {
         responseEnded = true;
@@ -8228,7 +8441,7 @@ function releaseIdleAntigravitySessionLockIfSafe(reason = "idle_session_reap") {
         ? Math.min(ANTIGRAVITY_IDLE_SESSION_RELEASE_MS, ANTIGRAVITY_QUEUED_IDLE_SESSION_RELEASE_MS)
         : ANTIGRAVITY_IDLE_SESSION_RELEASE_MS;
     if (!lock.activeResponseIds?.length) {
-        if (Number(lock.queued || 0) === 0) return { attempted: false, reason: "no_active_continuation", lock, activeRequests, queue, busy };
+        if (lock.active !== true) return { attempted: false, reason: "no_active_continuation", lock, activeRequests, queue, busy };
         const released = ANTIGRAVITY_SESSION_LOCK.releaseIdleActive({
             reason,
             maxIdleMs,
@@ -8246,19 +8459,34 @@ async function resetAntigravitySessionLock(reason = "manager_action") {
     const before = {
         sessionLock: ANTIGRAVITY_SESSION_LOCK.snapshot(),
         queue: ANTIGRAVITY_REQUEST_QUEUE.snapshot(),
-        activeRequests: ACTIVE_ANTIGRAVITY_REQUESTS.snapshot(),
+        activeRequests: ACTIVE_ANTIGRAVITY_REQUESTS.snapshot({ includeEntries: true }),
     };
+    rememberResetCancelledResponseIds(before.sessionLock?.activeResponseIds || [], reason);
+    rememberResetCancelledRequestFingerprints(before.activeRequests?.entries || [], reason);
     const [activeRequests, queue, sessionLock] = await Promise.all([
         ACTIVE_ANTIGRAVITY_REQUESTS.cancelAll(),
         Promise.resolve(ANTIGRAVITY_REQUEST_QUEUE.cancelAll(new DOMException("Anti-Codex Antigravity session lock reset locally.", "AbortError"))),
         Promise.resolve(ANTIGRAVITY_SESSION_LOCK.reset({ reason })),
     ]);
+    const processManager = resetAntigravityProcessManagerState(reason);
     const after = {
         sessionLock: ANTIGRAVITY_SESSION_LOCK.snapshot(),
         queue: ANTIGRAVITY_REQUEST_QUEUE.snapshot(),
         activeRequests: ACTIVE_ANTIGRAVITY_REQUESTS.snapshot(),
     };
-    return { ok: true, reason, before, activeRequests, queue, sessionLock, after };
+    return {
+        ok: true,
+        reason,
+        activeReleased: sessionLock?.activeReleased === true,
+        queuedCancelled: Number(sessionLock?.queuedCancelled || 0),
+        snapshot: sessionLock?.snapshot || after.sessionLock,
+        before,
+        activeRequests,
+        queue,
+        sessionLock,
+        processManager,
+        after,
+    };
 }
 
 async function callQueuedAntigravityUpstream(chatBody, dependencies = {}) {
@@ -8299,7 +8527,7 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
     const sse = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     const cleanupClientAbort = attachAntigravityStreamingClientAbort(req, res, controller);
 
-    registry.register(id, { controller });
+    registry.register(id, { controller, fingerprint: resetReplayFingerprint(parsed) });
     res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", connection: "keep-alive", "x-accel-buffering": "no", "access-control-allow-origin": "*" });
     sse("response.created", { type: "response.created", response: inProgress });
     sse("response.in_progress", { type: "response.in_progress", response: inProgress });
@@ -8359,14 +8587,30 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
     const controller = new AbortController();
     const model = parsed.model || chatBody.model || "gemini-pro-agent";
     const inProgress = responseShell(parsed, { id, created, model, status: "in_progress", output: [] });
-    const sse = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    let clientDisconnected = false;
+    const sse = (event, data) => {
+        if (clientDisconnected || res.destroyed || res.writableEnded) return false;
+        try {
+            return res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        } catch {
+            clientDisconnected = true;
+            return false;
+        }
+    };
     const streamedMessageId = messageId();
     let streamedText = "";
     let messageOpened = false;
     let textWasRevised = false;
     let completion = null;
     const toolCapable = Array.isArray(chatBody?.tools) && chatBody.tools.length > 0;
-    const cleanupClientAbort = attachAntigravityStreamingClientAbort(req, res, controller);
+    const cleanupClientAbort = attachAntigravityStreamingClientAbort(req, res, controller, {
+        abortOnDisconnect: !toolCapable,
+        onDisconnect: () => {
+            if (!toolCapable) return;
+            clientDisconnected = true;
+            writeLifecycleEvent("tool_stream_client_detached", { responseId: id, model });
+        },
+    });
     const streamIdleTimeoutMs = Math.max(1, Number(dependencies.streamIdleTimeoutMs || ANTIGRAVITY_STREAM_IDLE_TIMEOUT_MS) || ANTIGRAVITY_STREAM_IDLE_TIMEOUT_MS);
     const streamTotalTimeoutMs = Math.max(1, Number(dependencies.streamTotalTimeoutMs || ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS) || ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS);
     const streamKeepAliveMs = Math.max(1, Number(dependencies.streamKeepAliveMs || ANTIGRAVITY_SSE_KEEPALIVE_MS) || ANTIGRAVITY_SSE_KEEPALIVE_MS);
@@ -8446,13 +8690,17 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
         });
     };
 
-    registry.register(id, { controller });
+    registry.register(id, { controller, fingerprint: resetReplayFingerprint(parsed) });
     res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", connection: "keep-alive", "x-accel-buffering": "no", "access-control-allow-origin": "*" });
     sse("response.created", { type: "response.created", response: inProgress });
     sse("response.in_progress", { type: "response.in_progress", response: inProgress });
     streamKeepAliveTimer = setInterval(() => {
-        if (responseSettled || controller.signal.aborted || res.writableEnded) return;
-        res.write(`: anticodex-keepalive ${Date.now()}\n\n`);
+        if (responseSettled || controller.signal.aborted || clientDisconnected || res.destroyed || res.writableEnded) return;
+        try {
+            res.write(`: anticodex-keepalive ${Date.now()}\n\n`);
+        } catch {
+            clientDisconnected = true;
+        }
     }, streamKeepAliveMs);
     refreshStreamIdleTimeout();
 
@@ -8629,7 +8877,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
         cleanupClientAbort();
         endBusy();
         registry.finish(id);
-        res.end();
+        if (!res.destroyed && !res.writableEnded) res.end();
     }
 }
 
@@ -8655,7 +8903,8 @@ function invalidCustomToolMessage(name) {
         "Regenerate a valid patch body and call the tool with {\"content\":\"*** Begin Patch\\n...\\n*** End Patch\"}.",
         "For apply_patch, each file hunk must start with exactly one of \"*** Add File:\", \"*** Delete File:\", or \"*** Update File:\" and the final line must be exactly \"*** End Patch\".",
         "Do not use narrative headers, ordinary unified diff headers (---/+++), or line-number replacement prose inside the patch body.",
-        "Do not bypass this by writing source files with shell commands just because the freeform tool call was malformed.",
+        "Do not bypass this by writing ordinary source files with shell commands just because the freeform tool call was malformed.",
+        "Exception: if the user explicitly scoped the task to a fixture/temp/example/generated directory, and apply_patch already failed once or the file is easier to rewrite completely, use shell/PowerShell file writing inside that scoped directory and verify with read/test commands.",
     ].join("\n");
 }
 
@@ -9120,11 +9369,137 @@ function responsesWebSocketAcceptKey(secWebSocketKey) {
 
 function webSocketFrame(opcode, payload = Buffer.alloc(0)) {
     const body = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload));
-    if (body.length >= 126) return Buffer.alloc(0);
-    return Buffer.concat([Buffer.from([0x80 | opcode, body.length]), body]);
+    if (body.length < 126) return Buffer.concat([Buffer.from([0x80 | opcode, body.length]), body]);
+    if (body.length <= 0xffff) {
+        const header = Buffer.alloc(4);
+        header[0] = 0x80 | opcode;
+        header[1] = 126;
+        header.writeUInt16BE(body.length, 2);
+        return Buffer.concat([header, body]);
+    }
+    const header = Buffer.alloc(10);
+    header[0] = 0x80 | opcode;
+    header[1] = 127;
+    header.writeUInt32BE(0, 2);
+    header.writeUInt32BE(body.length, 6);
+    return Buffer.concat([header, body]);
 }
 
-function attachIdleResponsesWebSocket(req, socket) {
+function parseClientWebSocketFrames(buffer) {
+    const frames = [];
+    let offset = 0;
+    while (buffer.length - offset >= 2) {
+        const first = buffer[offset];
+        const second = buffer[offset + 1];
+        const opcode = first & 0x0f;
+        const masked = (second & 0x80) !== 0;
+        let length = second & 0x7f;
+        let headerLength = 2;
+        if (length === 126) {
+            if (buffer.length - offset < 4) break;
+            length = buffer.readUInt16BE(offset + 2);
+            headerLength = 4;
+        } else if (length === 127) {
+            if (buffer.length - offset < 10) break;
+            const high = buffer.readUInt32BE(offset + 2);
+            const low = buffer.readUInt32BE(offset + 6);
+            if (high > 0) throw new Error("Responses websocket frame is too large");
+            length = low;
+            headerLength = 10;
+        }
+        const maskLength = masked ? 4 : 0;
+        const frameEnd = offset + headerLength + maskLength + length;
+        if (buffer.length < frameEnd) break;
+        let payload = buffer.slice(offset + headerLength + maskLength, frameEnd);
+        if (masked) {
+            const mask = buffer.slice(offset + headerLength, offset + headerLength + 4);
+            payload = Buffer.from(payload);
+            for (let i = 0; i < payload.length; i += 1) payload[i] ^= mask[i % 4];
+        }
+        frames.push({ opcode, payload });
+        offset = frameEnd;
+    }
+    return { frames, rest: buffer.slice(offset) };
+}
+
+function responsesWebSocketRelayHeaders(req) {
+    const headers = { "content-type": "application/json" };
+    const forwardHeaders = [
+        "session_id",
+        "x-codex-window-id",
+        "x-codex-app-version",
+        "x-codex-client",
+        "openai-beta",
+        "authorization",
+        "user-agent",
+    ];
+    for (const name of forwardHeaders) {
+        const value = req?.headers?.[name];
+        if (typeof value === "string" && value) headers[name] = value;
+    }
+    return headers;
+}
+
+async function relayResponsesHttpToWebSocket({ pathname, payload, socket, headers }) {
+    const response = await fetch(`http://${LISTEN_HOST}:${PORT}${pathname}`, {
+        method: "POST",
+        headers: headers || { "content-type": "application/json" },
+        body: payload,
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        socket.write(webSocketFrame(0x1, JSON.stringify({
+            type: "error",
+            error: {
+                message: text || `Responses HTTP relay failed with ${response.status}`,
+                status: response.status,
+            },
+        })));
+        return;
+    }
+
+    let sent = 0;
+    const sendEventBlock = (part) => {
+        const dataLines = [];
+        for (const line of String(part || "").split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            dataLines.push(trimmed.slice(5).trimStart());
+        }
+        const data = dataLines.join("\n").trim();
+        if (!data || data === "[DONE]") return;
+        if (!socket.destroyed && !socket.writableEnded) {
+            socket.write(webSocketFrame(0x1, data));
+            sent += 1;
+        }
+    };
+
+    if (!response.body) {
+        const text = await response.text();
+        sendEventBlock(text);
+        if (sent === 0 && text.trim() && !socket.destroyed && !socket.writableEnded) {
+            socket.write(webSocketFrame(0x1, text.trim()));
+        }
+        return;
+    }
+
+    const decoder = new TextDecoder();
+    let carry = "";
+    for await (const chunk of response.body) {
+        carry += decoder.decode(chunk, { stream: true });
+        while (carry) {
+            const boundary = carry.match(/\r?\n\r?\n/);
+            if (!boundary || boundary.index === undefined) break;
+            const part = carry.slice(0, boundary.index);
+            carry = carry.slice(boundary.index + boundary[0].length);
+            sendEventBlock(part);
+        }
+    }
+    carry += decoder.decode();
+    if (carry.trim()) sendEventBlock(carry);
+}
+
+function attachResponsesWebSocket(req, socket, pathname = "/responses") {
     const key = safeHeaderValue(req?.headers?.["sec-websocket-key"]);
     if (!key) {
         socket.write(unsupportedResponsesWebSocketHttpResponse(400));
@@ -9141,17 +9516,72 @@ function attachIdleResponsesWebSocket(req, socket) {
     if (protocol) headers.push(`sec-websocket-protocol: ${protocol.split(",")[0].trim()}`);
     headers.push("", "");
     socket.write(headers.join("\r\n"));
-    socket.setTimeout(5 * 60 * 1000, () => {
-        try { socket.end(webSocketFrame(0x8)); } catch {}
-    });
-    socket.on("data", (chunk) => {
-        if (!Buffer.isBuffer(chunk) || chunk.length < 2) return;
-        const opcode = chunk[0] & 0x0f;
-        if (opcode === 0x9) {
-            try { socket.write(webSocketFrame(0xA)); } catch {}
-        } else if (opcode === 0x8) {
-            try { socket.end(webSocketFrame(0x8)); } catch {}
+    let buffer = Buffer.alloc(0);
+    let closed = false;
+    const pendingPayloads = [];
+    let draining = false;
+    let pingInterval = null;
+    const relayHeaders = responsesWebSocketRelayHeaders(req);
+
+    const closeSocket = (payload = Buffer.alloc(0)) => {
+        if (closed) return;
+        closed = true;
+        if (pingInterval) clearInterval(pingInterval);
+        try { socket.end(webSocketFrame(0x8, payload)); } catch {}
+    };
+
+    const drainResponsesWebSocketQueue = async () => {
+        if (draining || closed) return;
+        draining = true;
+        try {
+            while (!closed && pendingPayloads.length > 0) {
+                const payload = pendingPayloads.shift();
+                await relayResponsesHttpToWebSocket({ pathname, payload, socket, headers: relayHeaders });
+            }
+        } catch (error) {
+            try {
+                socket.write(webSocketFrame(0x1, JSON.stringify({ type: "error", error: { message: String(error?.message || error) } })));
+            } catch {}
+        } finally {
+            draining = false;
+            if (!closed && pendingPayloads.length > 0) void drainResponsesWebSocketQueue();
         }
+    };
+
+    socket.setTimeout(5 * 60 * 1000, () => {
+        closeSocket();
+    });
+    pingInterval = setInterval(() => {
+        if (closed || socket.destroyed || socket.writableEnded) return;
+        try { socket.write(webSocketFrame(0x9, "anticodex")); } catch {}
+    }, 15_000);
+    pingInterval.unref?.();
+    socket.on("data", async (chunk) => {
+        if (!Buffer.isBuffer(chunk) || closed) return;
+        buffer = Buffer.concat([buffer, chunk]);
+        let parsed;
+        try {
+            parsed = parseClientWebSocketFrames(buffer);
+        } catch (error) {
+            socket.write(webSocketFrame(0x1, JSON.stringify({ type: "error", error: { message: String(error?.message || error) } })));
+            closeSocket();
+            return;
+        }
+        buffer = parsed.rest;
+        for (const frame of parsed.frames) {
+            if (frame.opcode === 0x9) {
+                try { socket.write(webSocketFrame(0xA, frame.payload)); } catch {}
+            } else if (frame.opcode === 0x8) {
+                closeSocket(frame.payload);
+            } else if (frame.opcode === 0x1 || frame.opcode === 0x2) {
+                pendingPayloads.push(frame.payload.toString("utf8"));
+                void drainResponsesWebSocketQueue();
+            }
+        }
+    });
+    socket.on("close", () => {
+        closed = true;
+        if (pingInterval) clearInterval(pingInterval);
     });
     socket.on("error", () => {});
     return true;
@@ -9399,7 +9829,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/anticodex/diagnostics") {
-        return jsonResponse(res, 200, diagnosticsPayload());
+        return jsonResponse(res, 200, diagnosticsPayload({ fast: url.searchParams.get("fast") === "1" }));
     }
 
     if (req.method === "GET" && url.pathname === "/anticodex/account") {
@@ -9535,6 +9965,10 @@ const server = http.createServer(async (req, res) => {
                 if (readinessFailure) {
                     recordAntigravityTrafficFailure(readinessFailure);
                     return failWithDetails(res, readinessFailure.status, readinessFailure);
+                }
+                const resetCancelledFailure = resetCancelledPreviousResponseFailure(parsed);
+                if (resetCancelledFailure) {
+                    return failWithDetails(res, resetCancelledFailure.status, resetCancelledFailure);
                 }
             }
 
@@ -9679,10 +10113,10 @@ server.on("upgrade", (req, socket) => {
             recordResponsesWebSocketAttempt(req, {
                 kind: "upgrade",
                 status: 101,
-                responseType: "accepted_idle_websocket",
+                responseType: "http_relay_websocket",
                 pathname: url.pathname,
             });
-            attachIdleResponsesWebSocket(req, socket);
+            attachResponsesWebSocket(req, socket, url.pathname);
             return;
         }
         const body = JSON.stringify({ error: { message: `Not found: websocket ${url.pathname}`, type: "not_found" } });

@@ -79,3 +79,34 @@ test("registry cancels and removes every active request during shutdown", async 
   assert.deepEqual(cancelled.sort(), ["cascade_4", "cascade_5"]);
   assert.deepEqual(registry.snapshot(), { active: 0, statuses: {} });
 });
+
+test("registry cancelAll releases local requests even when cascade cancellation stalls", async () => {
+  const registry = createAntigravityRequestRegistry({
+    cascadeCancelTimeoutMs: 10,
+    cancelCascade: async () => new Promise(() => {}),
+  });
+
+  registry.register("resp_stalled");
+  await registry.attachCascade("resp_stalled", { connection: {}, cascadeId: "cascade_stalled" });
+
+  const startedAt = Date.now();
+  const result = await registry.cancelAll();
+
+  assert.equal(result.requested, 1);
+  assert.equal(result.cancelled, 1);
+  assert.equal(result.failed, 0);
+  assert.ok(Date.now() - startedAt < 500);
+  assert.deepEqual(registry.snapshot(), { active: 0, statuses: {} });
+});
+
+test("registry can include active request fingerprints for reset replay blocking", () => {
+  const registry = createAntigravityRequestRegistry();
+
+  registry.register("resp_fingerprint", { fingerprint: "fp_123" });
+
+  assert.deepEqual(registry.snapshot({ includeEntries: true }), {
+    active: 1,
+    statuses: { active: 1 },
+    entries: [{ responseId: "resp_fingerprint", status: "active", fingerprint: "fp_123" }],
+  });
+});

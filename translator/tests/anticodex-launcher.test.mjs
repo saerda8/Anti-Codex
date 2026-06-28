@@ -144,12 +144,16 @@ test("Antigravity system prompt requires local artifact verification before comp
   assert.match(server, /Local artifact completion rule/);
   assert.match(server, /preserve exact user-provided strings, markers, file names, and paths byte-for-byte/);
   assert.match(server, /treat them as a checklist/);
+  assert.match(server, /explicitly says to create one required file first/);
   assert.match(server, /run a follow-up read\/check command before claiming completion/);
   assert.match(server, /Verify required files exist and required exact marker strings and feature keywords are present/);
   assert.match(server, /Do not reply with \\"completed\\" merely because a write command exited successfully/);
-  assert.match(server, /prefer shell\/PowerShell file writes over apply_patch/);
-  assert.match(server, /Do not retry a failing apply_patch for a one-off user artifact more than once/);
-  assert.match(server, /This source-file restriction does not apply to user-requested one-off artifact directories outside the current source repo/);
+  assert.match(server, /Passing code tests does not complete a task while any explicitly required file or deliverable is still missing/);
+  assert.match(server, /Do not call get_goal for an ordinary file or coding task/);
+  assert.match(server, /use shell\/PowerShell file writes instead of apply_patch/);
+  assert.match(server, /Do not use apply_patch for fixture\/temp\/example\/generated directory tasks/);
+  assert.match(server, /use shell\/PowerShell file writing inside that scoped directory/);
+  assert.match(server, /Do not inspect unrelated assistant history, Antigravity brain, transcript, or log folders/);
 });
 
 test("Antigravity routes explicit desktop web searches through stable internal search", () => {
@@ -1444,6 +1448,17 @@ test("Anti-Codex default runtime config is file-auth and Flash-first", () => {
   assert.equal(slugs.some((slug) => /^gpt-/i.test(slug)), false);
 });
 
+test("Anti-Codex startup registers an explicit workspace as the active desktop project", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+
+  assert.match(launcher, /\$env:ANTICODEX_WORKSPACE/);
+  assert.match(launcher, /electron-saved-workspace-roots/);
+  assert.match(launcher, /active-workspace-roots/);
+  assert.match(launcher, /electron-workspace-root-labels/);
+  assert.match(launcher, /project-order/);
+  assert.match(launcher, /state\["active-workspace-roots"\]\s*=\s*\[workspace\]/);
+});
+
 test("Anti-Codex installer creates an isolated copied Codex host", () => {
   const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
   const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
@@ -2446,6 +2461,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(managerAction, /activeReleased/);
   assert.match(managerAction, /queuedCancelled/);
   assert.match(managerAction, /activeAntigravityRequests/);
+  assert.match(server, /resetAntigravityProcessManagerState/);
+  assert.match(server, /process_manager/);
+  assert.match(server, /chat_processes\.json/);
+  assert.match(server, /before-reset-/);
   assert.match(managerAction, /\$activeRequestCount\s*=\s*\[int\]\$diagnostics\.activeAntigravityRequests\.active/);
   assert.match(managerAction, /\$canResetStaleLock\s*=\s*\$true/);
   assert.match(managerAction, /resetMode\s*=\s*if \(\$isIdle\) \{ "idle" \} else \{ "stale-lock" \}/);
@@ -7124,6 +7143,7 @@ test("Anti-Codex ships a read-only runtime config verifier", () => {
 
 test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   const websocket = readFileSync(resolve(root, "scripts", "test-anticodex-websocket-fallback.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   assert.match(websocket, /Upgrade: websocket/);
   assert.match(websocket, /Sec-WebSocket-Key/);
@@ -7135,13 +7155,38 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(websocket, /probeResults/);
   assert.match(websocket, /HTTP\/1\\\.1 101/);
   assert.match(websocket, /acceptedIdleWebsocket/);
-  assert.match(websocket, /accepted_idle_websocket/);
+  assert.match(websocket, /http_relay_websocket/);
   assert.match(websocket, /\/anticodex\/diagnostics/);
   assert.match(websocket, /responsesWebSocket/);
   assert.match(websocket, /lastUpgrade/);
   assert.match(websocket, /secWebSocketProtocol/);
   assert.match(websocket, /TcpClient/);
   assert.match(websocket, /ConvertTo-Json/);
+  assert.match(server, /const pendingPayloads = \[\]/);
+  assert.match(server, /drainResponsesWebSocketQueue/);
+  assert.match(server, /function responsesWebSocketRelayHeaders\(req\)/);
+  assert.match(server, /"session_id"/);
+  assert.match(server, /"x-codex-window-id"/);
+  assert.match(server, /const relayHeaders = responsesWebSocketRelayHeaders\(req\)/);
+  assert.match(server, /headers: relayHeaders/);
+  assert.match(server, /RESET_CANCELLED_RESPONSE_IDS/);
+  assert.match(server, /RESET_CANCELLED_REQUEST_FINGERPRINTS/);
+  assert.match(server, /RESET_PREVIOUS_RESPONSE_COOLDOWN_MS/);
+  assert.match(server, /LAST_ANTIGRAVITY_SESSION_RESET/);
+  assert.match(server, /rememberResetCancelledResponseIds\(before\.sessionLock\?\.activeResponseIds/);
+  assert.match(server, /rememberResetCancelledRequestFingerprints\(before\.activeRequests\?\.entries/);
+  assert.match(server, /resetReplayFingerprint\(parsed\)/);
+  assert.match(server, /includeEntries:\s*true/);
+  assert.match(server, /resetCancelledPreviousResponseFailure\(parsed\)/);
+  assert.match(server, /resetCooldown:\s*true/);
+  assert.match(server, /resetFingerprint:\s*true/);
+  assert.match(server, /anticodex_session_reset/);
+  assert.match(server, /pendingPayloads\.push\(frame\.payload\.toString\("utf8"\)\)/);
+  assert.match(server, /for await \(const chunk of response\.body\)/);
+  assert.match(server, /decoder\.decode\(chunk, \{ stream: true \}\)/);
+  assert.match(server, /socket\.write\(webSocketFrame\(0x9, "anticodex"\)\)/);
+  assert.doesNotMatch(server, /const text = await response\.text\(\);\s*if \(!response\.ok\)/);
+  assert.doesNotMatch(server, /await relayResponsesHttpToWebSocket\(\{ pathname, payload: frame\.payload\.toString\("utf8"\), socket \}\);\s*if \(!closed\) socket\.end/);
   assert.doesNotMatch(websocket, /Stop-Process/);
   assert.doesNotMatch(websocket, /Start-Process/);
   assert.doesNotMatch(websocket, /chatgpt\.com/);
@@ -11154,6 +11199,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /"ui-local-project-smoke"/);
   assert.match(verifier, /"ui-coding-project-smoke"/);
   assert.match(verifier, /"ui-repo-file-edit-smoke"/);
+  assert.match(verifier, /"ui-repo-multi-file-edit-smoke"/);
   assert.match(verifier, /"ui-report-site-smoke"/);
   assert.match(verifier, /let cdpPort = Number\(args\.get\("--cdp-port"\) \|\| process\.env\.DEEPCODEX_CDP_PORT \|\| 58318\)/);
   assert.match(verifier, /async function resolveCdpTargets/);
@@ -11169,6 +11215,17 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /size-token-button-composer/);
   assert.match(verifier, /aria-disabled/);
   assert.match(verifier, /data-disabled/);
+  assert.match(verifier, /projectMatched/);
+  assert.match(verifier, /"exact-marker"/);
+  assert.match(verifier, /"free-chat"/);
+  assert.match(verifier, /"web-search"/);
+  assert.match(verifier, /function visibleMainPaneText\(\)/);
+  assert.match(verifier, /rect\.left < 300/);
+  assert.match(verifier, /diagnosticsUrl = `\$\{baseUrl\}\/anticodex\/diagnostics\?fast=1`/);
+  assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
+  assert.match(server, /reason: "fast_diagnostics"/);
+  assert.match(verifier, /project task did not open a deepcodex project chat before submit/);
+  assert.match(verifier, /project task composer was still projectless before clicking send/);
   assert.match(verifier, /composer did not contain exactly the submitted prompt before clicking send/);
   assert.match(verifier, /send button was not found in the composer controls/);
   assert.match(verifier, /Network\.enable/);
@@ -11187,6 +11244,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /function verifyLocalProjectArtifact/);
   assert.match(verifier, /function verifyCodingProjectArtifact/);
   assert.match(verifier, /function verifyRepoFileEditFixture/);
+  assert.match(verifier, /function verifyRepoMultiFileEditFixture/);
   assert.match(verifier, /function verifyReportSiteArtifact/);
   assert.match(verifier, /node:test did not pass/);
   assert.match(verifier, /execFileSync\(process\.execPath, \["--test", testPath\]/);
@@ -11208,7 +11266,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /sessionLockClear/);
   assert.match(verifier, /function diagnosticsAreIdle/);
   assert.match(verifier, /async function waitForIdleDiagnostics/);
-  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "report-site" \|\| taskMode === "repo-file-edit" \? 60_000 : 20_000/);
+  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "report-site" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
   assert.match(verifier, /desktop task did not become idle after the assistant reply/);
   assert.match(verifier, /antigravitySessionLock/);
   assert.match(verifier, /activeAntigravityRequests/);
@@ -11218,8 +11276,24 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /latest-\$\{reportName\}\.json/);
   assert.match(verifier, /taskMode === "complex-project"/);
   assert.match(verifier, /taskMode === "repo-file-edit"/);
+  assert.match(verifier, /taskMode === "repo-multi-file-edit"/);
   assert.match(verifier, /ui-complex-project-smoke/);
   assert.match(verifier, /repo-file-edit node:test did not pass after the desktop task/);
+  assert.match(verifier, /repo-multi-file-edit CLI output did not contain ok=2 needs-review=1 blocked=1/);
+  assert.match(verifier, /repo-multi-file-edit source was not changed from the failing fixture/);
+  assert.match(verifier, /repo-multi-file-edit modified the acceptance test/);
+  assert.match(verifier, /repo-multi-file-edit modified the input data/);
+  assert.match(verifier, /Your first filesystem-changing action must create README\.md/);
+  assert.match(verifier, /artifactCompletionObserved/);
+  assert.match(verifier, /Do not run git status/);
+  assert.match(verifier, /Do not use apply_patch for this fixture task/);
+  assert.match(verifier, /htmlOffline/);
+  assert.match(verifier, /HTML used external assets or link\/preconnect tags/);
+  assert.match(verifier, /no http\/https URLs, no <link tags, and no preconnect/);
+  assert.match(verifier, /do not add external fonts/);
+  assert.match(verifier, /onlyReadmeMissing/);
+  assert.match(verifier, /Create only \$\{repoMultiFileReadme\} now/);
+  assert.match(verifier, /idleBreakAfterMs/);
   assert.match(verifier, /codex-update-analyzer\.mjs/);
   assert.match(verifier, /sources\.json/);
   assert.match(verifier, /summarizeSources/);
@@ -11231,6 +11305,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(overall, /latest-ui-coding-project-smoke\.json/);
   assert.match(overall, /latest-ui-multi-turn-project-smoke\.json/);
   assert.match(overall, /latest-ui-repo-file-edit-smoke\.json/);
+  assert.match(overall, /latest-ui-repo-multi-file-edit-smoke\.json/);
   assert.match(overall, /latest-ui-complex-project-smoke\.json/);
   assert.match(overall, /latest-ui-report-site-smoke\.json/);
   assert.match(collector, /latest-ui-chat-smoke\.json/);
@@ -11239,6 +11314,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(collector, /latest-ui-coding-project-smoke\.json/);
   assert.match(collector, /latest-ui-multi-turn-project-smoke\.json/);
   assert.match(collector, /latest-ui-repo-file-edit-smoke\.json/);
+  assert.match(collector, /latest-ui-repo-multi-file-edit-smoke\.json/);
   assert.match(collector, /latest-ui-complex-project-smoke\.json/);
   assert.match(collector, /latest-ui-report-site-smoke\.json/);
   assert.match(collector, /uiChatSmokeEvidence = \$json\.uiChatSmokeEvidence/);
@@ -11247,12 +11323,14 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(collector, /uiCodingProjectEvidence = \$json\.uiCodingProjectEvidence/);
   assert.match(collector, /uiMultiTurnProjectEvidence = \$json\.uiMultiTurnProjectEvidence/);
   assert.match(collector, /uiRepoFileEditEvidence = \$json\.uiRepoFileEditEvidence/);
+  assert.match(collector, /uiRepoMultiFileEditEvidence = \$json\.uiRepoMultiFileEditEvidence/);
   assert.match(collector, /uiComplexProjectEvidence = \$json\.uiComplexProjectEvidence/);
   assert.match(collector, /uiReportSiteEvidence = \$json\.uiReportSiteEvidence/);
   assert.match(signer, /latest-ui-local-project-smoke\.json/);
   assert.match(signer, /latest-ui-coding-project-smoke\.json/);
   assert.match(signer, /latest-ui-multi-turn-project-smoke\.json/);
   assert.match(signer, /latest-ui-repo-file-edit-smoke\.json/);
+  assert.match(signer, /latest-ui-repo-multi-file-edit-smoke\.json/);
   assert.match(signer, /latest-ui-complex-project-smoke\.json/);
   assert.match(signer, /latest-ui-report-site-smoke\.json/);
   assert.match(server, /latest-ui-chat-smoke\.json/);
@@ -11261,17 +11339,22 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(server, /latest-ui-coding-project-smoke\.json/);
   assert.match(server, /latest-ui-multi-turn-project-smoke\.json/);
   assert.match(server, /latest-ui-repo-file-edit-smoke\.json/);
+  assert.match(server, /latest-ui-repo-multi-file-edit-smoke\.json/);
   assert.match(server, /latest-ui-complex-project-smoke\.json/);
   assert.match(server, /latest-ui-report-site-smoke\.json/);
   assert.match(server, /uiWebSearchSmokeEvidence/);
   assert.match(server, /uiCodingProjectEvidence/);
   assert.match(server, /uiMultiTurnProjectEvidence/);
   assert.match(server, /uiRepoFileEditEvidence/);
+  assert.match(server, /uiRepoMultiFileEditEvidence/);
+  assert.match(server, /sourceChangedFromFixture/);
+  assert.match(server, /inputsLocked=/);
   assert.match(server, /uiComplexProjectEvidence/);
   assert.match(server, /uiReportSiteEvidence/);
   assert.match(server, /uiWebSearch:/);
   assert.match(server, /uiCoding:/);
   assert.match(server, /uiMultiTurn:/);
+  assert.match(server, /uiRepoMulti:/);
   assert.match(server, /uiComplex:/);
   assert.match(server, /uiReportSite:/);
   assert.match(summarizer, /uiChatSmokeEvidence/);
@@ -11280,6 +11363,9 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(summarizer, /uiCodingProjectEvidence/);
   assert.match(summarizer, /uiMultiTurnProjectEvidence/);
   assert.match(summarizer, /uiRepoFileEditEvidence/);
+  assert.match(summarizer, /uiRepoMultiFileEditEvidence/);
+  assert.match(summarizer, /testUnchanged/);
+  assert.match(summarizer, /dataUnchanged/);
   assert.match(summarizer, /uiComplexProjectEvidence/);
   assert.match(summarizer, /uiReportSiteEvidence/);
   assert.match(summarizer, /reportHasMarker/);
@@ -11293,12 +11379,16 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(releaseGates, /requireUiChatSmokeSemantics:\s*true/);
   assert.match(releaseGates, /ui_chat_smoke_marker_missing/);
   assert.match(releaseGates, /ui_chat_smoke_session_lock_not_clear/);
+  assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_source_unchanged/);
+  assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_test_modified/);
+  assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_data_modified/);
   const requiredReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*true[^}]*\}/g), (match) => match[1]))).sort();
   assert.ok(requiredReports.includes("latest-ui-web-search-smoke.json"), "desktop web-search evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-local-project-smoke.json"), "desktop local-project evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-coding-project-smoke.json"), "desktop coding-project evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-multi-turn-project-smoke.json"), "desktop multi-turn project evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-repo-file-edit-smoke.json"), "desktop repo-file-edit evidence must be release-required");
+  assert.ok(requiredReports.includes("latest-ui-repo-multi-file-edit-smoke.json"), "desktop repo multi-file edit evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-complex-project-smoke.json"), "desktop complex-project evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-report-site-smoke.json"), "desktop report-site evidence must be release-required");
 });

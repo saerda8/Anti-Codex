@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -21,6 +21,7 @@ const scriptRoot = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = resolve(scriptRoot, "..");
 let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT || 58318);
 const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
+const diagnosticsUrl = `${baseUrl}/anticodex/diagnostics?fast=1`;
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const taskMode = String(args.get("--task-mode") || "exact-marker");
@@ -39,9 +40,24 @@ const reportName = taskMode === "web-search"
       ? "ui-report-site-smoke"
     : taskMode === "repo-file-edit"
       ? "ui-repo-file-edit-smoke"
+    : taskMode === "repo-multi-file-edit"
+      ? "ui-repo-multi-file-edit-smoke"
     : taskMode === "local-project"
       ? "ui-local-project-smoke"
-      : "ui-chat-smoke";
+  : "ui-chat-smoke";
+const projectTaskModes = new Set([
+  "exact-marker",
+  "free-chat",
+  "web-search",
+  "local-project",
+  "coding-project",
+  "multi-turn-project",
+  "complex-project",
+  "report-site",
+  "repo-file-edit",
+  "repo-multi-file-edit",
+]);
+const requiresProjectChat = projectTaskModes.has(taskMode);
 const markerPrefix = taskMode === "web-search"
   ? "UI_WEB_SEARCH_SMOKE"
   : taskMode === "coding-project"
@@ -54,6 +70,8 @@ const markerPrefix = taskMode === "web-search"
     ? "UI_REPORT_SITE_SMOKE"
   : taskMode === "repo-file-edit"
     ? "UI_REPO_FILE_EDIT_SMOKE"
+  : taskMode === "repo-multi-file-edit"
+    ? "UI_REPO_MULTI_FILE_EDIT_SMOKE"
   : taskMode === "local-project"
     ? "UI_LOCAL_PROJECT_SMOKE"
     : "UI_CHAT_SMOKE";
@@ -77,6 +95,15 @@ const artifactDir = args.get("--artifact-dir")
 const repoFileEditDir = resolve(args.get("--repo-file-edit-dir") || join(sourceRoot, "scripts", "fixtures", "desktop-coworker-live"));
 const repoFileEditTarget = resolve(repoFileEditDir, "acceptance-target.mjs");
 const repoFileEditTest = resolve(repoFileEditDir, "acceptance-target.test.mjs");
+const repoMultiFileEditDir = resolve(args.get("--repo-multi-file-edit-dir") || join(sourceRoot, "scripts", "fixtures", "desktop-coworker-project"));
+const repoMultiFileSource = resolve(repoMultiFileEditDir, "status-dashboard.mjs");
+const repoMultiFileTest = resolve(repoMultiFileEditDir, "status-dashboard.test.mjs");
+const repoMultiFileData = resolve(repoMultiFileEditDir, "status-data.json");
+const repoMultiFileReadme = resolve(repoMultiFileEditDir, "README.md");
+const repoMultiFileHtml = resolve(repoMultiFileEditDir, "status-dashboard.html");
+let repoMultiFileBaselineSource = "";
+let repoMultiFileExpectedTest = "";
+let repoMultiFileExpectedData = "";
 let promptText = String(args.get("--prompt") || (taskMode === "web-search"
   ? `最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 ${marker}。`
   : taskMode === "local-project"
@@ -103,6 +130,9 @@ if (!args.get("--prompt") && taskMode === "report-site") {
 if (!args.get("--prompt") && taskMode === "repo-file-edit") {
   promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Do not edit any other source file. Run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
 }
+if (!args.get("--prompt") && taskMode === "repo-multi-file-edit") {
+  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. Do not edit files outside it. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. The acceptance test and data file are read-only; do not chmod, unlock, edit, rewrite, or replace them. Your first filesystem-changing action must create README.md with the exact Chinese phrase 使用说明 and this command: node status-dashboard.mjs status-data.json; after writing it, read it back before touching the source file. You may write 使用说明 using escapes \\u4f7f\\u7528\\u8bf4\\u660e in a Node fs.writeFileSync command. Then complete ${repoMultiFileSource}: it must export normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). renderSummaryHtml must return a complete fully offline HTML document containing the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked. To avoid Windows console mojibake, you may write 状态仪表盘 as JavaScript escapes \\u72b6\\u6001\\u4eea\\u8868\\u76d8 inside JS strings. Running node ${repoMultiFileSource} ${repoMultiFileData} must print summary JSON and write status-dashboard.html in the same directory. Keep the implementation and HTML small; do not add external fonts, http/https URLs, link tags, preconnect links, animations, or large decorative CSS. Do not edit ${repoMultiFileTest} or change the meaning of ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after both commands pass, README.md exists, and status-dashboard.html contains 状态仪表盘 and contains no http/https URLs or <link tags. Put exactly ${marker} on the final line and stop.`;
+}
 if (args.get("--prompt") && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
   if (promptMarker) marker = promptMarker;
@@ -110,7 +140,18 @@ if (args.get("--prompt") && !args.get("--marker")) {
 const startedAt = Date.now();
 const uiLockDir = join(reportRoot, "ui-chat-smoke.lock");
 
-async function acquireUiSmokeLock({ waitMs = 60_000, staleMs = 10 * 60_000 } = {}) {
+function processIsAlive(pid) {
+  const value = Number(pid);
+  if (!Number.isInteger(value) || value <= 0) return false;
+  try {
+    process.kill(value, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function acquireUiSmokeLock({ waitMs = 60_000, staleMs = 60_000 } = {}) {
   mkdirSync(reportRoot, { recursive: true });
   const deadline = Date.now() + waitMs;
   let lastOwner = null;
@@ -138,6 +179,13 @@ async function acquireUiSmokeLock({ waitMs = 60_000, staleMs = 10 * 60_000 } = {
           continue;
         }
         lastOwner = readFileSync(join(uiLockDir, "owner.json"), "utf8");
+        try {
+          const owner = JSON.parse(lastOwner);
+          if (!processIsAlive(owner?.pid)) {
+            rmSync(uiLockDir, { recursive: true, force: true });
+            continue;
+          }
+        } catch {}
       } catch {}
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
     }
@@ -145,9 +193,15 @@ async function acquireUiSmokeLock({ waitMs = 60_000, staleMs = 10 * 60_000 } = {
   throw new Error(`another desktop UI smoke is still running; lock=${uiLockDir}; owner=${lastOwner || "unknown"}`);
 }
 
-function httpJson(url) {
+function httpJson(url, headers = {}) {
   return new Promise((resolveJson, reject) => {
-    const req = http.get(url, (res) => {
+    const target = new URL(url);
+    const req = http.get({
+      hostname: target.hostname,
+      port: target.port,
+      path: `${target.pathname}${target.search}`,
+      headers,
+    }, (res) => {
       let data = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => { data += chunk; });
@@ -161,6 +215,49 @@ function httpJson(url) {
     });
     req.setTimeout(8_000, () => req.destroy(new Error(`timeout from ${url}`)));
     req.on("error", reject);
+  });
+}
+
+function httpJsonPost(url, body, headers = {}) {
+  const payload = JSON.stringify(body || {});
+  const target = new URL(url);
+  return new Promise((resolveJson, reject) => {
+    const req = http.request({
+      hostname: target.hostname,
+      port: target.port,
+      path: `${target.pathname}${target.search}`,
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(payload),
+        ...headers,
+      },
+    }, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          resolveJson(JSON.parse(data));
+        } catch (error) {
+          reject(new Error(`invalid JSON from ${url}: ${error.message}`));
+        }
+      });
+    });
+    req.setTimeout(8_000, () => req.destroy(new Error(`timeout from ${url}`)));
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
+
+async function resetBackendSessionLock(url) {
+  const headers = { origin: url, referer: `${url}/anticodex/manager` };
+  const boot = await httpJson(`${url}/anticodex/manager/bootstrap`, headers);
+  const token = boot?.token;
+  if (!token) throw new Error("manager bootstrap did not return a token");
+  return httpJsonPost(`${url}/anticodex/manager/action`, { action: "resetAntigravitySessionLock" }, {
+    ...headers,
+    "x-anticodex-manager-token": token,
   });
 }
 
@@ -322,6 +419,22 @@ function fileExists(path) {
   }
 }
 
+function sameTextIgnoringNewlineStyle(actual, expected) {
+  return String(actual || "").replace(/\r\n/g, "\n") === String(expected || "").replace(/\r\n/g, "\n");
+}
+
+function makeWritable(path) {
+  try {
+    if (fileExists(path)) chmodSync(path, 0o666);
+  } catch {}
+}
+
+function makeReadOnly(path) {
+  try {
+    if (fileExists(path)) chmodSync(path, 0o444);
+  } catch {}
+}
+
 function prepareRepoFileEditFixture() {
   mkdirSync(repoFileEditDir, { recursive: true });
   writeFileSync(repoFileEditTarget, [
@@ -403,6 +516,216 @@ function verifyRepoFileEditFixture() {
     }
   }
   return evidence;
+}
+
+function prepareRepoMultiFileEditFixture() {
+  mkdirSync(repoMultiFileEditDir, { recursive: true });
+  makeWritable(repoMultiFileSource);
+  makeWritable(repoMultiFileTest);
+  makeWritable(repoMultiFileData);
+  makeWritable(repoMultiFileReadme);
+  makeWritable(repoMultiFileHtml);
+  repoMultiFileExpectedData = `${JSON.stringify([
+    { id: 1, title: "Gateway ready", status: " OK " },
+    { id: 2, title: "Connector review", status: "Needs Review" },
+    { id: 3, title: "Proxy blocked", status: "Blocked!!" },
+    { id: 4, title: "Second ready check", status: "ok" },
+  ], null, 2)}\n`;
+  repoMultiFileBaselineSource = [
+    'export function normalizeStatus(input = "") {',
+    "  return String(input).trim();",
+    "}",
+    "",
+    "export function summarizeRecords(records = []) {",
+    "  return {};",
+    "}",
+    "",
+    "export function renderSummaryHtml(summary = {}) {",
+    '  return "<main></main>";',
+    "}",
+    "",
+  ].join("\n");
+  repoMultiFileExpectedTest = [
+    'import test from "node:test";',
+    'import assert from "node:assert/strict";',
+    'import { execFileSync } from "node:child_process";',
+    'import { readFileSync, rmSync } from "node:fs";',
+    'import { dirname, join } from "node:path";',
+    'import { fileURLToPath } from "node:url";',
+    'import { normalizeStatus, renderSummaryHtml, summarizeRecords } from "./status-dashboard.mjs";',
+    "",
+    "const here = dirname(fileURLToPath(import.meta.url));",
+    'const htmlPath = join(here, "status-dashboard.html");',
+    "",
+    'test("normalizes and summarizes dashboard statuses", () => {',
+    '  assert.equal(normalizeStatus("  Needs!! Review__  "), "needs-review");',
+    '  assert.equal(normalizeStatus("***Blocked_by Proxy!!"), "blocked-by-proxy");',
+    "  assert.deepEqual(summarizeRecords([",
+    '    { status: " OK " },',
+    '    { status: "ok" },',
+    '    { status: "Needs Review" },',
+    '    { status: "Blocked!!" },',
+    "  ]), {",
+    "    ok: 2,",
+    '    "needs-review": 1,',
+    "    blocked: 1,",
+    "  });",
+    "});",
+    "",
+    'test("renders complete HTML and CLI writes the dashboard file", () => {',
+    "  const html = renderSummaryHtml({ ok: 2, \"needs-review\": 1, blocked: 1 });",
+    '  assert.match(html, /<!doctype html>|<html/i);',
+    '  assert.match(html, /ok/i);',
+    '  assert.match(html, /needs-review/i);',
+    '  assert.doesNotMatch(html, /\\[object Object\\]/);',
+    "  rmSync(htmlPath, { force: true });",
+    '  const output = execFileSync(process.execPath, ["status-dashboard.mjs", "status-data.json"], { cwd: here, encoding: "utf8" });',
+    "  const parsed = JSON.parse(output);",
+    "  assert.equal(parsed.ok, 2);",
+    '  assert.equal(parsed["needs-review"], 1);',
+    "  assert.equal(parsed.blocked, 1);",
+    '  const written = readFileSync(htmlPath, "utf8");',
+    '  assert.match(written, /\\u72b6\\u6001\\u4eea\\u8868\\u76d8/);',
+    '  assert.match(written, /needs-review/i);',
+    "});",
+    "",
+  ].join("\n");
+  writeFileSync(repoMultiFileData, repoMultiFileExpectedData, "utf8");
+  writeFileSync(repoMultiFileSource, repoMultiFileBaselineSource, "utf8");
+  writeFileSync(repoMultiFileTest, repoMultiFileExpectedTest, "utf8");
+  rmSync(repoMultiFileReadme, { force: true });
+  rmSync(repoMultiFileHtml, { force: true });
+  makeReadOnly(repoMultiFileTest);
+  makeReadOnly(repoMultiFileData);
+}
+
+function verifyRepoMultiFileEditFixture() {
+  const evidence = {
+    dir: repoMultiFileEditDir,
+    source: repoMultiFileSource,
+    test: repoMultiFileTest,
+    data: repoMultiFileData,
+    readme: repoMultiFileReadme,
+    html: repoMultiFileHtml,
+    files: {
+      source: fileExists(repoMultiFileSource),
+      test: fileExists(repoMultiFileTest),
+      data: fileExists(repoMultiFileData),
+      readme: fileExists(repoMultiFileReadme),
+      html: fileExists(repoMultiFileHtml),
+    },
+    exportsNormalizeStatus: false,
+    exportsSummarizeRecords: false,
+    exportsRenderSummaryHtml: false,
+    sourceChangedFromFixture: false,
+    testUnchanged: false,
+    dataUnchanged: false,
+    testPassed: false,
+    cliPassed: false,
+    cliJson: null,
+    testOutput: "",
+    cliOutput: "",
+    error: "",
+    htmlComplete: false,
+    htmlHasChinese: false,
+    htmlMentionsStatuses: false,
+    htmlAvoidsObjectObject: false,
+    htmlOffline: false,
+    readmeHasChinese: false,
+    readmeMentionsCommand: false,
+  };
+  try {
+    if (evidence.files.source) {
+      const source = readFileSync(repoMultiFileSource, "utf8");
+      evidence.exportsNormalizeStatus = /export\s+function\s+normalizeStatus/.test(source);
+      evidence.exportsSummarizeRecords = /export\s+function\s+summarizeRecords/.test(source);
+      evidence.exportsRenderSummaryHtml = /export\s+function\s+renderSummaryHtml/.test(source);
+      evidence.sourceChangedFromFixture = source !== repoMultiFileBaselineSource;
+    }
+    if (evidence.files.test) {
+      evidence.testUnchanged = sameTextIgnoringNewlineStyle(readFileSync(repoMultiFileTest, "utf8"), repoMultiFileExpectedTest);
+      evidence.testOutput = execFileSync(process.execPath, ["--test", repoMultiFileTest], {
+        cwd: sourceRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 30_000,
+        windowsHide: true,
+      });
+      evidence.testPassed = true;
+    }
+    if (evidence.files.source && evidence.files.data) {
+      evidence.dataUnchanged = sameTextIgnoringNewlineStyle(readFileSync(repoMultiFileData, "utf8"), repoMultiFileExpectedData);
+      evidence.cliOutput = execFileSync(process.execPath, [repoMultiFileSource, repoMultiFileData], {
+        cwd: repoMultiFileEditDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000,
+        windowsHide: true,
+      }).trim();
+      evidence.cliJson = JSON.parse(evidence.cliOutput);
+      evidence.cliPassed = Number(evidence.cliJson?.ok) === 2
+        && Number(evidence.cliJson?.["needs-review"]) === 1
+        && Number(evidence.cliJson?.blocked) === 1;
+      evidence.files.html = fileExists(repoMultiFileHtml);
+    }
+    if (evidence.files.html) {
+      const html = readFileSync(repoMultiFileHtml, "utf8");
+      evidence.htmlComplete = /<html|<!doctype/i.test(html) && /<\/html>/i.test(html);
+      evidence.htmlHasChinese = /状态仪表盘/.test(html);
+      evidence.htmlMentionsStatuses = /ok/i.test(html) && /needs-review/i.test(html) && /blocked/i.test(html);
+      evidence.htmlAvoidsObjectObject = !/\[object Object\]/.test(html);
+      evidence.htmlOffline = !/(https?:\/\/|<link\b|preconnect|fonts\.googleapis|fonts\.gstatic)/i.test(html);
+    }
+    evidence.files.readme = fileExists(repoMultiFileReadme);
+    if (evidence.files.readme) {
+      const readme = readFileSync(repoMultiFileReadme, "utf8");
+      evidence.readmeHasChinese = /使用说明/.test(readme);
+      evidence.readmeMentionsCommand = /node\s+status-dashboard\.mjs\s+status-data\.json/i.test(readme);
+    }
+  } catch (error) {
+    evidence.error = String(error?.stderr || error?.message || error || "");
+  }
+  return evidence;
+}
+
+function collectRepoMultiFileEditFailures(artifactEvidence) {
+  const localFailures = [];
+  if (!artifactEvidence?.files?.source) localFailures.push("repo-multi-file-edit source file was not present");
+  if (!artifactEvidence?.files?.test) localFailures.push("repo-multi-file-edit test file was not present");
+  if (!artifactEvidence?.files?.data) localFailures.push("repo-multi-file-edit data file was not present");
+  if (!artifactEvidence?.files?.readme) localFailures.push("repo-multi-file-edit README.md was not created");
+  if (!artifactEvidence?.files?.html) localFailures.push("repo-multi-file-edit status-dashboard.html was not created");
+  if (artifactEvidence?.files?.source && artifactEvidence.exportsNormalizeStatus !== true) localFailures.push("repo-multi-file-edit did not export normalizeStatus");
+  if (artifactEvidence?.files?.source && artifactEvidence.exportsSummarizeRecords !== true) localFailures.push("repo-multi-file-edit did not export summarizeRecords");
+  if (artifactEvidence?.files?.source && artifactEvidence.exportsRenderSummaryHtml !== true) localFailures.push("repo-multi-file-edit did not export renderSummaryHtml");
+  if (artifactEvidence?.sourceChangedFromFixture !== true) localFailures.push("repo-multi-file-edit source was not changed from the failing fixture");
+  if (artifactEvidence?.testUnchanged !== true) localFailures.push("repo-multi-file-edit modified the acceptance test");
+  if (artifactEvidence?.dataUnchanged !== true) localFailures.push("repo-multi-file-edit modified the input data");
+  if (artifactEvidence?.testPassed !== true) localFailures.push("repo-multi-file-edit node:test did not pass after the desktop task");
+  if (artifactEvidence?.cliPassed !== true) localFailures.push("repo-multi-file-edit CLI output did not contain ok=2 needs-review=1 blocked=1");
+  if (artifactEvidence?.files?.html && artifactEvidence.htmlComplete !== true) localFailures.push("repo-multi-file-edit HTML is not a complete HTML document");
+  if (artifactEvidence?.files?.html && artifactEvidence.htmlHasChinese !== true) localFailures.push("repo-multi-file-edit HTML missing Chinese content");
+  if (artifactEvidence?.files?.html && artifactEvidence.htmlMentionsStatuses !== true) localFailures.push("repo-multi-file-edit HTML missing normalized status labels");
+  if (artifactEvidence?.files?.html && artifactEvidence.htmlAvoidsObjectObject !== true) localFailures.push("repo-multi-file-edit HTML leaked [object Object]");
+  if (artifactEvidence?.files?.html && artifactEvidence.htmlOffline !== true) localFailures.push("repo-multi-file-edit HTML used external assets or link/preconnect tags");
+  if (artifactEvidence?.files?.readme && artifactEvidence.readmeHasChinese !== true) localFailures.push("repo-multi-file-edit README missing Chinese content");
+  if (artifactEvidence?.files?.readme && artifactEvidence.readmeMentionsCommand !== true) localFailures.push("repo-multi-file-edit README missing CLI command");
+  return localFailures;
+}
+
+function buildRepoMultiFileRepairPrompt(currentFailures, evidence) {
+  const error = String(evidence?.error || "").slice(0, 1600);
+  const mostlyWorking = evidence?.testPassed === true && evidence?.cliPassed === true;
+  const onlyReadmeMissing = mostlyWorking
+    && currentFailures.length > 0
+    && currentFailures.every((failure) => /README\.md|README missing/i.test(failure));
+  if (onlyReadmeMissing) {
+    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not inspect files, tests, git status, Antigravity brain, transcript, history, or log folders. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Create only ${repoMultiFileReadme} now with UTF-8 content containing the exact Chinese phrase 使用说明 and this command: node status-dashboard.mjs status-data.json. To avoid Windows console mojibake, use one Node fs.writeFileSync command with \\u4f7f\\u7528\\u8bf4\\u660e if needed. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
+  }
+  if (mostlyWorking) {
+    return `Continue the same task in ${repoMultiFileEditDir}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. The code and CLI already pass. Fix only the missing final artifacts. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. Current verifier failures: ${currentFailures.join("; ")}. Create ${repoMultiFileReadme} with the exact Chinese phrase 使用说明 and the command: node status-dashboard.mjs status-data.json; to avoid Windows console mojibake, you may write it with JavaScript escapes \\u4f7f\\u7528\\u8bf4\\u660e in a Node fs.writeFileSync command. Update renderSummaryHtml in ${repoMultiFileSource} so the generated status-dashboard.html contains the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked; it must stay fully offline with no http/https URLs, no <link tags, and no preconnect. Do not edit ${repoMultiFileTest}. Do not change ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after README.md exists and status-dashboard.html contains 状态仪表盘 and no external links. Put exactly ${marker} on the final line and stop.`;
+  }
+  return `Continue the same local project task in ${repoMultiFileEditDir}. Fix only files inside ${repoMultiFileEditDir}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. Current verifier failures: ${currentFailures.join("; ")}. ${error ? `Test/CLI error excerpt: ${error}. ` : ""}Do not edit ${repoMultiFileTest}. Restore ${repoMultiFileData} to this JSON if needed:\n${repoMultiFileExpectedData}\nFix ${repoMultiFileSource} exports and create README.md with the exact Chinese phrase 使用说明 plus: node status-dashboard.mjs status-data.json. To avoid Windows console mojibake, use JS escapes \\u4f7f\\u7528\\u8bf4\\u660e for README content if needed. renderSummaryHtml must output complete fully offline HTML with the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked; use JS escapes \\u72b6\\u6001\\u4eea\\u8868\\u76d8 if needed. The HTML must contain no http/https URLs, no <link tags, and no preconnect. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Put exactly ${marker} on the final line and stop.`;
 }
 
 function verifyLocalProjectArtifact(dir, expectedMarker) {
@@ -743,7 +1066,7 @@ async function waitForIdleDiagnostics(url, timeoutMs = 20_000) {
   let lastError = null;
   while (Date.now() < deadline) {
     try {
-      latest = await httpJson(`${url}/anticodex/diagnostics`);
+      latest = await httpJson(`${url}/anticodex/diagnostics?fast=1`);
       if (diagnosticsAreIdle(latest)) return { diagnostics: latest, lastError: null };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -864,6 +1187,64 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
   })()`;
 }
 
+function newChatClickExpression(projectName = "") {
+  const expectedProject = JSON.stringify(projectName || "");
+  return `(() => {
+    const expectedProject = ${expectedProject};
+    const controls = Array.from(document.querySelectorAll('button,[role="button"],a'));
+    const candidates = controls.map((el, index) => {
+      const text = String(el.innerText || el.getAttribute('aria-label') || el.title || '').replace(/\\s+/g, ' ').trim();
+      const aria = String(el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+      const rect = el.getBoundingClientRect();
+      const isNewChat = text.includes('\\u65b0\\u5bf9\\u8bdd') || /Ctrl\\+N|New chat/i.test(text);
+      const projectText = text + ' ' + aria;
+      const isProjectNewChat = expectedProject
+        && projectText.includes(expectedProject)
+        && (projectText.includes('\\u5f00\\u59cb\\u65b0\\u5bf9\\u8bdd') || /new chat|new conversation|start/i.test(projectText));
+      return { el, index, text, aria, rect, isNewChat, isProjectNewChat };
+    }).filter((item) => item.isNewChat && item.rect.width > 0 && item.rect.height > 0);
+    const selected = candidates.sort((a, b) => {
+      if (a.isProjectNewChat !== b.isProjectNewChat) return a.isProjectNewChat ? -1 : 1;
+      return (a.rect.y - b.rect.y) || (a.rect.x - b.rect.x);
+    })[0] || null;
+    if (!selected) return { clicked: false, candidates: [] };
+    selected.el.click();
+    return {
+      clicked: true,
+      projectPreferred: Boolean(expectedProject),
+      projectMatched: Boolean(selected.isProjectNewChat),
+      selected: {
+        index: selected.index,
+        text: selected.text,
+        aria: selected.aria,
+        rect: { x: selected.rect.x, y: selected.rect.y, w: selected.rect.width, h: selected.rect.height },
+      },
+      candidates: candidates.slice(0, 5).map((item) => ({ index: item.index, text: item.text, aria: item.aria, project: item.isProjectNewChat })),
+    };
+  })()`;
+}
+
+const visibleMainPaneTextExpression = `
+  function visibleMainPaneText() {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const parts = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = String(node.nodeValue || '').replace(/\\s+/g, ' ').trim();
+      if (!text) continue;
+      const el = node.parentElement;
+      if (!el) continue;
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      if (rect.left < 300 || rect.left > Math.max(900, window.innerWidth - 260)) continue;
+      parts.push(text);
+    }
+    return parts.join('\\n');
+  }
+`;
+
 async function resolveCdpTargets() {
   const explicitPort = args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT;
   const candidates = explicitPort
@@ -883,7 +1264,7 @@ async function resolveCdpTargets() {
   throw new Error(`Anti-Codex CDP target was not reachable on ${candidates.join(" or ")}: ${lastError || "unknown error"}`);
 }
 
-async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
+async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, options = {}) {
   const failures = [];
   let clicked = false;
   let submitSucceeded = false;
@@ -895,6 +1276,8 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
   let lastSample = "";
   let answerSample = "";
   let activeReconnectSeen = false;
+  let artifactCompletionObserved = false;
+  let artifactEvidence = null;
   const activeReconnectEvidence = [];
   let inLoopIdleDiagnostics = null;
 
@@ -938,8 +1321,13 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
     returnByValue: true,
   });
   prep = state.result?.result?.value || null;
+  const projectlessComposer = options.requiresProjectChat === true
+    && Array.isArray(prep?.nearbyButtons)
+    && prep.nearbyButtons.some((button) => /Choose project/i.test(`${button?.label || ""} ${button?.aria || ""}`));
   if (prep?.composerMatches !== true) {
     failures.push("composer did not contain exactly the submitted prompt before clicking send");
+  } else if (projectlessComposer) {
+    failures.push("project task composer was still projectless before clicking send");
   } else if (prep?.hasSendButton !== true) {
     failures.push("send button was not found in the composer controls");
   } else {
@@ -987,18 +1375,22 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
   }
   if (clicked) {
     const deadline = Date.now() + waitMs;
+    const waitStartedAt = Date.now();
+    const idleBreakAfterMs = Math.max(5_000, Number(options.idleBreakAfterMs || 12_000));
     while (Date.now() < deadline) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
       const stateAfter = await ws.send("Runtime.evaluate", {
         expression: `(() => {
+          ${visibleMainPaneTextExpression}
           const text = document.body.innerText;
+          const mainText = visibleMainPaneText();
           const composer = document.querySelector('.ProseMirror');
-          return { text, composer: composer?.innerText || '' };
+          return { text, mainText, composer: composer?.innerText || '' };
         })()`,
         returnByValue: true,
       });
       const value = stateAfter.result?.result?.value || {};
-      const text = String(value.text || "");
+      const text = String(value.mainText || value.text || "");
       composer = String(value.composer || "");
       count = expectedMarker ? (text.match(new RegExp(expectedMarker, "g")) || []).length : 0;
       lastSample = text.slice(-1200);
@@ -1014,9 +1406,23 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
         }
       }
       answerMarkerCount = expectedMarker && answerSample ? (answerSample.match(new RegExp(expectedMarker, "g")) || []).length : 0;
-      if (answerMarkerCount >= 1 && !composer.includes(expectedMarker)) {
+      if (taskMode === "repo-multi-file-edit") {
+        artifactEvidence = verifyRepoMultiFileEditFixture();
+        const artifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
+        if (artifactFailures.length === 0 && !composer.includes(prompt)) {
+          try {
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              artifactCompletionObserved = true;
+              inLoopIdleDiagnostics = loopDiagnostics;
+              break;
+            }
+          } catch {}
+        }
+      }
+      if (!composer.includes(expectedMarker) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
         try {
-          const loopDiagnostics = await httpJson(`${baseUrl}/anticodex/diagnostics`);
+          const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
             inLoopIdleDiagnostics = loopDiagnostics;
             break;
@@ -1027,7 +1433,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
   }
   if (!clicked) failures.push("send button was not clicked");
   if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
-  if (answerMarkerCount < 1) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
+  if (answerMarkerCount < 1 && !artifactCompletionObserved) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
   if (composer.includes(expectedMarker)) failures.push("composer still contains the submitted prompt");
   return {
     ok: failures.length === 0,
@@ -1040,6 +1446,8 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs) {
     clicked,
     markerCount: count,
     answerMarkerCount,
+    artifactCompletionObserved,
+    artifactEvidence,
     activeReconnectSeen,
     activeReconnectEvidence,
     inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
@@ -1070,6 +1478,8 @@ async function main() {
   let releaseUiLock = null;
   let initialIdle = null;
   let staleRecovery = null;
+  let backendResetBeforeSubmit = null;
+  let newChatEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
 
@@ -1096,7 +1506,28 @@ async function main() {
     if (Array.isArray(staleRecovery?.clicked) && staleRecovery.clicked.length > 0) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
     }
+    try {
+      backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+    } catch (error) {
+      backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
     initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
+    if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
+      try {
+        backendResetBeforeSubmit = {
+          first: backendResetBeforeSubmit,
+          retry: await resetBackendSessionLock(baseUrl),
+        };
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+        initialIdle = await waitForIdleDiagnostics(baseUrl, 20_000);
+      } catch (error) {
+        backendResetBeforeSubmit = {
+          first: backendResetBeforeSubmit,
+          retry: { ok: false, error: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    }
     if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
       throw new Error(`desktop backend was not idle before submit after stale recovery: ${initialIdle.lastError || "busy"}`);
     }
@@ -1106,21 +1537,39 @@ async function main() {
       if (artifactEvidence?.testPassed === true) failures.push("repo-file-edit fixture was not reset to a failing state before submit");
       artifactEvidence = null;
     }
+    if (taskMode === "repo-multi-file-edit") {
+      prepareRepoMultiFileEditFixture();
+      artifactEvidence = verifyRepoMultiFileEditFixture();
+      if (artifactEvidence?.testPassed === true) failures.push("repo-multi-file-edit fixture was not reset to a failing state before submit");
+      artifactEvidence = null;
+    }
     if (isolateChat) {
-      await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
-      await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
-      await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
-      await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
+      const clickedNewChat = await ws.send("Runtime.evaluate", {
+        expression: newChatClickExpression(requiresProjectChat ? "deepcodex" : ""),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      newChatEvidence = clickedNewChat.result?.result?.value || null;
+      if (requiresProjectChat && newChatEvidence?.projectMatched !== true) {
+        failures.push("project task did not open a deepcodex project chat before submit");
+      }
+      if (newChatEvidence?.clicked !== true) {
+        await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
+        await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
+        await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
+        await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
+        newChatEvidence = { ...(newChatEvidence || {}), fallbackShortcut: true };
+      }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
     }
 
     if (taskMode === "multi-turn-project") {
       const firstMarker = `${marker}_FIRST`;
       const followupPrompt = `Continue the same project in ${artifactDir}. Do not start over and do not inspect Antigravity brain, transcript, history, or log folders. Modify word-tally.mjs so it also exports uniqueWords(text), returning sorted unique words. Update word-tally.test.mjs to keep the original tallyWords assertion and add a node:test assertion that uniqueWords("red blue red") returns ["blue","red"]. Create CHANGELOG.md mentioning the new uniqueWords follow-up and the exact marker ${marker}. Create followup.txt containing exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red green", verify red=2 blue=1 green=1, then reply with ${marker}.`;
-      const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs);
+      const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs, { requiresProjectChat });
       failures.push(...turn1.failures.map((failure) => `turn1: ${failure}`));
       const firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
-      const turn2 = await submitDesktopPromptAndWait(ws, followupPrompt, marker, timeoutMs);
+      const turn2 = await submitDesktopPromptAndWait(ws, followupPrompt, marker, timeoutMs, { requiresProjectChat });
       failures.push(...turn2.failures.map((failure) => `turn2: ${failure}`));
       artifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
       if (!artifactEvidence?.files?.packageJson) failures.push("multi-turn package.json was not created");
@@ -1189,6 +1638,7 @@ async function main() {
           clicked: turn.clicked,
           submitSucceeded: turn.submitSucceeded,
           answerMarkerCount: turn.answerMarkerCount,
+          artifactCompletionObserved: turn.artifactCompletionObserved,
           composerCleared: turn.composerCleared,
           activeReconnectSeen: turn.activeReconnectSeen,
           inLoopIdleObserved: turn.inLoopIdleObserved,
@@ -1201,6 +1651,120 @@ async function main() {
         submitEvidence,
         submitSucceeded,
         staleRecovery,
+        backendResetBeforeSubmit,
+        newChatEvidence,
+        initialIdleObserved: Boolean(initialIdle?.diagnostics),
+        clicked,
+        markerCount: count,
+        answerMarkerCount,
+        activeReconnectSeen,
+        activeReconnectEvidence,
+        inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
+        composerCleared: !composer.includes(marker),
+        sessionLockClear: sessionLock ? sessionLock.active !== true && Number(sessionLock.queued || 0) === 0 : false,
+        lastSample,
+        antigravitySessionLock: sessionLock,
+        activeAntigravityRequests: activeRequests,
+        antigravityQueue: queue,
+        responsesWebSocket: diagnostics?.responsesWebSocket || null,
+        networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
+      };
+      releaseUiLock?.();
+      releaseUiLock = null;
+      writeReport(payload);
+      console.log(JSON.stringify(payload));
+      if (!payload.ok) process.exit(1);
+      process.exit(0);
+    }
+
+    if (taskMode === "repo-multi-file-edit") {
+      const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat });
+      const firstArtifactEvidence = verifyRepoMultiFileEditFixture();
+      const firstArtifactFailures = collectRepoMultiFileEditFailures(firstArtifactEvidence);
+      let repairPrompt = null;
+      let turn2 = null;
+      let repairAttempted = false;
+      artifactEvidence = firstArtifactEvidence;
+      let finalArtifactFailures = firstArtifactFailures;
+      if (firstArtifactFailures.length > 0 || turn1.failures.length > 0) {
+        repairAttempted = true;
+        repairPrompt = buildRepoMultiFileRepairPrompt(firstArtifactFailures, firstArtifactEvidence);
+        turn2 = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
+        artifactEvidence = verifyRepoMultiFileEditFixture();
+        finalArtifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
+      }
+      const finalTurn = turn2 || turn1;
+      failures.push(...finalTurn.failures.map((failure) => repairAttempted ? `repair: ${failure}` : failure));
+      failures.push(...finalArtifactFailures);
+
+      clicked = turn1.clicked === true && (!turn2 || turn2.clicked === true);
+      prep = turn1.prep;
+      submitEvidence = finalTurn.submitEvidence;
+      submitSucceeded = turn1.submitSucceeded === true && (!turn2 || turn2.submitSucceeded === true);
+      count = Number(turn1.markerCount || 0) + Number(turn2?.markerCount || 0);
+      answerMarkerCount = Number(finalTurn.answerMarkerCount || 0);
+      composer = finalTurn.composer || "";
+      lastSample = finalTurn.lastSample || turn1.lastSample || "";
+      answerSample = finalTurn.answerSample || "";
+      activeReconnectSeen = turn1.activeReconnectSeen === true || turn2?.activeReconnectSeen === true;
+      activeReconnectEvidence.push(...(turn1.activeReconnectEvidence || []), ...(turn2?.activeReconnectEvidence || []));
+      inLoopIdleDiagnostics = finalTurn.inLoopIdleDiagnostics || turn1.inLoopIdleDiagnostics || null;
+
+      const idleResult = inLoopIdleDiagnostics
+        ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
+        : await waitForIdleDiagnostics(baseUrl, 60_000);
+      diagnostics = idleResult.diagnostics;
+      if (!diagnostics) {
+        failures.push(`diagnostics endpoint did not respond after desktop task: ${idleResult.lastError || "unknown error"}`);
+      } else if (!diagnosticsAreIdle(diagnostics)) {
+        failures.push("desktop task did not become idle after the assistant reply");
+      }
+      const sessionLock = diagnostics?.antigravitySessionLock || null;
+      const activeRequests = diagnostics?.activeAntigravityRequests || null;
+      const queue = diagnostics?.antigravityQueue || null;
+      if (sessionLock?.active === true) failures.push("desktop task left the Antigravity session lock active");
+      if (Number(sessionLock?.queued || 0) > 0) failures.push("desktop task left queued Antigravity sessions");
+      if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
+      if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
+      const payload = {
+        ok: failures.length === 0,
+        reportName,
+        requestedRealTraffic: true,
+        usedRealTraffic: true,
+        behaviorCovered: true,
+        coverageKind: "desktop-ui-real-traffic",
+        taskMode,
+        promptText,
+        repairAttempted,
+        turnPrompts: repairPrompt ? [promptText, repairPrompt] : [promptText],
+        elapsedMs: Date.now() - startedAt,
+        failures,
+        marker,
+        artifactDir: repoMultiFileEditDir,
+        firstArtifactEvidence,
+        firstArtifactFailures,
+        artifactEvidence,
+        finalArtifactFailures,
+        turnEvidence: [turn1, turn2].filter(Boolean).map((turn) => ({
+          ok: turn.ok,
+          marker: turn.marker,
+          clicked: turn.clicked,
+          submitSucceeded: turn.submitSucceeded,
+          answerMarkerCount: turn.answerMarkerCount,
+          composerCleared: turn.composerCleared,
+          activeReconnectSeen: turn.activeReconnectSeen,
+          inLoopIdleObserved: turn.inLoopIdleObserved,
+          failures: turn.failures,
+        })),
+        cdpPort,
+        baseUrl,
+        target: target ? { id: target.id, title: target.title, url: target.url } : null,
+        prep,
+        submitEvidence,
+        submitSucceeded,
+        staleRecovery,
+        backendResetBeforeSubmit,
+        newChatEvidence,
         initialIdleObserved: Boolean(initialIdle?.diagnostics),
         clicked,
         markerCount: count,
@@ -1318,14 +1882,16 @@ async function main() {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
       const stateAfter = await ws.send("Runtime.evaluate", {
         expression: `(() => {
+          ${visibleMainPaneTextExpression}
           const text = document.body.innerText;
+          const mainText = visibleMainPaneText();
           const composer = document.querySelector('.ProseMirror');
-          return { text, composer: composer?.innerText || '' };
+          return { text, mainText, composer: composer?.innerText || '' };
         })()`,
         returnByValue: true,
       });
       const value = stateAfter.result?.result?.value || {};
-      const text = String(value.text || "");
+      const text = String(value.mainText || value.text || "");
       composer = String(value.composer || "");
       count = marker ? (text.match(new RegExp(marker, "g")) || []).length : 0;
       lastSample = text.slice(-1200);
@@ -1348,7 +1914,7 @@ async function main() {
         artifactEvidence = verifyRepoFileEditFixture();
         if (artifactEvidence?.testPassed === true && !composer.includes(promptText)) {
           try {
-            const loopDiagnostics = await httpJson(`${baseUrl}/anticodex/diagnostics`);
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
               inLoopIdleDiagnostics = loopDiagnostics;
               break;
@@ -1357,7 +1923,7 @@ async function main() {
         }
       } else if (answerMarkerCount >= 1 && !composer.includes(marker)) {
         try {
-          const loopDiagnostics = await httpJson(`${baseUrl}/anticodex/diagnostics`);
+          const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
             inLoopIdleDiagnostics = loopDiagnostics;
             break;
@@ -1393,6 +1959,29 @@ async function main() {
       if (!artifactEvidence?.files?.target) failures.push("repo-file-edit target file was not present");
       if (!artifactEvidence?.files?.test) failures.push("repo-file-edit test file was not present");
       if (artifactEvidence?.testPassed !== true) failures.push("repo-file-edit node:test did not pass after the desktop task");
+    }
+    if (taskMode === "repo-multi-file-edit") {
+      artifactEvidence = verifyRepoMultiFileEditFixture();
+      if (!artifactEvidence?.files?.source) failures.push("repo-multi-file-edit source file was not present");
+      if (!artifactEvidence?.files?.test) failures.push("repo-multi-file-edit test file was not present");
+      if (!artifactEvidence?.files?.data) failures.push("repo-multi-file-edit data file was not present");
+      if (!artifactEvidence?.files?.readme) failures.push("repo-multi-file-edit README.md was not created");
+      if (!artifactEvidence?.files?.html) failures.push("repo-multi-file-edit status-dashboard.html was not created");
+      if (artifactEvidence?.files?.source && artifactEvidence.exportsNormalizeStatus !== true) failures.push("repo-multi-file-edit did not export normalizeStatus");
+      if (artifactEvidence?.files?.source && artifactEvidence.exportsSummarizeRecords !== true) failures.push("repo-multi-file-edit did not export summarizeRecords");
+      if (artifactEvidence?.files?.source && artifactEvidence.exportsRenderSummaryHtml !== true) failures.push("repo-multi-file-edit did not export renderSummaryHtml");
+      if (artifactEvidence?.sourceChangedFromFixture !== true) failures.push("repo-multi-file-edit source was not changed from the failing fixture");
+      if (artifactEvidence?.testUnchanged !== true) failures.push("repo-multi-file-edit modified the acceptance test");
+      if (artifactEvidence?.dataUnchanged !== true) failures.push("repo-multi-file-edit modified the input data");
+      if (artifactEvidence?.testPassed !== true) failures.push("repo-multi-file-edit node:test did not pass after the desktop task");
+      if (artifactEvidence?.cliPassed !== true) failures.push("repo-multi-file-edit CLI output did not contain ok=2 needs-review=1 blocked=1");
+      if (artifactEvidence?.files?.html && artifactEvidence.htmlComplete !== true) failures.push("repo-multi-file-edit HTML is not a complete HTML document");
+      if (artifactEvidence?.files?.html && artifactEvidence.htmlHasChinese !== true) failures.push("repo-multi-file-edit HTML missing Chinese content");
+      if (artifactEvidence?.files?.html && artifactEvidence.htmlMentionsStatuses !== true) failures.push("repo-multi-file-edit HTML missing normalized status labels");
+      if (artifactEvidence?.files?.html && artifactEvidence.htmlAvoidsObjectObject !== true) failures.push("repo-multi-file-edit HTML leaked [object Object]");
+      if (artifactEvidence?.files?.html && artifactEvidence.htmlOffline !== true) failures.push("repo-multi-file-edit HTML used external assets or link/preconnect tags");
+      if (artifactEvidence?.files?.readme && artifactEvidence.readmeHasChinese !== true) failures.push("repo-multi-file-edit README missing Chinese content");
+      if (artifactEvidence?.files?.readme && artifactEvidence.readmeMentionsCommand !== true) failures.push("repo-multi-file-edit README missing CLI command");
     }
     if (taskMode === "local-project") {
       artifactEvidence = verifyLocalProjectArtifact(artifactDir, marker);
@@ -1462,7 +2051,7 @@ async function main() {
     failures.push(error instanceof Error ? error.message : String(error));
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "repo-file-edit" ? 60_000 : 20_000;
+  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
     : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
@@ -1493,6 +2082,8 @@ async function main() {
     marker,
     artifactDir: taskMode === "repo-file-edit"
       ? repoFileEditDir
+      : taskMode === "repo-multi-file-edit"
+        ? repoMultiFileEditDir
       : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
     artifactEvidence,
     cdpPort,
@@ -1502,6 +2093,8 @@ async function main() {
     submitEvidence,
     submitSucceeded,
     staleRecovery,
+    backendResetBeforeSubmit,
+    newChatEvidence,
     initialIdleObserved: Boolean(initialIdle?.diagnostics),
     clicked,
     markerCount: count,
@@ -1541,6 +2134,8 @@ main().catch((error) => {
     marker,
     artifactDir: taskMode === "repo-file-edit"
       ? repoFileEditDir
+      : taskMode === "repo-multi-file-edit"
+        ? repoMultiFileEditDir
       : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
   };
   writeReport(payload);

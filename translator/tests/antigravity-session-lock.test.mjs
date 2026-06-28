@@ -103,6 +103,30 @@ test("Antigravity session lock can release an idle tool continuation early", asy
   assert.equal(lock.snapshot().idleReleased, 1);
 });
 
+test("Antigravity session lock can release stale response ids by idle age", async () => {
+  const lock = createAntigravitySessionLock({ ttlMs: 5000 });
+  const first = await lock.acquire();
+  first.continueWith("resp_stale");
+  const queued = lock.acquire();
+
+  const early = lock.releaseIdleContinuation({ maxIdleMs: 1000, reason: "test_stale_response" });
+  assert.equal(early.released, false);
+  assert.equal(lock.snapshot().active, true);
+  assert.equal(lock.snapshot().queued, 1);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const released = lock.releaseIdleContinuation({ maxIdleMs: 1, reason: "test_stale_response" });
+  assert.equal(released.ok, true);
+  assert.equal(released.released, true);
+  assert.equal(released.reason, "test_stale_response");
+  assert.equal(lock.snapshot().active, true);
+  assert.equal(lock.snapshot().queued, 0);
+  assert.equal(lock.snapshot().idleReleased, 1);
+
+  const secondLease = await queued;
+  secondLease.release();
+});
+
 test("Antigravity session lock can release an idle active session without continuation ids", async () => {
   const lock = createAntigravitySessionLock({ ttlMs: 5000 });
   await lock.acquire();

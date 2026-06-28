@@ -1,5 +1,6 @@
 export function createAntigravityRequestRegistry(options = {}) {
   const cancelCascade = options.cancelCascade ?? (async () => {});
+  const cascadeCancelTimeoutMs = Number(options.cascadeCancelTimeoutMs ?? 1500);
   const requests = new Map();
 
   function register(responseId, request = {}) {
@@ -10,6 +11,7 @@ export function createAntigravityRequestRegistry(options = {}) {
       status: "active",
       cascade: null,
       cascadeCancelPromise: null,
+      fingerprint: typeof request.fingerprint === "string" ? request.fingerprint : "",
     };
     requests.set(responseId, entry);
     return entry;
@@ -20,7 +22,7 @@ export function createAntigravityRequestRegistry(options = {}) {
     if (!entry) return false;
     entry.cascade = cascade;
     if (entry.status === "cancelling" || entry.status === "cancelled") {
-      await cancelAttachedCascade(entry);
+      await waitForCascadeCancel(entry);
     }
     return true;
   }
@@ -29,15 +31,15 @@ export function createAntigravityRequestRegistry(options = {}) {
     const entry = requests.get(responseId);
     if (!entry) return { found: false, cancelled: false };
     if (entry.status === "cancelling" || entry.status === "cancelled") {
-      await entry.cascadeCancelPromise;
-      return { found: true, cancelled: true, alreadyCancelled: true };
+      const cascade = await waitForCascadeCancel(entry);
+      return { found: true, cancelled: true, alreadyCancelled: true, cascade };
     }
 
     entry.status = "cancelling";
     entry.controller.abort(new DOMException("Anti-Codex response was cancelled.", "AbortError"));
-    await cancelAttachedCascade(entry);
+    const cascade = await waitForCascadeCancel(entry);
     entry.status = "cancelled";
-    return { found: true, cancelled: true };
+    return { found: true, cancelled: true, cascade };
   }
 
   function finish(responseId) {
@@ -59,26 +61,52 @@ export function createAntigravityRequestRegistry(options = {}) {
     };
   }
 
-  function snapshot() {
+  function snapshot(options = {}) {
     const statuses = {};
     for (const entry of requests.values()) {
       statuses[entry.status] = (statuses[entry.status] ?? 0) + 1;
     }
-    return {
+    const result = {
       active: requests.size,
       statuses,
     };
+    if (options.includeEntries) {
+      result.entries = [...requests.entries()].map(([responseId, entry]) => ({
+        responseId,
+        status: entry.status,
+        fingerprint: entry.fingerprint || "",
+      }));
+    }
+    return result;
   }
 
-  async function cancelAttachedCascade(entry) {
+  function ensureCascadeCancel(entry) {
     if (!entry.cascade) return;
     if (!entry.cascadeCancelPromise) {
       entry.cascadeCancelPromise = Promise.resolve(cancelCascade(
         entry.cascade.connection,
         entry.cascade.cascadeId,
-      ));
+      )).then(
+        () => ({ ok: true }),
+        (error) => ({ ok: false, error: String(error?.message || error) }),
+      );
     }
-    await entry.cascadeCancelPromise;
+    return entry.cascadeCancelPromise;
+  }
+
+  async function waitForCascadeCancel(entry) {
+    const promise = ensureCascadeCancel(entry);
+    if (!promise) return { ok: true, skipped: true };
+    const timeoutMs = Number.isFinite(cascadeCancelTimeoutMs) ? Math.max(0, cascadeCancelTimeoutMs) : 1500;
+    let timer;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ ok: false, timedOut: true, timeoutMs }), timeoutMs);
+    });
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   return { register, attachCascade, cancel, cancelAll, finish, get, snapshot };
