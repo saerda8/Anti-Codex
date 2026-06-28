@@ -1395,6 +1395,67 @@ test("Antigravity SSE pipe retries fake tool claims before emitting buffered too
   assert.match(wire, /response.completed/);
 });
 
+test("Antigravity SSE pipe blocks fake tool claims after replay exhaustion", async () => {
+  let streamCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: "run the marker tool",
+    tools: [{ type: "function", name: "marker_tool" }],
+  };
+  const chatBody = {
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "run the marker tool" }],
+    tools: [{ type: "function", function: { name: "marker_tool", parameters: { type: "object", properties: {}, additionalProperties: false } } }],
+    tool_choice: "auto",
+  };
+  const routing = {
+    marker_tool: {
+      type: "function",
+      codexName: "marker_tool",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  };
+  const queue = { run: async (task) => task({}) };
+  async function* streamUpstream() {
+    streamCalls += 1;
+    yield { type: "text_delta", delta: "I will run the marker tool now." };
+    yield {
+      type: "done",
+      completion: {
+        choices: [{ finish_reason: "stop", message: { role: "assistant", content: "I will run the marker tool now." } }],
+      },
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue,
+    streamUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(streamCalls, 3);
+  assert.match(wire, /Anti-Codex/);
+  assert.match(wire, /tool call/);
+  assert.doesNotMatch(wire, /I will run the marker tool now/);
+  assert.doesNotMatch(wire, /"type":"function_call"/);
+  assert.match(wire, /response.completed/);
+});
+
 test("generic provider streaming path aborts upstream fetch when the client disconnects", () => {
   const server = fs.readFileSync(new URL("../adaptive-server.mjs", import.meta.url), "utf8");
   const start = server.indexOf("async function pipeStreamingChatAsResponses");

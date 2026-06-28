@@ -9182,15 +9182,21 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                 fmt = chatToResponsesFormat(makeTextCompletion(workingChatBody.model || parsed.model, artifactMarkerMismatchBlockedMessage(artifactMismatch)), parsed, routing, { strictTools: true });
                 break;
             }
-            const shouldReplayFakeClaim = toolCapable
+            const shouldBlockFakeClaim = toolCapable
                 && !responseOutputHasToolCall(fmt.output)
-                && fakeToolClaimStreamReplays < MAX_FAKE_TOOL_CLAIM_REPLAYS
                 && shouldBlockAssistantToolClaim(assistantText, {
                     hasToolEvidence: requestHasToolEvidence(parsed),
                     hasToolCall: false,
                     hasWebToolEvidence,
                 });
-            if (!shouldReplayFakeClaim) break;
+            if (!shouldBlockFakeClaim) break;
+            if (fakeToolClaimStreamReplays >= MAX_FAKE_TOOL_CLAIM_REPLAYS) {
+                fmt = chatToResponsesFormat(makeTextCompletion(
+                    workingChatBody.model || parsed.model,
+                    blockedToolClaimMessageFor(assistantText, { hasWebToolEvidence }),
+                ), parsed, routing, { strictTools: true });
+                break;
+            }
             fakeToolClaimStreamReplays += 1;
             workingChatBody = {
                 ...workingChatBody,
