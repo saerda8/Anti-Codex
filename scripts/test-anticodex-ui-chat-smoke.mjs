@@ -1420,6 +1420,9 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   let artifactEvidence = null;
   const activeReconnectEvidence = [];
   let inLoopIdleDiagnostics = null;
+  let submitCompletedAt = 0;
+  let firstReplySeenAt = 0;
+  let idleCompletedAt = 0;
 
   const clear = await ws.send("Runtime.evaluate", {
     expression: `(() => {
@@ -1503,6 +1506,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   if (clicked && submitSucceeded) {
     const deadline = Date.now() + waitMs;
     const waitStartedAt = Date.now();
+    submitCompletedAt = waitStartedAt;
     const idleBreakAfterMs = Math.max(5_000, Number(options.idleBreakAfterMs || 12_000));
     while (Date.now() < deadline) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
@@ -1533,6 +1537,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         }
       }
       answerMarkerCount = expectedMarker && answerSample ? (answerSample.match(new RegExp(expectedMarker, "g")) || []).length : 0;
+      if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (taskMode === "repo-multi-file-edit") {
         artifactEvidence = verifyRepoMultiFileEditFixture();
         const artifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
@@ -1542,6 +1547,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
             if (diagnosticsAreIdle(loopDiagnostics)) {
               artifactCompletionObserved = true;
               inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
               break;
             }
           } catch {}
@@ -1552,6 +1558,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
             inLoopIdleDiagnostics = loopDiagnostics;
+            idleCompletedAt = Date.now();
             break;
           }
         } catch {}
@@ -1587,6 +1594,14 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     composer,
     lastSample,
     answerSample,
+    timing: {
+      submitCompletedAt: submitCompletedAt ? new Date(submitCompletedAt).toISOString() : null,
+      firstReplySeenAt: firstReplySeenAt ? new Date(firstReplySeenAt).toISOString() : null,
+      idleCompletedAt: idleCompletedAt ? new Date(idleCompletedAt).toISOString() : null,
+      submitMs: submitCompletedAt ? submitCompletedAt - (startedAt) : null,
+      firstReplyMs: firstReplySeenAt && submitCompletedAt ? firstReplySeenAt - submitCompletedAt : null,
+      idleWaitMs: idleCompletedAt && firstReplySeenAt ? idleCompletedAt - firstReplySeenAt : null,
+    },
   };
 }
 
@@ -1613,6 +1628,9 @@ async function main() {
   let newChatEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
+  let submitCompletedAt = 0;
+  let firstReplySeenAt = 0;
+  let idleCompletedAt = 0;
 
   try {
     releaseUiLock = await acquireUiSmokeLock();
@@ -1793,6 +1811,7 @@ async function main() {
           activeReconnectSeen: turn.activeReconnectSeen,
           inLoopIdleObserved: turn.inLoopIdleObserved,
           failures: turn.failures,
+          timing: turn.timing || null,
         })),
         cdpPort,
         baseUrl,
@@ -1818,6 +1837,10 @@ async function main() {
         antigravityQueue: queue,
         responsesWebSocket: diagnostics?.responsesWebSocket || null,
         networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
+        timing: {
+          turn1: turn1.timing || null,
+          turn2: turn2.timing || null,
+        },
       };
       releaseUiLock?.();
       releaseUiLock = null;
@@ -1905,6 +1928,7 @@ async function main() {
           activeReconnectSeen: turn.activeReconnectSeen,
           inLoopIdleObserved: turn.inLoopIdleObserved,
           failures: turn.failures,
+          timing: turn.timing || null,
         })),
         cdpPort,
         baseUrl,
@@ -1930,6 +1954,10 @@ async function main() {
         antigravityQueue: queue,
         responsesWebSocket: diagnostics?.responsesWebSocket || null,
         networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
+        timing: {
+          turn1: turn1.timing || null,
+          turn2: turn2?.timing || null,
+        },
       };
       releaseUiLock?.();
       releaseUiLock = null;
@@ -2012,6 +2040,7 @@ async function main() {
           submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
         }
       }
+      if (submitSucceeded) submitCompletedAt = Date.now();
       if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
     }
     if (clicked && submitSucceeded) {
@@ -2045,6 +2074,7 @@ async function main() {
         }
       }
       answerMarkerCount = marker && answerSample ? (answerSample.match(new RegExp(marker, "g")) || []).length : 0;
+      if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (taskMode === "free-chat") {
         const normalizedAnswer = answerSample.replace(/完全访问|输出|暂无产物|来源|暂无来源|Gemini[^\n]*/g, "").trim();
         if (!composer.includes(promptText) && /[\u4e00-\u9fff]/.test(normalizedAnswer) && !/正在思考|已处理|停止了|重新连接/.test(normalizedAnswer)) break;
@@ -2055,6 +2085,7 @@ async function main() {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
               inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
               break;
             }
           } catch {}
@@ -2064,6 +2095,7 @@ async function main() {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
             inLoopIdleDiagnostics = loopDiagnostics;
+            idleCompletedAt = Date.now();
             break;
           }
         } catch {}
@@ -2252,6 +2284,14 @@ async function main() {
     antigravityQueue: queue,
     responsesWebSocket: diagnostics?.responsesWebSocket || null,
     networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
+    timing: {
+      submitCompletedAt: submitCompletedAt ? new Date(submitCompletedAt).toISOString() : null,
+      firstReplySeenAt: firstReplySeenAt ? new Date(firstReplySeenAt).toISOString() : null,
+      idleCompletedAt: idleCompletedAt ? new Date(idleCompletedAt).toISOString() : null,
+      submitMs: submitCompletedAt ? submitCompletedAt - (startedAt) : null,
+      firstReplyMs: firstReplySeenAt && submitCompletedAt ? firstReplySeenAt - submitCompletedAt : null,
+      idleWaitMs: idleCompletedAt && firstReplySeenAt ? idleCompletedAt - firstReplySeenAt : null,
+    },
   };
   releaseUiLock?.();
   releaseUiLock = null;
@@ -2279,6 +2319,7 @@ main().catch((error) => {
       : taskMode === "repo-multi-file-edit"
         ? repoMultiFileEditDir
       : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+    timing: null,
   };
   writeReport(payload);
   console.log(JSON.stringify(payload));

@@ -11285,6 +11285,13 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /inLoopIdleObserved/);
   assert.match(verifier, /composerCleared/);
   assert.match(verifier, /sessionLockClear/);
+  assert.match(verifier, /timing/);
+  assert.match(verifier, /submitCompletedAt/);
+  assert.match(verifier, /firstReplySeenAt/);
+  assert.match(verifier, /idleCompletedAt/);
+  assert.match(verifier, /submitMs/);
+  assert.match(verifier, /firstReplyMs/);
+  assert.match(verifier, /idleWaitMs/);
   assert.match(verifier, /function diagnosticsAreIdle/);
   assert.match(verifier, /async function waitForIdleDiagnostics/);
   assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "report-site" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
