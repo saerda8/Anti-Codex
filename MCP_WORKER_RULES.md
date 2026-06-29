@@ -95,6 +95,22 @@ After every failure, before another dispatch:
 - Cause classification: external CLI/transport failure, not a code review result.
 - Rule change: when DeepSeek transport closes before edit, do not keep retrying the same dispatch. Route the small scoped task to another available worker or the main agent, then record the failure.
 
+### 2026-06-30 - MIMO start rejected workspace-external forbidden paths
+
+- Job: no job id; `mimo_start_implementation` rejected the request before worker launch.
+- Task: add MCP worker tool-name coverage for all current worker MCP servers.
+- Result: error `forbidden_paths escapes cwd: C:\Users\XD\.codex`; no file changes.
+- Cause classification: dispatch-boundary error by main agent, not model/task failure.
+- Rule change: for isolated worktree dispatches, use `allowed_dirs` to constrain writable scope and do not pass workspace-external paths in `forbidden_paths`; state those external paths as task text only.
+
+### 2026-06-30 - MIMO MCP worker coverage timeout
+
+- Job: `dsw_mqzl1fgl_fzq7wb`
+- Task: add expected tools/list coverage for the seven current worker MCP servers.
+- Result: `caller_timeout_no_valid_changes`; zero diff, no checks.
+- Cause classification: worker timeout/no valid changes on a narrow patch task.
+- Rule change: record as no-evidence and continue with mainline diff plus direct syntax/focused tests; do not wait on the stale isolated worktree.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

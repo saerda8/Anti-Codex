@@ -10,6 +10,8 @@ param(
     [string]$AntiCodexAccountId = "",
     [string]$McpAccountId = "",
     [string]$SeparateAccountProofApprovalId = "",
+    [ValidateSet("profile-and-appdata-only", "separate-windows-user", "official-independent-credential-store")]
+    [string]$AccountIsolationBoundary = "profile-and-appdata-only",
     [string]$Model = "gemini-pro-agent",
     [string]$Prompt = "",
     [int]$TimeoutSec = 90
@@ -170,13 +172,13 @@ try {
             reportName = "antigravity-cli-real-smoke"
             skipped = $true
             requestedRealTraffic = $false
-            skipReason = "real Antigravity CLI traffic is opt-in; rerun with -AllowRealTraffic and an isolated -ProfileRoot or saved Antigravity CLI profile"
-            reason = "real Antigravity CLI traffic is opt-in; rerun with -AllowRealTraffic and an isolated -ProfileRoot or saved Antigravity CLI profile"
-            coveredBy = "test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-profile>"
+            skipReason = "real Antigravity CLI traffic is opt-in; rerun only after the Anti-Codex lane uses a separate Windows user or official independent Antigravity credential store"
+            reason = "real Antigravity CLI traffic is opt-in; rerun only after the Anti-Codex lane uses a separate Windows user or official independent Antigravity credential store"
+            coveredBy = "test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-profile> -AccountIsolationBoundary <separate-windows-user|official-independent-credential-store>"
             usedRealTraffic = $false
             loginVerified = $false
             separateAccountVerified = $false
-            accountIsolationBoundary = "profile-and-appdata-only"
+            accountIsolationBoundary = $AccountIsolationBoundary
             accountIsolationCaveat = "Skipped real traffic; no account identity or Windows credential-store isolation was verified."
             behaviorCovered = $false
             coverageKind = "skipped"
@@ -270,13 +272,14 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         if (-not $antiCodexAccountIdTrimmed) { Add-Failure "Anti-Codex account identity is required before separate-account proof can be recorded" }
         if (-not $mcpAccountIdTrimmed) { Add-Failure "MCP Antigravity account identity is required before separate-account proof can be recorded" }
         if (-not $separateAccountProofApprovalIdTrimmed) { Add-Failure "explicit separate-account proof approval id is required before separate-account proof can be recorded" }
+        if ($AccountIsolationBoundary -eq "profile-and-appdata-only") { Add-Failure "same Windows user profile/AppData isolation is not credential isolation; use a separate Windows user or official independent credential store before separate-account proof" }
         if ($antiCodexAccountIdTrimmed -and $mcpAccountIdTrimmed -and $antiCodexAccountIdTrimmed -eq $mcpAccountIdTrimmed) {
             Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
         }
         if ($failures.Count -eq 0) {
             $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed -CapturedAt ([DateTime]::UtcNow.ToString("o")) -ApprovalId $separateAccountProofApprovalIdTrimmed
             $separateAccountVerified = $true
-            $separateAccountVerificationReason = "explicitly approved real CLI smoke plus external MCP account identity comparison showed distinct account identities"
+            $separateAccountVerificationReason = "explicitly approved real CLI smoke under $AccountIsolationBoundary plus external MCP account identity comparison showed distinct account identities"
         }
     } elseif ($antiCodexAccountIdTrimmed -or $mcpAccountIdTrimmed) {
         Add-Failure "account identity inputs require -AllowSeparateAccountProof; refusing to record ambiguous identity evidence"
@@ -300,8 +303,8 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         loginVerifiedMethod = if ($failures.Count -eq 0) { "marker-match" } else { "" }
         separateAccountVerified = $separateAccountVerified
         separateAccountVerificationReason = $separateAccountVerificationReason
-        accountIsolationBoundary = "profile-and-appdata-only"
-        accountIsolationCaveat = "If Antigravity CLI stores auth in the shared Windows credential store, real traffic can still use the currently signed-in account even with an isolated profileRoot."
+        accountIsolationBoundary = $AccountIsolationBoundary
+        accountIsolationCaveat = "Same-Windows-user profile/AppData isolation is not credential isolation. Separate-account proof requires a separate Windows user or official independent Antigravity credential store plus account identity comparison."
         marker = if ($Prompt -eq "") { $marker } else { "" }
         accountLaneRole = "anticodex-model-text"
         mcpAccountLaneManagedByAntiCodex = $false
@@ -323,7 +326,7 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         usedRealTraffic = $attemptedRealTraffic
         loginVerified = $false
         separateAccountVerified = $false
-        accountIsolationBoundary = "profile-and-appdata-only"
+        accountIsolationBoundary = $AccountIsolationBoundary
         accountIsolationCaveat = "Failure path did not prove account identity or Windows credential-store isolation."
         behaviorCovered = $false
         coverageKind = if ($attemptedRealTraffic) { "real-traffic" } elseif (-not $AllowRealTraffic) { "skipped" } elseif (-not $profileRootFull) { "blocked-no-profile" } else { "blocked-not-isolated" }

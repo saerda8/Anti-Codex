@@ -912,6 +912,9 @@ function summarizeGate(definition) {
           }
           if (!report.accountIsolationBoundary) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_boundary_missing");
           if (!report.accountIsolationCaveat) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_caveat_missing");
+          if (report.separateAccountVerified === true && !["separate-windows-user", "official-independent-credential-store"].includes(String(report.accountIsolationBoundary || ""))) {
+            semanticFailures.push("optional_antigravity_cli_real_smoke_credential_boundary_insufficient");
+          }
           if (report.accountLaneRole !== "anticodex-model-text") semanticFailures.push("optional_antigravity_cli_real_smoke_account_lane_role");
           if (report.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("optional_antigravity_cli_real_smoke_mcp_lane_managed_by_anticodex");
           if (report.mcpAccountLaneOwner !== "external-antigravity-account-not-managed-here") semanticFailures.push("optional_antigravity_cli_real_smoke_mcp_lane_owner_mismatch");
@@ -1478,7 +1481,7 @@ function gateGuidance(gate) {
     return "optional_antigravity_return_required: optional provider-to-Antigravity return evidence is stale or missing; run only with explicit user approval because it performs a real Antigravity return turn.";
   }
   if (gate?.id === "antigravityCliRealSmokeOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
-    return "optional_antigravity_cli_real_smoke_required: Anti-Codex only verifies its model-text lane/profile; MCP Antigravity account lane is externally managed/not managed here; separate account proof still requires explicit account-identity evidence. Run only with explicit user approval, an isolated CLI profile, and no Antigravity Desktop/coworker dependency.";
+    return "optional_antigravity_cli_real_smoke_required: Anti-Codex only verifies its model-text lane/profile; MCP Antigravity account lane is externally managed/not managed here; same-Windows-user profile/AppData isolation is insufficient; separate account proof requires a separate Windows user or official independent credential store plus explicit account-identity evidence. Run only with explicit user approval and no Antigravity Desktop/coworker dependency.";
   }
   if (actions.some((item) => item.id === "stabilitySoak") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_stability_soak_required: optional soak evidence is stale; run only with explicit user approval because it uses the local gateway, real traffic, and a longer stability window.";
@@ -1524,7 +1527,7 @@ const realTrafficRefreshOrder = [
 const optionalEvidenceRefreshOrder = [
   ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
   ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
-  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>", { requiresRealTraffic: true, highImpact: true }],
+  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>", { requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
@@ -3342,6 +3345,37 @@ if (args.has("--self-test")) {
       },
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Shared Windows credential store caveat.",
+    });
+    semanticFailures.antigravityCliRealSmokeSeparateTrueInsufficientCredentialBoundary = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with only profile/AppData isolation satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_credential_boundary_insufficient",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
+      accountIdentityComparison: {
+        antiCodexAccountId: "anticodex-account",
+        mcpAccountId: "mcp-account",
+        antiCodexSource: "anticodex-cli-real-smoke",
+        mcpSource: "external-mcp-antigravity-account",
+        comparisonMethod: "explicit-user-approved-account-identity-parameter",
+        capturedAt: "2026-06-29T18:00:00.000Z",
+        approvalId: "approval-2026-06-29",
+        approvalSource: "explicit-user-approval",
+      },
+      accountIsolationBoundary: "separate-windows-user",
+      accountIsolationCaveat: "Separate Windows user credential boundary.",
     });
     const antigravityCliRealSmokeValidComparisonGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "antigravityCliRealSmokeOptional"));
     if (antigravityCliRealSmokeValidComparisonGate.satisfied !== true) {

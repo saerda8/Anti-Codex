@@ -5971,6 +5971,8 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   const sharedConfigSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-config.mjs"), "utf8");
   const pluginHostSync = readFileSync(resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"), "utf8");
   const sourceSnapshot = readFileSync(resolve(root, "scripts", "anticodex-source-snapshot.ps1"), "utf8");
+  const antigravityCliLogin = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login.ps1"), "utf8");
+  const antigravityCliWindowsUserLogin = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login-windows-user.ps1"), "utf8");
   const adaptiveServer = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   // Must include health check and MCP/skills endpoints
@@ -6100,7 +6102,20 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(mcpSkills, /MCP node_repl real stdio tool call failed/);
   assert.match(mcpSkills, /expectedMcpToolNames/);
   assert.match(mcpSkills, /antigravity_start_implementation/);
+  assert.match(mcpSkills, /antigravity_health/);
+  assert.doesNotMatch(mcpSkills, /antigravity_get_conversation/);
+  assert.doesNotMatch(mcpSkills, /antigravity_send_message/);
   assert.match(mcpSkills, /deepseek_start_implementation/);
+  assert.match(mcpSkills, /mimo_start_implementation/);
+  assert.match(mcpSkills, /mimo_implement_in_workspace/);
+  assert.match(mcpSkills, /mimocode_start_implementation/);
+  assert.match(mcpSkills, /mimocode_wait_for_job/);
+  assert.match(mcpSkills, /deveco_start_implementation/);
+  assert.match(mcpSkills, /deveco_tail_job/);
+  assert.match(mcpSkills, /opencode_start_implementation/);
+  assert.match(mcpSkills, /opencode_cancel_job/);
+  assert.match(mcpSkills, /kilo_start_implementation/);
+  assert.match(mcpSkills, /kilo_wait_for_job/);
   assert.match(mcpSkills, /missingExpectedTools/);
   assert.match(mcpSkills, /real stdio tools\/list missing expected tools/);
   assert.match(mcpSkills, /real stdio tools\/list failed/);
@@ -6216,6 +6231,30 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /function Get-LinkTargetValue/);
   assert.doesNotMatch(refreshLocalFeatures, /target = if \(\$item\) \{ \$item\.Target \}/);
   assert.match(refreshLocalFeatures, /ConvertTo-Json/);
+  assert.match(antigravityCliLogin, /prepare-anticodex-antigravity-cli-profile\.ps1/);
+  assert.match(antigravityCliLogin, /\[switch\]\$DryRun/);
+  assert.match(antigravityCliLogin, /\[switch\]\$AllowFileIsolationOnly/);
+  assert.match(antigravityCliLogin, /capturesLoginOutput = \$false/);
+  assert.match(antigravityCliLogin, /blockedByDefault = \(-not \$AllowFileIsolationOnly\.IsPresent\)/);
+  assert.match(antigravityCliLogin, /same Windows user can reuse Antigravity credentials/);
+  assert.match(antigravityCliLogin, /windowsCredentialStoreIsolation = \$false/);
+  assert.match(antigravityCliLogin, /file-and-appdata-only/);
+  assert.match(antigravityCliLogin, /-WorkingDirectory \$profileRootFull/);
+  assert.match(antigravityCliLogin, /-ArgumentList \$terminalArgs/);
+  assert.match(antigravityCliLogin, /-File/);
+  assert.match(antigravityCliLogin, /strictWindowsAppDataIsolation = \$true/);
+  assert.doesNotMatch(antigravityCliLogin, /-Command/);
+  assert.doesNotMatch(antigravityCliLogin, /RedirectStandardOutput/);
+  assert.doesNotMatch(antigravityCliLogin, /Start-Transcript/);
+  assert.match(antigravityCliWindowsUserLogin, /runas\.exe/);
+  assert.match(antigravityCliWindowsUserLogin, /separate-windows-user/);
+  assert.match(antigravityCliWindowsUserLogin, /expectedCredentialStoreIsolation = \$true/);
+  assert.match(antigravityCliWindowsUserLogin, /password is handled by Windows runas, not by Codex/);
+  assert.match(antigravityCliWindowsUserLogin, /-AllowFileIsolationOnly/);
+  assert.match(antigravityCliWindowsUserLogin, /\[switch\]\$DryRun/);
+  assert.match(antigravityCliWindowsUserLogin, /capturesLoginOutput = \$false/);
+  assert.doesNotMatch(antigravityCliWindowsUserLogin, /Start-Transcript/);
+  assert.doesNotMatch(antigravityCliWindowsUserLogin, /RedirectStandardOutput/);
   assert.match(pluginHostSync, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
   assert.match(pluginHostSync, /extraSkillsRoots/);
   assert.match(pluginHostSync, /agentsSkillsPath/);
@@ -11566,7 +11605,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_evidence_without_verification/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_boundary_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_caveat_missing/);
-  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_credential_boundary_insufficient/);
+  assert.match(releaseGates, /same-Windows-user profile\/AppData isolation is insufficient/);
+  assert.match(releaseGates, /separate Windows user or official independent credential store/);
+  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user\|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>/);
   assert.match(releaseGates, /model-text lane/);
   assert.match(releaseGates, /MCP/);
   assert.match(releaseGates, /externally managed/);
@@ -13111,8 +13153,11 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /\[string\]\$AntiCodexAccountId/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$McpAccountId/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$SeparateAccountProofApprovalId/);
+  assert.match(antigravityCliRealSmoke, /\[ValidateSet\("profile-and-appdata-only", "separate-windows-user", "official-independent-credential-store"\)\]/);
+  assert.match(antigravityCliRealSmoke, /\[string\]\$AccountIsolationBoundary = "profile-and-appdata-only"/);
   assert.match(antigravityCliRealSmoke, /account identity inputs require -AllowSeparateAccountProof/);
   assert.match(antigravityCliRealSmoke, /explicit separate-account proof approval id is required/);
+  assert.match(antigravityCliRealSmoke, /same Windows user profile\/AppData isolation is not credential isolation/);
   assert.match(antigravityCliRealSmoke, /Anti-Codex and MCP Antigravity account identities match/);
   assert.match(antigravityCliRealSmoke, /\$report\.accountIdentityComparison = \$accountIdentityComparison/);
   assert.match(antigravityCliRealSmoke, /antiCodexSource = "anticodex-cli-real-smoke"/);
@@ -13122,7 +13167,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /approvalId = \$ApprovalId/);
   assert.match(antigravityCliRealSmoke, /approvalSource = "explicit-user-approval"/);
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
-  assert.match(antigravityCliRealSmoke, /Windows credential store/);
+  assert.match(antigravityCliRealSmoke, /Windows credential-store/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(preflight, /function Test-AntigravityCliProfilePrepare/);
   assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Test-AntigravityCliProfilePrepare/);
@@ -13267,7 +13312,7 @@ test("Antigravity CLI account isolation scripts keep separate-account proof gate
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
 
   assert.match(antigravityCliPrepare, /shared Windows credential store/);
-  assert.match(antigravityCliRealSmoke, /Windows credential store/);
+  assert.match(antigravityCliRealSmoke, /Windows credential-store/);
 
   assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
 
@@ -13688,6 +13733,7 @@ test("no-traffic Antigravity profile prepare must not be surfaced as real dual-a
   // Source preflight must label profile prepare as no-traffic, never real proof
   assert.match(preflight, /separateAccountVerified.*\$false/);
   assert.match(preflight, /profile-prepared-no-traffic/);
+  assert.match(preflight, /latest-antigravity-cli-profile-prepare\.json/);
 
   // Profile prepare script must default separateAccountVerified to false
   assert.match(antigravityCliPrepare, /separateAccountVerified = \$false/);

@@ -878,10 +878,8 @@ if ($configText) {
 
 $expectedMcpToolNames = @{
     "antigravity-code-worker" = @(
-        "antigravity_get_conversation",
         "antigravity_get_job",
         "antigravity_health",
-        "antigravity_send_message",
         "antigravity_start_implementation",
         "antigravity_tail_job"
     )
@@ -892,6 +890,46 @@ $expectedMcpToolNames = @{
         "deepseek_start_implementation",
         "deepseek_tail_job",
         "deepseek_wait_for_job"
+    )
+    "deveco-code-worker" = @(
+        "deveco_cancel_job",
+        "deveco_get_job",
+        "deveco_implement_in_workspace",
+        "deveco_start_implementation",
+        "deveco_tail_job",
+        "deveco_wait_for_job"
+    )
+    "kilo-worker" = @(
+        "kilo_cancel_job",
+        "kilo_get_job",
+        "kilo_implement_in_workspace",
+        "kilo_start_implementation",
+        "kilo_tail_job",
+        "kilo_wait_for_job"
+    )
+    "mimo-claude-coworker" = @(
+        "mimo_cancel_job",
+        "mimo_get_job",
+        "mimo_implement_in_workspace",
+        "mimo_start_implementation",
+        "mimo_tail_job",
+        "mimo_wait_for_job"
+    )
+    "mimocode-worker" = @(
+        "mimocode_cancel_job",
+        "mimocode_get_job",
+        "mimocode_implement_in_workspace",
+        "mimocode_start_implementation",
+        "mimocode_tail_job",
+        "mimocode_wait_for_job"
+    )
+    "opencode-worker" = @(
+        "opencode_cancel_job",
+        "opencode_get_job",
+        "opencode_implement_in_workspace",
+        "opencode_start_implementation",
+        "opencode_tail_job",
+        "opencode_wait_for_job"
     )
 }
 

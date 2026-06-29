@@ -101,6 +101,19 @@ function Invoke-SourceProcess {
     }
 }
 
+function Get-SourceJsonReportText {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReportRoot,
+        [Parameter(Mandatory = $true)][string]$LatestFileName,
+        [string[]]$FallbackTail = @()
+    )
+    $latestPath = Join-Path $ReportRoot $LatestFileName
+    if (Test-Path -LiteralPath $latestPath -PathType Leaf) {
+        return Get-Content -LiteralPath $latestPath -Raw
+    }
+    return ($FallbackTail -join "`n")
+}
+
 function Test-JavaScriptSyntax {
     $node = (Get-Command "node" -ErrorAction Stop).Source
     $scanRoots = @("translator", "scripts")
@@ -385,7 +398,10 @@ function Test-AntigravityCliProfilePrepare {
                 "-ProfileRoot", $tempProfileRoot,
                 "-NoSaveProfile") `
             -TimeoutSec 30
-        $prepareJson = ($result.stdoutTail -join "`n")
+        $prepareJson = Get-SourceJsonReportText `
+            -ReportRoot $tempReportRoot `
+            -LatestFileName "latest-antigravity-cli-profile-prepare.json" `
+            -FallbackTail $result.stdoutTail
         $prepareOk = $false
         $prepareContract = [ordered]@{
             ok = $false
@@ -468,7 +484,10 @@ function Test-AntigravityCliProfilePrepareRejectsDefaultChild {
                 "-ProfileRoot", $badChildProfile,
                 "-NoSaveProfile") `
             -TimeoutSec 30
-        $prepareJson = ($result.stdoutTail -join "`n")
+        $prepareJson = Get-SourceJsonReportText `
+            -ReportRoot $tempReportRoot `
+            -LatestFileName "latest-antigravity-cli-profile-prepare.json" `
+            -FallbackTail $result.stdoutTail
         $rejectedOk = $false
         $usedRealTraffic = $null
         $failureText = ""
