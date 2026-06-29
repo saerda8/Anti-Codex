@@ -22,6 +22,7 @@ let reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA |
 const maxAgeHours = Number(args.get("--max-age-hours") || 48);
 const strict = args.has("--strict");
 const strictOptionalRealTraffic = args.has("--strict-optional-real-traffic");
+const compactStatus = args.has("--compact-status") || args.has("--status");
 const startedAt = Date.now();
 function currentSourceRoot() {
   return resolve(args.get("--source-root") || join(dirname(fileURLToPath(import.meta.url)), ".."));
@@ -1699,6 +1700,28 @@ function summarizeApprovalPlan(actions) {
     requiredForReleaseCount: items.filter((item) => item.requiredForRelease === true).length,
     firstBlockedAction: items.find((item) => item.blockedUntilExplicitUserApproval === true)?.id || "",
     phases,
+  };
+}
+
+function compactReleaseGateStatus(payload) {
+  const approvalPlan = payload?.approvalPlan && typeof payload.approvalPlan === "object" ? payload.approvalPlan : {};
+  return {
+    ok: payload?.ok === true,
+    reportName: "release-gates-status",
+    shortReady: payload?.shortReady === true,
+    releaseReady: payload?.releaseReady === true,
+    releaseBlockedOnlyByRequiredRealTraffic: payload?.releaseBlockedOnlyByRequiredRealTraffic === true,
+    requiredRealTrafficBlockedGates: Array.isArray(payload?.requiredRealTrafficBlockedGates) ? payload.requiredRealTrafficBlockedGates : [],
+    missingRequired: Array.isArray(payload?.missingRequired) ? payload.missingRequired : [],
+    missingShort: Array.isArray(payload?.missingShort) ? payload.missingShort : [],
+    damagedReports: Array.isArray(payload?.damagedReports) ? payload.damagedReports : [],
+    firstBlockedAction: typeof approvalPlan.firstBlockedAction === "string" ? approvalPlan.firstBlockedAction : "",
+    nextActionsAvailableCount: Number.isFinite(Number(payload?.nextActionsAvailableCount)) ? Number(payload.nextActionsAvailableCount) : 0,
+    nextActionsHiddenCount: Number.isFinite(Number(payload?.nextActionsHiddenCount)) ? Number(payload.nextActionsHiddenCount) : 0,
+    nextActionsTruncated: payload?.nextActionsTruncated === true,
+    requiresGatewayStartCount: Number.isFinite(Number(approvalPlan.requiresGatewayStartCount)) ? Number(approvalPlan.requiresGatewayStartCount) : 0,
+    requiresRealTrafficCount: Number.isFinite(Number(approvalPlan.requiresRealTrafficCount)) ? Number(approvalPlan.requiresRealTrafficCount) : 0,
+    reportOnlyCount: Number.isFinite(Number(approvalPlan.reportOnlyCount)) ? Number(approvalPlan.reportOnlyCount) : 0,
   };
 }
 
@@ -3863,4 +3886,4 @@ const payload = {
   gates,
 };
 writeJsonReportAtomic(payload);
-process.stdout.write(JSON.stringify(payload));
+process.stdout.write(JSON.stringify(compactStatus ? compactReleaseGateStatus(payload) : payload));

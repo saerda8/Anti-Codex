@@ -11206,6 +11206,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   const reportFilePattern = (file) => new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
   assert.match(releaseGates, /latest-release-gates\.json/);
+  assert.match(releaseGates, /compactStatus = args\.has\("--compact-status"\) \|\| args\.has\("--status"\)/);
+  assert.match(releaseGates, /function compactReleaseGateStatus\(payload\)/);
+  assert.match(releaseGates, /reportName: "release-gates-status"/);
+  assert.match(releaseGates, /firstBlockedAction/);
+  assert.match(releaseGates, /compactStatus \? compactReleaseGateStatus\(payload\) : payload/);
   assert.match(releaseGates, /group: "short"/);
   assert.match(releaseGates, /group: "no-traffic"/);
   assert.match(releaseGates, /real-traffic/);
@@ -11608,6 +11613,32 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
     assert.match(installedOverall, reportFilePattern(reportFile), `${reportFile} must be covered by installed report integrity checks`);
   }
   assert.doesNotMatch(releaseGates, /fetch\(|node:(?:http|https|net|child_process)|require\(["'](?:http|https|net|node:http|node:https|node:net|child_process|node:child_process)["']\)|Invoke-RestMethod|Invoke-WebRequest|Start-Process|Stop-Process|auth\/login|OPENAI_API_KEY|ANTHROPIC_API_KEY/);
+});
+
+test("passive release gate compact status emits a short parseable summary", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-release-gates-status-"));
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-release-gates.mjs"),
+      "--report-root", tempRoot,
+      "--compact-status",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.reportName, "release-gates-status");
+    assert.equal(typeof summary.shortReady, "boolean");
+    assert.equal(typeof summary.releaseReady, "boolean");
+    assert.ok(Array.isArray(summary.missingRequired));
+    assert.ok(Array.isArray(summary.missingShort));
+    assert.ok(Array.isArray(summary.damagedReports));
+    assert.ok(Array.isArray(summary.requiredRealTrafficBlockedGates));
+    assert.equal(Object.hasOwn(summary, "gates"), false);
+    assert.equal(Object.hasOwn(summary, "releaseGateFailureReasons"), false);
+    assert.equal(Object.hasOwn(summary, "nextActions"), false);
+    assert.equal(existsSync(resolve(tempRoot, "latest-release-gates.json")), true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("passive release gate self-test executes successfully", () => {
