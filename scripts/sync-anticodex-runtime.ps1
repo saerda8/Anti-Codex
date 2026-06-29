@@ -25,7 +25,13 @@ if ($targetRuntimeFull -ne $expectedRuntime) {
 $requiredSourceFiles = @(
     "scripts\start-anticodex.ps1",
     "scripts\start-deepcodex.ps1",
+    "scripts\anticodex-update-status.psm1",
     "scripts\sync-anticodex.ps1",
+    "scripts\sync-anticodex-launcher.ps1",
+    "scripts\rollback-anticodex.ps1",
+    "scripts\rollback-anticodex-launcher.ps1",
+    "scripts\manage-anticodex.ps1",
+    "scripts\check-anticodex-update.ps1",
     "scripts\anticodex-manager-bridge.mjs",
     "scripts\anticodex-manager-inject.js",
     "scripts\anticodex-manager-open-inject.js",

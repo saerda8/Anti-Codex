@@ -2188,7 +2188,13 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   assert.match(runtimeSync, /Refusing to remove Anti-Codex legacy runtime file outside/);
   assert.match(runtimeSync, /scripts\\start-anticodex\.ps1/);
   assert.match(runtimeSync, /start-deepcodex\.ps1/);
+  assert.match(runtimeSync, /scripts\\anticodex-update-status\.psm1/);
   assert.match(runtimeSync, /scripts\\sync-anticodex\.ps1/);
+  assert.match(runtimeSync, /scripts\\sync-anticodex-launcher\.ps1/);
+  assert.match(runtimeSync, /scripts\\rollback-anticodex\.ps1/);
+  assert.match(runtimeSync, /scripts\\rollback-anticodex-launcher\.ps1/);
+  assert.match(runtimeSync, /scripts\\manage-anticodex\.ps1/);
+  assert.match(runtimeSync, /scripts\\check-anticodex-update\.ps1/);
   assert.match(runtimeSync, /-TranslatorOnly/);
   assert.match(runtimeSync, /\$restartHealthy = \$false/);
   assert.match(runtimeSync, /Wait-AntiCodexHealth -Seconds 1/);
