@@ -581,11 +581,26 @@ function summarizeGate(definition) {
         custom: "custom-tool-loop",
       };
       const expectedReportName = expectedToolLoopReportNames[definition.requireToolLoopSemantics];
-      if (report.reportName !== expectedReportName) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_report_name`);
-      if (report.requestedRealTraffic !== true) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_real_traffic_not_requested`);
-      if (report.usedRealTraffic !== true) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_real_traffic_missing`);
-      if (report.behaviorCovered !== true) semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_behavior_not_covered`);
-      if (report.coverageKind !== "real-traffic") semanticFailures.push(`${definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}_coverage_kind`);
+      const failurePrefix = definition.id.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+      const nativeBridgeDisabledSkip = (
+        (definition.requireToolLoopSemantics === "native" || definition.requireToolLoopSemantics === "native-multi") &&
+        report.skipped === true &&
+        report.nativeBridgeDefaultEnabled === false &&
+        report.reason === "native_bridge_disabled"
+      );
+      if (nativeBridgeDisabledSkip) {
+        if (report.reportName !== expectedReportName) semanticFailures.push(`${failurePrefix}_report_name`);
+        if (report.requestedRealTraffic !== false) semanticFailures.push(`${failurePrefix}_disabled_skip_requested_real_traffic`);
+        if (report.usedRealTraffic !== false) semanticFailures.push(`${failurePrefix}_disabled_skip_used_real_traffic`);
+        if (report.behaviorCovered !== false) semanticFailures.push(`${failurePrefix}_disabled_skip_behavior_covered`);
+        if (report.coverageKind !== "native-bridge-disabled") semanticFailures.push(`${failurePrefix}_disabled_skip_coverage_kind`);
+        if (report.coveredBy !== "codex-owned-tools-model-only") semanticFailures.push(`${failurePrefix}_disabled_skip_covered_by`);
+      } else {
+      if (report.reportName !== expectedReportName) semanticFailures.push(`${failurePrefix}_report_name`);
+      if (report.requestedRealTraffic !== true) semanticFailures.push(`${failurePrefix}_real_traffic_not_requested`);
+      if (report.usedRealTraffic !== true) semanticFailures.push(`${failurePrefix}_real_traffic_missing`);
+      if (report.behaviorCovered !== true) semanticFailures.push(`${failurePrefix}_behavior_not_covered`);
+      if (report.coverageKind !== "real-traffic") semanticFailures.push(`${failurePrefix}_coverage_kind`);
       if (definition.requireToolLoopSemantics === "standard") {
         if (!callId) semanticFailures.push("tool_loop_call_id_missing");
         if (!finalText.includes("MARKER_731")) semanticFailures.push("tool_loop_marker_missing");
@@ -622,6 +637,7 @@ function summarizeGate(definition) {
         if (tool.name !== "apply_patch") semanticFailures.push("custom_tool_loop_name_mismatch");
         if (tool.inputPreserved !== true) semanticFailures.push("custom_tool_loop_input_not_preserved");
         if (tool.marker !== "CUSTOM_PATCH_519" || !finalText.includes("CUSTOM_PATCH_519")) semanticFailures.push("custom_tool_loop_marker_missing");
+      }
       }
     }
     if (definition.requireWebToolsSemantics) {

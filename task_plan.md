@@ -30,7 +30,9 @@ Build an independent Anti-Codex desktop client that is best understood as a sepa
 - Do not modify or depend on the running state of the original Codex installation.
 - Treat Codex app-server behavior and schemas as the client contract.
 - Treat Antigravity Desktop/CLI discovery as a model adapter boundary, not as a coworker, tool executor, or UI automation layer.
+- Product direction: Anti-Codex is a guarded copy/sync of the Codex client plus Anti-Codex isolation, branding, and an Antigravity-entitlement model adapter. When Codex updates, Anti-Codex should update by guarded host sync from that Codex client surface, not by reimplementing native Codex features one by one.
 - Prefer carrying forward native Codex client/tool behavior instead of rebuilding tool features in the Antigravity adapter. Host sync should be treated as a guarded Codex client copy/incremental patch flow plus Anti-Codex branding, isolation, and model-adapter changes.
+- Do not replace missing Codex-client behavior with Antigravity coworker/Desktop behavior. If a Codex capability is absent after sync, treat it as a host-sync/client-parity bug unless the user explicitly accepts a different architecture.
 - Until dual Antigravity account isolation is implemented, do not run Antigravity coworker/native tool-bridge traffic as part of default testing or release gates; it can share the same account as MCP and interfere with the user's separate Antigravity usage.
 - Preserve the native Codex event, tool, MCP, skill, cancellation, compaction, and session semantics; a visual shell is not an acceptable deliverable.
 - Model names and IDs must come from the active Antigravity account and must be provably used by the execution layer.

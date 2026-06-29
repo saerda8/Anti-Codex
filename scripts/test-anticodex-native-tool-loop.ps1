@@ -67,17 +67,27 @@ function Save-Report {
 try {
     $diagnostics = Invoke-RestMethod -Uri "$BaseUrl/anticodex/diagnostics" -Proxy $null -TimeoutSec $TimeoutSec
     if ($diagnostics.toolBridge.nativeBridgeDefaultEnabled -ne $true) {
-        Add-Failure "Native bridge is disabled in the running gateway. Restart Anti-Codex with ANTICODEX_NATIVE_TOOL_BRIDGE=1 before running this opt-in verifier."
         $result = [pscustomobject]@{
-            ok = $false
-            failures = $failures.ToArray()
+            reportName = "native-tool-loop"
+            ok = $true
+            skipped = $true
+            requestedRealTraffic = $false
+            usedRealTraffic = $false
+            behaviorCovered = $false
+            coverageKind = "native-bridge-disabled"
+            reason = "native_bridge_disabled"
+            coveredBy = "codex-owned-tools-model-only"
+            failures = @()
             model = $model
             elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
             nativeBridgeDefaultEnabled = $diagnostics.toolBridge.nativeBridgeDefaultEnabled
+            toolBridgeMode = $diagnostics.toolBridge.mode
+            verifier = "test-anticodex-tool-loop.ps1"
+            nativeVerifier = "test-anticodex-native-tool-loop.ps1"
         }
         Save-Report $result
         $result | ConvertTo-Json -Depth 12 -Compress
-        exit 1
+        exit 0
     }
 
     $tool = @{

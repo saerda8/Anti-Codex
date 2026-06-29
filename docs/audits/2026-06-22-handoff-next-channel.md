@@ -6,6 +6,7 @@ Branch: main
 ## Current State
 
 - Anti-Codex is an isolated desktop/runtime fork using Antigravity Desktop as the default model provider.
+- Direction lock: Anti-Codex should remain a guarded Codex client copy plus isolation, branding, and model-adapter changes. Do not reimplement Codex client/tool features one by one through Antigravity Desktop/coworker; use host sync and parity validation when Codex changes.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the last checks: upstream `antigravity-desktop`, account ready, 8 models.
 - Manager is at `native-panel-v85`.
 - Standalone real Manager MCP/Skill and plugin/application button gates pass after local feature refresh. The default standalone real-button script now runs only those two non-disruptive actions; report viewing and diagnostics bundle remain opt-in.

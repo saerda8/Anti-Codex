@@ -5222,11 +5222,17 @@ test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   assert.match(nativeToolLoop, /\\u4e00-\\u9fff/);
   assert.match(nativeToolLoop, /DeepCodex\|Deep Codex/);
   assert.match(nativeToolLoop, /reportName\s*=\s*"native-tool-loop"/);
+  assert.match(nativeToolLoop, /reason\s*=\s*"native_bridge_disabled"/);
+  assert.match(nativeToolLoop, /coverageKind\s*=\s*"native-bridge-disabled"/);
+  assert.match(nativeToolLoop, /coveredBy\s*=\s*"codex-owned-tools-model-only"/);
   assert.match(nativeToolLoop, /requestedRealTraffic\s*=\s*\$true/);
   assert.match(nativeToolLoop, /usedRealTraffic\s*=\s*\$true/);
   assert.match(nativeToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
   assert.match(nativeToolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(nativeMultiToolLoop, /reportName\s*=\s*"native-multi-tool-loop"/);
+  assert.match(nativeMultiToolLoop, /reason\s*=\s*"native_bridge_disabled"/);
+  assert.match(nativeMultiToolLoop, /coverageKind\s*=\s*"native-bridge-disabled"/);
+  assert.match(nativeMultiToolLoop, /coveredBy\s*=\s*"codex-owned-tools-model-only"/);
   assert.match(nativeMultiToolLoop, /requestedRealTraffic\s*=\s*\$true/);
   assert.match(nativeMultiToolLoop, /usedRealTraffic\s*=\s*\$true/);
   assert.match(nativeMultiToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
@@ -10812,6 +10818,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requiredForRelease/);
   assert.match(releaseGates, /id: "nativeToolLoop"[\s\S]*requiredForRelease: false[\s\S]*Opt-in native bridge diagnostic/);
   assert.match(releaseGates, /id: "nativeMultiToolLoop"[\s\S]*requiredForRelease: false[\s\S]*Opt-in native bridge diagnostic/);
+  assert.match(releaseGates, /nativeBridgeDisabledSkip/);
+  assert.match(releaseGates, /native_bridge_disabled/);
+  assert.match(releaseGates, /native-bridge-disabled/);
+  assert.match(releaseGates, /disabled_skip_covered_by/);
   assert.match(releaseGates, /requireSourcePreflightSemantics/);
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);
