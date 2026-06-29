@@ -5103,6 +5103,10 @@ async function runUpstreamProfileScript(action, values = {}, options = {}) {
     addArg("Model", values.model);
     addArg("TestStatus", values.testStatus);
     addArg("CapabilitiesJson", values.capabilitiesJson);
+    addArg("AntigravityCliProfileRoot", values.antigravityCliProfileRoot);
+    if (values.antigravityCliStrictWindowsAppDataIsolation !== undefined) {
+        addArg("AntigravityCliStrictWindowsAppDataIsolation", values.antigravityCliStrictWindowsAppDataIsolation ? "true" : "false");
+    }
     const { stdout } = await execFileAsync(powershellPath(), args, {
         cwd: MANAGER_SCRIPTS_ROOT,
         timeout: options.timeoutMs || 15_000,
@@ -10441,7 +10445,7 @@ const server = http.createServer(async (req, res) => {
                 ok: true,
                 active: isAntigravityUpstreamMode(UPSTREAM_MODE) ? "antigravity" : "third-party",
                 runtime: isAntigravityUpstreamMode(UPSTREAM_MODE)
-                    ? { mode: "antigravity" }
+                    ? { mode: "antigravity", antigravityCliIsolation: diagnosticsAntigravityCliIsolation() }
                     : publicUpstreamProfile(activeUpstreamProfile()),
                 saved,
             });
@@ -10487,7 +10491,13 @@ const server = http.createServer(async (req, res) => {
             const raw = await readRaw(req);
             const body = JSON.parse(raw.toString("utf8") || "{}");
             if (body.mode === "antigravity") {
-                const saved = await runUpstreamProfileScript("UseAntigravity");
+                const cli = body.antigravityCli && typeof body.antigravityCli === "object" ? body.antigravityCli : null;
+                const saved = cli
+                    ? await runUpstreamProfileScript("SaveAntigravity", {
+                        antigravityCliProfileRoot: cli.profileRoot,
+                        antigravityCliStrictWindowsAppDataIsolation: cli.strictWindowsAppDataIsolation === true,
+                    })
+                    : await runUpstreamProfileScript("UseAntigravity");
                 return jsonResponse(res, 200, { ok: true, saved, restartRequired: true });
             }
             let apiKey = String(body.apiKey || "");

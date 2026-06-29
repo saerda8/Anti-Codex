@@ -96,6 +96,7 @@ $env:DEEPCODEX_DISPLAY_NAME = "Anti-Codex"
 $env:DEEPCODEX_SKIP_PLUGIN_SYNC = "1"
 $upstreamProfileScript = Join-Path $PSScriptRoot "anticodex-upstream-profile.ps1"
 $antiCodexUsesAntigravity = $true
+$runtimeProfile = $null
 if (Test-Path -LiteralPath $upstreamProfileScript -PathType Leaf) {
     try {
         $runtimeProfile = & $upstreamProfileScript -Action GetRuntime -StateRoot $env:DEEPCODEX_STATE_ROOT | ConvertFrom-Json
@@ -114,6 +115,22 @@ if (Test-Path -LiteralPath $upstreamProfileScript -PathType Leaf) {
         exit 1
     }
 }
+function Set-AntiCodexAntigravityCliEnvironment {
+    param($Profile)
+    $cli = $null
+    if ($Profile -and ($Profile.PSObject.Properties.Name -contains "antigravityCli")) {
+        $cli = $Profile.antigravityCli
+    }
+    if ($cli -and ($cli.PSObject.Properties.Name -contains "profileRoot") -and [string]$cli.profileRoot -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = [string]$cli.profileRoot
+    }
+    if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $env:DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+    }
+    if ($cli -and ($cli.PSObject.Properties.Name -contains "strictWindowsAppDataIsolation") -and $cli.strictWindowsAppDataIsolation -eq $true -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA = "1"
+    }
+}
 if ($antiCodexUsesAntigravity) {
     $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
     Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
@@ -121,9 +138,7 @@ if ($antiCodexUsesAntigravity) {
     if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
         $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
     }
-    if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
-        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $env:DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
-    }
+    Set-AntiCodexAntigravityCliEnvironment -Profile $runtimeProfile
     if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
         $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
     }

@@ -76,6 +76,24 @@ $DEEPCODEX_DISPLAY_NAME = if ($env:DEEPCODEX_DISPLAY_NAME) { $env:DEEPCODEX_DISP
 $DEEPCODEX_ACCOUNT_EMAIL = if ($env:DEEPCODEX_ACCOUNT_EMAIL) { $env:DEEPCODEX_ACCOUNT_EMAIL } else { "deepcodex@local" }
 $LOCAL_CODEX_API_KEY = if ($env:LOCAL_CODEX_API_KEY) { $env:LOCAL_CODEX_API_KEY } else { "sk-codex-deepseek-local" }
 $ANTICODEX_UPSTREAM_PROFILE_SCRIPT = Join-Path $PSScriptRoot "anticodex-upstream-profile.ps1"
+
+function Set-AntiCodexAntigravityCliEnvironment {
+    param($Profile)
+    $cli = $null
+    if ($Profile -and ($Profile.PSObject.Properties.Name -contains "antigravityCli")) {
+        $cli = $Profile.antigravityCli
+    }
+    if ($cli -and ($cli.PSObject.Properties.Name -contains "profileRoot") -and [string]$cli.profileRoot -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = [string]$cli.profileRoot
+    }
+    if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+    }
+    if ($cli -and ($cli.PSObject.Properties.Name -contains "strictWindowsAppDataIsolation") -and $cli.strictWindowsAppDataIsolation -eq $true -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA) {
+        $env:ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA = "1"
+    }
+}
+
 if ($IS_ANTICODEX_INSTALL_ROOT -and (Test-Path -LiteralPath $ANTICODEX_UPSTREAM_PROFILE_SCRIPT -PathType Leaf)) {
     try {
         $runtimeProfile = & $ANTICODEX_UPSTREAM_PROFILE_SCRIPT -Action GetRuntime -StateRoot $DEEPCODEX_STATE_ROOT | ConvertFrom-Json
@@ -94,9 +112,7 @@ if ($IS_ANTICODEX_INSTALL_ROOT -and (Test-Path -LiteralPath $ANTICODEX_UPSTREAM_
             if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
                 $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
             }
-            if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
-                $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
-            }
+            Set-AntiCodexAntigravityCliEnvironment -Profile $runtimeProfile
             if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
                 $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
             }
@@ -113,7 +129,7 @@ if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
     $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
 }
 if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
-    $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
+    Set-AntiCodexAntigravityCliEnvironment
 }
 if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
     $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
@@ -144,9 +160,7 @@ function Update-AntiCodexUpstreamEnvironment {
             if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
                 $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
             }
-            if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
-                $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
-            }
+            Set-AntiCodexAntigravityCliEnvironment -Profile $runtimeProfile
             if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
                 $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
             }

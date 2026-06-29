@@ -177,6 +177,9 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']cli["']/i);
   assert.match(launcher, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.match(launcher, /antigravity-cli-profile/);
+  assert.match(launcher, /Set-AntiCodexAntigravityCliEnvironment/);
+  assert.match(launcher, /ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA/);
+  assert.match(launcher, /strictWindowsAppDataIsolation/);
   assert.match(launcher, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']0["']/i);
   assert.match(launcher, /anticodex-launcher\.out\.log/);
   assert.match(launcher, /anticodex-launcher\.err\.log/);
@@ -11844,6 +11847,9 @@ test("Anti-Codex selects third-party upstream without changing its persistent st
 
   assert.match(sharedLauncher, /\$USES_ANTIGRAVITY_UPSTREAM/);
   assert.match(sharedLauncher, /function Update-AntiCodexUpstreamEnvironment/);
+  assert.match(sharedLauncher, /Set-AntiCodexAntigravityCliEnvironment/);
+  assert.match(sharedLauncher, /ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA/);
+  assert.match(sharedLauncher, /strictWindowsAppDataIsolation/);
   assert.match(sharedLauncher, /refusing silent Antigravity fallback/);
   assert.doesNotMatch(sharedLauncher, /upstream profile could not be read; using Antigravity/);
   assert.match(sharedLauncher, /function Start-TranslatorProcess \{[\s\S]*?Update-AntiCodexUpstreamEnvironment/);
@@ -11908,6 +11914,9 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-test"/);
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-test"[\s\S]*?validateManagerActionRequest\(req\)/);
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-profile"/);
+  assert.match(server, /antigravityCliIsolation/);
+  assert.match(server, /SaveAntigravity/);
+  assert.match(server, /AntigravityCliStrictWindowsAppDataIsolation/);
   assert.match(server, /Array\.isArray\(stage\?\.models\)[\s\S]*?models:\s*stage\.models\.map/);
   assert.match(server, /providerModels:\s*providerModelIdsFromConnectionStages\(stages,\s*body\.model\)/);
   assert.match(server, /url\.pathname === "\/anticodex\/upstream-apply"/);
@@ -11915,6 +11924,9 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(server, /ANTICODEX_UPSTREAM_API_KEY_INPUT/);
 
   assert.match(profile, /ProtectedData\]::Protect/);
+  assert.match(profile, /SaveAntigravity/);
+  assert.match(profile, /antigravityCli/);
+  assert.match(profile, /strictWindowsAppDataIsolation/);
   assert.match(profile, /DataProtectionScope\]::CurrentUser/);
   assert.match(profile, /WriteAllText\(\$ProfilePath/);
   assert.doesNotMatch(profile, /apiKey\s*=\s*\$ApiKey/);

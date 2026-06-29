@@ -57,6 +57,22 @@ try {
     Assert-Equal $public.mode "antigravity" "default mode"
     Assert-Equal $public.keyConfigured $false "default keyConfigured"
     Assert-Equal $public.keyHint "" "default keyHint"
+    Assert-Equal $public.antigravityCli.profileRoot "" "default Antigravity CLI profileRoot"
+    Assert-Equal $public.antigravityCli.strictWindowsAppDataIsolation $false "default Antigravity CLI strict AppData isolation"
+
+    $savedAntigravityCli = Invoke-ProfileJson -Parameters @{
+        Action = "SaveAntigravity"
+        StateRoot = $StateRoot
+        AntigravityCliProfileRoot = (Join-Path $StateRoot "ag-account-b")
+        AntigravityCliStrictWindowsAppDataIsolation = "true"
+    }
+    Assert-Equal $savedAntigravityCli.mode "antigravity" "SaveAntigravity mode"
+    Assert-Equal $savedAntigravityCli.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "SaveAntigravity profileRoot"
+    Assert-Equal $savedAntigravityCli.antigravityCli.strictWindowsAppDataIsolation $true "SaveAntigravity strict isolation"
+
+    $runtimeAntigravityCli = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
+    Assert-Equal $runtimeAntigravityCli.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "runtime Antigravity CLI profileRoot"
+    Assert-Equal $runtimeAntigravityCli.antigravityCli.strictWindowsAppDataIsolation $true "runtime Antigravity CLI strict isolation"
 
     $corruptStateRoot = Join-Path $StateRoot "corrupt-profile"
     New-Item -ItemType Directory -Path $corruptStateRoot -Force | Out-Null
@@ -87,6 +103,8 @@ try {
     Assert-Equal $saved.lastTestStatus "success" "saved lastTestStatus"
     Assert-Equal $saved.keyConfigured $true "saved keyConfigured"
     Assert-Equal $saved.keyHint "sk-...1234" "saved keyHint"
+    Assert-Equal $saved.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "SaveThirdParty preserves Antigravity CLI profileRoot"
+    Assert-Equal $saved.antigravityCli.strictWindowsAppDataIsolation $true "SaveThirdParty preserves Antigravity CLI strict isolation"
 
     $profilePath = Join-Path $StateRoot "upstream-profile.json"
     $keyPath = Join-Path $StateRoot "upstream-profile.key"
@@ -180,6 +198,8 @@ try {
     Assert-Equal $back.baseUrl "http://[::1]:8080" "UseAntigravity preserves baseUrl"
     Assert-Equal $back.model "m" "UseAntigravity preserves model"
     Assert-Equal $back.keyConfigured $true "UseAntigravity preserves key state"
+    Assert-Equal $back.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "UseAntigravity preserves Antigravity CLI profileRoot"
+    Assert-Equal $back.antigravityCli.strictWindowsAppDataIsolation $true "UseAntigravity preserves Antigravity CLI strict isolation"
     Assert-Equal (Get-Content -LiteralPath $historyPath -Raw) $historyMarker "provider switching preserves response history"
 
     $bytes = [System.IO.File]::ReadAllBytes($profilePath)

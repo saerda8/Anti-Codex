@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("GetPublic", "GetRuntime", "SaveThirdParty", "UseAntigravity")]
+    [ValidateSet("GetPublic", "GetRuntime", "SaveThirdParty", "UseAntigravity", "SaveAntigravity")]
     [string]$Action,
 
     [string]$StateRoot,
@@ -12,7 +12,9 @@ param(
     [string]$Model = "",
     [string]$ApiKey = "",
     [string]$TestStatus = "pending",
-    [string]$CapabilitiesJson = "{}"
+    [string]$CapabilitiesJson = "{}",
+    [string]$AntigravityCliProfileRoot = "",
+    [string]$AntigravityCliStrictWindowsAppDataIsolation = ""
 )
 
 Set-StrictMode -Version Latest
@@ -49,6 +51,37 @@ function New-DefaultProfile {
         lastTestStatus = ""
         lastTestAt = ""
         capabilities = @{}
+        antigravityCli = New-DefaultAntigravityCliProfile
+    }
+}
+
+function Convert-ToBool {
+    param([string]$Value, [bool]$Default = $false)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $Default }
+    return $Value -match '^(1|true|yes|on)$'
+}
+
+function New-DefaultAntigravityCliProfile {
+    [Ordered]@{
+        profileRoot = ""
+        strictWindowsAppDataIsolation = $false
+    }
+}
+
+function Normalize-AntigravityCliProfile {
+    param($Value)
+    $default = New-DefaultAntigravityCliProfile
+    if (-not $Value) { return $default }
+    if ($Value -is [System.Collections.IDictionary]) {
+        return [Ordered]@{
+            profileRoot = if ($Value.Contains("profileRoot")) { [string]$Value["profileRoot"] } else { "" }
+            strictWindowsAppDataIsolation = if ($Value.Contains("strictWindowsAppDataIsolation")) { [bool]$Value["strictWindowsAppDataIsolation"] } else { $false }
+        }
+    }
+    $names = @($Value.PSObject.Properties.Name)
+    return [Ordered]@{
+        profileRoot = if ($names -contains "profileRoot") { [string]$Value.profileRoot } else { "" }
+        strictWindowsAppDataIsolation = if ($names -contains "strictWindowsAppDataIsolation") { [bool]$Value.strictWindowsAppDataIsolation } else { $false }
     }
 }
 
@@ -68,6 +101,7 @@ function Read-Profile {
             lastTestStatus = if ($parsed.lastTestStatus) { [string]$parsed.lastTestStatus } else { "" }
             lastTestAt = if ($parsed.lastTestAt) { [string]$parsed.lastTestAt } else { "" }
             capabilities = if ($parsed.capabilities) { $parsed.capabilities } else { @{} }
+            antigravityCli = Normalize-AntigravityCliProfile $parsed.antigravityCli
         }
     } catch {
         throw "Existing upstream profile is unreadable: $($_.Exception.Message)"
@@ -157,6 +191,7 @@ function Public-Profile {
         lastTestStatus = $Profile.lastTestStatus
         lastTestAt = $Profile.lastTestAt
         capabilities = $Profile.capabilities
+        antigravityCli = Normalize-AntigravityCliProfile $Profile.antigravityCli
         keyConfigured = -not [string]::IsNullOrEmpty($apiKey)
         keyHint = Get-KeyHint $apiKey
     }
@@ -183,6 +218,7 @@ try {
                 lastTestStatus = $profile.lastTestStatus
                 lastTestAt = $profile.lastTestAt
                 capabilities = $profile.capabilities
+                antigravityCli = Normalize-AntigravityCliProfile $profile.antigravityCli
                 apiKey = $runtimeApiKey
             }
             $runtime | ConvertTo-Json -Depth 20
@@ -204,6 +240,7 @@ try {
                 Protect-ApiKey $ApiKey
             }
 
+            $existingProfile = Read-Profile
             $profile = [Ordered]@{
                 schemaVersion = 1
                 mode = "third-party"
@@ -213,13 +250,24 @@ try {
                 lastTestStatus = $TestStatus
                 lastTestAt = [DateTime]::UtcNow.ToString("o")
                 capabilities = Read-Capabilities
+                antigravityCli = Normalize-AntigravityCliProfile $existingProfile.antigravityCli
             }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20
         }
         "UseAntigravity" {
             $profile = Read-Profile
-            $profile.mode = "antigravity"
+            $profile["mode"] = "antigravity"
+            Write-Profile $profile
+            Public-Profile $profile | ConvertTo-Json -Depth 20
+        }
+        "SaveAntigravity" {
+            $profile = Read-Profile
+            $profile["mode"] = "antigravity"
+            $profile["antigravityCli"] = [Ordered]@{
+                profileRoot = [string]$AntigravityCliProfileRoot
+                strictWindowsAppDataIsolation = Convert-ToBool $AntigravityCliStrictWindowsAppDataIsolation
+            }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20
         }
