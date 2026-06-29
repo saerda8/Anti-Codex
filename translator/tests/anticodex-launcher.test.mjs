@@ -13429,3 +13429,20 @@ test("diagnostics/sourcePreflight support path must preserve antigravityCliProfi
   assert.match(server, /accountIsolationCaveat/);
   assert.match(server, /sourcePreflight profilePrepare caveat:/);
 });
+
+test("current Manager status uses native-panel-v99 and rejects stale v85/v98 in docs", () => {
+  const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const currentStatus = taskPlan.split("## Goal")[0];
+  const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
+
+  // Current Manager status sections must declare native-panel-v99
+  assert.match(currentStatus, /native-panel-v99/);
+  assert.match(handoffCurrentStatus, /native-panel-v99/);
+
+  // Stale Manager version wording must not appear in current-status sections
+  assert.doesNotMatch(currentStatus, /native-panel-v85/);
+  assert.doesNotMatch(currentStatus, /native-panel-v98/);
+  assert.doesNotMatch(handoffCurrentStatus, /native-panel-v85/);
+  assert.doesNotMatch(handoffCurrentStatus, /native-panel-v98/);
+});

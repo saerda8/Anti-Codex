@@ -10,7 +10,7 @@ Branch: main
 - Client sync contract: native Codex updates must be handled as guarded host/client sync plus Anti-Codex patch reapplication. Missing native Codex behavior in Anti-Codex is a sync/parity bug by default, not a prompt to manually rebuild that behavior.
 - Antigravity account mode is back to a two-account/profile split because Gemini CLI is not usable for the MCP-side account lane. Anti-Codex should keep its own isolated Antigravity CLI profile/account for model text while MCP can use a different Antigravity account. Do not run real account/traffic proof without explicit approval.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the latest no-traffic checks: upstream `antigravity-desktop`, CLI model-text transport, account ready, 8 models, session lock idle.
-- Manager is at `native-panel-v85`.
+- Manager source/readiness contracts now target `native-panel-v99`.
 - Standalone real Manager MCP/Skill and plugin/application button gates pass after local feature refresh. The default standalone real-button script now runs only those two non-disruptive actions; report viewing and diagnostics bundle remain opt-in.
 - `latest-manager-real-buttons.json` is now indexed by Manager latest reports, diagnostic bundle report summaries, and installed overall report-integrity checks.
 - Latest feature parity evidence after refresh: connectors `5866/5866`, app tools `58/58`, missing shared `[]`, callable app tools `0` because no connector is authorized.
