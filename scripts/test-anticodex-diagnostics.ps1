@@ -1727,6 +1727,13 @@ if ($diagnostics) {
         if (-not $diagnosticModel) { Add-Failure "third-party diagnostics missing model" }
     } elseif ($diagnosticMode -eq "antigravity") {
         if ($diagnostics.mode.upstream -ne "antigravity-desktop") { Add-Failure "diagnostics upstream is not antigravity-desktop" }
+        $diagnosticModelTextTransport = if (Has-Property $diagnostics.health "modelTextTransport") { [string]$diagnostics.health.modelTextTransport } else { "" }
+        $diagnosticModelDiscoverySource = if (Has-Property $diagnostics.health "modelDiscoverySource") { [string]$diagnostics.health.modelDiscoverySource } else { "" }
+        $diagnosticAntigravityCoworkerDefault = if (Has-Property $diagnostics.health "antigravityCoworkerDefault") { [bool]$diagnostics.health.antigravityCoworkerDefault } else { $null }
+        if ($diagnosticModelTextTransport -ne "cli") { Add-Failure "diagnostics model text transport is not cli" }
+        if (-not $diagnosticModelDiscoverySource) { Add-Failure "diagnostics missing model discovery source" }
+        if ($diagnosticModelDiscoverySource -and $AllowedAntigravityModelDiscoverySources -notcontains $diagnosticModelDiscoverySource) { Add-Failure "diagnostics model discovery source is not allowed" }
+        if ($diagnosticAntigravityCoworkerDefault -ne $false) { Add-Failure "diagnostics antigravity coworker default is not false" }
         if ($diagnostics.health.accountReady -ne $true) { Add-Failure "diagnostics account is not ready" }
     } else {
         Add-Failure "diagnostics upstream mode is unknown"

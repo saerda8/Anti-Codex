@@ -8260,6 +8260,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /\$diagnosticMode -eq "third-party"/);
   assert.match(diagnostics, /third-party diagnostics missing protocol/);
   assert.match(diagnostics, /third-party diagnostics missing model/);
+  assert.match(diagnostics, /diagnostics model text transport is not cli/);
+  assert.match(diagnostics, /diagnostics missing model discovery source/);
+  assert.match(diagnostics, /diagnostics model discovery source is not allowed/);
+  assert.match(diagnostics, /diagnostics antigravity coworker default is not false/);
   assert.match(diagnostics, /provider-native-or-compat/);
   assert.match(diagnostics, /upstream-provider/);
   assert.match(diagnostics, /mode = \$diagnosticMode/);
