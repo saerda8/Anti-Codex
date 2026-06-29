@@ -11570,6 +11570,15 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /repo-multi-file-edit source was not changed from the failing fixture/);
   assert.match(verifier, /repo-multi-file-edit modified the acceptance test/);
   assert.match(verifier, /repo-multi-file-edit modified the input data/);
+  assert.match(verifier, /function repoMultiArtifactIdleSettle\(turn, phase, evidence\)/);
+  assert.match(verifier, /artifact_idle_without_history_wait/);
+  assert.match(verifier, /historyToolOutputRequired:\s*false/);
+  assert.match(verifier, /function artifactProgressEvidenceForWait\(evidence, options = \{\}\)/);
+  assert.match(verifier, /options\.readmeOnly === true[\s\S]*evidence\?\.files\?\.readme === true/);
+  assert.match(verifier, /sourceChangedFromFixture === true/);
+  assert.match(verifier, /firstTurnSettle/);
+  assert.match(verifier, /finalTurnSettle/);
+  assert.doesNotMatch(verifier, /if \(taskMode === "repo-multi-file-edit"\) \{[\s\S]*waitForDesktopToolTurnSettled\(ws, marker, Math\.min\(timeoutMs, 120_000\)\)/);
   assert.match(verifier, /Your first and only tool action for this step must write \$\{repoMultiFileReadme\}/);
   assert.match(verifier, /function jsSingleQuotedLiteral\(value\)/);
   assert.match(verifier, /function buildRepoMultiReadmeWriteCommand\(\)/);

@@ -821,6 +821,36 @@ function repoMultiFileArtifactCompleteForWait(evidence, phase = "full") {
   return failures.length === 0;
 }
 
+function repoMultiArtifactIdleSettle(turn, phase, evidence) {
+  return {
+    ok: Boolean(turn?.artifactCompletionObserved) && Boolean(turn?.inLoopIdleDiagnostics),
+    kind: "artifact_idle_without_history_wait",
+    phase,
+    historyToolOutputRequired: false,
+    historyToolOutputSeen: responseHistoryHasToolOutputMarker(marker),
+    artifactComplete: repoMultiFileArtifactCompleteForWait(evidence, phase),
+    inLoopIdleObserved: Boolean(turn?.inLoopIdleDiagnostics),
+    diagnostics: turn?.inLoopIdleDiagnostics || null,
+  };
+}
+
+function artifactProgressEvidenceForWait(evidence, options = {}) {
+  if (taskMode === "repo-multi-file-edit" && options.readmeOnly === true) {
+    return evidence?.files?.readme === true;
+  }
+  if (taskMode === "repo-multi-file-edit") {
+    return evidence?.testPassed === true
+      || evidence?.cliPassed === true
+      || evidence?.files?.html === true
+      || evidence?.sourceChangedFromFixture === true;
+  }
+  return evidence?.files?.readme === true
+    || evidence?.files?.source === true
+    || evidence?.files?.target === true
+    || evidence?.testPassed === true
+    || evidence?.cliPassed === true;
+}
+
 function collectRepoMultiFileEditFailures(artifactEvidence) {
   const localFailures = [];
   if (!artifactEvidence?.files?.source) localFailures.push("repo-multi-file-edit source file was not present");
@@ -1678,11 +1708,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
             const hasProgressEvidence = answerMarkerCount >= 1
-              || artifactEvidence?.files?.readme === true
-              || artifactEvidence?.files?.source === true
-              || artifactEvidence?.files?.target === true
-              || artifactEvidence?.testPassed === true
-              || artifactEvidence?.cliPassed === true;
+              || artifactProgressEvidenceForWait(artifactEvidence, options);
             if (hasProgressEvidence || Date.now() - waitStartedAt >= waitMs * 0.6) {
               inLoopIdleDiagnostics = loopDiagnostics;
               idleCompletedAt = Date.now();
@@ -1980,20 +2006,21 @@ async function main() {
 
     if (taskMode === "repo-multi-file-edit") {
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat, readmeOnly: true });
-      await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
       const firstArtifactEvidence = verifyRepoMultiFileEditFixture();
+      const firstTurnSettle = repoMultiArtifactIdleSettle(turn1, "readme", firstArtifactEvidence);
       const firstArtifactFailures = collectRepoMultiFileReadmeFailures(firstArtifactEvidence);
       const actionableTurn1Failures = filterRepoMultiReadmeTextOnlyFailures(turn1.failures, firstArtifactFailures);
       let implementationPrompt = null;
       let turn2 = null;
       artifactEvidence = firstArtifactEvidence;
       let finalArtifactFailures = firstArtifactFailures;
+      let finalTurnSettle = firstTurnSettle;
       if (firstArtifactFailures.length === 0 && actionableTurn1Failures.length === 0) {
         implementationPrompt = buildRepoMultiFileImplementationPrompt(collectRepoMultiFileEditFailures(firstArtifactEvidence));
         makeWritable(repoMultiFileSource);
         turn2 = await submitDesktopPromptAndWait(ws, implementationPrompt, marker, timeoutMs, { requiresProjectChat });
-        await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
         artifactEvidence = verifyRepoMultiFileEditFixture();
+        finalTurnSettle = repoMultiArtifactIdleSettle(turn2, "full", artifactEvidence);
         finalArtifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
       }
       const finalTurn = turn2 || turn1;
@@ -2047,8 +2074,10 @@ async function main() {
         artifactDir: repoMultiFileEditDir,
         firstArtifactEvidence,
         firstArtifactFailures,
+        firstTurnSettle,
         artifactEvidence,
         finalArtifactFailures,
+        finalTurnSettle,
         turnEvidence: [turn1, turn2].filter(Boolean).map((turn) => ({
           ok: turn.ok,
           marker: turn.marker,

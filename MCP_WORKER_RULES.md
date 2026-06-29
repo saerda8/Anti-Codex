@@ -1793,3 +1793,11 @@ After every failure, before another dispatch:
 - Result: DeepSeek returned `Transport closed` before editing. MIMO completed in an isolated worktree with tests passing, but its diff carried broad line-ending churn and was used only as directional confirmation. MiMoCode timed out after a partial one-file diff that referenced an undefined command variable, so it was not merged.
 - Cause classification: mixed worker availability and partial-diff quality issue, not product failure.
 - Rule change: for prompt-hardening tasks, require a focused static contract in the main patch and inspect worker diffs for undefined helper names before accepting them. A passing broad static test is not enough if the worker only changed the prompt string and skipped the helper/test pair.
+
+## 2026-06-29 - Repo-multi settle optimization worker comparison
+
+- Workers: DeepSeek `deepseek_start_implementation`, MIMO `dsw_mqyv8lio_j2y7k3`, and MiMoCode `mcw_mqyv8w4e_8848ee`.
+- Task: remove redundant repo-multi `response-history` settle waits after artifact evidence plus idle diagnostics.
+- Result: DeepSeek returned `Transport closed` before editing. MIMO completed with a valid direction but added an extra idle helper and did not remove the final redundant wait. MiMoCode timed out after a partial one-file diff. The main patch used a smaller phase-specific artifact-idle settle and added static coverage.
+- Cause classification: mixed worker availability and partial-diff quality issue, not product failure.
+- Rule change: when optimizing visible desktop verifier latency, keep phase-specific evidence contracts in the main patch and prove with a real desktop run. Do not accept worker latency changes unless they remove all redundant waits and keep report evidence for skipped waits.
