@@ -7343,7 +7343,14 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /source preflight publicDocumentationClientCopySyncContractOk is missing or not green in diagnostics/);
   assert.match(overall, /sourcePreflightAntigravityCliProfilePrepare/);
   assert.match(overall, /sourcePreflight\.antigravityCliProfilePrepareOk/);
-  assert.match(overall, /source preflight antigravity CLI profile prepare status is missing or not green in diagnostics/);
+  assert.match(overall, /antigravityCliProfilePrepareContract/);
+  assert.match(overall, /profilePrepareContract\.usedRealTraffic -eq \$false/);
+  assert.match(overall, /profilePrepareContract\.loginVerified -eq \$false/);
+  assert.match(overall, /profilePrepareContract\.separateAccountVerified -eq \$false/);
+  assert.match(overall, /profilePrepareContract\.coverageKind -eq "profile-prepared-no-traffic"/);
+  assert.match(overall, /profilePrepareContract\.accountIsolationCaveat/);
+  assert.match(overall, /source preflight antigravity CLI profile prepare no-traffic contract is missing or invalid in diagnostics/);
+  assert.match(overall, /must be green with a no-traffic false-verification contract/);
   assert.match(overall, /logDbGuardDiagnostics/);
   assert.match(overall, /diagnostics\.logDbGuard/);
   assert.match(overall, /installed overall log database guard is not protected/);
@@ -13375,4 +13382,34 @@ test("no-traffic Antigravity profile prepare must not be surfaced as real dual-a
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("diagnostics/sourcePreflight support path must preserve antigravityCliProfilePrepareContract caveat and false verification semantics", () => {
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const preflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  // Diagnostics verifier must surface the contract object in source preflight summary
+  assert.match(diagnostics, /antigravityCliProfilePrepareContract/);
+
+  // Diagnostics verifier must reject a source preflight summary that claims separateAccountVerified is true
+  assert.match(diagnostics, /source-preflight summary profile prepare claims separate account verified/);
+  assert.match(diagnostics, /diagnostics source preflight profile prepare claims separate account verified/);
+
+  // Diagnostics verifier must reject a source preflight summary with missing accountIsolationCaveat
+  assert.match(diagnostics, /source-preflight summary profile prepare missing isolation caveat/);
+  assert.match(diagnostics, /diagnostics source preflight profile prepare missing isolation caveat/);
+
+  // Source preflight script must initialize the contract with separateAccountVerified = $false
+  assert.match(preflight, /separateAccountVerified = \$false/);
+  assert.match(preflight, /separateAccountVerified.*\$false/);
+
+  // Source preflight script must populate accountIsolationCaveat in the contract
+  assert.match(preflight, /accountIsolationCaveat/);
+  assert.match(preflight, /\$prepareContract\.accountIsolationCaveat/);
+
+  // Adaptive server must surface the contract in sourcePreflightSummary and diagnostics output
+  assert.match(server, /antigravityCliProfilePrepareContract/);
+  assert.match(server, /accountIsolationCaveat/);
+  assert.match(server, /sourcePreflight profilePrepare caveat:/);
 });

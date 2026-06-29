@@ -1400,17 +1400,26 @@ $checks.sourcePreflightPublicDocumentation = try {
 $checks.sourcePreflightAntigravityCliProfilePrepare = try {
     $diagForCliProfile = Get-InstalledOverallDiagnosticsSnapshot
     $sourcePreflightCliProfile = $diagForCliProfile.sourcePreflight
+    $profilePrepareContract = if (Has-Property $sourcePreflightCliProfile "antigravityCliProfilePrepareContract") { $sourcePreflightCliProfile.antigravityCliProfilePrepareContract } else { $null }
     $ok = $diagForCliProfile.object -eq "anticodex.diagnostics" `
         -and (Has-Property $sourcePreflightCliProfile "antigravityCliProfilePrepareOk") `
-        -and $sourcePreflightCliProfile.antigravityCliProfilePrepareOk -eq $true
+        -and $sourcePreflightCliProfile.antigravityCliProfilePrepareOk -eq $true `
+        -and $profilePrepareContract `
+        -and $profilePrepareContract.usedRealTraffic -eq $false `
+        -and $profilePrepareContract.loginVerified -eq $false `
+        -and $profilePrepareContract.separateAccountVerified -eq $false `
+        -and $profilePrepareContract.coverageKind -eq "profile-prepared-no-traffic" `
+        -and [string]$profilePrepareContract.accountIsolationBoundary `
+        -and [string]$profilePrepareContract.accountIsolationCaveat
     if (-not $ok) {
-        Add-Failure "source preflight antigravity CLI profile prepare status is missing or not green in diagnostics"
+        Add-Failure "source preflight antigravity CLI profile prepare no-traffic contract is missing or invalid in diagnostics"
     }
     [pscustomobject]@{
         ok = $ok
         skipped = $false
-        reason = "diagnostics sourcePreflight.antigravityCliProfilePrepareOk must be green"
+        reason = "diagnostics sourcePreflight.antigravityCliProfilePrepareOk must be green with a no-traffic false-verification contract"
         antigravityCliProfilePrepareOk = if (Has-Property $sourcePreflightCliProfile "antigravityCliProfilePrepareOk") { [bool]$sourcePreflightCliProfile.antigravityCliProfilePrepareOk } else { $null }
+        antigravityCliProfilePrepareContract = $profilePrepareContract
         reportName = if (Has-Property $sourcePreflightCliProfile "reportName") { [string]$sourcePreflightCliProfile.reportName } else { "" }
     }
 } catch {
