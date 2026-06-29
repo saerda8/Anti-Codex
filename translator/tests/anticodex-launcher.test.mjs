@@ -12510,12 +12510,18 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
 
 test("current docs describe Antigravity as model entitlement, not Desktop coworker default", () => {
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const readme = readFileSync(resolve(root, "README.md"), "utf8");
+  const readmeEn = readFileSync(resolve(root, "README_EN.md"), "utf8");
   const videoScript = readFileSync(resolve(root, "docs", "marketing", "video-script.md"), "utf8");
   for (const source of [handoff, videoScript]) {
     assert.doesNotMatch(source, /Antigravity Desktop as the default model provider/);
     assert.doesNotMatch(source, /uses Antigravity Desktop as the default\s+provider/);
     assert.match(source, /Antigravity entitlement/);
   }
+  assert.match(readme, /受保护的客户端同步/);
+  assert.match(readme, /不是把 Codex 功能一个一个重做出来/);
+  assert.match(readmeEn, /guarded client sync/);
+  assert.match(readmeEn, /not a feature-by-feature reimplementation/);
   assert.match(handoff, /Antigravity coworker\/tool execution is not the default product path/);
   assert.match(videoScript, /Codex-owned tools stay in Anti-Codex/);
 });

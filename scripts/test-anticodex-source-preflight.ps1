@@ -342,11 +342,13 @@ function Test-PublicDocumentationContracts {
     ) -join "`n`n"
 
     Add-DocAssertion -File "README.md" -Name "anti-codex-brand" -Ok ($readme -match '^# Anti-Codex')
+    Add-DocAssertion -File "README.md" -Name "client-copy-sync-contract" -Ok ($readme -match 'client-copy sync' -and $readme -match 'feature-by-feature rebuild')
     Add-DocAssertion -File "README.md" -Name "antigravity-entitlement-model-text" -Ok ($readme -match 'Antigravity' -and $readme -match 'Anti-Codex/Codex')
     Add-DocAssertion -File "README.md" -Name "third-party-profile-boundary" -Ok ($readme -match 'upstream profile')
     Add-DocAssertion -File "README.md" -Name "connector-authorization-boundary" -Ok ($readme -match 'connector-backed app tools')
     Add-DocAssertion -File "README.md" -Name "no-old-public-launch-claims" -Ok ($readme -notmatch 'DeepCodex app|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk')
     Add-DocAssertion -File "README_EN.md" -Name "anti-codex-brand" -Ok ($readmeEn -match '^# Anti-Codex')
+    Add-DocAssertion -File "README_EN.md" -Name "client-copy-sync-contract" -Ok ($readmeEn -match 'guarded client sync' -and $readmeEn -match 'not a feature-by-feature reimplementation')
     Add-DocAssertion -File "README_EN.md" -Name "antigravity-entitlement-model-text" -Ok ($readmeEn -match 'Antigravity entitlement' -and $readmeEn -match 'Codex-owned tools stay in Anti-Codex')
     Add-DocAssertion -File "README_EN.md" -Name "third-party-profile-boundary" -Ok ($readmeEn -match 'upstream profile')
     Add-DocAssertion -File "README_EN.md" -Name "connector-authorization-boundary" -Ok ($readmeEn -match 'Connector-backed app tools')

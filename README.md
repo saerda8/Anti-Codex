@@ -2,6 +2,8 @@
 
 Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作流沿用 Codex，模型请求使用当前 Antigravity 权益提供的模型文本，不需要 ChatGPT 登录，也不使用 DeepSeek API Key。
 
+客户端维护原则很简单：Codex 更新后，Anti-Codex 通过受保护的客户端同步跟进，再重新套用 Anti-Codex 的品牌、隔离、启动器和模型接入补丁；这不是把 Codex 功能一个一个重做出来。换句话说，这是 client-copy sync，不是 feature-by-feature rebuild。
+
 它不会修改原生 Codex。两者有独立的程序、任务栏名称、运行状态和本地数据，可以同时运行。
 
 ## 当前能力

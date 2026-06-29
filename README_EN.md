@@ -4,6 +4,8 @@ Anti-Codex is an independently runnable copy of Codex Desktop powered by model t
 
 It preserves the Codex UI and core workflow while keeping its executable, taskbar identity, state, and configuration isolated from the original Codex installation. Both applications can run at the same time.
 
+Client maintenance follows one rule: when Codex updates, Anti-Codex tracks it through guarded client sync and then reapplies Anti-Codex branding, isolation, launcher, and model-adapter patches. It is not a feature-by-feature reimplementation of Codex.
+
 ## Capabilities
 
 - Exact Antigravity-entitlement model names and reasoning levels
