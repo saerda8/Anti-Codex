@@ -1785,3 +1785,11 @@ After every failure, before another dispatch:
 - Result: DeepSeek returned `Transport closed` before work. MIMO completed successfully in an isolated worktree and independently confirmed the support-path direction, but used alternate `contract*` field names that were not merged to avoid schema drift. A third review worktree could not accept the main diff cleanly, so it was abandoned before any product evidence was cited.
 - Cause classification: mixed worker availability and schema-divergence risk, not a product failure.
 - Rule change: for support-path schema work, keep one canonical field family in the main agent patch and use worker diffs only as reviewed suggestions. Do not merge alternate names such as `contractMode` when the accepted schema is `clientSyncMode`.
+
+## 2026-06-29 - Repo-multi README command worker comparison
+
+- Workers: DeepSeek `deepseek_start_implementation`, MIMO `dsw_mqyujwit_z768d0`, and MiMoCode `mcw_mqyuk8t4_43qeqe`.
+- Task: harden the desktop repo-multi README-only prompt with an exact Node file-write command.
+- Result: DeepSeek returned `Transport closed` before editing. MIMO completed in an isolated worktree with tests passing, but its diff carried broad line-ending churn and was used only as directional confirmation. MiMoCode timed out after a partial one-file diff that referenced an undefined command variable, so it was not merged.
+- Cause classification: mixed worker availability and partial-diff quality issue, not product failure.
+- Rule change: for prompt-hardening tasks, require a focused static contract in the main patch and inspect worker diffs for undefined helper names before accepting them. A passing broad static test is not enough if the worker only changed the prompt string and skipped the helper/test pair.

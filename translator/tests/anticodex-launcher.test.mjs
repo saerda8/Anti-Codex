@@ -11569,6 +11569,11 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /repo-multi-file-edit modified the acceptance test/);
   assert.match(verifier, /repo-multi-file-edit modified the input data/);
   assert.match(verifier, /Your first and only tool action for this step must write \$\{repoMultiFileReadme\}/);
+  assert.match(verifier, /function jsSingleQuotedLiteral\(value\)/);
+  assert.match(verifier, /function buildRepoMultiReadmeWriteCommand\(\)/);
+  assert.match(verifier, /PowerShell-safe Node command before any other command/);
+  assert.match(verifier, /require\('node:fs'\)\.writeFileSync/);
+  assert.match(verifier, /\\u4f7f\\u7528\\u8bf4\\u660e/);
   assert.match(verifier, /artifactCompletionObserved/);
   assert.match(verifier, /Do not run git status/);
   assert.match(verifier, /Do not use apply_patch for this fixture task/);
@@ -11578,7 +11583,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /fonts\\.googleapis\|fonts\\.gstatic/);
   assert.match(verifier, /onlyReadmeMissing/);
   assert.match(verifier, /Create only \$\{repoMultiFileReadme\} now/);
-  assert.match(verifier, /Use a direct PowerShell or Node file-write command/);
+  assert.match(verifier, /Your first and only tool action now must execute exactly this PowerShell-safe Node command/);
   assert.match(verifier, /idleBreakAfterMs/);
   assert.match(verifier, /artifactEvidence\?\.testPassed === true/);
   assert.doesNotMatch(verifier, /taskMode === "repo-file-edit" \? 30_000 : 12_000/);

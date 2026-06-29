@@ -133,7 +133,7 @@ if (!args.get("--prompt") && taskMode === "repo-file-edit") {
   promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Do not start with Get-ChildItem, dir, ls, or another directory listing. You already have the required behavior: implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Your first tool action must modify ${repoFileEditTarget}. Do not edit any other source file. Then run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
 }
 if (!args.get("--prompt") && taskMode === "repo-multi-file-edit") {
-  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. This is step 1 of 2. Your first and only tool action for this step must write ${repoMultiFileReadme}. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. Use a direct PowerShell or Node file-write command from the prompt details; do not inspect the directory first. Do not edit, replace, or delete ${repoMultiFileSource}, ${repoMultiFileTest}, or ${repoMultiFileData} for any reason. Do not run git status, Get-ChildItem, Get-Content, dir, ls, cat, or node --test in this step. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
+  promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. This is step 1 of 2. Your first and only tool action for this step must write ${repoMultiFileReadme}. Execute exactly this PowerShell-safe Node command before any other command: ${buildRepoMultiReadmeWriteCommand()}. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. Do not inspect the directory first. Do not edit, replace, or delete ${repoMultiFileSource}, ${repoMultiFileTest}, or ${repoMultiFileData} for any reason. Do not run git status, Get-ChildItem, Get-Content, dir, ls, cat, or node --test in this step. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
 }
 if (args.get("--prompt") && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
@@ -858,6 +858,15 @@ function collectRepoMultiFileReadmeFailures(artifactEvidence) {
   return localFailures;
 }
 
+function jsSingleQuotedLiteral(value) {
+  return `'${String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r/g, "\\r").replace(/\n/g, "\\n")}'`;
+}
+
+function buildRepoMultiReadmeWriteCommand() {
+  const readmePath = jsSingleQuotedLiteral(repoMultiFileReadme);
+  return `node -e "require('node:fs').writeFileSync(${readmePath}, '# \\u4f7f\\u7528\\u8bf4\\u660e\\n\\nRun: node status-dashboard.mjs status-data.json\\n', 'utf8')"`;
+}
+
 function filterRepoMultiReadmeTextOnlyFailures(failures = [], artifactFailures = []) {
   if (artifactFailures.length > 0) return failures;
   return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
@@ -874,7 +883,7 @@ function buildRepoMultiFileRepairPrompt(currentFailures, evidence) {
     && currentFailures.length > 0
     && currentFailures.every((failure) => /README\.md|README missing/i.test(failure));
   if (onlyReadmeMissing) {
-    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Create only ${repoMultiFileReadme} now, containing the Chinese title 使用说明 and the CLI command: node status-dashboard.mjs status-data.json. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
+    return `Continue the same task in ${repoMultiFileEditDir}. The code and CLI already pass. Do not edit ${repoMultiFileSource}, ${repoMultiFileTest}, ${repoMultiFileData}, or ${repoMultiFileHtml}. Your first and only tool action now must execute exactly this PowerShell-safe Node command: ${buildRepoMultiReadmeWriteCommand()}. Create only ${repoMultiFileReadme}, containing the Chinese title 使用说明 and the CLI command: node status-dashboard.mjs status-data.json. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
   }
   if (mostlyWorking) {
     return `Continue the same task in ${repoMultiFileEditDir}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not run git status. The code and CLI already pass. Fix only the missing final artifacts. Do not use apply_patch for this fixture task; use PowerShell or Node fs.writeFileSync commands inside this fixture directory, then read/check the files. Current verifier failures: ${currentFailures.join("; ")}. Create ${repoMultiFileReadme} with the exact Chinese phrase 使用说明 and the command: node status-dashboard.mjs status-data.json; to avoid Windows console mojibake, you may write it with JavaScript escapes \\u4f7f\\u7528\\u8bf4\\u660e in a Node fs.writeFileSync command. Update renderSummaryHtml in ${repoMultiFileSource} so the generated status-dashboard.html contains the exact Chinese phrase 状态仪表盘 plus ok, needs-review, and blocked; it must stay fully offline with no http/https URLs, no <link tags, and no preconnect. Do not edit ${repoMultiFileTest}. Do not change ${repoMultiFileData}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after README.md exists and status-dashboard.html contains 状态仪表盘 and no external links. Put exactly ${marker} on the final line and stop.`;
