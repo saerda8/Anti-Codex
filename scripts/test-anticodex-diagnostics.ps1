@@ -217,6 +217,12 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
     if ($ReleaseGatesSummary.effectiveOk -eq $true -and @(As-FlatArray $ReleaseGatesSummary.damagedReports | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
         Add-Failure "release-gates effectiveOk true with damaged reports"
     }
+    if (-not (Has-Property $ReleaseGatesSummary "releaseBlockedOnlyByRequiredRealTraffic")) {
+        Add-Failure "release-gates summary missing required real-traffic-only blocker flag"
+    }
+    if (-not (Has-Property $ReleaseGatesSummary "requiredRealTrafficBlockedGates")) {
+        Add-Failure "release-gates summary missing required real-traffic blocker gate IDs"
+    }
     foreach ($failureId in @(As-FlatArray $ReleaseGatesSummary.releaseGateFailures | ForEach-Object { if ($_.id) { [string]$_.id } else { [string]$_ } } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
         if (@(As-FlatArray $ReleaseGatesSummary.releaseGateFailureReasons | Where-Object { [string]$_.id -eq $failureId }).Count -lt 1) {
             Add-Failure "release-gates failure $failureId missing failure reason details"
@@ -244,6 +250,25 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         Add-Failure "release-gates summary nextActions truncated flag mismatch"
     }
     $missingRequiredGates = @(As-FlatArray $ReleaseGatesSummary.missingRequired | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $requiredRealTrafficBlockedGates = @(As-FlatArray $ReleaseGatesSummary.requiredRealTrafficBlockedGates | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($ReleaseGatesSummary.releaseBlockedOnlyByRequiredRealTraffic -eq $true) {
+        if ($ReleaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates real-traffic-only blocker flag set while shortReady is not true" }
+        if (@(As-FlatArray $ReleaseGatesSummary.damagedReports | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) { Add-Failure "release-gates real-traffic-only blocker flag set with damaged reports" }
+        if ($missingRequiredGates.Count -lt 1) { Add-Failure "release-gates real-traffic-only blocker flag set without missing required gates" }
+        foreach ($missingGateId in $missingRequiredGates) {
+            if ($requiredRealTrafficBlockedGates -notcontains $missingGateId) { Add-Failure "release-gates real-traffic-only blocker flag missing required gate $missingGateId" }
+        }
+        foreach ($blockedGateId in $requiredRealTrafficBlockedGates) {
+            if ($missingRequiredGates -notcontains $blockedGateId) { Add-Failure "release-gates real-traffic-only blocker gate $blockedGateId is not a missing required gate" }
+            $matchingActions = @($nextActions | Where-Object { [string]$_.id -eq $blockedGateId -or [string]$_.gateId -eq $blockedGateId })
+            $actionable = @($matchingActions | Where-Object { $_.reportOnly -ne $true })
+            if ($actionable.Count -lt 1) {
+                Add-Failure "release-gates real-traffic-only blocker gate $blockedGateId has no actionable real-traffic action"
+            } elseif (@($actionable | Where-Object { $_.requiresRealTraffic -ne $true -or $_.blockedUntilExplicitUserApproval -ne $true }).Count -gt 0) {
+                Add-Failure "release-gates real-traffic-only blocker gate $blockedGateId has non-real-traffic or unblocked action"
+            }
+        }
+    }
     foreach ($missingGateId in $missingRequiredGates) {
         $matchingActions = @($nextActions | Where-Object { [string]$_.id -eq $missingGateId -or [string]$_.gateId -eq $missingGateId })
         if ($matchingActions.Count -lt 1) {
@@ -649,6 +674,8 @@ function Test-ReportsSummary {
         elseif ($RequireReleaseReady -and $releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
         if (-not (Has-Property $releaseGatesSummary "effectiveOk")) { Add-Failure "release-gates summary missing effectiveOk" }
         elseif ($RequireReleaseReady -and $releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
+        if (-not (Has-Property $releaseGatesSummary "releaseBlockedOnlyByRequiredRealTraffic")) { Add-Failure "release-gates summary missing required real-traffic-only blocker flag" }
+        if (-not (Has-Property $releaseGatesSummary "requiredRealTrafficBlockedGates")) { Add-Failure "release-gates summary missing required real-traffic blocker gate IDs" }
         if (-not (Has-Property $releaseGatesSummary "strictOptionalRealTraffic")) { Add-Failure "release-gates summary missing strict optional real-traffic flag" }
         if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficReady")) { Add-Failure "release-gates summary missing optional real-traffic readiness" }
         if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficFailures")) { Add-Failure "release-gates summary missing optional real-traffic failures" }
@@ -1423,6 +1450,8 @@ function Test-DiagnosticBundle {
             elseif ($releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
             if (-not (Has-Property $releaseGatesSummary "effectiveOk")) { Add-Failure "release-gates summary missing effectiveOk" }
             elseif ($releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
+            if (-not (Has-Property $releaseGatesSummary "releaseBlockedOnlyByRequiredRealTraffic")) { Add-Failure "release-gates summary missing required real-traffic-only blocker flag" }
+            if (-not (Has-Property $releaseGatesSummary "requiredRealTrafficBlockedGates")) { Add-Failure "release-gates summary missing required real-traffic blocker gate IDs" }
             if (-not (Has-Property $releaseGatesSummary "strictOptionalRealTraffic")) { Add-Failure "release-gates summary missing strict optional real-traffic flag" }
             if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficReady")) { Add-Failure "release-gates summary missing optional real-traffic readiness" }
             if (-not (Has-Property $releaseGatesSummary "optionalRealTrafficFailures")) { Add-Failure "release-gates summary missing optional real-traffic failures" }
