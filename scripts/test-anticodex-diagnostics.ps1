@@ -1091,6 +1091,7 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.publicDocumentationOk -ne $true) { Add-Failure "source-preflight summary missing public documentation success" }
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
+            if ($sourcePreflightSummary.antigravityCliProfilePrepareOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare success" }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
         }
         $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]
@@ -1914,6 +1915,7 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "publicDocumentationOk")) { Add-Failure "diagnostics source preflight missing public documentation result" }
         if (-not (Has-Property $sourcePreflight "translatorRegressionOk")) { Add-Failure "diagnostics source preflight missing translator regression result" }
         if (-not (Has-Property $sourcePreflight "diffWhitespaceOk")) { Add-Failure "diagnostics source preflight missing diff whitespace result" }
+        if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareOk")) { Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare result" }
         if (-not (Has-Property $sourcePreflight "skipFullRegression")) { Add-Failure "diagnostics source preflight missing skipFullRegression" }
     }
     if (-not (Has-Property $diagnostics "lifecycle")) {

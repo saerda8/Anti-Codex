@@ -3436,6 +3436,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
         uiStateSelfTest: { ok: true },
         upstreamProfileStorage: { ok: true },
         antigravityCliIsolationProfile: { ok: true },
+        antigravityCliProfilePrepare: { ok: true },
         localConnectorVerifier: { ok: true },
         publicDocumentation: { ok: true },
         translatorRegression: { ok: true },
@@ -3461,6 +3462,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     assert.equal(summary.uiStateSelfTestOk, true);
     assert.equal(summary.upstreamProfileStorageOk, true);
     assert.equal(summary.antigravityCliIsolationProfileOk, true);
+    assert.equal(summary.antigravityCliProfilePrepareOk, true);
     assert.equal(summary.localConnectorVerifierOk, true);
     assert.equal(summary.publicDocumentationOk, true);
     assert.equal(summary.translatorRegressionOk, true);
