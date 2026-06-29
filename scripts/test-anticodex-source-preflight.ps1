@@ -229,6 +229,9 @@ function Test-AntigravityCliProfilePrepare {
             usedRealTraffic = $false
             loginVerified = $false
             separateAccountVerified = $false
+            accountLaneRole = ""
+            mcpAccountLaneManagedByAntiCodex = $true
+            mcpAccountLaneOwner = ""
             coverageKind = "missing"
             accountIsolationBoundary = ""
             accountIsolationCaveat = ""
@@ -240,6 +243,9 @@ function Test-AntigravityCliProfilePrepare {
                 $prepareContract.usedRealTraffic = [bool]$parsed.usedRealTraffic
                 $prepareContract.loginVerified = [bool]$parsed.loginVerified
                 $prepareContract.separateAccountVerified = [bool]$parsed.separateAccountVerified
+                $prepareContract.accountLaneRole = [string]$parsed.accountLaneRole
+                $prepareContract.mcpAccountLaneManagedByAntiCodex = [bool]$parsed.mcpAccountLaneManagedByAntiCodex
+                $prepareContract.mcpAccountLaneOwner = [string]$parsed.mcpAccountLaneOwner
                 $prepareContract.coverageKind = [string]$parsed.coverageKind
                 $prepareContract.accountIsolationBoundary = [string]$parsed.accountIsolationBoundary
                 $prepareContract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
@@ -247,6 +253,9 @@ function Test-AntigravityCliProfilePrepare {
                     -and $parsed.usedRealTraffic -eq $false `
                     -and $parsed.loginVerified -eq $false `
                     -and $parsed.separateAccountVerified -eq $false `
+                    -and $parsed.accountLaneRole -eq "anticodex-model-text" `
+                    -and $parsed.mcpAccountLaneManagedByAntiCodex -eq $false `
+                    -and $parsed.mcpAccountLaneOwner `
                     -and $parsed.coverageKind -eq "profile-prepared-no-traffic" `
                     -and $parsed.accountIsolationBoundary `
                     -and $parsed.accountIsolationCaveat
@@ -267,6 +276,9 @@ function Test-AntigravityCliProfilePrepare {
             usedRealTraffic = $false
             loginVerified = $false
             separateAccountVerified = $false
+            accountLaneRole = $prepareContract.accountLaneRole
+            mcpAccountLaneManagedByAntiCodex = $prepareContract.mcpAccountLaneManagedByAntiCodex
+            mcpAccountLaneOwner = $prepareContract.mcpAccountLaneOwner
             coverageKind = $prepareContract.coverageKind
             accountIsolationBoundary = $prepareContract.accountIsolationBoundary
             accountIsolationCaveat = $prepareContract.accountIsolationCaveat

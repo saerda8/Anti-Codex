@@ -1021,6 +1021,9 @@ function summarizeGate(definition) {
         if (contract.usedRealTraffic !== false) semanticFailures.push("source_preflight_profile_prepare_used_real_traffic");
         if (contract.loginVerified !== false) semanticFailures.push("source_preflight_profile_prepare_login_verified");
         if (contract.separateAccountVerified !== false) semanticFailures.push("source_preflight_profile_prepare_separate_account_verified");
+        if (contract.accountLaneRole !== "anticodex-model-text") semanticFailures.push("source_preflight_profile_prepare_account_lane_role");
+        if (contract.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("source_preflight_profile_prepare_mcp_lane_managed_by_anticodex");
+        if (!contract.mcpAccountLaneOwner) semanticFailures.push("source_preflight_profile_prepare_mcp_lane_owner_missing");
         if (contract.coverageKind !== "profile-prepared-no-traffic") semanticFailures.push("source_preflight_profile_prepare_coverage_kind");
         if (!contract.accountIsolationBoundary) semanticFailures.push("source_preflight_profile_prepare_isolation_boundary_missing");
         if (!contract.accountIsolationCaveat) semanticFailures.push("source_preflight_profile_prepare_isolation_caveat_missing");
@@ -3279,6 +3282,9 @@ if (args.has("--self-test")) {
       "source_preflight_profile_prepare_used_real_traffic",
       "source_preflight_profile_prepare_login_verified",
       "source_preflight_profile_prepare_separate_account_verified",
+      "source_preflight_profile_prepare_account_lane_role",
+      "source_preflight_profile_prepare_mcp_lane_managed_by_anticodex",
+      "source_preflight_profile_prepare_mcp_lane_owner_missing",
       "source_preflight_profile_prepare_coverage_kind",
       "source_preflight_profile_prepare_isolation_boundary_missing",
       "source_preflight_profile_prepare_isolation_caveat_missing",

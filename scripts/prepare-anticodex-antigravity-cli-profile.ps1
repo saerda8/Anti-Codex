@@ -165,6 +165,9 @@ try {
         loginVerified = $false
         loginVerificationReason = "profile prepared only; run the helper command and real smoke after signing in the isolated CLI account"
         separateAccountVerified = $false
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
         accountIsolationBoundary = "profile-and-appdata-only"
         accountIsolationCaveat = "This prepares isolated CLI files and AppData paths only; if Antigravity CLI uses the shared Windows credential store, a real smoke can still use the currently signed-in Windows credential."
         behaviorCovered = ($failures.Count -eq 0)
@@ -181,6 +184,7 @@ try {
             "Run the helper command with Antigravity CLI login or first-run arguments for the second account.",
             "After login, run realSmokeCommand to verify model traffic from this isolated CLI file profile.",
             "Compare the visible Antigravity account identity separately before treating this as a second-account proof.",
+            "Keep MCP-side Antigravity account setup outside this Anti-Codex profile-prepare report.",
             "Do not use Antigravity Desktop or coworker for this profile verification."
         )
         directories = [ordered]@{
@@ -210,6 +214,9 @@ try {
         noTraffic = $true
         usedRealTraffic = $false
         loginVerified = $false
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
         behaviorCovered = $false
         coverageKind = "profile-prepare-failed"
         elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)

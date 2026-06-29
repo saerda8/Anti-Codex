@@ -3541,6 +3541,9 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
           usedRealTraffic: false,
           loginVerified: false,
           separateAccountVerified: false,
+          accountLaneRole: "anticodex-model-text",
+          mcpAccountLaneManagedByAntiCodex: false,
+          mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
           coverageKind: "profile-prepared-no-traffic",
           accountIsolationBoundary: "appdata-isolation",
           accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
@@ -3581,6 +3584,9 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
       usedRealTraffic: false,
       loginVerified: false,
       separateAccountVerified: false,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       coverageKind: "profile-prepared-no-traffic",
       accountIsolationBoundary: "appdata-isolation",
       accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
@@ -11470,6 +11476,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_profile_prepare_contract_missing/);
   assert.match(releaseGates, /source_preflight_profile_prepare_login_verified/);
   assert.match(releaseGates, /source_preflight_profile_prepare_separate_account_verified/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_account_lane_role/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_mcp_lane_managed_by_anticodex/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_mcp_lane_owner_missing/);
   assert.match(releaseGates, /source_preflight_profile_prepare_coverage_kind/);
   assert.match(releaseGates, /source_preflight_profile_prepare_isolation_boundary_missing/);
   assert.match(releaseGates, /source_preflight_profile_prepare_isolation_caveat_missing/);
@@ -11891,6 +11900,9 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContractMissing.includes("source_preflight_profile_prepare_contract_missing"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_login_verified"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_separate_account_verified"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_account_lane_role"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_mcp_lane_managed_by_anticodex"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_mcp_lane_owner_missing"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_coverage_kind"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_isolation_boundary_missing"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_isolation_caveat_missing"));
@@ -13230,6 +13242,9 @@ test("summarize-anticodex-report exposes antigravity-cli-profile-prepare isolati
       ok: true,
       reportName: "antigravity-cli-profile-prepare",
       separateAccountVerified: false,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "This prepares isolated CLI files and AppData paths only; if Antigravity CLI uses the shared Windows credential store, a real smoke can still use the currently signed-in Windows credential.",
     }), "utf8");
@@ -13241,6 +13256,9 @@ test("summarize-anticodex-report exposes antigravity-cli-profile-prepare isolati
     assert.deepEqual(summary.antigravityCliProfilePrepareEvidence, {
       reportName: "antigravity-cli-profile-prepare",
       separateAccountVerified: false,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "This prepares isolated CLI files and AppData paths only; if Antigravity CLI uses the shared Windows credential store, a real smoke can still use the currently signed-in Windows credential.",
     });
@@ -13265,6 +13283,9 @@ test("summarize-anticodex-report exposes antigravity-cli-real-smoke isolation bo
       loginVerified: true,
       loginVerifiedMethod: "marker-match",
       separateAccountVerified: false,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       separateAccountVerificationReason: "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Skipped real traffic; no account identity or Windows credential-store isolation was verified.",
@@ -13285,6 +13306,9 @@ test("summarize-anticodex-report exposes antigravity-cli-real-smoke isolation bo
       loginVerified: true,
       loginVerifiedMethod: "marker-match",
       separateAccountVerified: false,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       separateAccountVerificationReason: "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Skipped real traffic; no account identity or Windows credential-store isolation was verified.",
@@ -13445,4 +13469,21 @@ test("current Manager status uses native-panel-v99 and rejects stale v85/v98 in 
   assert.doesNotMatch(currentStatus, /native-panel-v98/);
   assert.doesNotMatch(handoffCurrentStatus, /native-panel-v85/);
   assert.doesNotMatch(handoffCurrentStatus, /native-panel-v98/);
+});
+
+test("Antigravity CLI profile prepare carries account-lane boundary fields and defaults", () => {
+  const profilePrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
+  const upstreamProfile = readFileSync(resolve(root, "scripts", "anticodex-upstream-profile.ps1"), "utf8");
+
+  assert.match(profilePrepare, /accountLaneRole/);
+  assert.match(profilePrepare, /mcpAccountLaneManagedByAntiCodex/);
+  assert.match(profilePrepare, /mcpAccountLaneOwner/);
+  assert.match(upstreamProfile, /accountLaneRole/);
+  assert.match(upstreamProfile, /mcpAccountLaneManagedByAntiCodex/);
+  assert.match(upstreamProfile, /mcpAccountLaneOwner/);
+
+  assert.match(profilePrepare, /accountLaneRole\s*=\s*"anticodex-model-text"/);
+  assert.match(profilePrepare, /mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/);
+  assert.match(upstreamProfile, /accountLaneRole\s*=\s*"anticodex-model-text"/);
+  assert.match(upstreamProfile, /mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/);
 });

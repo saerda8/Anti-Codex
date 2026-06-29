@@ -1572,6 +1572,9 @@ function sourcePreflightSummary(report) {
             usedRealTraffic: checks.antigravityCliProfilePrepare.contract.usedRealTraffic === true,
             loginVerified: checks.antigravityCliProfilePrepare.contract.loginVerified === true,
             separateAccountVerified: checks.antigravityCliProfilePrepare.contract.separateAccountVerified === true,
+            accountLaneRole: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountLaneRole, ""),
+            mcpAccountLaneManagedByAntiCodex: checks.antigravityCliProfilePrepare.contract.mcpAccountLaneManagedByAntiCodex === true,
+            mcpAccountLaneOwner: shortSafeText(checks.antigravityCliProfilePrepare.contract.mcpAccountLaneOwner, ""),
             coverageKind: shortSafeText(checks.antigravityCliProfilePrepare.contract.coverageKind, ""),
             accountIsolationBoundary: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountIsolationBoundary, ""),
             accountIsolationCaveat: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountIsolationCaveat, ""),
@@ -2975,6 +2978,9 @@ function latestManagerReportItem(label, fileName) {
                 usedRealTraffic: checks.antigravityCliProfilePrepare.contract.usedRealTraffic === true,
                 loginVerified: checks.antigravityCliProfilePrepare.contract.loginVerified === true,
                 separateAccountVerified: checks.antigravityCliProfilePrepare.contract.separateAccountVerified === true,
+                accountLaneRole: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountLaneRole, ""),
+                mcpAccountLaneManagedByAntiCodex: checks.antigravityCliProfilePrepare.contract.mcpAccountLaneManagedByAntiCodex === true,
+                mcpAccountLaneOwner: shortSafeText(checks.antigravityCliProfilePrepare.contract.mcpAccountLaneOwner, ""),
                 coverageKind: shortSafeText(checks.antigravityCliProfilePrepare.contract.coverageKind, ""),
                 accountIsolationBoundary: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountIsolationBoundary, ""),
                 accountIsolationCaveat: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountIsolationCaveat, ""),
@@ -4057,6 +4063,7 @@ function latestReportsSummary(result){
       if(evidence.antigravityCliProfilePrepareContract){
         const c=evidence.antigravityCliProfilePrepareContract;
         lines.push("  sourcePreflight profilePrepare: traffic="+(c.usedRealTraffic?"true":"false")+" / login="+(c.loginVerified?"true":"false")+" / separateAccount="+(c.separateAccountVerified?"true":"false")+" / coverage="+(c.coverageKind||"unknown")+" / boundary="+(c.accountIsolationBoundary||"unknown"));
+        lines.push("  sourcePreflight profilePrepare lane: role="+(c.accountLaneRole||"unknown")+" / mcpManagedHere="+(c.mcpAccountLaneManagedByAntiCodex?"true":"false")+" / mcpOwner="+(c.mcpAccountLaneOwner||"unknown"));
         if(c.accountIsolationCaveat) lines.push("  sourcePreflight profilePrepare caveat: "+c.accountIsolationCaveat);
       }
     }
@@ -4092,6 +4099,7 @@ function latestReportsSummary(result){
     if(item.antigravityCliProfilePrepareEvidence){
       const evidence=item.antigravityCliProfilePrepareEvidence;
       lines.push("  antigravityCliProfilePrepare: separateAccount="+(evidence.separateAccountVerified?"true":"false")+" / boundary="+(evidence.accountIsolationBoundary||"unknown"));
+      lines.push("  antigravityCliProfilePrepare lane: role="+(evidence.accountLaneRole||"unknown")+" / mcpManagedHere="+(evidence.mcpAccountLaneManagedByAntiCodex?"true":"false")+" / mcpOwner="+(evidence.mcpAccountLaneOwner||"unknown"));
       if(evidence.accountIsolationCaveat) lines.push("  antigravityCliProfilePrepare caveat: "+evidence.accountIsolationCaveat);
     }
     if(item.uiChatSmokeEvidence){

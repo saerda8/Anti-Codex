@@ -474,6 +474,7 @@ function latestReportsSummary(result) {
       if (evidence.antigravityCliProfilePrepareContract) {
         const c = evidence.antigravityCliProfilePrepareContract;
         lines.push(`  sourcePreflight profilePrepare: traffic=${c.usedRealTraffic ? "true" : "false"} / login=${c.loginVerified ? "true" : "false"} / separateAccount=${c.separateAccountVerified ? "true" : "false"} / coverage=${c.coverageKind || "unknown"} / boundary=${c.accountIsolationBoundary || "unknown"}`);
+        lines.push(`  sourcePreflight profilePrepare lane: role=${c.accountLaneRole || "unknown"} / mcpManagedHere=${c.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${c.mcpAccountLaneOwner || "unknown"}`);
         if (c.accountIsolationCaveat) lines.push(`  sourcePreflight profilePrepare caveat: ${c.accountIsolationCaveat}`);
       }
     }
@@ -502,6 +503,7 @@ function latestReportsSummary(result) {
     if (item.antigravityCliProfilePrepareEvidence) {
       const evidence = item.antigravityCliProfilePrepareEvidence;
       lines.push(`  antigravityCliProfilePrepare: separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / boundary=${evidence.accountIsolationBoundary || "unknown"}`);
+      lines.push(`  antigravityCliProfilePrepare lane: role=${evidence.accountLaneRole || "unknown"} / mcpManagedHere=${evidence.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${evidence.mcpAccountLaneOwner || "unknown"}`);
       if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliProfilePrepare caveat: ${evidence.accountIsolationCaveat}`);
     }
     if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {

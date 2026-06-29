@@ -65,6 +65,9 @@ function New-DefaultAntigravityCliProfile {
     [Ordered]@{
         profileRoot = ""
         strictWindowsAppDataIsolation = $false
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
     }
 }
 
@@ -76,12 +79,18 @@ function Normalize-AntigravityCliProfile {
         return [Ordered]@{
             profileRoot = if ($Value.Contains("profileRoot")) { [string]$Value["profileRoot"] } else { "" }
             strictWindowsAppDataIsolation = if ($Value.Contains("strictWindowsAppDataIsolation")) { [bool]$Value["strictWindowsAppDataIsolation"] } else { $false }
+            accountLaneRole = if ($Value.Contains("accountLaneRole")) { [string]$Value["accountLaneRole"] } else { "anticodex-model-text" }
+            mcpAccountLaneManagedByAntiCodex = if ($Value.Contains("mcpAccountLaneManagedByAntiCodex")) { [bool]$Value["mcpAccountLaneManagedByAntiCodex"] } else { $false }
+            mcpAccountLaneOwner = if ($Value.Contains("mcpAccountLaneOwner")) { [string]$Value["mcpAccountLaneOwner"] } else { "external-antigravity-account-not-managed-here" }
         }
     }
     $names = @($Value.PSObject.Properties.Name)
     return [Ordered]@{
         profileRoot = if ($names -contains "profileRoot") { [string]$Value.profileRoot } else { "" }
         strictWindowsAppDataIsolation = if ($names -contains "strictWindowsAppDataIsolation") { [bool]$Value.strictWindowsAppDataIsolation } else { $false }
+        accountLaneRole = if ($names -contains "accountLaneRole") { [string]$Value.accountLaneRole } else { "anticodex-model-text" }
+        mcpAccountLaneManagedByAntiCodex = if ($names -contains "mcpAccountLaneManagedByAntiCodex") { [bool]$Value.mcpAccountLaneManagedByAntiCodex } else { $false }
+        mcpAccountLaneOwner = if ($names -contains "mcpAccountLaneOwner") { [string]$Value.mcpAccountLaneOwner } else { "external-antigravity-account-not-managed-here" }
     }
 }
 
@@ -267,6 +276,9 @@ try {
             $profile["antigravityCli"] = [Ordered]@{
                 profileRoot = [string]$AntigravityCliProfileRoot
                 strictWindowsAppDataIsolation = Convert-ToBool $AntigravityCliStrictWindowsAppDataIsolation
+                accountLaneRole = "anticodex-model-text"
+                mcpAccountLaneManagedByAntiCodex = $false
+                mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
             }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20
