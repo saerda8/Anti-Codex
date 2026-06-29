@@ -1494,6 +1494,29 @@ test("Anti-Codex critical host patch lists stay synchronized", () => {
   assert.deepEqual([...new Set(branderList)].sort(), [...new Set(validatorList)].sort());
 });
 
+test("Anti-Codex brander patch set is a fixed guarded copy, not a feature-by-feature reimplementation", () => {
+  const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+
+  const patchSpecsStart = brander.indexOf("const patchSpecs = [");
+  const patchSpecsEnd = brander.indexOf("const written = [];", patchSpecsStart);
+  assert.notEqual(patchSpecsStart, -1, "missing patchSpecs block");
+  assert.notEqual(patchSpecsEnd, -1, "missing patchSpecs end marker");
+  const patchSpecNames = [...brander.slice(patchSpecsStart, patchSpecsEnd).matchAll(/\["([a-z][a-z0-9-]*)"/g)].map((match) => match[1]);
+  assert.ok(patchSpecNames.length >= 10, "brander patchSpecs unexpectedly small; host sync must use an explicit patch list");
+
+  const criticalPatches = extractJsSetBlock(brander, "criticalPatchNames");
+  for (const patchName of criticalPatches) {
+    assert.ok(patchSpecNames.includes(patchName), `critical patch ${patchName} missing from patchSpecs`);
+  }
+
+  assert.match(brander, /do not reimplement per-plugin behavior here/);
+  assert.match(brander, /do not reimplement per-model behavior here|patchLocalModelAvailability/);
+
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  assert.match(installer, /Anti-Codex is already installed/);
+  assert.doesNotMatch(installer, /codex-patched-app\.ok.*Remove-Item.*-HostOnly/);
+});
+
 test("Anti-Codex shell shows visible models returned by its local app-server", () => {
   const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
 
@@ -4866,6 +4889,12 @@ test("Anti-Codex ships a read-only sync readiness verifier", () => {
   assert.match(syncReadiness, /\[switch\]\$SkipIconPaletteProbe/);
   assert.match(syncReadiness, /\$FastMaxElapsedMs\s*=\s*30000/);
   assert.match(syncReadiness, /if \(\$Fast\) \{ \$SkipIconPaletteProbe = \$true \}/);
+  assert.match(syncReadiness, /clientSyncContract = \[pscustomobject\]@{/);
+  assert.match(syncReadiness, /codex-client-copy-plus-anticodex-patches/);
+  assert.match(syncReadiness, /guarded-host-sync-then-reapply-anticodex-patches/);
+  assert.match(syncReadiness, /nativeClientBehaviorCarriedByHostSync = \$true/);
+  assert.match(syncReadiness, /forbidsFeatureByFeatureReimplementation = \$true/);
+  assert.match(syncReadiness, /antiCodexPatchScope = @\("branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"\)/);
   assert.match(syncReadiness, /update-status\.json/);
   assert.match(syncReadiness, /fast_cached_update_status/);
   assert.match(syncReadiness, /@{\s*InstallRoot\s*=\s*\$installRoot;\s*NoPersist\s*=\s*\$true\s*}/);

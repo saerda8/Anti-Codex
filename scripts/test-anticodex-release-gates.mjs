@@ -1046,9 +1046,22 @@ function summarizeGate(definition) {
       const shortcuts = Array.isArray(sync.shortcutVerification) ? sync.shortcutVerification : [];
       const managerBridge = sync.managerBridge || {};
       const rollbackHost = sync.rollbackHost || {};
+      const clientSyncContract = report.clientSyncContract || {};
+      const patchScope = Array.isArray(clientSyncContract.antiCodexPatchScope) ? clientSyncContract.antiCodexPatchScope : [];
       if (report.reportName !== "sync-readiness") semanticFailures.push("sync_readiness_report_name");
       if (report.noTraffic !== true || report.usedRealTraffic !== false || report.behaviorCovered !== true || report.coverageKind !== "installed-no-traffic") semanticFailures.push("sync_readiness_no_traffic_attestation");
       if (report.fast !== false || report.skipIconPaletteProbe !== false) semanticFailures.push("sync_readiness_full_mode_required");
+      if (clientSyncContract.mode !== "codex-client-copy-plus-anticodex-patches"
+        || clientSyncContract.maintenancePath !== "guarded-host-sync-then-reapply-anticodex-patches"
+        || clientSyncContract.nativeClientBehaviorCarriedByHostSync !== true
+        || clientSyncContract.forbidsFeatureByFeatureReimplementation !== true) semanticFailures.push("sync_readiness_client_sync_contract");
+      if (!String(clientSyncContract.sourcePackageName || "").includes("Codex")
+        || !String(clientSyncContract.activeSourcePackageName || "").includes("Codex")
+        || clientSyncContract.sourceHostHashMatches !== true
+        || clientSyncContract.sourceCliHashMatches !== true) semanticFailures.push("sync_readiness_client_sync_source_match");
+      for (const requiredPatch of ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"]) {
+        if (!patchScope.includes(requiredPatch)) semanticFailures.push(`sync_readiness_client_patch_scope:${requiredPatch}`);
+      }
       if (activeHost.exists !== true || activeHost.markerExists !== true || activeHost.manifestValid !== true || activeHost.exeExists !== true) semanticFailures.push("sync_readiness_active_host");
       if (activeHost.productName !== "Anti-Codex" || activeHost.fileDescription !== "Anti-Codex" || activeHost.originalFilename !== "Anti-Codex.exe") semanticFailures.push("sync_readiness_brand");
       if (activeHost.hostIconExists !== true || activeHost.trayIconExists !== true || activeHost.appRootIconExists !== true) semanticFailures.push("sync_readiness_icon_files");
@@ -2347,6 +2360,9 @@ if (args.has("--self-test")) {
       "sync_readiness_report_name",
       "sync_readiness_no_traffic_attestation",
       "sync_readiness_full_mode_required",
+      "sync_readiness_client_sync_contract",
+      "sync_readiness_client_sync_source_match",
+      "sync_readiness_client_patch_scope:branding",
       "sync_readiness_active_host",
       "sync_readiness_brand",
       "sync_readiness_icon_files",
@@ -2378,6 +2394,19 @@ if (args.has("--self-test")) {
       usedRealTraffic: false,
       behaviorCovered: true,
       coverageKind: "installed-no-traffic",
+      clientSyncContract: {
+        mode: "codex-client-copy-plus-anticodex-patches",
+        maintenancePath: "guarded-host-sync-then-reapply-anticodex-patches",
+        nativeClientBehaviorCarriedByHostSync: true,
+        forbidsFeatureByFeatureReimplementation: true,
+        sourcePackageName: "OpenAI.Codex",
+        sourcePackageVersion: "26.623.5546.0",
+        activeSourcePackageName: "OpenAI.Codex",
+        activeSourcePackageVersion: "26.623.5546.0",
+        sourceHostHashMatches: true,
+        sourceCliHashMatches: true,
+        antiCodexPatchScope: ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"],
+      },
       activeHost: {
         exists: true,
         markerExists: true,
@@ -2392,6 +2421,8 @@ if (args.has("--self-test")) {
         hostIconPalette: { ok: true },
         trayIconPalette: { ok: true },
         appRootIconPalette: { ok: true },
+        sourcePackageName: "OpenAI.Codex",
+        sourcePackageVersion: "26.623.5546.0",
       },
       sync: {
         scriptExists: true,
@@ -2408,8 +2439,8 @@ if (args.has("--self-test")) {
           ok: true,
           updateNeeded: false,
           drift: { state: "synced" },
-          source: { hostHash: "host", cliHash: "cli" },
-          active: { hostHash: "host", cliHash: "cli" },
+          source: { packageName: "OpenAI.Codex", packageVersion: "26.623.5546.0", hostHash: "host", cliHash: "cli" },
+          active: { packageName: "OpenAI.Codex", packageVersion: "26.623.5546.0", hostHash: "host", cliHash: "cli" },
           operation: { state: "succeeded" },
           guardrails: { brandPreserved: true, iconPreserved: true, activeHostValid: true, failures: [] },
         },

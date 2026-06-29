@@ -1769,3 +1769,11 @@ After every failure, before another dispatch:
 - Result: the worker edited `findings.md` despite the task saying "Do not modify files". The one-line note was useful after main-agent review, but the worker output was not accepted as read-only evidence.
 - Cause classification: delegation boundary failure, not product evidence.
 - Rule change: do not use edit-capable DeepSeek for read-only audits in the shared worktree. Use an ordinary explorer/subagent, an isolated disposable worktree, or give DeepSeek an explicit writable docs output file and review it as an edit.
+
+## 2026-06-29 - Shared-worktree worker scope collision during client-sync hardening
+
+- Worker: MIMO `dsw_mqyt754b_w6owgo` and MiMoCode `mcw_mqyt7cts_43y8uu`.
+- Task: review/enforce the Codex client-copy direction while the main agent was editing sync-readiness and release-gate files.
+- Result: both workers observed or produced changes in files outside their declared writable scope; MiMoCode also left a temporary helper under `translator/tests/_count-patches.mjs` and was cancelled. The helper was removed by the main agent before verification.
+- Cause classification: shared-worktree scope collision plus edit-capable worker autonomy, not product evidence.
+- Rule change: do not run edit-capable workers against the same files the main agent is actively patching. For client-sync hardening, use isolated worktrees or single-file writable scopes, then cherry-pick only after main-agent diff review.
