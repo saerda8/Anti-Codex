@@ -886,7 +886,17 @@ function summarizeGate(definition) {
           if (report.profileRoot && String(report.profileRoot).toLowerCase() === String(process.env.USERPROFILE || "").toLowerCase()) semanticFailures.push("optional_antigravity_cli_real_smoke_default_profile");
           if (report.separateAccountVerified === undefined) semanticFailures.push("optional_antigravity_cli_real_smoke_separate_account_verified_missing");
           if (report.separateAccountVerified === true) {
-            if (!report.accountIdentityComparison && !report.accountIdentityEvidence) semanticFailures.push("optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing");
+            const comparison = report.accountIdentityComparison && typeof report.accountIdentityComparison === "object" ? report.accountIdentityComparison : null;
+            if (!comparison && !report.accountIdentityEvidence) semanticFailures.push("optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing");
+            if (!comparison) {
+              semanticFailures.push("optional_antigravity_cli_real_smoke_identity_comparison_missing");
+            } else {
+              const antiCodexAccountId = typeof comparison.antiCodexAccountId === "string" ? comparison.antiCodexAccountId.trim() : "";
+              const mcpAccountId = typeof comparison.mcpAccountId === "string" ? comparison.mcpAccountId.trim() : "";
+              if (!antiCodexAccountId) semanticFailures.push("optional_antigravity_cli_real_smoke_anticodex_account_id_missing");
+              if (!mcpAccountId) semanticFailures.push("optional_antigravity_cli_real_smoke_mcp_account_id_missing");
+              if (antiCodexAccountId && mcpAccountId && antiCodexAccountId === mcpAccountId) semanticFailures.push("optional_antigravity_cli_real_smoke_identity_accounts_match");
+            }
           }
           if (report.separateAccountVerified === false) {
             if (report.accountIdentityEvidence || report.accountIdentityComparison) {
@@ -3141,6 +3151,80 @@ if (args.has("--self-test")) {
     });
     semanticFailures.antigravityCliRealSmokeSeparateTrueMissingEvidence = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with separateAccountVerified=true but missing identity evidence satisfied the gate", [
       "optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing",
+      "optional_antigravity_cli_real_smoke_identity_comparison_missing",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
+      accountIdentityEvidence: "two different accounts observed",
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Shared Windows credential store caveat.",
+    });
+    semanticFailures.antigravityCliRealSmokeSeparateTrueTextEvidenceOnly = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with text-only account evidence satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_identity_comparison_missing",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
+      accountIdentityComparison: {
+        antiCodexAccountId: "same-account",
+        mcpAccountId: "same-account",
+      },
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Shared Windows credential store caveat.",
+    });
+    semanticFailures.antigravityCliRealSmokeSeparateTrueSameAccount = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with matching account IDs satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_identity_accounts_match",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
+      accountIdentityComparison: {
+        antiCodexAccountId: "",
+        mcpAccountId: "",
+      },
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Shared Windows credential store caveat.",
+    });
+    semanticFailures.antigravityCliRealSmokeSeparateTrueMissingAccountIds = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with missing comparison account IDs satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_anticodex_account_id_missing",
+      "optional_antigravity_cli_real_smoke_mcp_account_id_missing",
     ]);
     writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
       ok: true,
