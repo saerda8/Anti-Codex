@@ -3492,6 +3492,19 @@ test("ambient desktop suggestions are answered locally without model work", () =
   }, { model: "gemini-pro-agent", messages: [] });
 
   assert.deepEqual(JSON.parse(completion.choices[0].message.content), []);
+
+  const preReadinessCompletion = deterministicAmbientSuggestionsCompletion({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "# Overview\n\nGenerate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: G:\\Trae-Project\\Anti-Codex\\deepcodex\n\n# Response format\n\nEach suggestion must include:\n- title\n- description\n- prompt\n- appId\n- write the prompt as something that should launch as a new Codex thread in this project",
+      }],
+    }],
+  }, null);
+  assert.deepEqual(JSON.parse(preReadinessCompletion.choices[0].message.content), []);
 });
 
 test("desktop task-title requests are answered locally without model work", () => {

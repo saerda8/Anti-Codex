@@ -11638,6 +11638,10 @@ test("Anti-Codex guards against ambient background suggestions without real traf
   assert.match(collector, /latest-ambient-suggestions\.json/);
   assert.match(collector, /ambientSuggestionsEvidence = \$json\.ambientSuggestionsEvidence/);
   assert.match(server, /latest-ambient-suggestions\.json/);
+  assert.match(
+    server,
+    /const ambientSuggestionsBeforeReadiness = deterministicAmbientSuggestionsCompletion\(parsed, null\);[\s\S]*?if \(antigravityMode\) \{[\s\S]*?const readinessFailure = antigravityReadinessFailure/,
+  );
   assert.match(summarizer, /ambientSuggestionsEvidence/);
 
   assert.match(releaseGates, /id:\s*"ambientSuggestions"[\s\S]*?file:\s*"latest-ambient-suggestions\.json"[\s\S]*?requiredForRelease:\s*true/);

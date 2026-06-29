@@ -10855,6 +10855,13 @@ const server = http.createServer(async (req, res) => {
                     ? jsonResponse(res, 200, websocketPrewarm)
                     : pipeSSE(res, websocketPrewarm);
             }
+            const ambientSuggestionsBeforeReadiness = deterministicAmbientSuggestionsCompletion(parsed, null);
+            if (ambientSuggestionsBeforeReadiness) {
+                const fmt = chatToResponsesFormat(ambientSuggestionsBeforeReadiness, parsed, null, { strictTools: true });
+                applyResponsesEndTurnHint(fmt, req, parsed, { allowEndTurnFalse: false });
+                RESPONSE_HISTORY.remember(fmt, parsed);
+                return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
+            }
             if (antigravityMode) {
                 const readinessFailure = antigravityReadinessFailure(ANTIGRAVITY_READINESS?.getSnapshot());
                 if (readinessFailure) {
@@ -10879,13 +10886,6 @@ const server = http.createServer(async (req, res) => {
             delete chatBody._routing;
 
             if (antigravityMode) {
-                const ambientSuggestions = deterministicAmbientSuggestionsCompletion(parsed, chatBody);
-                if (ambientSuggestions) {
-                    const fmt = chatToResponsesFormat(ambientSuggestions, parsed, routing, { strictTools: true });
-                    applyResponsesEndTurnHint(fmt, req, parsed, { allowEndTurnFalse: false });
-                    RESPONSE_HISTORY.remember(fmt, parsed);
-                    return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
-                }
                 const taskTitle = deterministicTaskTitleCompletion(parsed, chatBody);
                 if (taskTitle) {
                     const fmt = chatToResponsesFormat(taskTitle, parsed, routing, { strictTools: true });
