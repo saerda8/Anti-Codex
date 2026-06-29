@@ -517,6 +517,7 @@ function latestReportsSummary(result) {
     if (item.installedOverallEvidence) {
       const evidence = item.installedOverallEvidence;
       lines.push(`  installedOverall: noTraffic=${evidence.noTraffic ? "true" : "false"} / coverage=${evidence.coverageKind || "unknown"} / usedRealTraffic=${evidence.usedRealTraffic ? "true" : "false"} / behaviorCovered=${evidence.behaviorCovered ? "true" : "false"}`);
+      lines.push(`  installedOverall model: transport=${evidence.modelTextTransport || "unknown"} / discovery=${evidence.modelDiscoverySource || "unknown"} / coworkerDefault=${evidence.antigravityCoworkerDefault === false ? "false" : "check"}`);
       lines.push(`  installedOverall checks: ok=${evidence.okCheckCount ?? 0}/${evidence.checkCount ?? 0} / skipped=${evidence.skippedCheckCount ?? 0} / realSkipped=${Array.isArray(evidence.realTrafficSkippedChecks) ? evidence.realTrafficSkippedChecks.join(",") : ""}`);
     }
     if (item.toolBridgeEvidence) {

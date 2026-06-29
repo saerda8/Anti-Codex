@@ -11369,6 +11369,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(server, /const passed=\(item\.effectiveOk!==null&&item\.effectiveOk!==undefined\)\?item\.effectiveOk:item\.ok/);
   assert.match(managerInject, /const passed = item\.effectiveOk !== null && item\.effectiveOk !== undefined \? item\.effectiveOk : item\.ok/);
   assert.match(managerBridge, /const passed = item\.effectiveOk !== null && item\.effectiveOk !== undefined \? item\.effectiveOk : item\.ok/);
+  assert.match(managerInject, /installedOverall model: transport=\$\{evidence\.modelTextTransport \|\| "unknown"\} \/ discovery=\$\{evidence\.modelDiscoverySource \|\| "unknown"\} \/ coworkerDefault=/);
+  assert.match(managerBridge, /installedOverall model: transport=\$\{evidence\.modelTextTransport \|\| "unknown"\} \/ discovery=\$\{evidence\.modelDiscoverySource \|\| "unknown"\} \/ coworkerDefault=/);
   assert.match(collector, /latest-release-gates\.json/);
   assert.match(server, /releaseGateGroups/);
   assert.match(server, /selectedHistory/);
