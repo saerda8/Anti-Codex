@@ -13043,7 +13043,12 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /requestedRealTraffic/);
   assert.match(antigravityCliRealSmoke, /coverageKind = "skipped"/);
   assert.match(antigravityCliRealSmoke, /strict Windows AppData isolation is required/);
-  assert.match(antigravityCliRealSmoke, /profileRoot matches a known default Antigravity profile location/);
+  assert.match(antigravityCliPrepare, /function Test-IsDefaultAntigravityProfilePath/);
+  assert.match(antigravityCliRealSmoke, /function Test-IsDefaultAntigravityProfilePath/);
+  assert.match(antigravityCliPrepare, /profileRoot matches or nests under a known default Antigravity profile location/);
+  assert.match(antigravityCliRealSmoke, /profileRoot matches or nests under a known default Antigravity profile location/);
+  assert.match(antigravityCliPrepare, /StartsWith\(\$defaultFull \+ \[IO\.Path\]::DirectorySeparatorChar, \[StringComparison\]::OrdinalIgnoreCase\)/);
+  assert.match(antigravityCliRealSmoke, /StartsWith\(\$defaultFull \+ \[IO\.Path\]::DirectorySeparatorChar, \[StringComparison\]::OrdinalIgnoreCase\)/);
   assert.match(antigravityCliRealSmoke, /runAntigravityTextTurn/);
   assert.match(antigravityCliRealSmoke, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.match(antigravityCliRealSmoke, /latest-antigravity-cli-profile-prepare\.json/);

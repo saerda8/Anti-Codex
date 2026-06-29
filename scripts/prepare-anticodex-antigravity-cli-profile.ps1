@@ -50,6 +50,18 @@ function Get-KnownDefaultAntigravityProfileRoots {
     return $roots.ToArray()
 }
 
+function Test-IsDefaultAntigravityProfilePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProfileRoot,
+        [Parameter(Mandatory = $true)][string]$DefaultRoot
+    )
+    $profileFull = [IO.Path]::GetFullPath($ProfileRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $defaultFull = [IO.Path]::GetFullPath($DefaultRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    if ($profileFull -ieq $defaultFull) { return $true }
+    if ($env:USERPROFILE -and $defaultFull -ieq ([IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))) { return $false }
+    return $profileFull.StartsWith($defaultFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Write-Report {
     param([hashtable]$Report)
     $reportRootFull = Resolve-ReportRoot
@@ -117,8 +129,8 @@ try {
         Add-Failure "ProfileRoot is required"
     }
     foreach ($defaultRoot in (Get-KnownDefaultAntigravityProfileRoots)) {
-        if ($profileRootFull -and $profileRootFull -eq $defaultRoot) {
-            Add-Failure "profileRoot matches a known default Antigravity profile location"
+        if ($profileRootFull -and (Test-IsDefaultAntigravityProfilePath -ProfileRoot $profileRootFull -DefaultRoot $defaultRoot)) {
+            Add-Failure "profileRoot matches or nests under a known default Antigravity profile location"
             break
         }
     }
