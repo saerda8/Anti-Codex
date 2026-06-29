@@ -10926,6 +10926,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);
   assert.match(releaseGates, /source_preflight_public_documentation/);
+  assert.match(releaseGates, /latest-antigravity-cli-real-smoke\.json/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_login_not_verified/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_strict_isolation_missing/);
+  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot/);
   assert.match(releaseGates, /requireModelRoutingSemantics/);
   assert.match(releaseGates, /model_routing_skip_requests_not_true/);
   assert.match(releaseGates, /model_routing_result_not_skipped/);
@@ -12299,6 +12303,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   const installer = readFileSync(resolve(root, "scripts", "install-deepcodex.ps1"), "utf8");
   const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
   const antigravityCliIsolation = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-isolation.ps1"), "utf8");
+  const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
   assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
@@ -12307,6 +12312,15 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliIsolation, /usedRealTraffic\s*=\s*\$false/);
   assert.match(antigravityCliIsolation, /loginVerified\s*=\s*\$false/);
   assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
+  assert.match(antigravityCliRealSmoke, /\[switch\]\$AllowRealTraffic/);
+  assert.match(antigravityCliRealSmoke, /real Antigravity CLI traffic is opt-in/);
+  assert.match(antigravityCliRealSmoke, /refusing to use the default account/);
+  assert.match(antigravityCliRealSmoke, /requestedRealTraffic/);
+  assert.match(antigravityCliRealSmoke, /coverageKind = "skipped"/);
+  assert.match(antigravityCliRealSmoke, /strict Windows AppData isolation is required/);
+  assert.match(antigravityCliRealSmoke, /profileRoot matches a known default Antigravity profile location/);
+  assert.match(antigravityCliRealSmoke, /runAntigravityTextTurn/);
+  assert.match(antigravityCliRealSmoke, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
   assert.match(runtimeSync, /README_EN\.md/);

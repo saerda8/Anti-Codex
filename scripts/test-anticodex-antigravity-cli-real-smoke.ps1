@@ -1,0 +1,223 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param(
+    [switch]$AllowRealTraffic,
+    [string]$StateRoot = "",
+    [string]$ReportRoot = "",
+    [string]$ProfileRoot = "",
+    [switch]$StrictWindowsAppDataIsolation,
+    [string]$Model = "gemini-pro-agent",
+    [string]$Prompt = "",
+    [int]$TimeoutSec = 90
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+$startedAt = [DateTime]::UtcNow
+$failures = New-Object System.Collections.Generic.List[string]
+$attemptedRealTraffic = $false
+$profileRootFull = ""
+$profileSource = "none"
+$strictIsolation = $false
+
+function Add-Failure {
+    param([string]$Message)
+    $failures.Add($Message) | Out-Null
+}
+
+function Resolve-StateRoot {
+    if ($StateRoot) { return [IO.Path]::GetFullPath($StateRoot) }
+    if ($env:DEEPCODEX_STATE_ROOT) { return [IO.Path]::GetFullPath($env:DEEPCODEX_STATE_ROOT) }
+    return [IO.Path]::GetFullPath((Join-Path $env:APPDATA "anticodex"))
+}
+
+function Resolve-ReportRoot {
+    if ($ReportRoot) { return [IO.Path]::GetFullPath($ReportRoot) }
+    if ($env:ANTICODEX_REPORT_ROOT) { return [IO.Path]::GetFullPath($env:ANTICODEX_REPORT_ROOT) }
+    return [IO.Path]::GetFullPath((Join-Path $env:APPDATA "anticodex\reports"))
+}
+
+function Write-Report {
+    param([hashtable]$Report)
+    $reportRootFull = Resolve-ReportRoot
+    New-Item -ItemType Directory -Path $reportRootFull -Force | Out-Null
+    $json = $Report | ConvertTo-Json -Depth 20
+    Write-AntiCodexJsonReport `
+        -LatestPath (Join-Path $reportRootFull "latest-antigravity-cli-real-smoke.json") `
+        -HistoryPath (Join-Path $reportRootFull ("{0}-antigravity-cli-real-smoke.json" -f ([DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")))) `
+        -Json $json
+    $Report | ConvertTo-Json -Depth 20 -Compress
+}
+
+function ConvertTo-JsStringLiteral {
+    param([string]$Value)
+    $escaped = $Value.Replace("\", "\\").Replace("'", "\'").Replace("`r", "\r").Replace("`n", "\n")
+    return "'$escaped'"
+}
+
+function Read-SavedAntigravityCliProfile {
+    $profileScript = Join-Path $PSScriptRoot "anticodex-upstream-profile.ps1"
+    $output = & $profileScript -Action GetRuntime -StateRoot (Resolve-StateRoot)
+    if (-not $?) {
+        throw "failed to read saved upstream profile"
+    }
+    $profile = (($output -join [Environment]::NewLine) | ConvertFrom-Json)
+    if ($profile.antigravityCli) { return $profile.antigravityCli }
+    return $null
+}
+
+function Get-KnownDefaultAntigravityProfileRoots {
+    $roots = New-Object System.Collections.Generic.List[string]
+    if ($env:USERPROFILE) {
+        $roots.Add([IO.Path]::GetFullPath($env:USERPROFILE)) | Out-Null
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:USERPROFILE ".antigravity"))) | Out-Null
+    }
+    if ($env:APPDATA) {
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:APPDATA "Antigravity"))) | Out-Null
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:APPDATA "Antigravity CLI"))) | Out-Null
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:APPDATA "Google\Antigravity"))) | Out-Null
+    }
+    if ($env:LOCALAPPDATA) {
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Antigravity"))) | Out-Null
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Antigravity CLI"))) | Out-Null
+        $roots.Add([IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Google\Antigravity"))) | Out-Null
+    }
+    return $roots.ToArray()
+}
+
+$stateRootFull = Resolve-StateRoot
+$reportRootFull = Resolve-ReportRoot
+$marker = "ANTICODEX_CLI_REAL_SMOKE_{0}" -f ([Guid]::NewGuid().ToString("N"))
+$effectivePrompt = if ([string]::IsNullOrWhiteSpace($Prompt)) {
+    "Reply with exactly this marker and no other content: $marker"
+} else {
+    $Prompt
+}
+
+try {
+    if (-not $AllowRealTraffic) {
+        $report = [ordered]@{
+            ok = $true
+            reportName = "antigravity-cli-real-smoke"
+            skipped = $true
+            requestedRealTraffic = $false
+            skipReason = "real Antigravity CLI traffic is opt-in; rerun with -AllowRealTraffic and an isolated -ProfileRoot or saved Antigravity CLI profile"
+            reason = "real Antigravity CLI traffic is opt-in; rerun with -AllowRealTraffic and an isolated -ProfileRoot or saved Antigravity CLI profile"
+            coveredBy = "test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-profile>"
+            usedRealTraffic = $false
+            loginVerified = $false
+            behaviorCovered = $false
+            coverageKind = "skipped"
+            stateRoot = $stateRootFull
+            reportRoot = $reportRootFull
+            failures = @()
+        }
+        Write-Report -Report $report
+        exit 0
+    }
+
+    $savedCli = Read-SavedAntigravityCliProfile
+    $profileRootFull = if ($ProfileRoot) {
+        $profileSource = "argument"
+        [IO.Path]::GetFullPath($ProfileRoot)
+    } elseif ($savedCli -and [string]$savedCli.profileRoot) {
+        $profileSource = "saved-profile"
+        [IO.Path]::GetFullPath([string]$savedCli.profileRoot)
+    } else {
+        ""
+    }
+
+    if (-not $profileRootFull) {
+        Add-Failure "isolated Antigravity CLI profileRoot is required before real CLI smoke; refusing to use the default account"
+    }
+    $knownDefaultRoots = Get-KnownDefaultAntigravityProfileRoots
+    foreach ($defaultRoot in $knownDefaultRoots) {
+        if ($profileRootFull -and $profileRootFull -eq $defaultRoot) {
+            Add-Failure "profileRoot matches a known default Antigravity profile location; refusing to test against the default account"
+            break
+        }
+    }
+
+    $strictIsolation = $StrictWindowsAppDataIsolation.IsPresent
+    if (-not $strictIsolation -and $savedCli -and $savedCli.strictWindowsAppDataIsolation -eq $true) {
+        $strictIsolation = $true
+    }
+    if (-not $strictIsolation) {
+        Add-Failure "strict Windows AppData isolation is required before real CLI smoke"
+    }
+
+    if ($failures.Count -eq 0) {
+        New-Item -ItemType Directory -Path $profileRootFull -Force | Out-Null
+        $node = (Get-Command "node" -ErrorAction Stop).Source
+        $modulePath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\translator\antigravity-agentapi.mjs"))
+        $moduleLiteral = ConvertTo-JsStringLiteral $modulePath
+        $promptLiteral = ConvertTo-JsStringLiteral $effectivePrompt
+        $modelLiteral = ConvertTo-JsStringLiteral $Model
+        $cwdLiteral = ConvertTo-JsStringLiteral ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..")))
+        $profileLiteral = ConvertTo-JsStringLiteral $profileRootFull
+        $strictLiteral = if ($strictIsolation) { "'1'" } else { "'0'" }
+        $timeoutMs = [Math]::Max(1000, $TimeoutSec * 1000)
+        $script = @"
+import { pathToFileURL } from 'node:url';
+const { runAntigravityTextTurn, antigravityCliIsolationEnv } = await import(pathToFileURL($moduleLiteral).href);
+const env = {
+  ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT: $profileLiteral,
+  ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA: $strictLiteral,
+};
+const result = await runAntigravityTextTurn($promptLiteral, {
+  model: $modelLiteral,
+  timeoutMs: $timeoutMs,
+  cwd: $cwdLiteral,
+  env,
+});
+console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env) }));
+"@
+        $attemptedRealTraffic = $true
+        $output = & $node "--input-type=module" "-e" $script
+        if ($LASTEXITCODE -ne 0) { Add-Failure "Antigravity CLI real smoke exited with $LASTEXITCODE" }
+        $payload = if ($output) { (($output -join [Environment]::NewLine) | ConvertFrom-Json) } else { $null }
+        $text = if ($payload -and $payload.result) { [string]$payload.result.text } else { "" }
+        if ($Prompt -eq "" -and $text -notmatch [regex]::Escape($marker)) {
+            Add-Failure "Antigravity CLI real smoke response did not contain the marker"
+        }
+    }
+
+    $elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
+    $report = [ordered]@{
+        ok = ($failures.Count -eq 0)
+        reportName = "antigravity-cli-real-smoke"
+        skipped = $false
+        requestedRealTraffic = $true
+        usedRealTraffic = $attemptedRealTraffic
+        loginVerified = ($failures.Count -eq 0)
+        behaviorCovered = ($failures.Count -eq 0)
+        coverageKind = if ($attemptedRealTraffic) { "real-traffic" } elseif (-not $profileRootFull) { "blocked-no-profile" } else { "blocked-not-isolated" }
+        elapsedMs = $elapsedMs
+        model = $Model
+        profileRoot = $profileRootFull
+        profileSource = $profileSource
+        strictWindowsAppDataIsolation = $strictIsolation
+        loginVerifiedMethod = if ($failures.Count -eq 0) { "marker-match" } else { "" }
+        marker = if ($Prompt -eq "") { $marker } else { "" }
+        failures = $failures.ToArray()
+    }
+    Write-Report -Report $report
+    if ($failures.Count -gt 0) { exit 1 }
+} catch {
+    Add-Failure $_.Exception.Message
+    $report = [ordered]@{
+        ok = $false
+        reportName = "antigravity-cli-real-smoke"
+        skipped = (-not $AllowRealTraffic)
+        requestedRealTraffic = [bool]$AllowRealTraffic
+        usedRealTraffic = $attemptedRealTraffic
+        loginVerified = $false
+        behaviorCovered = $false
+        coverageKind = if ($attemptedRealTraffic) { "real-traffic" } elseif (-not $AllowRealTraffic) { "skipped" } elseif (-not $profileRootFull) { "blocked-no-profile" } else { "blocked-not-isolated" }
+        elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
+        failures = $failures.ToArray()
+    }
+    Write-Report -Report $report
+    exit 1
+}

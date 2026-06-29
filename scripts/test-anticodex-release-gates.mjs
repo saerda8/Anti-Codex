@@ -51,6 +51,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-diagnostics.ps1",
   "scripts/test-anticodex-installed-overall.ps1",
   "scripts/test-anticodex-ambient-suggestions.ps1",
+  "scripts/test-anticodex-antigravity-cli-real-smoke.ps1",
   "scripts/test-anticodex-local-connectors.mjs",
   "scripts/test-anticodex-manager-action.ps1",
   "scripts/test-anticodex-manager-button.mjs",
@@ -109,6 +110,7 @@ const gateDefinitions = [
   { id: "refreshFeatures", group: "manager", file: "latest-refresh-features.json", requiredForRelease: true, requireRefreshFeatureSemantics: true },
   { id: "realThirdPartyProviderOptional", group: "optional-real-traffic", file: "latest-real-third-party-provider.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
   { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
+  { id: "antigravityCliRealSmokeOptional", group: "optional-real-traffic", file: "latest-antigravity-cli-real-smoke.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
 
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true, requireInstalledOverallSemantics: true, expectedFast: false, expectedReportName: "installed-overall", expectedCoverageKind: "installed-no-traffic" },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
@@ -410,6 +412,7 @@ function summarizeGate(definition) {
         "pluginCapabilities",
         "realThirdPartyProviderOptional",
         "providerAntigravityReturnOptional",
+        "antigravityCliRealSmokeOptional",
         "realMiniTool",
         "realWork",
         "realSmallProject",
@@ -814,6 +817,13 @@ function summarizeGate(definition) {
           if (Number(evidence.missingMarkerCount || 0) !== 0) semanticFailures.push("optional_antigravity_return_missing_markers");
           if (!evidence.routeTransport || evidence.routeTransport === "upstream-provider") semanticFailures.push("optional_antigravity_return_route_transport");
           if (!evidence.resolvedModel) semanticFailures.push("optional_antigravity_return_resolved_model");
+        }
+        if (definition.id === "antigravityCliRealSmokeOptional") {
+          if (report.reportName !== "antigravity-cli-real-smoke") semanticFailures.push("optional_antigravity_cli_real_smoke_report_name");
+          if (report.loginVerified !== true) semanticFailures.push("optional_antigravity_cli_real_smoke_login_not_verified");
+          if (!report.profileRoot) semanticFailures.push("optional_antigravity_cli_real_smoke_profile_missing");
+          if (report.strictWindowsAppDataIsolation !== true) semanticFailures.push("optional_antigravity_cli_real_smoke_strict_isolation_missing");
+          if (report.profileRoot && String(report.profileRoot).toLowerCase() === String(process.env.USERPROFILE || "").toLowerCase()) semanticFailures.push("optional_antigravity_cli_real_smoke_default_profile");
         }
       }
     }
@@ -1291,6 +1301,9 @@ function gateGuidance(gate) {
   if (gate?.id === "providerAntigravityReturnOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_antigravity_return_required: optional provider-to-Antigravity return evidence is stale or missing; run only with explicit user approval because it performs a real Antigravity return turn.";
   }
+  if (gate?.id === "antigravityCliRealSmokeOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "optional_antigravity_cli_real_smoke_required: optional isolated Antigravity CLI account evidence is stale or missing; run only with explicit user approval, an isolated CLI profile, and no Antigravity Desktop/coworker dependency.";
+  }
   if (actions.some((item) => item.id === "stabilitySoak") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_stability_soak_required: optional soak evidence is stale; run only with explicit user approval because it uses the local gateway, real traffic, and a longer stability window.";
   }
@@ -1335,6 +1348,7 @@ const realTrafficRefreshOrder = [
 const optionalEvidenceRefreshOrder = [
   ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
   ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
+  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile>", { requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
