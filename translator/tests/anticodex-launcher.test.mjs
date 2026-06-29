@@ -2713,9 +2713,12 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /antigravityCliIsolationProfileOk/);
   assert.match(server, /antigravityCliProfilePrepareOk/);
   assert.match(server, /localConnectorVerifierOk/);
+  assert.match(server, /publicDocumentationClientCopySyncContractOk/);
+  assert.match(server, /client-copy-sync-contract/);
   assert.match(server, /sourcePreflight: js=/);
   assert.match(server, /cliIsolation=/);
   assert.match(server, /prepare=/);
+  assert.match(server, /clientCopyDocs=/);
   assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /localConnectorEvidence/);
   assert.match(server, /modelRoutingEvidence/);
@@ -4892,6 +4895,7 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(server, /function latestSourcePreflightStatus/);
   assert.match(server, /function sourcePreflightSummary/);
   assert.match(server, /publicDocumentationOk/);
+  assert.match(server, /publicDocumentationClientCopySyncContractOk/);
   assert.match(server, /function installedCheckSummary/);
   assert.match(server, /latest-source-preflight\.json/);
   assert.match(server, /latest-installed-overall-fast\.json/);
