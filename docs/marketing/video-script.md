@@ -23,7 +23,7 @@ Anti-Codex: Codex-like desktop workflow, Antigravity by default
 | Time | Visual | Voiceover |
 |---|---|---|
 | 0-5s | Anti-Codex and original Codex visible as separate entries | Anti-Codex is a separate desktop route for people who want the Codex workflow without touching their original Codex setup. |
-| 5-12s | Anti-Codex starts and shows the Manager | It runs through a local translator gateway and uses Antigravity Desktop as the default provider. |
+| 5-12s | Anti-Codex starts and shows the Manager | It runs through a local translator gateway, uses Antigravity entitlement for model text, and keeps Codex-owned tools in Anti-Codex. |
 | 12-22s | Manager provider panel | If you need a third-party API, you configure it explicitly here. No ChatGPT login, no silent provider swap. |
 | 22-34s | Provider switch continuity report | Provider switching keeps multi-turn history and structured tool results intact, including OpenAI-compatible and Anthropic-style requests. |
 | 34-45s | MCP, skills, plugins, and connector summaries | Local MCP servers, skills, plugin metadata, and connector metadata are mirrored so the local capability surface stays in sync. |
@@ -35,8 +35,9 @@ Anti-Codex: Codex-like desktop workflow, Antigravity by default
 Anti-Codex is a separate desktop route for people who want the Codex workflow
 without changing their original Codex install.
 
-It starts its own local gateway and uses Antigravity Desktop as the default
-provider. The original Codex account and app state stay untouched.
+It starts its own local gateway and uses Antigravity entitlement for model
+text. Codex-owned tools stay in Anti-Codex, and the original Codex account
+and app state stay untouched.
 
 If you want to use a third-party API, you configure that explicitly in the
 Manager. Anti-Codex does not use a ChatGPT login path and does not silently

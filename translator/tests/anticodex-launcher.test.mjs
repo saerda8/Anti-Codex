@@ -12497,6 +12497,18 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(profileTest, /corrupt third-party key can still restore Antigravity/);
 });
 
+test("current docs describe Antigravity as model entitlement, not Desktop coworker default", () => {
+  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const videoScript = readFileSync(resolve(root, "docs", "marketing", "video-script.md"), "utf8");
+  for (const source of [handoff, videoScript]) {
+    assert.doesNotMatch(source, /Antigravity Desktop as the default model provider/);
+    assert.doesNotMatch(source, /uses Antigravity Desktop as the default\s+provider/);
+    assert.match(source, /Antigravity entitlement/);
+  }
+  assert.match(handoff, /Antigravity coworker\/tool execution is not the default product path/);
+  assert.match(videoScript, /Codex-owned tools stay in Anti-Codex/);
+});
+
 test("Anti-Codex ships an installed no-traffic missing-history verifier", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-missing-history.mjs"), "utf8");
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");

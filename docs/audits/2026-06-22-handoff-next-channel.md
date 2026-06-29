@@ -5,7 +5,7 @@ Branch: main
 
 ## Current State
 
-- Anti-Codex is an isolated desktop/runtime fork using Antigravity Desktop as the default model provider.
+- Anti-Codex is an isolated Codex desktop/runtime copy with an Antigravity entitlement model adapter. Antigravity Desktop/CLI may supply model text, but Antigravity coworker/tool execution is not the default product path.
 - Direction lock: Anti-Codex should remain a guarded Codex client copy plus isolation, branding, and model-adapter changes. Do not reimplement Codex client/tool features one by one through Antigravity Desktop/coworker; use host sync and parity validation when Codex changes.
 - Client sync contract: native Codex updates must be handled as guarded host/client sync plus Anti-Codex patch reapplication. Missing native Codex behavior in Anti-Codex is a sync/parity bug by default, not a prompt to manually rebuild that behavior.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the last checks: upstream `antigravity-desktop`, account ready, 8 models.
