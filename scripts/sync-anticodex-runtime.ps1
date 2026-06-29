@@ -55,6 +55,7 @@ $requiredSourceFiles = @(
     "scripts\start-anticodex-antigravity-cli-login-windows-user.ps1",
     "scripts\test-anticodex-antigravity-cli-dual-account-lanes.ps1",
     "scripts\test-anticodex-antigravity-cli-windows-user-readiness.ps1",
+    "scripts\test-anticodex-antigravity-account-isolation-status.ps1",
     "scripts\test-anticodex-antigravity-cli-real-smoke.ps1",
     "scripts\test-anticodex-windows-user-account-prepare.ps1",
     "scripts\test-anticodex-local-connectors.mjs",

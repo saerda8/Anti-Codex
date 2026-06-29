@@ -213,6 +213,7 @@ const isAntigravityCliProfilePrepareReport = report?.reportName === "antigravity
 const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravity-cli-dual-account-lanes" || /latest-antigravity-cli-dual-account-lanes\.json$/i.test(path);
 const isAntigravityCliWindowsUserReadinessReport = report?.reportName === "antigravity-cli-windows-user-readiness" || /latest-antigravity-cli-windows-user-readiness\.json$/i.test(path);
 const isWindowsUserAccountPrepareReport = report?.reportName === "windows-user-account-prepare" || /latest-windows-user-account-prepare\.json$/i.test(path);
+const isAntigravityAccountIsolationStatusReport = report?.reportName === "antigravity-account-isolation-status" || /latest-antigravity-account-isolation-status\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -835,6 +836,38 @@ const summary = {
     nextProofRequiresRealTraffic: boolField(report, "nextProofRequiresRealTraffic"),
     separateAccountVerified: boolField(report, "separateAccountVerified"),
     loginVerified: boolField(report, "loginVerified"),
+  } : null,
+  antigravityAccountIsolationStatusEvidence: isAntigravityAccountIsolationStatusReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    completionState: has(report, "completionState") ? asString(report.completionState) : null,
+    accountLaneRole: has(report, "accountLaneRole") ? asString(report.accountLaneRole) : null,
+    antiCodexLaneRole: has(report, "antiCodexLaneRole") ? asString(report.antiCodexLaneRole) : null,
+    mcpLaneRole: has(report, "mcpLaneRole") ? asString(report.mcpLaneRole) : null,
+    mcpAccountLaneManagedByAntiCodex: boolField(report, "mcpAccountLaneManagedByAntiCodex"),
+    mcpAccountLaneOwner: has(report, "mcpAccountLaneOwner") ? asString(report.mcpAccountLaneOwner) : null,
+    antiCodexModelTextLanePrepared: boolField(report, "antiCodexModelTextLanePrepared"),
+    mcpExternalLanePrepared: boolField(report, "mcpExternalLanePrepared"),
+    fileIsolationPrepared: boolField(report, "fileIsolationPrepared"),
+    credentialBoundary: has(report, "credentialBoundary") ? asString(report.credentialBoundary) : null,
+    expectedCredentialStoreIsolation: boolField(report, "expectedCredentialStoreIsolation"),
+    targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+    targetUserIsCurrentUser: boolField(report, "targetUserIsCurrentUser"),
+    readyForInteractiveLogin: boolField(report, "readyForInteractiveLogin"),
+    readinessBlockingReason: has(report, "readinessBlockingReason") ? asString(report.readinessBlockingReason) : null,
+    safeToAskUserForSecondAccountLogin: boolField(report, "safeToAskUserForSecondAccountLogin"),
+    canProceedToInteractiveLogin: boolField(report, "canProceedToInteractiveLogin"),
+    blockedBeforeInteractiveLogin: boolField(report, "blockedBeforeInteractiveLogin"),
+    operatorBlockingStage: has(report, "operatorBlockingStage") ? asString(report.operatorBlockingStage) : null,
+    operatorNextStep: has(report, "operatorNextStep") ? asString(report.operatorNextStep) : null,
+    nextProofRequiresInteractiveLogin: boolField(report, "nextProofRequiresInteractiveLogin"),
+    nextProofRequiresRealTraffic: boolField(report, "nextProofRequiresRealTraffic"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    loginVerified: boolField(report, "loginVerified"),
+    releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
   } : null,
   antigravityCliRealSmokeEvidence: isAntigravityCliRealSmokeReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,

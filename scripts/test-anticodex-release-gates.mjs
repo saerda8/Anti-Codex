@@ -57,6 +57,7 @@ const runtimeSyncFiles = [
   "scripts/start-anticodex-antigravity-cli-login-windows-user.ps1",
   "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-windows-user-readiness.ps1",
+  "scripts/test-anticodex-antigravity-account-isolation-status.ps1",
   "scripts/test-anticodex-antigravity-cli-real-smoke.ps1",
   "scripts/test-anticodex-windows-user-account-prepare.ps1",
   "scripts/test-anticodex-local-connectors.mjs",
@@ -131,6 +132,7 @@ const gateDefinitions = [
   { id: "ambientSuggestions", group: "no-traffic", file: "latest-ambient-suggestions.json", requiredForRelease: true, requireAmbientSuggestionSemantics: true },
   { id: "antigravityCliWindowsUserReadiness", group: "no-traffic", file: "latest-antigravity-cli-windows-user-readiness.json", requiredForRelease: true, requireAntigravityCliWindowsUserReadinessSemantics: true },
   { id: "windowsUserAccountPrepare", group: "no-traffic", file: "latest-windows-user-account-prepare.json", requiredForRelease: true, requireWindowsUserAccountPrepareSemantics: true },
+  { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -1169,6 +1171,37 @@ function summarizeGate(definition) {
       if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_prepare_separate_account_verified");
       if (report.loginVerified !== false) semanticFailures.push("windows_user_prepare_login_verified");
     }
+    if (definition.requireAntigravityAccountIsolationStatusSemantics) {
+      const safeToAskLogin = report.safeToAskUserForSecondAccountLogin === true;
+      if (report.reportName !== "antigravity-account-isolation-status") semanticFailures.push("account_isolation_status_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("account_isolation_status_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("account_isolation_status_used_real_traffic");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("account_isolation_status_requested_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("account_isolation_status_behavior_not_covered");
+      if (report.coverageKind !== "account-isolation-status-no-traffic") semanticFailures.push("account_isolation_status_coverage_kind");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("account_isolation_status_failures");
+      if (report.accountLaneRole !== "dual-antigravity-account-isolation-status") semanticFailures.push("account_isolation_status_account_lane_role");
+      if (report.antiCodexLaneRole !== "anticodex-model-text") semanticFailures.push("account_isolation_status_anticodex_lane_role");
+      if (report.mcpLaneRole !== "external-mcp-antigravity-account") semanticFailures.push("account_isolation_status_mcp_lane_role");
+      if (report.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("account_isolation_status_mcp_lane_managed_by_anticodex");
+      if (report.mcpAccountLaneOwner !== "external-antigravity-account-not-managed-here") semanticFailures.push("account_isolation_status_mcp_lane_owner");
+      if (report.antiCodexModelTextLanePrepared !== true) semanticFailures.push("account_isolation_status_anticodex_lane_not_prepared");
+      if (report.mcpExternalLanePrepared !== true) semanticFailures.push("account_isolation_status_mcp_lane_not_prepared");
+      if (report.fileIsolationPrepared !== true) semanticFailures.push("account_isolation_status_file_isolation_not_prepared");
+      if (report.credentialBoundary !== "separate-windows-user") semanticFailures.push("account_isolation_status_credential_boundary");
+      if (report.expectedCredentialStoreIsolation !== true) semanticFailures.push("account_isolation_status_expected_credential_isolation");
+      if (report.targetUserIsCurrentUser === true) semanticFailures.push("account_isolation_status_target_is_current_user");
+      if (report.readyForInteractiveLogin !== true && !report.readinessBlockingReason) semanticFailures.push("account_isolation_status_blocking_reason_missing");
+      if (report.canProceedToInteractiveLogin !== safeToAskLogin) semanticFailures.push("account_isolation_status_can_proceed_mismatch");
+      if (report.blockedBeforeInteractiveLogin !== !safeToAskLogin) semanticFailures.push("account_isolation_status_blocked_before_login_mismatch");
+      if (!report.operatorBlockingStage) semanticFailures.push("account_isolation_status_operator_stage_missing");
+      if (!report.operatorNextStep) semanticFailures.push("account_isolation_status_operator_next_step_missing");
+      if (report.nextProofRequiresRealTraffic !== true) semanticFailures.push("account_isolation_status_next_proof_real_traffic_missing");
+      if (report.separateAccountVerified !== false) semanticFailures.push("account_isolation_status_separate_account_verified");
+      if (report.loginVerified !== false) semanticFailures.push("account_isolation_status_login_verified");
+      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("account_isolation_status_release_proof_claimed");
+      if (!report.accountIsolationCaveat) semanticFailures.push("account_isolation_status_caveat_missing");
+    }
     if (definition.requireModelRoutingSemantics) {
       const results = Array.isArray(report.results) ? report.results : [];
       if (report.skipRequests !== true) semanticFailures.push("model_routing_skip_requests_not_true");
@@ -1633,6 +1666,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["ambientSuggestions", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-ambient-suggestions.ps1"],
   ["antigravityCliWindowsUserReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-windows-user-readiness.ps1"],
   ["windowsUserAccountPrepare", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1"],
+  ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -2605,6 +2639,40 @@ if (args.has("--self-test")) {
       loginVerified: true,
     });
 
+    writeFakeLatestReport("latest-antigravity-account-isolation-status.json", {
+      ok: true,
+      reportName: "wrong-account-isolation-status",
+      noTraffic: false,
+      usedRealTraffic: true,
+      requestedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "wrong",
+      failures: ["should not be ignored"],
+      accountLaneRole: "wrong",
+      antiCodexLaneRole: "wrong",
+      mcpLaneRole: "wrong",
+      mcpAccountLaneManagedByAntiCodex: true,
+      mcpAccountLaneOwner: "",
+      antiCodexModelTextLanePrepared: false,
+      mcpExternalLanePrepared: false,
+      fileIsolationPrepared: false,
+      credentialBoundary: "profile-and-appdata-only",
+      expectedCredentialStoreIsolation: false,
+      targetUserIsCurrentUser: true,
+      readyForInteractiveLogin: false,
+      readinessBlockingReason: "",
+      safeToAskUserForSecondAccountLogin: true,
+      canProceedToInteractiveLogin: false,
+      blockedBeforeInteractiveLogin: true,
+      operatorBlockingStage: "",
+      operatorNextStep: "",
+      nextProofRequiresRealTraffic: false,
+      separateAccountVerified: true,
+      loginVerified: true,
+      releaseAcceptableAccountProof: true,
+      accountIsolationCaveat: "",
+    });
+
     const semanticFailures = {};
     semanticFailures.fastOverallNoTraffic = assertSemanticFailures("fastOverallNoTraffic", "self-test failed: semantically invalid fast installed-overall report satisfied the gate", [
       "installed_overall_report_name",
@@ -2725,6 +2793,36 @@ if (args.has("--self-test")) {
       "windows_user_prepare_next_proof_real_traffic_missing",
       "windows_user_prepare_separate_account_verified",
       "windows_user_prepare_login_verified",
+    ]);
+    semanticFailures.antigravityAccountIsolationStatus = assertSemanticFailures("antigravityAccountIsolationStatus", "self-test failed: semantically invalid Antigravity account-isolation status report satisfied the gate", [
+      "account_isolation_status_report_name",
+      "account_isolation_status_no_traffic",
+      "account_isolation_status_used_real_traffic",
+      "account_isolation_status_requested_real_traffic",
+      "account_isolation_status_behavior_not_covered",
+      "account_isolation_status_coverage_kind",
+      "account_isolation_status_failures",
+      "account_isolation_status_account_lane_role",
+      "account_isolation_status_anticodex_lane_role",
+      "account_isolation_status_mcp_lane_role",
+      "account_isolation_status_mcp_lane_managed_by_anticodex",
+      "account_isolation_status_mcp_lane_owner",
+      "account_isolation_status_anticodex_lane_not_prepared",
+      "account_isolation_status_mcp_lane_not_prepared",
+      "account_isolation_status_file_isolation_not_prepared",
+      "account_isolation_status_credential_boundary",
+      "account_isolation_status_expected_credential_isolation",
+      "account_isolation_status_target_is_current_user",
+      "account_isolation_status_blocking_reason_missing",
+      "account_isolation_status_can_proceed_mismatch",
+      "account_isolation_status_blocked_before_login_mismatch",
+      "account_isolation_status_operator_stage_missing",
+      "account_isolation_status_operator_next_step_missing",
+      "account_isolation_status_next_proof_real_traffic_missing",
+      "account_isolation_status_separate_account_verified",
+      "account_isolation_status_login_verified",
+      "account_isolation_status_release_proof_claimed",
+      "account_isolation_status_caveat_missing",
     ]);
     semanticFailures.uiIdleStability = assertSemanticFailures("uiIdleStability", "self-test failed: semantically invalid ui-idle report satisfied the gate", [
       "ui_idle_duration",

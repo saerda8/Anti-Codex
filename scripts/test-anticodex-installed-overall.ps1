@@ -788,6 +788,7 @@ function Test-ReportEncoding {
         "latest-antigravity-cli-profile-prepare.json",
         "latest-antigravity-cli-windows-user-readiness.json",
         "latest-windows-user-account-prepare.json",
+        "latest-antigravity-account-isolation-status.json",
         "latest-antigravity-cli-real-smoke.json",
         "latest-third-party-provider.json",
         "latest-missing-history.json",

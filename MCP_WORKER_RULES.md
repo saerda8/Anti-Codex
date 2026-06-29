@@ -158,6 +158,13 @@ After every failure, before another dispatch:
 - Result: completed with accepted changes and the focused launcher test passed. The main patch kept a broader field set and absorbed the useful static checks forbidding user creation and network calls in the launcher.
 - Rule change: account login launchers need a runtime guard, not only a report/Manager warning. Non-DryRun paths must return machine-readable blocked JSON and `started:false` before any interactive login process starts.
 
+### 2026-06-30 - Account-isolation total status worker comparison
+
+- Workers: OpenCode `ocw_mqzpm3we_cvrwm5` and DevEco `dcw_mqzpmd0d_ie2fs7`.
+- Task: add a no-traffic total Antigravity account-isolation status report and cross-check it with static tests/notes.
+- Result: OpenCode completed with a scoped draft touching the new status script and launcher test, and both requested checks passed. DevEco timed out with `caller_timeout_no_valid_changes`, zero diff, and no checks.
+- Rule change: for account-boundary status work, keep the mainline support chain authoritative. Absorb OpenCode only after direct diff review and local tests; treat DevEco zero-diff timeouts as no-evidence latency and record them instead of retrying unchanged.
+
 ### 2026-06-30 - Windows-user release-gate Kilo partial
 
 - Worker: Kilo `klw_mqzp57cb_p0p1sx` in isolated worktree `deepcodex-kilo-windows-gates`.

@@ -423,6 +423,7 @@ $latestReports = @(
     "latest-antigravity-cli-profile-prepare.json",
     "latest-antigravity-cli-windows-user-readiness.json",
     "latest-windows-user-account-prepare.json",
+    "latest-antigravity-account-isolation-status.json",
     "latest-antigravity-cli-real-smoke.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",
