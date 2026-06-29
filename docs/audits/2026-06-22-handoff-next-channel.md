@@ -11,6 +11,7 @@ Branch: main
 - Antigravity account mode is back to a two-account/profile split because Gemini CLI is not usable for the MCP-side account lane. Anti-Codex should keep its own isolated Antigravity CLI profile/account for model text while MCP can use a different Antigravity account. Do not run real account/traffic proof without explicit approval.
 - Optional Antigravity CLI real-smoke reports now must carry `accountLaneRole`, `mcpAccountLaneManagedByAntiCodex`, and `mcpAccountLaneOwner`; release gate will reject missing or inaccurate owner fields.
 - Optional Antigravity CLI real-smoke reports cannot claim `separateAccountVerified:true` from text-only evidence. Release gate now requires structured `accountIdentityComparison` with non-empty, different Anti-Codex and MCP Antigravity account IDs.
+- Manager/report summaries show only sanitized identity-comparison status (`present`/`missing`/`distinct`), not raw account IDs.
 - Manager latest-report/support text now displays `antigravityCliRealSmoke` lane, making it clear Anti-Codex only handles model-text lane while MCP lane is externally managed.
 - Diagnostics now validates optional real-smoke summary for lane field consistency.
 - Anti-Codex-side account lane evidence is explicit in no-traffic profile-prepare/source-preflight/diagnostics reports: `accountLaneRole:"anticodex-model-text"`, `mcpAccountLaneManagedByAntiCodex:false`, and `mcpAccountLaneOwner:"external-antigravity-account-not-managed-here"`. MCP-side setup is external to this channel.

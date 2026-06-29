@@ -1283,6 +1283,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /antigravityCliRealSmoke lane:.*mcpManagedHere=/);
   assert.match(managerBridge, /antigravityCliRealSmoke lane:.*mcpOwner=/);
   assert.match(managerInject, /antigravityCliRealSmoke lane:.*mcpOwner=/);
+  assert.match(managerBridge, /antigravityCliRealSmoke identity: antiCodexId=/);
+  assert.match(managerInject, /antigravityCliRealSmoke identity: antiCodexId=/);
+  assert.match(managerBridge, /antigravityCliRealSmoke identity:.*distinct=/);
+  assert.match(managerInject, /antigravityCliRealSmoke identity:.*distinct=/);
   assert.match(managerBridge, /antigravityCliProfilePrepare: separateAccount=/);
   assert.match(managerInject, /antigravityCliProfilePrepare: separateAccount=/);
   assert.match(managerBridge, /antigravityCliProfilePrepare caveat:/);
@@ -2824,6 +2828,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /antigravityCliRealSmoke lane: role=/);
   assert.match(server, /antigravityCliRealSmoke lane:.*mcpManagedHere=/);
   assert.match(server, /antigravityCliRealSmoke lane:.*mcpOwner=/);
+  assert.match(server, /antigravityCliRealSmoke identity: antiCodexId=/);
+  assert.match(server, /antigravityCliRealSmoke identity:.*distinct=/);
   assert.match(server, /antigravityCliProfilePrepare: separateAccount=/);
   assert.match(server, /antigravityCliProfilePrepare caveat:/);
   assert.match(server, /connectorParityMissingSharedSample/);
@@ -13467,6 +13473,46 @@ test("summarize-anticodex-report real-smoke retains caveat and does not claim ve
     assert.equal(summary.antigravityCliRealSmokeEvidence.loginVerified, true, "loginVerified must be retained when separateAccountVerified=false");
     assert.equal(summary.antigravityCliRealSmokeEvidence.loginVerifiedMethod, "marker-match", "loginVerifiedMethod must be retained when separateAccountVerified=false");
     assert.equal(summary.antigravityCliRealSmokeEvidence.separateAccountVerificationReason, "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account", "separateAccountVerificationReason must be retained when separateAccountVerified=false");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("summarize-anticodex-report real-smoke sanitizes account identity comparison", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-cli-real-smoke-identity-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-real-smoke.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      coverageKind: "real-traffic",
+      strictWindowsAppDataIsolation: true,
+      profileSource: "saved-profile",
+      loginVerified: true,
+      loginVerifiedMethod: "marker-match",
+      separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
+      accountIdentityComparison: {
+        antiCodexAccountId: "anticodex-account-private-id",
+        mcpAccountId: "mcp-account-private-id",
+      },
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Real account comparison was explicitly approved.",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.deepEqual(summary.antigravityCliRealSmokeEvidence.accountIdentityComparison, {
+      antiCodexAccountIdPresent: true,
+      mcpAccountIdPresent: true,
+      accountIdsDiffer: true,
+    });
+    assert.doesNotMatch(result.stdout, /anticodex-account-private-id/);
+    assert.doesNotMatch(result.stdout, /mcp-account-private-id/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

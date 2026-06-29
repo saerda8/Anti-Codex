@@ -26,6 +26,17 @@ function asShortString(value, maxLength = 256) {
   return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
+function asAccountIdentityComparisonEvidence(value) {
+  if (!value || typeof value !== "object") return null;
+  const antiCodexAccountId = typeof value.antiCodexAccountId === "string" ? value.antiCodexAccountId.trim() : "";
+  const mcpAccountId = typeof value.mcpAccountId === "string" ? value.mcpAccountId.trim() : "";
+  return {
+    antiCodexAccountIdPresent: !!antiCodexAccountId,
+    mcpAccountIdPresent: !!mcpAccountId,
+    accountIdsDiffer: antiCodexAccountId && mcpAccountId ? antiCodexAccountId !== mcpAccountId : null,
+  };
+}
+
 function asRefreshRecoveryActions(value) {
   if (!Array.isArray(value)) return [];
   return value.map((action) => ({
@@ -698,6 +709,7 @@ const summary = {
     accountLaneRole: has(report, "accountLaneRole") ? asString(report.accountLaneRole) : null,
     mcpAccountLaneManagedByAntiCodex: boolField(report, "mcpAccountLaneManagedByAntiCodex"),
     mcpAccountLaneOwner: has(report, "mcpAccountLaneOwner") ? asString(report.mcpAccountLaneOwner) : null,
+    ...(asAccountIdentityComparisonEvidence(report.accountIdentityComparison) ? { accountIdentityComparison: asAccountIdentityComparisonEvidence(report.accountIdentityComparison) } : {}),
     separateAccountVerificationReason: has(report, "separateAccountVerificationReason") ? asString(report.separateAccountVerificationReason) : null,
     accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
     accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
