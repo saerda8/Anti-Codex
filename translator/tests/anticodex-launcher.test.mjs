@@ -11234,6 +11234,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optionalRealTrafficFailures/);
   assert.match(releaseGates, /sourceFingerprint/);
   assert.match(releaseGates, /refresh_features_source_snapshot_missing/);
+  assert.match(releaseGates, /refresh_features_source_snapshot_mismatch/);
   assert.match(releaseGates, /mcp_skills_source_snapshot_missing/);
   assert.match(releaseGates, /mcp_skills_source_snapshot_mismatch/);
   assert.match(releaseGates, /mcp_skills_changed_shared_skills/);
@@ -11495,6 +11496,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.localConnectors.includes("local_connector_get_post_tool_mismatch"));
   assert.ok(summary.semanticFailures.pluginCapabilities.includes("plugin_capabilities_local_connector_parity_changed_shared"));
   assert.ok(summary.semanticFailures.logDbGuard.includes("log_db_guard_trigger_missing"));
+  assert.ok(summary.semanticFailures.sourceSnapshotMismatch.refreshFeatures.includes("refresh_features_source_snapshot_mismatch"));
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch"));
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch"));
   assert.ok(summary.semanticFailures.installedRuntimeSync.includes("installed_runtime_hash_mismatch"));

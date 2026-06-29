@@ -1281,6 +1281,20 @@ function gateSatisfiedBeforeCrossSnapshotCheck(gate) {
     && (!Array.isArray(gate.semanticFailures) || gate.semanticFailures.length === 0);
 }
 
+function addSourceSnapshotMismatchFailures(gates, addFailure) {
+  const checkedGates = [
+    { id: "refreshFeatures", failure: "refresh_features_source_snapshot_mismatch" },
+    { id: "mcpSkills", failure: "mcp_skills_source_snapshot_mismatch" },
+    { id: "pluginCapabilities", failure: "plugin_capabilities_source_snapshot_mismatch" },
+  ]
+    .map((entry) => ({ ...entry, gate: gates.find((gate) => gate.id === entry.id) }))
+    .filter((entry) => gateSatisfiedBeforeCrossSnapshotCheck(entry.gate) && entry.gate.sourceFingerprint);
+  if (checkedGates.length !== 3) return;
+  const fingerprints = new Set(checkedGates.map((entry) => entry.gate.sourceFingerprint));
+  if (fingerprints.size <= 1) return;
+  for (const entry of checkedGates) addFailure(entry.id, entry.failure);
+}
+
 function writeTextAtomic(filePath, text) {
   const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   try {
@@ -3410,21 +3424,18 @@ if (args.has("--self-test")) {
       sourceSnapshot: { fingerprint: "stale-plugin-source", fileCount: 3, sourceMtimeMax: "2026-06-23T00:00:00.000Z" },
     });
     const crossSourceGates = gateDefinitions.map(summarizeGate);
-    const crossMcpGate = crossSourceGates.find((gate) => gate.id === "mcpSkills");
-    const crossPluginGate = crossSourceGates.find((gate) => gate.id === "pluginCapabilities");
-    if (gateSatisfiedBeforeCrossSnapshotCheck(crossMcpGate) && gateSatisfiedBeforeCrossSnapshotCheck(crossPluginGate) && crossMcpGate.sourceFingerprint && crossPluginGate.sourceFingerprint && crossMcpGate.sourceFingerprint !== crossPluginGate.sourceFingerprint) {
-      for (const [gate, failure] of [
-        [crossMcpGate, "mcp_skills_source_snapshot_mismatch"],
-        [crossPluginGate, "plugin_capabilities_source_snapshot_mismatch"],
-      ]) {
-        if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
-        gate.semanticFailures.push(failure);
-      }
-    }
+    addSourceSnapshotMismatchFailures(crossSourceGates, (gateId, failure) => {
+      const gate = crossSourceGates.find((item) => item.id === gateId);
+      if (!gate) return;
+      if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
+      if (!gate.semanticFailures.includes(failure)) gate.semanticFailures.push(failure);
+    });
     semanticFailures.sourceSnapshotMismatch = {
+      refreshFeatures: crossSourceGates.find((gate) => gate.id === "refreshFeatures")?.semanticFailures || [],
       mcpSkills: crossSourceGates.find((gate) => gate.id === "mcpSkills")?.semanticFailures || [],
       pluginCapabilities: crossSourceGates.find((gate) => gate.id === "pluginCapabilities")?.semanticFailures || [],
     };
+    if (!semanticFailures.sourceSnapshotMismatch.refreshFeatures.includes("refresh_features_source_snapshot_mismatch")) throw new Error("self-test failed: refresh-features source snapshot mismatch was not detected");
     if (!semanticFailures.sourceSnapshotMismatch.mcpSkills.includes("mcp_skills_source_snapshot_mismatch")) throw new Error("self-test failed: MCP/Skill source snapshot mismatch was not detected");
     if (!semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch")) throw new Error("self-test failed: plugin-capability source snapshot mismatch was not detected");
     writeFakeLatestReport("latest-plugin-capabilities.json", {
@@ -3448,15 +3459,12 @@ if (args.has("--self-test")) {
     if (offlinePluginGate?.offlineSnapshotEvidence?.connectorContentMatches !== true || offlinePluginGate?.offlineSnapshotEvidence?.appToolContentMatches !== true || offlinePluginGate?.offlineSnapshotEvidence?.refreshGateSatisfied !== true) {
       throw new Error("self-test failed: plugin offline snapshot evidence was not attached from refresh-features");
     }
-    if (gateSatisfiedBeforeCrossSnapshotCheck(offlineMcpGate) && gateSatisfiedBeforeCrossSnapshotCheck(offlinePluginGate) && offlineMcpGate.sourceFingerprint && offlinePluginGate.sourceFingerprint && offlineMcpGate.sourceFingerprint !== offlinePluginGate.sourceFingerprint) {
-      for (const [gate, failure] of [
-        [offlineMcpGate, "mcp_skills_source_snapshot_mismatch"],
-        [offlinePluginGate, "plugin_capabilities_source_snapshot_mismatch"],
-      ]) {
-        if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
-        gate.semanticFailures.push(failure);
-      }
-    }
+    addSourceSnapshotMismatchFailures(offlinePluginGates, (gateId, failure) => {
+      const gate = offlinePluginGates.find((item) => item.id === gateId);
+      if (!gate) return;
+      if (!Array.isArray(gate.semanticFailures)) gate.semanticFailures = [];
+      if (!gate.semanticFailures.includes(failure)) gate.semanticFailures.push(failure);
+    });
     if ((offlineMcpGate.semanticFailures || []).includes("mcp_skills_source_snapshot_mismatch")) {
       throw new Error("self-test failed: unsatisfied plugin report should not add source snapshot mismatch to MCP/Skill gate");
     }
@@ -3660,12 +3668,7 @@ function addSemanticFailure(gateId, failure) {
   gate.satisfied = gate.present && gate.parseable && gate.hashValid === true && gate.okField === true && gate.fresh === true && gate.semanticFailures.length === 0;
 }
 
-const mcpSkillGate = gates.find((gate) => gate.id === "mcpSkills");
-const pluginCapabilityGate = gates.find((gate) => gate.id === "pluginCapabilities");
-if (gateSatisfiedBeforeCrossSnapshotCheck(mcpSkillGate) && gateSatisfiedBeforeCrossSnapshotCheck(pluginCapabilityGate) && mcpSkillGate.sourceFingerprint && pluginCapabilityGate.sourceFingerprint && mcpSkillGate.sourceFingerprint !== pluginCapabilityGate.sourceFingerprint) {
-  addSemanticFailure("mcpSkills", "mcp_skills_source_snapshot_mismatch");
-  addSemanticFailure("pluginCapabilities", "plugin_capabilities_source_snapshot_mismatch");
-}
+addSourceSnapshotMismatchFailures(gates, addSemanticFailure);
 const requiredRelease = gates.filter((gate) => gate.requiredForRelease);
 const requiredShort = gates.filter((gate) => gate.requiredForShort);
 
