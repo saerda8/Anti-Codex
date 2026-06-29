@@ -56,6 +56,7 @@ const runtimeSyncFiles = [
   "scripts/start-anticodex-antigravity-cli-login.ps1",
   "scripts/start-anticodex-antigravity-cli-login-windows-user.ps1",
   "scripts/start-anticodex-second-antigravity-account-login.ps1",
+  "scripts/test-anticodex-second-account-login-entrypoint.ps1",
   "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-windows-user-readiness.ps1",
   "scripts/test-anticodex-antigravity-account-isolation-status.ps1",
@@ -134,6 +135,7 @@ const gateDefinitions = [
   { id: "antigravityCliWindowsUserReadiness", group: "no-traffic", file: "latest-antigravity-cli-windows-user-readiness.json", requiredForRelease: true, requireAntigravityCliWindowsUserReadinessSemantics: true },
   { id: "windowsUserAccountPrepare", group: "no-traffic", file: "latest-windows-user-account-prepare.json", requiredForRelease: true, requireWindowsUserAccountPrepareSemantics: true },
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
+  { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -1205,6 +1207,29 @@ function summarizeGate(definition) {
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("account_isolation_status_release_proof_claimed");
       if (!report.accountIsolationCaveat) semanticFailures.push("account_isolation_status_caveat_missing");
     }
+    if (definition.requireSecondAccountLoginEntrypointSemantics) {
+      if (report.reportName !== "second-antigravity-account-login-entrypoint") semanticFailures.push("second_account_entrypoint_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("second_account_entrypoint_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("second_account_entrypoint_used_real_traffic");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("second_account_entrypoint_requested_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("second_account_entrypoint_behavior_not_covered");
+      if (report.coverageKind !== "second-account-login-entrypoint-no-traffic") semanticFailures.push("second_account_entrypoint_coverage_kind");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("second_account_entrypoint_failures");
+      if (report.statusOnlyOk !== true) semanticFailures.push("second_account_entrypoint_status_only_not_ok");
+      if (report.missingApprovalBlocked !== true) semanticFailures.push("second_account_entrypoint_missing_approval_not_blocked");
+      if (report.approvedStartBlockedByStatusGate !== true) semanticFailures.push("second_account_entrypoint_status_gate_not_enforced");
+      if (report.requestedStartLogin !== false) semanticFailures.push("second_account_entrypoint_requested_start_login");
+      if (report.startedLogin !== false) semanticFailures.push("second_account_entrypoint_started_login");
+      if (report.capturesLoginOutput !== false) semanticFailures.push("second_account_entrypoint_captures_login_output");
+      if (report.requiredStartLoginApproval !== "start-separate-windows-user-login") semanticFailures.push("second_account_entrypoint_approval_token");
+      if (report.safeToStartLogin !== true && !report.readinessBlockingReason) semanticFailures.push("second_account_entrypoint_blocking_reason_missing");
+      if (!report.operatorBlockingStage) semanticFailures.push("second_account_entrypoint_operator_stage_missing");
+      if (!report.operatorNextStep) semanticFailures.push("second_account_entrypoint_operator_next_step_missing");
+      if (report.separateAccountVerified !== false) semanticFailures.push("second_account_entrypoint_separate_account_verified");
+      if (report.loginVerified !== false) semanticFailures.push("second_account_entrypoint_login_verified");
+      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("second_account_entrypoint_release_proof_claimed");
+      if (!report.accountIsolationCaveat) semanticFailures.push("second_account_entrypoint_caveat_missing");
+    }
     if (definition.requireModelRoutingSemantics) {
       const results = Array.isArray(report.results) ? report.results : [];
       if (report.skipRequests !== true) semanticFailures.push("model_routing_skip_requests_not_true");
@@ -1670,6 +1695,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["antigravityCliWindowsUserReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-windows-user-readiness.ps1"],
   ["windowsUserAccountPrepare", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1"],
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
+  ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -2676,6 +2702,33 @@ if (args.has("--self-test")) {
       accountIsolationCaveat: "",
     });
 
+    writeFakeLatestReport("latest-second-antigravity-account-login-entrypoint.json", {
+      ok: true,
+      reportName: "wrong-second-account-entrypoint",
+      noTraffic: false,
+      usedRealTraffic: true,
+      requestedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "wrong",
+      failures: ["should not be ignored"],
+      statusOnlyOk: false,
+      missingApprovalBlocked: false,
+      approvedStartBlockedByStatusGate: false,
+      requestedStartLogin: true,
+      startedLogin: true,
+      capturesLoginOutput: true,
+      safeToStartLogin: false,
+      requiredStartLoginApproval: "",
+      completionState: "ready_for_interactive_login",
+      readinessBlockingReason: "",
+      operatorBlockingStage: "",
+      operatorNextStep: "",
+      separateAccountVerified: true,
+      loginVerified: true,
+      releaseAcceptableAccountProof: true,
+      accountIsolationCaveat: "",
+    });
+
     const semanticFailures = {};
     semanticFailures.fastOverallNoTraffic = assertSemanticFailures("fastOverallNoTraffic", "self-test failed: semantically invalid fast installed-overall report satisfied the gate", [
       "installed_overall_report_name",
@@ -2826,6 +2879,29 @@ if (args.has("--self-test")) {
       "account_isolation_status_login_verified",
       "account_isolation_status_release_proof_claimed",
       "account_isolation_status_caveat_missing",
+    ]);
+    semanticFailures.secondAccountLoginEntrypoint = assertSemanticFailures("secondAccountLoginEntrypoint", "self-test failed: semantically invalid second-account login entrypoint report satisfied the gate", [
+      "second_account_entrypoint_report_name",
+      "second_account_entrypoint_no_traffic",
+      "second_account_entrypoint_used_real_traffic",
+      "second_account_entrypoint_requested_real_traffic",
+      "second_account_entrypoint_behavior_not_covered",
+      "second_account_entrypoint_coverage_kind",
+      "second_account_entrypoint_failures",
+      "second_account_entrypoint_status_only_not_ok",
+      "second_account_entrypoint_missing_approval_not_blocked",
+      "second_account_entrypoint_status_gate_not_enforced",
+      "second_account_entrypoint_requested_start_login",
+      "second_account_entrypoint_started_login",
+      "second_account_entrypoint_captures_login_output",
+      "second_account_entrypoint_approval_token",
+      "second_account_entrypoint_blocking_reason_missing",
+      "second_account_entrypoint_operator_stage_missing",
+      "second_account_entrypoint_operator_next_step_missing",
+      "second_account_entrypoint_separate_account_verified",
+      "second_account_entrypoint_login_verified",
+      "second_account_entrypoint_release_proof_claimed",
+      "second_account_entrypoint_caveat_missing",
     ]);
     semanticFailures.uiIdleStability = assertSemanticFailures("uiIdleStability", "self-test failed: semantically invalid ui-idle report satisfied the gate", [
       "ui_idle_duration",

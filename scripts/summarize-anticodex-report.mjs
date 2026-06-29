@@ -214,6 +214,7 @@ const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravi
 const isAntigravityCliWindowsUserReadinessReport = report?.reportName === "antigravity-cli-windows-user-readiness" || /latest-antigravity-cli-windows-user-readiness\.json$/i.test(path);
 const isWindowsUserAccountPrepareReport = report?.reportName === "windows-user-account-prepare" || /latest-windows-user-account-prepare\.json$/i.test(path);
 const isAntigravityAccountIsolationStatusReport = report?.reportName === "antigravity-account-isolation-status" || /latest-antigravity-account-isolation-status\.json$/i.test(path);
+const isSecondAccountLoginEntrypointReport = report?.reportName === "second-antigravity-account-login-entrypoint" || /latest-second-antigravity-account-login-entrypoint\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -867,6 +868,28 @@ const summary = {
     operatorNextStep: has(report, "operatorNextStep") ? asString(report.operatorNextStep) : null,
     nextProofRequiresInteractiveLogin: boolField(report, "nextProofRequiresInteractiveLogin"),
     nextProofRequiresRealTraffic: boolField(report, "nextProofRequiresRealTraffic"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    loginVerified: boolField(report, "loginVerified"),
+    releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+  } : null,
+  secondAccountLoginEntrypointEvidence: isSecondAccountLoginEntrypointReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    statusOnlyOk: boolField(report, "statusOnlyOk"),
+    missingApprovalBlocked: boolField(report, "missingApprovalBlocked"),
+    approvedStartBlockedByStatusGate: boolField(report, "approvedStartBlockedByStatusGate"),
+    requestedStartLogin: boolField(report, "requestedStartLogin"),
+    startedLogin: boolField(report, "startedLogin"),
+    capturesLoginOutput: boolField(report, "capturesLoginOutput"),
+    safeToStartLogin: boolField(report, "safeToStartLogin"),
+    requiredStartLoginApproval: has(report, "requiredStartLoginApproval") ? asString(report.requiredStartLoginApproval) : null,
+    completionState: has(report, "completionState") ? asString(report.completionState) : null,
+    readinessBlockingReason: has(report, "readinessBlockingReason") ? asString(report.readinessBlockingReason) : null,
+    operatorBlockingStage: has(report, "operatorBlockingStage") ? asString(report.operatorBlockingStage) : null,
+    operatorNextStep: has(report, "operatorNextStep") ? asString(report.operatorNextStep) : null,
     separateAccountVerified: boolField(report, "separateAccountVerified"),
     loginVerified: boolField(report, "loginVerified"),
     releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),

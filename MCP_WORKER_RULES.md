@@ -187,6 +187,14 @@ After every failure, before another dispatch:
 - Additional incident: accidental Kilo noop job `klw_mqzp9zo0_zh5gph` was started with no useful writable scope and failed without file changes. Treat this as a dispatch error by the main agent, not a model result.
 - Rule change: for required release gates, adding `gateDefinitions` entries alone is not enough. The patch must also add semantic validators, self-test invalid fixtures, ordered next actions, and static coverage before it is mergeable.
 
+### 2026-06-30 - Second-account login entrypoint worker comparison
+
+- Workers: Kilo `klw_mqzqukyd_mc04st` and MiMoCode `mcw_mqzquvei_ivzmxv` in isolated worktrees.
+- Task: add no-traffic report/static coverage for the second Antigravity account login operator entrypoint.
+- Result: Kilo ended as `caller_timeout_after_valid_changes` with two checks passing, but its draft made the operator entrypoint write the signed report directly. MiMoCode produced a two-file release-gate draft, but `node scripts\test-anticodex-release-gates.mjs --self-test` failed.
+- Cause classification: useful comparison, but schema/support-chain risk and failed worker validation.
+- Rule change: keep the operator entrypoint as the minimal start/status surface and put signed no-traffic behavior proof in a dedicated verifier report. Do not merge weaker release-gate semantics or worker diffs whose self-test fails.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`
