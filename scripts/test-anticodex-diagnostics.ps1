@@ -1210,6 +1210,7 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
             if ($sourcePreflightSummary.antigravityCliProfilePrepareOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare success" }
+            if ($sourcePreflightSummary.antigravityCliProfilePrepareRejectsDefaultChildOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare default-child rejection success" }
             $profilePrepareContract = $sourcePreflightSummary.antigravityCliProfilePrepareContract
             if (-not $profilePrepareContract) {
                 Add-Failure "source-preflight summary missing Antigravity CLI profile prepare contract"
@@ -2092,6 +2093,11 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "translatorRegressionOk")) { Add-Failure "diagnostics source preflight missing translator regression result" }
         if (-not (Has-Property $sourcePreflight "diffWhitespaceOk")) { Add-Failure "diagnostics source preflight missing diff whitespace result" }
         if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareOk")) { Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare result" }
+        if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareRejectsDefaultChildOk")) {
+            Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare default-child rejection result"
+        } elseif ($sourcePreflight.antigravityCliProfilePrepareRejectsDefaultChildOk -ne $true) {
+            Add-Failure "diagnostics source preflight Antigravity CLI profile prepare default-child rejection is not green"
+        }
         if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareContract")) {
             Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare contract"
         } elseif ($sourcePreflight.antigravityCliProfilePrepareContract) {

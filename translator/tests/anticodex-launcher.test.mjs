@@ -8514,6 +8514,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /source-preflight summary missing Antigravity CLI profile prepare contract/);
   assert.match(diagnostics, /source-preflight summary profile prepare claims separate account verified/);
   assert.match(diagnostics, /diagnostics source preflight missing Antigravity CLI profile prepare contract/);
+  assert.match(diagnostics, /antigravityCliProfilePrepareRejectsDefaultChildOk/);
+  assert.match(diagnostics, /default-child rejection/);
   assert.match(diagnostics, /diagnostics source preflight profile prepare claims separate account verified/);
   // Diagnostics reports-summary path must cover the independent latest-antigravity-cli-profile-prepare.json no-traffic caveat
   assert.match(diagnostics, /antigravityCliProfilePrepareEvidence/);
@@ -11513,6 +11515,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare/);
+  assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare_rejects_default_child/);
   assert.match(releaseGates, /source_preflight_profile_prepare_used_real_traffic/);
   assert.match(releaseGates, /source_preflight_profile_prepare_contract_missing/);
   assert.match(releaseGates, /source_preflight_profile_prepare_login_verified/);
@@ -11942,6 +11945,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_local_connector_verifier"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_isolation_profile"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_profile_prepare"));
+  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_profile_prepare_rejects_default_child"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_used_real_traffic"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContractMissing.includes("source_preflight_profile_prepare_contract_missing"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_login_verified"));
@@ -13058,6 +13062,11 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(preflight, /function Test-AntigravityCliProfilePrepare/);
   assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Test-AntigravityCliProfilePrepare/);
+  assert.match(preflight, /function Test-AntigravityCliProfilePrepareRejectsDefaultChild/);
+  assert.match(preflight, /checks\["antigravityCliProfilePrepareRejectsDefaultChild"\] = Test-AntigravityCliProfilePrepareRejectsDefaultChild/);
+  assert.match(preflight, /Antigravity\\anticodex-srcpreflight-bad-child-/);
+  assert.match(preflight, /known default Antigravity profile location/);
+  assert.match(preflight, /usedRealTraffic -eq \$false/);
   assert.match(preflight, /-NoSaveProfile/);
   assert.match(preflight, /anticodex-srcpreflight-state-/);
   assert.match(preflight, /anticodex-srcpreflight-report-/);

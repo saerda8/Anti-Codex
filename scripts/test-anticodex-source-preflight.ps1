@@ -345,6 +345,58 @@ function Test-AntigravityCliProfilePrepare {
     }
 }
 
+function Test-AntigravityCliProfilePrepareRejectsDefaultChild {
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\prepare-anticodex-antigravity-cli-profile.ps1"
+    $tempStateRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-badchild-state-" + [Guid]::NewGuid().ToString("N"))
+    $tempReportRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-badchild-report-" + [Guid]::NewGuid().ToString("N"))
+    $badChildProfile = Join-Path $env:APPDATA ("Antigravity\anticodex-srcpreflight-bad-child-" + [Guid]::NewGuid().ToString("N"))
+    try {
+        $result = Invoke-SourceProcess `
+            -Name "Antigravity CLI profile prepare (reject default child)" `
+            -FilePath $powershell `
+            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script,
+                "-StateRoot", $tempStateRoot,
+                "-ReportRoot", $tempReportRoot,
+                "-ProfileRoot", $badChildProfile,
+                "-NoSaveProfile") `
+            -TimeoutSec 30
+        $prepareJson = ($result.stdoutTail -join "`n")
+        $rejectedOk = $false
+        $usedRealTraffic = $null
+        $failureText = ""
+        if ($prepareJson) {
+            try {
+                $parsed = $prepareJson | ConvertFrom-Json
+                $usedRealTraffic = $parsed.usedRealTraffic
+                $failureText = (($parsed.failures | ForEach-Object { [string]$_ }) -join "`n")
+                $rejectedOk = $result.exitCode -ne 0 `
+                    -and $parsed.ok -eq $false `
+                    -and $parsed.usedRealTraffic -eq $false `
+                    -and $parsed.coverageKind -eq "profile-prepare-failed" `
+                    -and $failureText -match "known default Antigravity profile location"
+            } catch {
+                Add-Failure "Antigravity CLI profile prepare reject default child JSON parse failed"
+            }
+        }
+        if (-not $rejectedOk) {
+            Add-Failure "Antigravity CLI profile prepare did not reject default Antigravity child profile without real traffic"
+        }
+        return [pscustomobject]@{
+            ok = $rejectedOk
+            name = "Antigravity CLI profile prepare (reject default child)"
+            exitCode = $result.exitCode
+            timedOut = $result.timedOut
+            durationMs = $result.durationMs
+            profileRoot = $badChildProfile
+            usedRealTraffic = $usedRealTraffic
+            failureText = $failureText
+        }
+    } finally {
+        Remove-Item -LiteralPath $tempStateRoot, $tempReportRoot, $badChildProfile -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-LocalConnectorVerifier {
     $node = (Get-Command "node" -ErrorAction Stop).Source
     $script = Join-Path $SourceRoot "scripts\test-anticodex-local-connectors.mjs"
@@ -542,6 +594,7 @@ try {
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
     $checks["antigravityCliIsolationProfile"] = Test-AntigravityCliIsolationProfile
     $checks["antigravityCliProfilePrepare"] = Test-AntigravityCliProfilePrepare
+    $checks["antigravityCliProfilePrepareRejectsDefaultChild"] = Test-AntigravityCliProfilePrepareRejectsDefaultChild
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression

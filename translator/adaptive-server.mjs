@@ -1544,6 +1544,7 @@ function sourcePreflightSummary(report) {
             antigravityCliIsolationProfileOk: null,
             antigravityCliIsolationProfileContract: null,
             antigravityCliProfilePrepareOk: null,
+            antigravityCliProfilePrepareRejectsDefaultChildOk: null,
             antigravityCliProfilePrepareContract: null,
             localConnectorVerifierOk: null,
             publicDocumentationOk: null,
@@ -1608,6 +1609,7 @@ function sourcePreflightSummary(report) {
         antigravityCliIsolationProfileOk: checks.antigravityCliIsolationProfile?.ok === true,
         antigravityCliIsolationProfileContract: isolationContract,
         antigravityCliProfilePrepareOk: report.antigravityCliProfilePrepareOk === true && checks.antigravityCliProfilePrepare?.ok === true,
+        antigravityCliProfilePrepareRejectsDefaultChildOk: checks.antigravityCliProfilePrepareRejectsDefaultChild?.ok === true && checks.antigravityCliProfilePrepareRejectsDefaultChild?.usedRealTraffic === false,
         antigravityCliProfilePrepareContract: profilePrepareContract,
         localConnectorVerifierOk: checks.localConnectorVerifier?.ok === true,
         publicDocumentationOk: checks.publicDocumentation?.ok === true,
@@ -2998,6 +3000,7 @@ function latestManagerReportItem(label, fileName) {
                 accountIsolationCaveat: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountIsolationCaveat, ""),
             } : null,
             antigravityCliProfilePrepareOk: checks.antigravityCliProfilePrepare?.ok === true,
+            antigravityCliProfilePrepareRejectsDefaultChildOk: checks.antigravityCliProfilePrepareRejectsDefaultChild?.ok === true && checks.antigravityCliProfilePrepareRejectsDefaultChild?.usedRealTraffic === false,
             antigravityCliProfilePrepareContract: checks.antigravityCliProfilePrepare?.contract ? {
                 usedRealTraffic: checks.antigravityCliProfilePrepare.contract.usedRealTraffic === true,
                 loginVerified: checks.antigravityCliProfilePrepare.contract.loginVerified === true,
@@ -4082,7 +4085,7 @@ function latestReportsSummary(result){
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
     if(item.sourcePreflightEvidence){
       const evidence=item.sourcePreflightEvidence;
-      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / cliIsolation="+(evidence.antigravityCliIsolationProfileOk?"true":"false")+" / prepare="+(evidence.antigravityCliProfilePrepareOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false")+" / clientCopyDocs="+(evidence.publicDocumentationClientCopySyncContractOk?"true":"false"));
+      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / cliIsolation="+(evidence.antigravityCliIsolationProfileOk?"true":"false")+" / prepare="+(evidence.antigravityCliProfilePrepareOk?"true":"false")+" / rejectDefaultChild="+(evidence.antigravityCliProfilePrepareRejectsDefaultChildOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false")+" / clientCopyDocs="+(evidence.publicDocumentationClientCopySyncContractOk?"true":"false"));
       lines.push("  sourcePreflight: ui="+(evidence.uiStateSelfTestOk?"true":"false")+" / regression="+(evidence.translatorRegressionOk?"true":"false")+" / diff="+(evidence.diffWhitespaceOk?"true":"false")+" / skipFull="+(evidence.skipFullRegression?"true":"false"));
       if(evidence.antigravityCliIsolationProfileContract){
         const c=evidence.antigravityCliIsolationProfileContract;

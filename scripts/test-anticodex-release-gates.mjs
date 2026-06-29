@@ -1028,6 +1028,7 @@ function summarizeGate(definition) {
         if (!isolation.accountIsolationCaveat) semanticFailures.push("source_preflight_cli_isolation_caveat_missing");
       }
       if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
+      if (!checks.antigravityCliProfilePrepareRejectsDefaultChild || checks.antigravityCliProfilePrepareRejectsDefaultChild.ok !== true || checks.antigravityCliProfilePrepareRejectsDefaultChild.usedRealTraffic !== false) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare_rejects_default_child");
       if (!checks.antigravityCliProfilePrepare || !checks.antigravityCliProfilePrepare.contract) {
         semanticFailures.push("source_preflight_profile_prepare_contract_missing");
       } else {
@@ -3224,6 +3225,7 @@ if (args.has("--self-test")) {
       "source_preflight_upstream_profile_storage",
       "source_preflight_antigravity_cli_isolation_profile",
       "source_preflight_antigravity_cli_profile_prepare",
+      "source_preflight_antigravity_cli_profile_prepare_rejects_default_child",
       "source_preflight_local_connector_verifier",
       "source_preflight_public_documentation",
       "source_preflight_public_documentation_client_sync_contract",

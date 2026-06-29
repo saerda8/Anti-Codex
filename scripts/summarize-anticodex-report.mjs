@@ -433,6 +433,7 @@ const summary = {
     };
   })(),
   antigravityCliProfilePrepareOk: checkOk("antigravityCliProfilePrepare"),
+  antigravityCliProfilePrepareRejectsDefaultChildOk: checkOk("antigravityCliProfilePrepareRejectsDefaultChild"),
   antigravityCliProfilePrepareContract: (() => {
     const contract = checks.antigravityCliProfilePrepare && typeof checks.antigravityCliProfilePrepare === "object"
       ? checks.antigravityCliProfilePrepare.contract
