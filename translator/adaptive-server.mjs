@@ -3038,6 +3038,13 @@ function latestManagerReportItem(label, fileName) {
             readyForInteractiveLogin: report.readyForInteractiveLogin === true,
             readinessBlockingReason: shortSafeText(report.readinessBlockingReason || "", ""),
             recommendedOperatorAction: shortSafeText(report.recommendedOperatorAction || "", ""),
+            safeToAskUserForSecondAccountLogin: report.safeToAskUserForSecondAccountLogin === true,
+            blockedBeforeInteractiveLogin: report.blockedBeforeInteractiveLogin === true,
+            operatorBlockingStage: shortSafeText(report.operatorBlockingStage || "", ""),
+            operatorNextStep: shortSafeText(report.operatorNextStep || "", ""),
+            setupActionRequired: report.setupActionRequired === true,
+            canProceedToInteractiveLogin: report.canProceedToInteractiveLogin === true,
+            requiresUserPresence: report.requiresUserPresence === true,
             nextProofRequiresRealTraffic: report.nextProofRequiresRealTraffic === true,
             separateAccountVerified: report.separateAccountVerified === true,
             loginVerified: report.loginVerified === true,
@@ -4235,6 +4242,7 @@ function latestReportsSummary(result){
       const evidence=item.windowsUserAccountPrepareEvidence;
       lines.push("  windowsUserAccountPrepare: elevated="+(evidence.currentProcessElevated?"true":"false")+" / userExists="+(evidence.targetUserExists===true?"true":evidence.targetUserExists===false?"false":"unknown")+" / canCreate="+(evidence.canCreateTargetWindowsUser?"true":"false")+" / action="+(evidence.recommendedOperatorAction||"unknown"));
       lines.push("  windowsUserAccountPrepare guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
+      lines.push("  windowsUserAccountPrepare next: safeToAskLogin="+(evidence.safeToAskUserForSecondAccountLogin?"true":"false")+" / canProceedLogin="+(evidence.canProceedToInteractiveLogin?"true":"false")+" / blockedBeforeLogin="+(evidence.blockedBeforeInteractiveLogin?"true":"false")+" / stage="+(evidence.operatorBlockingStage||"unknown")+" / next="+(evidence.operatorNextStep||"unknown"));
       if(evidence.readinessBlockingReason) lines.push("  windowsUserAccountPrepare reason: "+evidence.readinessBlockingReason);
     }
     if(item.uiChatSmokeEvidence){

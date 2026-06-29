@@ -52,6 +52,17 @@ function Get-RecommendedOperatorAction {
     return "verify_windows_user_manually"
 }
 
+function Get-OperatorNextStep {
+    param([string]$RecommendedOperatorAction)
+    switch ($RecommendedOperatorAction) {
+        "run_interactive_login_with_explicit_user_approval" { return "run_windows_user_interactive_login_with_user_present" }
+        "choose_different_windows_user" { return "choose_separate_windows_user_then_rerun_prepare" }
+        "create_target_windows_user_with_explicit_user_approval" { return "create_target_windows_user_then_rerun_prepare" }
+        "open_elevated_windows_user_settings" { return "open_elevated_windows_user_settings_then_rerun_prepare" }
+        default { return "verify_windows_user_manually_then_rerun_prepare" }
+    }
+}
+
 function Save-PrepareReport {
     param($Report)
     $reportRootFull = [IO.Path]::GetFullPath($ReportRoot)
@@ -97,6 +108,20 @@ $recommendedOperatorAction = Get-RecommendedOperatorAction `
     -TargetUserIsCurrentUser $targetUserIsCurrentUser `
     -CurrentProcessElevated $currentProcessElevated `
     -ReadinessBlockingReason $readinessBlockingReason
+$safeToAskUserForSecondAccountLogin = ($readyForInteractiveLogin -eq $true)
+$blockedBeforeInteractiveLogin = -not $safeToAskUserForSecondAccountLogin
+$operatorBlockingStage = if ($safeToAskUserForSecondAccountLogin) {
+    "ready"
+} elseif ($targetUserIsCurrentUser) {
+    "target_user_is_current_user"
+} elseif ($targetUserExists -eq $false) {
+    "target_user_missing_blocked_before_login"
+} else {
+    "unknown_blocked_before_login"
+}
+$operatorNextStep = Get-OperatorNextStep -RecommendedOperatorAction $recommendedOperatorAction
+$setupActionRequired = $blockedBeforeInteractiveLogin
+$canProceedToInteractiveLogin = $safeToAskUserForSecondAccountLogin
 
 if ($targetUserExists -eq $false) { $warnings += "target_windows_user_missing" }
 if (-not $currentProcessElevated -and $targetUserExists -eq $false) { $warnings += "not_elevated_for_user_creation" }
@@ -130,6 +155,13 @@ $report = [ordered]@{
     readinessReport = if ($readiness) { [string]$readiness.report.latest } else { "" }
     readinessError = $readinessError
     recommendedOperatorAction = $recommendedOperatorAction
+    safeToAskUserForSecondAccountLogin = $safeToAskUserForSecondAccountLogin
+    blockedBeforeInteractiveLogin = $blockedBeforeInteractiveLogin
+    operatorBlockingStage = $operatorBlockingStage
+    operatorNextStep = $operatorNextStep
+    setupActionRequired = $setupActionRequired
+    canProceedToInteractiveLogin = $canProceedToInteractiveLogin
+    requiresUserPresence = $true
     nextProofRequiresInteractiveLogin = $readyForInteractiveLogin
     nextProofRequiresRealTraffic = $true
     separateAccountVerified = $false

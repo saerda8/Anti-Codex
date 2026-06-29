@@ -143,6 +143,14 @@ After every failure, before another dispatch:
 - Cause classification: useful partial worker direction, but support-surface coverage and naming were incomplete.
 - Rule change: account-boundary reports must keep one canonical report name and one support chain. Do not merge worker drafts that introduce parallel report names or update only the summarizer/script without diagnostics, Manager, installed-runtime inventory, and static launcher contracts.
 
+### 2026-06-30 - Windows-user operator-stage Kilo draft partially absorbed
+
+- Worker: Kilo `klw_mqzoj66x_skw9au` in isolated worktree `deepcodex-kilo-operator-stage`.
+- Task: add machine-readable login-blocking stage and next-step fields to the Windows-user account prepare report.
+- Result: `caller_timeout_after_valid_changes`; changed the prepare script, summarizer, and launcher test, with the focused test passing.
+- Cause classification: useful narrow suggestion with incomplete support-surface coverage.
+- Rule change: absorb useful field semantics such as `target_user_missing_blocked_before_login` and `canProceedToInteractiveLogin`, but keep mainline responsible for Manager bridge/inject/adaptive-server summaries and installed-runtime verification.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

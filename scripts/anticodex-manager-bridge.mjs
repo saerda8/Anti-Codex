@@ -532,6 +532,7 @@ function latestReportsSummary(result) {
       const evidence = item.windowsUserAccountPrepareEvidence;
       lines.push(`  windowsUserAccountPrepare: elevated=${evidence.currentProcessElevated ? "true" : "false"} / userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / canCreate=${evidence.canCreateTargetWindowsUser ? "true" : "false"} / action=${evidence.recommendedOperatorAction || "unknown"}`);
       lines.push(`  windowsUserAccountPrepare guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
+      lines.push(`  windowsUserAccountPrepare next: safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / canProceedLogin=${evidence.canProceedToInteractiveLogin ? "true" : "false"} / blockedBeforeLogin=${evidence.blockedBeforeInteractiveLogin ? "true" : "false"} / stage=${evidence.operatorBlockingStage || "unknown"} / next=${evidence.operatorNextStep || "unknown"}`);
       if (evidence.readinessBlockingReason) lines.push(`  windowsUserAccountPrepare reason: ${evidence.readinessBlockingReason}`);
     }
     if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
