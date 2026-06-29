@@ -148,6 +148,9 @@ try {
             stateRoot = $stateRootFull
             reportRoot = $reportRootFull
             preparationReport = (Get-PreparationReportEvidence -ExpectedProfileRoot "")
+            accountLaneRole = "anticodex-model-text"
+            mcpAccountLaneManagedByAntiCodex = $false
+            mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
             failures = @()
         }
         Write-Report -Report $report
@@ -243,6 +246,9 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         accountIsolationBoundary = "profile-and-appdata-only"
         accountIsolationCaveat = "If Antigravity CLI stores auth in the shared Windows credential store, real traffic can still use the currently signed-in account even with an isolated profileRoot."
         marker = if ($Prompt -eq "") { $marker } else { "" }
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
         failures = $failures.ToArray()
     }
     Write-Report -Report $report
@@ -261,6 +267,9 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         accountIsolationCaveat = "Failure path did not prove account identity or Windows credential-store isolation."
         behaviorCovered = $false
         coverageKind = if ($attemptedRealTraffic) { "real-traffic" } elseif (-not $AllowRealTraffic) { "skipped" } elseif (-not $profileRootFull) { "blocked-no-profile" } else { "blocked-not-isolated" }
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
         elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
         failures = $failures.ToArray()
     }

@@ -2992,6 +2992,22 @@ test("Anti-Codex ships a post-verification real-traffic verifier", () => {
   assert.doesNotMatch(script, /-NoTraffic/);
 });
 
+test("Anti-Codex optional Antigravity CLI real-smoke carries account lane boundary fields", () => {
+  const smoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
+  const gates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+
+  assert.match(smoke, /accountLaneRole\s*=\s*"anticodex-model-text"/);
+  assert.match(smoke, /mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/);
+  assert.match(smoke, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
+  assert.ok((smoke.match(/accountLaneRole\s*=\s*"anticodex-model-text"/g) || []).length >= 3);
+  assert.ok((smoke.match(/mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/g) || []).length >= 3);
+  assert.ok((smoke.match(/mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/g) || []).length >= 3);
+
+  assert.match(gates, /optional_antigravity_cli_real_smoke_account_lane_role/);
+  assert.match(gates, /optional_antigravity_cli_real_smoke_mcp_lane_managed_by_anticodex/);
+  assert.match(gates, /optional_antigravity_cli_real_smoke_mcp_lane_owner_mismatch/);
+});
+
 test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
 

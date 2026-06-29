@@ -895,6 +895,9 @@ function summarizeGate(definition) {
           }
           if (!report.accountIsolationBoundary) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_boundary_missing");
           if (!report.accountIsolationCaveat) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_caveat_missing");
+          if (report.accountLaneRole !== "anticodex-model-text") semanticFailures.push("optional_antigravity_cli_real_smoke_account_lane_role");
+          if (report.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("optional_antigravity_cli_real_smoke_mcp_lane_managed_by_anticodex");
+          if (report.mcpAccountLaneOwner !== "external-antigravity-account-not-managed-here") semanticFailures.push("optional_antigravity_cli_real_smoke_mcp_lane_owner_mismatch");
         }
       }
     }
@@ -3102,6 +3105,9 @@ if (args.has("--self-test")) {
       "optional_antigravity_cli_real_smoke_separate_account_verified_missing",
       "optional_antigravity_cli_real_smoke_isolation_boundary_missing",
       "optional_antigravity_cli_real_smoke_isolation_caveat_missing",
+      "optional_antigravity_cli_real_smoke_account_lane_role",
+      "optional_antigravity_cli_real_smoke_mcp_lane_managed_by_anticodex",
+      "optional_antigravity_cli_real_smoke_mcp_lane_owner_mismatch",
     ]);
     writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
       ok: true,
@@ -3115,6 +3121,9 @@ if (args.has("--self-test")) {
       profileRoot: "C:\\isolated-antigravity-cli",
       strictWindowsAppDataIsolation: true,
       separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Shared Windows credential store caveat.",
     });
@@ -3133,6 +3142,9 @@ if (args.has("--self-test")) {
       profileRoot: "C:\\isolated-antigravity-cli",
       strictWindowsAppDataIsolation: true,
       separateAccountVerified: false,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
       accountIdentityEvidence: "cli-profile-isolation-only",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Profile isolation only; not proof of a separate account.",
