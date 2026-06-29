@@ -10926,6 +10926,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);
   assert.match(releaseGates, /source_preflight_public_documentation/);
+  assert.match(releaseGates, /prepare-anticodex-antigravity-cli-profile\.ps1/);
   assert.match(releaseGates, /latest-antigravity-cli-real-smoke\.json/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_login_not_verified/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_strict_isolation_missing/);
@@ -11617,6 +11618,7 @@ test("optional and special latest reports stay visible without becoming release-
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const optionalReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*false[^}]*\}/g), (match) => match[1]))).sort();
   const specialReports = [
+    "latest-antigravity-cli-profile-prepare.json",
     "latest-diagnostics.json",
     "latest-release-gates.json",
     "latest-shortcut-repair.json",
@@ -11625,6 +11627,7 @@ test("optional and special latest reports stay visible without becoming release-
   ];
 
   assert.deepEqual(optionalReports, [
+    "latest-antigravity-cli-real-smoke.json",
     "latest-cold-relaunch.json",
     "latest-native-multi-tool-loop.json",
     "latest-native-tool-loop.json",
@@ -12303,6 +12306,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   const installer = readFileSync(resolve(root, "scripts", "install-deepcodex.ps1"), "utf8");
   const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
   const antigravityCliIsolation = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-isolation.ps1"), "utf8");
+  const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
@@ -12312,6 +12316,15 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliIsolation, /usedRealTraffic\s*=\s*\$false/);
   assert.match(antigravityCliIsolation, /loginVerified\s*=\s*\$false/);
   assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
+  assert.match(antigravityCliPrepare, /reportName = "antigravity-cli-profile-prepare"/);
+  assert.match(antigravityCliPrepare, /usedRealTraffic = \$false/);
+  assert.match(antigravityCliPrepare, /loginVerified = \$false/);
+  assert.match(antigravityCliPrepare, /separateAccountVerified = \$false/);
+  assert.match(antigravityCliPrepare, /shared Windows credential store/);
+  assert.match(antigravityCliPrepare, /profile-prepare-failed/);
+  assert.match(antigravityCliPrepare, /Invoke-AntigravityCli-Isolated\.ps1/);
+  assert.match(antigravityCliPrepare, /-StrictWindowsAppDataIsolation/);
+  assert.match(antigravityCliPrepare, /Do not use Antigravity Desktop or coworker/);
   assert.match(antigravityCliRealSmoke, /\[switch\]\$AllowRealTraffic/);
   assert.match(antigravityCliRealSmoke, /real Antigravity CLI traffic is opt-in/);
   assert.match(antigravityCliRealSmoke, /refusing to use the default account/);
@@ -12321,6 +12334,10 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /profileRoot matches a known default Antigravity profile location/);
   assert.match(antigravityCliRealSmoke, /runAntigravityTextTurn/);
   assert.match(antigravityCliRealSmoke, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
+  assert.match(antigravityCliRealSmoke, /latest-antigravity-cli-profile-prepare\.json/);
+  assert.match(antigravityCliRealSmoke, /profileMatched/);
+  assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
+  assert.match(antigravityCliRealSmoke, /Windows credential store/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
   assert.match(runtimeSync, /README_EN\.md/);

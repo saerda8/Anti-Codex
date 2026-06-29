@@ -409,6 +409,7 @@ $latestReports = @(
     "latest-missing-history.json",
     "latest-real-third-party-provider.json",
     "latest-provider-antigravity-return.json",
+    "latest-antigravity-cli-profile-prepare.json",
     "latest-antigravity-cli-real-smoke.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",

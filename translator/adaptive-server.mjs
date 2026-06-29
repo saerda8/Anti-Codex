@@ -3296,6 +3296,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("历史过期恢复", "latest-missing-history.json"),
         latestManagerReportItem("可选真实第三方", "latest-real-third-party-provider.json"),
         latestManagerReportItem("可选回切 Antigravity", "latest-provider-antigravity-return.json"),
+        latestManagerReportItem("独立 Antigravity CLI 准备", "latest-antigravity-cli-profile-prepare.json"),
         latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
     ];
     return {

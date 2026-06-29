@@ -703,6 +703,7 @@ function Test-ReportEncoding {
         "latest-cold-relaunch.json",
         "latest-real-third-party-provider.json",
         "latest-provider-antigravity-return.json",
+        "latest-antigravity-cli-profile-prepare.json",
         "latest-antigravity-cli-real-smoke.json",
         "latest-third-party-provider.json",
         "latest-missing-history.json",

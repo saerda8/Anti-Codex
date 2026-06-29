@@ -67,6 +67,39 @@ function Read-SavedAntigravityCliProfile {
     return $null
 }
 
+function Get-PreparationReportEvidence {
+    param([string]$ExpectedProfileRoot)
+
+    $latestPath = Join-Path (Resolve-ReportRoot) "latest-antigravity-cli-profile-prepare.json"
+    $evidence = [ordered]@{
+        present = $false
+        file = $latestPath
+        profileMatched = $false
+        strictWindowsAppDataIsolation = $false
+        noTraffic = $false
+        usedRealTraffic = $null
+        loginVerified = $null
+        error = ""
+    }
+    if (-not (Test-Path -LiteralPath $latestPath)) { return $evidence }
+
+    try {
+        $prepare = Get-Content -LiteralPath $latestPath -Raw | ConvertFrom-Json
+        $evidence.present = $true
+        $evidence.strictWindowsAppDataIsolation = ($prepare.strictWindowsAppDataIsolation -eq $true)
+        $evidence.noTraffic = ($prepare.noTraffic -eq $true)
+        $evidence.usedRealTraffic = ($prepare.usedRealTraffic -eq $true)
+        $evidence.loginVerified = ($prepare.loginVerified -eq $true)
+        if ($ExpectedProfileRoot -and [string]$prepare.profileRoot) {
+            $preparedRoot = [IO.Path]::GetFullPath([string]$prepare.profileRoot)
+            $evidence.profileMatched = ($preparedRoot -eq [IO.Path]::GetFullPath($ExpectedProfileRoot))
+        }
+    } catch {
+        $evidence.error = $_.Exception.Message
+    }
+    return $evidence
+}
+
 function Get-KnownDefaultAntigravityProfileRoots {
     $roots = New-Object System.Collections.Generic.List[string]
     if ($env:USERPROFILE) {
@@ -107,10 +140,14 @@ try {
             coveredBy = "test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-profile>"
             usedRealTraffic = $false
             loginVerified = $false
+            separateAccountVerified = $false
+            accountIsolationBoundary = "profile-and-appdata-only"
+            accountIsolationCaveat = "Skipped real traffic; no account identity or Windows credential-store isolation was verified."
             behaviorCovered = $false
             coverageKind = "skipped"
             stateRoot = $stateRootFull
             reportRoot = $reportRootFull
+            preparationReport = (Get-PreparationReportEvidence -ExpectedProfileRoot "")
             failures = @()
         }
         Write-Report -Report $report
@@ -143,6 +180,7 @@ try {
     if (-not $strictIsolation -and $savedCli -and $savedCli.strictWindowsAppDataIsolation -eq $true) {
         $strictIsolation = $true
     }
+    $preparationEvidence = Get-PreparationReportEvidence -ExpectedProfileRoot $profileRootFull
     if (-not $strictIsolation) {
         Add-Failure "strict Windows AppData isolation is required before real CLI smoke"
     }
@@ -198,7 +236,12 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         profileRoot = $profileRootFull
         profileSource = $profileSource
         strictWindowsAppDataIsolation = $strictIsolation
+        preparationReport = $preparationEvidence
         loginVerifiedMethod = if ($failures.Count -eq 0) { "marker-match" } else { "" }
+        separateAccountVerified = $false
+        separateAccountVerificationReason = "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account"
+        accountIsolationBoundary = "profile-and-appdata-only"
+        accountIsolationCaveat = "If Antigravity CLI stores auth in the shared Windows credential store, real traffic can still use the currently signed-in account even with an isolated profileRoot."
         marker = if ($Prompt -eq "") { $marker } else { "" }
         failures = $failures.ToArray()
     }
@@ -213,6 +256,9 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         requestedRealTraffic = [bool]$AllowRealTraffic
         usedRealTraffic = $attemptedRealTraffic
         loginVerified = $false
+        separateAccountVerified = $false
+        accountIsolationBoundary = "profile-and-appdata-only"
+        accountIsolationCaveat = "Failure path did not prove account identity or Windows credential-store isolation."
         behaviorCovered = $false
         coverageKind = if ($attemptedRealTraffic) { "real-traffic" } elseif (-not $AllowRealTraffic) { "skipped" } elseif (-not $profileRootFull) { "blocked-no-profile" } else { "blocked-not-isolated" }
         elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
