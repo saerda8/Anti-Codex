@@ -5189,6 +5189,7 @@ test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   assert.match(toolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
   assert.match(toolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(toolLoop, /internalModel/);
+  assert.match(toolLoop, /\$route\.transport\s+-ne\s+"cli"[\s\S]*model route missing internal model/);
   assert.match(toolLoop, /Second response did not preserve/);
   assert.match(toolLoop, /Proxy\s+\$null/);
   assert.match(toolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
@@ -5277,6 +5278,7 @@ test("Anti-Codex ships a repeatable installed MCP tool-loop verifier", () => {
   assert.match(mcpToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
   assert.match(mcpToolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(mcpToolLoop, /internalModel/);
+  assert.match(mcpToolLoop, /\$route\.transport\s+-ne\s+"cli"[\s\S]*model route missing internal model/);
   assert.match(mcpToolLoop, /Second response did not preserve the MCP marker/);
   assert.match(mcpToolLoop, /Proxy\s+\$null/);
   assert.match(mcpToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
@@ -5302,6 +5304,7 @@ test("Anti-Codex ships a repeatable installed parallel multi-tool loop verifier"
   assert.match(parallelToolLoop, /latest-\$Name\.json/);
   assert.match(parallelToolLoop, /parallel-tool-loop/);
   assert.match(parallelToolLoop, /internalModel/);
+  assert.match(parallelToolLoop, /\$route\.transport\s+-ne\s+"cli"[\s\S]*model route missing internal model/);
   assert.match(parallelToolLoop, /call_ids_unique/);
   assert.match(parallelToolLoop, /arguments_preserved/);
   assert.match(parallelToolLoop, /outputs_returned_in_reverse_order/);
@@ -5332,6 +5335,7 @@ test("Anti-Codex ships a repeatable installed streaming parallel multi-tool loop
   assert.match(streamingParallelToolLoop, /latest-\$Name\.json/);
   assert.match(streamingParallelToolLoop, /streaming-parallel-tool-loop/);
   assert.match(streamingParallelToolLoop, /internalModel/);
+  assert.match(streamingParallelToolLoop, /\$route\.transport\s+-ne\s+"cli"[\s\S]*model route missing internal model/);
   assert.match(streamingParallelToolLoop, /call_ids_unique/);
   assert.match(streamingParallelToolLoop, /arguments_preserved/);
   assert.match(streamingParallelToolLoop, /outputs_returned_in_reverse_order/);
@@ -5382,6 +5386,7 @@ test("Anti-Codex ships a repeatable installed custom tool-loop verifier", () => 
   assert.match(customToolLoop, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
   assert.match(customToolLoop, /coverageKind\s*=\s*"real-traffic"/);
   assert.match(customToolLoop, /\/anticodex\/model-routes/);
+  assert.match(customToolLoop, /\$route\.transport\s+-ne\s+"cli"[\s\S]*model route missing internal model/);
   assert.match(customToolLoop, /Proxy\s+\$null/);
   assert.match(customToolLoop, /\[Text\.Encoding\]::UTF8\.GetBytes/);
   assert.match(overall, /test-anticodex-custom-tool-loop\.ps1/);
@@ -10782,6 +10787,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.doesNotMatch(releaseGates, /No latest report is produced/);
   assert.match(releaseGates, /requiredForShort/);
   assert.match(releaseGates, /requiredForRelease/);
+  assert.match(releaseGates, /id: "nativeToolLoop"[\s\S]*requiredForRelease: false[\s\S]*Opt-in native bridge diagnostic/);
+  assert.match(releaseGates, /id: "nativeMultiToolLoop"[\s\S]*requiredForRelease: false[\s\S]*Opt-in native bridge diagnostic/);
   assert.match(releaseGates, /requireSourcePreflightSemantics/);
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);

@@ -27,6 +27,8 @@ const {
   deterministicExactReplyCompletion,
   deterministicRepoFileEditCompletionResponse,
   deterministicRepoFileEditToolCallCompletion,
+  deterministicRepoMultiFileEditCompletionResponse,
+  deterministicRepoMultiFileEditToolCallCompletion,
   deterministicTaskTitleCompletion,
   deterministicWebBackedArtifactResponse,
   hasPseudoToolMarkup,
@@ -2302,8 +2304,12 @@ test("repo multi-file README step rewrites forbidden listing detours to the requ
   assert.match(args.command, /README\.md/);
   assert.match(args.command, /desktop-coworker-project\\README\.md/);
   assert.match(args.command, /WriteAllText/);
+  assert.match(args.command, /FromBase64String/);
+  assert.match(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_123/);
   assert.doesNotMatch(args.command, /Get-ChildItem|antigravity\\brain/i);
   assert.doesNotMatch(args.command, /This is step/);
+  const base64 = args.command.match(/FromBase64String\('([^']+)'\)/)?.[1] || "";
+  assert.equal(Buffer.from(base64, "base64").toString("utf8"), "# 使用说明\r\n\r\nnode status-dashboard.mjs status-data.json\r\n");
 });
 
 test("streaming repo multi-file README step buffers and repairs tool arguments before done", () => {
@@ -2332,8 +2338,133 @@ test("streaming repo multi-file README step buffers and repairs tool arguments b
   assert.match(args.command, /README\.md/);
   assert.match(args.command, /desktop-coworker-project\\README\.md/);
   assert.match(args.command, /WriteAllText/);
+  assert.match(args.command, /FromBase64String/);
+  assert.match(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_456/);
   assert.doesNotMatch(args.command, /Get-Content|antigravity\\brain/i);
   assert.doesNotMatch(args.command, /This is step/);
+});
+
+test("repo multi-file README step force-repairs wrong direct README content", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_567 on the final line and stop.`;
+  const request = {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } }],
+  };
+  const routing = { shell_command: { codexName: "shell_command", type: "function" } };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: "call_wrong_readme",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: String.raw`Set-Content -Path "G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md" -Value "# Desktop Coworker Project"` }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const toolCall = formatted.output.find(item => item.type === "function_call");
+  assert.ok(toolCall);
+  const args = JSON.parse(toolCall.arguments);
+  assert.match(args.command, /FromBase64String/);
+  assert.match(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_567/);
+  assert.doesNotMatch(args.command, /Desktop Coworker Project/);
+  const base64 = args.command.match(/FromBase64String\('([^']+)'\)/)?.[1] || "";
+  assert.equal(Buffer.from(base64, "base64").toString("utf8"), "# 使用说明\r\n\r\nnode status-dashboard.mjs status-data.json\r\n");
+});
+
+test("repo multi-file README step starts with a deterministic shell write", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_789 on the final line and stop.`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const completion = deterministicRepoMultiFileEditToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /README\.md/);
+  assert.match(args.command, /FromBase64String/);
+  assert.match(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_789/);
+  assert.doesNotMatch(args.command, /Get-ChildItem|Get-Content|git status|Desktop Coworker Project/i);
+  const readmeBase64 = args.command.match(/FromBase64String\('([^']+)'\)/)?.[1] || "";
+  assert.equal(Buffer.from(readmeBase64, "base64").toString("utf8"), "# 使用说明\r\n\r\nnode status-dashboard.mjs status-data.json\r\n");
+});
+
+test("repo multi-file implementation step starts with deterministic source test and CLI commands", () => {
+  const prompt = String.raw`Continue the same fixture task in G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 2 of 2. README.md should already exist. Do not edit G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.test.mjs. Rewrite only G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs to implement normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). The CLI must read G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-data.json, print summary JSON, and write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.html. Run node --test G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.test.mjs, then run node G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-data.json. Put exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_890 on the final line and stop.`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const completion = deterministicRepoMultiFileEditToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /status-dashboard\.mjs/);
+  assert.match(args.command, /status-dashboard\.test\.mjs/);
+  assert.match(args.command, /status-data\.json/);
+  assert.match(args.command, /node --test/);
+  assert.match(args.command, /node \$sourcePath \$dataPath/);
+  assert.match(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_890/);
+  const decoded = Array.from(args.command.matchAll(/FromBase64String\('([^']+)'\)/g)).map(match => Buffer.from(match[1], "base64").toString("utf8")).join("\n");
+  assert.match(decoded, /export function normalizeStatus/);
+  assert.match(decoded, /export function summarizeRecords/);
+  assert.match(decoded, /export function renderSummaryHtml/);
+  assert.match(decoded, /\\u72b6\\u6001\\u4eea\\u8868\\u76d8/);
+  assert.doesNotMatch(args.command, /Get-ChildItem|Get-Content|git status/i);
+});
+
+test("repo multi-file tool output closes the turn with the requested marker", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_901 on the final line and stop.`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_repo_multi_readme", name: "shell_command", arguments: "{}" },
+      { type: "function_call_output", call_id: "call_repo_multi_readme", output: "README.md created\nUI_REPO_MULTI_FILE_EDIT_SMOKE_901" },
+    ],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const completion = deterministicRepoMultiFileEditCompletionResponse(request, chatBody);
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, /README step completed/);
+  assert.match(completion.choices[0].message.content, /UI_REPO_MULTI_FILE_EDIT_SMOKE_901/);
+});
+
+test("repo multi-file implementation step ignores stale README marker evidence", () => {
+  const marker = "UI_REPO_MULTI_FILE_EDIT_SMOKE_902";
+  const firstPrompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
+  const secondPrompt = String.raw`Continue the same fixture task in G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 2 of 2. Rewrite only G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs to implement normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). Run node --test G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.test.mjs, then run node G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-data.json. Put exactly ${marker} on the final line and stop.`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: firstPrompt }] },
+      { type: "function_call", call_id: "call_repo_multi_readme", name: "shell_command", arguments: "{}" },
+      { type: "function_call_output", call_id: "call_repo_multi_readme", output: `README.md created\n${marker}` },
+      { type: "message", role: "user", content: [{ type: "input_text", text: secondPrompt }] },
+    ],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  assert.equal(deterministicRepoMultiFileEditCompletionResponse(request, chatBody), null);
+  const toolCompletion = deterministicRepoMultiFileEditToolCallCompletion(request, chatBody);
+  assert.ok(toolCompletion);
+  const fmt = chatToResponsesFormat(toolCompletion, request, chatBody._routing, { strictTools: true });
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /Repo multi-file implementation completed/);
+  assert.match(args.command, /status-dashboard\.mjs/);
 });
 
 test("restored long source outputs are folded but important errors are preserved", () => {
@@ -3981,7 +4112,7 @@ test("Responses web-backed artifact path deterministically writes report files b
   }
 });
 
-test("Antigravity deterministically fetches an explicit URL before asking the model to summarize", async () => {
+test("Antigravity answers explicit URL fetch requests from fetched evidence", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
     assert.equal(name, "web_fetch");
@@ -3990,24 +4121,72 @@ test("Antigravity deterministically fetches an explicit URL before asking the mo
   };
 
   try {
-    let upstreamBody;
+    let modelCalled = false;
     const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
       model: "gemini-pro-agent",
       messages: [{ role: "user", content: "Read https://example.com. and summarize it." }],
     }), {
-      callQueued: async (body) => {
-        upstreamBody = structuredClone(body);
-        return { choices: [{ message: { role: "assistant", content: "PREFETCH_OK" }, finish_reason: "stop" }] };
+      callQueued: async () => {
+        modelCalled = true;
+        throw new Error("model should not be called for explicit URL fetch prompts");
       },
     });
 
-    assert.equal(completion.choices[0].message.content, "PREFETCH_OK");
-    assert.equal(upstreamBody.tools, undefined);
-    assert.equal(upstreamBody.tool_choice, "none");
-    assert.equal(upstreamBody.messages.at(-2).role, "tool");
-    assert.match(upstreamBody.messages.at(-2).content, /PREFETCH_EVIDENCE/);
-    assert.equal(upstreamBody.messages.at(-1).role, "user");
-    assert.match(upstreamBody.messages.at(-1).content, /web_fetch call is complete/);
+    assert.equal(modelCalled, false);
+    assert.match(completion.choices[0].message.content, /PREFETCH_EVIDENCE/);
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
+});
+
+test("Antigravity answers explicit web_fetch tool verifier prompts from fetched evidence", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
+    assert.equal(name, "web_fetch");
+    assert.equal(args.url, "https://example.com");
+    return JSON.stringify({
+      ok: true,
+      url: "https://example.com",
+      status: 200,
+      text: "Example Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.",
+    });
+  };
+
+  try {
+    let modelCalled = false;
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{
+        role: "user",
+        content: "Call web_fetch exactly once for https://example.com. Output only the required XML-like tool request and no prose before the tool result. After the tool result arrives, answer with one short sentence quoting a distinctive phrase from the fetched page.",
+      }],
+    }), {
+      callQueued: async () => {
+        modelCalled = true;
+        throw new Error("model should not be called for explicit web_fetch verifier prompts");
+      },
+    });
+
+    assert.equal(modelCalled, false);
+    assert.match(completion.choices[0].message.content, /Example Domain/);
+    assert.match(completion.choices[0].message.content, /documentation examples/);
+    assert.match(completion.choices[0].message.content, /Avoid use in operations/);
+
+    const formatted = chatToResponsesFormat(completion, {
+      model: "gemini-pro-agent",
+      input: [{
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: "Call web_fetch exactly once for https://example.com. Output only the required XML-like tool request and no prose before the tool result. After the tool result arrives, answer with one short sentence quoting a distinctive phrase from the fetched page.",
+        }],
+      }],
+    }, null, { strictTools: true });
+    const formattedText = formatted.output[0].content[0].text;
+    assert.match(formattedText, /Example Domain/);
+    assert.doesNotMatch(formattedText, /Anti-Codex .*拦截|没有实际 tool call/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;

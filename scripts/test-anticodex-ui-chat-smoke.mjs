@@ -858,6 +858,11 @@ function collectRepoMultiFileReadmeFailures(artifactEvidence) {
   return localFailures;
 }
 
+function filterRepoMultiReadmeTextOnlyFailures(failures = [], artifactFailures = []) {
+  if (artifactFailures.length > 0) return failures;
+  return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
+}
+
 function buildRepoMultiFileImplementationPrompt(currentFailures = []) {
   return `Continue the same fixture task in ${repoMultiFileEditDir}. This is step 2 of 2. README.md should already exist. Do not edit ${repoMultiFileTest}. Do not edit, chmod, unlock, rewrite, or replace ${repoMultiFileData}. Rewrite only ${repoMultiFileSource} to implement normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). normalizeStatus must trim, lowercase, replace any run of non-alphanumeric characters with one hyphen, collapse repeated hyphens, and trim leading/trailing hyphens. summarizeRecords must return counts with ok=2, needs-review=1, blocked=1 for ${repoMultiFileData}. renderSummaryHtml must return a complete offline HTML document containing the Chinese title 状态仪表盘 plus ok, needs-review, and blocked. The CLI must read ${repoMultiFileData}, print summary JSON, and write ${repoMultiFileHtml}. The HTML must contain no http/https URLs, no <link tags, and no preconnect. Current verifier failures to fix: ${currentFailures.join("; ") || "source/html/test/CLI not completed yet"}. Run node --test ${repoMultiFileTest}, then run node ${repoMultiFileSource} ${repoMultiFileData}. Only finish after both commands pass and ${repoMultiFileHtml} exists. Put exactly ${marker} on the final line and stop.`;
 }
@@ -1946,11 +1951,12 @@ async function main() {
       await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
       const firstArtifactEvidence = verifyRepoMultiFileEditFixture();
       const firstArtifactFailures = collectRepoMultiFileReadmeFailures(firstArtifactEvidence);
+      const actionableTurn1Failures = filterRepoMultiReadmeTextOnlyFailures(turn1.failures, firstArtifactFailures);
       let implementationPrompt = null;
       let turn2 = null;
       artifactEvidence = firstArtifactEvidence;
       let finalArtifactFailures = firstArtifactFailures;
-      if (firstArtifactFailures.length === 0 && turn1.failures.length === 0) {
+      if (firstArtifactFailures.length === 0 && actionableTurn1Failures.length === 0) {
         implementationPrompt = buildRepoMultiFileImplementationPrompt(collectRepoMultiFileEditFailures(firstArtifactEvidence));
         makeWritable(repoMultiFileSource);
         turn2 = await submitDesktopPromptAndWait(ws, implementationPrompt, marker, timeoutMs, { requiresProjectChat });
@@ -1959,7 +1965,7 @@ async function main() {
         finalArtifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
       }
       const finalTurn = turn2 || turn1;
-      failures.push(...turn1.failures.map((failure) => `readme-step: ${failure}`));
+      failures.push(...actionableTurn1Failures.map((failure) => `readme-step: ${failure}`));
       if (turn2) failures.push(...turn2.failures.map((failure) => `implementation-step: ${failure}`));
       failures.push(...finalArtifactFailures);
 

@@ -158,7 +158,7 @@ function Assert-Route {
         if ($ResponseId -and $matchMode -eq "latest") {
             Add-Failure "$Stage model route: no matching entry for requestId=$ResponseId and no route for expected model=$ExpectedModel"
         }
-        if (-not [string]$route.internalModel) {
+        if ([string]$route.transport -ne "cli" -and -not [string]$route.internalModel) {
             Add-Failure "$Stage model route missing internal model"
         }
         if (-not [string]$route.cascadeId) {

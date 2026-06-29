@@ -30,7 +30,7 @@ export function isAntigravityAccountVerificationRequired(error) {
 export function shouldRetryAntigravityFailure(error) {
   const message = String(error?.message ?? error ?? "");
   if (isAntigravityAccountVerificationRequired(error)) return false;
-  return /(?:ECONNRESET|ECONNREFUSED|EPIPE|connection reset|connection refused|connection (?:closed|terminated)|socket hang up|socket closed|fetch failed|ETIMEDOUT|Desktop is not ready|language server panic|network error|proxy error|upstream connect error|temporarily unavailable|service unavailable|operation was aborted|request was aborted|Failed to generate plan|\bUNAVAILABLE\b|\bDEADLINE_EXCEEDED\b|\bEOF\b|\b(?:500|502|503|504)\b)/i.test(message);
+  return /(?:ECONNRESET|ECONNREFUSED|EPIPE|connection reset|connection refused|connection (?:closed|terminated)|socket hang up|socket closed|fetch failed|ETIMEDOUT|Desktop is not ready|language server panic|network error|proxy error|upstream connect error|temporarily unavailable|service unavailable|operation was aborted|request was aborted|Failed to generate plan|without a conversation id|without a readable assistant response|\bUNAVAILABLE\b|\bDEADLINE_EXCEEDED\b|\bEOF\b|\b(?:500|502|503|504)\b)/i.test(message);
 }
 
 function shouldFallbackNativeToolBridge(error) {
@@ -242,12 +242,13 @@ export async function callAntigravityUpstream(chatBody, options = {}) {
     }
   }
   if (typeof options.onModelRouted === "function") {
+    const resolvedModel = result.model ?? antigravityModelFor(chatBody?.model);
     options.onModelRouted({
       requestId: completionId,
       transport,
       requestedModel: chatBody?.model,
-      resolvedModel: result.model,
-      displayName: normalizeAntigravityDisplayName(result.model, result.displayName),
+      resolvedModel,
+      displayName: normalizeAntigravityDisplayName(resolvedModel, result.displayName),
       internalModel: result.internalModel,
       cascadeId: result.cascadeId ?? result.conversationId,
       status: "success",
@@ -588,6 +589,7 @@ function retryReason(error) {
   if (/proxy/i.test(message)) return "proxy";
   if (/Desktop is not ready|language server panic/i.test(message)) return "desktop_service";
   if (/ETIMEDOUT|DEADLINE_EXCEEDED|timeout/i.test(message)) return "timeout";
+  if (/without a conversation id|without a readable assistant response/i.test(message)) return "empty_cli_result";
   if (/ECONNRESET|ECONNREFUSED|EPIPE|connection|socket|fetch failed|network error/i.test(message)) return "connection";
   if (/\b(?:502|503|504)\b|UNAVAILABLE|service unavailable|upstream connect error/i.test(message)) return "gateway";
   if (/Failed to generate plan/i.test(message)) return "plan_generation";

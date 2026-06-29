@@ -118,7 +118,7 @@ function Assert-Route {
         if ([string]$route.resolvedModel -ne $ExpectedModel) {
             Add-Failure "$Stage model route mismatch: selected=$ExpectedModel resolved=$($route.resolvedModel)"
         }
-        if (-not [string]$route.internalModel) {
+        if ([string]$route.transport -ne "cli" -and -not [string]$route.internalModel) {
             Add-Failure "$Stage model route missing internal model"
         }
         if (-not [string]$route.cascadeId) {

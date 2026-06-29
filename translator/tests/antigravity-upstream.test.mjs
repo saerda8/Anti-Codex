@@ -538,6 +538,11 @@ test("shouldRetryAntigravityFailure recognizes new transient network patterns", 
   assert.equal(shouldRetryAntigravityFailure(new Error('model unreachable: Post "https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse": EOF')), true);
 });
 
+test("shouldRetryAntigravityFailure recognizes empty CLI result transients", () => {
+  assert.equal(shouldRetryAntigravityFailure(new Error("Antigravity CLI completed without a conversation id.")), true);
+  assert.equal(shouldRetryAntigravityFailure(new Error("Antigravity completed without a readable assistant response.")), true);
+});
+
 test("shouldRetryAntigravityFailure does not treat quota, auth, or model errors as retryable", () => {
   assert.equal(shouldRetryAntigravityFailure(new Error("model quota exceeded")), false);
   assert.equal(shouldRetryAntigravityFailure(new Error("authentication failed")), false);
@@ -661,6 +666,29 @@ test("callAntigravityUpstream reports resolved model route metadata", async () =
   assert.equal(route.displayName, "Gemini 3.1 Pro (Low)");
   assert.equal(route.internalModel, "MODEL_PLACEHOLDER_M31");
   assert.equal(route.cascadeId, "cascade_route_1");
+});
+
+test("callAntigravityUpstream falls back to the selected model for CLI route audits", async () => {
+  let route = null;
+  const completion = await callAntigravityUpstream({
+    model: "gemini-3.5-flash-low",
+    messages: [{ role: "user", content: "hello" }],
+  }, {
+    responseId: "route-cli-fallback-id",
+    onModelRouted: (entry) => { route = entry; },
+    runTurn: async () => ({
+      conversationId: "cli-route-fallback-conversation",
+      text: "cli ok",
+    }),
+  });
+
+  assert.equal(completion.id, "route-cli-fallback-id");
+  assert.equal(route.transport, "cli");
+  assert.equal(route.requestedModel, "gemini-3.5-flash-low");
+  assert.equal(route.resolvedModel, "gemini-3.5-flash-low");
+  assert.equal(route.displayName, "gemini-3.5-flash-low (Low)");
+  assert.equal(route.internalModel, undefined);
+  assert.equal(route.cascadeId, "cli-route-fallback-conversation");
 });
 
 test("callAntigravityUpstream does not auto-switch long CLI prompts to desktop Cascade", async () => {
@@ -798,6 +826,34 @@ test("callAntigravityUpstream retries on transient error and succeeds if not abo
 
   assert.equal(callCount, 2);
   assert.equal(completion.choices[0].message.content, "success response");
+});
+
+test("callAntigravityUpstream retries empty CLI result failures", async () => {
+  const failures = [
+    "Antigravity CLI completed without a conversation id.",
+    "Antigravity completed without a readable assistant response.",
+  ];
+
+  for (const message of failures) {
+    let callCount = 0;
+    const retries = [];
+    const completion = await callAntigravityUpstream(
+      { messages: [{ role: "user", content: "hello" }] },
+      {
+        runTurn: async () => {
+          callCount++;
+          if (callCount === 1) throw new Error(message);
+          return { text: "recovered response", conversationId: "conv_retry_ok" };
+        },
+        retryDelayMs: 1,
+        onRetry: (retry) => retries.push(retry),
+      },
+    );
+
+    assert.equal(callCount, 2);
+    assert.equal(retries[0]?.reason, "empty_cli_result");
+    assert.equal(completion.choices[0].message.content, "recovered response");
+  }
 });
 
 test("callAntigravityUpstream retries up to three total attempts with backoff", async () => {
