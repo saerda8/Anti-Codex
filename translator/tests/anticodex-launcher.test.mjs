@@ -12999,13 +12999,22 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   const antigravityCliIsolation = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-isolation.ps1"), "utf8");
   const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
   assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
   assert.match(preflight, /test-anticodex-antigravity-cli-isolation\.ps1/);
   assert.match(preflight, /checks\["antigravityCliIsolationProfile"\]/);
+  assert.match(preflight, /Antigravity CLI isolation profile contract not satisfied/);
+  assert.match(preflight, /contract = \$isolationContract/);
   assert.match(antigravityCliIsolation, /usedRealTraffic\s*=\s*\$false/);
   assert.match(antigravityCliIsolation, /loginVerified\s*=\s*\$false/);
+  assert.match(antigravityCliIsolation, /separateAccountVerified\s*=\s*\$false/);
+  assert.match(antigravityCliIsolation, /accountLaneRole\s*=\s*"anticodex-model-text"/);
+  assert.match(antigravityCliIsolation, /mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/);
+  assert.match(antigravityCliIsolation, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
+  assert.match(antigravityCliIsolation, /profile-and-appdata-only/);
+  assert.match(antigravityCliIsolation, /does not prove a separate Antigravity account/);
   assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
   assert.match(antigravityCliPrepare, /reportName = "antigravity-cli-profile-prepare"/);
   assert.match(antigravityCliPrepare, /usedRealTraffic = \$false/);
@@ -13041,6 +13050,10 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(preflight, /separateAccountVerified.*\$false/);
   assert.match(preflight, /profile-prepared-no-traffic/);
   assert.match(preflight, /antigravityCliProfilePrepareOk/);
+  assert.match(releaseGates, /source_preflight_cli_isolation_account_lane_role/);
+  assert.match(releaseGates, /source_preflight_cli_isolation_mcp_lane_managed_by_anticodex/);
+  assert.match(releaseGates, /source_preflight_cli_isolation_mcp_lane_owner_mismatch/);
+  assert.match(releaseGates, /source_preflight_cli_isolation_caveat_missing/);
   assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
   assert.match(runtimeSync, /README_EN\.md/);
   assert.match(runtimeSync, /docs\\ADAPTIVE_ONE_API_STACK\.md/);

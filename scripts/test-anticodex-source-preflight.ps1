@@ -202,8 +202,64 @@ function Test-AntigravityCliIsolationProfile {
         -FilePath $powershell `
         -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script, "-ReportRoot", $ReportRoot) `
         -TimeoutSec 30
+    $isolationJson = ($result.stdoutTail -join "`n")
+    $isolationOk = $false
+    $isolationContract = [ordered]@{
+        ok = $false
+        usedRealTraffic = $false
+        loginVerified = $false
+        separateAccountVerified = $false
+        accountLaneRole = ""
+        mcpAccountLaneManagedByAntiCodex = $true
+        mcpAccountLaneOwner = ""
+        accountIsolationBoundary = ""
+        accountIsolationCaveat = ""
+    }
+    if ($result.ok -and $isolationJson) {
+        try {
+            $parsed = $isolationJson | ConvertFrom-Json
+            $isolationContract.ok = [bool]$parsed.ok
+            $isolationContract.usedRealTraffic = [bool]$parsed.usedRealTraffic
+            $isolationContract.loginVerified = [bool]$parsed.loginVerified
+            $isolationContract.separateAccountVerified = [bool]$parsed.separateAccountVerified
+            $isolationContract.accountLaneRole = [string]$parsed.accountLaneRole
+            $isolationContract.mcpAccountLaneManagedByAntiCodex = [bool]$parsed.mcpAccountLaneManagedByAntiCodex
+            $isolationContract.mcpAccountLaneOwner = [string]$parsed.mcpAccountLaneOwner
+            $isolationContract.accountIsolationBoundary = [string]$parsed.accountIsolationBoundary
+            $isolationContract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
+            $isolationOk = $parsed.ok -eq $true `
+                -and $parsed.usedRealTraffic -eq $false `
+                -and $parsed.loginVerified -eq $false `
+                -and $parsed.separateAccountVerified -eq $false `
+                -and $parsed.accountLaneRole -eq "anticodex-model-text" `
+                -and $parsed.mcpAccountLaneManagedByAntiCodex -eq $false `
+                -and $parsed.mcpAccountLaneOwner -eq "external-antigravity-account-not-managed-here" `
+                -and $parsed.accountIsolationBoundary `
+                -and $parsed.accountIsolationCaveat
+        } catch {
+            Add-Failure "Antigravity CLI isolation profile JSON parse failed"
+        }
+    }
+    if (-not $isolationOk -and $result.ok) {
+        Add-Failure "Antigravity CLI isolation profile contract not satisfied"
+    }
     if (-not $result.ok) { Add-Failure "Antigravity CLI isolation profile test failed" }
-    return $result
+    return [pscustomobject]@{
+        ok = $isolationOk
+        name = "Antigravity CLI isolation profile"
+        exitCode = $result.exitCode
+        timedOut = $result.timedOut
+        durationMs = $result.durationMs
+        usedRealTraffic = $false
+        loginVerified = $false
+        separateAccountVerified = $false
+        accountLaneRole = $isolationContract.accountLaneRole
+        mcpAccountLaneManagedByAntiCodex = $isolationContract.mcpAccountLaneManagedByAntiCodex
+        mcpAccountLaneOwner = $isolationContract.mcpAccountLaneOwner
+        accountIsolationBoundary = $isolationContract.accountIsolationBoundary
+        accountIsolationCaveat = $isolationContract.accountIsolationCaveat
+        contract = $isolationContract
+    }
 }
 
 function Test-AntigravityCliProfilePrepare {

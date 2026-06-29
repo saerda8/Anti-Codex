@@ -1016,6 +1016,17 @@ function summarizeGate(definition) {
       if (!checks.uiStateSelfTest || checks.uiStateSelfTest.ok !== true) semanticFailures.push("source_preflight_ui_state_self_test");
       if (!checks.upstreamProfileStorage || checks.upstreamProfileStorage.ok !== true) semanticFailures.push("source_preflight_upstream_profile_storage");
       if (!checks.antigravityCliIsolationProfile || checks.antigravityCliIsolationProfile.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_isolation_profile");
+      if (checks.antigravityCliIsolationProfile && checks.antigravityCliIsolationProfile.ok === true) {
+        const isolation = checks.antigravityCliIsolationProfile;
+        if (isolation.usedRealTraffic !== false) semanticFailures.push("source_preflight_cli_isolation_used_real_traffic");
+        if (isolation.loginVerified !== false) semanticFailures.push("source_preflight_cli_isolation_login_verified");
+        if (isolation.separateAccountVerified !== false) semanticFailures.push("source_preflight_cli_isolation_separate_account_verified");
+        if (isolation.accountLaneRole !== "anticodex-model-text") semanticFailures.push("source_preflight_cli_isolation_account_lane_role");
+        if (isolation.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("source_preflight_cli_isolation_mcp_lane_managed_by_anticodex");
+        if (isolation.mcpAccountLaneOwner !== "external-antigravity-account-not-managed-here") semanticFailures.push("source_preflight_cli_isolation_mcp_lane_owner_mismatch");
+        if (!isolation.accountIsolationBoundary) semanticFailures.push("source_preflight_cli_isolation_boundary_missing");
+        if (!isolation.accountIsolationCaveat) semanticFailures.push("source_preflight_cli_isolation_caveat_missing");
+      }
       if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
       if (!checks.antigravityCliProfilePrepare || !checks.antigravityCliProfilePrepare.contract) {
         semanticFailures.push("source_preflight_profile_prepare_contract_missing");

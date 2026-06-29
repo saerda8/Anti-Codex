@@ -117,6 +117,12 @@ console.log(JSON.stringify(env));
         elapsedMs = $elapsedMs
         usedRealTraffic = $false
         loginVerified = $false
+        separateAccountVerified = $false
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
+        accountIsolationBoundary = "profile-and-appdata-only"
+        accountIsolationCaveat = "This verifies isolated CLI file and AppData paths only; it does not prove a separate Antigravity account or Windows credential-store isolation."
         loginVerificationReason = "profile-and-environment verifier only; does not launch Antigravity CLI or claim account authorization"
         stateRoot = $stateRootFull
         profileRoot = $profileRootFull
@@ -152,6 +158,12 @@ console.log(JSON.stringify(env));
         elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
         usedRealTraffic = $false
         loginVerified = $false
+        separateAccountVerified = $false
+        accountLaneRole = "anticodex-model-text"
+        mcpAccountLaneManagedByAntiCodex = $false
+        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
+        accountIsolationBoundary = "profile-and-appdata-only"
+        accountIsolationCaveat = "Failure path did not prove account identity or Windows credential-store isolation."
         failures = $failures.ToArray()
     }
     $result | ConvertTo-Json -Depth 20 -Compress
