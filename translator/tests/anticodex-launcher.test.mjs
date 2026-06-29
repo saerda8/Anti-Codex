@@ -8084,6 +8084,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /uiStateSelfTestOk/);
   assert.match(diagnostics, /upstreamProfileStorageOk/);
   assert.match(diagnostics, /antigravityCliIsolationProfileOk/);
+  assert.match(diagnostics, /antigravityCliProfilePrepareOk/);
   assert.match(diagnostics, /localConnectorVerifierOk/);
   assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /translatorRegressionOk/);
