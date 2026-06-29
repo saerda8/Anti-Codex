@@ -699,11 +699,11 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v96/);
+  assert.match(managerInject, /native-panel-v97/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
   assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
-  assert.match(syncReadiness, /native-panel-v96/);
-  assert.match(uiState, /native-panel-v96/);
+  assert.match(syncReadiness, /native-panel-v97/);
+  assert.match(uiState, /native-panel-v97/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -957,9 +957,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v96["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v96"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v96"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v97["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v97"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v97"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -1269,6 +1269,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /logDbGuardEvidence/);
   assert.match(managerBridge, /logDbGuard: protected=/);
   assert.match(managerInject, /logDbGuard: protected=/);
+  assert.match(managerBridge, /antigravityCliRealSmoke: login=/);
+  assert.match(managerInject, /antigravityCliRealSmoke: login=/);
+  assert.match(managerBridge, /antigravityCliRealSmoke caveat:/);
+  assert.match(managerInject, /antigravityCliRealSmoke caveat:/);
   assert.match(managerBridge, /parity drift: connectorMissing=/);
   assert.match(managerInject, /parity drift: connectorMissing=/);
   assert.match(managerBridge, /connectorExtra=/);
@@ -1370,7 +1374,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v96/);
+  assert.match(managerOpenInject, /native-panel-v97/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -2407,7 +2411,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v96 manager script/);
+  assert.match(manager, /latest native-panel-v97 manager script/);
   assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -2799,6 +2803,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /pluginCapabilityEvidence/);
   assert.match(server, /logDbGuardEvidence/);
   assert.match(server, /logDbGuard: protected=/);
+  assert.match(server, /antigravityCliRealSmoke: login=/);
+  assert.match(server, /antigravityCliRealSmoke caveat:/);
   assert.match(server, /connectorParityMissingSharedSample/);
   assert.match(server, /connectorParityExtraLocalSample/);
   assert.match(server, /connectorParityChangedSharedSample/);

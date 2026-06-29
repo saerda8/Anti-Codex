@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v96";
+  const VERSION = "native-panel-v97";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -962,6 +962,7 @@
           if (gate?.ageHours !== undefined && gate.ageHours !== null && Number.isFinite(Number(gate.ageHours))) details.push(`age=${Number(gate.ageHours).toFixed(1)}h`);
           if (typeof gate?.fresh === "boolean") details.push(`fresh=${triStateText(gate.fresh)}`);
           if (typeof gate?.selectedFromHistory === "boolean") details.push(`history=${triStateText(gate.selectedFromHistory)}`);
+          if (typeof gate?.historySourceMismatch === "boolean") details.push(`sourceMismatch=${triStateText(gate.historySourceMismatch)}`);
           if (typeof gate?.requiredForShort === "boolean" || typeof gate?.requiredForRelease === "boolean") details.push(`required=${triStateText(gate.requiredForShort)}/${triStateText(gate.requiredForRelease)}`);
           return `${gate?.id || "unknown"}:${reason}${details.length ? `[${details.join("/")}]` : ""}`;
         }
@@ -1045,7 +1046,7 @@
           }
         }
         if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
-          const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}`).join(", ");
+          const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}${entry.historySourceMismatch === true ? "[sourceMismatch]" : ""}`).join(", ");
           lines.push(`  selectedHistory: ${selectedReports}`);
         }
         if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
@@ -1119,6 +1120,12 @@
         lines.push(`  accountProxy: detail=${evidence.diagnosisDetail || "unknown"} / action=${evidence.suggestedAction || "none"} / localProxyBypassed=${evidence.localProxyBypassed ? "true" : "false"}`);
         lines.push(`  accountProxy phase: account=${phase.accountOk ? "ok" : "check"} / refresh=${phase.refreshOk ? "ok" : "check"} / models=${phase.modelCount ?? "unknown"} / real=${phase.realRequestAttempted ? (phase.realRequestOk ? "ok" : "check") : "not-attempted"}`);
         lines.push(`  accountProxy logs: source=${signals.sourcePresent ? "present" : "missing"} / fresh=${signals.sourceFresh ? "true" : "false"} / scanned=${signals.tailLinesScanned ?? "unknown"} / verify=${signals.verificationRequiredCount ?? 0} / network=${signals.generalNetworkFailureCount ?? 0}`);
+      }
+      if (item.antigravityCliRealSmokeEvidence) {
+        const evidence = item.antigravityCliRealSmokeEvidence;
+        lines.push(`  antigravityCliRealSmoke: login=${evidence.loginVerified ? "true" : "false"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / strictAppData=${evidence.strictWindowsAppDataIsolation ? "true" : "false"} / source=${evidence.profileSource || "unknown"}`);
+        if (evidence.separateAccountVerificationReason) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.separateAccountVerificationReason}`);
+        else if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.accountIsolationCaveat}`);
       }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);

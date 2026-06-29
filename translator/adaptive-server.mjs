@@ -4058,6 +4058,12 @@ function latestReportsSummary(result){
       lines.push("  accountProxy phase: account="+(phase.accountOk?"ok":"check")+" / refresh="+(phase.refreshOk?"ok":"check")+" / models="+(phase.modelCount??"unknown")+" / real="+(phase.realRequestAttempted?(phase.realRequestOk?"ok":"check"):"not-attempted"));
       lines.push("  accountProxy logs: source="+(signals.sourcePresent?"present":"missing")+" / fresh="+(signals.sourceFresh?"true":"false")+" / scanned="+(signals.tailLinesScanned??"unknown")+" / verify="+(signals.verificationRequiredCount??0)+" / network="+(signals.generalNetworkFailureCount??0));
     }
+    if(item.antigravityCliRealSmokeEvidence){
+      const evidence=item.antigravityCliRealSmokeEvidence;
+      lines.push("  antigravityCliRealSmoke: login="+(evidence.loginVerified?"true":"false")+" / separateAccount="+(evidence.separateAccountVerified?"true":"false")+" / strictAppData="+(evidence.strictWindowsAppDataIsolation?"true":"false")+" / source="+(evidence.profileSource||"unknown"));
+      if(evidence.separateAccountVerificationReason) lines.push("  antigravityCliRealSmoke caveat: "+evidence.separateAccountVerificationReason);
+      else if(evidence.accountIsolationCaveat) lines.push("  antigravityCliRealSmoke caveat: "+evidence.accountIsolationCaveat);
+    }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;
       lines.push("  uiChat: clicked="+(evidence.clicked?"true":"false")+" / reconnect="+(evidence.activeReconnectSeen?"seen":"clear")+" / session="+(evidence.sessionLockClear?"clear":"check")+" / marker="+(evidence.marker||"unknown"));
