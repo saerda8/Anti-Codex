@@ -996,6 +996,7 @@ function Test-DiagnosticBundle {
     $logDbGuardSummary = $null
     $releaseGatesSummary = $null
     $coldRelaunchSummary = $null
+    $antigravityCliProfilePrepareSummary = $null
     if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
         $summary = As-FlatArray (Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json)
         $modelSummary = @($summary | Where-Object { $_.file -eq "latest-model-routing.json" } | Select-Object -First 1)[0]
@@ -1208,6 +1209,18 @@ function Test-DiagnosticBundle {
                 if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "source-preflight summary profile prepare missing isolation caveat" }
             }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
+        }
+        $antigravityCliProfilePrepareSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-cli-profile-prepare.json" } | Select-Object -First 1)[0]
+        if ($antigravityCliProfilePrepareSummary) {
+            $profilePrepareEvidence = $antigravityCliProfilePrepareSummary.antigravityCliProfilePrepareEvidence
+            if (-not $profilePrepareEvidence) {
+                Add-Failure "diagnostic profile prepare summary missing antigravityCliProfilePrepareEvidence"
+            } else {
+                if ($profilePrepareEvidence.reportName -ne "antigravity-cli-profile-prepare") { Add-Failure "diagnostic profile prepare summary reportName mismatch" }
+                if ($profilePrepareEvidence.separateAccountVerified -ne $false) { Add-Failure "diagnostic profile prepare summary separateAccountVerified must be false; profile prepare is not real dual-account proof" }
+                if (-not [string]$profilePrepareEvidence.accountIsolationBoundary) { Add-Failure "diagnostic profile prepare summary missing accountIsolationBoundary" }
+                if (-not [string]$profilePrepareEvidence.accountIsolationCaveat) { Add-Failure "diagnostic profile prepare summary missing accountIsolationCaveat" }
+            }
         }
         $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]
         if (-not $thirdPartyProviderSummary) {
@@ -1483,12 +1496,13 @@ function Test-DiagnosticBundle {
         }
         $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
         if ($releaseGatesSummary) {
+            $releaseBlockedOnlyByRequiredRealTraffic = (Has-Property $releaseGatesSummary "releaseBlockedOnlyByRequiredRealTraffic") -and $releaseGatesSummary.releaseBlockedOnlyByRequiredRealTraffic -eq $true
             if ($releaseGatesSummary.ok -ne $true) { Add-Failure "release-gates summary ok=false" }
             if ($releaseGatesSummary.shortReady -ne $true) { Add-Failure "release-gates summary shortReady is not true" }
             if (-not (Has-Property $releaseGatesSummary "releaseReady")) { Add-Failure "release-gates summary missing releaseReady" }
-            elseif ($releaseGatesSummary.releaseReady -ne $true) { Add-Failure "release-gates summary releaseReady is not true" }
+            elseif ($releaseGatesSummary.releaseReady -ne $true -and -not $releaseBlockedOnlyByRequiredRealTraffic) { Add-Failure "release-gates summary releaseReady is not true" }
             if (-not (Has-Property $releaseGatesSummary "effectiveOk")) { Add-Failure "release-gates summary missing effectiveOk" }
-            elseif ($releaseGatesSummary.effectiveOk -ne $true) { Add-Failure "release-gates summary effectiveOk is not true" }
+            elseif ($releaseGatesSummary.effectiveOk -ne $true -and -not $releaseBlockedOnlyByRequiredRealTraffic) { Add-Failure "release-gates summary effectiveOk is not true" }
             if (-not (Has-Property $releaseGatesSummary "releaseBlockedOnlyByRequiredRealTraffic")) { Add-Failure "release-gates summary missing required real-traffic-only blocker flag" }
             if (-not (Has-Property $releaseGatesSummary "requiredRealTrafficBlockedGates")) { Add-Failure "release-gates summary missing required real-traffic blocker gate IDs" }
             if (-not (Has-Property $releaseGatesSummary "strictOptionalRealTraffic")) { Add-Failure "release-gates summary missing strict optional real-traffic flag" }

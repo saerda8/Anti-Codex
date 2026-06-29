@@ -8160,6 +8160,13 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /reports summary file missing/);
   assert.match(diagnostics, /collect-anticodex-diagnostics\.ps1/);
   assert.match(diagnostics, /"-BaseUrl", \$BaseUrl, "-NoPopup"/);
+  assert.match(collector, /antigravityCliProfilePrepareOk = \$json\.antigravityCliProfilePrepareOk/);
+  assert.match(collector, /antigravityCliProfilePrepareContract = \$json\.antigravityCliProfilePrepareContract/);
+  assert.match(collector, /publicDocumentationClientCopySyncContractOk = \$json\.publicDocumentationClientCopySyncContractOk/);
+  assert.match(collector, /antigravityCliProfilePrepareEvidence = \$json\.antigravityCliProfilePrepareEvidence/);
+  assert.match(collector, /antigravityCliRealSmokeEvidence = \$json\.antigravityCliRealSmokeEvidence/);
+  assert.match(collector, /releaseBlockedOnlyByRequiredRealTraffic = \$json\.releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(collector, /requiredRealTrafficBlockedGates = @\(\$json\.requiredRealTrafficBlockedGates/);
   assert.match(diagnostics, /model-routing-refresh\.json/);
   assert.match(diagnostics, /latest-model-routing\.json/);
   assert.match(diagnostics, /modelRoutingEvidence/);
@@ -8218,6 +8225,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates summary/);
   assert.match(diagnostics, /shortReady/);
   assert.match(diagnostics, /releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(diagnostics, /\$releaseBlockedOnlyByRequiredRealTraffic = \(Has-Property \$releaseGatesSummary "releaseBlockedOnlyByRequiredRealTraffic"\)/);
+  assert.match(diagnostics, /releaseReady -ne \$true -and -not \$releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(diagnostics, /effectiveOk -ne \$true -and -not \$releaseBlockedOnlyByRequiredRealTraffic/);
   assert.match(diagnostics, /requiredRealTrafficBlockedGates/);
   assert.match(diagnostics, /release-gates summary missing required real-traffic-only blocker flag/);
   assert.match(diagnostics, /release-gates real-traffic-only blocker gate \$blockedGateId has non-real-traffic or unblocked action/);
@@ -8458,6 +8468,12 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /source-preflight summary profile prepare claims separate account verified/);
   assert.match(diagnostics, /diagnostics source preflight missing Antigravity CLI profile prepare contract/);
   assert.match(diagnostics, /diagnostics source preflight profile prepare claims separate account verified/);
+  // Diagnostics reports-summary path must cover the independent latest-antigravity-cli-profile-prepare.json no-traffic caveat
+  assert.match(diagnostics, /antigravityCliProfilePrepareEvidence/);
+  assert.match(diagnostics, /latest-antigravity-cli-profile-prepare\.json/);
+  assert.match(diagnostics, /separateAccountVerified/);
+  assert.match(diagnostics, /accountIsolationCaveat/);
+  assert.match(diagnostics, /profile prepare is not real dual-account proof/);
   assert.match(diagnostics, /localConnectorVerifierOk/);
   assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /publicDocumentationClientCopySyncContractOk/);

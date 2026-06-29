@@ -206,8 +206,11 @@ function Read-JsonSummary {
             uiStateSelfTestOk = $json.uiStateSelfTestOk
             upstreamProfileStorageOk = $json.upstreamProfileStorageOk
             antigravityCliIsolationProfileOk = $json.antigravityCliIsolationProfileOk
+            antigravityCliProfilePrepareOk = $json.antigravityCliProfilePrepareOk
+            antigravityCliProfilePrepareContract = $json.antigravityCliProfilePrepareContract
             localConnectorVerifierOk = $json.localConnectorVerifierOk
             publicDocumentationOk = $json.publicDocumentationOk
+            publicDocumentationClientCopySyncContractOk = $json.publicDocumentationClientCopySyncContractOk
             translatorRegressionOk = $json.translatorRegressionOk
             diffWhitespaceOk = $json.diffWhitespaceOk
             baseUrl = $json.baseUrl
@@ -224,6 +227,8 @@ function Read-JsonSummary {
             uiRepoMultiFileEditEvidence = $json.uiRepoMultiFileEditEvidence
             uiComplexProjectEvidence = $json.uiComplexProjectEvidence
             uiReportSiteEvidence = $json.uiReportSiteEvidence
+            antigravityCliProfilePrepareEvidence = $json.antigravityCliProfilePrepareEvidence
+            antigravityCliRealSmokeEvidence = $json.antigravityCliRealSmokeEvidence
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
             toolBridgeEvidence = $json.toolBridgeEvidence
@@ -249,6 +254,8 @@ function Read-JsonSummary {
             repairedAt = $json.repairedAt
             releaseReady = $json.releaseReady
             shortReady = $json.shortReady
+            releaseBlockedOnlyByRequiredRealTraffic = $json.releaseBlockedOnlyByRequiredRealTraffic
+            requiredRealTrafficBlockedGates = @($json.requiredRealTrafficBlockedGates | ForEach-Object { [string]$_ })
             strictOptionalRealTraffic = $json.strictOptionalRealTraffic
             optionalRealTrafficReady = $json.optionalRealTrafficReady
             optionalRealTrafficFailures = @($json.optionalRealTrafficFailures | ForEach-Object { [string]$_ })
