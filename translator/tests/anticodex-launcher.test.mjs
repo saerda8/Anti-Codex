@@ -12339,6 +12339,17 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /Windows credential store/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
+  assert.match(preflight, /function Test-AntigravityCliProfilePrepare/);
+  assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Test-AntigravityCliProfilePrepare/);
+  assert.match(preflight, /-NoSaveProfile/);
+  assert.match(preflight, /anticodex-srcpreflight-state-/);
+  assert.match(preflight, /anticodex-srcpreflight-report-/);
+  assert.match(preflight, /anticodex-srcpreflight-profile-/);
+  assert.match(preflight, /usedRealTraffic.*\$false/);
+  assert.match(preflight, /loginVerified.*\$false/);
+  assert.match(preflight, /separateAccountVerified.*\$false/);
+  assert.match(preflight, /profile-prepared-no-traffic/);
+  assert.match(preflight, /antigravityCliProfilePrepareOk/);
   assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
   assert.match(runtimeSync, /README_EN\.md/);
   assert.match(runtimeSync, /docs\\ADAPTIVE_ONE_API_STACK\.md/);

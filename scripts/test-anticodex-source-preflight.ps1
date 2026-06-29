@@ -206,6 +206,69 @@ function Test-AntigravityCliIsolationProfile {
     return $result
 }
 
+function Test-AntigravityCliProfilePrepare {
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\prepare-anticodex-antigravity-cli-profile.ps1"
+    $tempStateRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-state-" + [Guid]::NewGuid().ToString("N"))
+    $tempReportRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-report-" + [Guid]::NewGuid().ToString("N"))
+    $tempProfileRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-profile-" + [Guid]::NewGuid().ToString("N"))
+    try {
+        $result = Invoke-SourceProcess `
+            -Name "Antigravity CLI profile prepare (no-traffic)" `
+            -FilePath $powershell `
+            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script,
+                "-StateRoot", $tempStateRoot,
+                "-ReportRoot", $tempReportRoot,
+                "-ProfileRoot", $tempProfileRoot,
+                "-NoSaveProfile") `
+            -TimeoutSec 30
+        $prepareJson = ($result.stdoutTail -join "`n")
+        $prepareOk = $false
+        $prepareContract = [ordered]@{
+            ok = $false
+            usedRealTraffic = $false
+            loginVerified = $false
+            separateAccountVerified = $false
+            coverageKind = "missing"
+        }
+        if ($result.ok -and $prepareJson) {
+            try {
+                $parsed = $prepareJson | ConvertFrom-Json
+                $prepareContract.ok = [bool]$parsed.ok
+                $prepareContract.usedRealTraffic = [bool]$parsed.usedRealTraffic
+                $prepareContract.loginVerified = [bool]$parsed.loginVerified
+                $prepareContract.separateAccountVerified = [bool]$parsed.separateAccountVerified
+                $prepareContract.coverageKind = [string]$parsed.coverageKind
+                $prepareOk = $parsed.ok -eq $true `
+                    -and $parsed.usedRealTraffic -eq $false `
+                    -and $parsed.loginVerified -eq $false `
+                    -and $parsed.separateAccountVerified -eq $false `
+                    -and $parsed.coverageKind -eq "profile-prepared-no-traffic"
+            } catch {
+                Add-Failure "Antigravity CLI profile prepare JSON parse failed"
+            }
+        }
+        if (-not $prepareOk -and $result.ok) {
+            Add-Failure "Antigravity CLI profile prepare contract not satisfied"
+        }
+        if (-not $result.ok) { Add-Failure "Antigravity CLI profile prepare failed" }
+        return [pscustomobject]@{
+            ok = $prepareOk
+            name = "Antigravity CLI profile prepare (no-traffic)"
+            exitCode = $result.exitCode
+            timedOut = $result.timedOut
+            durationMs = $result.durationMs
+            usedRealTraffic = $false
+            loginVerified = $false
+            separateAccountVerified = $false
+            coverageKind = $prepareContract.coverageKind
+            contract = $prepareContract
+        }
+    } finally {
+        Remove-Item -LiteralPath $tempStateRoot, $tempReportRoot, $tempProfileRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-LocalConnectorVerifier {
     $node = (Get-Command "node" -ErrorAction Stop).Source
     $script = Join-Path $SourceRoot "scripts\test-anticodex-local-connectors.mjs"
@@ -381,6 +444,7 @@ try {
     $checks["logDbGuardSelfTest"] = Test-LogDbGuardSelfTest
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
     $checks["antigravityCliIsolationProfile"] = Test-AntigravityCliIsolationProfile
+    $checks["antigravityCliProfilePrepare"] = Test-AntigravityCliProfilePrepare
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
@@ -392,6 +456,10 @@ try {
 }
 
 $elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+$antigravityCliProfilePrepareOk = $false
+if ($checks["antigravityCliProfilePrepare"]) {
+    $antigravityCliProfilePrepareOk = [bool]$checks["antigravityCliProfilePrepare"].ok
+}
 $report = [ordered]@{
     ok = ($failures.Count -eq 0)
     reportName = "source-preflight"
@@ -399,6 +467,7 @@ $report = [ordered]@{
     usedRealTraffic = $false
     behaviorCovered = ($failures.Count -eq 0)
     coverageKind = "source-no-traffic"
+    antigravityCliProfilePrepareOk = $antigravityCliProfilePrepareOk
     sourceRoot = Normalize-Path $SourceRoot
     startedAt = $startedAt.ToString("o")
     elapsedMs = $elapsedMs
