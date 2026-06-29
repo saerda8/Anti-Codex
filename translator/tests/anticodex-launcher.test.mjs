@@ -1277,6 +1277,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /antigravityCliRealSmoke: login=/);
   assert.match(managerBridge, /antigravityCliRealSmoke caveat:/);
   assert.match(managerInject, /antigravityCliRealSmoke caveat:/);
+  assert.match(managerBridge, /antigravityCliRealSmoke lane: role=/);
+  assert.match(managerInject, /antigravityCliRealSmoke lane: role=/);
+  assert.match(managerBridge, /antigravityCliRealSmoke lane:.*mcpManagedHere=/);
+  assert.match(managerInject, /antigravityCliRealSmoke lane:.*mcpManagedHere=/);
+  assert.match(managerBridge, /antigravityCliRealSmoke lane:.*mcpOwner=/);
+  assert.match(managerInject, /antigravityCliRealSmoke lane:.*mcpOwner=/);
   assert.match(managerBridge, /antigravityCliProfilePrepare: separateAccount=/);
   assert.match(managerInject, /antigravityCliProfilePrepare: separateAccount=/);
   assert.match(managerBridge, /antigravityCliProfilePrepare caveat:/);
@@ -2815,6 +2821,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /logDbGuard: protected=/);
   assert.match(server, /antigravityCliRealSmoke: login=/);
   assert.match(server, /antigravityCliRealSmoke caveat:/);
+  assert.match(server, /antigravityCliRealSmoke lane: role=/);
+  assert.match(server, /antigravityCliRealSmoke lane:.*mcpManagedHere=/);
+  assert.match(server, /antigravityCliRealSmoke lane:.*mcpOwner=/);
   assert.match(server, /antigravityCliProfilePrepare: separateAccount=/);
   assert.match(server, /antigravityCliProfilePrepare caveat:/);
   assert.match(server, /connectorParityMissingSharedSample/);

@@ -497,6 +497,7 @@ function latestReportsSummary(result) {
     if (item.antigravityCliRealSmokeEvidence) {
       const evidence = item.antigravityCliRealSmokeEvidence;
       lines.push(`  antigravityCliRealSmoke: login=${evidence.loginVerified ? "true" : "false"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / strictAppData=${evidence.strictWindowsAppDataIsolation ? "true" : "false"} / source=${evidence.profileSource || "unknown"}`);
+      lines.push(`  antigravityCliRealSmoke lane: role=${evidence.accountLaneRole || "unknown"} / mcpManagedHere=${evidence.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${evidence.mcpAccountLaneOwner || "unknown"}`);
       if (evidence.separateAccountVerificationReason) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.separateAccountVerificationReason}`);
       else if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.accountIsolationCaveat}`);
     }
