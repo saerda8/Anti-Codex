@@ -7462,6 +7462,11 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /\$checks\["managerBridgeSelfTest"\] = Test-ManagerBridgeSelfTest/);
   assert.match(preflight, /docs\\ADAPTIVE_ONE_API_STACK\.md/);
   assert.match(preflight, /docs\\marketing\\video-script\.md/);
+  assert.match(preflight, /antigravity-entitlement-model-text/);
+  assert.match(preflight, /Antigravity entitlement supplies model text/);
+  assert.match(preflight, /no-antigravity-desktop-default-route/);
+  assert.match(preflight, /no-native-bridge-default-wording/);
+  assert.doesNotMatch(preflight, /Antigravity Desktop provider by default/);
   assert.match(preflight, /provider profile/);
   assert.match(preflight, /connector-backed app tools/);
   assert.match(preflight, /UTF8Encoding\]::new\(\$false\)/);

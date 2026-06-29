@@ -65,8 +65,8 @@ capability boundaries.
 
 Anti-Codex is a separate desktop route that keeps the original Codex untouched.
 
-It uses Antigravity Desktop by default, and third-party APIs only when you
-explicitly configure them.
+It uses Antigravity entitlement for model text, and third-party APIs only when
+you explicitly configure them.
 
 It mirrors MCP, skills, plugin metadata, and connector metadata, but it does not
 fake connector authorization.
@@ -77,7 +77,7 @@ Same familiar workflow, cleaner provider control, honest boundaries.
 
 - Separate Anti-Codex runtime
 - Original Codex stays untouched
-- Antigravity Desktop by default
+- Antigravity model entitlement
 - Explicit third-party API profiles
 - No ChatGPT login route
 - MCP and skills mirrored locally

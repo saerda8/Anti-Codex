@@ -18,7 +18,7 @@
 
 更准确地说，它是一个本地桌面运行时：
 
-> 让 Codex 的主要工作流继续存在，同时把模型路线接到 Antigravity Desktop 或你自己配置的第三方 API。
+> 让 Codex 的主要工作流继续存在，同时用 Antigravity 权益提供模型文本，或接到你自己配置的第三方 API。
 
 这件事听起来像只是换一个 base URL，但真正麻烦的地方不在这里。
 
@@ -39,7 +39,7 @@ Anti-Codex 要做的不是“把请求转发一下”，而是把这些边界都
 
 当前版本的重点是稳定和诚实。
 
-它默认使用本机已登录的 Antigravity Desktop 路线，也可以在管理面板里配置第三方 OpenAI-compatible 或 Anthropic API。
+它默认使用 Antigravity 权益提供模型文本，Codex 工具留在 Anti-Codex 侧；也可以在管理面板里配置第三方 OpenAI-compatible 或 Anthropic API。
 
 配置第三方 provider 时，Anti-Codex 会保留同一个项目状态、会话目录和长上下文历史，不会因为换 provider 就清掉工作区。
 
@@ -92,7 +92,7 @@ Anti-Codex 是独立入口、独立状态和独立运行时。它会读取和同
 如果你在意这些点，Anti-Codex 会比较适合：
 
 - 想保留 Codex 的工作流。
-- 想使用 Antigravity Desktop 或自己的 API provider。
+- 想使用 Antigravity 权益或自己的 API provider。
 - 需要 MCP、skills、插件元数据继续同步。
 - 不希望为了 connector 能力去伪造授权状态。
 - 不想让原版 Codex 被改坏。

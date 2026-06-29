@@ -9,7 +9,7 @@ Anti-Codex 继续推进到一个更像独立产品的状态了。
 它做的是：
 
 - 独立 Anti-Codex 入口和图标。
-- 默认接入已登录的 Antigravity Desktop 模型路线。
+- 默认使用 Antigravity 权益提供模型文本，Codex 工具留在 Anti-Codex 侧。
 - 可选配置第三方 OpenAI-compatible / Anthropic API。
 - 保留 Codex 的主要工作流、项目状态和长上下文历史。
 - 同步本机已有 MCP、skills、插件和连接器元数据。
@@ -29,7 +29,7 @@ Anti-Codex 继续推进到一个更像独立产品的状态了。
 
 Anti-Codex 是一个可与原版 Codex 并存的本地桌面运行时。
 
-默认走 Antigravity Desktop，也支持第三方 API；同步你本机已有 MCP、skills 和插件元数据，但不会伪造 connector 授权。
+默认走 Antigravity 权益模型文本，也支持第三方 API；同步你本机已有 MCP、skills 和插件元数据，但不会伪造 connector 授权。
 
 重点是三个边界：
 

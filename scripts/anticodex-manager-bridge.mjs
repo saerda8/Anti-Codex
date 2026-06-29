@@ -963,7 +963,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
   assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42 \/ reused=true \/ reason=short_budget_reused_previous_snapshot/);
-  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ cliIsolation=true \/ localConnector=true \/ docs=true/);
+  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ cliIsolation=true \/ prepare=true \/ localConnector=true \/ docs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);
   const missingHistorySummary = latestReportsSummary({
