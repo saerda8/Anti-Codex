@@ -8773,6 +8773,51 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
   }
 });
 
+test("diagnostics reports-summary fixture rejects malformed refresh recovery actions even when refresh failed", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-refresh-recovery-failed-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([
+      minimalDiagnosticsReleaseGateSummary(),
+      {
+        file: "latest-refresh-features.json",
+        ok: false,
+        sourceSnapshotEvidence: {
+          fingerprint: "source-refresh-fingerprint",
+          fileCount: 3,
+          sourceMtimeMax: "2026-06-29T00:00:00.000Z",
+        },
+        refreshFeatureEvidence: {
+          recoveryActions: [{
+            id: "refreshFeatures.skillsDirectoryLocked",
+            guidance: "",
+            commands: ["powershell.exe -File scripts/refresh-anticodex-local-features.ps1 -VerifyOnly"],
+            requiresRealTraffic: false,
+          }],
+          recoveryActionIds: ["refreshFeatures.skillsDirectoryLocked"],
+        },
+      },
+    ]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("refresh-features recovery action missing guidance"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("diagnostics reports-summary fixture rejects failure truncation count mismatches", () => {
   const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-failure-counts-"));
   try {

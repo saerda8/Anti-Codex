@@ -657,6 +657,35 @@ function Test-SyncReadinessEvidence {
 
 $AllowedAntigravityModelDiscoverySources = @("antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog")
 
+function Test-RefreshFeaturesSummarySupportEvidence {
+    param($RefreshFeaturesSummary)
+    if (-not $RefreshFeaturesSummary) { return }
+
+    if (-not $RefreshFeaturesSummary.sourceSnapshotEvidence) { Add-Failure "refresh-features summary missing source snapshot evidence" }
+    $refreshEvidence = $RefreshFeaturesSummary.refreshFeatureEvidence
+    if (-not $refreshEvidence) {
+        Add-Failure "refresh-features summary missing refreshFeatureEvidence"
+        return
+    }
+
+    if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActions")) { Add-Failure "refresh-features summary missing recoveryActions support evidence" }
+    if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActionIds")) { Add-Failure "refresh-features summary missing recoveryActionIds support evidence" }
+    foreach ($recoveryAction in @($refreshEvidence.recoveryActions)) {
+        if (-not [string]$recoveryAction.id) { Add-Failure "refresh-features recovery action missing id" }
+        if (-not [string]$recoveryAction.guidance) { Add-Failure "refresh-features recovery action missing guidance" }
+        if (@($recoveryAction.commands).Count -lt 1) { Add-Failure "refresh-features recovery action missing command guidance" }
+        if ($recoveryAction.requiresRealTraffic -eq $true) { Add-Failure "refresh-features recovery action unexpectedly requires real traffic" }
+    }
+
+    if ($RefreshFeaturesSummary.ok -eq $true) {
+        if (-not ($refreshEvidence.PSObject.Properties.Name -contains "elapsedMs")) { Add-Failure "refresh-features summary missing elapsedMs evidence" }
+        if ($refreshEvidence.connectorSharedExists -eq $true -and $refreshEvidence.connectorContentMatches -ne $true) { Add-Failure "refresh-features summary connector parity not clean" }
+        if ($refreshEvidence.appToolSharedExists -eq $true -and $refreshEvidence.appToolContentMatches -ne $true) { Add-Failure "refresh-features summary app-tool parity not clean" }
+        if (@($refreshEvidence.changedExpectedSkills).Count -ne 0) { Add-Failure "refresh-features summary skill content parity not clean" }
+        if (@($refreshEvidence.guidanceChanged).Count -ne 0) { Add-Failure "refresh-features summary guidance parity not clean" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -671,6 +700,7 @@ function Test-ReportsSummary {
     $releaseGatesSummary = @($summary | Where-Object { $_.file -eq "latest-release-gates.json" } | Select-Object -First 1)[0]
     $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
     $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
+    $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -711,6 +741,7 @@ function Test-ReportsSummary {
         }
         Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
     }
+    Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
@@ -1390,27 +1421,7 @@ function Test-DiagnosticBundle {
             }
         }
         $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
-        if ($refreshFeaturesSummary) {
-            if (-not $refreshFeaturesSummary.sourceSnapshotEvidence) { Add-Failure "refresh-features summary missing source snapshot evidence" }
-            $refreshEvidence = $refreshFeaturesSummary.refreshFeatureEvidence
-            if (-not $refreshEvidence) {
-                Add-Failure "refresh-features summary missing refreshFeatureEvidence"
-            } elseif ($refreshFeaturesSummary.ok -eq $true) {
-                if (-not ($refreshEvidence.PSObject.Properties.Name -contains "elapsedMs")) { Add-Failure "refresh-features summary missing elapsedMs evidence" }
-                if ($refreshEvidence.connectorSharedExists -eq $true -and $refreshEvidence.connectorContentMatches -ne $true) { Add-Failure "refresh-features summary connector parity not clean" }
-                if ($refreshEvidence.appToolSharedExists -eq $true -and $refreshEvidence.appToolContentMatches -ne $true) { Add-Failure "refresh-features summary app-tool parity not clean" }
-                if (@($refreshEvidence.changedExpectedSkills).Count -ne 0) { Add-Failure "refresh-features summary skill content parity not clean" }
-                if (@($refreshEvidence.guidanceChanged).Count -ne 0) { Add-Failure "refresh-features summary guidance parity not clean" }
-                if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActions")) { Add-Failure "refresh-features summary missing recoveryActions support evidence" }
-                if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActionIds")) { Add-Failure "refresh-features summary missing recoveryActionIds support evidence" }
-                foreach ($recoveryAction in @($refreshEvidence.recoveryActions)) {
-                    if (-not [string]$recoveryAction.id) { Add-Failure "refresh-features recovery action missing id" }
-                    if (-not [string]$recoveryAction.guidance) { Add-Failure "refresh-features recovery action missing guidance" }
-                    if (@($recoveryAction.commands).Count -lt 1) { Add-Failure "refresh-features recovery action missing command guidance" }
-                    if ($recoveryAction.requiresRealTraffic -eq $true) { Add-Failure "refresh-features recovery action unexpectedly requires real traffic" }
-                }
-            }
-        }
+        Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary
         $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
         if ($optionalRealProviderSummary -and $optionalRealProviderSummary.skipped -eq $true) {
             if ($optionalRealProviderSummary.requestedRealTraffic -ne $false) { Add-Failure "optional real-provider skipped summary requested real traffic" }
