@@ -13540,6 +13540,39 @@ test("Antigravity CLI profile prepare carries account-lane boundary fields and d
   assert.match(upstreamProfile, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
 });
 
+test("Manager latest reports surface source preflight", () => {
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  // sourcePreflight profilePrepare lane must surface role/mcpManagedHere/mcpOwner in every Manager support path
+  assert.match(managerBridge, /sourcePreflight profilePrepare lane: role=/);
+  assert.match(managerBridge, /sourcePreflight profilePrepare lane:.*mcpManagedHere=/);
+  assert.match(managerBridge, /sourcePreflight profilePrepare lane:.*mcpOwner=/);
+  assert.match(managerInject, /sourcePreflight profilePrepare lane: role=/);
+  assert.match(managerInject, /sourcePreflight profilePrepare lane:.*mcpManagedHere=/);
+  assert.match(managerInject, /sourcePreflight profilePrepare lane:.*mcpOwner=/);
+  assert.match(server, /sourcePreflight profilePrepare lane: role=/);
+  assert.match(server, /sourcePreflight profilePrepare lane:.*mcpManagedHere=/);
+  assert.match(server, /sourcePreflight profilePrepare lane:.*mcpOwner=/);
+
+  // antigravityCliProfilePrepare lane must surface role/mcpManagedHere/mcpOwner in every Manager support path
+  assert.match(managerBridge, /antigravityCliProfilePrepare lane: role=/);
+  assert.match(managerBridge, /antigravityCliProfilePrepare lane:.*mcpManagedHere=/);
+  assert.match(managerBridge, /antigravityCliProfilePrepare lane:.*mcpOwner=/);
+  assert.match(managerInject, /antigravityCliProfilePrepare lane: role=/);
+  assert.match(managerInject, /antigravityCliProfilePrepare lane:.*mcpManagedHere=/);
+  assert.match(managerInject, /antigravityCliProfilePrepare lane:.*mcpOwner=/);
+  assert.match(server, /antigravityCliProfilePrepare lane: role=/);
+  assert.match(server, /antigravityCliProfilePrepare lane:.*mcpManagedHere=/);
+  assert.match(server, /antigravityCliProfilePrepare lane:.*mcpOwner=/);
+
+  // manager inject also keeps the optional real-smoke lane visible
+  assert.match(managerInject, /antigravityCliRealSmoke lane: role=/);
+  assert.match(managerInject, /antigravityCliRealSmoke lane:.*mcpManagedHere=/);
+  assert.match(managerInject, /antigravityCliRealSmoke lane:.*mcpOwner=/);
+});
+
 test("Antigravity CLI profile prepare: MCP account lane owner must be the exact sentinel string, not merely non-empty", () => {
   const requiredExact = "external-antigravity-account-not-managed-here";
   const scripts = [

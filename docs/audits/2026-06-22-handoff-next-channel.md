@@ -13,6 +13,7 @@ Branch: main
 - Manager latest-report/support text now displays `antigravityCliRealSmoke` lane, making it clear Anti-Codex only handles model-text lane while MCP lane is externally managed.
 - Diagnostics now validates optional real-smoke summary for lane field consistency.
 - Anti-Codex-side account lane evidence is explicit in no-traffic profile-prepare/source-preflight/diagnostics reports: `accountLaneRole:"anticodex-model-text"`, `mcpAccountLaneManagedByAntiCodex:false`, and `mcpAccountLaneOwner:"external-antigravity-account-not-managed-here"`. MCP-side setup is external to this channel.
+- Manager bridge text, embedded Manager injection text, and adaptive-server report summaries now all surface `sourcePreflight profilePrepare lane` and `antigravityCliProfilePrepare lane` with role, MCP-managed-here, and MCP-owner fields.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the latest no-traffic checks: upstream `antigravity-desktop`, CLI model-text transport, account ready, 8 models, session lock idle.
 - Manager source/readiness contracts now target `native-panel-v99`.
 - Standalone real Manager MCP/Skill and plugin/application button gates pass after local feature refresh. The default standalone real-button script now runs only those two non-disruptive actions; report viewing and diagnostics bundle remain opt-in.
