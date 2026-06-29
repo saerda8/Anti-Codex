@@ -888,6 +888,11 @@ function summarizeGate(definition) {
           if (report.separateAccountVerified === true) {
             if (!report.accountIdentityComparison && !report.accountIdentityEvidence) semanticFailures.push("optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing");
           }
+          if (report.separateAccountVerified === false) {
+            if (report.accountIdentityEvidence || report.accountIdentityComparison) {
+              semanticFailures.push("optional_antigravity_cli_real_smoke_identity_evidence_without_verification");
+            }
+          }
           if (!report.accountIsolationBoundary) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_boundary_missing");
           if (!report.accountIsolationCaveat) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_caveat_missing");
         }
@@ -1451,7 +1456,7 @@ const realTrafficRefreshOrder = [
 const optionalEvidenceRefreshOrder = [
   ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
   ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
-  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile>", { requiresRealTraffic: true, highImpact: true }],
+  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation", { requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
@@ -3101,6 +3106,25 @@ if (args.has("--self-test")) {
     });
     semanticFailures.antigravityCliRealSmokeSeparateTrueMissingEvidence = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with separateAccountVerified=true but missing identity evidence satisfied the gate", [
       "optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: false,
+      accountIdentityEvidence: "cli-profile-isolation-only",
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Profile isolation only; not proof of a separate account.",
+    });
+    semanticFailures.antigravityCliRealSmokeFalseWithIdentityEvidence = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with separateAccountVerified=false but identity evidence present satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_identity_evidence_without_verification",
     ]);
     semanticFailures.mcpSkills = assertSemanticFailures("mcpSkills", "self-test failed: semantically invalid MCP/Skill report satisfied the gate", [
       "mcp_skills_missing_shared_mcp",

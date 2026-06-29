@@ -11408,9 +11408,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_strict_isolation_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_separate_account_verified_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_evidence_without_verification/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_boundary_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_caveat_missing/);
-  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot/);
+  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation/);
   assert.match(releaseGates, /requireModelRoutingSemantics/);
   assert.match(releaseGates, /model_routing_skip_requests_not_true/);
   assert.match(releaseGates, /model_routing_result_not_skipped/);
@@ -13165,6 +13166,32 @@ test("summarize-anticodex-report real-smoke evidence is null when preparationRep
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
     assert.equal(summary.antigravityCliRealSmokeEvidence.preparationReport, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("summarize-anticodex-report real-smoke retains caveat and does not claim verification when separateAccountVerified=false", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-cli-real-smoke-false-caveat-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-real-smoke.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      coverageKind: "skipped",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Profile isolation only; not proof of a separate Antigravity account. Keep separateAccountVerified:false until explicit account-identity comparison or a truly separate credential namespace.",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.antigravityCliRealSmokeEvidence.separateAccountVerified, false);
+    assert.equal(summary.antigravityCliRealSmokeEvidence.accountIsolationCaveat, "Profile isolation only; not proof of a separate Antigravity account. Keep separateAccountVerified:false until explicit account-identity comparison or a truly separate credential namespace.");
+    assert.ok(summary.antigravityCliRealSmokeEvidence.accountIsolationBoundary, "accountIsolationBoundary must be retained when separateAccountVerified=false");
+    assert.equal(summary.antigravityCliRealSmokeEvidence.separateAccountVerified, false, "summary must not claim dual account verified when separateAccountVerified=false");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
