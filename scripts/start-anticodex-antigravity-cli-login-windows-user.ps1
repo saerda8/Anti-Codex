@@ -72,6 +72,16 @@ function Get-LocalWindowsUserReadiness {
     }
 }
 
+function Get-LoginOperatorNextStep {
+    param([string]$BlockingReason)
+    switch ($BlockingReason) {
+        "target_windows_user_missing" { return "open_elevated_windows_user_settings_then_rerun_prepare" }
+        "target_windows_user_is_current_user" { return "choose_separate_windows_user_then_rerun_prepare" }
+        "target_windows_user_lookup_unknown" { return "verify_windows_user_manually_then_rerun_prepare" }
+        default { return "verify_windows_user_manually_then_rerun_prepare" }
+    }
+}
+
 $commandParts = @(
     "powershell.exe",
     "-NoExit",
@@ -88,6 +98,24 @@ if ($Command) {
 }
 $runasCommand = $commandParts -join " "
 $readiness = Get-LocalWindowsUserReadiness -Name $WindowsUser
+$safeToAskUserForSecondAccountLogin = ($readiness.readyForInteractiveLogin -eq $true)
+$blockedBeforeInteractiveLogin = -not $safeToAskUserForSecondAccountLogin
+$operatorBlockingStage = if ($safeToAskUserForSecondAccountLogin) {
+    "ready"
+} elseif ($readiness.readinessBlockingReason -eq "target_windows_user_missing") {
+    "target_user_missing_blocked_before_login"
+} elseif ($readiness.readinessBlockingReason -eq "target_windows_user_is_current_user") {
+    "target_user_is_current_user"
+} elseif ($readiness.readinessBlockingReason -eq "target_windows_user_lookup_unknown") {
+    "target_user_lookup_unknown_blocked_before_login"
+} else {
+    "unknown_blocked_before_login"
+}
+$operatorNextStep = if ($safeToAskUserForSecondAccountLogin) {
+    "run_windows_user_interactive_login_with_user_present"
+} else {
+    Get-LoginOperatorNextStep -BlockingReason $readiness.readinessBlockingReason
+}
 
 $result = [ordered]@{
     ok = $true
@@ -105,6 +133,11 @@ $result = [ordered]@{
     readyForInteractiveLogin = $readiness.readyForInteractiveLogin
     readinessBlockingReason = $readiness.readinessBlockingReason
     readinessLookupError = $readiness.readinessLookupError
+    safeToAskUserForSecondAccountLogin = $safeToAskUserForSecondAccountLogin
+    canProceedToInteractiveLogin = $safeToAskUserForSecondAccountLogin
+    blockedBeforeInteractiveLogin = $blockedBeforeInteractiveLogin
+    operatorBlockingStage = $operatorBlockingStage
+    operatorNextStep = $operatorNextStep
     credentialBoundary = "separate-windows-user"
     expectedCredentialStoreIsolation = $true
     accountIsolationCaveat = "This opens an interactive runas prompt. The password is handled by Windows runas, not by Codex. Login proof still requires explicit user-approved real traffic and account identity comparison."
@@ -117,6 +150,14 @@ if ($DryRun) {
     $result.started = $false
     $result | ConvertTo-Json -Depth 12 -Compress
     exit 0
+}
+
+if (-not $safeToAskUserForSecondAccountLogin) {
+    $result.ok = $false
+    $result.started = $false
+    $result.error = "windows_user_not_ready_for_interactive_login"
+    $result | ConvertTo-Json -Depth 12 -Compress
+    exit 2
 }
 
 Start-Process -FilePath "runas.exe" -ArgumentList $result.runasArgs -WindowStyle Normal | Out-Null

@@ -14004,6 +14004,15 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
 
   assert.match(dryRunLauncher, /readinessChecked/);
   assert.match(dryRunLauncher, /target_windows_user_missing/);
+  assert.match(dryRunLauncher, /safeToAskUserForSecondAccountLogin/);
+  assert.match(dryRunLauncher, /canProceedToInteractiveLogin/);
+  assert.match(dryRunLauncher, /blockedBeforeInteractiveLogin/);
+  assert.match(dryRunLauncher, /operatorBlockingStage/);
+  assert.match(dryRunLauncher, /operatorNextStep/);
+  assert.match(dryRunLauncher, /windows_user_not_ready_for_interactive_login/);
+  assert.match(dryRunLauncher, /exit 2/);
+  assert.doesNotMatch(dryRunLauncher, /New-LocalUser|Add-LocalGroupMember/);
+  assert.doesNotMatch(dryRunLauncher, /Invoke-RestMethod|Invoke-WebRequest|\.env/);
   assert.match(summarizer, /isAntigravityCliWindowsUserReadinessReport/);
   assert.match(summarizer, /antigravityCliWindowsUserReadinessEvidence/);
   assert.match(summarizer, /isWindowsUserAccountPrepareReport/);

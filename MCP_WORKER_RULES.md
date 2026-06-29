@@ -151,6 +151,13 @@ After every failure, before another dispatch:
 - Cause classification: useful narrow suggestion with incomplete support-surface coverage.
 - Rule change: absorb useful field semantics such as `target_user_missing_blocked_before_login` and `canProceedToInteractiveLogin`, but keep mainline responsible for Manager bridge/inject/adaptive-server summaries and installed-runtime verification.
 
+### 2026-06-30 - Windows-user login hard-gate MIMO patch
+
+- Worker: MIMO `dsw_mqzovtpr_hpw1ey` in isolated worktree `deepcodex-mimo-login-guard`.
+- Task: prevent the separate-Windows-user login launcher from opening `runas` before readiness is true.
+- Result: completed with accepted changes and the focused launcher test passed. The main patch kept a broader field set and absorbed the useful static checks forbidding user creation and network calls in the launcher.
+- Rule change: account login launchers need a runtime guard, not only a report/Manager warning. Non-DryRun paths must return machine-readable blocked JSON and `started:false` before any interactive login process starts.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`
