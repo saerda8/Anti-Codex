@@ -7977,6 +7977,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /missing active source package version/);
   assert.match(diagnostics, /missing client sync version match flag/);
   assert.match(diagnostics, /client sync version mismatch/);
+  assert.match(diagnostics, /missing required patch scope: \$RequiredPatch/);
   assert.match(diagnostics, /missing update status reason/);
   assert.match(diagnostics, /missing source host hash/);
   assert.match(diagnostics, /missing host hash match flag/);
