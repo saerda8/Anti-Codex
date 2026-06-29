@@ -28,17 +28,30 @@ function Get-LocalWindowsUserReadiness {
     param([string]$Name)
     $normalizedTarget = Get-NormalizedWindowsUserName -Name $Name
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $currentUserSid = ""
+    try {
+        $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        if ($currentIdentity -and $currentIdentity.User) {
+            $currentUserSid = [string]$currentIdentity.User.Value
+        }
+    } catch {
+        $currentUserSid = ""
+    }
     $localUserName = ""
     $lookupAvailable = [bool](Get-Command "Get-LocalUser" -ErrorAction SilentlyContinue)
     $lookupError = ""
     $targetExists = $null
+    $targetUserSid = ""
     if ($normalizedTarget -match ('^{0}\\(.+)$' -f [regex]::Escape($env:COMPUTERNAME))) {
         $localUserName = $Matches[1]
     }
     if ($lookupAvailable -and $localUserName) {
         try {
-            Get-LocalUser -Name $localUserName -ErrorAction Stop | Out-Null
+            $targetUser = Get-LocalUser -Name $localUserName -ErrorAction Stop
             $targetExists = $true
+            if ($targetUser -and $targetUser.SID) {
+                $targetUserSid = [string]$targetUser.SID.Value
+            }
         } catch {
             $targetExists = $false
             $lookupError = $_.Exception.Message
@@ -49,12 +62,19 @@ function Get-LocalWindowsUserReadiness {
         $lookupError = "Target user is not a local Windows user name."
     }
     $targetIsCurrent = ($normalizedTarget -and $currentUser -and $normalizedTarget.Equals($currentUser, [StringComparison]::OrdinalIgnoreCase))
-    $ready = ($targetExists -eq $true -and -not $targetIsCurrent)
+    $targetUserSidMatchesCurrentUser = ($targetUserSid -and $currentUserSid -and $targetUserSid.Equals($currentUserSid, [StringComparison]::OrdinalIgnoreCase))
+    if ($targetUserSidMatchesCurrentUser) {
+        $targetIsCurrent = $true
+    }
+    $targetUserIdentityBoundaryOk = ($targetExists -eq $true -and [string]$targetUserSid -and [string]$currentUserSid -and -not $targetUserSidMatchesCurrentUser)
+    $ready = ($targetExists -eq $true -and -not $targetIsCurrent -and $targetUserIdentityBoundaryOk)
     $blockingReason = ""
     if ($targetIsCurrent) {
         $blockingReason = "target_windows_user_is_current_user"
     } elseif ($targetExists -eq $false) {
         $blockingReason = "target_windows_user_missing"
+    } elseif ($targetExists -eq $true -and -not $targetUserIdentityBoundaryOk) {
+        $blockingReason = "target_windows_user_identity_unverified"
     } elseif ($targetExists -ne $true) {
         $blockingReason = "target_windows_user_lookup_unknown"
     }
@@ -63,6 +83,10 @@ function Get-LocalWindowsUserReadiness {
         targetWindowsUser = $Name
         normalizedTargetWindowsUser = $normalizedTarget
         currentWindowsUser = $currentUser
+        currentWindowsUserSid = $currentUserSid
+        targetWindowsUserSid = $targetUserSid
+        targetUserSidMatchesCurrentUser = [bool]$targetUserSidMatchesCurrentUser
+        targetUserIdentityBoundaryOk = [bool]$targetUserIdentityBoundaryOk
         localUserLookupAvailable = $lookupAvailable
         targetUserExists = $targetExists
         targetUserIsCurrentUser = $targetIsCurrent
@@ -77,6 +101,7 @@ function Get-LoginOperatorNextStep {
     switch ($BlockingReason) {
         "target_windows_user_missing" { return "open_elevated_windows_user_settings_then_rerun_prepare" }
         "target_windows_user_is_current_user" { return "choose_separate_windows_user_then_rerun_prepare" }
+        "target_windows_user_identity_unverified" { return "verify_windows_user_identity_then_rerun_prepare" }
         "target_windows_user_lookup_unknown" { return "verify_windows_user_manually_then_rerun_prepare" }
         default { return "verify_windows_user_manually_then_rerun_prepare" }
     }
@@ -130,6 +155,10 @@ $result = [ordered]@{
     readinessChecked = $readiness.readinessChecked
     normalizedTargetWindowsUser = $readiness.normalizedTargetWindowsUser
     currentWindowsUser = $readiness.currentWindowsUser
+    currentWindowsUserSid = $readiness.currentWindowsUserSid
+    targetWindowsUserSid = $readiness.targetWindowsUserSid
+    targetUserSidMatchesCurrentUser = $readiness.targetUserSidMatchesCurrentUser
+    targetUserIdentityBoundaryOk = $readiness.targetUserIdentityBoundaryOk
     localUserLookupAvailable = $readiness.localUserLookupAvailable
     targetUserExists = $readiness.targetUserExists
     targetUserIsCurrentUser = $readiness.targetUserIsCurrentUser

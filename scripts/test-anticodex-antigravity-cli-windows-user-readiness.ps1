@@ -78,6 +78,8 @@ if ($dryRun) {
     if ($dryRun.expectedCredentialStoreIsolation -ne $true) { $failures += "missing_expected_credential_store_isolation" }
     if ($dryRun.readinessChecked -ne $true) { $failures += "readiness_not_checked" }
     if ($dryRun.targetUserIsCurrentUser -eq $true) { $failures += "target_windows_user_is_current_user" }
+    if ($dryRun.targetUserSidMatchesCurrentUser -eq $true) { $failures += "target_windows_user_sid_matches_current_user" }
+    if ($dryRun.readyForInteractiveLogin -eq $true -and $dryRun.targetUserIdentityBoundaryOk -ne $true) { $failures += "target_windows_user_identity_boundary_unverified" }
     if ($dryRun.targetUserExists -eq $false) { $warnings += "target_windows_user_missing" }
     if ($dryRun.readyForInteractiveLogin -ne $true -and -not [string]$dryRun.readinessBlockingReason) {
         $failures += "missing_readiness_blocking_reason"
@@ -108,6 +110,10 @@ $report = [ordered]@{
     readinessChecked = if ($dryRun) { [bool]$dryRun.readinessChecked } else { $false }
     normalizedTargetWindowsUser = if ($dryRun) { [string]$dryRun.normalizedTargetWindowsUser } else { "" }
     currentWindowsUser = if ($dryRun) { [string]$dryRun.currentWindowsUser } else { "" }
+    currentWindowsUserSid = if ($dryRun) { [string]$dryRun.currentWindowsUserSid } else { "" }
+    targetWindowsUserSid = if ($dryRun) { [string]$dryRun.targetWindowsUserSid } else { "" }
+    targetUserSidMatchesCurrentUser = if ($dryRun) { [bool]$dryRun.targetUserSidMatchesCurrentUser } else { $false }
+    targetUserIdentityBoundaryOk = if ($dryRun) { [bool]$dryRun.targetUserIdentityBoundaryOk } else { $false }
     localUserLookupAvailable = if ($dryRun) { [bool]$dryRun.localUserLookupAvailable } else { $false }
     targetUserExists = $targetExists
     targetUserIsCurrentUser = $targetIsCurrent

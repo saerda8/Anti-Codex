@@ -13974,6 +13974,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(readiness, /usedRealTraffic\s*=\s*\$false/);
   assert.match(readiness, /started\s*=\s*if \(\$dryRun\) \{ \[bool\]\$dryRun\.started \} else \{ \$false \}/);
   assert.match(readiness, /capturesLoginOutput\s*=\s*if \(\$dryRun\) \{ \[bool\]\$dryRun\.capturesLoginOutput \} else \{ \$false \}/);
+  assert.match(readiness, /currentWindowsUserSid/);
+  assert.match(readiness, /targetWindowsUserSid/);
+  assert.match(readiness, /targetUserSidMatchesCurrentUser/);
+  assert.match(readiness, /targetUserIdentityBoundaryOk/);
   assert.match(readiness, /separateAccountVerified\s*=\s*\$false/);
   assert.match(readiness, /loginVerified\s*=\s*\$false/);
   assert.match(readiness, /create_target_windows_user/);
@@ -13990,6 +13994,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(prepare, /startedLogin\s*=\s*\$false/);
   assert.match(prepare, /capturesPassword\s*=\s*\$false/);
   assert.match(prepare, /storesPassword\s*=\s*\$false/);
+  assert.match(prepare, /currentWindowsUserSid/);
+  assert.match(prepare, /targetWindowsUserSid/);
+  assert.match(prepare, /targetUserSidMatchesCurrentUser/);
+  assert.match(prepare, /targetUserIdentityBoundaryOk/);
   assert.match(prepare, /currentProcessElevated/);
   assert.match(prepare, /canCreateTargetWindowsUser/);
   assert.match(prepare, /create_target_windows_user_with_explicit_user_approval/);
@@ -14013,6 +14021,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(status, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(status, /latest-antigravity-account-isolation-status\.json/);
   assert.match(status, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
+  assert.match(status, /currentWindowsUserSid/);
+  assert.match(status, /targetWindowsUserSid/);
+  assert.match(status, /targetUserSidMatchesCurrentUser/);
+  assert.match(status, /targetUserIdentityBoundaryOk/);
   assert.match(status, /releaseAcceptableAccountProof\s*=\s*\$false/);
   assert.doesNotMatch(status, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
 
@@ -14023,6 +14035,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(dryRunLauncher, /blockedBeforeInteractiveLogin/);
   assert.match(dryRunLauncher, /operatorBlockingStage/);
   assert.match(dryRunLauncher, /operatorNextStep/);
+  assert.match(dryRunLauncher, /currentWindowsUserSid/);
+  assert.match(dryRunLauncher, /targetWindowsUserSid/);
+  assert.match(dryRunLauncher, /targetUserSidMatchesCurrentUser/);
+  assert.match(dryRunLauncher, /targetUserIdentityBoundaryOk/);
   assert.match(dryRunLauncher, /windows_user_not_ready_for_interactive_login/);
   assert.match(dryRunLauncher, /exit 2/);
   assert.match(dryRunLauncher, /\$runasWorkingDirectory = Join-Path \$env:SystemRoot "System32"/);
@@ -14066,6 +14082,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(setupGuidance, /storesPassword = \$false/);
   assert.match(setupGuidance, /opensSettings = \$false/);
   assert.match(setupGuidance, /runsSystemUserCommand = \$false/);
+  assert.match(setupGuidance, /currentWindowsUserSid/);
+  assert.match(setupGuidance, /targetWindowsUserSid/);
+  assert.match(setupGuidance, /targetUserSidMatchesCurrentUser/);
+  assert.match(setupGuidance, /targetUserIdentityBoundaryOk/);
   assert.match(setupGuidance, /releaseAcceptableAccountProof = \$false/);
   assert.doesNotMatch(setupGuidance, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
 
@@ -14073,6 +14093,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /bootstrapKeepsShellOpen/);
   assert.match(summarizer, /secondAccountLoginEntrypointEvidence/);
   assert.match(summarizer, /windowsUserSetupGuidanceEvidence/);
+  assert.match(summarizer, /currentWindowsUserSidPresent/);
+  assert.match(summarizer, /targetWindowsUserSidPresent/);
+  assert.match(summarizer, /targetUserIdentityBoundaryOk/);
   assert.match(summarizer, /isAntigravityCliWindowsUserReadinessReport/);
   assert.match(summarizer, /antigravityCliWindowsUserReadinessEvidence/);
   assert.match(summarizer, /isWindowsUserAccountPrepareReport/);
@@ -14119,13 +14142,21 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /antigravityAccountIsolationStatus/);
   assert.match(releaseGates, /requireAntigravityAccountIsolationStatusSemantics/);
   assert.match(releaseGates, /windows_user_readiness_started_login/);
+  assert.match(releaseGates, /windows_user_readiness_target_sid_matches_current_user/);
+  assert.match(releaseGates, /windows_user_readiness_identity_boundary_unverified/);
   assert.match(releaseGates, /windows_user_prepare_changed_system/);
+  assert.match(releaseGates, /windows_user_prepare_target_sid_matches_current_user/);
+  assert.match(releaseGates, /windows_user_prepare_identity_boundary_unverified/);
   assert.match(releaseGates, /windows_user_prepare_captures_password/);
   assert.match(releaseGates, /windows_user_prepare_next_proof_real_traffic_missing/);
   assert.match(releaseGates, /windows_user_setup_guidance_changed_system/);
   assert.match(releaseGates, /windows_user_setup_guidance_started_login/);
+  assert.match(releaseGates, /windows_user_setup_guidance_target_sid_matches_current_user/);
+  assert.match(releaseGates, /windows_user_setup_guidance_identity_boundary_unverified/);
   assert.match(releaseGates, /windows_user_setup_guidance_captures_password/);
   assert.match(releaseGates, /account_isolation_status_release_proof_claimed/);
+  assert.match(releaseGates, /account_isolation_status_target_sid_matches_current_user/);
+  assert.match(releaseGates, /account_isolation_status_identity_boundary_unverified/);
   assert.match(releaseGates, /source_preflight_windows_user_login_runas_workdir_missing/);
   assert.match(releaseGates, /source_preflight_windows_user_login_bootstrap_keeps_shell/);
   assert.match(releaseGates, /secondAccountLoginEntrypoint/);
@@ -14150,6 +14181,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /antigravityCliWindowsUserReadiness/);
   assert.match(server, /runasWorkingDirectory/);
   assert.match(server, /bootstrapKeepsShellOpen/);
+  assert.match(server, /currentWindowsUserSidPresent/);
+  assert.match(server, /targetWindowsUserSidPresent/);
+  assert.match(server, /targetUserIdentityBoundaryOk/);
   assert.match(server, /runasWorkdir/);
   assert.match(server, /latest-windows-user-account-prepare\.json/);
   assert.match(server, /windowsUserAccountPrepare/);

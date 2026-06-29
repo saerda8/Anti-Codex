@@ -550,6 +550,10 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         readinessChecked = $false
         normalizedTargetWindowsUser = ""
         currentWindowsUser = ""
+        currentWindowsUserSid = ""
+        targetWindowsUserSid = ""
+        targetUserSidMatchesCurrentUser = $true
+        targetUserIdentityBoundaryOk = $false
         localUserLookupAvailable = $false
         targetUserExists = $null
         targetUserIsCurrentUser = $true
@@ -572,6 +576,10 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
             $contract.readinessChecked = [bool]$parsed.readinessChecked
             $contract.normalizedTargetWindowsUser = [string]$parsed.normalizedTargetWindowsUser
             $contract.currentWindowsUser = [string]$parsed.currentWindowsUser
+            $contract.currentWindowsUserSid = if ($parsed.PSObject.Properties.Name -contains "currentWindowsUserSid") { [string]$parsed.currentWindowsUserSid } else { "" }
+            $contract.targetWindowsUserSid = if ($parsed.PSObject.Properties.Name -contains "targetWindowsUserSid") { [string]$parsed.targetWindowsUserSid } else { "" }
+            $contract.targetUserSidMatchesCurrentUser = if ($parsed.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser") { [bool]$parsed.targetUserSidMatchesCurrentUser } else { $true }
+            $contract.targetUserIdentityBoundaryOk = if ($parsed.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk") { [bool]$parsed.targetUserIdentityBoundaryOk } else { $false }
             $contract.localUserLookupAvailable = [bool]$parsed.localUserLookupAvailable
             $contract.targetUserExists = $parsed.targetUserExists
             $contract.targetUserIsCurrentUser = [bool]$parsed.targetUserIsCurrentUser
@@ -590,7 +598,10 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
                 -and $parsed.readinessChecked -eq $true `
                 -and [string]$parsed.normalizedTargetWindowsUser `
                 -and [string]$parsed.currentWindowsUser `
+                -and [string]$contract.currentWindowsUserSid `
                 -and $parsed.targetUserIsCurrentUser -eq $false `
+                -and $contract.targetUserSidMatchesCurrentUser -eq $false `
+                -and ($parsed.readyForInteractiveLogin -ne $true -or ([string]$contract.targetWindowsUserSid -and $contract.targetUserIdentityBoundaryOk -eq $true)) `
                 -and $parsed.credentialBoundary -eq "separate-windows-user" `
                 -and $parsed.expectedCredentialStoreIsolation -eq $true `
                 -and [string]$parsed.runasWorkingDirectory `
@@ -620,6 +631,10 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         readinessChecked = $contract.readinessChecked
         normalizedTargetWindowsUser = $contract.normalizedTargetWindowsUser
         currentWindowsUser = $contract.currentWindowsUser
+        currentWindowsUserSid = $contract.currentWindowsUserSid
+        targetWindowsUserSid = $contract.targetWindowsUserSid
+        targetUserSidMatchesCurrentUser = $contract.targetUserSidMatchesCurrentUser
+        targetUserIdentityBoundaryOk = $contract.targetUserIdentityBoundaryOk
         localUserLookupAvailable = $contract.localUserLookupAvailable
         targetUserExists = $contract.targetUserExists
         targetUserIsCurrentUser = $contract.targetUserIsCurrentUser

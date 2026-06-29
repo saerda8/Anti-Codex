@@ -202,6 +202,13 @@ After every failure, before another dispatch:
 - Result: Kilo finished with zero diff and no checks, so it provided no implementation evidence. MiMoCode ended as `caller_timeout_after_valid_changes` with release self-test and focused launcher test passing; the main patch absorbed its useful stricter second-account entrypoint checks for `changedSystem`, `createdUser`, `capturesPassword`, and `storesPassword`.
 - Rule change: account setup guidance must stay report-only. It may explain the manual next step, but it must not open settings, run user-management commands, create users, start login, capture passwords, or claim account proof.
 
+### 2026-06-30 - Windows-user SID boundary worker comparison
+
+- Workers: Kilo `klw_mqzrnfzx_ia3sdq` and MiMoCode `mcw_mqzrngso_brzv6s` in isolated worktrees.
+- Task: add SID identity-boundary evidence for the separate Windows user used by the second Antigravity account.
+- Result: Kilo ended as `caller_timeout_after_valid_changes` with two requested checks passing and a useful Manager/server summary suggestion. The main patch kept the SID boundary fields but surfaced only presence/match booleans in summaries instead of raw SID text. MiMoCode produced a release-gate draft but failed `node scripts\test-anticodex-release-gates.mjs --self-test`, so it was not merged.
+- Rule change: display-name separation is not enough for a ready second-account login. Ready evidence must prove the target Windows user has a SID, the current user has a SID, and the two do not match; support summaries should avoid printing raw SID values unless explicitly needed for debugging.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

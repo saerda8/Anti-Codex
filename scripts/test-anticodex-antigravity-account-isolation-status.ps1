@@ -107,6 +107,8 @@ $mcpLanePrepared = ($dual -and $dual.ok -eq $true -and $dual.mcpLane.role -eq "e
 $fileIsolationPrepared = ($dual -and $dual.ok -eq $true -and $dual.laneComparison.profileRootsDifferent -eq $true -and $dual.laneComparison.profileRootsNested -eq $false -and $dual.laneComparison.appDataDifferent -eq $true -and $dual.laneComparison.localAppDataDifferent -eq $true -and $dual.laneComparison.geminiDirDifferent -eq $true)
 $targetUserExists = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserExists")) { $prepare.targetUserExists } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserExists")) { $readiness.targetUserExists } else { $null }
 $targetUserIsCurrentUser = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$prepare.targetUserIsCurrentUser } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$readiness.targetUserIsCurrentUser } else { $false }
+$targetUserSidMatchesCurrentUser = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$prepare.targetUserSidMatchesCurrentUser } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$readiness.targetUserSidMatchesCurrentUser } else { $false }
+$targetUserIdentityBoundaryOk = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$prepare.targetUserIdentityBoundaryOk } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$readiness.targetUserIdentityBoundaryOk } else { $false }
 
 $completionState = if ($targetUserIsCurrentUser) {
     "blocked_target_is_current_windows_user"
@@ -141,6 +143,10 @@ $report = [ordered]@{
     expectedCredentialStoreIsolation = $true
     targetUserExists = $targetUserExists
     targetUserIsCurrentUser = $targetUserIsCurrentUser
+    currentWindowsUserSid = if ($prepare) { [string]$prepare.currentWindowsUserSid } elseif ($readiness) { [string]$readiness.currentWindowsUserSid } else { "" }
+    targetWindowsUserSid = if ($prepare) { [string]$prepare.targetWindowsUserSid } elseif ($readiness) { [string]$readiness.targetWindowsUserSid } else { "" }
+    targetUserSidMatchesCurrentUser = $targetUserSidMatchesCurrentUser
+    targetUserIdentityBoundaryOk = $targetUserIdentityBoundaryOk
     readyForInteractiveLogin = $readyForInteractiveLogin
     readinessBlockingReason = $readinessBlockingReason
     safeToAskUserForSecondAccountLogin = $safeToAskLogin

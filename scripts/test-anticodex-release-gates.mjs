@@ -1095,6 +1095,10 @@ function summarizeGate(definition) {
         if (!windowsUserLogin.normalizedTargetWindowsUser) semanticFailures.push("source_preflight_windows_user_login_target_user_missing");
         if (!windowsUserLogin.currentWindowsUser) semanticFailures.push("source_preflight_windows_user_login_current_user_missing");
         if (windowsUserLogin.targetUserIsCurrentUser === true) semanticFailures.push("source_preflight_windows_user_login_target_is_current_user");
+        if (!windowsUserLogin.currentWindowsUserSid) semanticFailures.push("source_preflight_windows_user_login_current_sid_missing");
+        if (windowsUserLogin.targetUserSidMatchesCurrentUser === true) semanticFailures.push("source_preflight_windows_user_login_target_sid_matches_current_user");
+        if (windowsUserLogin.readyForInteractiveLogin === true && !windowsUserLogin.targetWindowsUserSid) semanticFailures.push("source_preflight_windows_user_login_target_sid_missing");
+        if (windowsUserLogin.readyForInteractiveLogin === true && windowsUserLogin.targetUserIdentityBoundaryOk !== true) semanticFailures.push("source_preflight_windows_user_login_identity_boundary_unverified");
         if (windowsUserLogin.readyForInteractiveLogin !== true && !windowsUserLogin.readinessBlockingReason) semanticFailures.push("source_preflight_windows_user_login_readiness_reason_missing");
         if (windowsUserLogin.credentialBoundary !== "separate-windows-user") semanticFailures.push("source_preflight_windows_user_login_credential_boundary");
         if (windowsUserLogin.expectedCredentialStoreIsolation !== true) semanticFailures.push("source_preflight_windows_user_login_expected_credential_isolation");
@@ -1141,6 +1145,10 @@ function summarizeGate(definition) {
       if (!report.normalizedTargetWindowsUser) semanticFailures.push("windows_user_readiness_target_user_missing");
       if (!report.currentWindowsUser) semanticFailures.push("windows_user_readiness_current_user_missing");
       if (report.targetUserIsCurrentUser === true) semanticFailures.push("windows_user_readiness_target_is_current_user");
+      if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("windows_user_readiness_target_sid_matches_current_user");
+      if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("windows_user_readiness_current_sid_missing");
+      if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("windows_user_readiness_target_sid_missing");
+      if (report.readyForInteractiveLogin === true && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("windows_user_readiness_identity_boundary_unverified");
       if (report.readyForInteractiveLogin !== true && !report.readinessBlockingReason) semanticFailures.push("windows_user_readiness_blocking_reason_missing");
       if (report.readyForInteractiveLogin === true && report.recommendedOperatorAction !== "run_interactive_login_with_explicit_user_approval") semanticFailures.push("windows_user_readiness_ready_action_mismatch");
       if (report.readyForInteractiveLogin !== true && report.requiresUserAction !== true) semanticFailures.push("windows_user_readiness_requires_user_action_missing");
@@ -1164,6 +1172,10 @@ function summarizeGate(definition) {
       if (report.capturesPassword !== false) semanticFailures.push("windows_user_prepare_captures_password");
       if (report.storesPassword !== false) semanticFailures.push("windows_user_prepare_stores_password");
       if (report.targetUserIsCurrentUser === true) semanticFailures.push("windows_user_prepare_target_is_current_user");
+      if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("windows_user_prepare_target_sid_matches_current_user");
+      if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("windows_user_prepare_current_sid_missing");
+      if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("windows_user_prepare_target_sid_missing");
+      if (report.readyForInteractiveLogin === true && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("windows_user_prepare_identity_boundary_unverified");
       if (report.readyForInteractiveLogin !== true && !report.readinessBlockingReason) semanticFailures.push("windows_user_prepare_blocking_reason_missing");
       if (report.canProceedToInteractiveLogin !== safeToAskLogin) semanticFailures.push("windows_user_prepare_can_proceed_mismatch");
       if (report.blockedBeforeInteractiveLogin !== !safeToAskLogin) semanticFailures.push("windows_user_prepare_blocked_before_login_mismatch");
@@ -1195,6 +1207,10 @@ function summarizeGate(definition) {
       if (report.storesPassword !== false) semanticFailures.push("windows_user_setup_guidance_stores_password");
       if (report.opensSettings !== false) semanticFailures.push("windows_user_setup_guidance_opens_settings");
       if (report.runsSystemUserCommand !== false) semanticFailures.push("windows_user_setup_guidance_runs_system_user_command");
+      if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("windows_user_setup_guidance_target_sid_matches_current_user");
+      if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("windows_user_setup_guidance_current_sid_missing");
+      if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("windows_user_setup_guidance_target_sid_missing");
+      if (report.readyForInteractiveLogin === true && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("windows_user_setup_guidance_identity_boundary_unverified");
       if (report.blockedBeforeInteractiveLogin !== !safeToAskLogin) semanticFailures.push("windows_user_setup_guidance_blocked_before_login_mismatch");
       if (!report.operatorBlockingStage) semanticFailures.push("windows_user_setup_guidance_operator_stage_missing");
       if (!report.operatorNextStep) semanticFailures.push("windows_user_setup_guidance_operator_next_step_missing");
@@ -1226,6 +1242,10 @@ function summarizeGate(definition) {
       if (report.credentialBoundary !== "separate-windows-user") semanticFailures.push("account_isolation_status_credential_boundary");
       if (report.expectedCredentialStoreIsolation !== true) semanticFailures.push("account_isolation_status_expected_credential_isolation");
       if (report.targetUserIsCurrentUser === true) semanticFailures.push("account_isolation_status_target_is_current_user");
+      if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("account_isolation_status_target_sid_matches_current_user");
+      if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("account_isolation_status_current_sid_missing");
+      if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("account_isolation_status_target_sid_missing");
+      if (report.readyForInteractiveLogin === true && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("account_isolation_status_identity_boundary_unverified");
       if (report.readyForInteractiveLogin !== true && !report.readinessBlockingReason) semanticFailures.push("account_isolation_status_blocking_reason_missing");
       if (report.canProceedToInteractiveLogin !== safeToAskLogin) semanticFailures.push("account_isolation_status_can_proceed_mismatch");
       if (report.blockedBeforeInteractiveLogin !== !safeToAskLogin) semanticFailures.push("account_isolation_status_blocked_before_login_mismatch");
@@ -2661,6 +2681,10 @@ if (args.has("--self-test")) {
       readinessChecked: false,
       normalizedTargetWindowsUser: "",
       currentWindowsUser: "",
+      currentWindowsUserSid: "",
+      targetWindowsUserSid: "",
+      targetUserSidMatchesCurrentUser: true,
+      targetUserIdentityBoundaryOk: false,
       targetUserIsCurrentUser: true,
       readyForInteractiveLogin: false,
       readinessBlockingReason: "",
@@ -2688,6 +2712,10 @@ if (args.has("--self-test")) {
       capturesPassword: true,
       storesPassword: true,
       targetUserIsCurrentUser: true,
+      currentWindowsUserSid: "",
+      targetWindowsUserSid: "",
+      targetUserSidMatchesCurrentUser: true,
+      targetUserIdentityBoundaryOk: false,
       readyForInteractiveLogin: false,
       readinessBlockingReason: "",
       recommendedOperatorAction: "run_interactive_login_with_explicit_user_approval",
@@ -2720,6 +2748,10 @@ if (args.has("--self-test")) {
       storesPassword: true,
       opensSettings: true,
       runsSystemUserCommand: true,
+      currentWindowsUserSid: "",
+      targetWindowsUserSid: "",
+      targetUserSidMatchesCurrentUser: true,
+      targetUserIdentityBoundaryOk: false,
       safeToAskUserForSecondAccountLogin: true,
       blockedBeforeInteractiveLogin: true,
       operatorBlockingStage: "",
@@ -2753,6 +2785,10 @@ if (args.has("--self-test")) {
       credentialBoundary: "profile-and-appdata-only",
       expectedCredentialStoreIsolation: false,
       targetUserIsCurrentUser: true,
+      currentWindowsUserSid: "",
+      targetWindowsUserSid: "",
+      targetUserSidMatchesCurrentUser: true,
+      targetUserIdentityBoundaryOk: false,
       readyForInteractiveLogin: false,
       readinessBlockingReason: "",
       safeToAskUserForSecondAccountLogin: true,
@@ -2887,6 +2923,7 @@ if (args.has("--self-test")) {
       "windows_user_readiness_target_user_missing",
       "windows_user_readiness_current_user_missing",
       "windows_user_readiness_target_is_current_user",
+      "windows_user_readiness_target_sid_matches_current_user",
       "windows_user_readiness_blocking_reason_missing",
       "windows_user_readiness_requires_user_action_missing",
       "windows_user_readiness_next_proof_real_traffic_missing",
@@ -2908,6 +2945,7 @@ if (args.has("--self-test")) {
       "windows_user_prepare_captures_password",
       "windows_user_prepare_stores_password",
       "windows_user_prepare_target_is_current_user",
+      "windows_user_prepare_target_sid_matches_current_user",
       "windows_user_prepare_blocking_reason_missing",
       "windows_user_prepare_can_proceed_mismatch",
       "windows_user_prepare_blocked_before_login_mismatch",
@@ -2935,6 +2973,7 @@ if (args.has("--self-test")) {
       "windows_user_setup_guidance_stores_password",
       "windows_user_setup_guidance_opens_settings",
       "windows_user_setup_guidance_runs_system_user_command",
+      "windows_user_setup_guidance_target_sid_matches_current_user",
       "windows_user_setup_guidance_blocked_before_login_mismatch",
       "windows_user_setup_guidance_operator_stage_missing",
       "windows_user_setup_guidance_operator_next_step_missing",
@@ -2965,6 +3004,7 @@ if (args.has("--self-test")) {
       "account_isolation_status_credential_boundary",
       "account_isolation_status_expected_credential_isolation",
       "account_isolation_status_target_is_current_user",
+      "account_isolation_status_target_sid_matches_current_user",
       "account_isolation_status_blocking_reason_missing",
       "account_isolation_status_can_proceed_mismatch",
       "account_isolation_status_blocked_before_login_mismatch",
@@ -4003,6 +4043,10 @@ if (args.has("--self-test")) {
             readinessChecked: false,
             normalizedTargetWindowsUser: "",
             currentWindowsUser: "",
+            currentWindowsUserSid: "",
+            targetWindowsUserSid: "",
+            targetUserSidMatchesCurrentUser: true,
+            targetUserIdentityBoundaryOk: false,
             targetUserIsCurrentUser: true,
             readyForInteractiveLogin: false,
             readinessBlockingReason: "",
@@ -4045,6 +4089,8 @@ if (args.has("--self-test")) {
       "source_preflight_windows_user_login_target_user_missing",
       "source_preflight_windows_user_login_current_user_missing",
       "source_preflight_windows_user_login_target_is_current_user",
+      "source_preflight_windows_user_login_current_sid_missing",
+      "source_preflight_windows_user_login_target_sid_matches_current_user",
       "source_preflight_windows_user_login_readiness_reason_missing",
       "source_preflight_windows_user_login_credential_boundary",
       "source_preflight_windows_user_login_expected_credential_isolation",
