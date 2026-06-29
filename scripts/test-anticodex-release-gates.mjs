@@ -1427,7 +1427,7 @@ function gateGuidance(gate) {
     return "optional_antigravity_return_required: optional provider-to-Antigravity return evidence is stale or missing; run only with explicit user approval because it performs a real Antigravity return turn.";
   }
   if (gate?.id === "antigravityCliRealSmokeOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
-    return "optional_antigravity_cli_real_smoke_required: optional isolated Antigravity CLI account evidence is stale or missing; run only with explicit user approval, an isolated CLI profile, and no Antigravity Desktop/coworker dependency.";
+    return "optional_antigravity_cli_real_smoke_required: Anti-Codex only verifies its model-text lane/profile; MCP Antigravity account lane is externally managed/not managed here; separate account proof still requires explicit account-identity evidence. Run only with explicit user approval, an isolated CLI profile, and no Antigravity Desktop/coworker dependency.";
   }
   if (actions.some((item) => item.id === "stabilitySoak") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_stability_soak_required: optional soak evidence is stale; run only with explicit user approval because it uses the local gateway, real traffic, and a longer stability window.";
