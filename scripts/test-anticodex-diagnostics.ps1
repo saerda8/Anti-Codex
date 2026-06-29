@@ -1107,6 +1107,7 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.antigravityCliIsolationProfileOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI isolation profile success" }
             if ($sourcePreflightSummary.localConnectorVerifierOk -ne $true) { Add-Failure "source-preflight summary missing local connector verifier success" }
             if ($sourcePreflightSummary.publicDocumentationOk -ne $true) { Add-Failure "source-preflight summary missing public documentation success" }
+            if ($sourcePreflightSummary.publicDocumentationClientCopySyncContractOk -ne $true) { Add-Failure "source-preflight summary missing client-copy public documentation contract success" }
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
             if ($sourcePreflightSummary.antigravityCliProfilePrepareOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare success" }
@@ -1931,6 +1932,7 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "antigravityCliIsolationProfileOk")) { Add-Failure "diagnostics source preflight missing Antigravity CLI isolation profile result" }
         if (-not (Has-Property $sourcePreflight "localConnectorVerifierOk")) { Add-Failure "diagnostics source preflight missing local connector verifier result" }
         if (-not (Has-Property $sourcePreflight "publicDocumentationOk")) { Add-Failure "diagnostics source preflight missing public documentation result" }
+        if (-not (Has-Property $sourcePreflight "publicDocumentationClientCopySyncContractOk")) { Add-Failure "diagnostics source preflight missing client-copy public documentation contract result" }
         if (-not (Has-Property $sourcePreflight "translatorRegressionOk")) { Add-Failure "diagnostics source preflight missing translator regression result" }
         if (-not (Has-Property $sourcePreflight "diffWhitespaceOk")) { Add-Failure "diagnostics source preflight missing diff whitespace result" }
         if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareOk")) { Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare result" }

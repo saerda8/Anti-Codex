@@ -108,6 +108,14 @@ function checkOk(name) {
   return has(checks, name) && checks[name] && has(checks[name], "ok") ? !!checks[name].ok : null;
 }
 
+function publicDocumentationAssertionOk(file, name) {
+  const publicDocumentation = checks.publicDocumentation && typeof checks.publicDocumentation === "object"
+    ? checks.publicDocumentation
+    : null;
+  const assertions = Array.isArray(publicDocumentation?.assertions) ? publicDocumentation.assertions : [];
+  return assertions.some((item) => item?.file === file && item?.name === name && item?.ok === true);
+}
+
 const managerButton = report && report.managerButton ? report.managerButton : null;
 const managerResults = managerButton && managerButton.results ? managerButton.results : {};
 const managerButtonResults = Object.entries(managerResults).map(([action, entry]) => {
@@ -385,6 +393,9 @@ const summary = {
   antigravityCliProfilePrepareOk: checkOk("antigravityCliProfilePrepare"),
   localConnectorVerifierOk: checkOk("localConnectorVerifier"),
   publicDocumentationOk: checkOk("publicDocumentation"),
+  publicDocumentationClientCopySyncContractOk: report.reportName === "source-preflight"
+    ? publicDocumentationAssertionOk("README.md", "client-copy-sync-contract") && publicDocumentationAssertionOk("README_EN.md", "client-copy-sync-contract")
+    : null,
   translatorRegressionOk: checkOk("translatorRegression"),
   diffWhitespaceOk: checkOk("diffWhitespace"),
   baseUrl: has(report, "baseUrl") ? report.baseUrl : null,

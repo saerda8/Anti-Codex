@@ -467,7 +467,7 @@ function latestReportsSummary(result) {
     }
     if (item.sourcePreflightEvidence) {
       const evidence = item.sourcePreflightEvidence;
-      lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
+      lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"} / clientCopyDocs=${evidence.publicDocumentationClientCopySyncContractOk ? "true" : "false"}`);
       lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
     }
     if (item.logDbGuardEvidence) {
@@ -892,7 +892,7 @@ if (args.has("--self-test")) {
       exists: true,
       ok: true,
       sourceSnapshotEvidence: { fingerprint: "abcdef0123456789", fileCount: 15589, cacheHitCount: 12000, cacheMissCount: 42, reusedFromPreviousReport: true, refreshSkippedReason: "short_budget_reused_previous_snapshot" },
-      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, antigravityCliIsolationProfileOk: true, antigravityCliProfilePrepareOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
+      sourcePreflightEvidence: { javascriptSyntaxOk: true, powershellSyntaxOk: true, upstreamProfileStorageOk: true, antigravityCliIsolationProfileOk: true, antigravityCliProfilePrepareOk: true, localConnectorVerifierOk: true, publicDocumentationOk: true, publicDocumentationClientCopySyncContractOk: true, uiStateSelfTestOk: true, translatorRegressionOk: true, diffWhitespaceOk: true, skipFullRegression: false },
     }, {
       label: "\u65e5\u5fd7\u5e93\u9632\u62a4",
       exists: true,
@@ -963,7 +963,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);
   assert.match(evidenceSummary, /sourceSnapshot: files=15589 \/ fingerprint=abcdef012345 \/ cache=12000\/42 \/ reused=true \/ reason=short_budget_reused_previous_snapshot/);
-  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ cliIsolation=true \/ prepare=true \/ localConnector=true \/ docs=true/);
+  assert.match(evidenceSummary, /sourcePreflight: js=true \/ ps=true \/ profile=true \/ cliIsolation=true \/ prepare=true \/ localConnector=true \/ docs=true \/ clientCopyDocs=true/);
   assert.match(evidenceSummary, /sourcePreflight: ui=true \/ regression=true \/ diff=true \/ skipFull=false/);
   assert.match(evidenceSummary, /logDbGuard: protected=true \/ trigger=true \/ noTraffic=true \/ wal=0/);
   const missingHistorySummary = latestReportsSummary({

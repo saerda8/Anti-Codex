@@ -1141,6 +1141,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /localConnectorVerifierOk/);
   assert.match(managerBridge, /antigravityCliProfilePrepareOk/);
   assert.match(managerInject, /antigravityCliProfilePrepareOk/);
+  assert.match(managerBridge, /publicDocumentationClientCopySyncContractOk/);
+  assert.match(managerInject, /publicDocumentationClientCopySyncContractOk/);
+  assert.match(managerBridge, /clientCopyDocs=/);
+  assert.match(managerInject, /clientCopyDocs=/);
   assert.match(managerBridge, /uiStateSelfTestOk/);
   assert.match(managerInject, /uiStateSelfTestOk/);
   assert.match(managerBridge, /translatorRegressionOk/);
@@ -3476,7 +3480,13 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
         antigravityCliIsolationProfile: { ok: true },
         antigravityCliProfilePrepare: { ok: true },
         localConnectorVerifier: { ok: true },
-        publicDocumentation: { ok: true },
+        publicDocumentation: {
+          ok: true,
+          assertions: [
+            { file: "README.md", name: "client-copy-sync-contract", ok: true },
+            { file: "README_EN.md", name: "client-copy-sync-contract", ok: true },
+          ],
+        },
         translatorRegression: { ok: true },
         diffWhitespace: { ok: true },
       },
@@ -3503,6 +3513,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     assert.equal(summary.antigravityCliProfilePrepareOk, true);
     assert.equal(summary.localConnectorVerifierOk, true);
     assert.equal(summary.publicDocumentationOk, true);
+    assert.equal(summary.publicDocumentationClientCopySyncContractOk, true);
     assert.equal(summary.translatorRegressionOk, true);
     assert.equal(summary.diffWhitespaceOk, true);
     assert.equal(summary.sourceSnapshotEvidence.cacheHitCount, 12000);
@@ -8173,6 +8184,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /antigravityCliProfilePrepareOk/);
   assert.match(diagnostics, /localConnectorVerifierOk/);
   assert.match(diagnostics, /publicDocumentationOk/);
+  assert.match(diagnostics, /publicDocumentationClientCopySyncContractOk/);
+  assert.match(diagnostics, /source-preflight summary missing client-copy public documentation contract success/);
   assert.match(diagnostics, /translatorRegressionOk/);
   assert.match(diagnostics, /diffWhitespaceOk/);
   assert.match(diagnostics, /skipFullRegression/);
