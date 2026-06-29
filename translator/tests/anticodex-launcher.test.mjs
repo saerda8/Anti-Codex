@@ -218,6 +218,63 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   );
 });
 
+test("Anti-Codex conversation cleanup preserves project roots and native Codex isolation", () => {
+  const cleanup = readFileSync(resolve(root, "scripts", "clear-anticodex-conversations.ps1"), "utf8");
+
+  assert.match(cleanup, /conversation-backups/);
+  assert.match(cleanup, /state_5\.sqlite/);
+  assert.match(cleanup, /state_5\.sqlite-wal/);
+  assert.match(cleanup, /state_5\.sqlite-shm/);
+  assert.match(cleanup, /sqlite\\codex-dev\.db/);
+  assert.match(cleanup, /response-history\.json/);
+  assert.match(cleanup, /sessions/);
+  assert.match(cleanup, /codex-home-deepseek-app/);
+  assert.match(cleanup, /codexHomeFull/);
+  assert.match(cleanup, /codexHomeFull "sessions"/);
+  assert.match(cleanup, /codexHomeFull "state_5\.sqlite"/);
+  assert.match(cleanup, /codexHomeFull "sqlite\\codex-dev\.db"/);
+  assert.match(cleanup, /codexHomeElectronDefault/);
+  assert.match(cleanup, /codexGlobalStatePath/);
+  assert.match(cleanup, /logs_2\.sqlite/);
+  assert.match(cleanup, /electron-user-data-adaptive\\Default/);
+  assert.match(cleanup, /Local Storage/);
+  assert.match(cleanup, /Session Storage/);
+  assert.match(cleanup, /History-journal/);
+  assert.match(cleanup, /electron-saved-workspace-roots/);
+  assert.match(cleanup, /active-workspace-roots/);
+  assert.match(cleanup, /electron-workspace-root-labels/);
+  assert.match(cleanup, /project-order/);
+  assert.match(cleanup, /thread-client-id-v1/);
+  assert.match(cleanup, /unread-thread-ids-by-host-v1/);
+  assert.match(cleanup, /heartbeat-thread-permissions-by-id/);
+  assert.match(cleanup, /projectless-thread-ids/);
+  assert.match(cleanup, /prompt-history/);
+  assert.match(cleanup, /composer-drafts/);
+  assert.match(cleanup, /G:\\Trae-Project\\Anti-Codex\\deepcodex/);
+  assert.match(cleanup, /deepcodex/);
+  assert.match(cleanup, /Stop-Process/);
+  assert.match(cleanup, /Get-AntiCodexProcesses/);
+  assert.match(cleanup, /AppData\\Roaming\\anticodex/);
+  assert.match(cleanup, /AppData\\Local\\Anti-Codex/);
+  assert.match(cleanup, /Get-OriginalCodexMainProcesses/);
+  assert.match(cleanup, /refusing to stop original Codex process ids/);
+  assert.match(cleanup, /Assert-UnderPath/);
+  assert.match(cleanup, /Move-IfExists/);
+  assert.match(cleanup, /\[System\.IO\.Directory\]::Move/);
+  assert.match(cleanup, /\[System\.IO\.File\]::Move/);
+  assert.match(cleanup, /ConvertTo-Array/);
+  assert.match(cleanup, /electron-persisted-atom-state/);
+  assert.match(cleanup, /agent-mode-by-host-id/);
+  assert.match(cleanup, /skip-full-access-confirm/);
+  assert.match(cleanup, /composer-permission-mode-visibility/);
+  assert.match(cleanup, /full-access/);
+  assert.match(cleanup, /thread-client-id-v1:\*/);
+  assert.match(cleanup, /refusing non-default Anti-Codex state root/);
+  assert.match(cleanup, /protect-anticodex-log-db\.mjs/);
+  assert.doesNotMatch(cleanup, /Remove-Item\s+[^`r`n]*(?:USERPROFILE|\\\.codex|AppData\\Roaming\\Codex|AppData\\Local\\Codex)/i);
+  assert.doesNotMatch(cleanup, /Move-Item\s+[^`r`n]*(?:USERPROFILE|\\\.codex|AppData\\Roaming\\Codex|AppData\\Local\\Codex)/i);
+});
+
 test("Anti-Codex recovers a dead translator without restarting its desktop window", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
   const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
