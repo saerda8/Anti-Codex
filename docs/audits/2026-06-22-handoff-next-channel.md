@@ -1,6 +1,6 @@
 # Anti-Codex Handoff For Next Channel
 
-Date: 2026-06-23, current-status refreshed 2026-06-29
+Date: 2026-06-23, current-status refreshed 2026-06-30
 Branch: main
 
 ## Current State
@@ -9,6 +9,9 @@ Branch: main
 - Direction lock: Anti-Codex should remain a guarded Codex client copy plus isolation, branding, and model-adapter changes. Do not reimplement Codex client/tool features one by one through Antigravity Desktop/coworker; use host sync and parity validation when Codex changes.
 - Client sync contract: native Codex updates must be handled as guarded host/client sync plus Anti-Codex patch reapplication. Missing native Codex behavior in Anti-Codex is a sync/parity bug by default, not a prompt to manually rebuild that behavior.
 - Antigravity account mode is back to a two-account/profile split because Gemini CLI is not usable for the MCP-side account lane. Anti-Codex should keep its own isolated Antigravity CLI profile/account for model text while MCP can use a different Antigravity account. Do not run real account/traffic proof without explicit approval.
+- Optional Antigravity CLI real-smoke reports now must carry `accountLaneRole`, `mcpAccountLaneManagedByAntiCodex`, and `mcpAccountLaneOwner`; release gate will reject missing or inaccurate owner fields.
+- Manager latest-report/support text now displays `antigravityCliRealSmoke` lane, making it clear Anti-Codex only handles model-text lane while MCP lane is externally managed.
+- Diagnostics now validates optional real-smoke summary for lane field consistency.
 - Anti-Codex-side account lane evidence is explicit in no-traffic profile-prepare/source-preflight/diagnostics reports: `accountLaneRole:"anticodex-model-text"`, `mcpAccountLaneManagedByAntiCodex:false`, and `mcpAccountLaneOwner:"external-antigravity-account-not-managed-here"`. MCP-side setup is external to this channel.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the latest no-traffic checks: upstream `antigravity-desktop`, CLI model-text transport, account ready, 8 models, session lock idle.
 - Manager source/readiness contracts now target `native-panel-v99`.
@@ -102,6 +105,7 @@ Branch: main
 - Manager latest reports and diagnostic bundle collection now surface both optional report files when generated; neither was added to passive release-required gates.
 - Fast source preflight now runs the isolated upstream profile storage suite as `upstreamProfileStorage`, covering corrupt/unreadable third-party key fail-closed behavior, explicit Antigravity recovery, history preservation, and no real APPDATA profile mutation.
 - Responses missing-history handling now preserves HTTP 410 `response_history_missing` instead of generic `gateway_error`; integration coverage proves non-retryable guidance, original response ID, and no upstream request.
+- Added optional real-smoke lane evidence (e790c08), strengthened optional real-traffic validation (da52407), and updated diagnostics to cover real-smoke summary lane fields (fd0bc1c).
 
 ## Fresh Lessons For Next Channel
 
