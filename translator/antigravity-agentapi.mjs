@@ -438,6 +438,7 @@ export function antigravityCliIsolationEnv(env = process.env) {
   const profileRoot = env.ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT
     || env.ANTICODEX_ANTIGRAVITY_CLI_HOME
     || "";
+  const strictWindowsAppData = env.ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA === "1";
   const next = {};
   if (profileRoot) {
     next.HOME = profileRoot;
@@ -445,9 +446,15 @@ export function antigravityCliIsolationEnv(env = process.env) {
     next.GEMINI_DIR = env.ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR || join(profileRoot, ".gemini");
     next.ANTIGRAVITY_CLI_CONVERSATIONS_DIR = env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR
       || join(next.GEMINI_DIR, "antigravity-cli", "conversations");
+    if (strictWindowsAppData) {
+      next.APPDATA = env.ANTICODEX_ANTIGRAVITY_CLI_APPDATA || join(profileRoot, "AppData", "Roaming");
+      next.LOCALAPPDATA = env.ANTICODEX_ANTIGRAVITY_CLI_LOCALAPPDATA || join(profileRoot, "AppData", "Local");
+    }
   }
   if (env.ANTICODEX_ANTIGRAVITY_CLI_HOME) next.HOME = env.ANTICODEX_ANTIGRAVITY_CLI_HOME;
   if (env.ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE) next.USERPROFILE = env.ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE;
+  if (env.ANTICODEX_ANTIGRAVITY_CLI_APPDATA) next.APPDATA = env.ANTICODEX_ANTIGRAVITY_CLI_APPDATA;
+  if (env.ANTICODEX_ANTIGRAVITY_CLI_LOCALAPPDATA) next.LOCALAPPDATA = env.ANTICODEX_ANTIGRAVITY_CLI_LOCALAPPDATA;
   if (env.ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR) {
     next.GEMINI_DIR = env.ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR;
     next.ANTIGRAVITY_CLI_CONVERSATIONS_DIR = env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR

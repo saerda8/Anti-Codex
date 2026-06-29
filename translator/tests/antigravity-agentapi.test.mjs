@@ -462,18 +462,34 @@ test("antigravityCliIsolationEnv builds an Anti-Codex-owned CLI profile boundary
   assert.equal(env.USERPROFILE, "G:\\AntiCodexProfiles\\ag-account-b");
   assert.equal(env.GEMINI_DIR, "G:\\AntiCodexProfiles\\ag-account-b\\.gemini");
   assert.equal(env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR, "G:\\AntiCodexProfiles\\ag-account-b\\.gemini\\antigravity-cli\\conversations");
+  assert.equal(env.APPDATA, undefined);
+  assert.equal(env.LOCALAPPDATA, undefined);
+});
+
+test("antigravityCliIsolationEnv can isolate Windows AppData for a second CLI account", () => {
+  const env = antigravityCliIsolationEnv({
+    ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT: "G:\\AntiCodexProfiles\\ag-account-b",
+    ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA: "1",
+  });
+
+  assert.equal(env.APPDATA, "G:\\AntiCodexProfiles\\ag-account-b\\AppData\\Roaming");
+  assert.equal(env.LOCALAPPDATA, "G:\\AntiCodexProfiles\\ag-account-b\\AppData\\Local");
 });
 
 test("antigravityCliIsolationEnv allows explicit home and conversation overrides", () => {
   const env = antigravityCliIsolationEnv({
     ANTICODEX_ANTIGRAVITY_CLI_HOME: "G:\\anti-home",
     ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE: "G:\\anti-user",
+    ANTICODEX_ANTIGRAVITY_CLI_APPDATA: "G:\\anti-appdata",
+    ANTICODEX_ANTIGRAVITY_CLI_LOCALAPPDATA: "G:\\anti-localappdata",
     ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR: "G:\\anti-gemini",
     ANTICODEX_ANTIGRAVITY_CLI_CONVERSATIONS_DIR: "G:\\anti-conversations",
   });
 
   assert.equal(env.HOME, "G:\\anti-home");
   assert.equal(env.USERPROFILE, "G:\\anti-user");
+  assert.equal(env.APPDATA, "G:\\anti-appdata");
+  assert.equal(env.LOCALAPPDATA, "G:\\anti-localappdata");
   assert.equal(env.GEMINI_DIR, "G:\\anti-gemini");
   assert.equal(env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR, "G:\\anti-conversations");
 });
