@@ -5018,6 +5018,8 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(server, /function latestInstalledCheckStatus/);
   assert.match(server, /function latestSourcePreflightStatus/);
   assert.match(server, /function sourcePreflightSummary/);
+  assert.match(server, /antigravityCliProfilePrepareContract/);
+  assert.match(server, /profilePrepareContract/);
   assert.match(server, /publicDocumentationOk/);
   assert.match(server, /publicDocumentationClientCopySyncContractOk/);
   assert.match(server, /function installedCheckSummary/);
@@ -8444,6 +8446,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /upstreamProfileStorageOk/);
   assert.match(diagnostics, /antigravityCliIsolationProfileOk/);
   assert.match(diagnostics, /antigravityCliProfilePrepareOk/);
+  assert.match(diagnostics, /antigravityCliProfilePrepareContract/);
+  assert.match(diagnostics, /source-preflight summary missing Antigravity CLI profile prepare contract/);
+  assert.match(diagnostics, /source-preflight summary profile prepare claims separate account verified/);
+  assert.match(diagnostics, /diagnostics source preflight missing Antigravity CLI profile prepare contract/);
+  assert.match(diagnostics, /diagnostics source preflight profile prepare claims separate account verified/);
   assert.match(diagnostics, /localConnectorVerifierOk/);
   assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /publicDocumentationClientCopySyncContractOk/);
@@ -13320,6 +13327,51 @@ test("summarize-anticodex-report real-smoke retains caveat and does not claim ve
     assert.equal(summary.antigravityCliRealSmokeEvidence.loginVerified, true, "loginVerified must be retained when separateAccountVerified=false");
     assert.equal(summary.antigravityCliRealSmokeEvidence.loginVerifiedMethod, "marker-match", "loginVerifiedMethod must be retained when separateAccountVerified=false");
     assert.equal(summary.antigravityCliRealSmokeEvidence.separateAccountVerificationReason, "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account", "separateAccountVerificationReason must be retained when separateAccountVerified=false");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("no-traffic Antigravity profile prepare must not be surfaced as real dual-account proof", () => {
+  const preflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
+  const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
+  const findings = readFileSync(resolve(root, "findings.md"), "utf8");
+  const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+
+  // Source preflight must label profile prepare as no-traffic, never real proof
+  assert.match(preflight, /separateAccountVerified.*\$false/);
+  assert.match(preflight, /profile-prepared-no-traffic/);
+
+  // Profile prepare script must default separateAccountVerified to false
+  assert.match(antigravityCliPrepare, /separateAccountVerified = \$false/);
+
+  // Real smoke script must default separateAccountVerified to false
+  assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
+
+  // Findings and task plan must not claim that profile prepare alone is real dual-account proof
+  assert.doesNotMatch(findings, /profile prepare proves a separate Antigravity account/);
+  assert.doesNotMatch(findings, /profile prepare is real dual-account proof/);
+  assert.doesNotMatch(taskPlan, /profile prepare proves a separate Antigravity account/);
+  assert.doesNotMatch(taskPlan, /profile prepare is real dual-account proof/);
+
+  // Summarizer must surface the no-traffic caveat, not treat profile prepare as verification
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-no-traffic-profile-proof-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-profile-prepare.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-profile-prepare",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.antigravityCliProfilePrepareEvidence.separateAccountVerified, false, "no-traffic profile prepare must not be surfaced as real dual-account proof");
+    assert.match(summary.antigravityCliProfilePrepareEvidence.accountIsolationCaveat, /no real dual-account proof/);
+    assert.equal(summary.antigravityCliRealSmokeEvidence, null, "no-traffic profile prepare must not produce real-smoke evidence");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

@@ -1543,6 +1543,7 @@ function sourcePreflightSummary(report) {
             upstreamProfileStorageOk: null,
             antigravityCliIsolationProfileOk: null,
             antigravityCliProfilePrepareOk: null,
+            antigravityCliProfilePrepareContract: null,
             localConnectorVerifierOk: null,
             publicDocumentationOk: null,
             publicDocumentationClientCopySyncContractOk: null,
@@ -1566,6 +1567,16 @@ function sourcePreflightSummary(report) {
         : [];
     const publicDocumentationClientCopySyncContractOk = publicDocumentationAssertions.some((item) => item?.file === "README.md" && item?.name === "client-copy-sync-contract" && item?.ok === true)
         && publicDocumentationAssertions.some((item) => item?.file === "README_EN.md" && item?.name === "client-copy-sync-contract" && item?.ok === true);
+    const profilePrepareContract = checks.antigravityCliProfilePrepare?.contract && typeof checks.antigravityCliProfilePrepare.contract === "object"
+        ? {
+            usedRealTraffic: checks.antigravityCliProfilePrepare.contract.usedRealTraffic === true,
+            loginVerified: checks.antigravityCliProfilePrepare.contract.loginVerified === true,
+            separateAccountVerified: checks.antigravityCliProfilePrepare.contract.separateAccountVerified === true,
+            coverageKind: shortSafeText(checks.antigravityCliProfilePrepare.contract.coverageKind, ""),
+            accountIsolationBoundary: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountIsolationBoundary, ""),
+            accountIsolationCaveat: shortSafeText(checks.antigravityCliProfilePrepare.contract.accountIsolationCaveat, ""),
+        }
+        : null;
     return {
         present: true,
         ok: report.ok === true,
@@ -1580,6 +1591,7 @@ function sourcePreflightSummary(report) {
         upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
         antigravityCliIsolationProfileOk: checks.antigravityCliIsolationProfile?.ok === true,
         antigravityCliProfilePrepareOk: report.antigravityCliProfilePrepareOk === true && checks.antigravityCliProfilePrepare?.ok === true,
+        antigravityCliProfilePrepareContract: profilePrepareContract,
         localConnectorVerifierOk: checks.localConnectorVerifier?.ok === true,
         publicDocumentationOk: checks.publicDocumentation?.ok === true,
         publicDocumentationClientCopySyncContractOk,

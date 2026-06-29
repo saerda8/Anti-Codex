@@ -1196,6 +1196,17 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
             if ($sourcePreflightSummary.antigravityCliProfilePrepareOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare success" }
+            $profilePrepareContract = $sourcePreflightSummary.antigravityCliProfilePrepareContract
+            if (-not $profilePrepareContract) {
+                Add-Failure "source-preflight summary missing Antigravity CLI profile prepare contract"
+            } else {
+                if ($profilePrepareContract.usedRealTraffic -ne $false) { Add-Failure "source-preflight summary profile prepare used real traffic" }
+                if ($profilePrepareContract.loginVerified -ne $false) { Add-Failure "source-preflight summary profile prepare claims login verified" }
+                if ($profilePrepareContract.separateAccountVerified -ne $false) { Add-Failure "source-preflight summary profile prepare claims separate account verified" }
+                if ($profilePrepareContract.coverageKind -ne "profile-prepared-no-traffic") { Add-Failure "source-preflight summary profile prepare coverage kind mismatch" }
+                if (-not [string]$profilePrepareContract.accountIsolationBoundary) { Add-Failure "source-preflight summary profile prepare missing isolation boundary" }
+                if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "source-preflight summary profile prepare missing isolation caveat" }
+            }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
         }
         $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]
@@ -2024,6 +2035,17 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "translatorRegressionOk")) { Add-Failure "diagnostics source preflight missing translator regression result" }
         if (-not (Has-Property $sourcePreflight "diffWhitespaceOk")) { Add-Failure "diagnostics source preflight missing diff whitespace result" }
         if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareOk")) { Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare result" }
+        if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareContract")) {
+            Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare contract"
+        } elseif ($sourcePreflight.antigravityCliProfilePrepareContract) {
+            $profilePrepareContract = $sourcePreflight.antigravityCliProfilePrepareContract
+            if ($profilePrepareContract.usedRealTraffic -ne $false) { Add-Failure "diagnostics source preflight profile prepare used real traffic" }
+            if ($profilePrepareContract.loginVerified -ne $false) { Add-Failure "diagnostics source preflight profile prepare claims login verified" }
+            if ($profilePrepareContract.separateAccountVerified -ne $false) { Add-Failure "diagnostics source preflight profile prepare claims separate account verified" }
+            if ($profilePrepareContract.coverageKind -ne "profile-prepared-no-traffic") { Add-Failure "diagnostics source preflight profile prepare coverage kind mismatch" }
+            if (-not [string]$profilePrepareContract.accountIsolationBoundary) { Add-Failure "diagnostics source preflight profile prepare missing isolation boundary" }
+            if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight profile prepare missing isolation caveat" }
+        }
         if (-not (Has-Property $sourcePreflight "skipFullRegression")) { Add-Failure "diagnostics source preflight missing skipFullRegression" }
     }
     if (-not (Has-Property $diagnostics "lifecycle")) {
