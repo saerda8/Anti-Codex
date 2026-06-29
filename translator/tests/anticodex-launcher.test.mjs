@@ -11549,7 +11549,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_evidence_without_verification/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_boundary_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_caveat_missing/);
-  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation/);
+  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint>/);
   assert.match(releaseGates, /model-text lane/);
   assert.match(releaseGates, /MCP/);
   assert.match(releaseGates, /externally managed/);
@@ -13067,6 +13067,12 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.match(antigravityCliRealSmoke, /latest-antigravity-cli-profile-prepare\.json/);
   assert.match(antigravityCliRealSmoke, /profileMatched/);
+  assert.match(antigravityCliRealSmoke, /\[switch\]\$AllowSeparateAccountProof/);
+  assert.match(antigravityCliRealSmoke, /\[string\]\$AntiCodexAccountId/);
+  assert.match(antigravityCliRealSmoke, /\[string\]\$McpAccountId/);
+  assert.match(antigravityCliRealSmoke, /account identity inputs require -AllowSeparateAccountProof/);
+  assert.match(antigravityCliRealSmoke, /Anti-Codex and MCP Antigravity account identities match/);
+  assert.match(antigravityCliRealSmoke, /\$report\.accountIdentityComparison = \$accountIdentityComparison/);
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /Windows credential store/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
@@ -13437,6 +13443,33 @@ test("summarize-anticodex-report real-smoke evidence is null when preparationRep
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
     assert.equal(summary.antigravityCliRealSmokeEvidence.preparationReport, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Antigravity CLI real-smoke skip path ignores account proof inputs without real traffic", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-real-smoke-skip-identity-"));
+  try {
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"),
+      "-ReportRoot",
+      tempRoot,
+      "-AntiCodexAccountId",
+      "anticodex-private-test-id",
+      "-McpAccountId",
+      "mcp-private-test-id",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stdout, /anticodex-private-test-id|mcp-private-test-id/);
+    const report = JSON.parse(result.stdout.trim());
+    assert.equal(report.usedRealTraffic, false);
+    assert.equal(report.separateAccountVerified, false);
+    assert.equal(Object.prototype.hasOwnProperty.call(report, "accountIdentityComparison"), false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

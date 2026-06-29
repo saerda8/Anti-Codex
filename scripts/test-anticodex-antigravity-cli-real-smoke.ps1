@@ -6,6 +6,9 @@ param(
     [string]$ReportRoot = "",
     [string]$ProfileRoot = "",
     [switch]$StrictWindowsAppDataIsolation,
+    [switch]$AllowSeparateAccountProof,
+    [string]$AntiCodexAccountId = "",
+    [string]$McpAccountId = "",
     [string]$Model = "gemini-pro-agent",
     [string]$Prompt = "",
     [int]$TimeoutSec = 90
@@ -131,6 +134,17 @@ function Test-IsDefaultAntigravityProfilePath {
     return $profileFull.StartsWith($defaultFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function New-AccountIdentityComparison {
+    param(
+        [Parameter(Mandatory = $true)][string]$AntiCodexId,
+        [Parameter(Mandatory = $true)][string]$McpId
+    )
+    return [ordered]@{
+        antiCodexAccountId = $AntiCodexId
+        mcpAccountId = $McpId
+    }
+}
+
 $stateRootFull = Resolve-StateRoot
 $reportRootFull = Resolve-ReportRoot
 $marker = "ANTICODEX_CLI_REAL_SMOKE_{0}" -f ([Guid]::NewGuid().ToString("N"))
@@ -237,6 +251,26 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
     }
 
     $elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
+    $antiCodexAccountIdTrimmed = ([string]$AntiCodexAccountId).Trim()
+    $mcpAccountIdTrimmed = ([string]$McpAccountId).Trim()
+    $accountIdentityComparison = $null
+    $separateAccountVerified = $false
+    $separateAccountVerificationReason = "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account"
+    if ($AllowSeparateAccountProof.IsPresent) {
+        if (-not $antiCodexAccountIdTrimmed) { Add-Failure "Anti-Codex account identity is required before separate-account proof can be recorded" }
+        if (-not $mcpAccountIdTrimmed) { Add-Failure "MCP Antigravity account identity is required before separate-account proof can be recorded" }
+        if ($antiCodexAccountIdTrimmed -and $mcpAccountIdTrimmed -and $antiCodexAccountIdTrimmed -eq $mcpAccountIdTrimmed) {
+            Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
+        }
+        if ($failures.Count -eq 0) {
+            $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed
+            $separateAccountVerified = $true
+            $separateAccountVerificationReason = "explicitly approved real CLI smoke plus external MCP account identity comparison showed distinct account identities"
+        }
+    } elseif ($antiCodexAccountIdTrimmed -or $mcpAccountIdTrimmed) {
+        Add-Failure "account identity inputs require -AllowSeparateAccountProof; refusing to record ambiguous identity evidence"
+    }
+
     $report = [ordered]@{
         ok = ($failures.Count -eq 0)
         reportName = "antigravity-cli-real-smoke"
@@ -253,8 +287,8 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         strictWindowsAppDataIsolation = $strictIsolation
         preparationReport = $preparationEvidence
         loginVerifiedMethod = if ($failures.Count -eq 0) { "marker-match" } else { "" }
-        separateAccountVerified = $false
-        separateAccountVerificationReason = "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account"
+        separateAccountVerified = $separateAccountVerified
+        separateAccountVerificationReason = $separateAccountVerificationReason
         accountIsolationBoundary = "profile-and-appdata-only"
         accountIsolationCaveat = "If Antigravity CLI stores auth in the shared Windows credential store, real traffic can still use the currently signed-in account even with an isolated profileRoot."
         marker = if ($Prompt -eq "") { $marker } else { "" }
@@ -262,6 +296,9 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         mcpAccountLaneManagedByAntiCodex = $false
         mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
         failures = $failures.ToArray()
+    }
+    if ($accountIdentityComparison) {
+        $report.accountIdentityComparison = $accountIdentityComparison
     }
     Write-Report -Report $report
     if ($failures.Count -gt 0) { exit 1 }
