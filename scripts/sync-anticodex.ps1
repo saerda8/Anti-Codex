@@ -2,6 +2,14 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC = if ($env:ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC) {
+    [Math]::Max(1, [int]$env:ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC)
+} elseif ($env:ANTICODEX_POSTSYNC_HEALTH_TIMEOUT_SEC) {
+    [Math]::Max(1, [int]$env:ANTICODEX_POSTSYNC_HEALTH_TIMEOUT_SEC)
+} else {
+    8
+}
+
 $installRoot = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $expectedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 if ($installRoot -ne $expectedRoot) {
@@ -147,7 +155,7 @@ function Wait-AntiCodexPostSyncReady {
         }).Count -gt 0
         $gatewayReady = $false
         try {
-            $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec 3
+            $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
             $gatewayReady = $health.ok -eq $true
         } catch {}
         if ($mainReady -and $gatewayReady) { return $true }
@@ -180,7 +188,7 @@ function Invoke-AntiCodexPostSyncAcceptance {
     do {
         try {
             $marker = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
-            $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec 3
+            $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
             $sourceVersion = [string]$marker.source.packageVersion
             $modelCount = [int]$health.modelCount
             $upstreamReady = [string]$health.upstream -eq "antigravity-desktop"

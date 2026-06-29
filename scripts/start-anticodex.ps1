@@ -7,6 +7,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS = if ($env:ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS) { [Math]::Max(1000, [int]$env:ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS) } else { 8000 }
+
 function Find-AntiCodexLocalAddress {
     if ($env:ANTICODEX_LOCAL_ADDRESS) { return $env:ANTICODEX_LOCAL_ADDRESS }
     return "127.0.0.1"
@@ -19,7 +21,7 @@ function Get-AntiCodexTranslatorHealth {
     try {
         $request = [System.Net.WebRequest]::Create("$Url/health")
         $request.Proxy = $null
-        $request.Timeout = 2000
+        $request.Timeout = $ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS
         $response = $request.GetResponse()
         if ([int]$response.StatusCode -ne 200) { return $null }
         $reader = New-Object IO.StreamReader($response.GetResponseStream())

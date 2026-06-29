@@ -208,6 +208,10 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /AppActivate/);
   assert.match(launcher, /Test-AntiCodexTranslatorHealth/);
   assert.doesNotMatch(launcher, /TRANSLATOR_LISTEN_HOST\s*=\s*["']0\.0\.0\.0["']/);
+  assert.match(launcher, /ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS/);
+  assert.match(launcher, /\$env:ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS/);
+  assert.match(launcher, /\$ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS[\s\S]*else \{ 8000 \}/);
+  assert.doesNotMatch(launcher, /request\.Timeout\s*=\s*2000/);
   assert.ok(
     launcher.indexOf("$runningMain = Get-RunningAntiCodexMain") < launcher.indexOf("$updateChecker = Join-Path"),
     "running Anti-Codex fast path should run before update checks",
@@ -2115,6 +2119,13 @@ test("Anti-Codex ships a Codex host sync script", () => {
   assert.doesNotMatch(sync, /Invoke-RestMethod -Uri "\$baseUrl\/anticodex\/diagnostics"/);
   assert.doesNotMatch(sync, /nativeBridgeDefaultEnabled/);
   assert.doesNotMatch(sync, /antigravitySessionLock/);
+  assert.match(sync, /ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC/);
+  assert.match(sync, /\$env:ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC/);
+  assert.match(sync, /ANTICODEX_POSTSYNC_HEALTH_TIMEOUT_SEC/);
+  assert.match(sync, /\$env:ANTICODEX_POSTSYNC_HEALTH_TIMEOUT_SEC/);
+  assert.match(sync, /else\s*\{\s*8\s*\}/);
+  assert.match(sync, /TimeoutSec \$ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC/);
+  assert.doesNotMatch(sync, /TimeoutSec\s+3(?!\d)/);
   assert.match(sync, /Post-sync acceptance timed out/);
   assert.match(sync, /function Wait-AntiCodexChildProcess/);
   assert.match(sync, /\$Process\.HasExited/);
@@ -2175,7 +2186,9 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   assert.match(runtimeSync, /runtime translator\\adaptive-server\.mjs/);
   assert.match(runtimeSync, /adaptive-server\.mjs/);
   assert.match(runtimeSync, /Refusing to remove Anti-Codex legacy runtime file outside/);
+  assert.match(runtimeSync, /scripts\\start-anticodex\.ps1/);
   assert.match(runtimeSync, /start-deepcodex\.ps1/);
+  assert.match(runtimeSync, /scripts\\sync-anticodex\.ps1/);
   assert.match(runtimeSync, /-TranslatorOnly/);
   assert.match(runtimeSync, /\$restartHealthy = \$false/);
   assert.match(runtimeSync, /Wait-AntiCodexHealth -Seconds 1/);
