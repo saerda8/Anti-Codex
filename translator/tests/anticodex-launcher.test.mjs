@@ -3137,6 +3137,13 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /appToolGetCount/);
   assert.match(reportSummarizer, /appToolGetPostParityClean/);
   assert.match(reportSummarizer, /appToolGetPostParityContentMatches/);
+  assert.match(reportSummarizer, /antigravityCliProfilePrepareEvidence/);
+  assert.match(reportSummarizer, /separateAccountVerified/);
+  assert.match(reportSummarizer, /accountIsolationBoundary/);
+  assert.match(reportSummarizer, /accountIsolationCaveat/);
+  assert.match(reportSummarizer, /antigravityCliRealSmokeEvidence/);
+  assert.match(reportSummarizer, /preparationReport/);
+  assert.match(reportSummarizer, /profileMatched/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.doesNotMatch(collector, /failures = if \(\$result\.PSObject\.Properties\.Name -contains "failures"\)/);
   assert.match(collector, /\$resultFailures = if \(\$result\.PSObject\.Properties\.Name -contains "failures"\)/);
@@ -12447,6 +12454,93 @@ test("Anti-Codex ships an installed no-traffic missing-history verifier", () => 
       routeBeforeStatus: "success",
       routeAfterStatus: "success",
     });
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("summarize-anticodex-report exposes antigravity-cli-profile-prepare isolation boundary fields", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-cli-profile-prepare-summary-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-profile-prepare.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-profile-prepare",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "This prepares isolated CLI files and AppData paths only; if Antigravity CLI uses the shared Windows credential store, a real smoke can still use the currently signed-in Windows credential.",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, true);
+    assert.equal(summary.reportName, "antigravity-cli-profile-prepare");
+    assert.deepEqual(summary.antigravityCliProfilePrepareEvidence, {
+      reportName: "antigravity-cli-profile-prepare",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "This prepares isolated CLI files and AppData paths only; if Antigravity CLI uses the shared Windows credential store, a real smoke can still use the currently signed-in Windows credential.",
+    });
+    assert.equal(summary.antigravityCliRealSmokeEvidence, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("summarize-anticodex-report exposes antigravity-cli-real-smoke isolation boundary and preparationReport.profileMatched", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-cli-real-smoke-summary-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-real-smoke.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      coverageKind: "skipped",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Skipped real traffic; no account identity or Windows credential-store isolation was verified.",
+      preparationReport: { profileMatched: false },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, true);
+    assert.equal(summary.reportName, "antigravity-cli-real-smoke");
+    assert.deepEqual(summary.antigravityCliRealSmokeEvidence, {
+      reportName: "antigravity-cli-real-smoke",
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      coverageKind: "skipped",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Skipped real traffic; no account identity or Windows credential-store isolation was verified.",
+      preparationReport: { profileMatched: false },
+    });
+    assert.equal(summary.antigravityCliProfilePrepareEvidence, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("summarize-anticodex-report real-smoke evidence is null when preparationReport is missing", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-cli-real-smoke-noprep-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-real-smoke.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      coverageKind: "skipped",
+      separateAccountVerified: false,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "No preparationReport present.",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.antigravityCliRealSmokeEvidence.preparationReport, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

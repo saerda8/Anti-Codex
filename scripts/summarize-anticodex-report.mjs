@@ -145,6 +145,8 @@ const isUiRepoFileEditSmokeReport = report?.reportName === "ui-repo-file-edit-sm
 const isUiRepoMultiFileEditSmokeReport = report?.reportName === "ui-repo-multi-file-edit-smoke" || /latest-ui-repo-multi-file-edit-smoke\.json$/i.test(path);
 const isUiComplexProjectSmokeReport = report?.reportName === "ui-complex-project-smoke" || /latest-ui-complex-project-smoke\.json$/i.test(path);
 const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
+const isAntigravityCliProfilePrepareReport = report?.reportName === "antigravity-cli-profile-prepare" || /latest-antigravity-cli-profile-prepare\.json$/i.test(path);
+const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
   : null;
@@ -585,6 +587,24 @@ const summary = {
     sharedUrlCount: report.artifactEvidence && has(report.artifactEvidence, "sharedUrlCount") ? report.artifactEvidence.sharedUrlCount : null,
     htmlComplete: report.artifactEvidence && has(report.artifactEvidence, "htmlComplete") ? !!report.artifactEvidence.htmlComplete : null,
     htmlLinksReport: report.artifactEvidence && has(report.artifactEvidence, "htmlLinksReport") ? !!report.artifactEvidence.htmlLinksReport : null,
+  } : null,
+  antigravityCliProfilePrepareEvidence: isAntigravityCliProfilePrepareReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
+  } : null,
+  antigravityCliRealSmokeEvidence: isAntigravityCliRealSmokeReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
+    preparationReport: report.preparationReport && typeof report.preparationReport === "object" ? {
+      profileMatched: boolField(report.preparationReport, "profileMatched"),
+    } : null,
   } : null,
   skipRequests: boolField(report, "skipRequests"),
   modelRoutingEvidence: has(report, "skipRequests") || modelRoutingResults.length ? {
