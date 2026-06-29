@@ -20,10 +20,10 @@ Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作
 ## 依赖
 
 1. Windows 版官方 Codex Desktop
-2. Antigravity Desktop，并已登录可用账号
+2. Antigravity CLI 或 Desktop，已登录可用账号（用于获取模型权益文本）
 3. Antigravity 访问 Google 服务所需的代理
 
-Anti-Codex 到本机 Antigravity Desktop 的通信不走代理；Antigravity Desktop 访问外部模型服务时使用它自己的网络设置。
+当前文本传输默认走 Antigravity CLI；模型目录和账号发现仍可使用 Antigravity Desktop 兼容层。目标方向是以 Antigravity CLI/权益模型能力为主；Desktop/coworker 不作为默认工作路径，仅作为当前兼容层。
 
 ## 安装
 

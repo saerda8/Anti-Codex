@@ -18,10 +18,10 @@ Client maintenance follows one rule: when Codex updates, Anti-Codex tracks it th
 ## Requirements
 
 1. Official Codex Desktop for Windows
-2. Antigravity Desktop with a signed-in account
+2. Antigravity CLI or Desktop with a signed-in account (for model-entitlement text)
 3. Any proxy Antigravity needs to reach Google services
 
-Local Anti-Codex-to-Antigravity traffic bypasses the proxy. Antigravity uses its own network settings for external model traffic.
+Text transport defaults to Antigravity CLI; model catalog and account discovery may still use the Antigravity Desktop compatibility layer. The target direction is Antigravity CLI/entitlement-based model capability; Desktop/coworker is not the default path and serves only as a current compatibility layer.
 
 ## Install And Update
 

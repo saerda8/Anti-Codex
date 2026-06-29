@@ -332,6 +332,7 @@ function Test-PublicDocumentationContracts {
 
     $readme = Read-PublicDoc "README.md"
     $readmeEn = Read-PublicDoc "README_EN.md"
+    $windowsDoc = Read-PublicDoc "docs\WINDOWS.md"
     $providerStack = Read-PublicDoc "docs\ADAPTIVE_ONE_API_STACK.md"
     $compatibility = Read-PublicDoc "docs\chat-to-responses-compat.md"
     $legacyMarketing = Read-PublicDoc "docs\marketing\legacy\deepcodex-video-script.md"
@@ -371,8 +372,19 @@ function Test-PublicDocumentationContracts {
     Add-DocAssertion -File "docs\marketing\*.md" -Name "provider-language" -Ok ($marketingDocs -match 'Antigravity' -and $marketingDocs -match 'third-party|provider|OpenAI-compatible|Anthropic API')
     Add-DocAssertion -File "docs\marketing\*.md" -Name "connector-boundary" -Ok ($marketingDocs -match 'connector|app tool' -and $marketingDocs -match 'does not fake authorization')
     Add-DocAssertion -File "docs\marketing\*.md" -Name "no-current-legacy-marketing" -Ok ($marketingDocs -notmatch 'DeepCodex|deepcodex|DeepSeek-only|DeepSeek route|DeepSeek API key')
-    Add-DocAssertion -File "current public docs" -Name "no-antigravity-desktop-default-route" -Ok ((@($readme, $readmeEn, $providerStack, $compatibility, $marketingDocs) -join "`n") -notmatch 'Antigravity Desktop provider|Antigravity Desktop is the default|Antigravity Desktop remains the default route|default route remains the local signed-in Antigravity Desktop account|Antigravity Desktop by default')
-    Add-DocAssertion -File "current public docs" -Name "no-native-bridge-default-wording" -Ok ((@($readme, $readmeEn, $providerStack, $compatibility, $marketingDocs) -join "`n") -notmatch 'native same-cascade MCP continuation')
+    $currentPublicDocs = @($readme, $readmeEn, $providerStack, $compatibility, $marketingDocs) -join "`n"
+    $currentCliBoundaryDocs = @($readme, $readmeEn, $windowsDoc) -join "`n"
+    $hasAntigravityCliTarget = $currentCliBoundaryDocs -match 'Antigravity CLI'
+    $hasDesktopCoworkerBoundary = $currentCliBoundaryDocs -match 'Desktop/coworker'
+    $hasCompatibilityLayerBoundary = $currentCliBoundaryDocs -match 'compatibility layer'
+    $cliTargetDesktopCompatBoundaryOk = $hasAntigravityCliTarget -and $hasDesktopCoworkerBoundary -and $hasCompatibilityLayerBoundary
+    $noDesktopDefaultPattern = 'Antigravity Desktop provider|Antigravity Desktop is the default|Antigravity Desktop remains the default route|default route remains the local signed-in Antigravity Desktop account|Antigravity Desktop by default'
+    $noNativeBridgeDefaultPattern = 'native same-cascade MCP continuation'
+    $noAntigravityDesktopDefaultRouteOk = $currentPublicDocs -notmatch $noDesktopDefaultPattern
+    $noNativeBridgeDefaultWordingOk = $currentPublicDocs -notmatch $noNativeBridgeDefaultPattern
+    Add-DocAssertion -File "current public docs" -Name "no-antigravity-desktop-default-route" -Ok $noAntigravityDesktopDefaultRouteOk
+    Add-DocAssertion -File "current public docs" -Name "antigravity-cli-target-desktop-compat-boundary" -Ok $cliTargetDesktopCompatBoundaryOk
+    Add-DocAssertion -File "current public docs" -Name "no-native-bridge-default-wording" -Ok $noNativeBridgeDefaultWordingOk
     Add-DocAssertion -File "docs\marketing\legacy\deepcodex-video-script.md" -Name "legacy-marker" -Ok ($legacyMarketing -match 'archived historical DeepCodex / DeepSeek launch material' -and $legacyMarketing -match 'not a current Anti-Codex launch asset')
 
     $failed = @($assertions.ToArray() | Where-Object { -not [bool]$_.ok })

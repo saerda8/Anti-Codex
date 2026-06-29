@@ -587,10 +587,17 @@ function translatorHealthPayload({
     cachedModelCount = cachedAntigravityModelCount(),
     traffic = ANTIGRAVITY_TRAFFIC_STATUS,
 } = {}) {
+    const antigravityMode = isAntigravityUpstreamMode(UPSTREAM_MODE);
+    const modelTextTransport = antigravityMode
+        ? String(process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT || "cli").toLowerCase()
+        : "upstream-provider";
     const payload = {
         ok: true,
         upstream,
         profile,
+        modelTextTransport,
+        modelDiscoverySource: antigravityMode ? "antigravity-desktop-catalog" : "upstream-profile",
+        antigravityCoworkerDefault: false,
         internalTools,
         upstreamProfile: currentUpstreamHealthProfile(),
     };
@@ -4587,7 +4594,7 @@ async function load(){
     getJson("/backend-api/wham/apps",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}),
     getJson("/anticodex/local-connectors/allowlist"),
   ]);
-  kv("health",[["网关",badge(health.ok)],["上游",health.upstream||"未知"],["模型数",health.modelCount??0],["熔断",badge(health.antigravityCircuitState)],["启动状态",diagnosis(diag.lifecycle?.type||"未知")],["最近启动",diag.lifecycle?.at||"未知"],["进程",diag.process?("#"+diag.process.pid+" / "+diag.process.uptimeSec+" 秒"):"未知"]]);
+  kv("health",[["网关",badge(health.ok)],["上游",health.upstream||"未知"],["模型传输",health.modelTextTransport||"未知"],["模型发现",health.modelDiscoverySource||"未知"],["模型数",health.modelCount??0],["熔断",badge(health.antigravityCircuitState)],["启动状态",diagnosis(diag.lifecycle?.type||"未知")],["最近启动",diag.lifecycle?.at||"未知"],["进程",diag.process?("#"+diag.process.pid+" / "+diag.process.uptimeSec+" 秒"):"未知"]]);
   kv("account",[["账号",badge(health.accountReady)],["流量",badge(health.accountTrafficReady)],["状态",diagnosis(health.accountTrafficDiagnosis||health.accountTrafficState||health.accountState)],["建议",health.accountTrafficSuggestedAction||"暂无"],["套餐",((account.planName||"未知")+" / "+(account.tierName||"未知"))],["代理边界","Anti-Codex 到 Antigravity 本机通信不走代理"]]);
   const q=diag.antigravityQueue||{};
   const lf=diag.localFeatures||{};

@@ -6,7 +6,7 @@ Anti-Codex for Windows installs an isolated patched Codex Desktop host under `%L
 
 - Codex Desktop for Windows
 - Node.js available as `node.exe`
-- A signed-in Antigravity Desktop account for the default model route
+- A signed-in Antigravity CLI or Desktop account for model-entitlement text (CLI is the target text transport; Desktop is a compatibility layer, not the default product path)
 
 ## Install
 
@@ -64,7 +64,7 @@ The `codex-home-deepseek-app` path segment is also legacy compatibility state; i
 
 - Anti-Codex does not require a ChatGPT login path.
 - Anti-Codex does not fake connector authorization; connector-backed app tools remain unavailable until the real connector is authorized.
-- The default route uses Antigravity Desktop through the local gateway.
+- Model text transport defaults to Antigravity CLI. Model catalog and account discovery may still use the Antigravity Desktop compatibility layer, but Desktop/coworker must not become the default tool execution path.
 - Third-party API profiles are configured from the Anti-Codex Manager and use the same isolated state root.
 - PowerShell 5.1 is supported.
 - The installed Anti-Codex state is separate from the normal Codex state.

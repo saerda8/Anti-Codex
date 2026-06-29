@@ -172,6 +172,7 @@ test("Antigravity routes explicit desktop web searches through stable internal s
 
 test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   assert.match(launcher, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
   assert.match(launcher, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']cli["']/i);
@@ -198,6 +199,12 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /\$translatorLoopbackUrl = "http:\/\/127\.0\.0\.1:\$\(\$env:TRANSLATOR_PORT\)"/);
   assert.match(launcher, /Test-AntiCodexTranslatorHealth \$translatorLoopbackUrl/);
   assert.match(launcher, /profile\.transport/);
+  assert.match(server, /modelTextTransport/);
+  assert.match(server, /process\.env\.ANTICODEX_ANTIGRAVITY_TRANSPORT \|\| "cli"/);
+  assert.match(server, /modelDiscoverySource:\s*antigravityMode \? "antigravity-desktop-catalog" : "upstream-profile"/);
+  assert.match(server, /antigravityCoworkerDefault:\s*false/);
+  assert.match(server, /模型传输/);
+  assert.match(server, /模型发现/);
   assert.match(launcher, /expectedTransport/);
   assert.match(launcher, /DEEPCODEX_STATE_ROOT/);
   assert.match(launcher, /function Resolve-AntiCodexInstallRoot/);
@@ -7483,6 +7490,7 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /antigravity-entitlement-model-text/);
   assert.match(preflight, /Antigravity entitlement supplies model text/);
   assert.match(preflight, /no-antigravity-desktop-default-route/);
+  assert.match(preflight, /antigravity-cli-target-desktop-compat-boundary/);
   assert.match(preflight, /no-native-bridge-default-wording/);
   assert.doesNotMatch(preflight, /Antigravity Desktop provider by default/);
   assert.match(preflight, /provider profile/);
