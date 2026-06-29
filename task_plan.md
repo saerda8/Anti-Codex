@@ -31,6 +31,7 @@
 - Current client-copy support evidence hardening: Manager/latest-report support text now surfaces `activeSourcePackageVersion` plus `clientSyncVersionMatches`, and diagnostics rejects missing or false version-match evidence when readiness is required. This keeps the operator view aligned with the product rule that Anti-Codex tracks Codex by guarded client sync, not by rebuilding client features one by one.
 - Current model-only boundary cleanup: Manager gateway-only recovery now preserves `ANTICODEX_NATIVE_TOOL_BRIDGE=0`, matching the normal launcher and translator recovery paths. Native Antigravity/coworker bridge remains opt-in diagnostic coverage only.
 - Current docs direction cleanup: current handoff and marketing docs now describe Antigravity as an entitlement/model-text adapter, not "Antigravity Desktop as the default provider"; launcher tests reject that stale wording in current docs.
+- Current public-doc direction cleanup: README, README_EN, provider-stack docs, chat/Responses compatibility notes, and current marketing copy now use Antigravity entitlement/model-text wording and keep Codex-owned tools in Anti-Codex. The public-doc contract test rejects the old "local Antigravity Desktop provider/default route" wording and the old claim that Codex tool definitions are handed to Antigravity.
 - Current desktop repo-multi usability hardening: the README-only phase now injects one exact PowerShell-safe Node `fs.writeFileSync` command using Unicode escapes, and the README-only repair prompt repeats the same command. This targets the slow/failure-prone pattern where the desktop model reads directories or runs tests before writing the required README.
 - Current repo-multi real desktop evidence: after fixing UI smoke CDP discovery to read the active `Anti-Codex.exe --remote-debugging-port`, a fresh visible desktop `repo-multi-file-edit` run passed in about 225 seconds. Evidence: README step wrote UTF-8 `使用说明`, implementation changed only the source, kept test/data unchanged, created offline HTML, passed 2 `node:test` tests, produced CLI JSON `ok=2 needs-review=1 blocked=1`, and left session/queue idle.
 - Current repo-multi latency update: repo-multi no longer waits for `response-history` tool-output markers after phases already have file-level artifact evidence plus idle diagnostics. A fresh visible desktop run passed in about 98 seconds with README, source, offline HTML, `node:test`, CLI JSON, and idle session/queue evidence intact.
@@ -826,39 +827,39 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 
 ## 2026-06-23 Marketing Copy Refresh
 - Completed: rewrote `docs/marketing/launch-post.md` and `docs/marketing/wechat-article.md` from garbled DeepCodex/DeepSeek-only copy into current Anti-Codex messaging.
-- Completed: the refreshed copy states the current provider shape: default Antigravity Desktop, optional third-party API, no ChatGPT login path, no original Codex mutation, and no fake connector/app-tool authorization.
+- (historical) the refreshed copy at the time stated: default Antigravity Desktop, optional third-party API, no ChatGPT login path, no original Codex mutation, and no fake connector/app-tool authorization. Current docs now say Antigravity entitlement supplies model text, not that Antigravity Desktop is the default provider.
 - Verification: marketing-doc search finds no `DeepCodex` / `deepcodex` residues; documentation whitespace check passed.
 
 ## 2026-06-23 Provider Stack Doc Refresh
-- Completed: rewrote `docs/ADAPTIVE_ONE_API_STACK.md` from the old DeepCodex one-api bootstrap path into the current Anti-Codex provider stack: local translator, default Antigravity Desktop upstream, optional explicit third-party provider profile, and no ChatGPT login route.
+- (historical) rewrote `docs/ADAPTIVE_ONE_API_STACK.md` from the old DeepCodex one-api bootstrap path into the current Anti-Codex provider stack: local translator, default Antigravity Desktop upstream, optional explicit third-party provider profile, and no ChatGPT login route. Current docs now say Antigravity entitlement supplies model text, not that Antigravity Desktop is the default provider.
 - Completed: the doc now states the provider-switch continuity contract and the local MCP/skill/plugin/connector metadata parity boundary, including that metadata sync does not grant connector authorization.
 - Verification: focused stale-stack search and documentation whitespace checks passed.
 
 ## 2026-06-23 Video Script Refresh
 - Completed: moved the old DeepCodex/DeepSeek video script into `docs/marketing/legacy/deepcodex-video-script.md` instead of overwriting the historical material.
-- Completed: added a current `docs/marketing/video-script.md` for Anti-Codex: separate runtime, original Codex untouched, Antigravity Desktop default, explicit third-party API profiles, MCP/skill metadata parity, and no fake connector authorization.
+- (historical) added a current `docs/marketing/video-script.md` for Anti-Codex: separate runtime, original Codex untouched, Antigravity Desktop default, explicit third-party API profiles, MCP/skill metadata parity, and no fake connector authorization. The current video script uses Antigravity entitlement language, not "default provider" language.
 - Verification: current marketing-doc search finds no `DeepCodex` / `deepcodex` / `DeepSeek-only` residues outside the legacy folder; documentation whitespace check passed.
 
 ## 2026-06-23 Chat/Responses Compatibility Doc Refresh
 - Completed: rewrote `docs/chat-to-responses-compat.md` from a legacy DeepCodex-to-DeepSeek note into the current Anti-Codex provider compatibility contract.
-- Completed: the doc now covers Antigravity default, OpenAI-compatible and Anthropic-compatible provider shapes, structured tool-history preservation across provider switches, and the boundary between metadata parity and connector authorization.
+- (historical) the doc at the time covered Antigravity default, OpenAI-compatible and Anthropic-compatible provider shapes, structured tool-history preservation across provider switches, and the boundary between metadata parity and connector authorization. Current docs now use Antigravity entitlement language, not "default provider" language.
 - Completed: the legacy `deepcodex.reasoning.hex.v1:` replay prefix is documented as an internal compatibility token, not user-facing branding.
 
 ## 2026-06-23 DeepSeek Failure Notes Legacy Marker
-- Completed: marked `docs/DEEPSEEK_RUNTIME_FAILURE_NOTES.md` as legacy route notes so it is not mistaken for the current Anti-Codex default provider description.
-- Completed: the marker states the current default: local Antigravity Desktop provider, explicit third-party profiles, and no mutation of the original Codex installation.
+- (historical) marked `docs/DEEPSEEK_RUNTIME_FAILURE_NOTES.md` as legacy route notes so it is not mistaken for the current Anti-Codex default provider description.
+- (historical) the marker at the time stated: local Antigravity Desktop provider, explicit third-party profiles, and no mutation of the original Codex installation. The current wording says Antigravity entitlement supplies model text, not that Antigravity Desktop is the default provider.
 
 ## 2026-06-23 Windows Doc Compatibility Clarification
-- Completed: clarified that the `codex-home-deepseek-app` runtime path segment is legacy compatibility state and does not imply the current default provider.
+- (historical) clarified that the `codex-home-deepseek-app` runtime path segment is legacy compatibility state and does not imply the current default provider. The current wording says Antigravity entitlement supplies model text, not that Antigravity Desktop is the default provider.
 - Completed: clarified that Anti-Codex does not fake connector authorization; connector-backed app tools remain unavailable until the real connector is authorized.
 
 ## 2026-06-23 Public Documentation Contract Test
 - Completed: launcher contract coverage now includes current public docs: `README.md`, `docs/ADAPTIVE_ONE_API_STACK.md`, `docs/chat-to-responses-compat.md`, and the current marketing entry points.
-- Completed: the new test explicitly avoids recursive scans of audits, legacy marketing, prompt samples, and historical specs while requiring current docs to preserve Anti-Codex branding, Antigravity default provider language, explicit third-party provider language, and connector/app-tool authorization boundaries.
+- (historical) the new test at the time explicitly avoided recursive scans of audits, legacy marketing, prompt samples, and historical specs while requiring current docs to preserve Anti-Codex branding, Antigravity default provider language, explicit third-party provider language, and connector/app-tool authorization boundaries. The current test now requires Antigravity entitlement language instead of Antigravity default provider language.
 - Verification: `node --check translator/tests/anticodex-launcher.test.mjs` passed; focused launcher contract suite passed `91/91`.
 
 ## 2026-06-23 README Provider Boundary Refresh
-- Completed: README now explicitly documents that Antigravity Desktop remains the default route, third-party API profiles must be configured/tested/applied through Anti-Codex Manager, and unreadable profiles must not cause a silent wrong-upstream fallback.
+- (historical) README at the time documented Antigravity Desktop as the default route, third-party API profiles through Manager, and no silent wrong-upstream fallback. The current README uses upstream profile language and the current provider stack docs say Antigravity entitlement supplies model text.
 - Completed: README now states that MCP/skills/plugin/connector metadata sync does not grant connector-backed app-tool authorization.
 
 ## 2026-06-23 Fast Source Preflight Public Docs Gate

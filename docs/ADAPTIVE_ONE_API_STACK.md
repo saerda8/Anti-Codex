@@ -5,7 +5,7 @@ Current topology:
 ```text
 Anti-Codex desktop/runtime
   -> local translator gateway :8282
-  -> Antigravity Desktop provider by default
+  -> Antigravity entitlement supplies model text
   -> optional third-party provider profile when explicitly configured
 ```
 
@@ -15,7 +15,7 @@ one-api bootstrap notes, which are no longer the default setup path.
 ## Current defaults
 
 - Anti-Codex talks to the local translator at `http://127.0.0.1:8282`.
-- The default upstream is the local Antigravity Desktop runtime.
+- Antigravity entitlement supplies model text through the local runtime.
 - Optional third-party providers are configured through the Manager third-party
   API panel and must be explicitly saved, tested, and applied.
 - Provider keys stay in the local Anti-Codex profile storage. Do not put real

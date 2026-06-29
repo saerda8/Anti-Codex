@@ -12393,14 +12393,14 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   ].join("\n\n");
 
   assert.match(providerStack, /^# Anti-Codex provider stack/m);
-  assert.match(providerStack, /Antigravity Desktop provider by default/);
+  assert.match(providerStack, /Antigravity entitlement supplies model text/);
   assert.match(providerStack, /optional third-party provider profile/);
   assert.match(providerStack, /Metadata parity does not grant connector authorization/);
   assert.match(providerStack, /no ChatGPT login path/);
   assert.doesNotMatch(providerStack, /# deepcodex adaptive one-api|deepcodex\.app|setup-one-api-minimal|start-adaptive-oneapi|creates or updates a `deepcodex`/);
 
   assert.match(readme, /^# Anti-Codex/m);
-  assert.match(readme, /Antigravity Desktop/);
+  assert.match(readme, /Antigravity 权益/);
   assert.match(readme, /ChatGPT/);
   assert.match(readme, /DeepSeek API Key/);
   assert.match(readme, /Anti-Codex\.exe/);
@@ -12409,7 +12409,7 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.doesNotMatch(readme, /DeepCodex app|DeepSeek \u7248 Codex|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
 
   assert.match(readmeEn, /^# Anti-Codex/m);
-  assert.match(readmeEn, /Antigravity Desktop/);
+  assert.match(readmeEn, /Antigravity entitlement/);
   assert.match(readmeEn, /ChatGPT/);
   assert.match(readmeEn, /DeepSeek API key/);
   assert.match(readmeEn, /upstream profile/);
@@ -12418,7 +12418,7 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.doesNotMatch(readmeEn, /DeepCodex app|DeepCodex launched successfully|DeepCodex for Windows is|DeepCodex\.lnk/);
 
   assert.match(compatibility, /Scope: Anti-Codex translates Codex Desktop/);
-  assert.match(compatibility, /Antigravity Desktop is the default upstream/);
+  assert.match(compatibility, /Antigravity entitlement supplies model text/);
   assert.match(compatibility, /OpenAI-compatible third-party providers/);
   assert.match(compatibility, /Anthropic-compatible third-party providers/);
   assert.match(compatibility, /Connector\/app-tool metadata parity must not be treated as authorization/);
@@ -12434,6 +12434,11 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
   assert.doesNotMatch(marketingDocs, /DeepCodex|deepcodex|DeepSeek-only|DeepSeek route|DeepSeek API key/);
   assert.match(legacyMarketing, /archived historical DeepCodex \/ DeepSeek launch material/);
   assert.match(legacyMarketing, /not a current Anti-Codex launch asset/);
+  for (const currentDoc of [readme, readmeEn, providerStack, compatibility, marketingDocs]) {
+    assert.doesNotMatch(currentDoc, /Antigravity Desktop (?:provider|is the default upstream|remains the default route|as the default)/);
+    assert.doesNotMatch(currentDoc, /default route remains the local signed-in Antigravity Desktop account/);
+    assert.doesNotMatch(currentDoc, /默认路线仍是本机已登录的 Antigravity Desktop/);
+  }
 });
 
 test("Anti-Codex source preflight executes upstream profile assertions as part of its contract", () => {

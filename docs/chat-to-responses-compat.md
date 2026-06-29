@@ -10,7 +10,7 @@ a separate local control plane or pretend unsupported hosted features succeeded.
 
 ## Supported Provider Shapes
 
-- Antigravity Desktop is the default upstream.
+- Antigravity entitlement supplies model text.
 - OpenAI-compatible third-party providers use Chat Completions-compatible
   request and response shapes.
 - Anthropic-compatible third-party providers use Messages-compatible request and

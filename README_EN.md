@@ -1,14 +1,14 @@
 # Anti-Codex
 
-Anti-Codex is an independently runnable copy of Codex Desktop powered by the account currently signed in to Antigravity Desktop. It does not require ChatGPT login or a DeepSeek API key.
+Anti-Codex is an independently runnable copy of Codex Desktop powered by model text from the current Antigravity entitlement. It does not require ChatGPT login or a DeepSeek API key.
 
 It preserves the Codex UI and core workflow while keeping its executable, taskbar identity, state, and configuration isolated from the original Codex installation. Both applications can run at the same time.
 
 ## Capabilities
 
-- Exact account-backed Antigravity model names and reasoning levels
+- Exact Antigravity-entitlement model names and reasoning levels
 - Streaming, cancellation, long context, and compaction resume
-- Codex function/custom tools, native same-cascade MCP continuation, Skills, and local plugin snapshots
+- Codex function/custom tools, MCP, Skills, and local plugin snapshots owned by Anti-Codex/Codex
 - Independent state with no writes to the original Codex configuration
 - Guarded synchronization after Codex updates, with candidate validation and rollback
 - Installed checks for models, UI, account/proxy readiness, sync, diagnostics, and stability
@@ -33,7 +33,7 @@ Use `Anti-Codex > Manage Anti-Codex > Switch Antigravity Account`. Switch the ac
 
 ## Third-Party API Configuration
 
-The default route remains the local signed-in Antigravity Desktop account. When a third-party API is needed, the supported entry point is Anti-Codex Manager: test the connection, then save and apply the upstream profile. Lower-level scripts are controlled write and restart helpers only. If a saved profile cannot be read, Anti-Codex refuses a silent wrong-upstream fallback.
+The default route uses Antigravity entitlement for model text while Codex-owned tools stay in Anti-Codex. When a third-party API is needed, the supported entry point is Anti-Codex Manager: test the connection, then save and apply the upstream profile. Lower-level scripts are controlled write and restart helpers only. If a saved profile cannot be read, Anti-Codex refuses a silent wrong-upstream fallback.
 
 ## Connector Authorization Boundary
 

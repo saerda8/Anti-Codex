@@ -1,13 +1,13 @@
 # Anti-Codex
 
-Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作流沿用 Codex，模型请求使用当前已登录的 Antigravity Desktop 账号，不需要 ChatGPT 登录，也不使用 DeepSeek API Key。
+Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作流沿用 Codex，模型请求使用当前 Antigravity 权益提供的模型文本，不需要 ChatGPT 登录，也不使用 DeepSeek API Key。
 
 它不会修改原生 Codex。两者有独立的程序、任务栏名称、运行状态和本地数据，可以同时运行。
 
 ## 当前能力
 
 - 独立的 `Anti-Codex.exe`、桌面入口、任务栏名称和窗口名称
-- 自动读取 Antigravity Desktop 当前账号可用的精确模型名称与推理档位
+- 自动读取当前 Antigravity 权益可用的精确模型名称与推理档位
 - 支持模型切换、流式回复、取消任务、长上下文和上下文压缩恢复
 - 支持 Codex function/custom 工具、原生 MCP 同一会话续接、Skills 和本地插件快照
 - 支持中文跟随、网页搜索与网页读取
@@ -53,12 +53,12 @@ install-windows.bat
 
 ## 模型
 
-模型菜单来自 Antigravity Desktop 当前账号实际返回的可用模型。Anti-Codex 不伪造模型，也不会把推理档位冒充成模型名。当前机器已验证八个模型，包括精确数字版本与推理档位。
+模型菜单来自当前 Antigravity 权益实际返回的可用模型。Anti-Codex 不伪造模型，也不会把推理档位冒充成模型名。当前机器已验证八个模型，包括精确数字版本与推理档位。
 
 ## Skills、MCP 与插件
 
 - Skills、MCP 配置和插件缓存会复制到 Anti-Codex 的独立状态目录。
-- Codex 工具定义通过本地原生 MCP 通道交给 Antigravity，工具结果在同一会话中继续。
+- Codex 工具、MCP、Skills 和本地插件能力由 Anti-Codex/Codex 侧承接；Antigravity 只提供模型文本。
 - 远程 ChatGPT 插件市场和需要 ChatGPT 账号授权的连接器保持关闭。
 
 ## 已知边界
@@ -80,7 +80,7 @@ install-windows.bat
 
 ## 第三方 API 配置
 
-默认路线仍是本机已登录的 Antigravity Desktop。需要使用第三方 API 时，正式入口是 Anti-Codex Manager：先测试，再保存并应用 upstream profile；底层脚本只用于受控写入和重启。旧配置读取失败时不会静默切回错误上游，也不需要 ChatGPT 登录。
+默认路线是 Antigravity 权益提供模型文本、Codex 工具留在 Anti-Codex 侧。需要使用第三方 API 时，正式入口是 Anti-Codex Manager：先测试，再保存并应用 upstream profile；底层脚本只用于受控写入和重启。旧配置读取失败时不会静默切回错误上游，也不需要 ChatGPT 登录。
 
 ## Connector 授权边界
 

@@ -4,13 +4,14 @@
 
 ### Title
 
-Anti-Codex: Codex-like desktop workflow, Antigravity by default
+Anti-Codex: Codex-like desktop workflow, Antigravity model entitlement
 
 ### Core points
 
 - Separate Anti-Codex app/runtime.
 - Original Codex stays untouched.
-- Default route uses the local Antigravity Desktop provider.
+- Default route uses Antigravity entitlement for model text while Codex-owned
+  tools stay in Anti-Codex.
 - Optional third-party API profiles can be configured explicitly.
 - MCP servers, skills, plugin metadata, and connector metadata are mirrored into
   Anti-Codex local state.
