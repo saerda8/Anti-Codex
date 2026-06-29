@@ -7985,6 +7985,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing real traffic skipped checks/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary model text transport is not cli/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary missing model discovery source/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary antigravity coworker default is not false/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);
   assert.match(diagnostics, /latest-manager-real-buttons\.json/);

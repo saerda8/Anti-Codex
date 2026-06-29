@@ -1060,6 +1060,9 @@ function Test-DiagnosticBundle {
                 if ([int]$overallEvidence.failedCheckCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary failed checks" }
                 if ([int]$overallEvidence.missingSkipMetadataCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing skip metadata" }
                 if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 3) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
+                if ([string]$overallEvidence.modelTextTransport -ne "cli") { Add-Failure "diagnostic installed-overall $($entry.Label) summary model text transport is not cli" }
+                if (-not [string]$overallEvidence.modelDiscoverySource) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing model discovery source" }
+                if ($overallEvidence.antigravityCoworkerDefault -ne $false) { Add-Failure "diagnostic installed-overall $($entry.Label) summary antigravity coworker default is not false" }
             }
         }
         $postVerificationSummary = @($summary | Where-Object { $_.file -eq "latest-post-verification.json" } | Select-Object -First 1)[0]
