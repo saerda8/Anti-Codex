@@ -319,6 +319,18 @@ function isEmptyArray(value) {
   return Array.isArray(value) && value.length === 0;
 }
 
+function repoMultiSettleEvidenceOk(value, phase) {
+  return value && typeof value === "object"
+    && value.ok === true
+    && value.kind === "artifact_idle_without_history_wait"
+    && value.phase === phase
+    && value.historyToolOutputRequired === false
+    && value.artifactComplete === true
+    && value.inLoopIdleObserved === true
+    && value.diagnostics
+    && typeof value.diagnostics === "object";
+}
+
 function validToolEvidence(evidence, protocol) {
   return !!evidence
     && evidence.protocol === protocol
@@ -559,6 +571,8 @@ function summarizeGate(definition) {
         if (artifact.htmlAvoidsObjectObject !== true) semanticFailures.push(`${prefix}_html_object_leak`);
         if (artifact.readmeHasChinese !== true) semanticFailures.push(`${prefix}_readme_chinese_missing`);
         if (artifact.readmeMentionsCommand !== true) semanticFailures.push(`${prefix}_readme_command_missing`);
+        if (!repoMultiSettleEvidenceOk(report.firstTurnSettle, "readme")) semanticFailures.push(`${prefix}_first_turn_settle_missing`);
+        if (!repoMultiSettleEvidenceOk(report.finalTurnSettle, "full")) semanticFailures.push(`${prefix}_final_turn_settle_missing`);
       }
       if (spec.requireReportSite) {
         if (artifact.reportHasChinese !== true) semanticFailures.push(`${prefix}_report_chinese_missing`);
@@ -2691,6 +2705,44 @@ if (args.has("--self-test")) {
       "ui_repo_multi_file_edit_smoke_html_object_leak",
       "ui_repo_multi_file_edit_smoke_readme_chinese_missing",
       "ui_repo_multi_file_edit_smoke_readme_command_missing",
+      "ui_repo_multi_file_edit_smoke_first_turn_settle_missing",
+      "ui_repo_multi_file_edit_smoke_final_turn_settle_missing",
+    ]);
+    writeFakeLatestReport("latest-ui-repo-multi-file-edit-smoke.json", {
+      ok: true,
+      reportName: "ui-repo-multi-file-edit-smoke",
+      taskMode: "repo-multi-file-edit",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "desktop-ui-real-traffic",
+      failures: [],
+      clicked: true,
+      composerCleared: true,
+      activeReconnectSeen: false,
+      sessionLockClear: true,
+      antigravitySessionLock: { active: false, queued: 0 },
+      artifactEvidence: {
+        files: { source: true, test: true, data: true, readme: true, html: true },
+        exportsNormalizeStatus: true,
+        exportsSummarizeRecords: true,
+        exportsRenderSummaryHtml: true,
+        sourceChangedFromFixture: true,
+        testUnchanged: true,
+        dataUnchanged: true,
+        testPassed: true,
+        cliPassed: true,
+        htmlComplete: true,
+        htmlHasChinese: true,
+        htmlMentionsStatuses: true,
+        htmlAvoidsObjectObject: true,
+        readmeHasChinese: true,
+        readmeMentionsCommand: true,
+      },
+    });
+    semanticFailures.uiRepoMultiFileEditSmokeMissingSettle = assertSemanticFailures("uiRepoMultiFileEditSmoke", "self-test failed: repo-multi report without settle evidence satisfied the gate", [
+      "ui_repo_multi_file_edit_smoke_first_turn_settle_missing",
+      "ui_repo_multi_file_edit_smoke_final_turn_settle_missing",
     ]);
     semanticFailures.uiComplexProjectSmoke = assertSemanticFailures("uiComplexProjectSmoke", "self-test failed: semantically invalid ui-complex-project-smoke report satisfied the gate", [
       "ui_complex_project_smoke_report_name",

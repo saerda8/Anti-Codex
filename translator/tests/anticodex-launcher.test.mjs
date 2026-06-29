@@ -8461,6 +8461,15 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       file: "latest-sync-readiness.json",
       ok: false,
       syncReadinessEvidence: {
+        clientSyncMode: "codex-client-copy-plus-anticodex-patches",
+        clientSyncMaintenancePath: "guarded-host-sync-then-reapply-anticodex-patches",
+        nativeClientBehaviorCarriedByHostSync: true,
+        forbidsFeatureByFeatureReimplementation: true,
+        sourcePackageName: "OpenAI.Codex",
+        activeSourcePackageName: "OpenAI.Codex",
+        clientSyncHostHashMatches: false,
+        clientSyncCliHashMatches: false,
+        antiCodexPatchScope: ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"],
         sourcePackageVersion: "26.623.3245.0",
         activePackageVersion: "26.616.9593.0",
         updateStatusReason: "source_codex_changed",
@@ -11676,8 +11685,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(summarizer, /uiMultiTurnProjectEvidence/);
   assert.match(summarizer, /uiRepoFileEditEvidence/);
   assert.match(summarizer, /uiRepoMultiFileEditEvidence/);
+  assert.match(summarizer, /asRepoMultiSettleEvidence/);
+  assert.match(summarizer, /diagnosticsPresent/);
   assert.match(summarizer, /testUnchanged/);
   assert.match(summarizer, /dataUnchanged/);
+  assert.match(summarizer, /firstTurnSettle/);
+  assert.match(summarizer, /finalTurnSettle/);
   assert.match(summarizer, /uiComplexProjectEvidence/);
   assert.match(summarizer, /uiReportSiteEvidence/);
   assert.match(summarizer, /reportHasMarker/);
@@ -11694,6 +11707,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_source_unchanged/);
   assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_test_modified/);
   assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_data_modified/);
+  assert.match(releaseGates, /repoMultiSettleEvidenceOk/);
+  assert.match(releaseGates, /typeof value\.diagnostics === "object"/);
+  assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_first_turn_settle_missing/);
+  assert.match(releaseGates, /ui_repo_multi_file_edit_smoke_final_turn_settle_missing/);
   const requiredReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*true[^}]*\}/g), (match) => match[1]))).sort();
   assert.ok(requiredReports.includes("latest-ui-web-search-smoke.json"), "desktop web-search evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-local-project-smoke.json"), "desktop local-project evidence must be release-required");

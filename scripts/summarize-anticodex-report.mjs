@@ -79,6 +79,20 @@ function boolField(object, key) {
   return has(object, key) ? !!object[key] : null;
 }
 
+function asRepoMultiSettleEvidence(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    ok: boolField(value, "ok"),
+    kind: asString(value.kind),
+    phase: asString(value.phase),
+    historyToolOutputRequired: boolField(value, "historyToolOutputRequired"),
+    historyToolOutputSeen: boolField(value, "historyToolOutputSeen"),
+    artifactComplete: boolField(value, "artifactComplete"),
+    inLoopIdleObserved: boolField(value, "inLoopIdleObserved"),
+    diagnosticsPresent: value.diagnostics && typeof value.diagnostics === "object",
+  };
+}
+
 function pathWithin(child, parent) {
   const childText = asString(child);
   const parentText = asString(parent);
@@ -537,6 +551,8 @@ const summary = {
     htmlAvoidsObjectObject: report.artifactEvidence && has(report.artifactEvidence, "htmlAvoidsObjectObject") ? !!report.artifactEvidence.htmlAvoidsObjectObject : null,
     readmeHasChinese: report.artifactEvidence && has(report.artifactEvidence, "readmeHasChinese") ? !!report.artifactEvidence.readmeHasChinese : null,
     readmeMentionsCommand: report.artifactEvidence && has(report.artifactEvidence, "readmeMentionsCommand") ? !!report.artifactEvidence.readmeMentionsCommand : null,
+    firstTurnSettle: asRepoMultiSettleEvidence(report.firstTurnSettle),
+    finalTurnSettle: asRepoMultiSettleEvidence(report.finalTurnSettle),
   } : null,
   uiComplexProjectEvidence: isUiComplexProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

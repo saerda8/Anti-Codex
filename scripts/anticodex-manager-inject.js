@@ -838,8 +838,18 @@
     const updateStatus = sync.updateStatus || r.updateStatus || {};
     const drift = updateStatus.drift || {};
     const managerBridge = sync.managerBridge || {};
+    const clientSyncContract = r.clientSyncContract || {};
     return {
       codexVersion: activeHost.codexVersion || updateStatus.source?.codexVersion || "",
+      clientSyncMode: clientSyncContract.mode || "",
+      clientSyncMaintenancePath: clientSyncContract.maintenancePath || "",
+      nativeClientBehaviorCarriedByHostSync: typeof clientSyncContract.nativeClientBehaviorCarriedByHostSync === "boolean" ? clientSyncContract.nativeClientBehaviorCarriedByHostSync : null,
+      forbidsFeatureByFeatureReimplementation: typeof clientSyncContract.forbidsFeatureByFeatureReimplementation === "boolean" ? clientSyncContract.forbidsFeatureByFeatureReimplementation : null,
+      sourcePackageName: clientSyncContract.sourcePackageName || updateStatus.source?.packageName || "",
+      activeSourcePackageName: clientSyncContract.activeSourcePackageName || activeHost.sourcePackageName || "",
+      clientSyncHostHashMatches: typeof clientSyncContract.sourceHostHashMatches === "boolean" ? clientSyncContract.sourceHostHashMatches : null,
+      clientSyncCliHashMatches: typeof clientSyncContract.sourceCliHashMatches === "boolean" ? clientSyncContract.sourceCliHashMatches : null,
+      antiCodexPatchScope: Array.isArray(clientSyncContract.antiCodexPatchScope) ? clientSyncContract.antiCodexPatchScope.filter(Boolean) : [],
       sourcePackageVersion: updateStatus.source?.packageVersion || activeHost.sourcePackageVersion || "",
       activePackageVersion: drift.activePackageVersion || updateStatus.active?.packageVersion || "",
       updateStatusSource: sync.updateStatusSource || updateStatus.sourceType || "",
@@ -861,6 +871,7 @@
   function syncReadinessEvidenceLines(evidence) {
     const e = evidence || {};
     return [
+      `sync contract: mode=${e.clientSyncMode || "unknown"} / path=${e.clientSyncMaintenancePath || "unknown"} / nativeHostSync=${triStateText(e.nativeClientBehaviorCarriedByHostSync)} / noFeatureRebuild=${triStateText(e.forbidsFeatureByFeatureReimplementation)} / patches=${Array.isArray(e.antiCodexPatchScope) && e.antiCodexPatchScope.length ? e.antiCodexPatchScope.join(",") : "unknown"}`,
       `\u7248\u672c\uff1aCodex ${e.codexVersion || "\u672a\u77e5"} / source ${e.sourcePackageVersion || "\u672a\u77e5"} / active ${e.activePackageVersion || "\u672a\u77e5"}`,
       `\u6f02\u79fb\uff1astate=${e.updateDriftState || "unknown"} / reason=${e.updateStatusReason || "unknown"} / source=${e.updateStatusSource || "unknown"} / hostChanged=${triStateText(e.updateDriftHostChanged)} / cliChanged=${triStateText(e.updateDriftCliChanged)}`,
       `hash\uff1ahost=${String(e.activeHostHash || "").slice(0, 8) || "unknown"}/${String(e.sourceHostHash || "").slice(0, 8) || "unknown"} match=${triStateText(e.hostHashMatches)} / cli=${String(e.activeCliHash || "").slice(0, 8) || "unknown"}/${String(e.sourceCliHash || "").slice(0, 8) || "unknown"} match=${triStateText(e.cliHashMatches)}`,
@@ -1085,7 +1096,7 @@
       }
       if (item.sourcePreflightEvidence) {
         const evidence = item.sourcePreflightEvidence;
-        lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
+        lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"}`);
         lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
       }
       if (item.logDbGuardEvidence) {
