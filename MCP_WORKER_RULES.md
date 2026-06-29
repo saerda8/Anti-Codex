@@ -86,6 +86,22 @@ After every failure, before another dispatch:
 - Result: host tool timed out after about 300 seconds, but the isolated worktree contained a small scoped diff in `scripts/test-anticodex-release-gates.mjs` and `translator/tests/anticodex-launcher.test.mjs`.
 - Cause classification: wrapper timeout after useful edits, not necessarily model/task failure.
 - Rule change: after a synchronous worker timeout, inspect the isolated worktree status and diff before retrying or discarding. If the diff is scoped, run the requested checks manually, commit it on the worker branch, and cherry-pick only after review.
+
+### 2026-06-29 - DeepSeek transport closed before edit
+
+- Job: `deepseek_implement_in_workspace` for source-preflight profile-prepare release-gate semantics.
+- Task: require `antigravityCliProfilePrepareOk` and `checks.antigravityCliProfilePrepare.ok` in release gates.
+- Result: tool returned `Transport closed` immediately and produced no file changes.
+- Cause classification: external CLI/transport failure, not a code review result.
+- Rule change: when DeepSeek transport closes before edit, do not keep retrying the same dispatch. Route the small scoped task to another available worker or the main agent, then record the failure.
+
+### 2026-06-29 - MiMoCode cancelled after no diff
+
+- Job: `mcw_mqysj1b3_wd2ce2`
+- Task: same source-preflight profile-prepare release-gate semantics.
+- Result: no file changes after the observation window; the task was cancelled and the main agent completed the small patch.
+- Cause classification: worker no-output/slow-start on a tiny task.
+- Rule change: for tiny tasks with no diff and an alternate worker/main path already moving, cancel the idle job before editing the same files elsewhere.
 - Cause classification: Antigravity CLI execution-channel failure, not task breadth. The task already had one behavior, one file, and one syntax check.
 - Rule change: after two silent exit-code-2 jobs with a healthy doctor, stop prompt-only retries, switch the coding task to another worker, and isolate Antigravity diagnosis from product work.
 
