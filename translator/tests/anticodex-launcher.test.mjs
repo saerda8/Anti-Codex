@@ -12956,19 +12956,22 @@ test("task plan current status does not claim full release readiness while real 
   assert.doesNotMatch(handoff, /Current[^\n]*releaseReady:true/);
 });
 
-test("current project direction uses one Antigravity CLI account instead of dual account isolation", () => {
+test("current project direction keeps separate Antigravity account lanes for MCP and Anti-Codex", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
   const baseline = taskPlan.split("## Phases")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  assert.match(currentStatus, /uses one Antigravity CLI account\/profile/);
-  assert.match(currentStatus, /manual account switching/);
-  assert.match(baseline, /single-account by default/);
-  assert.match(handoffCurrentStatus, /single CLI account\/profile/);
-  assert.doesNotMatch(baseline, /Until dual Antigravity account isolation is implemented/);
-  assert.doesNotMatch(baseline, /second Antigravity account test/);
+  assert.match(currentStatus, /Gemini CLI is not usable/);
+  assert.match(currentStatus, /separate Antigravity CLI profile\/account/);
+  assert.match(currentStatus, /MCP can use a different Antigravity account/);
+  assert.match(baseline, /two account\/profile boundaries/);
+  assert.match(baseline, /MCP wiring is handled outside this channel/);
+  assert.match(handoffCurrentStatus, /two-account\/profile split/);
+  assert.match(handoffCurrentStatus, /Do not run real account\/traffic proof without explicit approval/);
+  assert.doesNotMatch(currentStatus, /uses one Antigravity CLI account\/profile/);
+  assert.doesNotMatch(baseline, /single-account by default/);
 });
 
 test("Antigravity prompt preserves the model-text boundary, not coworker identity", () => {
