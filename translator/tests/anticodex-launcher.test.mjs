@@ -12940,6 +12940,15 @@ test("current docs describe Antigravity as model entitlement, not Desktop cowork
   assert.match(videoScript, /Codex-owned tools stay in Anti-Codex/);
 });
 
+test("task plan current status does not claim full release readiness while real traffic gates are blocked", () => {
+  const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const currentStatus = taskPlan.split("## Goal")[0];
+
+  assert.match(currentStatus, /releaseReady:false/);
+  assert.match(currentStatus, /releaseBlockedOnlyByRequiredRealTraffic:true/);
+  assert.doesNotMatch(currentStatus, /releaseReady:true/);
+});
+
 test("Antigravity prompt preserves the model-text boundary, not coworker identity", () => {
   const upstream = readFileSync(resolve(root, "translator", "antigravity-upstream.mjs"), "utf8");
 
