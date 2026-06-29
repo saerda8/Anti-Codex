@@ -11324,6 +11324,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /installed_overall_coverage_kind/);
   assert.match(releaseGates, /installed_overall_model_text_transport_not_cli/);
   assert.match(releaseGates, /installed_overall_model_discovery_source_missing/);
+  assert.match(releaseGates, /installed_overall_model_discovery_source_not_allowed/);
+  assert.match(releaseGates, /antigravity-coworker/);
+  assert.match(releaseGates, /antigravity-cli-catalog/);
   assert.match(releaseGates, /installed_overall_antigravity_coworker_default_not_false/);
   assert.match(releaseGates, /installed_overall_real_traffic_skip_missing/);
   assert.match(releaseGates, /allowedFullSkipped = new Set\(\[[\s\S]*"managerButtonMcpSkills"[\s\S]*"managerButtonPluginCapabilities"[\s\S]*"uiIdleStability"/);

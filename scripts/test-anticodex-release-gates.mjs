@@ -444,8 +444,10 @@ function summarizeGate(definition) {
       if (definition.expectedFast && Number(report.fastMaxElapsedMs || 0) > 0 && Number(report.elapsedMs || 0) > Number(report.fastMaxElapsedMs)) semanticFailures.push("installed_overall_fast_elapsed");
       const health = report.health && typeof report.health === "object" ? report.health : {};
       if (health.mode === "antigravity" || health.mode === undefined || health.mode === "") {
+        const allowedModelDiscoverySources = new Set(["antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog"]);
         if (health.modelTextTransport !== "cli") semanticFailures.push("installed_overall_model_text_transport_not_cli");
         if (typeof health.modelDiscoverySource !== "string" || !health.modelDiscoverySource) semanticFailures.push("installed_overall_model_discovery_source_missing");
+        else if (!allowedModelDiscoverySources.has(health.modelDiscoverySource)) semanticFailures.push("installed_overall_model_discovery_source_not_allowed");
         if (health.antigravityCoworkerDefault !== false) semanticFailures.push("installed_overall_antigravity_coworker_default_not_false");
       }
       if (entries.length < 1) semanticFailures.push("installed_overall_checks_missing");
@@ -1787,6 +1789,12 @@ if (args.has("--self-test")) {
         coverageKind: "real-traffic",
         fastMaxElapsedMs: 10,
         elapsedMs: 100,
+        health: {
+          mode: "antigravity",
+          modelTextTransport: "desktop-cascade",
+          modelDiscoverySource: "antigravity-coworker",
+          antigravityCoworkerDefault: true,
+        },
         checks: {
           branding: { ok: false },
           skippedWithoutMetadata: { ok: true, skipped: true },
@@ -2322,7 +2330,7 @@ if (args.has("--self-test")) {
       "installed_overall_behavior_not_covered",
       "installed_overall_fast_elapsed",
       "installed_overall_model_text_transport_not_cli",
-      "installed_overall_model_discovery_source_missing",
+      "installed_overall_model_discovery_source_not_allowed",
       "installed_overall_antigravity_coworker_default_not_false",
       "installed_overall_check_not_ok",
       "installed_overall_skip_metadata_missing",
@@ -2336,7 +2344,7 @@ if (args.has("--self-test")) {
       "installed_overall_coverage_kind",
       "installed_overall_behavior_not_covered",
       "installed_overall_model_text_transport_not_cli",
-      "installed_overall_model_discovery_source_missing",
+      "installed_overall_model_discovery_source_not_allowed",
       "installed_overall_antigravity_coworker_default_not_false",
       "installed_overall_check_not_ok",
       "installed_overall_skip_metadata_missing",
