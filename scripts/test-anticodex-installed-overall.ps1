@@ -1410,7 +1410,7 @@ $checks.sourcePreflightAntigravityCliProfilePrepare = try {
         -and $profilePrepareContract.separateAccountVerified -eq $false `
         -and $profilePrepareContract.accountLaneRole -eq "anticodex-model-text" `
         -and $profilePrepareContract.mcpAccountLaneManagedByAntiCodex -eq $false `
-        -and [string]$profilePrepareContract.mcpAccountLaneOwner `
+        -and $profilePrepareContract.mcpAccountLaneOwner -eq "external-antigravity-account-not-managed-here" `
         -and $profilePrepareContract.coverageKind -eq "profile-prepared-no-traffic" `
         -and [string]$profilePrepareContract.accountIsolationBoundary `
         -and [string]$profilePrepareContract.accountIsolationCaveat

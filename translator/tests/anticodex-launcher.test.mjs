@@ -11478,7 +11478,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_profile_prepare_separate_account_verified/);
   assert.match(releaseGates, /source_preflight_profile_prepare_account_lane_role/);
   assert.match(releaseGates, /source_preflight_profile_prepare_mcp_lane_managed_by_anticodex/);
-  assert.match(releaseGates, /source_preflight_profile_prepare_mcp_lane_owner_missing/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_mcp_lane_owner_mismatch/);
   assert.match(releaseGates, /source_preflight_profile_prepare_coverage_kind/);
   assert.match(releaseGates, /source_preflight_profile_prepare_isolation_boundary_missing/);
   assert.match(releaseGates, /source_preflight_profile_prepare_isolation_caveat_missing/);
@@ -11902,7 +11902,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_separate_account_verified"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_account_lane_role"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_mcp_lane_managed_by_anticodex"));
-  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_mcp_lane_owner_missing"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_mcp_lane_owner_mismatch"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_coverage_kind"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_isolation_boundary_missing"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_isolation_caveat_missing"));
@@ -13484,6 +13484,25 @@ test("Antigravity CLI profile prepare carries account-lane boundary fields and d
 
   assert.match(profilePrepare, /accountLaneRole\s*=\s*"anticodex-model-text"/);
   assert.match(profilePrepare, /mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/);
+  assert.match(profilePrepare, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
   assert.match(upstreamProfile, /accountLaneRole\s*=\s*"anticodex-model-text"/);
   assert.match(upstreamProfile, /mcpAccountLaneManagedByAntiCodex\s*=\s*\$false/);
+  assert.match(upstreamProfile, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
+});
+
+test("Antigravity CLI profile prepare: MCP account lane owner must be the exact sentinel string, not merely non-empty", () => {
+  const requiredExact = "external-antigravity-account-not-managed-here";
+  const scripts = [
+    { name: "test-anticodex-release-gates.mjs", path: resolve(root, "scripts", "test-anticodex-release-gates.mjs") },
+    { name: "test-anticodex-diagnostics.ps1", path: resolve(root, "scripts", "test-anticodex-diagnostics.ps1") },
+    { name: "test-anticodex-installed-overall.ps1", path: resolve(root, "scripts", "test-anticodex-installed-overall.ps1") },
+    { name: "test-anticodex-source-preflight.ps1", path: resolve(root, "scripts", "test-anticodex-source-preflight.ps1") },
+  ];
+  for (const { name, path } of scripts) {
+    const src = readFileSync(path, "utf8");
+    assert.match(src, /mcpAccountLaneOwner/, `${name} must reference mcpAccountLaneOwner`);
+    assert.match(src, new RegExp(requiredExact), `${name} must compare against exact MCP account lane owner sentinel`);
+    assert.doesNotMatch(src, /-not \[string\]\$profilePrepare(?:Contract|Evidence)\.mcpAccountLaneOwner/, `${name} must not only check owner non-empty`);
+    assert.doesNotMatch(src, /!contract\.mcpAccountLaneOwner/, `${name} must not only check owner non-empty`);
+  }
 });

@@ -255,7 +255,7 @@ function Test-AntigravityCliProfilePrepare {
                     -and $parsed.separateAccountVerified -eq $false `
                     -and $parsed.accountLaneRole -eq "anticodex-model-text" `
                     -and $parsed.mcpAccountLaneManagedByAntiCodex -eq $false `
-                    -and $parsed.mcpAccountLaneOwner `
+                    -and $parsed.mcpAccountLaneOwner -eq "external-antigravity-account-not-managed-here" `
                     -and $parsed.coverageKind -eq "profile-prepared-no-traffic" `
                     -and $parsed.accountIsolationBoundary `
                     -and $parsed.accountIsolationCaveat

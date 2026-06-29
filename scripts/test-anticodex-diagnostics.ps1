@@ -1206,7 +1206,7 @@ function Test-DiagnosticBundle {
                 if ($profilePrepareContract.separateAccountVerified -ne $false) { Add-Failure "source-preflight summary profile prepare claims separate account verified" }
                 if ($profilePrepareContract.accountLaneRole -ne "anticodex-model-text") { Add-Failure "source-preflight summary profile prepare account lane role mismatch" }
                 if ($profilePrepareContract.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "source-preflight summary profile prepare claims MCP account lane is managed by Anti-Codex" }
-                if (-not [string]$profilePrepareContract.mcpAccountLaneOwner) { Add-Failure "source-preflight summary profile prepare missing MCP account lane owner" }
+                if ($profilePrepareContract.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "source-preflight summary profile prepare MCP account lane owner mismatch" }
                 if ($profilePrepareContract.coverageKind -ne "profile-prepared-no-traffic") { Add-Failure "source-preflight summary profile prepare coverage kind mismatch" }
                 if (-not [string]$profilePrepareContract.accountIsolationBoundary) { Add-Failure "source-preflight summary profile prepare missing isolation boundary" }
                 if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "source-preflight summary profile prepare missing isolation caveat" }
@@ -1223,7 +1223,7 @@ function Test-DiagnosticBundle {
                 if ($profilePrepareEvidence.separateAccountVerified -ne $false) { Add-Failure "diagnostic profile prepare summary separateAccountVerified must be false; profile prepare is not real dual-account proof" }
                 if ($profilePrepareEvidence.accountLaneRole -ne "anticodex-model-text") { Add-Failure "diagnostic profile prepare summary accountLaneRole mismatch" }
                 if ($profilePrepareEvidence.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "diagnostic profile prepare summary claims MCP account lane is managed by Anti-Codex" }
-                if (-not [string]$profilePrepareEvidence.mcpAccountLaneOwner) { Add-Failure "diagnostic profile prepare summary missing mcpAccountLaneOwner" }
+                if ($profilePrepareEvidence.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "diagnostic profile prepare summary mcpAccountLaneOwner mismatch" }
                 if (-not [string]$profilePrepareEvidence.accountIsolationBoundary) { Add-Failure "diagnostic profile prepare summary missing accountIsolationBoundary" }
                 if (-not [string]$profilePrepareEvidence.accountIsolationCaveat) { Add-Failure "diagnostic profile prepare summary missing accountIsolationCaveat" }
             }
@@ -2064,7 +2064,7 @@ if ($diagnostics) {
             if ($profilePrepareContract.separateAccountVerified -ne $false) { Add-Failure "diagnostics source preflight profile prepare claims separate account verified" }
             if ($profilePrepareContract.accountLaneRole -ne "anticodex-model-text") { Add-Failure "diagnostics source preflight profile prepare account lane role mismatch" }
             if ($profilePrepareContract.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "diagnostics source preflight profile prepare claims MCP account lane is managed by Anti-Codex" }
-            if (-not [string]$profilePrepareContract.mcpAccountLaneOwner) { Add-Failure "diagnostics source preflight profile prepare missing MCP account lane owner" }
+            if ($profilePrepareContract.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "diagnostics source preflight profile prepare MCP account lane owner mismatch" }
             if ($profilePrepareContract.coverageKind -ne "profile-prepared-no-traffic") { Add-Failure "diagnostics source preflight profile prepare coverage kind mismatch" }
             if (-not [string]$profilePrepareContract.accountIsolationBoundary) { Add-Failure "diagnostics source preflight profile prepare missing isolation boundary" }
             if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight profile prepare missing isolation caveat" }
