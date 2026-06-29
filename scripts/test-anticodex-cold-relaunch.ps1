@@ -118,6 +118,18 @@ function Save-Progress {
     } catch {}
 }
 
+function Read-TextFileTail {
+    param([string]$Path, [int]$MaxChars = 4000)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
+    try {
+        $text = [System.IO.File]::ReadAllText($Path)
+        if ($text.Length -le $MaxChars) { return $text }
+        return $text.Substring($text.Length - $MaxChars)
+    } catch {
+        return ""
+    }
+}
+
 function New-ReportPaths {
     param([string]$Name)
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -142,6 +154,9 @@ $lastSnapshot = [pscustomobject]@{
 $originalCodexBefore = @()
 $originalCodexAfter = @()
 $originalCodexStopTargetIntersection = @()
+$launcherProc = $null
+$launcherOutPath = ""
+$launcherErrPath = ""
 
 function Get-AntiCodexProcessSnapshot {
     $main = New-Object System.Collections.Generic.List[object]
@@ -268,16 +283,14 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
     $launcherErrPath = [IO.Path]::GetTempFileName()
     try {
         $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
-        Start-Process -FilePath $powerShellBin `
+        $launcherProc = Start-Process -FilePath $powerShellBin `
             -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$startAntiCodex`"") `
             -RedirectStandardOutput $launcherOutPath `
             -RedirectStandardError $launcherErrPath `
-            -WindowStyle Hidden | Out-Null
+            -WindowStyle Hidden -PassThru
     } catch {
         $launched = $false
         Add-Failure "failed to launch Anti-Codex: $($_.Exception.Message)"
-    } finally {
-        Remove-Item -LiteralPath $launcherOutPath, $launcherErrPath -Force -ErrorAction SilentlyContinue
     }
     $stages.Add((New-Stage "launch-anticodex" $stageStarted $launched "start-anticodex.ps1 dispatched")) | Out-Null
     Save-Progress "launched-anticodex"
@@ -341,6 +354,17 @@ $finalSnapshot = Get-AntiCodexProcessSnapshot
 $mainSnapshot = @($finalSnapshot.main)
 $translatorSnapshot = @($finalSnapshot.translator)
 $reportPaths = New-ReportPaths "cold-relaunch"
+$launcherExitCode = $null
+$launcherHasExited = $null
+if ($launcherProc) {
+    try {
+        $launcherProc.Refresh()
+        $launcherHasExited = [bool]$launcherProc.HasExited
+        if ($launcherProc.HasExited) { $launcherExitCode = $launcherProc.ExitCode }
+    } catch {}
+}
+$launcherStdoutTail = Read-TextFileTail $launcherOutPath
+$launcherStderrTail = Read-TextFileTail $launcherErrPath
 
 $result = [pscustomobject]@{
     reportName = "cold-relaunch"
@@ -369,6 +393,14 @@ $result = [pscustomobject]@{
         translatorPids = @($translatorSnapshot | ForEach-Object { [int]$_.ProcessId })
         launcherCount = @($finalSnapshot.launcher).Count
     }
+    launcher = [pscustomobject]@{
+        started = [bool]$launcherProc
+        pid = if ($launcherProc) { [int]$launcherProc.Id } else { $null }
+        hasExited = $launcherHasExited
+        exitCode = $launcherExitCode
+        stdoutTail = $launcherStdoutTail
+        stderrTail = $launcherStderrTail
+    }
     originalCodex = [pscustomobject]@{
         unchanged = ($originalCodexStopTargetIntersection.Count -eq 0)
         beforePids = @($originalCodexBefore)
@@ -387,6 +419,7 @@ $result = [pscustomobject]@{
 
 $json = $result | ConvertTo-Json -Depth 8 -Compress
 Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPaths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
+Remove-Item -LiteralPath $launcherOutPath, $launcherErrPath -Force -ErrorAction SilentlyContinue
 $json
 if ($failures.Count -gt 0) { exit 1 }
 

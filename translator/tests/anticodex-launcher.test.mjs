@@ -3778,6 +3778,13 @@ test("report summarizer surfaces cold relaunch evidence", () => {
         translatorCount: 1,
         launcherCount: 1,
       },
+      launcher: {
+        started: true,
+        hasExited: true,
+        exitCode: 0,
+        stdoutTail: "Anti-Codex launched successfully",
+        stderrTail: "",
+      },
       originalCodex: {
         unchanged: true,
         beforePids: [11],
@@ -3800,6 +3807,10 @@ test("report summarizer surfaces cold relaunch evidence", () => {
     assert.equal(summary.coldRelaunchEvidence.mainCount, 1);
     assert.equal(summary.coldRelaunchEvidence.translatorCount, 1);
     assert.equal(summary.coldRelaunchEvidence.launcherCount, 1);
+    assert.equal(summary.coldRelaunchEvidence.launcherStarted, true);
+    assert.equal(summary.coldRelaunchEvidence.launcherHasExited, true);
+    assert.equal(summary.coldRelaunchEvidence.launcherExitCode, 0);
+    assert.match(summary.coldRelaunchEvidence.launcherStdoutTail, /launched successfully/);
     assert.equal(summary.coldRelaunchEvidence.originalCodexUnchanged, true);
     assert.equal(summary.coldRelaunchEvidence.stageCount, 3);
     assert.equal(summary.coldRelaunchEvidence.failedStageCount, 0);
@@ -6711,8 +6722,14 @@ test("Anti-Codex ships a cold relaunch verification script", () => {
   assert.match(relaunch, /TimeoutSec 2/);
   assert.match(relaunch, /WindowStyle Hidden/);
   assert.match(relaunch, /launcherOutPath/);
+  assert.match(relaunch, /Read-TextFileTail/);
   assert.match(relaunch, /RedirectStandardOutput/);
   assert.match(relaunch, /RedirectStandardError/);
+  assert.match(relaunch, /PassThru/);
+  assert.match(relaunch, /launcherProc\.Refresh\(\)/);
+  assert.match(relaunch, /launcher = \[pscustomobject\]/);
+  assert.match(relaunch, /stdoutTail = \$launcherStdoutTail/);
+  assert.match(relaunch, /stderrTail = \$launcherStderrTail/);
   assert.match(relaunch, /TimeoutSec = 18/);
   assert.match(relaunch, /StopTimeoutSec = 5/);
   assert.match(relaunch, /HealthPollTimeoutSec/);

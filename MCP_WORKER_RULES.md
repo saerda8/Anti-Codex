@@ -173,6 +173,13 @@ After every failure, before another dispatch:
 - Cause classification: command-runner mismatch; `rtk` is useful for normal external commands but should not wrap shell-native cmdlets.
 - Rule change: for PowerShell builtins such as `Get-Content` and `Select-String`, run them directly with tight path and line limits. Keep `rtk` for external commands such as `rg`, `git`, `node`, and script invocations.
 
+### 2026-06-29 - Worker parser checks created `$null`
+- Workers: DeepSeek `dsw_mqylmpcc_j5mkw2`, MiMoCode `mcw_mqylmqxb_je19pw`, and MIMO coworker worktree `deepcodex-worker-mimo-cold-20260629-1028`.
+- Task: cold-relaunch verifier patch with a PowerShell parser check supplied as an inline command containing `$null`.
+- Result: workers produced useful partial diffs but failed validation and left an untracked `$null` file in their isolated worktrees.
+- Cause classification: command-construction failure in worker validation, not product failure.
+- Rule change: do not pass inline parser checks containing `$null`, `$tokens`, `$errors`, or redirection to MCP workers. Use a checked helper script or omit parser checks from worker validation and let the main agent run parser checks directly.
+
 ### 2026-06-20 - Do not mix escaped regex fragments into PowerShell double quotes
 - Task: search version and sync-readiness summary patterns before bumping Manager v68.
 - Result: PowerShell parsed an escaped quote inside the regex as the end of the command string and failed before running `rg`.
