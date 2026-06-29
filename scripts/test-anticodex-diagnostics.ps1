@@ -1932,12 +1932,19 @@ if ($diagnostics) {
         } elseif ($diagnosticMode -eq "third-party" -and $tools.antigravityMode -ne $false) {
             Add-Failure "diagnostics.tools.antigravityMode is not false in third-party mode"
         }
-        if ($diagnosticMode -eq "antigravity" -and $tools.nativeAntigravityToolEvents -ne $true) {
-            Add-Failure "diagnostics.tools should confirm native Antigravity tool events"
+        $nativeBridgeEnabled = $diagnostics.toolBridge.nativeBridgeDefaultEnabled -eq $true
+        if ($diagnosticMode -eq "antigravity" -and $nativeBridgeEnabled -and $tools.nativeAntigravityToolEvents -ne $true) {
+            Add-Failure "diagnostics.tools should confirm native Antigravity tool events while native bridge is enabled"
+        } elseif ($diagnosticMode -eq "antigravity" -and -not $nativeBridgeEnabled -and $tools.nativeAntigravityToolEvents -ne $false) {
+            Add-Failure "diagnostics.tools should not report native Antigravity tool events by default"
         } elseif ($diagnosticMode -eq "third-party" -and $tools.nativeAntigravityToolEvents -ne $false) {
             Add-Failure "diagnostics.tools unexpectedly reports native Antigravity tool events in third-party mode"
         }
-        if ($tools.acceptsExternalToolDefinitions -ne $true) {
+        if ($diagnosticMode -eq "antigravity" -and $nativeBridgeEnabled -and $tools.acceptsExternalToolDefinitions -ne $true) {
+            Add-Failure "diagnostics.tools should confirm external tool definitions"
+        } elseif ($diagnosticMode -eq "antigravity" -and -not $nativeBridgeEnabled -and $tools.acceptsExternalToolDefinitions -ne $false) {
+            Add-Failure "diagnostics.tools should not expose native external tool definitions by default"
+        } elseif ($diagnosticMode -eq "third-party" -and $tools.acceptsExternalToolDefinitions -ne $true) {
             Add-Failure "diagnostics.tools should confirm external tool definitions"
         }
     }
