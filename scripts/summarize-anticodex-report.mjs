@@ -1049,6 +1049,10 @@ const summary = {
     guidanceChanged: refreshGuidance ? Object.entries(refreshGuidance)
       .filter(([, entry]) => entry && entry.sharedExists === true && entry.localExists === true && entry.contentMatches !== true)
       .map(([name]) => name) : [],
+    recoveryActions: Array.isArray(report.recoveryActions) ? report.recoveryActions : [],
+    recoveryActionIds: Array.isArray(report.recoveryActions)
+      ? report.recoveryActions.map((action) => asString(action?.id)).filter(Boolean)
+      : [],
   } : null,
   optionalRealProviderEvidence: has(report, "firstMarkerObserved") || has(report, "secondMarkerObserved") || has(report, "historyContinuationObserved") ? {
     firstMarkerObserved: boolField(report, "firstMarkerObserved"),

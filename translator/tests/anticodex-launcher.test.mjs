@@ -5785,6 +5785,42 @@ test("Anti-Codex source snapshot reuses unchanged cached file hashes", () => {
   }
 });
 
+test("refresh feature summarizer surfaces recovery actions", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-refresh-recovery-summary-"));
+  const reportPath = join(tempRoot, "latest-refresh-features.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: false,
+      reportName: "refresh-features",
+      verifyOnly: false,
+      failures: ["local snapshot refresh reported failure"],
+      recoveryActions: [{
+        id: "refreshFeatures.skillsDirectoryLocked",
+        reason: "local skills snapshot refresh was blocked by a Windows directory lock",
+        guidance: "Do not treat the partial refresh as release-ready.",
+        commands: [
+          "powershell.exe -File scripts/refresh-anticodex-local-features.ps1 -VerifyOnly",
+          "node scripts/sync-shared-codex-plugin-host.mjs <codexHome> <sharedCodexHome> --startup-snapshots",
+        ],
+        requiresRealTraffic: false,
+      }],
+      connectorParity: { sharedExists: true, localExists: true, contentMatches: true },
+      appToolParity: { sharedExists: true, localExists: true, contentMatches: true },
+      skills: { exists: true, count: 3, changedExpected: [], changedExpectedDetails: [] },
+      guidance: {},
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.deepEqual(summary.refreshFeatureEvidence.recoveryActionIds, ["refreshFeatures.skillsDirectoryLocked"]);
+    assert.equal(summary.refreshFeatureEvidence.recoveryActions[0].requiresRealTraffic, false);
+    assert.match(summary.refreshFeatureEvidence.recoveryActions[0].commands[0], /-VerifyOnly/);
+    assert.match(summary.refreshFeatureEvidence.recoveryActions[0].commands[1], /--startup-snapshots/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("Anti-Codex ships an installed MCP/skills verification script", () => {
   const mcpSkills = readFileSync(resolve(root, "scripts", "test-anticodex-mcp-skills.ps1"), "utf8");
   const realMcpSmoke = readFileSync(resolve(root, "scripts", "anticodex-real-mcp-smoke.mjs"), "utf8");
@@ -6011,6 +6047,14 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(refreshLocalFeatures, /anticodex-source-snapshot\.ps1/);
   assert.match(refreshLocalFeatures, /Get-AntiCodexSourceSnapshot/);
   assert.match(refreshLocalFeatures, /sourceSnapshot = \$sourceSnapshot/);
+  assert.match(refreshLocalFeatures, /recoveryActions = \$recoveryActions\.ToArray\(\)/);
+  assert.match(refreshLocalFeatures, /function Test-SkillsSnapshotLockFailure/);
+  assert.match(refreshLocalFeatures, /refreshFeatures\.skillsDirectoryLocked/);
+  assert.match(refreshLocalFeatures, /refresh-anticodex-local-features\.ps1 -VerifyOnly/);
+  assert.match(refreshLocalFeatures, /sync-shared-codex-plugin-host\.mjs <codexHome> <sharedCodexHome> --startup-snapshots/);
+  assert.match(refreshLocalFeatures, /requiresRealTraffic = \$false/);
+  assert.match(refreshLocalFeatures, /copy-failed/);
+  assert.match(refreshLocalFeatures, /Do not treat the partial refresh as release-ready/);
   assert.match(refreshLocalFeatures, /connectorParity/);
   assert.match(refreshLocalFeatures, /appToolParity/);
   assert.match(refreshLocalFeatures, /New-DirectoryContentDiff/);

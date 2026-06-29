@@ -21,6 +21,8 @@ $sharedConfigSync = Join-Path $scriptRoot "sync-shared-codex-config.mjs"
 $pluginHostSync = Join-Path $scriptRoot "sync-shared-codex-plugin-host.mjs"
 $sidecarsSync = Join-Path $scriptRoot "sync-shared-codex-sidecars.mjs"
 $failures = New-Object System.Collections.Generic.List[string]
+$recoveryActions = New-Object System.Collections.Generic.List[object]
+$recoveryActionIds = @{}
 $directoryFingerprintCache = @{}
 $script:refreshFeatureFileHashCachePath = Join-Path $StateRoot "cache\refresh-feature-file-hashes.json"
 $script:refreshFeatureFileHashCache = @{}
@@ -44,6 +46,49 @@ if (Test-Path -LiteralPath $script:refreshFeatureFileHashCachePath -PathType Lea
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
+}
+
+function Add-RecoveryAction {
+    param(
+        [string]$Id,
+        [string]$Reason,
+        [string]$Guidance,
+        [string[]]$Commands
+    )
+    if ($recoveryActionIds.ContainsKey($Id)) { return }
+    $recoveryActionIds[$Id] = $true
+    $recoveryActions.Add([pscustomobject]@{
+        id = $Id
+        reason = $Reason
+        guidance = $Guidance
+        commands = @($Commands)
+        requiresRealTraffic = $false
+    }) | Out-Null
+}
+
+function Test-SkillsSnapshotLockFailure {
+    param([string]$Message, [string]$RelPath = "")
+    if ($RelPath -and $RelPath -ne "skills") { return $false }
+    $text = [string]$Message
+    $hasLockError = $text -match "(?i)\b(EPERM|EACCES)\b" -or
+        $text -match "(?i)access is denied" -or
+        $text -match "(?i)used by another process"
+    $looksLikeSkillsSwap = $RelPath -eq "skills" -or
+        $text -match "(?i)skills" -or
+        $text -match "(?i)Failed to move existing target aside before swap" -or
+        $text -match "(?i)Failed to swap temporary directory into place"
+    return ($hasLockError -and $looksLikeSkillsSwap)
+}
+
+function Add-SkillsSnapshotLockRecoveryAction {
+    Add-RecoveryAction `
+        -Id "refreshFeatures.skillsDirectoryLocked" `
+        -Reason "local skills snapshot refresh was blocked by a Windows directory lock" `
+        -Guidance "Do not treat the partial refresh as release-ready. If guidance, connector, or app-tool drift was repaired, rerun refresh-anticodex-local-features.ps1 -VerifyOnly, then refresh the startup snapshot marker." `
+        -Commands @(
+            "powershell.exe -File scripts/refresh-anticodex-local-features.ps1 -VerifyOnly",
+            "node scripts/sync-shared-codex-plugin-host.mjs <codexHome> <sharedCodexHome> --startup-snapshots"
+        )
 }
 
 function New-ReportPaths {
@@ -321,8 +366,20 @@ if ($VerifyOnly) {
             }
         }
         if ($pluginSummary -and $pluginSummary.ok -ne $true) { Add-Failure "local snapshot refresh reported failure" }
+        if ($pluginSummary -and $pluginSummary.summary) {
+            foreach ($snapshotItem in @($pluginSummary.summary)) {
+                if ($snapshotItem.mode -eq "copy-failed" -and
+                    (Test-SkillsSnapshotLockFailure -RelPath ([string]$snapshotItem.relPath) -Message ([string]$snapshotItem.error))) {
+                    Add-SkillsSnapshotLockRecoveryAction
+                }
+            }
+        }
     } catch {
-        Add-Failure "local snapshot refresh failed: $($_.Exception.Message)"
+        $localSnapshotRefreshFailure = "local snapshot refresh failed: $($_.Exception.Message)"
+        Add-Failure $localSnapshotRefreshFailure
+        if (Test-SkillsSnapshotLockFailure -Message $localSnapshotRefreshFailure) {
+            Add-SkillsSnapshotLockRecoveryAction
+        }
     }
     try {
         $sidecarSummary = Invoke-NodeText $sidecarsSync @($SharedCodexHome, $CodexHome)
@@ -498,6 +555,7 @@ $result = [pscustomobject]@{
     startedAt = $startedAtUtc.ToString("o")
     elapsedMs = [int](([DateTime]::UtcNow - $startedAtUtc).TotalMilliseconds)
     failures = $failures.ToArray()
+    recoveryActions = $recoveryActions.ToArray()
     root = $root
     paths = [pscustomobject]@{
         codexHome = $CodexHome
