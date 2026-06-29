@@ -1108,6 +1108,7 @@ function Test-DiagnosticBundle {
                 if ([int]$overallEvidence.checkCount -lt 1) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing checks" }
                 if ([int]$overallEvidence.failedCheckCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary failed checks" }
                 if ([int]$overallEvidence.missingSkipMetadataCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing skip metadata" }
+                if ([int]$overallEvidence.managerVerifierBusyCheckCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary has Manager/UI verifier busy lock evidence" }
                 if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 3) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
                 if ([string]$overallEvidence.modelTextTransport -ne "cli") { Add-Failure "diagnostic installed-overall $($entry.Label) summary model text transport is not cli" }
                 if (-not [string]$overallEvidence.modelDiscoverySource) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing model discovery source" }

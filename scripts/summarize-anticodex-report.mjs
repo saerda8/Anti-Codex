@@ -223,6 +223,8 @@ const checkEntries = checks && typeof checks === "object" ? Object.entries(check
   value: value && typeof value === "object" ? value : {},
 })) : [];
 const skippedCheckEntries = checkEntries.filter((entry) => entry.value.skipped === true);
+const managerVerifierBusyCheckEntries = checkEntries.filter((entry) => entry.value.coverageKind === "manager-verifier-lock-busy"
+  || entry.value.reason === "Manager/UI verifier lock is already held; rerun installed overall serially");
 const releaseGateFailures = Array.isArray(report?.gates)
   ? report.gates
     .filter((gate) => {
@@ -742,6 +744,8 @@ const summary = {
     skippedCheckCount: skippedCheckEntries.length,
     skippedChecks: skippedCheckEntries.map((entry) => entry.id).sort(),
     missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
+    managerVerifierBusyCheckCount: managerVerifierBusyCheckEntries.length,
+    managerVerifierBusyChecks: managerVerifierBusyCheckEntries.map((entry) => entry.id).sort(),
     realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork" || entry.id === "realSmallProject").map((entry) => entry.id).sort(),
     modelTextTransport: has(report.health || {}, "modelTextTransport") ? asString(report.health.modelTextTransport) : null,
     modelDiscoverySource: has(report.health || {}, "modelDiscoverySource") ? asString(report.health.modelDiscoverySource) : null,

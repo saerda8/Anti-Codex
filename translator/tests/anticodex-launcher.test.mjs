@@ -3151,6 +3151,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /managerBridgeProcessCount/);
   assert.match(reportSummarizer, /installedOverallEvidence/);
   assert.match(reportSummarizer, /realTrafficSkippedChecks/);
+  assert.match(reportSummarizer, /managerVerifierBusyCheckCount/);
+  assert.match(reportSummarizer, /manager-verifier-lock-busy/);
   assert.match(reportSummarizer, /crossProtocolWithoutHistoryLoss/);
   assert.match(reportSummarizer, /structuralEvidenceClean/);
   assert.match(reportSummarizer, /orderedHistoryClean/);
@@ -3960,10 +3962,52 @@ test("report summarizer surfaces installed overall no-traffic evidence", () => {
     assert.equal(summary.installedOverallEvidence.failedCheckCount, 0);
     assert.equal(summary.installedOverallEvidence.skippedCheckCount, 3);
     assert.equal(summary.installedOverallEvidence.missingSkipMetadataCount, 0);
+    assert.equal(summary.installedOverallEvidence.managerVerifierBusyCheckCount, 0);
+    assert.deepEqual(summary.installedOverallEvidence.managerVerifierBusyChecks, []);
     assert.deepEqual(summary.installedOverallEvidence.realTrafficSkippedChecks, ["realMiniTool", "realWork"]);
     assert.equal(summary.installedOverallEvidence.modelTextTransport, "cli");
     assert.equal(summary.installedOverallEvidence.modelDiscoverySource, "antigravity-desktop-catalog");
     assert.equal(summary.installedOverallEvidence.antigravityCoworkerDefault, false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("report summarizer surfaces Manager verifier busy lock evidence", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-installed-overall-busy-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-installed-overall.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "installed-overall",
+      fast: false,
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "installed-no-traffic",
+      health: {
+        modelTextTransport: "cli",
+        modelDiscoverySource: "antigravity-desktop-catalog",
+        antigravityCoworkerDefault: false,
+      },
+      checks: {
+        branding: { ok: true },
+        managerVerifierBusy: {
+          ok: true,
+          skipped: true,
+          reason: "Manager/UI verifier lock is already held; rerun installed overall serially",
+          coveredBy: "serial rerun",
+          coverageKind: "manager-verifier-lock-busy",
+        },
+        realMiniTool: { ok: true, skipped: true, reason: "requires -AllowRealTraffic", coveredBy: "test-anticodex-real-mini-tool.ps1" },
+        realWork: { ok: true, skipped: true, reason: "requires -AllowRealTraffic", coveredBy: "test-anticodex-real-work.ps1" },
+      },
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.installedOverallEvidence.managerVerifierBusyCheckCount, 1);
+    assert.deepEqual(summary.installedOverallEvidence.managerVerifierBusyChecks, ["managerVerifierBusy"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -8012,6 +8056,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing real traffic skipped checks/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary has Manager\/UI verifier busy lock evidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary model text transport is not cli/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing model discovery source/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary model discovery source is not allowed/);
@@ -8477,6 +8522,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
       shortReady: false,
       releaseReady: false,
       effectiveOk: false,
+      releaseBlockedOnlyByRequiredRealTraffic: false,
+      requiredRealTrafficBlockedGates: [],
       strictOptionalRealTraffic: false,
       optionalRealTrafficReady: false,
       optionalRealTrafficFailures: [],
@@ -11181,6 +11228,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.doesNotMatch(releaseGates, /No latest report is produced/);
   assert.match(releaseGates, /requiredForShort/);
   assert.match(releaseGates, /requiredForRelease/);
+  assert.match(releaseGates, /installed_overall_manager_verifier_lock_busy/);
+  assert.match(releaseGates, /manager-verifier-lock-busy/);
   assert.match(releaseGates, /id: "nativeToolLoop"[\s\S]*requiredForRelease: false[\s\S]*Opt-in native bridge diagnostic/);
   assert.match(releaseGates, /id: "nativeMultiToolLoop"[\s\S]*requiredForRelease: false[\s\S]*Opt-in native bridge diagnostic/);
   assert.match(releaseGates, /nativeBridgeDisabledSkip/);
@@ -11595,6 +11644,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.sourceSnapshotMismatch.pluginCapabilities.includes("plugin_capabilities_source_snapshot_mismatch"));
   assert.ok(summary.semanticFailures.installedRuntimeSync.includes("installed_runtime_hash_mismatch"));
   assert.ok(summary.semanticFailures.installedRuntimeSync.includes("installed_runtime_fingerprint_mismatch"));
+  assert.ok(summary.semanticFailures.installedOverallNoTraffic.includes("installed_overall_manager_verifier_lock_busy"));
 });
 
 test("release-required latest reports stay visible in diagnostics, Manager, and report integrity checks", () => {

@@ -446,6 +446,8 @@ function summarizeGate(definition) {
       const checks = report.checks && typeof report.checks === "object" ? report.checks : {};
       const entries = Object.entries(checks).map(([id, value]) => ({ id, value: value && typeof value === "object" ? value : {} }));
       const skippedEntries = entries.filter((entry) => entry.value.skipped === true);
+      const managerVerifierBusyEntries = entries.filter((entry) => entry.value.coverageKind === "manager-verifier-lock-busy"
+        || entry.value.reason === "Manager/UI verifier lock is already held; rerun installed overall serially");
       const allowedFullSkipped = new Set([
         "managerButtonSafeActions",
         "managerButtonReportActions",
@@ -487,6 +489,7 @@ function summarizeGate(definition) {
         && entry.value.overallClassification === "host_sync_required_not_runtime_unusable";
       if (entries.some((entry) => entry.value.ok !== true && !nonBlockingHostSyncCheck(entry))) semanticFailures.push("installed_overall_check_not_ok");
       if (skippedEntries.some((entry) => !entry.value.reason || !entry.value.coveredBy)) semanticFailures.push("installed_overall_skip_metadata_missing");
+      if (managerVerifierBusyEntries.length > 0) semanticFailures.push("installed_overall_manager_verifier_lock_busy");
       if (!definition.expectedFast && skippedEntries.some((entry) => !allowedFullSkipped.has(entry.id))) semanticFailures.push("installed_overall_unexpected_skipped_check");
       const skippedIds = new Set(skippedEntries.map((entry) => entry.id));
       if (!skippedIds.has("realMiniTool") || !skippedIds.has("realWork") || !skippedIds.has("realSmallProject")) semanticFailures.push("installed_overall_real_traffic_skip_missing");
@@ -1844,6 +1847,7 @@ if (args.has("--self-test")) {
         checks: {
           branding: { ok: false },
           skippedWithoutMetadata: { ok: true, skipped: true },
+          managerVerifierBusy: { ok: true, skipped: true, reason: "Manager/UI verifier lock is already held; rerun installed overall serially", coveredBy: "serial rerun", coverageKind: "manager-verifier-lock-busy" },
           unexpectedSkipped: { ok: true, skipped: true, reason: "bad", coveredBy: "bad" },
         },
       });
@@ -2380,6 +2384,7 @@ if (args.has("--self-test")) {
       "installed_overall_antigravity_coworker_default_not_false",
       "installed_overall_check_not_ok",
       "installed_overall_skip_metadata_missing",
+      "installed_overall_manager_verifier_lock_busy",
       "installed_overall_real_traffic_skip_missing",
     ]);
     semanticFailures.installedOverallNoTraffic = assertSemanticFailures("installedOverallNoTraffic", "self-test failed: semantically invalid installed-overall report satisfied the gate", [
@@ -2394,6 +2399,7 @@ if (args.has("--self-test")) {
       "installed_overall_antigravity_coworker_default_not_false",
       "installed_overall_check_not_ok",
       "installed_overall_skip_metadata_missing",
+      "installed_overall_manager_verifier_lock_busy",
       "installed_overall_unexpected_skipped_check",
       "installed_overall_real_traffic_skip_missing",
     ]);
