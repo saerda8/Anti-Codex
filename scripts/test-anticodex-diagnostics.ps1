@@ -1251,6 +1251,18 @@ function Test-DiagnosticBundle {
                 if ($realSmokeEvidence.accountLaneRole -ne "anticodex-model-text") { Add-Failure "diagnostic real-smoke summary accountLaneRole mismatch" }
                 if ($realSmokeEvidence.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "diagnostic real-smoke summary claims MCP account lane is managed by Anti-Codex" }
                 if ($realSmokeEvidence.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "diagnostic real-smoke summary mcpAccountLaneOwner mismatch" }
+                $comparison = if (Has-Property $realSmokeEvidence "accountIdentityComparison") { $realSmokeEvidence.accountIdentityComparison } else { $null }
+                if ($realSmokeEvidence.separateAccountVerified -eq $true) {
+                    if (-not $comparison) {
+                        Add-Failure "diagnostic real-smoke summary missing account identity comparison for separate account proof"
+                    } else {
+                        if ($comparison.antiCodexAccountIdPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing Anti-Codex account identity presence" }
+                        if ($comparison.mcpAccountIdPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing MCP account identity presence" }
+                        if ($comparison.accountIdsDiffer -ne $true) { Add-Failure "diagnostic real-smoke summary does not prove distinct account identities" }
+                    }
+                } elseif ($comparison) {
+                    Add-Failure "diagnostic real-smoke summary has account identity comparison without separate account proof"
+                }
             }
         }
         $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]

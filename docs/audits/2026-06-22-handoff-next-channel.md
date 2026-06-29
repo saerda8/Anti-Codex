@@ -14,7 +14,7 @@ Branch: main
 - The real-smoke script only records separate-account proof when `-AllowSeparateAccountProof` is present, real traffic succeeds, and both Anti-Codex/MCP account identity inputs are non-empty and different.
 - Manager/report summaries show only sanitized identity-comparison status (`present`/`missing`/`distinct`), not raw account IDs.
 - Manager latest-report/support text now displays `antigravityCliRealSmoke` lane, making it clear Anti-Codex only handles model-text lane while MCP lane is externally managed.
-- Diagnostics now validates optional real-smoke summary for lane field consistency.
+- Diagnostics now validates optional real-smoke summary for lane field consistency and sanitized account-identity comparison consistency.
 - Anti-Codex-side account lane evidence is explicit in no-traffic profile-prepare/source-preflight/diagnostics reports: `accountLaneRole:"anticodex-model-text"`, `mcpAccountLaneManagedByAntiCodex:false`, and `mcpAccountLaneOwner:"external-antigravity-account-not-managed-here"`. MCP-side setup is external to this channel.
 - The no-traffic Antigravity CLI isolation subreport also carries these account-lane fields plus `separateAccountVerified:false`; source-preflight release gates reject isolation checks that omit the fields or claim login/separate-account proof.
 - Antigravity CLI profile prepare and real-smoke now reject profile roots nested under known default Antigravity account directories, not just exact default paths.

@@ -8213,6 +8213,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic real-smoke summary accountLaneRole mismatch/);
   assert.match(diagnostics, /diagnostic real-smoke summary claims MCP account lane is managed by Anti-Codex/);
   assert.match(diagnostics, /diagnostic real-smoke summary mcpAccountLaneOwner mismatch/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing account identity comparison for separate account proof/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing Anti-Codex account identity presence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing MCP account identity presence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary does not prove distinct account identities/);
+  assert.match(diagnostics, /diagnostic real-smoke summary has account identity comparison without separate account proof/);
   assert.match(collector, /releaseBlockedOnlyByRequiredRealTraffic = \$json\.releaseBlockedOnlyByRequiredRealTraffic/);
   assert.match(collector, /requiredRealTrafficBlockedGates = @\(\$json\.requiredRealTrafficBlockedGates/);
   assert.match(diagnostics, /model-routing-refresh\.json/);
