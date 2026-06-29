@@ -1542,6 +1542,7 @@ function sourcePreflightSummary(report) {
             uiStateSelfTestOk: null,
             upstreamProfileStorageOk: null,
             antigravityCliIsolationProfileOk: null,
+            antigravityCliIsolationProfileContract: null,
             antigravityCliProfilePrepareOk: null,
             antigravityCliProfilePrepareContract: null,
             localConnectorVerifierOk: null,
@@ -1567,6 +1568,18 @@ function sourcePreflightSummary(report) {
         : [];
     const publicDocumentationClientCopySyncContractOk = publicDocumentationAssertions.some((item) => item?.file === "README.md" && item?.name === "client-copy-sync-contract" && item?.ok === true)
         && publicDocumentationAssertions.some((item) => item?.file === "README_EN.md" && item?.name === "client-copy-sync-contract" && item?.ok === true);
+    const isolationContract = checks.antigravityCliIsolationProfile?.contract && typeof checks.antigravityCliIsolationProfile.contract === "object"
+        ? {
+            usedRealTraffic: checks.antigravityCliIsolationProfile.contract.usedRealTraffic === true,
+            loginVerified: checks.antigravityCliIsolationProfile.contract.loginVerified === true,
+            separateAccountVerified: checks.antigravityCliIsolationProfile.contract.separateAccountVerified === true,
+            accountLaneRole: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountLaneRole, ""),
+            mcpAccountLaneManagedByAntiCodex: checks.antigravityCliIsolationProfile.contract.mcpAccountLaneManagedByAntiCodex === true,
+            mcpAccountLaneOwner: shortSafeText(checks.antigravityCliIsolationProfile.contract.mcpAccountLaneOwner, ""),
+            accountIsolationBoundary: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountIsolationBoundary, ""),
+            accountIsolationCaveat: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountIsolationCaveat, ""),
+        }
+        : null;
     const profilePrepareContract = checks.antigravityCliProfilePrepare?.contract && typeof checks.antigravityCliProfilePrepare.contract === "object"
         ? {
             usedRealTraffic: checks.antigravityCliProfilePrepare.contract.usedRealTraffic === true,
@@ -1593,6 +1606,7 @@ function sourcePreflightSummary(report) {
         uiStateSelfTestOk: checks.uiStateSelfTest?.ok === true,
         upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
         antigravityCliIsolationProfileOk: checks.antigravityCliIsolationProfile?.ok === true,
+        antigravityCliIsolationProfileContract: isolationContract,
         antigravityCliProfilePrepareOk: report.antigravityCliProfilePrepareOk === true && checks.antigravityCliProfilePrepare?.ok === true,
         antigravityCliProfilePrepareContract: profilePrepareContract,
         localConnectorVerifierOk: checks.localConnectorVerifier?.ok === true,
@@ -2973,6 +2987,16 @@ function latestManagerReportItem(label, fileName) {
             uiStateSelfTestOk: checks.uiStateSelfTest?.ok === true,
             upstreamProfileStorageOk: checks.upstreamProfileStorage?.ok === true,
             antigravityCliIsolationProfileOk: checks.antigravityCliIsolationProfile?.ok === true,
+            antigravityCliIsolationProfileContract: checks.antigravityCliIsolationProfile?.contract ? {
+                usedRealTraffic: checks.antigravityCliIsolationProfile.contract.usedRealTraffic === true,
+                loginVerified: checks.antigravityCliIsolationProfile.contract.loginVerified === true,
+                separateAccountVerified: checks.antigravityCliIsolationProfile.contract.separateAccountVerified === true,
+                accountLaneRole: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountLaneRole, ""),
+                mcpAccountLaneManagedByAntiCodex: checks.antigravityCliIsolationProfile.contract.mcpAccountLaneManagedByAntiCodex === true,
+                mcpAccountLaneOwner: shortSafeText(checks.antigravityCliIsolationProfile.contract.mcpAccountLaneOwner, ""),
+                accountIsolationBoundary: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountIsolationBoundary, ""),
+                accountIsolationCaveat: shortSafeText(checks.antigravityCliIsolationProfile.contract.accountIsolationCaveat, ""),
+            } : null,
             antigravityCliProfilePrepareOk: checks.antigravityCliProfilePrepare?.ok === true,
             antigravityCliProfilePrepareContract: checks.antigravityCliProfilePrepare?.contract ? {
                 usedRealTraffic: checks.antigravityCliProfilePrepare.contract.usedRealTraffic === true,
@@ -4060,6 +4084,10 @@ function latestReportsSummary(result){
       const evidence=item.sourcePreflightEvidence;
       lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / cliIsolation="+(evidence.antigravityCliIsolationProfileOk?"true":"false")+" / prepare="+(evidence.antigravityCliProfilePrepareOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false")+" / clientCopyDocs="+(evidence.publicDocumentationClientCopySyncContractOk?"true":"false"));
       lines.push("  sourcePreflight: ui="+(evidence.uiStateSelfTestOk?"true":"false")+" / regression="+(evidence.translatorRegressionOk?"true":"false")+" / diff="+(evidence.diffWhitespaceOk?"true":"false")+" / skipFull="+(evidence.skipFullRegression?"true":"false"));
+      if(evidence.antigravityCliIsolationProfileContract){
+        const c=evidence.antigravityCliIsolationProfileContract;
+        lines.push("  sourcePreflight cliIsolation lane: role="+(c.accountLaneRole||"unknown")+" / mcpManagedHere="+(c.mcpAccountLaneManagedByAntiCodex?"true":"false")+" / mcpOwner="+(c.mcpAccountLaneOwner||"unknown"));
+      }
       if(evidence.antigravityCliProfilePrepareContract){
         const c=evidence.antigravityCliProfilePrepareContract;
         lines.push("  sourcePreflight profilePrepare: traffic="+(c.usedRealTraffic?"true":"false")+" / login="+(c.loginVerified?"true":"false")+" / separateAccount="+(c.separateAccountVerified?"true":"false")+" / coverage="+(c.coverageKind||"unknown")+" / boundary="+(c.accountIsolationBoundary||"unknown"));

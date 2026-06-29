@@ -3168,6 +3168,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /behaviorCovered/);
   assert.match(reportSummarizer, /upstreamProfileStorageOk/);
   assert.match(reportSummarizer, /antigravityCliIsolationProfileOk/);
+  assert.match(reportSummarizer, /antigravityCliIsolationProfileContract/);
   assert.match(reportSummarizer, /localConnectorVerifierOk/);
   assert.match(reportSummarizer, /modelRoutingEvidence/);
   assert.match(reportSummarizer, /modelThinkingEvidence/);
@@ -5050,6 +5051,7 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(server, /function latestSourcePreflightStatus/);
   assert.match(server, /function sourcePreflightSummary/);
   assert.match(server, /antigravityCliProfilePrepareContract/);
+  assert.match(server, /antigravityCliIsolationProfileContract/);
   assert.match(server, /profilePrepareContract/);
   assert.match(server, /publicDocumentationOk/);
   assert.match(server, /publicDocumentationClientCopySyncContractOk/);
@@ -8497,6 +8499,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /uiStateSelfTestOk/);
   assert.match(diagnostics, /upstreamProfileStorageOk/);
   assert.match(diagnostics, /antigravityCliIsolationProfileOk/);
+  assert.match(diagnostics, /antigravityCliIsolationProfileContract/);
+  assert.match(diagnostics, /source-preflight summary missing Antigravity CLI isolation profile contract/);
+  assert.match(diagnostics, /source-preflight summary isolation profile claims separate account verified/);
+  assert.match(diagnostics, /diagnostics source preflight missing Antigravity CLI isolation profile contract/);
+  assert.match(diagnostics, /diagnostics source preflight isolation profile claims separate account verified/);
   assert.match(diagnostics, /antigravityCliProfilePrepareOk/);
   assert.match(diagnostics, /antigravityCliProfilePrepareContract/);
   assert.match(diagnostics, /source-preflight summary missing Antigravity CLI profile prepare contract/);
@@ -13492,6 +13499,11 @@ test("diagnostics/sourcePreflight support path must preserve antigravityCliProfi
   const preflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
+  assert.match(diagnostics, /antigravityCliIsolationProfileContract/);
+  assert.match(diagnostics, /source-preflight summary isolation profile claims separate account verified/);
+  assert.match(diagnostics, /diagnostics source preflight isolation profile claims separate account verified/);
+  assert.match(server, /antigravityCliIsolationProfileContract/);
+
   // Diagnostics verifier must surface the contract object in source preflight summary
   assert.match(diagnostics, /antigravityCliProfilePrepareContract/);
 
@@ -13557,6 +13569,17 @@ test("Manager latest reports surface source preflight", () => {
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  // sourcePreflight cliIsolation lane must surface role/mcpManagedHere/mcpOwner in every Manager support path
+  assert.match(managerBridge, /sourcePreflight cliIsolation lane: role=/);
+  assert.match(managerBridge, /sourcePreflight cliIsolation lane:.*mcpManagedHere=/);
+  assert.match(managerBridge, /sourcePreflight cliIsolation lane:.*mcpOwner=/);
+  assert.match(managerInject, /sourcePreflight cliIsolation lane: role=/);
+  assert.match(managerInject, /sourcePreflight cliIsolation lane:.*mcpManagedHere=/);
+  assert.match(managerInject, /sourcePreflight cliIsolation lane:.*mcpOwner=/);
+  assert.match(server, /sourcePreflight cliIsolation lane: role=/);
+  assert.match(server, /sourcePreflight cliIsolation lane:.*mcpManagedHere=/);
+  assert.match(server, /sourcePreflight cliIsolation lane:.*mcpOwner=/);
 
   // sourcePreflight profilePrepare lane must surface role/mcpManagedHere/mcpOwner in every Manager support path
   assert.match(managerBridge, /sourcePreflight profilePrepare lane: role=/);

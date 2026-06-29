@@ -416,6 +416,22 @@ const summary = {
   uiStateSelfTestOk: checkOk("uiStateSelfTest"),
   upstreamProfileStorageOk: checkOk("upstreamProfileStorage"),
   antigravityCliIsolationProfileOk: checkOk("antigravityCliIsolationProfile"),
+  antigravityCliIsolationProfileContract: (() => {
+    const contract = checks.antigravityCliIsolationProfile && typeof checks.antigravityCliIsolationProfile === "object"
+      ? checks.antigravityCliIsolationProfile.contract
+      : null;
+    if (!contract || typeof contract !== "object") return null;
+    return {
+      usedRealTraffic: contract.usedRealTraffic === true,
+      loginVerified: contract.loginVerified === true,
+      separateAccountVerified: contract.separateAccountVerified === true,
+      accountLaneRole: has(contract, "accountLaneRole") ? asString(contract.accountLaneRole) : null,
+      mcpAccountLaneManagedByAntiCodex: boolField(contract, "mcpAccountLaneManagedByAntiCodex"),
+      mcpAccountLaneOwner: has(contract, "mcpAccountLaneOwner") ? asString(contract.mcpAccountLaneOwner) : null,
+      accountIsolationBoundary: has(contract, "accountIsolationBoundary") ? asString(contract.accountIsolationBoundary) : null,
+      accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
+    };
+  })(),
   antigravityCliProfilePrepareOk: checkOk("antigravityCliProfilePrepare"),
   antigravityCliProfilePrepareContract: (() => {
     const contract = checks.antigravityCliProfilePrepare && typeof checks.antigravityCliProfilePrepare === "object"

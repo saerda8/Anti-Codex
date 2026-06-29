@@ -1191,6 +1191,19 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.uiStateSelfTestOk -ne $true) { Add-Failure "source-preflight summary missing UI state self-test success" }
             if ($sourcePreflightSummary.upstreamProfileStorageOk -ne $true) { Add-Failure "source-preflight summary missing upstream profile storage success" }
             if ($sourcePreflightSummary.antigravityCliIsolationProfileOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI isolation profile success" }
+            $isolationContract = $sourcePreflightSummary.antigravityCliIsolationProfileContract
+            if (-not $isolationContract) {
+                Add-Failure "source-preflight summary missing Antigravity CLI isolation profile contract"
+            } else {
+                if ($isolationContract.usedRealTraffic -ne $false) { Add-Failure "source-preflight summary isolation profile used real traffic" }
+                if ($isolationContract.loginVerified -ne $false) { Add-Failure "source-preflight summary isolation profile claims login verified" }
+                if ($isolationContract.separateAccountVerified -ne $false) { Add-Failure "source-preflight summary isolation profile claims separate account verified" }
+                if ($isolationContract.accountLaneRole -ne "anticodex-model-text") { Add-Failure "source-preflight summary isolation profile account lane role mismatch" }
+                if ($isolationContract.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "source-preflight summary isolation profile claims MCP account lane is managed by Anti-Codex" }
+                if ($isolationContract.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "source-preflight summary isolation profile MCP account lane owner mismatch" }
+                if (-not [string]$isolationContract.accountIsolationBoundary) { Add-Failure "source-preflight summary isolation profile missing isolation boundary" }
+                if (-not [string]$isolationContract.accountIsolationCaveat) { Add-Failure "source-preflight summary isolation profile missing isolation caveat" }
+            }
             if ($sourcePreflightSummary.localConnectorVerifierOk -ne $true) { Add-Failure "source-preflight summary missing local connector verifier success" }
             if ($sourcePreflightSummary.publicDocumentationOk -ne $true) { Add-Failure "source-preflight summary missing public documentation success" }
             if ($sourcePreflightSummary.publicDocumentationClientCopySyncContractOk -ne $true) { Add-Failure "source-preflight summary missing client-copy public documentation contract success" }
@@ -2060,6 +2073,19 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "uiStateSelfTestOk")) { Add-Failure "diagnostics source preflight missing UI state self-test result" }
         if (-not (Has-Property $sourcePreflight "upstreamProfileStorageOk")) { Add-Failure "diagnostics source preflight missing upstream profile storage result" }
         if (-not (Has-Property $sourcePreflight "antigravityCliIsolationProfileOk")) { Add-Failure "diagnostics source preflight missing Antigravity CLI isolation profile result" }
+        if (-not (Has-Property $sourcePreflight "antigravityCliIsolationProfileContract")) {
+            Add-Failure "diagnostics source preflight missing Antigravity CLI isolation profile contract"
+        } elseif ($sourcePreflight.antigravityCliIsolationProfileContract) {
+            $isolationContract = $sourcePreflight.antigravityCliIsolationProfileContract
+            if ($isolationContract.usedRealTraffic -ne $false) { Add-Failure "diagnostics source preflight isolation profile used real traffic" }
+            if ($isolationContract.loginVerified -ne $false) { Add-Failure "diagnostics source preflight isolation profile claims login verified" }
+            if ($isolationContract.separateAccountVerified -ne $false) { Add-Failure "diagnostics source preflight isolation profile claims separate account verified" }
+            if ($isolationContract.accountLaneRole -ne "anticodex-model-text") { Add-Failure "diagnostics source preflight isolation profile account lane role mismatch" }
+            if ($isolationContract.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "diagnostics source preflight isolation profile claims MCP account lane is managed by Anti-Codex" }
+            if ($isolationContract.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "diagnostics source preflight isolation profile MCP account lane owner mismatch" }
+            if (-not [string]$isolationContract.accountIsolationBoundary) { Add-Failure "diagnostics source preflight isolation profile missing isolation boundary" }
+            if (-not [string]$isolationContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight isolation profile missing isolation caveat" }
+        }
         if (-not (Has-Property $sourcePreflight "localConnectorVerifierOk")) { Add-Failure "diagnostics source preflight missing local connector verifier result" }
         if (-not (Has-Property $sourcePreflight "publicDocumentationOk")) { Add-Failure "diagnostics source preflight missing public documentation result" }
         if (-not (Has-Property $sourcePreflight "publicDocumentationClientCopySyncContractOk")) { Add-Failure "diagnostics source preflight missing client-copy public documentation contract result" }
