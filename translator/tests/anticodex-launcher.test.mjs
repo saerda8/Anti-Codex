@@ -1027,6 +1027,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /sourceMismatch=/);
   assert.match(managerInject, /sourceMismatch=/);
   assert.match(managerServerSource, /sourceMismatch=/);
+  assert.match(managerBridge, /releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(managerInject, /releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(managerServerSource, /releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(managerBridge, /required real-traffic evidence only/);
+  assert.match(managerInject, /required real-traffic evidence only/);
+  assert.match(managerServerSource, /required real-traffic evidence only/);
   assert.match(managerBridge, /blockedUntilExplicitUserApproval/);
   assert.match(managerInject, /blockedUntilExplicitUserApproval/);
   assert.match(managerServerSource, /blockedUntilExplicitUserApproval/);
@@ -3056,6 +3062,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /payload\.results/);
   assert.match(reportSummarizer, /providerContinuity/);
   assert.match(reportSummarizer, /releaseReady/);
+  assert.match(reportSummarizer, /releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(reportSummarizer, /requiredRealTrafficBlockedGates/);
   assert.match(reportSummarizer, /effectiveOk/);
   assert.match(collector, /effectiveOk = \$json\.effectiveOk/);
   assert.match(reportSummarizer, /releaseGateEffectiveOk/);
@@ -11228,6 +11236,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /plugin_capabilities_local_app_tool_parity_missing_shared/);
   assert.match(releaseGates, /releaseReady/);
   assert.match(releaseGates, /shortReady/);
+  assert.match(releaseGates, /releaseBlockedOnlyByRequiredRealTraffic/);
+  assert.match(releaseGates, /requiredRealTrafficBlockedGates/);
   assert.match(releaseGates, /--strict-optional-real-traffic/);
   assert.match(releaseGates, /strictOptionalRealTraffic/);
   assert.match(releaseGates, /optionalRealTrafficReady/);

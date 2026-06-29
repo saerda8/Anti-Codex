@@ -3770,10 +3770,25 @@ const releaseGateSelectedReports = gates
 
 const releaseReady = missingRequired.length === 0 && (!strictOptionalRealTraffic || optionalRealTrafficReady);
 const shortReady = missingShort.length === 0;
+const missingRequiredFailureReasons = releaseGateFailureReasons.filter((gate) => gate.requiredForRelease === true && missingRequired.includes(gate.id));
+const requiredRealTrafficBlockedGates = missingRequiredFailureReasons
+  .filter((gate) => {
+    const actionable = Array.isArray(gate.orderedActions) ? gate.orderedActions.filter((actionItem) => actionItem?.reportOnly !== true) : [];
+    return actionable.length > 0
+      && actionable.every((actionItem) => actionItem?.requiresRealTraffic === true && actionItem?.blockedUntilExplicitUserApproval === true);
+  })
+  .map((gate) => gate.id);
+const releaseBlockedOnlyByRequiredRealTraffic = releaseReady === false
+  && shortReady === true
+  && damagedReports.length === 0
+  && missingRequired.length > 0
+  && requiredRealTrafficBlockedGates.length === missingRequired.length;
 const payload = {
   ok: strict ? releaseReady && damagedReports.length === 0 : true,
   releaseReady,
   shortReady,
+  releaseBlockedOnlyByRequiredRealTraffic,
+  requiredRealTrafficBlockedGates,
   strict,
   strictOptionalRealTraffic,
   optionalRealTrafficReady,

@@ -856,6 +856,8 @@ const summary = {
   } : null,
   releaseReady: boolField(report, "releaseReady"),
   shortReady: boolField(report, "shortReady"),
+  releaseBlockedOnlyByRequiredRealTraffic: boolField(report, "releaseBlockedOnlyByRequiredRealTraffic"),
+  requiredRealTrafficBlockedGates: has(report, "requiredRealTrafficBlockedGates") ? asStringArray(report.requiredRealTrafficBlockedGates) : [],
   strictOptionalRealTraffic: boolField(report, "strictOptionalRealTraffic"),
   optionalRealTrafficReady: boolField(report, "optionalRealTrafficReady"),
   optionalRealTrafficFailures: has(report, "optionalRealTrafficFailures") ? asStringArray(report.optionalRealTrafficFailures) : [],
