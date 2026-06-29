@@ -230,6 +230,8 @@ function Test-AntigravityCliProfilePrepare {
             loginVerified = $false
             separateAccountVerified = $false
             coverageKind = "missing"
+            accountIsolationBoundary = ""
+            accountIsolationCaveat = ""
         }
         if ($result.ok -and $prepareJson) {
             try {
@@ -239,11 +241,15 @@ function Test-AntigravityCliProfilePrepare {
                 $prepareContract.loginVerified = [bool]$parsed.loginVerified
                 $prepareContract.separateAccountVerified = [bool]$parsed.separateAccountVerified
                 $prepareContract.coverageKind = [string]$parsed.coverageKind
+                $prepareContract.accountIsolationBoundary = [string]$parsed.accountIsolationBoundary
+                $prepareContract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
                 $prepareOk = $parsed.ok -eq $true `
                     -and $parsed.usedRealTraffic -eq $false `
                     -and $parsed.loginVerified -eq $false `
                     -and $parsed.separateAccountVerified -eq $false `
-                    -and $parsed.coverageKind -eq "profile-prepared-no-traffic"
+                    -and $parsed.coverageKind -eq "profile-prepared-no-traffic" `
+                    -and $parsed.accountIsolationBoundary `
+                    -and $parsed.accountIsolationCaveat
             } catch {
                 Add-Failure "Antigravity CLI profile prepare JSON parse failed"
             }
@@ -262,6 +268,8 @@ function Test-AntigravityCliProfilePrepare {
             loginVerified = $false
             separateAccountVerified = $false
             coverageKind = $prepareContract.coverageKind
+            accountIsolationBoundary = $prepareContract.accountIsolationBoundary
+            accountIsolationCaveat = $prepareContract.accountIsolationCaveat
             contract = $prepareContract
         }
     } finally {

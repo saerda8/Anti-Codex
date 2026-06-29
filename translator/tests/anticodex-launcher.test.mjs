@@ -11415,6 +11415,13 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_used_real_traffic/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_contract_missing/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_login_verified/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_separate_account_verified/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_coverage_kind/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_isolation_boundary_missing/);
+  assert.match(releaseGates, /source_preflight_profile_prepare_isolation_caveat_missing/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);
   assert.match(releaseGates, /source_preflight_public_documentation/);
   assert.match(releaseGates, /source_preflight_public_documentation_client_sync_contract/);
@@ -11829,6 +11836,13 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_local_connector_verifier"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_isolation_profile"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_profile_prepare"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_used_real_traffic"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContractMissing.includes("source_preflight_profile_prepare_contract_missing"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_login_verified"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_separate_account_verified"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_coverage_kind"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_isolation_boundary_missing"));
+  assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_isolation_caveat_missing"));
   assert.ok(summary.semanticFailures.optionalRealProvider.includes("optional_real_provider_report_name"));
   assert.ok(summary.semanticFailures.optionalAntigravityReturn.includes("optional_antigravity_return_report_name"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));

@@ -1014,6 +1014,17 @@ function summarizeGate(definition) {
       if (!checks.upstreamProfileStorage || checks.upstreamProfileStorage.ok !== true) semanticFailures.push("source_preflight_upstream_profile_storage");
       if (!checks.antigravityCliIsolationProfile || checks.antigravityCliIsolationProfile.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_isolation_profile");
       if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
+      if (!checks.antigravityCliProfilePrepare || !checks.antigravityCliProfilePrepare.contract) {
+        semanticFailures.push("source_preflight_profile_prepare_contract_missing");
+      } else {
+        const contract = checks.antigravityCliProfilePrepare.contract;
+        if (contract.usedRealTraffic !== false) semanticFailures.push("source_preflight_profile_prepare_used_real_traffic");
+        if (contract.loginVerified !== false) semanticFailures.push("source_preflight_profile_prepare_login_verified");
+        if (contract.separateAccountVerified !== false) semanticFailures.push("source_preflight_profile_prepare_separate_account_verified");
+        if (contract.coverageKind !== "profile-prepared-no-traffic") semanticFailures.push("source_preflight_profile_prepare_coverage_kind");
+        if (!contract.accountIsolationBoundary) semanticFailures.push("source_preflight_profile_prepare_isolation_boundary_missing");
+        if (!contract.accountIsolationCaveat) semanticFailures.push("source_preflight_profile_prepare_isolation_caveat_missing");
+      }
       if (!checks.localConnectorVerifier || checks.localConnectorVerifier.ok !== true) semanticFailures.push("source_preflight_local_connector_verifier");
       if (!checks.publicDocumentation || checks.publicDocumentation.ok !== true) semanticFailures.push("source_preflight_public_documentation");
       if (!hasSuccessfulDocAssertion(checks.publicDocumentation, "README.md", "client-copy-sync-contract")
@@ -3224,6 +3235,84 @@ if (args.has("--self-test")) {
       "source_preflight_used_real_traffic",
       "source_preflight_behavior_not_covered",
       "source_preflight_coverage_kind",
+    ]);
+    writeFakeLatestReport("latest-source-preflight.json", {
+      ok: true,
+      reportName: "source-preflight",
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "source-no-traffic",
+      antigravityCliProfilePrepareOk: true,
+      failures: [],
+      checks: {
+        javascriptSyntax: { ok: true },
+        powershellSyntax: { ok: true },
+        uiStateSelfTest: { ok: true },
+        upstreamProfileStorage: { ok: true },
+        antigravityCliIsolationProfile: { ok: true },
+        antigravityCliProfilePrepare: {
+          ok: true,
+          contract: {
+            ok: true,
+            usedRealTraffic: true,
+            loginVerified: true,
+            separateAccountVerified: true,
+            coverageKind: "real-traffic",
+            accountIsolationBoundary: "",
+            accountIsolationCaveat: "",
+          },
+        },
+        localConnectorVerifier: { ok: true },
+        publicDocumentation: {
+          ok: true,
+          assertions: [
+            { file: "README.md", name: "client-copy-sync-contract", ok: true },
+            { file: "README_EN.md", name: "client-copy-sync-contract", ok: true },
+          ],
+        },
+        translatorRegression: { ok: true },
+        diffWhitespace: { ok: true },
+      },
+    });
+    semanticFailures.sourcePreflightProfilePrepareContract = assertSemanticFailures("sourcePreflight", "self-test failed: semantically invalid profile-prepare contract was not rejected", [
+      "source_preflight_profile_prepare_used_real_traffic",
+      "source_preflight_profile_prepare_login_verified",
+      "source_preflight_profile_prepare_separate_account_verified",
+      "source_preflight_profile_prepare_coverage_kind",
+      "source_preflight_profile_prepare_isolation_boundary_missing",
+      "source_preflight_profile_prepare_isolation_caveat_missing",
+    ]);
+    writeFakeLatestReport("latest-source-preflight.json", {
+      ok: true,
+      reportName: "source-preflight",
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      coverageKind: "source-no-traffic",
+      antigravityCliProfilePrepareOk: true,
+      failures: [],
+      checks: {
+        javascriptSyntax: { ok: true },
+        powershellSyntax: { ok: true },
+        uiStateSelfTest: { ok: true },
+        upstreamProfileStorage: { ok: true },
+        antigravityCliIsolationProfile: { ok: true },
+        antigravityCliProfilePrepare: { ok: true },
+        localConnectorVerifier: { ok: true },
+        publicDocumentation: {
+          ok: true,
+          assertions: [
+            { file: "README.md", name: "client-copy-sync-contract", ok: true },
+            { file: "README_EN.md", name: "client-copy-sync-contract", ok: true },
+          ],
+        },
+        translatorRegression: { ok: true },
+        diffWhitespace: { ok: true },
+      },
+    });
+    semanticFailures.sourcePreflightProfilePrepareContractMissing = assertSemanticFailures("sourcePreflight", "self-test failed: missing profile-prepare contract was not rejected", [
+      "source_preflight_profile_prepare_contract_missing",
     ]);
     semanticFailures.toolLoop = assertSemanticFailures("toolLoop", "self-test failed: semantically invalid tool-loop report satisfied the gate", [
       "tool_loop_call_id_missing",
