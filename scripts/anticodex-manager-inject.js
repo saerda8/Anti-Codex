@@ -1920,6 +1920,8 @@
       }
       const profilePayload = profileResult.value || {};
       const saved = profilePayload.saved || {};
+      const savedAntigravityCli = saved.antigravityCli || {};
+      const runtimeAntigravityCli = profilePayload.runtime?.antigravityCliIsolation || {};
       let lastStages = [];
       let testedFingerprint = "";
       let upstreamConfigOperationInFlight = false;
@@ -1936,12 +1938,27 @@
       const baseUrl = el("input", { style: fieldStyle, value: saved.baseUrl || "", placeholder: "https://api.example.com/v1 或完整 /chat/completions / /v1/messages 地址" });
       const model = el("input", { style: fieldStyle, value: saved.model || "", placeholder: "模型名，例如 gpt-4o-mini / claude-3-5-sonnet" });
       const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? "已保存，可留空沿用旧 key" : "请输入 API key" });
+      const antigravityCliProfileRoot = el("input", {
+        style: fieldStyle,
+        value: savedAntigravityCli.profileRoot || runtimeAntigravityCli.profileRoot || "",
+        placeholder: "%APPDATA%\\anticodex\\antigravity-cli-profile",
+      });
+      const antigravityCliStrict = el("input", {
+        type: "checkbox",
+        checked: savedAntigravityCli.strictWindowsAppDataIsolation === true || runtimeAntigravityCli.strictWindowsAppDataIsolation === true,
+      });
+      const strictRow = el("label", { style: "display:flex;align-items:center;gap:8px;color:var(--ac-muted);font-size:12px" }, [
+        antigravityCliStrict,
+        el("span", { text: "严格隔离 Antigravity CLI 的 AppData / LocalAppData" }),
+      ]);
       const stageBox = el("pre", { className: "anticodex-result", text: "先点“测试连通”。测试不会保存配置，也不会切换当前会话。" });
       const testButton = el("button", { type: "button", text: "测试连通" });
       const saveButton = el("button", { type: "button", className: "anticodex-action-danger", text: "保存并切换" });
       saveButton.disabled = true;
+      const saveAntigravityCliButton = el("button", { type: "button", className: "anticodex-action-danger", text: "保存 Antigravity CLI 隔离" });
       const restoreButton = el("button", { type: "button", className: "anticodex-action-danger", text: "恢复 Antigravity" });
       const upstreamConfigFields = [protocol, baseUrl, model, apiKey];
+      const antigravityCliFields = [antigravityCliProfileRoot, antigravityCliStrict];
       function upstreamConfigFingerprint() {
         return JSON.stringify([
           protocol.value,
@@ -1952,8 +1969,10 @@
       }
       const refreshUpstreamConfigControls = () => {
         for (const field of upstreamConfigFields) field.disabled = upstreamConfigOperationInFlight;
+        for (const field of antigravityCliFields) field.disabled = upstreamConfigOperationInFlight;
         testButton.disabled = upstreamConfigOperationInFlight;
         restoreButton.disabled = upstreamConfigOperationInFlight;
+        saveAntigravityCliButton.disabled = upstreamConfigOperationInFlight;
         saveButton.disabled = upstreamConfigOperationInFlight
           || !testedFingerprint
           || testedFingerprint !== upstreamConfigFingerprint();
@@ -2097,10 +2116,46 @@
           setUpstreamConfigBusy(false);
         }
       };
+      saveAntigravityCliButton.onclick = async () => {
+        if (upstreamConfigOperationInFlight) return;
+        setUpstreamConfigBusy(true);
+        stageBox.textContent = "正在保存 Antigravity CLI 隔离配置...";
+        try {
+          const payload = await managerPostJson("/anticodex/upstream-profile", {
+            mode: "antigravity",
+            antigravityCli: {
+              profileRoot: antigravityCliProfileRoot.value.trim(),
+              strictWindowsAppDataIsolation: antigravityCliStrict.checked === true,
+            },
+          }, {
+            timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
+            retryCandidates: false,
+          });
+          stageBox.classList.remove("anticodex-error");
+          if (payload.restartRequired) {
+            const applied = await applyAndWait("antigravity");
+            stageBox.textContent = applied
+              ? "已保存并应用 Antigravity CLI 隔离配置。"
+              : "配置已保存，但本地模型通道未在 30 秒内恢复。请关闭并重新打开 Anti-Codex。";
+            stageBox.classList.toggle("anticodex-error", !applied);
+          } else {
+            stageBox.textContent = "已保存 Antigravity CLI 隔离配置。";
+          }
+        } catch (error) {
+          stageBox.classList.add("anticodex-error");
+          stageBox.textContent = "保存失败：" + error.message;
+        } finally {
+          setUpstreamConfigBusy(false);
+        }
+      };
       refreshUpstreamConfigControls();
       result.classList.remove("anticodex-error");
       result.replaceChildren(el("div", { style: "display:grid;gap:10px" }, [
         el("div", { className: "anticodex-warn", text: "第三方 API 失败时只会报错，不会自动消耗 Antigravity 流量。聊天记录、项目和当前工作区不会被清空。" }),
+        el("div", { className: "anticodex-warn", text: `当前 Antigravity CLI：${runtimeAntigravityCli.strictWindowsAppDataIsolation ? "严格隔离" : "普通独立 profile"} / ${runtimeAntigravityCli.profileRoot || "未设置"}` }),
+        row("Antigravity CLI profile", antigravityCliProfileRoot),
+        strictRow,
+        el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [saveAntigravityCliButton]),
         row("协议", protocol),
         row("接口地址（可填 base URL 或完整接口）", baseUrl),
         row("模型名", model),

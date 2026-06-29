@@ -43,6 +43,7 @@ Build an independent Anti-Codex desktop client that is best understood as a sepa
 - Do not replace missing Codex-client behavior with Antigravity coworker/Desktop behavior. If a Codex capability is absent after sync, treat it as a host-sync/client-parity bug unless the user explicitly accepts a different architecture.
 - Until dual Antigravity account isolation is implemented, do not run Antigravity coworker/native tool-bridge traffic as part of default testing or release gates; it can share the same account as MCP and interfere with the user's separate Antigravity usage.
 - Antigravity CLI account isolation is staged behind explicit profile controls. The default launcher keeps the current CLI profile behavior for usability, while the Anti-Codex upstream profile can persist a separate Antigravity CLI profile root plus strict Windows `APPDATA`/`LOCALAPPDATA` isolation for a second CLI account test without touching native Codex.
+- The embedded Manager upstream-configuration panel now surfaces that Antigravity CLI profile/strict-isolation setting, so dual-account setup no longer depends on editing hidden environment variables by hand.
 - Preserve the native Codex event, tool, MCP, skill, cancellation, compaction, and session semantics; a visual shell is not an acceptable deliverable.
 - Model names and IDs must come from the active Antigravity account and must be provably used by the execution layer.
 - No feature is complete until installed-build validation passes.

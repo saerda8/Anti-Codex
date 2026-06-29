@@ -11894,6 +11894,11 @@ test("embedded Manager exposes secure third-party API testing and switching", ()
   assert.match(inject, /upstreamConfigOperationInFlight/);
   assert.match(inject, /showUpstreamConfig/);
   assert.match(inject, /safeJson\("\/anticodex\/upstream-profile"\)/);
+  assert.match(inject, /antigravityCliProfileRoot/);
+  assert.match(inject, /antigravityCliStrict/);
+  assert.match(inject, /saveAntigravityCliButton/);
+  assert.match(inject, /保存 Antigravity CLI 隔离/);
+  assert.match(inject, /strictWindowsAppDataIsolation/);
   assert.match(inject, /upstreamCapabilitySummary/);
   assert.match(inject, /upstreamConnectionSummaryText/);
   assert.match(inject, /summary\.suggestedAction/);
