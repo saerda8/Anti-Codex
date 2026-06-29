@@ -1259,6 +1259,10 @@ function Test-DiagnosticBundle {
                         if ($comparison.antiCodexAccountIdPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing Anti-Codex account identity presence" }
                         if ($comparison.mcpAccountIdPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing MCP account identity presence" }
                         if ($comparison.accountIdsDiffer -ne $true) { Add-Failure "diagnostic real-smoke summary does not prove distinct account identities" }
+                        if ($comparison.antiCodexSourcePresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing Anti-Codex identity source presence" }
+                        if ($comparison.mcpSourcePresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing MCP identity source presence" }
+                        if ($comparison.comparisonMethodPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing comparison method presence" }
+                        if ($comparison.capturedAtPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing identity capture timestamp presence" }
                     }
                 } elseif ($comparison) {
                     Add-Failure "diagnostic real-smoke summary has account identity comparison without separate account proof"

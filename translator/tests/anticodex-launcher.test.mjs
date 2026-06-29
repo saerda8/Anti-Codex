@@ -8217,6 +8217,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic real-smoke summary missing Anti-Codex account identity presence/);
   assert.match(diagnostics, /diagnostic real-smoke summary missing MCP account identity presence/);
   assert.match(diagnostics, /diagnostic real-smoke summary does not prove distinct account identities/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing Anti-Codex identity source presence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing MCP identity source presence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing comparison method presence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing identity capture timestamp presence/);
   assert.match(diagnostics, /diagnostic real-smoke summary has account identity comparison without separate account proof/);
   assert.match(collector, /releaseBlockedOnlyByRequiredRealTraffic = \$json\.releaseBlockedOnlyByRequiredRealTraffic/);
   assert.match(collector, /requiredRealTrafficBlockedGates = @\(\$json\.requiredRealTrafficBlockedGates/);
@@ -11551,6 +11555,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_anticodex_account_id_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_mcp_account_id_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_accounts_match/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_anticodex_identity_source/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_mcp_identity_source/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_comparison_method/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_captured_at/);
+  assert.match(releaseGates, /explicit-user-approved-account-identity-parameter/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_evidence_without_verification/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_boundary_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_caveat_missing/);
@@ -13078,6 +13087,10 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /account identity inputs require -AllowSeparateAccountProof/);
   assert.match(antigravityCliRealSmoke, /Anti-Codex and MCP Antigravity account identities match/);
   assert.match(antigravityCliRealSmoke, /\$report\.accountIdentityComparison = \$accountIdentityComparison/);
+  assert.match(antigravityCliRealSmoke, /antiCodexSource = "anticodex-cli-real-smoke"/);
+  assert.match(antigravityCliRealSmoke, /mcpSource = "external-mcp-antigravity-account"/);
+  assert.match(antigravityCliRealSmoke, /comparisonMethod = "explicit-user-approved-account-identity-parameter"/);
+  assert.match(antigravityCliRealSmoke, /capturedAt = \$CapturedAt/);
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /Windows credential store/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
@@ -13537,6 +13550,10 @@ test("summarize-anticodex-report real-smoke sanitizes account identity compariso
       accountIdentityComparison: {
         antiCodexAccountId: "anticodex-account-private-id",
         mcpAccountId: "mcp-account-private-id",
+        antiCodexSource: "anticodex-cli-real-smoke",
+        mcpSource: "external-mcp-antigravity-account",
+        comparisonMethod: "explicit-user-approved-account-identity-parameter",
+        capturedAt: "2026-06-29T18:00:00.000Z",
       },
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Real account comparison was explicitly approved.",
@@ -13548,9 +13565,15 @@ test("summarize-anticodex-report real-smoke sanitizes account identity compariso
       antiCodexAccountIdPresent: true,
       mcpAccountIdPresent: true,
       accountIdsDiffer: true,
+      antiCodexSourcePresent: true,
+      mcpSourcePresent: true,
+      comparisonMethodPresent: true,
+      capturedAtPresent: true,
     });
     assert.doesNotMatch(result.stdout, /anticodex-account-private-id/);
     assert.doesNotMatch(result.stdout, /mcp-account-private-id/);
+    assert.doesNotMatch(result.stdout, /anticodex-cli-real-smoke/);
+    assert.doesNotMatch(result.stdout, /external-mcp-antigravity-account/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

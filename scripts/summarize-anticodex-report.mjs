@@ -30,10 +30,18 @@ function asAccountIdentityComparisonEvidence(value) {
   if (!value || typeof value !== "object") return null;
   const antiCodexAccountId = typeof value.antiCodexAccountId === "string" ? value.antiCodexAccountId.trim() : "";
   const mcpAccountId = typeof value.mcpAccountId === "string" ? value.mcpAccountId.trim() : "";
+  const antiCodexSource = typeof value.antiCodexSource === "string" ? value.antiCodexSource.trim() : "";
+  const mcpSource = typeof value.mcpSource === "string" ? value.mcpSource.trim() : "";
+  const comparisonMethod = typeof value.comparisonMethod === "string" ? value.comparisonMethod.trim() : "";
+  const capturedAt = typeof value.capturedAt === "string" ? value.capturedAt.trim() : "";
   return {
     antiCodexAccountIdPresent: !!antiCodexAccountId,
     mcpAccountIdPresent: !!mcpAccountId,
     accountIdsDiffer: antiCodexAccountId && mcpAccountId ? antiCodexAccountId !== mcpAccountId : null,
+    antiCodexSourcePresent: !!antiCodexSource,
+    mcpSourcePresent: !!mcpSource,
+    comparisonMethodPresent: !!comparisonMethod,
+    capturedAtPresent: !!capturedAt,
   };
 }
 

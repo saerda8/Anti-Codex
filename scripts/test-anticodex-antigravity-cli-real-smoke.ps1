@@ -137,11 +137,16 @@ function Test-IsDefaultAntigravityProfilePath {
 function New-AccountIdentityComparison {
     param(
         [Parameter(Mandatory = $true)][string]$AntiCodexId,
-        [Parameter(Mandatory = $true)][string]$McpId
+        [Parameter(Mandatory = $true)][string]$McpId,
+        [Parameter(Mandatory = $true)][string]$CapturedAt
     )
     return [ordered]@{
         antiCodexAccountId = $AntiCodexId
         mcpAccountId = $McpId
+        antiCodexSource = "anticodex-cli-real-smoke"
+        mcpSource = "external-mcp-antigravity-account"
+        comparisonMethod = "explicit-user-approved-account-identity-parameter"
+        capturedAt = $CapturedAt
     }
 }
 
@@ -263,7 +268,7 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
             Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
         }
         if ($failures.Count -eq 0) {
-            $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed
+            $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed -CapturedAt ([DateTime]::UtcNow.ToString("o"))
             $separateAccountVerified = $true
             $separateAccountVerificationReason = "explicitly approved real CLI smoke plus external MCP account identity comparison showed distinct account identities"
         }
