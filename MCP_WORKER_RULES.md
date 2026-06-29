@@ -119,6 +119,14 @@ After every failure, before another dispatch:
 - Cause classification: useful partial worker suggestions, but incomplete support-surface coverage.
 - Rule change: for account-boundary evidence fields, do not merge worker patches that only update source-preflight and static tests. The main patch must also update release gates, report summaries, diagnostics, and Manager text.
 
+### 2026-06-30 - Windows-user readiness worker comparison
+
+- Workers: MIMO `dsw_mqzmn6e8_6gfih6` and Kilo `klw_mqzmnc3j_fpabfc`.
+- Task: surface no-traffic readiness for the separate Windows-user Antigravity CLI login entrypoint before asking the user to log in.
+- Result: MIMO produced a useful but timeout-ended multi-surface patch; Kilo produced a narrower login-script-only diff. The main patch kept the broader support chain and added installed-runtime fingerprint coverage for the account-isolation scripts.
+- Cause classification: partial worker suggestions were useful, but mainline needed stricter tri-state readiness, source-preflight/report/diagnostics/Manager support, and runtime-sync gate coverage.
+- Rule change: Windows-user readiness is not only a launcher field. Preserve it through source-preflight reports, release gates, diagnostics, Manager text, and installed runtime sync evidence.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

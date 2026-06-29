@@ -1602,6 +1602,14 @@ function sourcePreflightSummary(report) {
             usedRealTraffic: checks.antigravityCliWindowsUserLoginDryRun.contract.usedRealTraffic === true,
             started: checks.antigravityCliWindowsUserLoginDryRun.contract.started === true,
             capturesLoginOutput: checks.antigravityCliWindowsUserLoginDryRun.contract.capturesLoginOutput === true,
+            readinessChecked: checks.antigravityCliWindowsUserLoginDryRun.contract.readinessChecked === true,
+            normalizedTargetWindowsUser: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.normalizedTargetWindowsUser, ""),
+            currentWindowsUser: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.currentWindowsUser, ""),
+            localUserLookupAvailable: checks.antigravityCliWindowsUserLoginDryRun.contract.localUserLookupAvailable === true,
+            targetUserExists: checks.antigravityCliWindowsUserLoginDryRun.contract.targetUserExists === true ? true : checks.antigravityCliWindowsUserLoginDryRun.contract.targetUserExists === false ? false : null,
+            targetUserIsCurrentUser: checks.antigravityCliWindowsUserLoginDryRun.contract.targetUserIsCurrentUser === true,
+            readyForInteractiveLogin: checks.antigravityCliWindowsUserLoginDryRun.contract.readyForInteractiveLogin === true,
+            readinessBlockingReason: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.readinessBlockingReason, ""),
             credentialBoundary: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.credentialBoundary, ""),
             expectedCredentialStoreIsolation: checks.antigravityCliWindowsUserLoginDryRun.contract.expectedCredentialStoreIsolation === true,
             accountIsolationCaveat: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.accountIsolationCaveat, ""),
@@ -3033,6 +3041,14 @@ function latestManagerReportItem(label, fileName) {
                 usedRealTraffic: checks.antigravityCliWindowsUserLoginDryRun.contract.usedRealTraffic === true,
                 started: checks.antigravityCliWindowsUserLoginDryRun.contract.started === true,
                 capturesLoginOutput: checks.antigravityCliWindowsUserLoginDryRun.contract.capturesLoginOutput === true,
+                readinessChecked: checks.antigravityCliWindowsUserLoginDryRun.contract.readinessChecked === true,
+                normalizedTargetWindowsUser: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.normalizedTargetWindowsUser, ""),
+                currentWindowsUser: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.currentWindowsUser, ""),
+                localUserLookupAvailable: checks.antigravityCliWindowsUserLoginDryRun.contract.localUserLookupAvailable === true,
+                targetUserExists: checks.antigravityCliWindowsUserLoginDryRun.contract.targetUserExists === true ? true : checks.antigravityCliWindowsUserLoginDryRun.contract.targetUserExists === false ? false : null,
+                targetUserIsCurrentUser: checks.antigravityCliWindowsUserLoginDryRun.contract.targetUserIsCurrentUser === true,
+                readyForInteractiveLogin: checks.antigravityCliWindowsUserLoginDryRun.contract.readyForInteractiveLogin === true,
+                readinessBlockingReason: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.readinessBlockingReason, ""),
                 credentialBoundary: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.credentialBoundary, ""),
                 expectedCredentialStoreIsolation: checks.antigravityCliWindowsUserLoginDryRun.contract.expectedCredentialStoreIsolation === true,
                 accountIsolationCaveat: shortSafeText(checks.antigravityCliWindowsUserLoginDryRun.contract.accountIsolationCaveat, ""),
@@ -4125,6 +4141,7 @@ function latestReportsSummary(result){
       if(evidence.antigravityCliWindowsUserLoginDryRunContract){
         const c=evidence.antigravityCliWindowsUserLoginDryRunContract;
         lines.push("  sourcePreflight windowsUserLogin: traffic="+(c.usedRealTraffic?"true":"false")+" / started="+(c.started?"true":"false")+" / capturesOutput="+(c.capturesLoginOutput?"true":"false")+" / boundary="+(c.credentialBoundary||"unknown")+" / expectedCredentialStoreIsolation="+(c.expectedCredentialStoreIsolation?"true":"false"));
+        lines.push("  sourcePreflight windowsUserLogin readiness: checked="+(c.readinessChecked?"true":"false")+" / userExists="+(c.targetUserExists===true?"true":c.targetUserExists===false?"false":"unknown")+" / currentUser="+(c.targetUserIsCurrentUser?"true":"false")+" / ready="+(c.readyForInteractiveLogin?"true":"false")+" / reason="+(c.readinessBlockingReason||"none"));
         if(c.accountIsolationCaveat) lines.push("  sourcePreflight windowsUserLogin caveat: "+c.accountIsolationCaveat);
       }
     }

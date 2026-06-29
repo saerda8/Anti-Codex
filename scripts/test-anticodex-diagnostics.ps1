@@ -1256,6 +1256,11 @@ function Test-DiagnosticBundle {
                 if ($windowsUserLoginContract.usedRealTraffic -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run used real traffic" }
                 if ($windowsUserLoginContract.started -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run started a process" }
                 if ($windowsUserLoginContract.capturesLoginOutput -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run captures login output" }
+                if ($windowsUserLoginContract.readinessChecked -ne $true) { Add-Failure "source-preflight summary Windows-user login dry-run missing readiness check" }
+                if (-not [string]$windowsUserLoginContract.normalizedTargetWindowsUser) { Add-Failure "source-preflight summary Windows-user login dry-run missing normalized target user" }
+                if (-not [string]$windowsUserLoginContract.currentWindowsUser) { Add-Failure "source-preflight summary Windows-user login dry-run missing current user" }
+                if ($windowsUserLoginContract.targetUserIsCurrentUser -eq $true) { Add-Failure "source-preflight summary Windows-user login dry-run targets current user" }
+                if ($windowsUserLoginContract.readyForInteractiveLogin -ne $true -and -not [string]$windowsUserLoginContract.readinessBlockingReason) { Add-Failure "source-preflight summary Windows-user login dry-run missing readiness blocking reason" }
                 if ($windowsUserLoginContract.credentialBoundary -ne "separate-windows-user") { Add-Failure "source-preflight summary Windows-user login dry-run credential boundary mismatch" }
                 if ($windowsUserLoginContract.expectedCredentialStoreIsolation -ne $true) { Add-Failure "source-preflight summary Windows-user login dry-run missing expected credential-store isolation" }
                 if (-not [string]$windowsUserLoginContract.accountIsolationCaveat) { Add-Failure "source-preflight summary Windows-user login dry-run missing caveat" }
@@ -2202,6 +2207,11 @@ if ($diagnostics) {
             if ($windowsUserLoginContract.usedRealTraffic -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run used real traffic" }
             if ($windowsUserLoginContract.started -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run started a process" }
             if ($windowsUserLoginContract.capturesLoginOutput -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run captures login output" }
+            if ($windowsUserLoginContract.readinessChecked -ne $true) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing readiness check" }
+            if (-not [string]$windowsUserLoginContract.normalizedTargetWindowsUser) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing normalized target user" }
+            if (-not [string]$windowsUserLoginContract.currentWindowsUser) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing current user" }
+            if ($windowsUserLoginContract.targetUserIsCurrentUser -eq $true) { Add-Failure "diagnostics source preflight Windows-user login dry-run targets current user" }
+            if ($windowsUserLoginContract.readyForInteractiveLogin -ne $true -and -not [string]$windowsUserLoginContract.readinessBlockingReason) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing readiness blocking reason" }
             if ($windowsUserLoginContract.credentialBoundary -ne "separate-windows-user") { Add-Failure "diagnostics source preflight Windows-user login dry-run credential boundary mismatch" }
             if ($windowsUserLoginContract.expectedCredentialStoreIsolation -ne $true) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing expected credential-store isolation" }
             if (-not [string]$windowsUserLoginContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing caveat" }

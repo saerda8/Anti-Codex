@@ -292,7 +292,10 @@ function Test-AntigravityCliDualAccountLanes {
                 "-AntiCodexProfileRoot", $antiCodexRoot,
                 "-McpProfileRoot", $mcpRoot) `
             -TimeoutSec 30
-        $dualJson = ($result.stdoutTail -join "`n")
+        $dualJson = Get-SourceJsonReportText `
+            -ReportRoot $tempReportRoot `
+            -LatestFileName "latest-antigravity-cli-dual-account-lanes.json" `
+            -FallbackTail $result.stdoutTail
         $dualOk = $false
         $contract = [ordered]@{
             ok = $false
@@ -541,6 +544,14 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         usedRealTraffic = $true
         started = $true
         capturesLoginOutput = $true
+        readinessChecked = $false
+        normalizedTargetWindowsUser = ""
+        currentWindowsUser = ""
+        localUserLookupAvailable = $false
+        targetUserExists = $null
+        targetUserIsCurrentUser = $true
+        readyForInteractiveLogin = $false
+        readinessBlockingReason = ""
         credentialBoundary = ""
         expectedCredentialStoreIsolation = $false
         accountIsolationCaveat = ""
@@ -553,6 +564,14 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
             $contract.usedRealTraffic = [bool]$parsed.usedRealTraffic
             $contract.started = [bool]$parsed.started
             $contract.capturesLoginOutput = [bool]$parsed.capturesLoginOutput
+            $contract.readinessChecked = [bool]$parsed.readinessChecked
+            $contract.normalizedTargetWindowsUser = [string]$parsed.normalizedTargetWindowsUser
+            $contract.currentWindowsUser = [string]$parsed.currentWindowsUser
+            $contract.localUserLookupAvailable = [bool]$parsed.localUserLookupAvailable
+            $contract.targetUserExists = $parsed.targetUserExists
+            $contract.targetUserIsCurrentUser = [bool]$parsed.targetUserIsCurrentUser
+            $contract.readyForInteractiveLogin = [bool]$parsed.readyForInteractiveLogin
+            $contract.readinessBlockingReason = [string]$parsed.readinessBlockingReason
             $contract.credentialBoundary = [string]$parsed.credentialBoundary
             $contract.expectedCredentialStoreIsolation = [bool]$parsed.expectedCredentialStoreIsolation
             $contract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
@@ -561,9 +580,16 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
                 -and $parsed.usedRealTraffic -eq $false `
                 -and $parsed.started -eq $false `
                 -and $parsed.capturesLoginOutput -eq $false `
+                -and $parsed.readinessChecked -eq $true `
+                -and [string]$parsed.normalizedTargetWindowsUser `
+                -and [string]$parsed.currentWindowsUser `
+                -and $parsed.targetUserIsCurrentUser -eq $false `
                 -and $parsed.credentialBoundary -eq "separate-windows-user" `
                 -and $parsed.expectedCredentialStoreIsolation -eq $true `
                 -and [string]$parsed.accountIsolationCaveat
+            if ($parsed.readyForInteractiveLogin -ne $true -and [string]$parsed.readinessBlockingReason) {
+                Add-Warning "Antigravity CLI Windows-user login readiness gap: $($parsed.readinessBlockingReason)"
+            }
         } catch {
             Add-Failure "Antigravity CLI Windows-user login dry-run JSON parse failed"
         }
@@ -582,6 +608,14 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         usedRealTraffic = $contract.usedRealTraffic
         started = $contract.started
         capturesLoginOutput = $contract.capturesLoginOutput
+        readinessChecked = $contract.readinessChecked
+        normalizedTargetWindowsUser = $contract.normalizedTargetWindowsUser
+        currentWindowsUser = $contract.currentWindowsUser
+        localUserLookupAvailable = $contract.localUserLookupAvailable
+        targetUserExists = $contract.targetUserExists
+        targetUserIsCurrentUser = $contract.targetUserIsCurrentUser
+        readyForInteractiveLogin = $contract.readyForInteractiveLogin
+        readinessBlockingReason = $contract.readinessBlockingReason
         credentialBoundary = $contract.credentialBoundary
         expectedCredentialStoreIsolation = $contract.expectedCredentialStoreIsolation
         accountIsolationCaveat = $contract.accountIsolationCaveat

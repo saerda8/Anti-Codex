@@ -53,6 +53,8 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-installed-overall.ps1",
   "scripts/test-anticodex-ambient-suggestions.ps1",
   "scripts/prepare-anticodex-antigravity-cli-profile.ps1",
+  "scripts/start-anticodex-antigravity-cli-login.ps1",
+  "scripts/start-anticodex-antigravity-cli-login-windows-user.ps1",
   "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-real-smoke.ps1",
   "scripts/test-anticodex-local-connectors.mjs",
@@ -1078,6 +1080,11 @@ function summarizeGate(definition) {
         if (windowsUserLogin.usedRealTraffic !== false) semanticFailures.push("source_preflight_windows_user_login_used_real_traffic");
         if (windowsUserLogin.started !== false) semanticFailures.push("source_preflight_windows_user_login_started");
         if (windowsUserLogin.capturesLoginOutput !== false) semanticFailures.push("source_preflight_windows_user_login_captures_output");
+        if (windowsUserLogin.readinessChecked !== true) semanticFailures.push("source_preflight_windows_user_login_readiness_not_checked");
+        if (!windowsUserLogin.normalizedTargetWindowsUser) semanticFailures.push("source_preflight_windows_user_login_target_user_missing");
+        if (!windowsUserLogin.currentWindowsUser) semanticFailures.push("source_preflight_windows_user_login_current_user_missing");
+        if (windowsUserLogin.targetUserIsCurrentUser === true) semanticFailures.push("source_preflight_windows_user_login_target_is_current_user");
+        if (windowsUserLogin.readyForInteractiveLogin !== true && !windowsUserLogin.readinessBlockingReason) semanticFailures.push("source_preflight_windows_user_login_readiness_reason_missing");
         if (windowsUserLogin.credentialBoundary !== "separate-windows-user") semanticFailures.push("source_preflight_windows_user_login_credential_boundary");
         if (windowsUserLogin.expectedCredentialStoreIsolation !== true) semanticFailures.push("source_preflight_windows_user_login_expected_credential_isolation");
         if (!windowsUserLogin.accountIsolationCaveat) semanticFailures.push("source_preflight_windows_user_login_caveat_missing");
@@ -3550,6 +3557,12 @@ if (args.has("--self-test")) {
             usedRealTraffic: true,
             started: true,
             capturesLoginOutput: true,
+            readinessChecked: false,
+            normalizedTargetWindowsUser: "",
+            currentWindowsUser: "",
+            targetUserIsCurrentUser: true,
+            readyForInteractiveLogin: false,
+            readinessBlockingReason: "",
             credentialBoundary: "profile-and-appdata-only",
             expectedCredentialStoreIsolation: false,
             accountIsolationCaveat: "",
@@ -3583,6 +3596,11 @@ if (args.has("--self-test")) {
       "source_preflight_windows_user_login_used_real_traffic",
       "source_preflight_windows_user_login_started",
       "source_preflight_windows_user_login_captures_output",
+      "source_preflight_windows_user_login_readiness_not_checked",
+      "source_preflight_windows_user_login_target_user_missing",
+      "source_preflight_windows_user_login_current_user_missing",
+      "source_preflight_windows_user_login_target_is_current_user",
+      "source_preflight_windows_user_login_readiness_reason_missing",
       "source_preflight_windows_user_login_credential_boundary",
       "source_preflight_windows_user_login_expected_credential_isolation",
       "source_preflight_windows_user_login_caveat_missing",
