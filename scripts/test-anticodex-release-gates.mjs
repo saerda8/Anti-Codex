@@ -1062,6 +1062,8 @@ function summarizeGate(definition) {
       const rollbackHost = sync.rollbackHost || {};
       const clientSyncContract = report.clientSyncContract || {};
       const patchScope = Array.isArray(clientSyncContract.antiCodexPatchScope) ? clientSyncContract.antiCodexPatchScope : [];
+      const sourcePackageVersion = String(clientSyncContract.sourcePackageVersion || "");
+      const activeSourcePackageVersion = String(clientSyncContract.activeSourcePackageVersion || "");
       if (report.reportName !== "sync-readiness") semanticFailures.push("sync_readiness_report_name");
       if (report.noTraffic !== true || report.usedRealTraffic !== false || report.behaviorCovered !== true || report.coverageKind !== "installed-no-traffic") semanticFailures.push("sync_readiness_no_traffic_attestation");
       if (report.fast !== false || report.skipIconPaletteProbe !== false) semanticFailures.push("sync_readiness_full_mode_required");
@@ -1073,6 +1075,7 @@ function summarizeGate(definition) {
         || !String(clientSyncContract.activeSourcePackageName || "").includes("Codex")
         || clientSyncContract.sourceHostHashMatches !== true
         || clientSyncContract.sourceCliHashMatches !== true) semanticFailures.push("sync_readiness_client_sync_source_match");
+      if (!sourcePackageVersion || !activeSourcePackageVersion || sourcePackageVersion !== activeSourcePackageVersion) semanticFailures.push("sync_readiness_client_sync_version_mismatch");
       for (const requiredPatch of ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"]) {
         if (!patchScope.includes(requiredPatch)) semanticFailures.push(`sync_readiness_client_patch_scope:${requiredPatch}`);
       }
@@ -2376,6 +2379,7 @@ if (args.has("--self-test")) {
       "sync_readiness_full_mode_required",
       "sync_readiness_client_sync_contract",
       "sync_readiness_client_sync_source_match",
+      "sync_readiness_client_sync_version_mismatch",
       "sync_readiness_client_patch_scope:branding",
       "sync_readiness_active_host",
       "sync_readiness_brand",
@@ -2508,6 +2512,13 @@ if (args.has("--self-test")) {
     if (syncReadinessFallbackGate.selectedKind !== "history") throw new Error("self-test failed: history fallback selectedKind was not preserved");
     if (syncReadinessFallbackGate.selectedFile !== "20260624-000000-sync-readiness.json") throw new Error("self-test failed: history fallback selectedFile was not preserved");
     if (!syncReadinessFallbackGate.selectedMtime) throw new Error("self-test failed: history fallback selectedMtime was not preserved");
+    const syncReadinessVersionDriftReport = loadSignedJson(join(tempRoot, "20260624-000000-sync-readiness.json"));
+    syncReadinessVersionDriftReport.clientSyncContract.activeSourcePackageVersion = "26.999.0000.0";
+    writeFakeLatestReport("latest-sync-readiness.json", syncReadinessVersionDriftReport);
+    const syncReadinessVersionDriftGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "syncReadiness"));
+    if (syncReadinessVersionDriftGate.satisfied === true || !syncReadinessVersionDriftGate.semanticFailures?.includes("sync_readiness_client_sync_version_mismatch")) {
+      throw new Error("self-test failed: sync-readiness clientSyncContract version drift satisfied the gate");
+    }
     semanticFailures.coldRelaunch = assertSemanticFailures("coldRelaunch", "self-test failed: semantically invalid cold-relaunch report satisfied the gate", [
       "cold_relaunch_report_name",
       "cold_relaunch_skipped",

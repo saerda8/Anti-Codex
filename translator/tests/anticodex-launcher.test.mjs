@@ -3111,7 +3111,9 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /shortcutReadyCount/);
   assert.match(reportSummarizer, /codexVersion/);
   assert.match(reportSummarizer, /sourcePackageVersion/);
-  assert.match(reportSummarizer, /sourcePackageVersion: updateStatus\?\.source/);
+  assert.match(reportSummarizer, /sourcePackageVersion: report\.clientSyncContract/);
+  assert.match(reportSummarizer, /activeSourcePackageVersion/);
+  assert.match(reportSummarizer, /clientSyncVersionMatches/);
   assert.match(reportSummarizer, /updateStatusSource/);
   assert.match(reportSummarizer, /updateStatusReason/);
   assert.match(reportSummarizer, /sourceHostHash/);
@@ -3753,6 +3755,8 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
     assert.equal(summary.syncReadinessEvidence.updateDriftHostChanged, false);
     assert.equal(summary.syncReadinessEvidence.updateDriftCliChanged, false);
     assert.equal(summary.syncReadinessEvidence.activePackageVersion, "4.5.6");
+    assert.equal(summary.syncReadinessEvidence.activeSourcePackageVersion, "4.5.6");
+    assert.equal(summary.syncReadinessEvidence.clientSyncVersionMatches, true);
     assert.equal(summary.syncReadinessEvidence.sourceHostHash, "SOURCEHOST123456");
     assert.equal(summary.syncReadinessEvidence.activeHostHash, "SOURCEHOST123456");
     assert.equal(summary.syncReadinessEvidence.sourceCliHash, "SOURCECLI123456");
@@ -11267,6 +11271,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid model-thinking report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid ui-idle report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid sync-readiness report satisfied the gate/);
+  assert.match(releaseGates, /sync_readiness_client_sync_version_mismatch/);
   assert.match(releaseGates, /id:\s*"syncHost"[\s\S]*?sync-anticodex-launcher\.ps1[\s\S]*?highImpact:\s*true/);
   assert.match(releaseGates, /sync-readiness host-sync action was not marked high-impact/);
   assert.match(releaseGates, /sync-readiness host-sync samples were not normalized/);

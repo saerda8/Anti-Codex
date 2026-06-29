@@ -679,7 +679,11 @@ const summary = {
     clientSyncCliHashMatches: report.clientSyncContract ? boolField(report.clientSyncContract, "sourceCliHashMatches") : null,
     antiCodexPatchScope: Array.isArray(report.clientSyncContract?.antiCodexPatchScope) ? report.clientSyncContract.antiCodexPatchScope.map(asString).filter(Boolean) : [],
     codexVersion: activeHost && has(activeHost, "codexVersion") ? asString(activeHost.codexVersion) : null,
-    sourcePackageVersion: updateStatus?.source && has(updateStatus.source, "packageVersion") ? asString(updateStatus.source.packageVersion) : (activeHost && has(activeHost, "sourcePackageVersion") ? asString(activeHost.sourcePackageVersion) : null),
+    sourcePackageVersion: report.clientSyncContract && has(report.clientSyncContract, "sourcePackageVersion") ? asString(report.clientSyncContract.sourcePackageVersion) : (updateStatus?.source && has(updateStatus.source, "packageVersion") ? asString(updateStatus.source.packageVersion) : (activeHost && has(activeHost, "sourcePackageVersion") ? asString(activeHost.sourcePackageVersion) : null)),
+    activeSourcePackageVersion: report.clientSyncContract && has(report.clientSyncContract, "activeSourcePackageVersion") ? asString(report.clientSyncContract.activeSourcePackageVersion) : (updateStatus?.active && has(updateStatus.active, "packageVersion") ? asString(updateStatus.active.packageVersion) : null),
+    clientSyncVersionMatches: report.clientSyncContract && has(report.clientSyncContract, "sourcePackageVersion") && has(report.clientSyncContract, "activeSourcePackageVersion")
+      ? asString(report.clientSyncContract.sourcePackageVersion) === asString(report.clientSyncContract.activeSourcePackageVersion)
+      : null,
     activeHostReady: !!activeHost && activeHost.exists === true && activeHost.markerExists === true && activeHost.manifestValid === true && activeHost.exeExists === true,
     brandReady: activeHost?.productName === "Anti-Codex" && activeHost?.fileDescription === "Anti-Codex" && activeHost?.originalFilename === "Anti-Codex.exe",
     iconReady: activeHost?.hostIconExists === true && activeHost?.trayIconExists === true && activeHost?.appRootIconExists === true && activeHost?.hostIconPalette?.ok === true && activeHost?.trayIconPalette?.ok === true && activeHost?.appRootIconPalette?.ok === true && (!sync?.desktopShortcutIconPalette || sync.desktopShortcutIconPalette.ok === true),
