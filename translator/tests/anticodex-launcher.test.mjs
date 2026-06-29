@@ -665,7 +665,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /hostHashMatches/);
   assert.match(managerInject, /syncEvidence = diagnostics\?\.syncReadinessEvidence/);
   assert.match(managerInject, /Manager bridge/);
-  assert.match(managerServerSource, /syncReadinessEvidence: latestManagerReportItem/);
+  assert.match(managerServerSource, /syncReadinessEvidence:\s*fast\s*\?\s*null\s*:\s*latestManagerReportItem/);
   assert.match(managerServerSource, /function syncReadinessEvidenceFromResult/);
   assert.match(managerServerSource, /syncReadinessEvidenceLines/);
   assert.match(managerServerSource, /updateStatus\.source\?\.packageVersion\|\|activeHost\.sourcePackageVersion/);
@@ -7205,14 +7205,13 @@ test("Anti-Codex ships a read-only websocket fallback verifier", () => {
   assert.match(server, /attachResponsesWebSocket\(req, socket, url\.pathname\)/);
   assert.match(server, /RESET_CANCELLED_RESPONSE_IDS/);
   assert.match(server, /RESET_CANCELLED_REQUEST_FINGERPRINTS/);
-  assert.match(server, /RESET_PREVIOUS_RESPONSE_COOLDOWN_MS/);
-  assert.match(server, /LAST_ANTIGRAVITY_SESSION_RESET/);
+  assert.match(server, /RESET_CANCELLED_RESPONSE_TTL_MS/);
   assert.match(server, /rememberResetCancelledResponseIds\(before\.sessionLock\?\.activeResponseIds/);
   assert.match(server, /rememberResetCancelledRequestFingerprints\(before\.activeRequests\?\.entries/);
   assert.match(server, /resetReplayFingerprint\(parsed\)/);
   assert.match(server, /includeEntries:\s*true/);
   assert.match(server, /resetCancelledPreviousResponseFailure\(parsed\)/);
-  assert.match(server, /resetCooldown:\s*true/);
+  assert.match(server, /RESET_CANCELLED_RESPONSE_TTL_MS/);
   assert.match(server, /resetFingerprint:\s*true/);
   assert.match(server, /anticodex_session_reset/);
   assert.match(server, /responseType:\s*"http_relay_websocket"/);
@@ -7323,6 +7322,13 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiWrapper, /\[switch\]\$Fast/);
   assert.match(uiWrapper, /\[int\]\$ManagerProbeTimeoutSec = 0/);
   assert.match(uiWrapper, /\$effectiveManagerProbeTimeoutSec = if \(\$ManagerProbeTimeoutSec -gt 0\)/);
+  assert.match(uiWrapper, /function Test-CdpPort/);
+  assert.match(uiWrapper, /\/json\/version/);
+  assert.match(uiWrapper, /webSocketDebuggerUrl/);
+  assert.match(uiWrapper, /function Get-AntiCodexProcessCdpPorts/);
+  assert.match(uiWrapper, /Get-CimInstance Win32_Process -Filter "Name = 'Anti-Codex\.exe'"/);
+  assert.match(uiWrapper, /--remote-debugging-port=\(\\d\+\)/);
+  assert.match(uiWrapper, /No usable Anti-Codex CDP port found/);
   assert.match(uiWrapper, /"--manager-probe-timeout-ms"/);
   assert.match(uiWrapper, /\$effectiveManagerProbeTimeoutSec \* 1000/);
   assert.match(uiWrapper, /"--fast", "1"/);
@@ -11339,17 +11345,17 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /repo-multi-file-edit source was not changed from the failing fixture/);
   assert.match(verifier, /repo-multi-file-edit modified the acceptance test/);
   assert.match(verifier, /repo-multi-file-edit modified the input data/);
-  assert.match(verifier, /Your first filesystem-changing action must create README\.md/);
+  assert.match(verifier, /Your first and only tool action for this step must write \$\{repoMultiFileReadme\}/);
   assert.match(verifier, /artifactCompletionObserved/);
   assert.match(verifier, /Do not run git status/);
   assert.match(verifier, /Do not use apply_patch for this fixture task/);
   assert.match(verifier, /htmlOffline/);
   assert.match(verifier, /HTML used external assets or link\/preconnect tags/);
   assert.match(verifier, /no http\/https URLs, no <link tags, and no preconnect/);
-  assert.match(verifier, /do not add external fonts/);
+  assert.match(verifier, /fonts\\.googleapis\|fonts\\.gstatic/);
   assert.match(verifier, /onlyReadmeMissing/);
   assert.match(verifier, /Create only \$\{repoMultiFileReadme\} now/);
-  assert.match(verifier, /The next and only shell command must/);
+  assert.match(verifier, /Use a direct PowerShell or Node file-write command/);
   assert.match(verifier, /idleBreakAfterMs/);
   assert.match(verifier, /artifactEvidence\?\.testPassed === true/);
   assert.doesNotMatch(verifier, /taskMode === "repo-file-edit" \? 30_000 : 12_000/);
@@ -11488,6 +11494,8 @@ test("optional and special latest reports stay visible without becoming release-
 
   assert.deepEqual(optionalReports, [
     "latest-cold-relaunch.json",
+    "latest-native-multi-tool-loop.json",
+    "latest-native-tool-loop.json",
     "latest-provider-antigravity-return.json",
     "latest-real-third-party-provider.json",
     "latest-stability-soak.json",

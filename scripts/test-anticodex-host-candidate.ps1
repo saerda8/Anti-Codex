@@ -116,7 +116,8 @@ $expectedCriticalPatches = @(
     "local-model-availability",
     "local-plugin-catalog",
     "electron-local-plugin-catalog",
-    "webview-local-plugin-catalog"
+    "webview-local-plugin-catalog",
+    "retry-stream-error-visibility"
 )
 $recordedCriticalPatches = @($manifest.criticalPatches)
 if (($recordedCriticalPatches.Count -ne $expectedCriticalPatches.Count) -or

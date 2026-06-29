@@ -7518,6 +7518,7 @@ function deterministicCompactionRecall(originalRequest) {
 function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolCall = false, hasWebToolEvidence = false, isCompactionRecall = false } = {}) {
     if (hasToolCall) return false;
     if (assistantTextLooksLikeLongContextMarkerEcho(text)) return false;
+    if (/(?:requires a complete freeform patch\/tool body|Regenerate a valid patch body|Do not bypass this by writing ordinary source files)/i.test(String(text || ""))) return false;
     if (isCompactionRecall) return false;
     if (!assistantTextLooksLikeWebToolUnavailableClaim(text) && assistantTextLooksLikeHonestNoEvidenceBlocker(text)) return false;
     if (assistantTextLooksLikeWebToolUnavailableClaim(text) && !hasWebToolEvidence) return true;

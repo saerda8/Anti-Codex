@@ -41,15 +41,44 @@ if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
 
 $node = Resolve-Node $installRoot
 $effectiveManagerProbeTimeoutSec = if ($ManagerProbeTimeoutSec -gt 0) { $ManagerProbeTimeoutSec } else { $TimeoutSec }
+function Test-CdpPort {
+    param([int]$Port)
+    if ($Port -le 0) { return $false }
+    try {
+        $version = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/json/version" -Proxy $null -TimeoutSec 2
+        return ($null -ne $version -and ($version.PSObject.Properties.Name -contains "webSocketDebuggerUrl"))
+    } catch {
+        return $false
+    }
+}
+
+function Get-AntiCodexProcessCdpPorts {
+    $ports = New-Object System.Collections.Generic.List[int]
+    try {
+        $procs = Get-CimInstance Win32_Process -Filter "Name = 'Anti-Codex.exe'" -ErrorAction Stop
+        foreach ($proc in $procs) {
+            $cmd = [string]$proc.CommandLine
+            $match = [regex]::Match($cmd, "--remote-debugging-port=(\d+)")
+            if ($match.Success) {
+                $ports.Add([int]$match.Groups[1].Value) | Out-Null
+            }
+        }
+    } catch {}
+    return @($ports | Select-Object -Unique)
+}
+
 if ($CdpPort -le 0) {
-    foreach ($candidatePort in 58318, 58317) {
-        try {
-            Invoke-RestMethod -Uri "http://127.0.0.1:$candidatePort/json" -Proxy $null -TimeoutSec 2 | Out-Null
+    $candidatePorts = @()
+    if ($env:DEEPCODEX_CDP_PORT) { $candidatePorts += [int]$env:DEEPCODEX_CDP_PORT }
+    $candidatePorts += @(Get-AntiCodexProcessCdpPorts)
+    $candidatePorts += @(58318, 58317)
+    foreach ($candidatePort in @($candidatePorts | Select-Object -Unique)) {
+        if (Test-CdpPort -Port $candidatePort) {
             $CdpPort = $candidatePort
             break
-        } catch {}
+        }
     }
-    if ($CdpPort -le 0) { $CdpPort = 58318 }
+    if ($CdpPort -le 0) { throw "No usable Anti-Codex CDP port found" }
 }
 $nodeArgs = @(
     $scriptPath,

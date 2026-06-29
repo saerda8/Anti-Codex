@@ -252,7 +252,8 @@ function Write-HostManifest {
             "local-model-availability",
             "local-plugin-catalog",
             "electron-local-plugin-catalog",
-            "webview-local-plugin-catalog"
+            "webview-local-plugin-catalog",
+            "retry-stream-error-visibility"
         )
         files = [ordered]@{
             antiCodexExe = (Get-FileHash -LiteralPath (Join-Path $HostRoot "Anti-Codex.exe") -Algorithm SHA256).Hash
