@@ -165,6 +165,20 @@ After every failure, before another dispatch:
 - Result: OpenCode completed with a scoped draft touching the new status script and launcher test, and both requested checks passed. DevEco timed out with `caller_timeout_no_valid_changes`, zero diff, and no checks.
 - Rule change: for account-boundary status work, keep the mainline support chain authoritative. Absorb OpenCode only after direct diff review and local tests; treat DevEco zero-diff timeouts as no-evidence latency and record them instead of retrying unchanged.
 
+### 2026-06-30 - Duplicate MIMO login-cwd dispatch
+
+- Jobs: MIMO `dsw_mqzq3kqr_fm8ptw`, `dsw_mqzq4sxb_eg5rq3`, and `dsw_mqzq4zoi_nu6kcr`.
+- Task: review/harden the separate-Windows-user Antigravity login launcher working-directory boundary.
+- Result: the first job completed with a useful `-NoExit` removal suggestion; the second duplicate was cancelled; the third completed a docs-only note after being started by mistake. All were isolated to the worker worktree, and mainline kept the verified local patch.
+- Rule change: after starting one async worker for a worktree/task, do not start another same-worker job until the first reaches terminal state or is explicitly cancelled.
+
+### 2026-06-30 - OpenCode login-cwd review cancelled after no diff
+
+- Job: OpenCode `ocw_mqzq3smf_5hfrlx`.
+- Task: add static coverage for the separate-Windows-user login launcher's neutral working-directory boundary.
+- Result: after about four minutes it was still running with zero changed files, while the mainline patch and MIMO comparison had already covered the behavior; cancellation was requested.
+- Rule change: when a slow side-review worker has zero diff and the mainline has already produced verified coverage for the same narrow behavior, cancel it and record the no-evidence result instead of waiting indefinitely.
+
 ### 2026-06-30 - Windows-user release-gate Kilo partial
 
 - Worker: Kilo `klw_mqzp57cb_p0p1sx` in isolated worktree `deepcodex-kilo-windows-gates`.

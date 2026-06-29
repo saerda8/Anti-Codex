@@ -14021,6 +14021,11 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(dryRunLauncher, /operatorNextStep/);
   assert.match(dryRunLauncher, /windows_user_not_ready_for_interactive_login/);
   assert.match(dryRunLauncher, /exit 2/);
+  assert.match(dryRunLauncher, /\$runasWorkingDirectory = Join-Path \$env:SystemRoot "System32"/);
+  assert.match(dryRunLauncher, /runasWorkingDirectory = \$runasWorkingDirectory/);
+  assert.match(dryRunLauncher, /bootstrapKeepsShellOpen = \$false/);
+  assert.match(dryRunLauncher, /Start-Process -FilePath "runas\.exe" -ArgumentList \$result\.runasArgs -WorkingDirectory \$runasWorkingDirectory/);
+  assert.doesNotMatch(dryRunLauncher, /"powershell\.exe",\s*[\r\n]+\s*"-NoExit"/);
   assert.doesNotMatch(dryRunLauncher, /New-LocalUser|Add-LocalGroupMember/);
   assert.doesNotMatch(dryRunLauncher, /Invoke-RestMethod|Invoke-WebRequest|\.env/);
   assert.match(summarizer, /isAntigravityCliWindowsUserReadinessReport/);

@@ -84,7 +84,6 @@ function Get-LoginOperatorNextStep {
 
 $commandParts = @(
     "powershell.exe",
-    "-NoExit",
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -97,6 +96,10 @@ if ($Command) {
     $commandParts += ('"{0}"' -f ($Command.Replace('"', '\"')))
 }
 $runasCommand = $commandParts -join " "
+$runasWorkingDirectory = Join-Path $env:SystemRoot "System32"
+if (-not (Test-Path -LiteralPath $runasWorkingDirectory -PathType Container)) {
+    $runasWorkingDirectory = $env:USERPROFILE
+}
 $readiness = Get-LocalWindowsUserReadiness -Name $WindowsUser
 $safeToAskUserForSecondAccountLogin = ($readiness.readyForInteractiveLogin -eq $true)
 $blockedBeforeInteractiveLogin = -not $safeToAskUserForSecondAccountLogin
@@ -144,6 +147,8 @@ $result = [ordered]@{
     command = $Command
     runasFile = "runas.exe"
     runasArgs = @("/user:$WindowsUser", $runasCommand)
+    runasWorkingDirectory = $runasWorkingDirectory
+    bootstrapKeepsShellOpen = $false
 }
 
 if ($DryRun) {
@@ -160,6 +165,6 @@ if (-not $safeToAskUserForSecondAccountLogin) {
     exit 2
 }
 
-Start-Process -FilePath "runas.exe" -ArgumentList $result.runasArgs -WindowStyle Normal | Out-Null
+Start-Process -FilePath "runas.exe" -ArgumentList $result.runasArgs -WorkingDirectory $runasWorkingDirectory -WindowStyle Normal | Out-Null
 $result.started = $true
 $result | ConvertTo-Json -Depth 12 -Compress
