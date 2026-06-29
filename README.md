@@ -9,7 +9,7 @@ Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作
 - 独立的 `Anti-Codex.exe`、桌面入口、任务栏名称和窗口名称
 - 自动读取当前 Antigravity 权益可用的精确模型名称与推理档位
 - 支持模型切换、流式回复、取消任务、长上下文和上下文压缩恢复
-- 支持 Codex function/custom 工具、原生 MCP 同一会话续接、Skills 和本地插件快照
+- 支持 Codex function/custom 工具、MCP、Skills 和本地插件快照，能力归 Anti-Codex/Codex 侧承接
 - 支持中文跟随、网页搜索与网页读取
 - 独立保存 Anti-Codex 状态，不改写原生 Codex 配置
 - 检测原生 Codex 更新，并通过安全候选、兼容检查、回滚点完成同步

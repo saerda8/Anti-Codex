@@ -12438,6 +12438,7 @@ test("current user-facing docs describe the Anti-Codex provider and connector bo
     assert.doesNotMatch(currentDoc, /Antigravity Desktop (?:provider|is the default upstream|remains the default route|as the default)/);
     assert.doesNotMatch(currentDoc, /default route remains the local signed-in Antigravity Desktop account/);
     assert.doesNotMatch(currentDoc, /默认路线仍是本机已登录的 Antigravity Desktop/);
+    assert.doesNotMatch(currentDoc, /原生 MCP 同一会话续接|native same-cascade MCP continuation/);
   }
 });
 
