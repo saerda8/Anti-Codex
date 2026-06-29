@@ -13947,3 +13947,45 @@ test("Antigravity CLI profile prepare: MCP account lane owner must be the exact 
     assert.doesNotMatch(src, /!contract\.mcpAccountLaneOwner/, `${name} must not only check owner non-empty`);
   }
 });
+
+test("Antigravity CLI Windows-user readiness is report-only and surfaced before login", () => {
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-windows-user-readiness.ps1"), "utf8");
+  const dryRunLauncher = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login-windows-user.ps1"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const syncRuntime = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(readiness, /reportName\s*=\s*"antigravity-cli-windows-user-readiness"/);
+  assert.match(readiness, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);
+  assert.match(readiness, /-DryRun/);
+  assert.match(readiness, /usedRealTraffic\s*=\s*\$false/);
+  assert.match(readiness, /started\s*=\s*if \(\$dryRun\) \{ \[bool\]\$dryRun\.started \} else \{ \$false \}/);
+  assert.match(readiness, /capturesLoginOutput\s*=\s*if \(\$dryRun\) \{ \[bool\]\$dryRun\.capturesLoginOutput \} else \{ \$false \}/);
+  assert.match(readiness, /separateAccountVerified\s*=\s*\$false/);
+  assert.match(readiness, /loginVerified\s*=\s*\$false/);
+  assert.match(readiness, /create_target_windows_user/);
+  assert.match(readiness, /choose_different_windows_user/);
+  assert.match(readiness, /verify_windows_user_manually/);
+  assert.match(readiness, /run_interactive_login_with_explicit_user_approval/);
+  assert.match(readiness, /latest-antigravity-cli-windows-user-readiness\.json/);
+  assert.doesNotMatch(readiness, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
+
+  assert.match(dryRunLauncher, /readinessChecked/);
+  assert.match(dryRunLauncher, /target_windows_user_missing/);
+  assert.match(summarizer, /isAntigravityCliWindowsUserReadinessReport/);
+  assert.match(summarizer, /antigravityCliWindowsUserReadinessEvidence/);
+  assert.match(diagnostics, /latest-antigravity-cli-windows-user-readiness\.json/);
+  assert.match(diagnostics, /antigravityCliWindowsUserReadinessEvidence/);
+  assert.match(installedOverall, /latest-antigravity-cli-windows-user-readiness\.json/);
+  assert.match(syncRuntime, /test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
+  assert.match(releaseGates, /scripts\/test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
+  assert.match(managerBridge, /antigravityCliWindowsUserReadiness/);
+  assert.match(managerInject, /antigravityCliWindowsUserReadiness/);
+  assert.match(server, /latest-antigravity-cli-windows-user-readiness\.json/);
+  assert.match(server, /antigravityCliWindowsUserReadiness/);
+});

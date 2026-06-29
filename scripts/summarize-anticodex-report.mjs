@@ -211,6 +211,7 @@ const isUiComplexProjectSmokeReport = report?.reportName === "ui-complex-project
 const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
 const isAntigravityCliProfilePrepareReport = report?.reportName === "antigravity-cli-profile-prepare" || /latest-antigravity-cli-profile-prepare\.json$/i.test(path);
 const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravity-cli-dual-account-lanes" || /latest-antigravity-cli-dual-account-lanes\.json$/i.test(path);
+const isAntigravityCliWindowsUserReadinessReport = report?.reportName === "antigravity-cli-windows-user-readiness" || /latest-antigravity-cli-windows-user-readiness\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -775,6 +776,31 @@ const summary = {
     geminiDirDifferent: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "geminiDirDifferent") : null,
     neitherUsesDefaultAntigravityProfile: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "neitherUsesDefaultAntigravityProfile") : null,
     accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
+  } : null,
+  antigravityCliWindowsUserReadinessEvidence: isAntigravityCliWindowsUserReadinessReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    started: boolField(report, "started"),
+    capturesLoginOutput: boolField(report, "capturesLoginOutput"),
+    credentialBoundary: has(report, "credentialBoundary") ? asString(report.credentialBoundary) : null,
+    expectedCredentialStoreIsolation: boolField(report, "expectedCredentialStoreIsolation"),
+    readinessChecked: boolField(report, "readinessChecked"),
+    normalizedTargetWindowsUser: has(report, "normalizedTargetWindowsUser") ? asString(report.normalizedTargetWindowsUser) : null,
+    currentWindowsUser: has(report, "currentWindowsUser") ? asString(report.currentWindowsUser) : null,
+    localUserLookupAvailable: boolField(report, "localUserLookupAvailable"),
+    targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+    targetUserIsCurrentUser: boolField(report, "targetUserIsCurrentUser"),
+    readyForInteractiveLogin: boolField(report, "readyForInteractiveLogin"),
+    readinessBlockingReason: has(report, "readinessBlockingReason") ? asString(report.readinessBlockingReason) : null,
+    recommendedOperatorAction: has(report, "recommendedOperatorAction") ? asString(report.recommendedOperatorAction) : null,
+    requiresUserAction: boolField(report, "requiresUserAction"),
+    requiresRealTrafficForNextProof: boolField(report, "requiresRealTrafficForNextProof"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    loginVerified: boolField(report, "loginVerified"),
     accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
   } : null,
   antigravityCliRealSmokeEvidence: isAntigravityCliRealSmokeReport ? {

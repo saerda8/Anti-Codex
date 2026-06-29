@@ -127,6 +127,14 @@ After every failure, before another dispatch:
 - Cause classification: partial worker suggestions were useful, but mainline needed stricter tri-state readiness, source-preflight/report/diagnostics/Manager support, and runtime-sync gate coverage.
 - Rule change: Windows-user readiness is not only a launcher field. Preserve it through source-preflight reports, release gates, diagnostics, Manager text, and installed runtime sync evidence.
 
+### 2026-06-30 - Windows-user readiness report worker draft not merged
+
+- Worker: MIMO isolated worktree `deepcodex-mimo-user-report` after a compacted synchronous dispatch.
+- Task: add a standalone no-traffic readiness report before asking the user to log in the second Antigravity account.
+- Result: worker produced an untracked report script, static test, and audit note, but the draft used a parallel readiness implementation, had mojibake comments, and did not wire the existing Manager/diagnostics/runtime support chain.
+- Cause classification: useful direction but incomplete support-surface coverage.
+- Rule change: standalone readiness reports must reuse the existing `start-anticodex-antigravity-cli-login-windows-user.ps1 -DryRun` launcher as the single source of truth, then surface the report through summarizer, Manager bridge/inject/adaptive server, diagnostics, installed-overall inventory, and runtime sync fingerprints.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

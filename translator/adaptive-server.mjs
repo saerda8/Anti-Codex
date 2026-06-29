@@ -3005,6 +3005,24 @@ function latestManagerReportItem(label, fileName) {
             missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
             realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork" || entry.id === "realSmallProject").map((entry) => entry.id).sort(),
         } : null,
+        antigravityCliWindowsUserReadinessEvidence: report?.reportName === "antigravity-cli-windows-user-readiness" ? {
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            started: report.started === true,
+            capturesLoginOutput: report.capturesLoginOutput === true,
+            credentialBoundary: shortSafeText(report.credentialBoundary || "", ""),
+            readinessChecked: report.readinessChecked === true,
+            targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+            targetUserIsCurrentUser: report.targetUserIsCurrentUser === true,
+            readyForInteractiveLogin: report.readyForInteractiveLogin === true,
+            readinessBlockingReason: shortSafeText(report.readinessBlockingReason || "", ""),
+            recommendedOperatorAction: shortSafeText(report.recommendedOperatorAction || "", ""),
+            requiresUserAction: report.requiresUserAction === true,
+            requiresRealTrafficForNextProof: report.requiresRealTrafficForNextProof === true,
+            separateAccountVerified: report.separateAccountVerified === true,
+            loginVerified: report.loginVerified === true,
+            accountIsolationCaveat: shortSafeText(report.accountIsolationCaveat || "", ""),
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -3440,6 +3458,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("可选真实第三方", "latest-real-third-party-provider.json"),
         latestManagerReportItem("可选回切 Antigravity", "latest-provider-antigravity-return.json"),
         latestManagerReportItem("独立 Antigravity CLI 准备", "latest-antigravity-cli-profile-prepare.json"),
+        latestManagerReportItem("Antigravity Windows 用户准备", "latest-antigravity-cli-windows-user-readiness.json"),
         latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
     ];
     return {
@@ -4184,6 +4203,13 @@ function latestReportsSummary(result){
       lines.push("  antigravityCliProfilePrepare: separateAccount="+(evidence.separateAccountVerified?"true":"false")+" / boundary="+(evidence.accountIsolationBoundary||"unknown"));
       lines.push("  antigravityCliProfilePrepare lane: role="+(evidence.accountLaneRole||"unknown")+" / mcpManagedHere="+(evidence.mcpAccountLaneManagedByAntiCodex?"true":"false")+" / mcpOwner="+(evidence.mcpAccountLaneOwner||"unknown"));
       if(evidence.accountIsolationCaveat) lines.push("  antigravityCliProfilePrepare caveat: "+evidence.accountIsolationCaveat);
+    }
+    if(item.antigravityCliWindowsUserReadinessEvidence){
+      const evidence=item.antigravityCliWindowsUserReadinessEvidence;
+      lines.push("  antigravityCliWindowsUserReadiness: ready="+(evidence.readyForInteractiveLogin?"true":"false")+" / userExists="+(evidence.targetUserExists===true?"true":evidence.targetUserExists===false?"false":"unknown")+" / currentUser="+(evidence.targetUserIsCurrentUser?"true":"false")+" / action="+(evidence.recommendedOperatorAction||"unknown"));
+      lines.push("  antigravityCliWindowsUserReadiness guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / started="+(evidence.started?"true":"false")+" / capturesOutput="+(evidence.capturesLoginOutput?"true":"false")+" / boundary="+(evidence.credentialBoundary||"unknown")+" / separateAccount="+(evidence.separateAccountVerified?"true":"false")+" / login="+(evidence.loginVerified?"true":"false"));
+      if(evidence.readinessBlockingReason) lines.push("  antigravityCliWindowsUserReadiness reason: "+evidence.readinessBlockingReason);
+      if(evidence.accountIsolationCaveat) lines.push("  antigravityCliWindowsUserReadiness caveat: "+evidence.accountIsolationCaveat);
     }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;

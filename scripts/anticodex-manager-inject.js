@@ -1154,6 +1154,13 @@
         lines.push(`  antigravityCliProfilePrepare lane: role=${evidence.accountLaneRole || "unknown"} / mcpManagedHere=${evidence.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${evidence.mcpAccountLaneOwner || "unknown"}`);
         if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliProfilePrepare caveat: ${evidence.accountIsolationCaveat}`);
       }
+      if (item.antigravityCliWindowsUserReadinessEvidence) {
+        const evidence = item.antigravityCliWindowsUserReadinessEvidence;
+        lines.push(`  antigravityCliWindowsUserReadiness: ready=${evidence.readyForInteractiveLogin ? "true" : "false"} / userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / currentUser=${evidence.targetUserIsCurrentUser ? "true" : "false"} / action=${evidence.recommendedOperatorAction || "unknown"}`);
+        lines.push(`  antigravityCliWindowsUserReadiness guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / started=${evidence.started ? "true" : "false"} / capturesOutput=${evidence.capturesLoginOutput ? "true" : "false"} / boundary=${evidence.credentialBoundary || "unknown"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / login=${evidence.loginVerified ? "true" : "false"}`);
+        if (evidence.readinessBlockingReason) lines.push(`  antigravityCliWindowsUserReadiness reason: ${evidence.readinessBlockingReason}`);
+        if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliWindowsUserReadiness caveat: ${evidence.accountIsolationCaveat}`);
+      }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
         lines.push(`  managerButtons: ${actions.join(" | ")}`);
