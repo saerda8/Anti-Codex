@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v97";
+  const VERSION = "native-panel-v98";
   const SUMMARY_VERSION = "latest-reports-evidence-v1";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -1126,6 +1126,11 @@
         lines.push(`  antigravityCliRealSmoke: login=${evidence.loginVerified ? "true" : "false"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / strictAppData=${evidence.strictWindowsAppDataIsolation ? "true" : "false"} / source=${evidence.profileSource || "unknown"}`);
         if (evidence.separateAccountVerificationReason) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.separateAccountVerificationReason}`);
         else if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.accountIsolationCaveat}`);
+      }
+      if (item.antigravityCliProfilePrepareEvidence) {
+        const evidence = item.antigravityCliProfilePrepareEvidence;
+        lines.push(`  antigravityCliProfilePrepare: separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / boundary=${evidence.accountIsolationBoundary || "unknown"}`);
+        if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliProfilePrepare caveat: ${evidence.accountIsolationCaveat}`);
       }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);

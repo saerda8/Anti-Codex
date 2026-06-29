@@ -4064,6 +4064,11 @@ function latestReportsSummary(result){
       if(evidence.separateAccountVerificationReason) lines.push("  antigravityCliRealSmoke caveat: "+evidence.separateAccountVerificationReason);
       else if(evidence.accountIsolationCaveat) lines.push("  antigravityCliRealSmoke caveat: "+evidence.accountIsolationCaveat);
     }
+    if(item.antigravityCliProfilePrepareEvidence){
+      const evidence=item.antigravityCliProfilePrepareEvidence;
+      lines.push("  antigravityCliProfilePrepare: separateAccount="+(evidence.separateAccountVerified?"true":"false")+" / boundary="+(evidence.accountIsolationBoundary||"unknown"));
+      if(evidence.accountIsolationCaveat) lines.push("  antigravityCliProfilePrepare caveat: "+evidence.accountIsolationCaveat);
+    }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;
       lines.push("  uiChat: clicked="+(evidence.clicked?"true":"false")+" / reconnect="+(evidence.activeReconnectSeen?"seen":"clear")+" / session="+(evidence.sessionLockClear?"clear":"check")+" / marker="+(evidence.marker||"unknown"));

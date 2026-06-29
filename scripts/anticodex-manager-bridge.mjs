@@ -494,6 +494,11 @@ function latestReportsSummary(result) {
       if (evidence.separateAccountVerificationReason) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.separateAccountVerificationReason}`);
       else if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.accountIsolationCaveat}`);
     }
+    if (item.antigravityCliProfilePrepareEvidence) {
+      const evidence = item.antigravityCliProfilePrepareEvidence;
+      lines.push(`  antigravityCliProfilePrepare: separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / boundary=${evidence.accountIsolationBoundary || "unknown"}`);
+      if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliProfilePrepare caveat: ${evidence.accountIsolationCaveat}`);
+    }
     if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
       const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
       lines.push(`  managerButtons: ${actions.join(" | ")}`);
