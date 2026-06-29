@@ -7980,6 +7980,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /missing client sync version match flag/);
   assert.match(diagnostics, /client sync version mismatch/);
   assert.match(diagnostics, /missing required patch scope: \$RequiredPatch/);
+  assert.match(diagnostics, /unexpected Anti-Codex patch scope/);
+  assert.match(diagnostics, /Anti-Codex patch scope is not exact/);
   assert.match(diagnostics, /missing update status reason/);
   assert.match(diagnostics, /missing source host hash/);
   assert.match(diagnostics, /missing host hash match flag/);
@@ -11350,6 +11352,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid ui-idle report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid sync-readiness report satisfied the gate/);
   assert.match(releaseGates, /sync_readiness_client_sync_version_mismatch/);
+  assert.match(releaseGates, /sync_readiness_client_patch_scope_extra/);
+  assert.match(releaseGates, /sync-readiness extra Anti-Codex patch scope satisfied the gate/);
   assert.match(releaseGates, /id:\s*"syncHost"[\s\S]*?sync-anticodex-launcher\.ps1[\s\S]*?highImpact:\s*true/);
   assert.match(releaseGates, /sync-readiness host-sync action was not marked high-impact/);
   assert.match(releaseGates, /sync-readiness host-sync samples were not normalized/);

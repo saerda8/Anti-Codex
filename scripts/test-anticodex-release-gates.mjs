@@ -99,6 +99,8 @@ const runtimeSyncFiles = [
   "codex-home-deepseek-app/config.adaptive-oneapi.toml",
 ];
 
+const allowedAntiCodexPatchScope = ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"];
+
 const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true, requireInstalledOverallSemantics: true, expectedFast: true, expectedReportName: "installed-overall-fast", expectedCoverageKind: "installed-fast-no-traffic" },
   { id: "sourcePreflight", group: "short", file: "latest-source-preflight.json", requiredForShort: true, requiredForRelease: true, requireSourcePreflightSemantics: true },
@@ -1093,9 +1095,10 @@ function summarizeGate(definition) {
         || clientSyncContract.sourceHostHashMatches !== true
         || clientSyncContract.sourceCliHashMatches !== true) semanticFailures.push("sync_readiness_client_sync_source_match");
       if (!sourcePackageVersion || !activeSourcePackageVersion || sourcePackageVersion !== activeSourcePackageVersion) semanticFailures.push("sync_readiness_client_sync_version_mismatch");
-      for (const requiredPatch of ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"]) {
+      for (const requiredPatch of allowedAntiCodexPatchScope) {
         if (!patchScope.includes(requiredPatch)) semanticFailures.push(`sync_readiness_client_patch_scope:${requiredPatch}`);
       }
+      if (patchScope.length !== allowedAntiCodexPatchScope.length || patchScope.some((item) => !allowedAntiCodexPatchScope.includes(item))) semanticFailures.push("sync_readiness_client_patch_scope_extra");
       if (activeHost.exists !== true || activeHost.markerExists !== true || activeHost.manifestValid !== true || activeHost.exeExists !== true) semanticFailures.push("sync_readiness_active_host");
       if (activeHost.productName !== "Anti-Codex" || activeHost.fileDescription !== "Anti-Codex" || activeHost.originalFilename !== "Anti-Codex.exe") semanticFailures.push("sync_readiness_brand");
       if (activeHost.hostIconExists !== true || activeHost.trayIconExists !== true || activeHost.appRootIconExists !== true) semanticFailures.push("sync_readiness_icon_files");
@@ -2547,6 +2550,13 @@ if (args.has("--self-test")) {
     const syncReadinessVersionDriftGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "syncReadiness"));
     if (syncReadinessVersionDriftGate.satisfied === true || !syncReadinessVersionDriftGate.semanticFailures?.includes("sync_readiness_client_sync_version_mismatch")) {
       throw new Error("self-test failed: sync-readiness clientSyncContract version drift satisfied the gate");
+    }
+    const syncReadinessPatchScopeDriftReport = loadSignedJson(join(tempRoot, "20260624-000000-sync-readiness.json"));
+    syncReadinessPatchScopeDriftReport.clientSyncContract.antiCodexPatchScope = [...allowedAntiCodexPatchScope, "feature-rebuild"];
+    writeFakeLatestReport("latest-sync-readiness.json", syncReadinessPatchScopeDriftReport);
+    const syncReadinessPatchScopeDriftGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "syncReadiness"));
+    if (syncReadinessPatchScopeDriftGate.satisfied === true || !syncReadinessPatchScopeDriftGate.semanticFailures?.includes("sync_readiness_client_patch_scope_extra")) {
+      throw new Error("self-test failed: sync-readiness extra Anti-Codex patch scope satisfied the gate");
     }
     semanticFailures.coldRelaunch = assertSemanticFailures("coldRelaunch", "self-test failed: semantically invalid cold-relaunch report satisfied the gate", [
       "cold_relaunch_report_name",

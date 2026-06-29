@@ -597,9 +597,14 @@ function Test-SyncReadinessEvidence {
         if ($SyncEvidence.clientSyncCliHashMatches -ne $true) { Add-Failure "$Prefix client sync CLI hash mismatch" }
         if ($SyncEvidence.clientSyncVersionMatches -ne $true) { Add-Failure "$Prefix client sync version mismatch" }
         $RequiredPatches = @("branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter")
+        $PatchScope = @($SyncEvidence.antiCodexPatchScope)
         foreach ($RequiredPatch in $RequiredPatches) {
-            if ($SyncEvidence.antiCodexPatchScope -notcontains $RequiredPatch) { Add-Failure "$Prefix missing required patch scope: $RequiredPatch" }
+            if ($PatchScope -notcontains $RequiredPatch) { Add-Failure "$Prefix missing required patch scope: $RequiredPatch" }
         }
+        foreach ($Patch in $PatchScope) {
+            if ($RequiredPatches -notcontains $Patch) { Add-Failure "$Prefix unexpected Anti-Codex patch scope: $Patch" }
+        }
+        if ($PatchScope.Count -ne $RequiredPatches.Count) { Add-Failure "$Prefix Anti-Codex patch scope is not exact" }
         if ($SyncEvidence.noTrafficReady -ne $true) { Add-Failure "$Prefix missing no-traffic attestation" }
         if ($SyncEvidence.fullMode -ne $true) { Add-Failure "$Prefix not full mode" }
         if ($SyncEvidence.activeHostReady -ne $true) { Add-Failure "$Prefix active host not ready" }
