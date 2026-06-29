@@ -19,7 +19,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
 
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = resolve(scriptRoot, "..");
-let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT || 58318);
+let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT || 0);
 const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const diagnosticsUrl = `${baseUrl}/anticodex/diagnostics?fast=1`;
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
@@ -102,7 +102,6 @@ const repoMultiFileTest = resolve(repoMultiFileEditDir, "status-dashboard.test.m
 const repoMultiFileData = resolve(repoMultiFileEditDir, "status-data.json");
 const repoMultiFileReadme = resolve(repoMultiFileEditDir, "README.md");
 const repoMultiFileHtml = resolve(repoMultiFileEditDir, "status-dashboard.html");
-const repoMultiFileReadmeCommand = `node -e "require('node:fs').writeFileSync(${JSON.stringify(repoMultiFileReadme)}, '# \\\\u4f7f\\\\u7528\\\\u8bf4\\\\u660e\\n\\nnode status-dashboard.mjs status-data.json\\n', 'utf8')"`;
 let repoMultiFileBaselineSource = "";
 let repoMultiFileExpectedTest = "";
 let repoMultiFileExpectedData = "";
@@ -1482,9 +1481,9 @@ const visibleMainPaneTextExpression = `
 
 async function resolveCdpTargets() {
   const explicitPort = args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT;
-  const candidates = explicitPort
+  const candidates = [...new Set(explicitPort
     ? [Number(explicitPort)]
-    : [58318, 58317];
+    : [...discoverAntiCodexCdpPorts(), 58318, 58317])];
   let lastError = null;
   for (const candidate of candidates) {
     if (!Number.isFinite(candidate) || candidate <= 0) continue;
@@ -1497,6 +1496,30 @@ async function resolveCdpTargets() {
     }
   }
   throw new Error(`Anti-Codex CDP target was not reachable on ${candidates.join(" or ")}: ${lastError || "unknown error"}`);
+}
+
+function discoverAntiCodexCdpPorts() {
+  if (process.platform !== "win32") return [];
+  try {
+    const output = execFileSync("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "$ErrorActionPreference='SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $_.ProcessName -eq 'Anti-Codex.exe' -and $_.CommandLine -match '--remote-debugging-port=' } | ForEach-Object { $_.CommandLine }",
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    const ports = [];
+    for (const match of output.matchAll(/--remote-debugging-port=(\d+)/g)) {
+      const port = Number(match[1]);
+      if (Number.isFinite(port) && port > 0) ports.push(port);
+    }
+    return ports;
+  } catch {
+    return [];
+  }
 }
 
 async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, options = {}) {

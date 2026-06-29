@@ -11468,9 +11468,11 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /"ui-repo-file-edit-smoke"/);
   assert.match(verifier, /"ui-repo-multi-file-edit-smoke"/);
   assert.match(verifier, /"ui-report-site-smoke"/);
-  assert.match(verifier, /let cdpPort = Number\(args\.get\("--cdp-port"\) \|\| process\.env\.DEEPCODEX_CDP_PORT \|\| 58318\)/);
+  assert.match(verifier, /let cdpPort = Number\(args\.get\("--cdp-port"\) \|\| process\.env\.DEEPCODEX_CDP_PORT \|\| 0\)/);
   assert.match(verifier, /async function resolveCdpTargets/);
-  assert.match(verifier, /\[58318, 58317\]/);
+  assert.match(verifier, /function discoverAntiCodexCdpPorts\(\)/);
+  assert.match(verifier, /ProcessName -eq 'Anti-Codex\.exe'/);
+  assert.match(verifier, /\[\.\.\.discoverAntiCodexCdpPorts\(\), 58318, 58317\]/);
   assert.match(verifier, /ui-chat-smoke\.lock/);
   assert.match(verifier, /async function acquireUiSmokeLock/);
   assert.match(verifier, /process\.once\("exit", \(\) => releaseUiLock\?\.\(\)\)/);
@@ -11573,7 +11575,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /function buildRepoMultiReadmeWriteCommand\(\)/);
   assert.match(verifier, /PowerShell-safe Node command before any other command/);
   assert.match(verifier, /require\('node:fs'\)\.writeFileSync/);
-  assert.match(verifier, /\\u4f7f\\u7528\\u8bf4\\u660e/);
+  assert.match(verifier, /\\\\u4f7f\\\\u7528\\\\u8bf4\\\\u660e/);
   assert.match(verifier, /artifactCompletionObserved/);
   assert.match(verifier, /Do not run git status/);
   assert.match(verifier, /Do not use apply_patch for this fixture task/);
@@ -11582,7 +11584,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /no http\/https URLs, no <link tags, and no preconnect/);
   assert.match(verifier, /fonts\\.googleapis\|fonts\\.gstatic/);
   assert.match(verifier, /onlyReadmeMissing/);
-  assert.match(verifier, /Create only \$\{repoMultiFileReadme\} now/);
+  assert.match(verifier, /Create only \$\{repoMultiFileReadme\}, containing the Chinese title/);
   assert.match(verifier, /Your first and only tool action now must execute exactly this PowerShell-safe Node command/);
   assert.match(verifier, /idleBreakAfterMs/);
   assert.match(verifier, /artifactEvidence\?\.testPassed === true/);
