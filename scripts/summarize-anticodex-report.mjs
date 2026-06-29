@@ -653,7 +653,12 @@ const summary = {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
     coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    strictWindowsAppDataIsolation: boolField(report, "strictWindowsAppDataIsolation"),
+    profileSource: has(report, "profileSource") ? asString(report.profileSource) : null,
+    loginVerified: boolField(report, "loginVerified"),
+    loginVerifiedMethod: has(report, "loginVerifiedMethod") ? asString(report.loginVerifiedMethod) : null,
     separateAccountVerified: boolField(report, "separateAccountVerified"),
+    separateAccountVerificationReason: has(report, "separateAccountVerificationReason") ? asString(report.separateAccountVerificationReason) : null,
     accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
     accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
     preparationReport: report.preparationReport && typeof report.preparationReport === "object" ? {

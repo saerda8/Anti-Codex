@@ -3224,6 +3224,11 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /accountIsolationBoundary/);
   assert.match(reportSummarizer, /accountIsolationCaveat/);
   assert.match(reportSummarizer, /antigravityCliRealSmokeEvidence/);
+  assert.match(reportSummarizer, /strictWindowsAppDataIsolation/);
+  assert.match(reportSummarizer, /profileSource/);
+  assert.match(reportSummarizer, /loginVerified/);
+  assert.match(reportSummarizer, /loginVerifiedMethod/);
+  assert.match(reportSummarizer, /separateAccountVerificationReason/);
   assert.match(reportSummarizer, /preparationReport/);
   assert.match(reportSummarizer, /profileMatched/);
   assert.doesNotMatch(collector, /failures = if \(\$json\.PSObject\.Properties\.Name -contains "failures"\)/);
@@ -13122,7 +13127,12 @@ test("summarize-anticodex-report exposes antigravity-cli-real-smoke isolation bo
       requestedRealTraffic: false,
       usedRealTraffic: false,
       coverageKind: "skipped",
+      strictWindowsAppDataIsolation: true,
+      profileSource: "saved-profile",
+      loginVerified: true,
+      loginVerifiedMethod: "marker-match",
       separateAccountVerified: false,
+      separateAccountVerificationReason: "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Skipped real traffic; no account identity or Windows credential-store isolation was verified.",
       preparationReport: { profileMatched: false },
@@ -13137,7 +13147,12 @@ test("summarize-anticodex-report exposes antigravity-cli-real-smoke isolation bo
       requestedRealTraffic: false,
       usedRealTraffic: false,
       coverageKind: "skipped",
+      strictWindowsAppDataIsolation: true,
+      profileSource: "saved-profile",
+      loginVerified: true,
+      loginVerifiedMethod: "marker-match",
       separateAccountVerified: false,
+      separateAccountVerificationReason: "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Skipped real traffic; no account identity or Windows credential-store isolation was verified.",
       preparationReport: { profileMatched: false },
@@ -13181,7 +13196,12 @@ test("summarize-anticodex-report real-smoke retains caveat and does not claim ve
       requestedRealTraffic: false,
       usedRealTraffic: false,
       coverageKind: "skipped",
+      strictWindowsAppDataIsolation: true,
+      profileSource: "saved-profile",
+      loginVerified: true,
+      loginVerifiedMethod: "marker-match",
       separateAccountVerified: false,
+      separateAccountVerificationReason: "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account",
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Profile isolation only; not proof of a separate Antigravity account. Keep separateAccountVerified:false until explicit account-identity comparison or a truly separate credential namespace.",
     }), "utf8");
@@ -13192,6 +13212,11 @@ test("summarize-anticodex-report real-smoke retains caveat and does not claim ve
     assert.equal(summary.antigravityCliRealSmokeEvidence.accountIsolationCaveat, "Profile isolation only; not proof of a separate Antigravity account. Keep separateAccountVerified:false until explicit account-identity comparison or a truly separate credential namespace.");
     assert.ok(summary.antigravityCliRealSmokeEvidence.accountIsolationBoundary, "accountIsolationBoundary must be retained when separateAccountVerified=false");
     assert.equal(summary.antigravityCliRealSmokeEvidence.separateAccountVerified, false, "summary must not claim dual account verified when separateAccountVerified=false");
+    assert.equal(summary.antigravityCliRealSmokeEvidence.strictWindowsAppDataIsolation, true, "strictWindowsAppDataIsolation must be retained when separateAccountVerified=false");
+    assert.equal(summary.antigravityCliRealSmokeEvidence.profileSource, "saved-profile", "profileSource must be retained when separateAccountVerified=false");
+    assert.equal(summary.antigravityCliRealSmokeEvidence.loginVerified, true, "loginVerified must be retained when separateAccountVerified=false");
+    assert.equal(summary.antigravityCliRealSmokeEvidence.loginVerifiedMethod, "marker-match", "loginVerifiedMethod must be retained when separateAccountVerified=false");
+    assert.equal(summary.antigravityCliRealSmokeEvidence.separateAccountVerificationReason, "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account", "separateAccountVerificationReason must be retained when separateAccountVerified=false");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
