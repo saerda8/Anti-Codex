@@ -2376,6 +2376,7 @@ function latestManagerReportItem(label, fileName) {
     const refreshAppToolParity = report?.appToolParity && typeof report.appToolParity === "object" ? report.appToolParity : null;
     const refreshReport = report?.reportName === "refresh-features";
     const refreshGuidance = refreshReport && report?.guidance && typeof report.guidance === "object" ? report.guidance : null;
+    const refreshRecoveryActions = refreshReport && Array.isArray(report?.recoveryActions) ? report.recoveryActions : [];
     const appToolGetPostParity = capabilities?.appToolGetPostParity && typeof capabilities.appToolGetPostParity === "object"
         ? capabilities.appToolGetPostParity
         : (report?.appToolGetPostParity && typeof report.appToolGetPostParity === "object" ? report.appToolGetPostParity : null);
@@ -3108,6 +3109,14 @@ function latestManagerReportItem(label, fileName) {
                 .map(([name]) => shortSafeText(name, ""))
                 .filter(Boolean)
                 .slice(0, 8) : [],
+            recoveryActions: refreshRecoveryActions.slice(0, 5).map((action) => ({
+                id: shortSafeText(action?.id || "", ""),
+                reason: shortSafeText(action?.reason || "", ""),
+                guidance: shortSafeText(action?.guidance || "", ""),
+                commands: Array.isArray(action?.commands) ? action.commands.map((item) => shortSafeText(item, "")).filter(Boolean).slice(0, 3) : [],
+                requiresRealTraffic: action?.requiresRealTraffic === true,
+            })).filter((action) => action.id || action.guidance || action.commands.length),
+            recoveryActionIds: refreshRecoveryActions.map((action) => shortSafeText(action?.id || "", "")).filter(Boolean).slice(0, 8),
         } : null,
         optionalRealProviderEvidence: (typeof report?.firstMarkerObserved === "boolean" || typeof report?.secondMarkerObserved === "boolean" || typeof report?.historyContinuationObserved === "boolean") ? {
             firstMarkerObserved: report.firstMarkerObserved === true,
@@ -4332,6 +4341,14 @@ function latestReportsSummary(result){
       lines.push("  refresh parity: connector="+(connectorOk?"ok":"需处理")+" / appTool="+(appToolOk?"ok":"需处理")+refreshDrift+hashCache);
       if(evidence.elapsedMs!=null||evidence.verifyOnly===true) lines.push("  refresh timing: verifyOnly="+(evidence.verifyOnly===true?"true":"false")+" / elapsed="+(evidence.elapsedMs??"unknown")+" ms"+hashCache);
       if(skillChanged.length||guidanceChanged.length) lines.push("  refresh drift: skills="+(skillChanged.length?skillChanged.slice(0,5).join(", "):"ok")+" / guidance="+(guidanceChanged.length?guidanceChanged.slice(0,5).join(", "):"ok"));
+      const recoveryActions=Array.isArray(evidence.recoveryActions)?evidence.recoveryActions:[];
+      if(recoveryActions.length){
+        const recoveryText=recoveryActions.slice(0,3).map((action)=>{
+          const commands=Array.isArray(action.commands)?action.commands.slice(0,2).join(" | "):"";
+          return [action.id,action.guidance,commands].filter(Boolean).join(" / ");
+        }).filter(Boolean).join(" ; ");
+        if(recoveryText) lines.push("  refresh recovery: "+recoveryText);
+      }
     }
     if(item.optionalRealProviderEvidence){
       const evidence=item.optionalRealProviderEvidence;
@@ -4496,10 +4513,12 @@ function actionText(payload){
     }
     const snapshotCount=Array.isArray(r.snapshots)?r.snapshots.length:(r.snapshots?.count??"未知");
     const snapshotLine=sourceSnapshotLine(r);
+    const recoveryActionIds=Array.isArray(r.recoveryActions)?r.recoveryActions.map((action)=>action?.id).filter(Boolean).slice(0,3):[];
     return [
       "本地功能刷新："+(r.ok?"完成":"需要处理"),
       "Skill："+(r.skills?.count??"未知")+"    快照："+snapshotCount+"    连接器缓存："+(r.connectors?.count??"未知"),
       snapshotLine,
+      recoveryActionIds.length?("recoveryActions: "+recoveryActionIds.join(", ")):"",
       r.failures?.length?("失败："+r.failures.join("\\n")):"Codex 的本地插件、Skill、MCP 相关快照已同步到 Anti-Codex。"
     ].filter(Boolean).join("\\n");
   }

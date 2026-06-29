@@ -1235,6 +1235,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /verifyOnly=true/);
   assert.match(managerBridge, /refresh drift:/);
   assert.match(managerInject, /refresh drift:/);
+  assert.match(managerBridge, /refresh recovery:/);
+  assert.match(managerInject, /refresh recovery:/);
+  assert.match(managerBridge, /recoveryActions/);
+  assert.match(managerInject, /recoveryActions/);
+  assert.match(managerBridge, /recoveryActions: \$\{recoveryActionIds\.join/);
+  assert.match(managerInject, /recoveryActions: \$\{recoveryActionIds\.join/);
   assert.match(managerBridge, /localConnectorEvidence/);
   assert.match(managerInject, /localConnectorEvidence/);
   assert.match(managerBridge, /local connector parity:/);
@@ -2778,6 +2784,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /refresh parity:/);
   assert.match(server, /refresh timing:/);
   assert.match(server, /refresh drift:/);
+  assert.match(server, /refresh recovery:/);
+  assert.match(server, /recoveryActionIds/);
+  assert.match(server, /recoveryActions: "\+recoveryActionIds\.join/);
   assert.match(server, /optionalRealProviderEvidence/);
   assert.match(server, /realProviderToAntigravityReturnEvidence/);
   assert.match(server, /antigravityReturnEvidence/);
@@ -3197,6 +3206,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /appToolContentMatches/);
   assert.match(reportSummarizer, /changedExpectedSkills/);
   assert.match(reportSummarizer, /guidanceChanged/);
+  assert.match(reportSummarizer, /recoveryActions/);
+  assert.match(reportSummarizer, /recoveryActionIds/);
   assert.match(reportSummarizer, /optionalRealProviderEvidence/);
   assert.match(reportSummarizer, /realProviderToAntigravityReturnEvidence/);
   assert.match(reportSummarizer, /returnUpstream/);
@@ -4578,6 +4589,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       ageHours: 56.1,
       fresh: false,
       selectedFromHistory: false,
+      historySourceMismatch: false,
       selectedKind: "latest",
       selectedFile: "latest-post-verification.json",
       selectedMtime: "2026-06-24T01:02:03.000Z",
@@ -4606,6 +4618,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       ageHours: null,
       fresh: null,
       selectedFromHistory: false,
+      historySourceMismatch: false,
       selectedKind: "",
       selectedFile: "",
       selectedMtime: "",
@@ -4645,6 +4658,7 @@ test("report summarizer treats releaseReady false as not effectively passing", (
       id: "syncReadiness",
       group: "no-traffic",
       selectedFile: "20260624-071841-sync-readiness.json",
+      historySourceMismatch: false,
     }]);
     assert.equal(summary.installedRuntimeEvidence.sourceFileCount, 58);
     assert.equal(summary.installedRuntimeEvidence.installedRuntimeFileCount, 58);
@@ -8284,6 +8298,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /refresh-features summary missing elapsedMs evidence/);
   assert.match(diagnostics, /changedExpectedSkills/);
   assert.match(diagnostics, /guidanceChanged/);
+  assert.match(diagnostics, /recoveryActions/);
+  assert.match(diagnostics, /recoveryActionIds/);
   assert.match(diagnostics, /refresh-features summary missing refreshFeatureEvidence/);
   assert.match(diagnostics, /refresh-features summary connector parity not clean/);
   assert.match(diagnostics, /refresh-features summary app-tool parity not clean/);

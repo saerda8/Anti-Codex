@@ -1200,6 +1200,14 @@
         const refreshDrift = ` / connectorDrift=${evidence.connectorMissingSharedCount ?? 0}/${evidence.connectorExtraLocalCount ?? 0}/${evidence.connectorChangedSharedCount ?? 0} / appToolDrift=${evidence.appToolMissingSharedCount ?? 0}/${evidence.appToolExtraLocalCount ?? 0}/${evidence.appToolChangedSharedCount ?? 0}${refreshSamples.length ? ` / sample ${refreshSamples.join(", ")}` : ""}`;
         lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${refreshDrift}${mode}${elapsed}${hashCache}`);
         if (skillChanged.length || guidanceChanged.length) lines.push(`  refresh drift: skills=${skillChanged.length ? skillChanged.slice(0, 5).join(", ") : "ok"} / guidance=${guidanceChanged.length ? guidanceChanged.slice(0, 5).join(", ") : "ok"}`);
+        const recoveryActions = Array.isArray(evidence.recoveryActions) ? evidence.recoveryActions : [];
+        if (recoveryActions.length) {
+          const recoveryText = recoveryActions.slice(0, 3).map((action) => {
+            const commands = Array.isArray(action.commands) ? action.commands.slice(0, 2).join(" | ") : "";
+            return [action.id, action.guidance, commands].filter(Boolean).join(" / ");
+          }).filter(Boolean).join(" ; ");
+          if (recoveryText) lines.push(`  refresh recovery: ${recoveryText}`);
+        }
       }
       if (item.localConnectorEvidence) {
         const evidence = item.localConnectorEvidence;
@@ -1379,10 +1387,12 @@
       ].filter(Boolean).join("\n");
     }
     if (action === "refreshFeatures" && payload?.background) return payload?.alreadyRunning ? "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u8bf7\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u6216 MCP/Skill\u3001\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002" : "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5f00\u59cb\u540e\u53f0\u6267\u884c\u3002\n\u754c\u9762\u4e0d\u4f1a\u7b49\u5f85\u957f\u65f6\u590d\u5236\uff1b\u5b8c\u6210\u540e\u7528 MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002";
+    const recoveryActionIds = Array.isArray(r.recoveryActions) ? r.recoveryActions.map((action) => action?.id).filter(Boolean).slice(0, 3) : [];
     if (action === "refreshFeatures") return [
       `\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`,
       `Skill ${r.skills?.count ?? "\u672a\u77e5"} / \u8fde\u63a5\u5668\u7f13\u5b58 ${r.connectors?.count ?? "\u672a\u77e5"}`,
       sourceSnapshotLine(r),
+      recoveryActionIds.length ? `recoveryActions: ${recoveryActionIds.join(", ")}` : "",
       "\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u4ecd\u9700\u5355\u72ec smoke \u9a8c\u8bc1",
     ].filter(Boolean).join("\n");
     if (action === "stabilitySoak") {

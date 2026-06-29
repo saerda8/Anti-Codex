@@ -1401,6 +1401,8 @@ function Test-DiagnosticBundle {
                 if ($refreshEvidence.appToolSharedExists -eq $true -and $refreshEvidence.appToolContentMatches -ne $true) { Add-Failure "refresh-features summary app-tool parity not clean" }
                 if (@($refreshEvidence.changedExpectedSkills).Count -ne 0) { Add-Failure "refresh-features summary skill content parity not clean" }
                 if (@($refreshEvidence.guidanceChanged).Count -ne 0) { Add-Failure "refresh-features summary guidance parity not clean" }
+                if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActions")) { Add-Failure "refresh-features summary missing recoveryActions support evidence" }
+                if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActionIds")) { Add-Failure "refresh-features summary missing recoveryActionIds support evidence" }
             }
         }
         $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
