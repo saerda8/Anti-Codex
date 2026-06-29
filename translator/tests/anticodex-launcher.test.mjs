@@ -14030,6 +14030,14 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(syncRuntime, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-windows-user-account-prepare\.ps1/);
+  assert.match(releaseGates, /antigravityCliWindowsUserReadiness/);
+  assert.match(releaseGates, /requireAntigravityCliWindowsUserReadinessSemantics/);
+  assert.match(releaseGates, /windowsUserAccountPrepare/);
+  assert.match(releaseGates, /requireWindowsUserAccountPrepareSemantics/);
+  assert.match(releaseGates, /windows_user_readiness_started_login/);
+  assert.match(releaseGates, /windows_user_prepare_changed_system/);
+  assert.match(releaseGates, /windows_user_prepare_captures_password/);
+  assert.match(releaseGates, /windows_user_prepare_next_proof_real_traffic_missing/);
   assert.match(managerBridge, /antigravityCliWindowsUserReadiness/);
   assert.match(managerBridge, /windowsUserAccountPrepare/);
   assert.match(managerBridge, /safeToAskLogin/);

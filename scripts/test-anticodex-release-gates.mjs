@@ -129,6 +129,8 @@ const gateDefinitions = [
   { id: "syncReadiness", group: "no-traffic", file: "latest-sync-readiness.json", requiredForRelease: true, requireSyncReadinessSemantics: true },
   { id: "modelThinking", group: "no-traffic", file: "latest-model-thinking.json", requiredForRelease: true, requireModelThinkingSemantics: true },
   { id: "ambientSuggestions", group: "no-traffic", file: "latest-ambient-suggestions.json", requiredForRelease: true, requireAmbientSuggestionSemantics: true },
+  { id: "antigravityCliWindowsUserReadiness", group: "no-traffic", file: "latest-antigravity-cli-windows-user-readiness.json", requiredForRelease: true, requireAntigravityCliWindowsUserReadinessSemantics: true },
+  { id: "windowsUserAccountPrepare", group: "no-traffic", file: "latest-windows-user-account-prepare.json", requiredForRelease: true, requireWindowsUserAccountPrepareSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -1114,6 +1116,59 @@ function summarizeGate(definition) {
       if (!checks.translatorRegression || checks.translatorRegression.ok !== true) semanticFailures.push("source_preflight_translator_regression");
       if (!checks.diffWhitespace || checks.diffWhitespace.ok !== true) semanticFailures.push("source_preflight_diff_whitespace");
     }
+    if (definition.requireAntigravityCliWindowsUserReadinessSemantics) {
+      if (report.reportName !== "antigravity-cli-windows-user-readiness") semanticFailures.push("windows_user_readiness_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("windows_user_readiness_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("windows_user_readiness_used_real_traffic");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("windows_user_readiness_requested_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("windows_user_readiness_behavior_not_covered");
+      if (report.coverageKind !== "windows-user-login-readiness-no-traffic") semanticFailures.push("windows_user_readiness_coverage_kind");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("windows_user_readiness_failures");
+      if (report.started !== false) semanticFailures.push("windows_user_readiness_started_login");
+      if (report.capturesLoginOutput !== false) semanticFailures.push("windows_user_readiness_captures_login_output");
+      if (report.credentialBoundary !== "separate-windows-user") semanticFailures.push("windows_user_readiness_credential_boundary");
+      if (report.expectedCredentialStoreIsolation !== true) semanticFailures.push("windows_user_readiness_expected_credential_isolation");
+      if (report.readinessChecked !== true) semanticFailures.push("windows_user_readiness_not_checked");
+      if (!report.normalizedTargetWindowsUser) semanticFailures.push("windows_user_readiness_target_user_missing");
+      if (!report.currentWindowsUser) semanticFailures.push("windows_user_readiness_current_user_missing");
+      if (report.targetUserIsCurrentUser === true) semanticFailures.push("windows_user_readiness_target_is_current_user");
+      if (report.readyForInteractiveLogin !== true && !report.readinessBlockingReason) semanticFailures.push("windows_user_readiness_blocking_reason_missing");
+      if (report.readyForInteractiveLogin === true && report.recommendedOperatorAction !== "run_interactive_login_with_explicit_user_approval") semanticFailures.push("windows_user_readiness_ready_action_mismatch");
+      if (report.readyForInteractiveLogin !== true && report.requiresUserAction !== true) semanticFailures.push("windows_user_readiness_requires_user_action_missing");
+      if (report.requiresRealTrafficForNextProof !== true) semanticFailures.push("windows_user_readiness_next_proof_real_traffic_missing");
+      if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_readiness_separate_account_verified");
+      if (report.loginVerified !== false) semanticFailures.push("windows_user_readiness_login_verified");
+      if (!report.accountIsolationCaveat) semanticFailures.push("windows_user_readiness_caveat_missing");
+    }
+    if (definition.requireWindowsUserAccountPrepareSemantics) {
+      const safeToAskLogin = report.safeToAskUserForSecondAccountLogin === true;
+      if (report.reportName !== "windows-user-account-prepare") semanticFailures.push("windows_user_prepare_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("windows_user_prepare_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("windows_user_prepare_used_real_traffic");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("windows_user_prepare_requested_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("windows_user_prepare_behavior_not_covered");
+      if (report.coverageKind !== "windows-user-account-prepare-no-traffic") semanticFailures.push("windows_user_prepare_coverage_kind");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("windows_user_prepare_failures");
+      if (report.changedSystem !== false) semanticFailures.push("windows_user_prepare_changed_system");
+      if (report.createdUser !== false) semanticFailures.push("windows_user_prepare_created_user");
+      if (report.startedLogin !== false) semanticFailures.push("windows_user_prepare_started_login");
+      if (report.capturesPassword !== false) semanticFailures.push("windows_user_prepare_captures_password");
+      if (report.storesPassword !== false) semanticFailures.push("windows_user_prepare_stores_password");
+      if (report.targetUserIsCurrentUser === true) semanticFailures.push("windows_user_prepare_target_is_current_user");
+      if (report.readyForInteractiveLogin !== true && !report.readinessBlockingReason) semanticFailures.push("windows_user_prepare_blocking_reason_missing");
+      if (report.canProceedToInteractiveLogin !== safeToAskLogin) semanticFailures.push("windows_user_prepare_can_proceed_mismatch");
+      if (report.blockedBeforeInteractiveLogin !== !safeToAskLogin) semanticFailures.push("windows_user_prepare_blocked_before_login_mismatch");
+      if (report.setupActionRequired !== !safeToAskLogin) semanticFailures.push("windows_user_prepare_setup_action_mismatch");
+      if (!report.operatorBlockingStage) semanticFailures.push("windows_user_prepare_operator_stage_missing");
+      if (!report.operatorNextStep) semanticFailures.push("windows_user_prepare_operator_next_step_missing");
+      if (report.readyForInteractiveLogin === true && report.operatorBlockingStage !== "ready") semanticFailures.push("windows_user_prepare_ready_stage_mismatch");
+      if (report.readyForInteractiveLogin === true && report.operatorNextStep !== "run_windows_user_interactive_login_with_user_present") semanticFailures.push("windows_user_prepare_ready_next_step_mismatch");
+      if (report.readyForInteractiveLogin === true && report.recommendedOperatorAction !== "run_interactive_login_with_explicit_user_approval") semanticFailures.push("windows_user_prepare_ready_action_mismatch");
+      if (report.requiresUserPresence !== true) semanticFailures.push("windows_user_prepare_user_presence_missing");
+      if (report.nextProofRequiresRealTraffic !== true) semanticFailures.push("windows_user_prepare_next_proof_real_traffic_missing");
+      if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_prepare_separate_account_verified");
+      if (report.loginVerified !== false) semanticFailures.push("windows_user_prepare_login_verified");
+    }
     if (definition.requireModelRoutingSemantics) {
       const results = Array.isArray(report.results) ? report.results : [];
       if (report.skipRequests !== true) semanticFailures.push("model_routing_skip_requests_not_true");
@@ -1576,6 +1631,8 @@ const noTrafficEvidenceRefreshOrder = [
   ["syncReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-sync-readiness.ps1"],
   ["modelThinking", "no-traffic-gateway", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-model-thinking.ps1 -TimeoutSec 8", { requiresGatewayStart: true }],
   ["ambientSuggestions", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-ambient-suggestions.ps1"],
+  ["antigravityCliWindowsUserReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-windows-user-readiness.ps1"],
+  ["windowsUserAccountPrepare", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1"],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -2489,6 +2546,65 @@ if (args.has("--self-test")) {
       ],
     });
 
+    writeFakeLatestReport("latest-antigravity-cli-windows-user-readiness.json", {
+      ok: true,
+      reportName: "wrong-windows-user-readiness",
+      noTraffic: false,
+      usedRealTraffic: true,
+      requestedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "wrong",
+      failures: ["should not be ignored"],
+      windowsUser: ".\\XD",
+      started: true,
+      capturesLoginOutput: true,
+      credentialBoundary: "profile-and-appdata-only",
+      expectedCredentialStoreIsolation: false,
+      readinessChecked: false,
+      normalizedTargetWindowsUser: "",
+      currentWindowsUser: "",
+      targetUserIsCurrentUser: true,
+      readyForInteractiveLogin: false,
+      readinessBlockingReason: "",
+      recommendedOperatorAction: "run_interactive_login_with_explicit_user_approval",
+      requiresUserAction: false,
+      requiresRealTrafficForNextProof: false,
+      separateAccountVerified: true,
+      loginVerified: true,
+      accountIsolationCaveat: "",
+    });
+
+    writeFakeLatestReport("latest-windows-user-account-prepare.json", {
+      ok: true,
+      reportName: "wrong-windows-user-account-prepare",
+      noTraffic: false,
+      usedRealTraffic: true,
+      requestedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "wrong",
+      failures: ["should not be ignored"],
+      windowsUser: ".\\XD",
+      changedSystem: true,
+      createdUser: true,
+      startedLogin: true,
+      capturesPassword: true,
+      storesPassword: true,
+      targetUserIsCurrentUser: true,
+      readyForInteractiveLogin: false,
+      readinessBlockingReason: "",
+      recommendedOperatorAction: "run_interactive_login_with_explicit_user_approval",
+      safeToAskUserForSecondAccountLogin: true,
+      canProceedToInteractiveLogin: false,
+      blockedBeforeInteractiveLogin: true,
+      setupActionRequired: true,
+      operatorBlockingStage: "",
+      operatorNextStep: "",
+      requiresUserPresence: false,
+      nextProofRequiresRealTraffic: false,
+      separateAccountVerified: true,
+      loginVerified: true,
+    });
+
     const semanticFailures = {};
     semanticFailures.fastOverallNoTraffic = assertSemanticFailures("fastOverallNoTraffic", "self-test failed: semantically invalid fast installed-overall report satisfied the gate", [
       "installed_overall_report_name",
@@ -2561,6 +2677,54 @@ if (args.has("--self-test")) {
       "ambient_suggestions_sqlite_sources",
       "ambient_suggestions_unallowed_name",
       "ambient_suggestions_chromium_probe_missing",
+    ]);
+    semanticFailures.antigravityCliWindowsUserReadiness = assertSemanticFailures("antigravityCliWindowsUserReadiness", "self-test failed: semantically invalid Windows-user readiness report satisfied the gate", [
+      "windows_user_readiness_report_name",
+      "windows_user_readiness_no_traffic",
+      "windows_user_readiness_used_real_traffic",
+      "windows_user_readiness_requested_real_traffic",
+      "windows_user_readiness_behavior_not_covered",
+      "windows_user_readiness_coverage_kind",
+      "windows_user_readiness_failures",
+      "windows_user_readiness_started_login",
+      "windows_user_readiness_captures_login_output",
+      "windows_user_readiness_credential_boundary",
+      "windows_user_readiness_expected_credential_isolation",
+      "windows_user_readiness_not_checked",
+      "windows_user_readiness_target_user_missing",
+      "windows_user_readiness_current_user_missing",
+      "windows_user_readiness_target_is_current_user",
+      "windows_user_readiness_blocking_reason_missing",
+      "windows_user_readiness_requires_user_action_missing",
+      "windows_user_readiness_next_proof_real_traffic_missing",
+      "windows_user_readiness_separate_account_verified",
+      "windows_user_readiness_login_verified",
+      "windows_user_readiness_caveat_missing",
+    ]);
+    semanticFailures.windowsUserAccountPrepare = assertSemanticFailures("windowsUserAccountPrepare", "self-test failed: semantically invalid Windows-user account-prepare report satisfied the gate", [
+      "windows_user_prepare_report_name",
+      "windows_user_prepare_no_traffic",
+      "windows_user_prepare_used_real_traffic",
+      "windows_user_prepare_requested_real_traffic",
+      "windows_user_prepare_behavior_not_covered",
+      "windows_user_prepare_coverage_kind",
+      "windows_user_prepare_failures",
+      "windows_user_prepare_changed_system",
+      "windows_user_prepare_created_user",
+      "windows_user_prepare_started_login",
+      "windows_user_prepare_captures_password",
+      "windows_user_prepare_stores_password",
+      "windows_user_prepare_target_is_current_user",
+      "windows_user_prepare_blocking_reason_missing",
+      "windows_user_prepare_can_proceed_mismatch",
+      "windows_user_prepare_blocked_before_login_mismatch",
+      "windows_user_prepare_setup_action_mismatch",
+      "windows_user_prepare_operator_stage_missing",
+      "windows_user_prepare_operator_next_step_missing",
+      "windows_user_prepare_user_presence_missing",
+      "windows_user_prepare_next_proof_real_traffic_missing",
+      "windows_user_prepare_separate_account_verified",
+      "windows_user_prepare_login_verified",
     ]);
     semanticFailures.uiIdleStability = assertSemanticFailures("uiIdleStability", "self-test failed: semantically invalid ui-idle report satisfied the gate", [
       "ui_idle_duration",

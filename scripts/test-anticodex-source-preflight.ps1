@@ -215,7 +215,10 @@ function Test-AntigravityCliIsolationProfile {
         -FilePath $powershell `
         -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script, "-ReportRoot", $ReportRoot) `
         -TimeoutSec 30
-    $isolationJson = ($result.stdoutTail -join "`n")
+    $isolationJson = Get-SourceJsonReportText `
+        -ReportRoot $ReportRoot `
+        -LatestFileName "latest-antigravity-cli-isolation.json" `
+        -FallbackTail $result.stdoutTail
     $isolationOk = $false
     $isolationContract = [ordered]@{
         ok = $false

@@ -158,6 +158,14 @@ After every failure, before another dispatch:
 - Result: completed with accepted changes and the focused launcher test passed. The main patch kept a broader field set and absorbed the useful static checks forbidding user creation and network calls in the launcher.
 - Rule change: account login launchers need a runtime guard, not only a report/Manager warning. Non-DryRun paths must return machine-readable blocked JSON and `started:false` before any interactive login process starts.
 
+### 2026-06-30 - Windows-user release-gate Kilo partial
+
+- Worker: Kilo `klw_mqzp57cb_p0p1sx` in isolated worktree `deepcodex-kilo-windows-gates`.
+- Task: add passive release-gate coverage for the signed Windows-user readiness and account-prepare no-traffic reports.
+- Result: ended as `caller_timeout_after_valid_changes` with a scoped two-file draft and its two requested checks passing. The draft was not merged because the mainline patch had stricter field names, requested-real-traffic checks, no-login/no-password/system-change checks, ordered actions, and the source-preflight report-read fix.
+- Additional incident: accidental Kilo noop job `klw_mqzp9zo0_zh5gph` was started with no useful writable scope and failed without file changes. Treat this as a dispatch error by the main agent, not a model result.
+- Rule change: for required release gates, adding `gateDefinitions` entries alone is not enough. The patch must also add semantic validators, self-test invalid fixtures, ordered next actions, and static coverage before it is mergeable.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`
