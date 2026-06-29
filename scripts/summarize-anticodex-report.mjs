@@ -34,6 +34,8 @@ function asAccountIdentityComparisonEvidence(value) {
   const mcpSource = typeof value.mcpSource === "string" ? value.mcpSource.trim() : "";
   const comparisonMethod = typeof value.comparisonMethod === "string" ? value.comparisonMethod.trim() : "";
   const capturedAt = typeof value.capturedAt === "string" ? value.capturedAt.trim() : "";
+  const approvalId = typeof value.approvalId === "string" ? value.approvalId.trim() : "";
+  const approvalSource = typeof value.approvalSource === "string" ? value.approvalSource.trim() : "";
   return {
     antiCodexAccountIdPresent: !!antiCodexAccountId,
     mcpAccountIdPresent: !!mcpAccountId,
@@ -42,6 +44,8 @@ function asAccountIdentityComparisonEvidence(value) {
     mcpSourcePresent: !!mcpSource,
     comparisonMethodPresent: !!comparisonMethod,
     capturedAtPresent: !!capturedAt,
+    approvalIdPresent: !!approvalId,
+    approvalSourcePresent: !!approvalSource,
   };
 }
 

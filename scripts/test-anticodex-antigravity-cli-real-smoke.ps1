@@ -9,6 +9,7 @@ param(
     [switch]$AllowSeparateAccountProof,
     [string]$AntiCodexAccountId = "",
     [string]$McpAccountId = "",
+    [string]$SeparateAccountProofApprovalId = "",
     [string]$Model = "gemini-pro-agent",
     [string]$Prompt = "",
     [int]$TimeoutSec = 90
@@ -138,7 +139,8 @@ function New-AccountIdentityComparison {
     param(
         [Parameter(Mandatory = $true)][string]$AntiCodexId,
         [Parameter(Mandatory = $true)][string]$McpId,
-        [Parameter(Mandatory = $true)][string]$CapturedAt
+        [Parameter(Mandatory = $true)][string]$CapturedAt,
+        [Parameter(Mandatory = $true)][string]$ApprovalId
     )
     return [ordered]@{
         antiCodexAccountId = $AntiCodexId
@@ -147,6 +149,8 @@ function New-AccountIdentityComparison {
         mcpSource = "external-mcp-antigravity-account"
         comparisonMethod = "explicit-user-approved-account-identity-parameter"
         capturedAt = $CapturedAt
+        approvalId = $ApprovalId
+        approvalSource = "explicit-user-approval"
     }
 }
 
@@ -258,17 +262,19 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
     $elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
     $antiCodexAccountIdTrimmed = ([string]$AntiCodexAccountId).Trim()
     $mcpAccountIdTrimmed = ([string]$McpAccountId).Trim()
+    $separateAccountProofApprovalIdTrimmed = ([string]$SeparateAccountProofApprovalId).Trim()
     $accountIdentityComparison = $null
     $separateAccountVerified = $false
     $separateAccountVerificationReason = "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account"
     if ($AllowSeparateAccountProof.IsPresent) {
         if (-not $antiCodexAccountIdTrimmed) { Add-Failure "Anti-Codex account identity is required before separate-account proof can be recorded" }
         if (-not $mcpAccountIdTrimmed) { Add-Failure "MCP Antigravity account identity is required before separate-account proof can be recorded" }
+        if (-not $separateAccountProofApprovalIdTrimmed) { Add-Failure "explicit separate-account proof approval id is required before separate-account proof can be recorded" }
         if ($antiCodexAccountIdTrimmed -and $mcpAccountIdTrimmed -and $antiCodexAccountIdTrimmed -eq $mcpAccountIdTrimmed) {
             Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
         }
         if ($failures.Count -eq 0) {
-            $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed -CapturedAt ([DateTime]::UtcNow.ToString("o"))
+            $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed -CapturedAt ([DateTime]::UtcNow.ToString("o")) -ApprovalId $separateAccountProofApprovalIdTrimmed
             $separateAccountVerified = $true
             $separateAccountVerificationReason = "explicitly approved real CLI smoke plus external MCP account identity comparison showed distinct account identities"
         }

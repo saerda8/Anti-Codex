@@ -11559,11 +11559,14 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_mcp_identity_source/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_comparison_method/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_captured_at/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_approval_id/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_approval_source/);
   assert.match(releaseGates, /explicit-user-approved-account-identity-parameter/);
+  assert.match(releaseGates, /explicit-user-approval/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_identity_evidence_without_verification/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_boundary_missing/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_caveat_missing/);
-  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint>/);
+  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>/);
   assert.match(releaseGates, /model-text lane/);
   assert.match(releaseGates, /MCP/);
   assert.match(releaseGates, /externally managed/);
@@ -13084,13 +13087,17 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /\[switch\]\$AllowSeparateAccountProof/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$AntiCodexAccountId/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$McpAccountId/);
+  assert.match(antigravityCliRealSmoke, /\[string\]\$SeparateAccountProofApprovalId/);
   assert.match(antigravityCliRealSmoke, /account identity inputs require -AllowSeparateAccountProof/);
+  assert.match(antigravityCliRealSmoke, /explicit separate-account proof approval id is required/);
   assert.match(antigravityCliRealSmoke, /Anti-Codex and MCP Antigravity account identities match/);
   assert.match(antigravityCliRealSmoke, /\$report\.accountIdentityComparison = \$accountIdentityComparison/);
   assert.match(antigravityCliRealSmoke, /antiCodexSource = "anticodex-cli-real-smoke"/);
   assert.match(antigravityCliRealSmoke, /mcpSource = "external-mcp-antigravity-account"/);
   assert.match(antigravityCliRealSmoke, /comparisonMethod = "explicit-user-approved-account-identity-parameter"/);
   assert.match(antigravityCliRealSmoke, /capturedAt = \$CapturedAt/);
+  assert.match(antigravityCliRealSmoke, /approvalId = \$ApprovalId/);
+  assert.match(antigravityCliRealSmoke, /approvalSource = "explicit-user-approval"/);
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /Windows credential store/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
@@ -13481,9 +13488,11 @@ test("Antigravity CLI real-smoke skip path ignores account proof inputs without 
       "anticodex-private-test-id",
       "-McpAccountId",
       "mcp-private-test-id",
+      "-SeparateAccountProofApprovalId",
+      "approval-private-test-id",
     ], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.doesNotMatch(result.stdout, /anticodex-private-test-id|mcp-private-test-id/);
+    assert.doesNotMatch(result.stdout, /anticodex-private-test-id|mcp-private-test-id|approval-private-test-id/);
     const report = JSON.parse(result.stdout.trim());
     assert.equal(report.usedRealTraffic, false);
     assert.equal(report.separateAccountVerified, false);
@@ -13554,6 +13563,8 @@ test("summarize-anticodex-report real-smoke sanitizes account identity compariso
         mcpSource: "external-mcp-antigravity-account",
         comparisonMethod: "explicit-user-approved-account-identity-parameter",
         capturedAt: "2026-06-29T18:00:00.000Z",
+        approvalId: "approval-private-test-id",
+        approvalSource: "explicit-user-approval",
       },
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Real account comparison was explicitly approved.",
@@ -13569,9 +13580,12 @@ test("summarize-anticodex-report real-smoke sanitizes account identity compariso
       mcpSourcePresent: true,
       comparisonMethodPresent: true,
       capturedAtPresent: true,
+      approvalIdPresent: true,
+      approvalSourcePresent: true,
     });
     assert.doesNotMatch(result.stdout, /anticodex-account-private-id/);
     assert.doesNotMatch(result.stdout, /mcp-account-private-id/);
+    assert.doesNotMatch(result.stdout, /approval-private-test-id/);
     assert.doesNotMatch(result.stdout, /anticodex-cli-real-smoke/);
     assert.doesNotMatch(result.stdout, /external-mcp-antigravity-account/);
   } finally {

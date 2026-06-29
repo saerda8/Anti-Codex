@@ -900,6 +900,8 @@ function summarizeGate(definition) {
               if (comparison.mcpSource !== "external-mcp-antigravity-account") semanticFailures.push("optional_antigravity_cli_real_smoke_mcp_identity_source");
               if (comparison.comparisonMethod !== "explicit-user-approved-account-identity-parameter") semanticFailures.push("optional_antigravity_cli_real_smoke_identity_comparison_method");
               if (typeof comparison.capturedAt !== "string" || !comparison.capturedAt.trim() || Number.isNaN(Date.parse(comparison.capturedAt))) semanticFailures.push("optional_antigravity_cli_real_smoke_identity_captured_at");
+              if (typeof comparison.approvalId !== "string" || !comparison.approvalId.trim()) semanticFailures.push("optional_antigravity_cli_real_smoke_identity_approval_id");
+              if (comparison.approvalSource !== "explicit-user-approval") semanticFailures.push("optional_antigravity_cli_real_smoke_identity_approval_source");
             }
           }
           if (report.separateAccountVerified === false) {
@@ -1499,7 +1501,7 @@ const realTrafficRefreshOrder = [
 const optionalEvidenceRefreshOrder = [
   ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
   ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
-  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint>", { requiresRealTraffic: true, highImpact: true }],
+  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>", { requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
@@ -3257,6 +3259,8 @@ if (args.has("--self-test")) {
       "optional_antigravity_cli_real_smoke_mcp_identity_source",
       "optional_antigravity_cli_real_smoke_identity_comparison_method",
       "optional_antigravity_cli_real_smoke_identity_captured_at",
+      "optional_antigravity_cli_real_smoke_identity_approval_id",
+      "optional_antigravity_cli_real_smoke_identity_approval_source",
     ]);
     writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
       ok: true,
@@ -3280,6 +3284,38 @@ if (args.has("--self-test")) {
         mcpSource: "external-mcp-antigravity-account",
         comparisonMethod: "explicit-user-approved-account-identity-parameter",
         capturedAt: "2026-06-29T18:00:00.000Z",
+      },
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Shared Windows credential store caveat.",
+    });
+    semanticFailures.antigravityCliRealSmokeSeparateTrueMissingApproval = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with missing approval context satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_identity_approval_id",
+      "optional_antigravity_cli_real_smoke_identity_approval_source",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: true,
+      accountLaneRole: "anticodex-model-text",
+      mcpAccountLaneManagedByAntiCodex: false,
+      mcpAccountLaneOwner: "external-antigravity-account-not-managed-here",
+      accountIdentityComparison: {
+        antiCodexAccountId: "anticodex-account",
+        mcpAccountId: "mcp-account",
+        antiCodexSource: "anticodex-cli-real-smoke",
+        mcpSource: "external-mcp-antigravity-account",
+        comparisonMethod: "explicit-user-approved-account-identity-parameter",
+        capturedAt: "2026-06-29T18:00:00.000Z",
+        approvalId: "approval-2026-06-29",
+        approvalSource: "explicit-user-approval",
       },
       accountIsolationBoundary: "profile-and-appdata-only",
       accountIsolationCaveat: "Shared Windows credential store caveat.",

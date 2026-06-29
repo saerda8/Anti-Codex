@@ -1263,6 +1263,8 @@ function Test-DiagnosticBundle {
                         if ($comparison.mcpSourcePresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing MCP identity source presence" }
                         if ($comparison.comparisonMethodPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing comparison method presence" }
                         if ($comparison.capturedAtPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing identity capture timestamp presence" }
+                        if ($comparison.approvalIdPresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing separate-account proof approval id presence" }
+                        if ($comparison.approvalSourcePresent -ne $true) { Add-Failure "diagnostic real-smoke summary missing separate-account proof approval source presence" }
                     }
                 } elseif ($comparison) {
                     Add-Failure "diagnostic real-smoke summary has account identity comparison without separate account proof"
