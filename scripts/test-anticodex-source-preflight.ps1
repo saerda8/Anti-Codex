@@ -262,6 +262,113 @@ function Test-AntigravityCliIsolationProfile {
     }
 }
 
+function Test-AntigravityCliDualAccountLanes {
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\test-anticodex-antigravity-cli-dual-account-lanes.ps1"
+    $tempStateRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-dual-lanes-state-" + [Guid]::NewGuid().ToString("N"))
+    $tempReportRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-dual-lanes-report-" + [Guid]::NewGuid().ToString("N"))
+    $antiCodexRoot = Join-Path $tempStateRoot "anticodex-model-text"
+    $mcpRoot = Join-Path $tempStateRoot "external-mcp-antigravity-account"
+    try {
+        $result = Invoke-SourceProcess `
+            -Name "Antigravity CLI dual account lanes (no-traffic)" `
+            -FilePath $powershell `
+            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script,
+                "-StateRoot", $tempStateRoot,
+                "-ReportRoot", $tempReportRoot,
+                "-AntiCodexProfileRoot", $antiCodexRoot,
+                "-McpProfileRoot", $mcpRoot) `
+            -TimeoutSec 30
+        $dualJson = ($result.stdoutTail -join "`n")
+        $dualOk = $false
+        $contract = [ordered]@{
+            ok = $false
+            usedRealTraffic = $false
+            loginVerified = $false
+            separateAccountVerified = $false
+            accountLaneRole = ""
+            coverageKind = "missing"
+            antiCodexLaneRole = ""
+            mcpLaneRole = ""
+            mcpLaneManagedByAntiCodex = $true
+            profileRootsDifferent = $false
+            profileRootsNested = $true
+            appDataDifferent = $false
+            localAppDataDifferent = $false
+            geminiDirDifferent = $false
+            neitherUsesDefaultAntigravityProfile = $false
+            accountIsolationBoundary = ""
+            accountIsolationCaveat = ""
+        }
+        if ($result.ok -and $dualJson) {
+            try {
+                $parsed = $dualJson | ConvertFrom-Json
+                $comparison = $parsed.laneComparison
+                $contract.ok = [bool]$parsed.ok
+                $contract.usedRealTraffic = [bool]$parsed.usedRealTraffic
+                $contract.loginVerified = [bool]$parsed.loginVerified
+                $contract.separateAccountVerified = [bool]$parsed.separateAccountVerified
+                $contract.accountLaneRole = [string]$parsed.accountLaneRole
+                $contract.coverageKind = [string]$parsed.coverageKind
+                $contract.antiCodexLaneRole = [string]$parsed.antiCodexLane.role
+                $contract.mcpLaneRole = [string]$parsed.mcpLane.role
+                $contract.mcpLaneManagedByAntiCodex = [bool]$parsed.mcpLane.managedByAntiCodex
+                $contract.profileRootsDifferent = [bool]$comparison.profileRootsDifferent
+                $contract.profileRootsNested = [bool]$comparison.profileRootsNested
+                $contract.appDataDifferent = [bool]$comparison.appDataDifferent
+                $contract.localAppDataDifferent = [bool]$comparison.localAppDataDifferent
+                $contract.geminiDirDifferent = [bool]$comparison.geminiDirDifferent
+                $contract.neitherUsesDefaultAntigravityProfile = [bool]$comparison.neitherUsesDefaultAntigravityProfile
+                $contract.accountIsolationBoundary = [string]$parsed.accountIsolationBoundary
+                $contract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
+                $dualOk = $parsed.ok -eq $true `
+                    -and $parsed.usedRealTraffic -eq $false `
+                    -and $parsed.loginVerified -eq $false `
+                    -and $parsed.separateAccountVerified -eq $false `
+                    -and $parsed.accountLaneRole -eq "dual-antigravity-cli-account-lanes" `
+                    -and $parsed.coverageKind -eq "dual-account-lanes-prepared-no-traffic" `
+                    -and $parsed.antiCodexLane.role -eq "anticodex-model-text" `
+                    -and $parsed.mcpLane.role -eq "external-mcp-antigravity-account" `
+                    -and $parsed.mcpLane.managedByAntiCodex -eq $false `
+                    -and $comparison.profileRootsDifferent -eq $true `
+                    -and $comparison.profileRootsNested -eq $false `
+                    -and $comparison.appDataDifferent -eq $true `
+                    -and $comparison.localAppDataDifferent -eq $true `
+                    -and $comparison.geminiDirDifferent -eq $true `
+                    -and $comparison.neitherUsesDefaultAntigravityProfile -eq $true `
+                    -and [string]$parsed.accountIsolationBoundary `
+                    -and [string]$parsed.accountIsolationCaveat
+            } catch {
+                Add-Failure "Antigravity CLI dual account lanes JSON parse failed"
+            }
+        }
+        if (-not $dualOk -and $result.ok) {
+            Add-Failure "Antigravity CLI dual account lanes contract not satisfied"
+        }
+        if (-not $result.ok) { Add-Failure "Antigravity CLI dual account lanes verifier failed" }
+        return [pscustomobject]@{
+            ok = $dualOk
+            name = "Antigravity CLI dual account lanes (no-traffic)"
+            exitCode = $result.exitCode
+            timedOut = $result.timedOut
+            durationMs = $result.durationMs
+            usedRealTraffic = $false
+            loginVerified = $false
+            separateAccountVerified = $false
+            accountLaneRole = $contract.accountLaneRole
+            coverageKind = $contract.coverageKind
+            antiCodexLaneRole = $contract.antiCodexLaneRole
+            mcpLaneRole = $contract.mcpLaneRole
+            mcpLaneManagedByAntiCodex = $contract.mcpLaneManagedByAntiCodex
+            accountIsolationBoundary = $contract.accountIsolationBoundary
+            accountIsolationCaveat = $contract.accountIsolationCaveat
+            contract = $contract
+        }
+    } finally {
+        Remove-Item -LiteralPath $tempStateRoot, $tempReportRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-AntigravityCliProfilePrepare {
     $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
     $script = Join-Path $SourceRoot "scripts\prepare-anticodex-antigravity-cli-profile.ps1"
@@ -593,6 +700,7 @@ try {
     $checks["logDbGuardSelfTest"] = Test-LogDbGuardSelfTest
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
     $checks["antigravityCliIsolationProfile"] = Test-AntigravityCliIsolationProfile
+    $checks["antigravityCliDualAccountLanes"] = Test-AntigravityCliDualAccountLanes
     $checks["antigravityCliProfilePrepare"] = Test-AntigravityCliProfilePrepare
     $checks["antigravityCliProfilePrepareRejectsDefaultChild"] = Test-AntigravityCliProfilePrepareRejectsDefaultChild
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
@@ -607,6 +715,10 @@ try {
 
 $elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
 $antigravityCliProfilePrepareOk = $false
+$antigravityCliDualAccountLanesOk = $false
+if ($checks["antigravityCliDualAccountLanes"]) {
+    $antigravityCliDualAccountLanesOk = [bool]$checks["antigravityCliDualAccountLanes"].ok
+}
 if ($checks["antigravityCliProfilePrepare"]) {
     $antigravityCliProfilePrepareOk = [bool]$checks["antigravityCliProfilePrepare"].ok
 }
@@ -617,6 +729,7 @@ $report = [ordered]@{
     usedRealTraffic = $false
     behaviorCovered = ($failures.Count -eq 0)
     coverageKind = "source-no-traffic"
+    antigravityCliDualAccountLanesOk = $antigravityCliDualAccountLanesOk
     antigravityCliProfilePrepareOk = $antigravityCliProfilePrepareOk
     sourceRoot = Normalize-Path $SourceRoot
     startedAt = $startedAt.ToString("o")

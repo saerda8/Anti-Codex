@@ -13040,6 +13040,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   const installer = readFileSync(resolve(root, "scripts", "install-deepcodex.ps1"), "utf8");
   const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
   const antigravityCliIsolation = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-isolation.ps1"), "utf8");
+  const antigravityCliDualLanes = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-dual-account-lanes.ps1"), "utf8");
   const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
@@ -13048,6 +13049,9 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
   assert.match(preflight, /test-anticodex-antigravity-cli-isolation\.ps1/);
   assert.match(preflight, /checks\["antigravityCliIsolationProfile"\]/);
+  assert.match(preflight, /test-anticodex-antigravity-cli-dual-account-lanes\.ps1/);
+  assert.match(preflight, /checks\["antigravityCliDualAccountLanes"\]/);
+  assert.match(preflight, /Antigravity CLI dual account lanes contract not satisfied/);
   assert.match(preflight, /Antigravity CLI isolation profile contract not satisfied/);
   assert.match(preflight, /contract = \$isolationContract/);
   assert.match(antigravityCliIsolation, /usedRealTraffic\s*=\s*\$false/);
@@ -13059,6 +13063,25 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliIsolation, /profile-and-appdata-only/);
   assert.match(antigravityCliIsolation, /does not prove a separate Antigravity account/);
   assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
+  assert.match(antigravityCliDualLanes, /reportName = "antigravity-cli-dual-account-lanes"/);
+  assert.match(antigravityCliDualLanes, /usedRealTraffic = \$false/);
+  assert.match(antigravityCliDualLanes, /loginVerified = \$false/);
+  assert.match(antigravityCliDualLanes, /separateAccountVerified = \$false/);
+  assert.match(antigravityCliDualLanes, /dual-antigravity-cli-account-lanes/);
+  assert.match(antigravityCliDualLanes, /anticodex-model-text/);
+  assert.match(antigravityCliDualLanes, /external-mcp-antigravity-account/);
+  assert.match(antigravityCliDualLanes, /managedByAntiCodex = \$ManagedByAntiCodex/);
+  assert.match(antigravityCliDualLanes, /profileRootsDifferent/);
+  assert.match(antigravityCliDualLanes, /profileRootsNested/);
+  assert.match(antigravityCliDualLanes, /appDataDifferent/);
+  assert.match(antigravityCliDualLanes, /localAppDataDifferent/);
+  assert.match(antigravityCliDualLanes, /geminiDirDifferent/);
+  assert.match(antigravityCliDualLanes, /neitherUsesDefaultAntigravityProfile/);
+  assert.match(antigravityCliDualLanes, /does not prove login, account identity, or Windows credential-store separation/);
+  assert.match(releaseGates, /source_preflight_antigravity_cli_dual_account_lanes/);
+  assert.match(releaseGates, /source_preflight_dual_account_lanes_contract_missing/);
+  assert.match(releaseGates, /source_preflight_dual_lanes_profile_roots_not_different/);
+  assert.match(releaseGates, /source_preflight_dual_lanes_mcp_managed_by_anticodex/);
   assert.match(antigravityCliPrepare, /reportName = "antigravity-cli-profile-prepare"/);
   assert.match(antigravityCliPrepare, /usedRealTraffic = \$false/);
   assert.match(antigravityCliPrepare, /loginVerified = \$false/);
@@ -13588,6 +13611,68 @@ test("summarize-anticodex-report real-smoke sanitizes account identity compariso
     assert.doesNotMatch(result.stdout, /approval-private-test-id/);
     assert.doesNotMatch(result.stdout, /anticodex-cli-real-smoke/);
     assert.doesNotMatch(result.stdout, /external-mcp-antigravity-account/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("summarize-anticodex-report dual account lanes sanitizes profile paths", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-cli-dual-lanes-summary-"));
+  try {
+    const reportPath = join(tempRoot, "latest-antigravity-cli-dual-account-lanes.json");
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-cli-dual-account-lanes",
+      noTraffic: true,
+      usedRealTraffic: false,
+      loginVerified: false,
+      separateAccountVerified: false,
+      accountLaneRole: "dual-antigravity-cli-account-lanes",
+      coverageKind: "dual-account-lanes-prepared-no-traffic",
+      antiCodexLane: {
+        role: "anticodex-model-text",
+        managedByAntiCodex: true,
+        profileRoot: "C:\\private\\anticodex-antigravity-account",
+      },
+      mcpLane: {
+        role: "external-mcp-antigravity-account",
+        managedByAntiCodex: false,
+        profileRoot: "C:\\private\\mcp-antigravity-account",
+      },
+      laneComparison: {
+        profileRootsDifferent: true,
+        profileRootsNested: false,
+        appDataDifferent: true,
+        localAppDataDifferent: true,
+        geminiDirDifferent: true,
+        neitherUsesDefaultAntigravityProfile: true,
+      },
+      accountIsolationBoundary: "separate-profile-home-gemini-and-appdata",
+      accountIsolationCaveat: "No real traffic.",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.deepEqual(summary.antigravityCliDualAccountLanesEvidence, {
+      reportName: "antigravity-cli-dual-account-lanes",
+      usedRealTraffic: false,
+      loginVerified: false,
+      separateAccountVerified: false,
+      accountLaneRole: "dual-antigravity-cli-account-lanes",
+      coverageKind: "dual-account-lanes-prepared-no-traffic",
+      antiCodexLaneRole: "anticodex-model-text",
+      mcpLaneRole: "external-mcp-antigravity-account",
+      mcpLaneManagedByAntiCodex: false,
+      profileRootsDifferent: true,
+      profileRootsNested: false,
+      appDataDifferent: true,
+      localAppDataDifferent: true,
+      geminiDirDifferent: true,
+      neitherUsesDefaultAntigravityProfile: true,
+      accountIsolationBoundary: "separate-profile-home-gemini-and-appdata",
+      accountIsolationCaveat: "No real traffic.",
+    });
+    assert.doesNotMatch(result.stdout, /C:\\\\private/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

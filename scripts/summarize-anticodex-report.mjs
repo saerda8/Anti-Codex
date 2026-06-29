@@ -210,6 +210,7 @@ const isUiRepoMultiFileEditSmokeReport = report?.reportName === "ui-repo-multi-f
 const isUiComplexProjectSmokeReport = report?.reportName === "ui-complex-project-smoke" || /latest-ui-complex-project-smoke\.json$/i.test(path);
 const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" || /latest-ui-report-site-smoke\.json$/i.test(path);
 const isAntigravityCliProfilePrepareReport = report?.reportName === "antigravity-cli-profile-prepare" || /latest-antigravity-cli-profile-prepare\.json$/i.test(path);
+const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravity-cli-dual-account-lanes" || /latest-antigravity-cli-dual-account-lanes\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -451,6 +452,31 @@ const summary = {
       accountLaneRole: has(contract, "accountLaneRole") ? asString(contract.accountLaneRole) : null,
       mcpAccountLaneManagedByAntiCodex: boolField(contract, "mcpAccountLaneManagedByAntiCodex"),
       mcpAccountLaneOwner: has(contract, "mcpAccountLaneOwner") ? asString(contract.mcpAccountLaneOwner) : null,
+      accountIsolationBoundary: has(contract, "accountIsolationBoundary") ? asString(contract.accountIsolationBoundary) : null,
+      accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
+    };
+  })(),
+  antigravityCliDualAccountLanesOk: checkOk("antigravityCliDualAccountLanes"),
+  antigravityCliDualAccountLanesContract: (() => {
+    const contract = checks.antigravityCliDualAccountLanes && typeof checks.antigravityCliDualAccountLanes === "object"
+      ? checks.antigravityCliDualAccountLanes.contract
+      : null;
+    if (!contract || typeof contract !== "object") return null;
+    return {
+      usedRealTraffic: contract.usedRealTraffic === true,
+      loginVerified: contract.loginVerified === true,
+      separateAccountVerified: contract.separateAccountVerified === true,
+      accountLaneRole: has(contract, "accountLaneRole") ? asString(contract.accountLaneRole) : null,
+      coverageKind: has(contract, "coverageKind") ? asString(contract.coverageKind) : null,
+      antiCodexLaneRole: has(contract, "antiCodexLaneRole") ? asString(contract.antiCodexLaneRole) : null,
+      mcpLaneRole: has(contract, "mcpLaneRole") ? asString(contract.mcpLaneRole) : null,
+      mcpLaneManagedByAntiCodex: boolField(contract, "mcpLaneManagedByAntiCodex"),
+      profileRootsDifferent: boolField(contract, "profileRootsDifferent"),
+      profileRootsNested: boolField(contract, "profileRootsNested"),
+      appDataDifferent: boolField(contract, "appDataDifferent"),
+      localAppDataDifferent: boolField(contract, "localAppDataDifferent"),
+      geminiDirDifferent: boolField(contract, "geminiDirDifferent"),
+      neitherUsesDefaultAntigravityProfile: boolField(contract, "neitherUsesDefaultAntigravityProfile"),
       accountIsolationBoundary: has(contract, "accountIsolationBoundary") ? asString(contract.accountIsolationBoundary) : null,
       accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
     };
@@ -705,6 +731,25 @@ const summary = {
     accountLaneRole: has(report, "accountLaneRole") ? asString(report.accountLaneRole) : null,
     mcpAccountLaneManagedByAntiCodex: boolField(report, "mcpAccountLaneManagedByAntiCodex"),
     mcpAccountLaneOwner: has(report, "mcpAccountLaneOwner") ? asString(report.mcpAccountLaneOwner) : null,
+    accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
+  } : null,
+  antigravityCliDualAccountLanesEvidence: isAntigravityCliDualAccountLanesReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    loginVerified: boolField(report, "loginVerified"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    accountLaneRole: has(report, "accountLaneRole") ? asString(report.accountLaneRole) : null,
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    antiCodexLaneRole: report.antiCodexLane && typeof report.antiCodexLane === "object" ? asString(report.antiCodexLane.role) : null,
+    mcpLaneRole: report.mcpLane && typeof report.mcpLane === "object" ? asString(report.mcpLane.role) : null,
+    mcpLaneManagedByAntiCodex: report.mcpLane && typeof report.mcpLane === "object" ? boolField(report.mcpLane, "managedByAntiCodex") : null,
+    profileRootsDifferent: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "profileRootsDifferent") : null,
+    profileRootsNested: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "profileRootsNested") : null,
+    appDataDifferent: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "appDataDifferent") : null,
+    localAppDataDifferent: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "localAppDataDifferent") : null,
+    geminiDirDifferent: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "geminiDirDifferent") : null,
+    neitherUsesDefaultAntigravityProfile: report.laneComparison && typeof report.laneComparison === "object" ? boolField(report.laneComparison, "neitherUsesDefaultAntigravityProfile") : null,
     accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
     accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
   } : null,

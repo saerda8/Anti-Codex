@@ -53,6 +53,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-installed-overall.ps1",
   "scripts/test-anticodex-ambient-suggestions.ps1",
   "scripts/prepare-anticodex-antigravity-cli-profile.ps1",
+  "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-real-smoke.ps1",
   "scripts/test-anticodex-local-connectors.mjs",
   "scripts/test-anticodex-manager-action.ps1",
@@ -1042,6 +1043,28 @@ function summarizeGate(definition) {
         if (isolation.mcpAccountLaneOwner !== "external-antigravity-account-not-managed-here") semanticFailures.push("source_preflight_cli_isolation_mcp_lane_owner_mismatch");
         if (!isolation.accountIsolationBoundary) semanticFailures.push("source_preflight_cli_isolation_boundary_missing");
         if (!isolation.accountIsolationCaveat) semanticFailures.push("source_preflight_cli_isolation_caveat_missing");
+      }
+      if (report.antigravityCliDualAccountLanesOk !== true || !checks.antigravityCliDualAccountLanes || checks.antigravityCliDualAccountLanes.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_dual_account_lanes");
+      if (!checks.antigravityCliDualAccountLanes || !checks.antigravityCliDualAccountLanes.contract) {
+        semanticFailures.push("source_preflight_dual_account_lanes_contract_missing");
+      } else {
+        const dual = checks.antigravityCliDualAccountLanes.contract;
+        if (dual.usedRealTraffic !== false) semanticFailures.push("source_preflight_dual_lanes_used_real_traffic");
+        if (dual.loginVerified !== false) semanticFailures.push("source_preflight_dual_lanes_login_verified");
+        if (dual.separateAccountVerified !== false) semanticFailures.push("source_preflight_dual_lanes_separate_account_verified");
+        if (dual.accountLaneRole !== "dual-antigravity-cli-account-lanes") semanticFailures.push("source_preflight_dual_lanes_account_lane_role");
+        if (dual.coverageKind !== "dual-account-lanes-prepared-no-traffic") semanticFailures.push("source_preflight_dual_lanes_coverage_kind");
+        if (dual.antiCodexLaneRole !== "anticodex-model-text") semanticFailures.push("source_preflight_dual_lanes_anticodex_role");
+        if (dual.mcpLaneRole !== "external-mcp-antigravity-account") semanticFailures.push("source_preflight_dual_lanes_mcp_role");
+        if (dual.mcpLaneManagedByAntiCodex !== false) semanticFailures.push("source_preflight_dual_lanes_mcp_managed_by_anticodex");
+        if (dual.profileRootsDifferent !== true) semanticFailures.push("source_preflight_dual_lanes_profile_roots_not_different");
+        if (dual.profileRootsNested !== false) semanticFailures.push("source_preflight_dual_lanes_profile_roots_nested");
+        if (dual.appDataDifferent !== true) semanticFailures.push("source_preflight_dual_lanes_appdata_not_different");
+        if (dual.localAppDataDifferent !== true) semanticFailures.push("source_preflight_dual_lanes_localappdata_not_different");
+        if (dual.geminiDirDifferent !== true) semanticFailures.push("source_preflight_dual_lanes_gemini_dir_not_different");
+        if (dual.neitherUsesDefaultAntigravityProfile !== true) semanticFailures.push("source_preflight_dual_lanes_default_profile_used");
+        if (!dual.accountIsolationBoundary) semanticFailures.push("source_preflight_dual_lanes_isolation_boundary_missing");
+        if (!dual.accountIsolationCaveat) semanticFailures.push("source_preflight_dual_lanes_isolation_caveat_missing");
       }
       if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
       if (!checks.antigravityCliProfilePrepareRejectsDefaultChild || checks.antigravityCliProfilePrepareRejectsDefaultChild.ok !== true || checks.antigravityCliProfilePrepareRejectsDefaultChild.usedRealTraffic !== false) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare_rejects_default_child");

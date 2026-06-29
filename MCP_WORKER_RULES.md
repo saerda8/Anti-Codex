@@ -218,6 +218,14 @@ After every failure, before another dispatch:
 - Task: review uncommitted changes and edit only if a clear bug was found.
 - Result: both workers returned useful review text and changed no files, but the worker wrapper marked the jobs failed with `no_code_changed`.
 - Cause classification: dispatch contract mismatch, not product failure. These MCP worker entrypoints are optimized for implementation and can treat no-edit review as an unsuccessful job even when the model review itself completed.
+
+### 2026-06-30 - DevEco dual-lane verifier timeout
+
+- Worker: DevEco Code Worker `dcw_mqzknfd3_p58ldn`.
+- Task: add a no-traffic verifier for separate Anti-Codex and MCP Antigravity CLI account lanes in an isolated worktree.
+- Result: `caller_timeout_no_valid_changes` after about 312 seconds; zero diff and no checks.
+- Cause classification: worker latency/no-output on a small scoped implementation, not product evidence.
+- Rule change: do not wait on DevEco for the critical path when a small no-traffic account-lane patch can be locally verified; record zero-diff timeouts as no-evidence and continue with mainline tests.
 - Rule change: for pure review, either use a worker/tool mode that explicitly supports no-edit results, or expect `no_code_changed` and read the returned review text before judging the worker result.
 
 ### 2026-06-20 - Do not mix escaped regex fragments into PowerShell double quotes

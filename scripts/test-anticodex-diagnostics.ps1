@@ -1204,6 +1204,28 @@ function Test-DiagnosticBundle {
                 if (-not [string]$isolationContract.accountIsolationBoundary) { Add-Failure "source-preflight summary isolation profile missing isolation boundary" }
                 if (-not [string]$isolationContract.accountIsolationCaveat) { Add-Failure "source-preflight summary isolation profile missing isolation caveat" }
             }
+            if ($sourcePreflightSummary.antigravityCliDualAccountLanesOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI dual account lanes success" }
+            $dualLanesContract = $sourcePreflightSummary.antigravityCliDualAccountLanesContract
+            if (-not $dualLanesContract) {
+                Add-Failure "source-preflight summary missing Antigravity CLI dual account lanes contract"
+            } else {
+                if ($dualLanesContract.usedRealTraffic -ne $false) { Add-Failure "source-preflight summary dual account lanes used real traffic" }
+                if ($dualLanesContract.loginVerified -ne $false) { Add-Failure "source-preflight summary dual account lanes claims login verified" }
+                if ($dualLanesContract.separateAccountVerified -ne $false) { Add-Failure "source-preflight summary dual account lanes claims separate account verified" }
+                if ($dualLanesContract.accountLaneRole -ne "dual-antigravity-cli-account-lanes") { Add-Failure "source-preflight summary dual account lanes role mismatch" }
+                if ($dualLanesContract.coverageKind -ne "dual-account-lanes-prepared-no-traffic") { Add-Failure "source-preflight summary dual account lanes coverage kind mismatch" }
+                if ($dualLanesContract.antiCodexLaneRole -ne "anticodex-model-text") { Add-Failure "source-preflight summary dual account lanes Anti-Codex role mismatch" }
+                if ($dualLanesContract.mcpLaneRole -ne "external-mcp-antigravity-account") { Add-Failure "source-preflight summary dual account lanes MCP role mismatch" }
+                if ($dualLanesContract.mcpLaneManagedByAntiCodex -ne $false) { Add-Failure "source-preflight summary dual account lanes claims MCP lane is managed by Anti-Codex" }
+                if ($dualLanesContract.profileRootsDifferent -ne $true) { Add-Failure "source-preflight summary dual account lanes profile roots are not distinct" }
+                if ($dualLanesContract.profileRootsNested -ne $false) { Add-Failure "source-preflight summary dual account lanes profile roots are nested" }
+                if ($dualLanesContract.appDataDifferent -ne $true) { Add-Failure "source-preflight summary dual account lanes APPDATA not distinct" }
+                if ($dualLanesContract.localAppDataDifferent -ne $true) { Add-Failure "source-preflight summary dual account lanes LOCALAPPDATA not distinct" }
+                if ($dualLanesContract.geminiDirDifferent -ne $true) { Add-Failure "source-preflight summary dual account lanes GEMINI_DIR not distinct" }
+                if ($dualLanesContract.neitherUsesDefaultAntigravityProfile -ne $true) { Add-Failure "source-preflight summary dual account lanes use a default Antigravity profile" }
+                if (-not [string]$dualLanesContract.accountIsolationBoundary) { Add-Failure "source-preflight summary dual account lanes missing isolation boundary" }
+                if (-not [string]$dualLanesContract.accountIsolationCaveat) { Add-Failure "source-preflight summary dual account lanes missing isolation caveat" }
+            }
             if ($sourcePreflightSummary.localConnectorVerifierOk -ne $true) { Add-Failure "source-preflight summary missing local connector verifier success" }
             if ($sourcePreflightSummary.publicDocumentationOk -ne $true) { Add-Failure "source-preflight summary missing public documentation success" }
             if ($sourcePreflightSummary.publicDocumentationClientCopySyncContractOk -ne $true) { Add-Failure "source-preflight summary missing client-copy public documentation contract success" }
@@ -1240,6 +1262,30 @@ function Test-DiagnosticBundle {
                 if ($profilePrepareEvidence.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "diagnostic profile prepare summary mcpAccountLaneOwner mismatch" }
                 if (-not [string]$profilePrepareEvidence.accountIsolationBoundary) { Add-Failure "diagnostic profile prepare summary missing accountIsolationBoundary" }
                 if (-not [string]$profilePrepareEvidence.accountIsolationCaveat) { Add-Failure "diagnostic profile prepare summary missing accountIsolationCaveat" }
+            }
+        }
+        $antigravityCliDualAccountLanesSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-cli-dual-account-lanes.json" } | Select-Object -First 1)[0]
+        if ($antigravityCliDualAccountLanesSummary) {
+            $dualLanesEvidence = $antigravityCliDualAccountLanesSummary.antigravityCliDualAccountLanesEvidence
+            if (-not $dualLanesEvidence) {
+                Add-Failure "diagnostic dual account lanes summary missing antigravityCliDualAccountLanesEvidence"
+            } else {
+                if ($dualLanesEvidence.reportName -ne "antigravity-cli-dual-account-lanes") { Add-Failure "diagnostic dual account lanes summary reportName mismatch" }
+                if ($dualLanesEvidence.usedRealTraffic -ne $false) { Add-Failure "diagnostic dual account lanes summary used real traffic" }
+                if ($dualLanesEvidence.loginVerified -ne $false) { Add-Failure "diagnostic dual account lanes summary claims login verified" }
+                if ($dualLanesEvidence.separateAccountVerified -ne $false) { Add-Failure "diagnostic dual account lanes summary claims separate account verified" }
+                if ($dualLanesEvidence.accountLaneRole -ne "dual-antigravity-cli-account-lanes") { Add-Failure "diagnostic dual account lanes summary role mismatch" }
+                if ($dualLanesEvidence.antiCodexLaneRole -ne "anticodex-model-text") { Add-Failure "diagnostic dual account lanes summary Anti-Codex role mismatch" }
+                if ($dualLanesEvidence.mcpLaneRole -ne "external-mcp-antigravity-account") { Add-Failure "diagnostic dual account lanes summary MCP role mismatch" }
+                if ($dualLanesEvidence.mcpLaneManagedByAntiCodex -ne $false) { Add-Failure "diagnostic dual account lanes summary claims MCP lane is managed by Anti-Codex" }
+                if ($dualLanesEvidence.profileRootsDifferent -ne $true) { Add-Failure "diagnostic dual account lanes summary profile roots are not distinct" }
+                if ($dualLanesEvidence.profileRootsNested -ne $false) { Add-Failure "diagnostic dual account lanes summary profile roots are nested" }
+                if ($dualLanesEvidence.appDataDifferent -ne $true) { Add-Failure "diagnostic dual account lanes summary APPDATA not distinct" }
+                if ($dualLanesEvidence.localAppDataDifferent -ne $true) { Add-Failure "diagnostic dual account lanes summary LOCALAPPDATA not distinct" }
+                if ($dualLanesEvidence.geminiDirDifferent -ne $true) { Add-Failure "diagnostic dual account lanes summary GEMINI_DIR not distinct" }
+                if ($dualLanesEvidence.neitherUsesDefaultAntigravityProfile -ne $true) { Add-Failure "diagnostic dual account lanes summary uses a default Antigravity profile" }
+                if (-not [string]$dualLanesEvidence.accountIsolationBoundary) { Add-Failure "diagnostic dual account lanes summary missing accountIsolationBoundary" }
+                if (-not [string]$dualLanesEvidence.accountIsolationCaveat) { Add-Failure "diagnostic dual account lanes summary missing accountIsolationCaveat" }
             }
         }
         $antigravityCliRealSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-cli-real-smoke.json" } | Select-Object -First 1)[0]
