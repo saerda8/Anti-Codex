@@ -161,7 +161,7 @@ function Start-AntiCodexGatewayAndWait {
             $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
             Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
             $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-            $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "1"
+            $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
         }
         $env:DEEPCODEX_SKIP_PLUGIN_SYNC = "1"
 

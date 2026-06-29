@@ -2415,7 +2415,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.ok(gatewayFunction, "missing manager gateway-only recovery function");
   assert.match(gatewayFunction, /start-deepcodex\.ps1/i);
   assert.match(gatewayFunction, /-TranslatorOnly/);
-  assert.match(gatewayFunction, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
+  assert.match(gatewayFunction, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']0["']/i);
+  assert.doesNotMatch(gatewayFunction, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
   assert.match(gatewayFunction, /DEEPCODEX_SKIP_PLUGIN_SYNC/);
   assert.doesNotMatch(gatewayFunction, /start-anticodex\.ps1/i);
   assert.match(manager, /antigravity-desktop\.ps1/);
