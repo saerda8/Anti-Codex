@@ -10937,6 +10937,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /latest-antigravity-cli-real-smoke\.json/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_login_not_verified/);
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_strict_isolation_missing/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_separate_account_verified_missing/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_boundary_missing/);
+  assert.match(releaseGates, /optional_antigravity_cli_real_smoke_isolation_caveat_missing/);
   assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot/);
   assert.match(releaseGates, /requireModelRoutingSemantics/);
   assert.match(releaseGates, /model_routing_skip_requests_not_true/);

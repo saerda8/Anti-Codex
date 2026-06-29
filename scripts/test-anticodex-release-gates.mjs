@@ -825,6 +825,12 @@ function summarizeGate(definition) {
           if (!report.profileRoot) semanticFailures.push("optional_antigravity_cli_real_smoke_profile_missing");
           if (report.strictWindowsAppDataIsolation !== true) semanticFailures.push("optional_antigravity_cli_real_smoke_strict_isolation_missing");
           if (report.profileRoot && String(report.profileRoot).toLowerCase() === String(process.env.USERPROFILE || "").toLowerCase()) semanticFailures.push("optional_antigravity_cli_real_smoke_default_profile");
+          if (report.separateAccountVerified === undefined) semanticFailures.push("optional_antigravity_cli_real_smoke_separate_account_verified_missing");
+          if (report.separateAccountVerified === true) {
+            if (!report.accountIdentityComparison && !report.accountIdentityEvidence) semanticFailures.push("optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing");
+          }
+          if (!report.accountIsolationBoundary) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_boundary_missing");
+          if (!report.accountIsolationCaveat) semanticFailures.push("optional_antigravity_cli_real_smoke_isolation_caveat_missing");
         }
       }
     }
@@ -2835,6 +2841,48 @@ if (args.has("--self-test")) {
       "optional_antigravity_return_missing_markers",
       "optional_antigravity_return_route_transport",
       "optional_antigravity_return_resolved_model",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "wrong-antigravity-cli-smoke",
+      skipped: false,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      behaviorCovered: false,
+      coverageKind: "fake-coverage",
+      loginVerified: false,
+      profileRoot: process.env.USERPROFILE || "C:\\Users\\testuser",
+      strictWindowsAppDataIsolation: false,
+    });
+    semanticFailures.antigravityCliRealSmokeMissingFields = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: semantically invalid optional Antigravity CLI real-smoke report with missing fields satisfied the gate", [
+      "optional_real_traffic_not_requested",
+      "optional_real_traffic_not_used",
+      "optional_real_traffic_behavior_not_covered",
+      "optional_real_traffic_coverage_kind",
+      "optional_antigravity_cli_real_smoke_report_name",
+      "optional_antigravity_cli_real_smoke_login_not_verified",
+      "optional_antigravity_cli_real_smoke_strict_isolation_missing",
+      "optional_antigravity_cli_real_smoke_separate_account_verified_missing",
+      "optional_antigravity_cli_real_smoke_isolation_boundary_missing",
+      "optional_antigravity_cli_real_smoke_isolation_caveat_missing",
+    ]);
+    writeFakeLatestReport("latest-antigravity-cli-real-smoke.json", {
+      ok: true,
+      reportName: "antigravity-cli-real-smoke",
+      skipped: false,
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      loginVerified: true,
+      profileRoot: "C:\\isolated-antigravity-cli",
+      strictWindowsAppDataIsolation: true,
+      separateAccountVerified: true,
+      accountIsolationBoundary: "profile-and-appdata-only",
+      accountIsolationCaveat: "Shared Windows credential store caveat.",
+    });
+    semanticFailures.antigravityCliRealSmokeSeparateTrueMissingEvidence = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with separateAccountVerified=true but missing identity evidence satisfied the gate", [
+      "optional_antigravity_cli_real_smoke_separate_account_identity_evidence_missing",
     ]);
     semanticFailures.mcpSkills = assertSemanticFailures("mcpSkills", "self-test failed: semantically invalid MCP/Skill report satisfied the gate", [
       "mcp_skills_missing_shared_mcp",
