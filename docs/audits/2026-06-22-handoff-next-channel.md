@@ -17,7 +17,7 @@ Branch: main
 - Fast UI smoke, full no-traffic UI smoke, and installed no-traffic overall passed. Short non-fast UI smoke now uses explicit timeout budgets and records `dynamicProbeUnavailable` instead of hanging when the embedded dynamic probe times out.
 - Real Antigravity work verifier passed: model `gemini-3.5-flash-low` created a file, executed local `node_repl` MCP, matched the marker, and returned Chinese final text.
 - Source preflight fast gate passed after the latest model-text boundary cleanup.
-- Current passive release gate reports `shortReady:true`, `releaseReady:false`, `releaseBlockedOnlyByRequiredRealTraffic:true`, `missingShort:[]`, `missingRequired:[postVerification,accountProxyReadiness]`, and `damagedReports:[]`. Older `releaseReady:true` notes below are historical snapshots; do not run the required real-traffic gates without explicit user approval.
+- Current passive release gate reports `shortReady:true`, `releaseReady:false`, `releaseBlockedOnlyByRequiredRealTraffic:true`, `missingShort:[]`, `missingRequired:[postVerification,accountProxyReadiness]`, and `damagedReports:[]`. Older ready-state notes below are historical snapshots; do not run the required real-traffic gates without explicit user approval.
 
 ## Important Recent Checks
 
@@ -62,6 +62,8 @@ Branch: main
 
 ## Completed On 2026-06-23 Follow-Up
 
+> Historical snapshot disclaimer: the dated sections below are older evidence records. Any ready-state references in them are snapshots from the time they were written and do not reflect the current passive release gate, which is `releaseReady:false` / `releaseBlockedOnlyByRequiredRealTraffic:true` (see Current State at the top of this file).
+
 - (historical) `e554b40` refreshed `docs/ADAPTIVE_ONE_API_STACK.md` into the current Anti-Codex provider stack: local translator, Antigravity Desktop default, explicit third-party profiles, no ChatGPT login route, no original Codex mutation, and no fake connector authorization. The current wording now says Antigravity entitlement supplies model text, not that Antigravity Desktop is the default provider.
 - `a462ce5` moved the old DeepCodex/DeepSeek video script into `docs/marketing/legacy/deepcodex-video-script.md` and created a current Anti-Codex `docs/marketing/video-script.md`.
 - `1ea453d` refreshed `docs/chat-to-responses-compat.md` into the current provider compatibility contract, including OpenAI-compatible and Anthropic-compatible structured tool-history preservation. The `deepcodex.reasoning.hex.v1:` prefix remains documented only as an internal compatibility token.
@@ -84,7 +86,7 @@ Branch: main
 - Installed overall skipped checks now include `behaviorCovered:false` and `coverageKind:"skipped"` so fast reports do not overstate behavior coverage.
 - Latest verification: local fake-provider verifier refreshed `latest-third-party-provider.json`; launcher contract suite passed `91/91`; runtime sync restarted Anti-Codex successfully; installed diagnostics bundle verification passed with provider continuity evidence in `20260623-014948.zip`.
 - Added passive release gate summary: `test-anticodex-release-gates.mjs` reads latest reports only and writes `latest-release-gates.json`, grouping evidence into `short`, `no-traffic`, `real-traffic`, `manager`, `soak`, and `cold`.
-- Historical release-gate evidence from this earlier step was `shortReady:true`, `releaseReady:false`; later sidecar backfill and semantic hardening moved the current installed passive release gate to `releaseReady:true`. Manager latest reports and diagnostic bundles include the release-gate summary.
+- Historical release-gate evidence from this earlier step was `shortReady:true`, `releaseReady:false`; later sidecar backfill and semantic hardening moved the installed passive release gate to `releaseReady:true` at that time. Manager latest reports and diagnostic bundles include the release-gate summary.
 - Added cold relaunch latest-report surface: the cold relaunch verifier now writes `latest-cold-relaunch.json` and a signed history report; Manager latest reports, diagnostics bundles, installed overall report-integrity checks, and passive release gates can now display it. It remains optional in passive release readiness because generating it restarts the isolated Anti-Codex runtime.
 - Fixed MCP path drift after native Codex bin updates: config sync now repairs missing absolute MCP command paths such as stale `node_repl.exe` version directories. After refreshing local features, MCP/Skill, plugin/app-tool, Manager real buttons, and installed no-traffic overall are green; passive release gates no longer require `installedOverallNoTraffic`.
 - Release gate status after sidecar backfill: `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, `damagedReports:[]`. Required real-traffic reports were already fresh and `ok:true`; only legacy `.sha256` sidecars were missing.
@@ -302,7 +304,7 @@ Branch: main
 - Source preflight now invokes the script-level local connector/app-tool verifier with the same report root, so short/release preflight refreshes `latest-local-connectors.json` with current no-real-traffic evidence instead of only trusting stale latest-report state.
 - Optional real-provider and provider-to-Antigravity return reports now require the expected `reportName` in passive release gates and diagnostics, preventing wrong report payloads from satisfying optional real-traffic slots by shape alone.
 - `latest-refresh-features.json` is now release-required. Passive release readiness now depends on current shared-to-local feature synchronization evidence instead of treating refresh-feature parity as an optional Manager artifact.
-- Current passive release-gate check after that hardening: the new `refreshFeatures` required gate is satisfied. A first strict check exposed stale short evidence for `sourcePreflight`, `mcpSkills`, `localConnectors`, and `thirdPartyProvider`; bounded reruns refreshed those reports, and strict passive gates are now `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, and `damagedReports:[]`.
+- Historical passive release-gate check after that hardening: the new `refreshFeatures` required gate was satisfied. A first strict check exposed stale short evidence for `sourcePreflight`, `mcpSkills`, `localConnectors`, and `thirdPartyProvider`; bounded reruns refreshed those reports, and strict passive gates at that point were `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, and `damagedReports:[]`.
 - Optional real-traffic now has an explicit hard mode: `--strict-optional-real-traffic`. Default `--strict` remains unchanged, but the explicit flag reports optional readiness/failures and treats skipped optional real-provider or provider-to-Antigravity reports as not ready.
 - Earlier evidence before the latest release-required refresh-features hardening: bridge/inject/adaptive/summarizer syntax passed; refresh-feature, MCP/Skill, and plugin-capability parser checks passed; bridge `--self-test` passed; release-gate `--self-test` and strict passive release gates passed; focused Manager/MCP/Skill/plugin contracts passed. The stricter plugin verifier first caught stale connector cache drift, then `refresh-anticodex-local-features.ps1` refreshed snapshots and the rerun passed with connector parity `5760/5760`, app-tool parity `58/58`, and no missing/extra/changed shared entries.
 
@@ -360,7 +362,7 @@ Branch: main
 - The action is background/singleton guarded and requires high-impact confirmation; it does not run automatically and the real restart verifier still only runs when the operator clicks it.
 - Cold relaunch summaries now include mode, launcher count, original Codex preservation, and failed-stage count consistently across adaptive, bridge, and injected summaries.
 - Bridge/inject latest-report status now follows `effectiveOk` like the adaptive Manager, preventing `ok:true` plus `releaseReady:false` from being displayed as passing.
-- Fresh evidence: syntax checks passed for adaptive/bridge/inject/UI-state; Manager action PowerShell parser passed; bridge `--self-test` passed; focused Manager/release/cold tests passed; release-gate `--self-test` and strict passive gates passed. Current strict gate remains `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
+- Fresh evidence at that point: syntax checks passed for adaptive/bridge/inject/UI-state; Manager action PowerShell parser passed; bridge `--self-test` passed; focused Manager/release/cold tests passed; release-gate `--self-test` and strict passive gates passed. That historical strict gate was `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingOptional:["coldRelaunch"]`.
 
 ## 2026-06-23 Optional Real-Traffic Requested Flag Follow-Up
 

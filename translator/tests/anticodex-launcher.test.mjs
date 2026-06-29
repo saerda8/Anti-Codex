@@ -12942,11 +12942,18 @@ test("current docs describe Antigravity as model entitlement, not Desktop cowork
 
 test("task plan current status does not claim full release readiness while real traffic gates are blocked", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
+  const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
   assert.match(currentStatus, /releaseReady:false/);
   assert.match(currentStatus, /releaseBlockedOnlyByRequiredRealTraffic:true/);
   assert.doesNotMatch(currentStatus, /releaseReady:true/);
+  assert.match(handoffCurrentStatus, /releaseReady:false/);
+  assert.match(handoffCurrentStatus, /releaseBlockedOnlyByRequiredRealTraffic:true/);
+  assert.doesNotMatch(handoffCurrentStatus, /releaseReady:true/);
+  assert.doesNotMatch(taskPlan, /Current[^\n]*releaseReady:true/);
+  assert.doesNotMatch(handoff, /Current[^\n]*releaseReady:true/);
 });
 
 test("Antigravity prompt preserves the model-text boundary, not coworker identity", () => {
