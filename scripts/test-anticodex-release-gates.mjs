@@ -319,6 +319,11 @@ function isEmptyArray(value) {
   return Array.isArray(value) && value.length === 0;
 }
 
+function hasSuccessfulDocAssertion(check, file, name) {
+  const assertions = Array.isArray(check?.assertions) ? check.assertions : [];
+  return assertions.some((item) => item?.file === file && item?.name === name && item?.ok === true);
+}
+
 function repoMultiSettleEvidenceOk(value, phase) {
   return value && typeof value === "object"
     && value.ok === true
@@ -966,6 +971,10 @@ function summarizeGate(definition) {
       if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
       if (!checks.localConnectorVerifier || checks.localConnectorVerifier.ok !== true) semanticFailures.push("source_preflight_local_connector_verifier");
       if (!checks.publicDocumentation || checks.publicDocumentation.ok !== true) semanticFailures.push("source_preflight_public_documentation");
+      if (!hasSuccessfulDocAssertion(checks.publicDocumentation, "README.md", "client-copy-sync-contract")
+        || !hasSuccessfulDocAssertion(checks.publicDocumentation, "README_EN.md", "client-copy-sync-contract")) {
+        semanticFailures.push("source_preflight_public_documentation_client_sync_contract");
+      }
       if (!checks.translatorRegression || checks.translatorRegression.ok !== true) semanticFailures.push("source_preflight_translator_regression");
       if (!checks.diffWhitespace || checks.diffWhitespace.ok !== true) semanticFailures.push("source_preflight_diff_whitespace");
     }
@@ -3042,6 +3051,7 @@ if (args.has("--self-test")) {
       "source_preflight_antigravity_cli_profile_prepare",
       "source_preflight_local_connector_verifier",
       "source_preflight_public_documentation",
+      "source_preflight_public_documentation_client_sync_contract",
       "source_preflight_translator_regression",
       "source_preflight_diff_whitespace",
     ]);
@@ -3060,7 +3070,13 @@ if (args.has("--self-test")) {
         upstreamProfileStorage: { ok: true },
         antigravityCliIsolationProfile: { ok: true },
         localConnectorVerifier: { ok: true },
-        publicDocumentation: { ok: true },
+        publicDocumentation: {
+          ok: true,
+          assertions: [
+            { file: "README.md", name: "client-copy-sync-contract", ok: true },
+            { file: "README_EN.md", name: "client-copy-sync-contract", ok: true },
+          ],
+        },
         translatorRegression: { ok: true },
         diffWhitespace: { ok: true },
       },
