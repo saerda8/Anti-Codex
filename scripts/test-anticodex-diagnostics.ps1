@@ -1263,6 +1263,8 @@ function Test-DiagnosticBundle {
                 if ($windowsUserLoginContract.readyForInteractiveLogin -ne $true -and -not [string]$windowsUserLoginContract.readinessBlockingReason) { Add-Failure "source-preflight summary Windows-user login dry-run missing readiness blocking reason" }
                 if ($windowsUserLoginContract.credentialBoundary -ne "separate-windows-user") { Add-Failure "source-preflight summary Windows-user login dry-run credential boundary mismatch" }
                 if ($windowsUserLoginContract.expectedCredentialStoreIsolation -ne $true) { Add-Failure "source-preflight summary Windows-user login dry-run missing expected credential-store isolation" }
+                if (-not [string]$windowsUserLoginContract.runasWorkingDirectory) { Add-Failure "source-preflight summary Windows-user login dry-run missing runas working directory" }
+                if ($windowsUserLoginContract.bootstrapKeepsShellOpen -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run keeps bootstrap shell open" }
                 if (-not [string]$windowsUserLoginContract.accountIsolationCaveat) { Add-Failure "source-preflight summary Windows-user login dry-run missing caveat" }
             }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
@@ -2214,6 +2216,8 @@ if ($diagnostics) {
             if ($windowsUserLoginContract.readyForInteractiveLogin -ne $true -and -not [string]$windowsUserLoginContract.readinessBlockingReason) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing readiness blocking reason" }
             if ($windowsUserLoginContract.credentialBoundary -ne "separate-windows-user") { Add-Failure "diagnostics source preflight Windows-user login dry-run credential boundary mismatch" }
             if ($windowsUserLoginContract.expectedCredentialStoreIsolation -ne $true) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing expected credential-store isolation" }
+            if (-not [string]$windowsUserLoginContract.runasWorkingDirectory) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing runas working directory" }
+            if ($windowsUserLoginContract.bootstrapKeepsShellOpen -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run keeps bootstrap shell open" }
             if (-not [string]$windowsUserLoginContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing caveat" }
         }
         if (-not (Has-Property $sourcePreflight "skipFullRegression")) { Add-Failure "diagnostics source preflight missing skipFullRegression" }

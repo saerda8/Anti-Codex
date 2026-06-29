@@ -557,6 +557,8 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         readinessBlockingReason = ""
         credentialBoundary = ""
         expectedCredentialStoreIsolation = $false
+        runasWorkingDirectory = ""
+        bootstrapKeepsShellOpen = $true
         accountIsolationCaveat = ""
     }
     if ($result.ok -and $dryRunJson) {
@@ -577,6 +579,8 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
             $contract.readinessBlockingReason = [string]$parsed.readinessBlockingReason
             $contract.credentialBoundary = [string]$parsed.credentialBoundary
             $contract.expectedCredentialStoreIsolation = [bool]$parsed.expectedCredentialStoreIsolation
+            $contract.runasWorkingDirectory = [string]$parsed.runasWorkingDirectory
+            $contract.bootstrapKeepsShellOpen = if ($parsed.PSObject.Properties.Name -contains "bootstrapKeepsShellOpen") { [bool]$parsed.bootstrapKeepsShellOpen } else { $true }
             $contract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
             $contractOk = $parsed.ok -eq $true `
                 -and $parsed.noTraffic -eq $true `
@@ -589,6 +593,8 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
                 -and $parsed.targetUserIsCurrentUser -eq $false `
                 -and $parsed.credentialBoundary -eq "separate-windows-user" `
                 -and $parsed.expectedCredentialStoreIsolation -eq $true `
+                -and [string]$parsed.runasWorkingDirectory `
+                -and $parsed.bootstrapKeepsShellOpen -eq $false `
                 -and [string]$parsed.accountIsolationCaveat
             if ($parsed.readyForInteractiveLogin -ne $true -and [string]$parsed.readinessBlockingReason) {
                 Add-Warning "Antigravity CLI Windows-user login readiness gap: $($parsed.readinessBlockingReason)"
@@ -621,6 +627,8 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         readinessBlockingReason = $contract.readinessBlockingReason
         credentialBoundary = $contract.credentialBoundary
         expectedCredentialStoreIsolation = $contract.expectedCredentialStoreIsolation
+        runasWorkingDirectory = $contract.runasWorkingDirectory
+        bootstrapKeepsShellOpen = $contract.bootstrapKeepsShellOpen
         accountIsolationCaveat = $contract.accountIsolationCaveat
         contract = $contract
     }

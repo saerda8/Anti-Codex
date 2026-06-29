@@ -1093,6 +1093,8 @@ function summarizeGate(definition) {
         if (windowsUserLogin.readyForInteractiveLogin !== true && !windowsUserLogin.readinessBlockingReason) semanticFailures.push("source_preflight_windows_user_login_readiness_reason_missing");
         if (windowsUserLogin.credentialBoundary !== "separate-windows-user") semanticFailures.push("source_preflight_windows_user_login_credential_boundary");
         if (windowsUserLogin.expectedCredentialStoreIsolation !== true) semanticFailures.push("source_preflight_windows_user_login_expected_credential_isolation");
+        if (!windowsUserLogin.runasWorkingDirectory) semanticFailures.push("source_preflight_windows_user_login_runas_workdir_missing");
+        if (windowsUserLogin.bootstrapKeepsShellOpen !== false) semanticFailures.push("source_preflight_windows_user_login_bootstrap_keeps_shell");
         if (!windowsUserLogin.accountIsolationCaveat) semanticFailures.push("source_preflight_windows_user_login_caveat_missing");
       }
       if (!checks.antigravityCliProfilePrepare || !checks.antigravityCliProfilePrepare.contract) {
@@ -3829,6 +3831,8 @@ if (args.has("--self-test")) {
             readinessBlockingReason: "",
             credentialBoundary: "profile-and-appdata-only",
             expectedCredentialStoreIsolation: false,
+            runasWorkingDirectory: "",
+            bootstrapKeepsShellOpen: true,
             accountIsolationCaveat: "",
           },
         },
@@ -3867,6 +3871,8 @@ if (args.has("--self-test")) {
       "source_preflight_windows_user_login_readiness_reason_missing",
       "source_preflight_windows_user_login_credential_boundary",
       "source_preflight_windows_user_login_expected_credential_isolation",
+      "source_preflight_windows_user_login_runas_workdir_missing",
+      "source_preflight_windows_user_login_bootstrap_keeps_shell",
       "source_preflight_windows_user_login_caveat_missing",
     ]);
     writeFakeLatestReport("latest-source-preflight.json", {

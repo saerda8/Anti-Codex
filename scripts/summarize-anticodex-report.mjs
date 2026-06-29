@@ -524,6 +524,8 @@ const summary = {
       readinessBlockingReason: has(contract, "readinessBlockingReason") ? asString(contract.readinessBlockingReason) : null,
       credentialBoundary: has(contract, "credentialBoundary") ? asString(contract.credentialBoundary) : null,
       expectedCredentialStoreIsolation: boolField(contract, "expectedCredentialStoreIsolation"),
+      runasWorkingDirectory: has(contract, "runasWorkingDirectory") ? asString(contract.runasWorkingDirectory) : null,
+      bootstrapKeepsShellOpen: boolField(contract, "bootstrapKeepsShellOpen"),
       accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
     };
   })(),
