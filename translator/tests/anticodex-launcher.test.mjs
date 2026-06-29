@@ -13955,6 +13955,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   const prepare = readFileSync(resolve(root, "scripts", "test-anticodex-windows-user-account-prepare.ps1"), "utf8");
   const status = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-account-isolation-status.ps1"), "utf8");
   const dryRunLauncher = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login-windows-user.ps1"), "utf8");
+  const secondAccountLogin = readFileSync(resolve(root, "scripts", "start-anticodex-second-antigravity-account-login.ps1"), "utf8");
   const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   const diagnostics = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const diagnosticsTest = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
@@ -14029,6 +14030,16 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.doesNotMatch(dryRunLauncher, /"powershell\.exe",\s*[\r\n]+\s*"-NoExit"/);
   assert.doesNotMatch(dryRunLauncher, /New-LocalUser|Add-LocalGroupMember/);
   assert.doesNotMatch(dryRunLauncher, /Invoke-RestMethod|Invoke-WebRequest|\.env/);
+
+  assert.match(secondAccountLogin, /reportName = "second-antigravity-account-login-entrypoint"/);
+  assert.match(secondAccountLogin, /test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(secondAccountLogin, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);
+  assert.match(secondAccountLogin, /StartLoginApproval/);
+  assert.match(secondAccountLogin, /start-separate-windows-user-login/);
+  assert.match(secondAccountLogin, /explicit_start_login_approval_missing/);
+  assert.match(secondAccountLogin, /second_account_login_not_ready/);
+  assert.match(secondAccountLogin, /safeToStartLogin/);
+  assert.doesNotMatch(secondAccountLogin, /New-LocalUser|Add-LocalGroupMember|Invoke-RestMethod|Invoke-WebRequest|\.env/);
   assert.match(summarizer, /runasWorkingDirectory/);
   assert.match(summarizer, /bootstrapKeepsShellOpen/);
   assert.match(summarizer, /isAntigravityCliWindowsUserReadinessReport/);
@@ -14055,9 +14066,11 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(syncRuntime, /test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
   assert.match(syncRuntime, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(syncRuntime, /test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(syncRuntime, /start-anticodex-second-antigravity-account-login\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(releaseGates, /scripts\/start-anticodex-second-antigravity-account-login\.ps1/);
   assert.match(releaseGates, /antigravityCliWindowsUserReadiness/);
   assert.match(releaseGates, /requireAntigravityCliWindowsUserReadinessSemantics/);
   assert.match(releaseGates, /windowsUserAccountPrepare/);
