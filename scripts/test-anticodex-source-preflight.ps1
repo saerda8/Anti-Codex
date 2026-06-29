@@ -194,6 +194,18 @@ function Test-UpstreamProfileStorage {
     return $result
 }
 
+function Test-AntigravityCliIsolationProfile {
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\test-anticodex-antigravity-cli-isolation.ps1"
+    $result = Invoke-SourceProcess `
+        -Name "Antigravity CLI isolation profile" `
+        -FilePath $powershell `
+        -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script, "-ReportRoot", $ReportRoot) `
+        -TimeoutSec 30
+    if (-not $result.ok) { Add-Failure "Antigravity CLI isolation profile test failed" }
+    return $result
+}
+
 function Test-LocalConnectorVerifier {
     $node = (Get-Command "node" -ErrorAction Stop).Source
     $script = Join-Path $SourceRoot "scripts\test-anticodex-local-connectors.mjs"
@@ -368,6 +380,7 @@ try {
     $checks["managerBridgeSelfTest"] = Test-ManagerBridgeSelfTest
     $checks["logDbGuardSelfTest"] = Test-LogDbGuardSelfTest
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
+    $checks["antigravityCliIsolationProfile"] = Test-AntigravityCliIsolationProfile
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression

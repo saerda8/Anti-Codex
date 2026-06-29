@@ -365,6 +365,7 @@ const summary = {
   powershellSyntaxOk: checkOk("powershellSyntax"),
   uiStateSelfTestOk: checkOk("uiStateSelfTest"),
   upstreamProfileStorageOk: checkOk("upstreamProfileStorage"),
+  antigravityCliIsolationProfileOk: checkOk("antigravityCliIsolationProfile"),
   localConnectorVerifierOk: checkOk("localConnectorVerifier"),
   publicDocumentationOk: checkOk("publicDocumentation"),
   translatorRegressionOk: checkOk("translatorRegression"),

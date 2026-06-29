@@ -2672,8 +2672,10 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /publicDocumentationOk: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /sourcePreflightEvidence/);
   assert.match(server, /upstreamProfileStorageOk/);
+  assert.match(server, /antigravityCliIsolationProfileOk/);
   assert.match(server, /localConnectorVerifierOk/);
   assert.match(server, /sourcePreflight: js=/);
+  assert.match(server, /cliIsolation=/);
   assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /localConnectorEvidence/);
   assert.match(server, /modelRoutingEvidence/);
@@ -3050,6 +3052,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /coverageKind/);
   assert.match(reportSummarizer, /behaviorCovered/);
   assert.match(reportSummarizer, /upstreamProfileStorageOk/);
+  assert.match(reportSummarizer, /antigravityCliIsolationProfileOk/);
   assert.match(reportSummarizer, /localConnectorVerifierOk/);
   assert.match(reportSummarizer, /modelRoutingEvidence/);
   assert.match(reportSummarizer, /modelThinkingEvidence/);
@@ -3421,6 +3424,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
         powershellSyntax: { ok: true },
         uiStateSelfTest: { ok: true },
         upstreamProfileStorage: { ok: true },
+        antigravityCliIsolationProfile: { ok: true },
         localConnectorVerifier: { ok: true },
         publicDocumentation: { ok: true },
         translatorRegression: { ok: true },
@@ -3445,6 +3449,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     assert.equal(summary.powershellSyntaxOk, true);
     assert.equal(summary.uiStateSelfTestOk, true);
     assert.equal(summary.upstreamProfileStorageOk, true);
+    assert.equal(summary.antigravityCliIsolationProfileOk, true);
     assert.equal(summary.localConnectorVerifierOk, true);
     assert.equal(summary.publicDocumentationOk, true);
     assert.equal(summary.translatorRegressionOk, true);
@@ -8067,6 +8072,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /powershellSyntaxOk/);
   assert.match(diagnostics, /uiStateSelfTestOk/);
   assert.match(diagnostics, /upstreamProfileStorageOk/);
+  assert.match(diagnostics, /antigravityCliIsolationProfileOk/);
   assert.match(diagnostics, /localConnectorVerifierOk/);
   assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /translatorRegressionOk/);
@@ -10917,6 +10923,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /disabled_skip_covered_by/);
   assert.match(releaseGates, /requireSourcePreflightSemantics/);
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
+  assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);
   assert.match(releaseGates, /source_preflight_public_documentation/);
   assert.match(releaseGates, /requireModelRoutingSemantics/);
@@ -11272,6 +11279,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_marker_coverage"));
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_ordered_history"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_local_connector_verifier"));
+  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_isolation_profile"));
   assert.ok(summary.semanticFailures.optionalRealProvider.includes("optional_real_provider_report_name"));
   assert.ok(summary.semanticFailures.optionalAntigravityReturn.includes("optional_antigravity_return_report_name"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
@@ -12290,9 +12298,15 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
   const installer = readFileSync(resolve(root, "scripts", "install-deepcodex.ps1"), "utf8");
   const localConnectors = readFileSync(resolve(root, "scripts", "test-anticodex-local-connectors.mjs"), "utf8");
+  const antigravityCliIsolation = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-isolation.ps1"), "utf8");
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
   assert.match(preflight, /checks\["upstreamProfileStorage"\]/);
+  assert.match(preflight, /test-anticodex-antigravity-cli-isolation\.ps1/);
+  assert.match(preflight, /checks\["antigravityCliIsolationProfile"\]/);
+  assert.match(antigravityCliIsolation, /usedRealTraffic\s*=\s*\$false/);
+  assert.match(antigravityCliIsolation, /loginVerified\s*=\s*\$false/);
+  assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
   assert.match(runtimeSync, /README_EN\.md/);

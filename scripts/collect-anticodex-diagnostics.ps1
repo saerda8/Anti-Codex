@@ -205,6 +205,7 @@ function Read-JsonSummary {
             powershellSyntaxOk = $json.powershellSyntaxOk
             uiStateSelfTestOk = $json.uiStateSelfTestOk
             upstreamProfileStorageOk = $json.upstreamProfileStorageOk
+            antigravityCliIsolationProfileOk = $json.antigravityCliIsolationProfileOk
             localConnectorVerifierOk = $json.localConnectorVerifierOk
             publicDocumentationOk = $json.publicDocumentationOk
             translatorRegressionOk = $json.translatorRegressionOk
