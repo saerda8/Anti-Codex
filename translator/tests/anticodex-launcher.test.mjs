@@ -6986,6 +6986,14 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$healthMode -eq "third-party"/);
   assert.match(overall, /third-party upstream missing protocol/);
   assert.match(overall, /third-party upstream missing model/);
+  assert.match(overall, /Antigravity health missing modelTextTransport/);
+  assert.match(overall, /expected cli/);
+  assert.match(overall, /Antigravity health missing modelDiscoverySource/);
+  assert.match(overall, /Antigravity health missing antigravityCoworkerDefault/);
+  assert.match(overall, /Antigravity coworker must not be the default tool execution path/);
+  assert.match(overall, /modelTextTransport = \$healthModelTextTransport/);
+  assert.match(overall, /modelDiscoverySource = \$healthModelDiscoverySource/);
+  assert.match(overall, /antigravityCoworkerDefault = \$healthAntigravityCoworkerDefault/);
   assert.match(overall, /unknown upstream mode/);
   assert.match(overall, /mode = \$healthMode/);
   assert.doesNotMatch(overall, /third-party mode skips Antigravity UI catalog verification/);

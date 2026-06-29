@@ -1103,10 +1103,16 @@ $models = $null
 $healthMode = "unknown"
 $healthProtocol = $null
 $healthModel = $null
+$healthModelTextTransport = ""
+$healthModelDiscoverySource = ""
+$healthAntigravityCoworkerDefault = $null
 
 try {
     $health = Invoke-LocalJson "/health"
     if (-not $health.ok) { Add-Failure "health ok=false" }
+    $healthModelTextTransport = if (Has-Property $health "modelTextTransport") { [string]$health.modelTextTransport } else { "" }
+    $healthModelDiscoverySource = if (Has-Property $health "modelDiscoverySource") { [string]$health.modelDiscoverySource } else { "" }
+    $healthAntigravityCoworkerDefault = if (Has-Property $health "antigravityCoworkerDefault") { [bool]$health.antigravityCoworkerDefault } else { $null }
     $hasUpstreamProfile = (Has-Property $health "upstreamProfile") -and $null -ne $health.upstreamProfile
     if ($hasUpstreamProfile) {
         $healthMode = if (Has-Property $health.upstreamProfile "mode") { [string]$health.upstreamProfile.mode } else { "unknown" }
@@ -1123,6 +1129,11 @@ try {
         if (-not $healthModel) { Add-Failure "third-party upstream missing model" }
     } elseif ($healthMode -eq "antigravity") {
         if ($health.upstream -ne "antigravity-desktop") { Add-Failure "Antigravity mode but upstream is not antigravity-desktop: $($health.upstream)" }
+        if (-not $healthModelTextTransport) { Add-Failure "Antigravity health missing modelTextTransport" }
+        if ($healthModelTextTransport -and $healthModelTextTransport -ne "cli") { Add-Failure "Antigravity model text transport is '$healthModelTextTransport', expected cli" }
+        if (-not $healthModelDiscoverySource) { Add-Failure "Antigravity health missing modelDiscoverySource" }
+        if ($null -eq $healthAntigravityCoworkerDefault) { Add-Failure "Antigravity health missing antigravityCoworkerDefault" }
+        if ($healthAntigravityCoworkerDefault -eq $true) { Add-Failure "Antigravity coworker must not be the default tool execution path" }
         if ($health.accountReady -ne $true -and (-not $NoTraffic)) { Add-Failure "Antigravity account is not ready: $($health.accountMessage)" }
         if ($health.accountReady -ne $true -and $NoTraffic -and [int]$health.modelCount -lt 1) { Add-Failure "Antigravity model catalog is not ready: $($health.accountMessage)" }
         if ([int]$health.modelCount -lt 1) { Add-Failure "health modelCount is empty" }
@@ -1815,6 +1826,9 @@ $result = [pscustomobject]@{
         mode = $healthMode
         protocol = $healthProtocol
         model = $healthModel
+        modelTextTransport = $healthModelTextTransport
+        modelDiscoverySource = $healthModelDiscoverySource
+        antigravityCoworkerDefault = $healthAntigravityCoworkerDefault
         accountReady = if ($health) { $health.accountReady } else { $false }
         accountState = if ($health) { $health.accountState } else { $null }
         accountTrafficReady = if ($health) { $health.accountTrafficReady } else { $null }
