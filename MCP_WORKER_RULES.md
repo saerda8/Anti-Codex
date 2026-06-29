@@ -78,6 +78,14 @@ After every failure, before another dispatch:
 - Job: `ag-c9fbbd1b-1dc7-48c1-b32e-59eceb2ca4e5`
 - Task: append one legacy-status fallback RED test to one existing test file.
 - Result: exit code 2 after 21 seconds; CLI doctor was ready, but the job produced no stdout, stderr, or file changes.
+
+### 2026-06-29 - DeepSeek synchronous timeout with usable diff
+
+- Job: synchronous `deepseek_implement_in_workspace` call for optional Antigravity CLI real-smoke release-gate semantics.
+- Task: add semantic failures for `separateAccountVerified`, account identity evidence, and credential-store caveat fields.
+- Result: host tool timed out after about 300 seconds, but the isolated worktree contained a small scoped diff in `scripts/test-anticodex-release-gates.mjs` and `translator/tests/anticodex-launcher.test.mjs`.
+- Cause classification: wrapper timeout after useful edits, not necessarily model/task failure.
+- Rule change: after a synchronous worker timeout, inspect the isolated worktree status and diff before retrying or discarding. If the diff is scoped, run the requested checks manually, commit it on the worker branch, and cherry-pick only after review.
 - Cause classification: Antigravity CLI execution-channel failure, not task breadth. The task already had one behavior, one file, and one syntax check.
 - Rule change: after two silent exit-code-2 jobs with a healthy doctor, stop prompt-only retries, switch the coding task to another worker, and isolate Antigravity diagnosis from product work.
 
