@@ -8196,6 +8196,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(collector, /publicDocumentationClientCopySyncContractOk = \$json\.publicDocumentationClientCopySyncContractOk/);
   assert.match(collector, /antigravityCliProfilePrepareEvidence = \$json\.antigravityCliProfilePrepareEvidence/);
   assert.match(collector, /antigravityCliRealSmokeEvidence = \$json\.antigravityCliRealSmokeEvidence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary missing antigravityCliRealSmokeEvidence/);
+  assert.match(diagnostics, /diagnostic real-smoke summary accountLaneRole mismatch/);
+  assert.match(diagnostics, /diagnostic real-smoke summary claims MCP account lane is managed by Anti-Codex/);
+  assert.match(diagnostics, /diagnostic real-smoke summary mcpAccountLaneOwner mismatch/);
   assert.match(collector, /releaseBlockedOnlyByRequiredRealTraffic = \$json\.releaseBlockedOnlyByRequiredRealTraffic/);
   assert.match(collector, /requiredRealTrafficBlockedGates = @\(\$json\.requiredRealTrafficBlockedGates/);
   assert.match(diagnostics, /model-routing-refresh\.json/);

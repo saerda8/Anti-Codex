@@ -1228,6 +1228,17 @@ function Test-DiagnosticBundle {
                 if (-not [string]$profilePrepareEvidence.accountIsolationCaveat) { Add-Failure "diagnostic profile prepare summary missing accountIsolationCaveat" }
             }
         }
+        $antigravityCliRealSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-cli-real-smoke.json" } | Select-Object -First 1)[0]
+        if ($antigravityCliRealSmokeSummary) {
+            $realSmokeEvidence = $antigravityCliRealSmokeSummary.antigravityCliRealSmokeEvidence
+            if (-not $realSmokeEvidence) {
+                Add-Failure "diagnostic real-smoke summary missing antigravityCliRealSmokeEvidence"
+            } else {
+                if ($realSmokeEvidence.accountLaneRole -ne "anticodex-model-text") { Add-Failure "diagnostic real-smoke summary accountLaneRole mismatch" }
+                if ($realSmokeEvidence.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "diagnostic real-smoke summary claims MCP account lane is managed by Anti-Codex" }
+                if ($realSmokeEvidence.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "diagnostic real-smoke summary mcpAccountLaneOwner mismatch" }
+            }
+        }
         $thirdPartyProviderSummary = @($summary | Where-Object { $_.file -eq "latest-third-party-provider.json" } | Select-Object -First 1)[0]
         if (-not $thirdPartyProviderSummary) {
             Add-Failure "diagnostic reports summary missing latest-third-party-provider.json"
