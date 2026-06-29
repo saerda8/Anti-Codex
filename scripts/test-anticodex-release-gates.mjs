@@ -949,6 +949,7 @@ function summarizeGate(definition) {
       if (!checks.uiStateSelfTest || checks.uiStateSelfTest.ok !== true) semanticFailures.push("source_preflight_ui_state_self_test");
       if (!checks.upstreamProfileStorage || checks.upstreamProfileStorage.ok !== true) semanticFailures.push("source_preflight_upstream_profile_storage");
       if (!checks.antigravityCliIsolationProfile || checks.antigravityCliIsolationProfile.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_isolation_profile");
+      if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
       if (!checks.localConnectorVerifier || checks.localConnectorVerifier.ok !== true) semanticFailures.push("source_preflight_local_connector_verifier");
       if (!checks.publicDocumentation || checks.publicDocumentation.ok !== true) semanticFailures.push("source_preflight_public_documentation");
       if (!checks.translatorRegression || checks.translatorRegression.ok !== true) semanticFailures.push("source_preflight_translator_regression");
@@ -2944,6 +2945,7 @@ if (args.has("--self-test")) {
       "source_preflight_ui_state_self_test",
       "source_preflight_upstream_profile_storage",
       "source_preflight_antigravity_cli_isolation_profile",
+      "source_preflight_antigravity_cli_profile_prepare",
       "source_preflight_local_connector_verifier",
       "source_preflight_public_documentation",
       "source_preflight_translator_regression",
