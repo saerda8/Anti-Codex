@@ -12956,6 +12956,21 @@ test("task plan current status does not claim full release readiness while real 
   assert.doesNotMatch(handoff, /Current[^\n]*releaseReady:true/);
 });
 
+test("current project direction uses one Antigravity CLI account instead of dual account isolation", () => {
+  const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const currentStatus = taskPlan.split("## Goal")[0];
+  const baseline = taskPlan.split("## Phases")[0];
+  const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
+
+  assert.match(currentStatus, /uses one Antigravity CLI account\/profile/);
+  assert.match(currentStatus, /manual account switching/);
+  assert.match(baseline, /single-account by default/);
+  assert.match(handoffCurrentStatus, /single CLI account\/profile/);
+  assert.doesNotMatch(baseline, /Until dual Antigravity account isolation is implemented/);
+  assert.doesNotMatch(baseline, /second Antigravity account test/);
+});
+
 test("Antigravity prompt preserves the model-text boundary, not coworker identity", () => {
   const upstream = readFileSync(resolve(root, "translator", "antigravity-upstream.mjs"), "utf8");
 

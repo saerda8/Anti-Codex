@@ -8,6 +8,7 @@ Branch: main
 - Anti-Codex is an isolated Codex desktop/runtime copy with an Antigravity entitlement model adapter. Antigravity Desktop/CLI may supply model text, but Antigravity coworker/tool execution is not the default product path.
 - Direction lock: Anti-Codex should remain a guarded Codex client copy plus isolation, branding, and model-adapter changes. Do not reimplement Codex client/tool features one by one through Antigravity Desktop/coworker; use host sync and parity validation when Codex changes.
 - Client sync contract: native Codex updates must be handled as guarded host/client sync plus Anti-Codex patch reapplication. Missing native Codex behavior in Anti-Codex is a sync/parity bug by default, not a prompt to manually rebuild that behavior.
+- Antigravity account mode is single CLI account/profile. The user will switch that Antigravity CLI account manually when needed; do not continue Antigravity dual-account/double-open isolation work in this channel.
 - Installed runtime on `http://127.0.0.1:8484` was healthy during the latest no-traffic checks: upstream `antigravity-desktop`, CLI model-text transport, account ready, 8 models, session lock idle.
 - Manager is at `native-panel-v85`.
 - Standalone real Manager MCP/Skill and plugin/application button gates pass after local feature refresh. The default standalone real-button script now runs only those two non-disruptive actions; report viewing and diagnostics bundle remain opt-in.
