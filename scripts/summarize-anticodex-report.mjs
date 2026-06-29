@@ -20,6 +20,25 @@ function asStringArray(value) {
   return [String(value)];
 }
 
+function asShortString(value, maxLength = 256) {
+  const text = asString(value || "");
+  if (!text) return "";
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function asRefreshRecoveryActions(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((action) => ({
+    id: asShortString(action?.id, 128),
+    reason: asShortString(action?.reason),
+    guidance: asShortString(action?.guidance),
+    commands: Array.isArray(action?.commands)
+      ? action.commands.map((command) => asShortString(command)).filter(Boolean).slice(0, 4)
+      : [],
+    requiresRealTraffic: action?.requiresRealTraffic === true,
+  })).filter((action) => action.id).slice(0, 8);
+}
+
 function asOrderedActions(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => ({
@@ -1049,10 +1068,8 @@ const summary = {
     guidanceChanged: refreshGuidance ? Object.entries(refreshGuidance)
       .filter(([, entry]) => entry && entry.sharedExists === true && entry.localExists === true && entry.contentMatches !== true)
       .map(([name]) => name) : [],
-    recoveryActions: Array.isArray(report.recoveryActions) ? report.recoveryActions : [],
-    recoveryActionIds: Array.isArray(report.recoveryActions)
-      ? report.recoveryActions.map((action) => asString(action?.id)).filter(Boolean)
-      : [],
+    recoveryActions: asRefreshRecoveryActions(report.recoveryActions),
+    recoveryActionIds: asRefreshRecoveryActions(report.recoveryActions).map((action) => action.id).filter(Boolean),
   } : null,
   optionalRealProviderEvidence: has(report, "firstMarkerObserved") || has(report, "secondMarkerObserved") || has(report, "historyContinuationObserved") ? {
     firstMarkerObserved: boolField(report, "firstMarkerObserved"),

@@ -5817,6 +5817,9 @@ test("refresh feature summarizer surfaces recovery actions", () => {
           "node scripts/sync-shared-codex-plugin-host.mjs <codexHome> <sharedCodexHome> --startup-snapshots",
         ],
         requiresRealTraffic: false,
+      }, {}, {
+        id: "refreshFeatures.incomplete",
+        commands: ["node missing-guidance.mjs"],
       }],
       connectorParity: { sharedExists: true, localExists: true, contentMatches: true },
       appToolParity: { sharedExists: true, localExists: true, contentMatches: true },
@@ -5826,10 +5829,51 @@ test("refresh feature summarizer surfaces recovery actions", () => {
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
-    assert.deepEqual(summary.refreshFeatureEvidence.recoveryActionIds, ["refreshFeatures.skillsDirectoryLocked"]);
+    assert.deepEqual(summary.refreshFeatureEvidence.recoveryActionIds, ["refreshFeatures.skillsDirectoryLocked", "refreshFeatures.incomplete"]);
+    assert.equal(summary.refreshFeatureEvidence.recoveryActions.length, 2);
     assert.equal(summary.refreshFeatureEvidence.recoveryActions[0].requiresRealTraffic, false);
     assert.match(summary.refreshFeatureEvidence.recoveryActions[0].commands[0], /-VerifyOnly/);
     assert.match(summary.refreshFeatureEvidence.recoveryActions[0].commands[1], /--startup-snapshots/);
+    assert.equal(summary.refreshFeatureEvidence.recoveryActions[1].guidance, "");
+    assert.deepEqual(summary.refreshFeatureEvidence.recoveryActions[1].commands, ["node missing-guidance.mjs"]);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("refresh feature recovery actions are sanitized before summary output", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-refresh-recovery-sanitize-"));
+  const reportPath = join(tempRoot, "latest-refresh-features.json");
+  try {
+    const longText = "A".repeat(500);
+    writeFileSync(reportPath, JSON.stringify({
+      ok: false,
+      reportName: "refresh-features",
+      recoveryActions: [
+        { id: "keep.action", reason: "short reason", guidance: "Do this", commands: ["cmd1"], requiresRealTraffic: false, extraField: "drop me" },
+        { id: "", reason: "empty id", guidance: "skip", commands: ["cmd2"] },
+        { id: "realtraffic.action", reason: "needs traffic", guidance: "Do that", commands: ["cmd3"], requiresRealTraffic: true },
+        { id: "many.commands", reason: longText, guidance: longText, commands: Array.from({ length: 10 }, (_, i) => `${longText}-${i}`), requiresRealTraffic: false },
+        ...Array.from({ length: 20 }, (_, i) => ({ id: `overflow.${i}`, reason: "x", guidance: "y", commands: ["c"], requiresRealTraffic: false })),
+      ],
+      connectorParity: { sharedExists: true, localExists: true, contentMatches: true },
+      appToolParity: { sharedExists: true, localExists: true, contentMatches: true },
+      skills: { exists: true, count: 0, changedExpected: [], changedExpectedDetails: [] },
+      guidance: {},
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    const actions = summary.refreshFeatureEvidence.recoveryActions;
+    assert.equal(actions.length, 8);
+    assert.ok(!summary.refreshFeatureEvidence.recoveryActionIds.includes(""));
+    assert.equal(actions[0].extraField, undefined);
+    assert.equal(actions.find((action) => action.id === "realtraffic.action").requiresRealTraffic, true);
+    const many = actions.find((action) => action.id === "many.commands");
+    assert.equal(many.commands.length, 4);
+    assert.ok(many.reason.length <= 256);
+    assert.ok(many.guidance.length <= 256);
+    assert.ok(many.commands[0].length <= 256);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -8300,6 +8344,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /guidanceChanged/);
   assert.match(diagnostics, /recoveryActions/);
   assert.match(diagnostics, /recoveryActionIds/);
+  assert.match(diagnostics, /refresh-features recovery action missing id/);
+  assert.match(diagnostics, /refresh-features recovery action missing guidance/);
+  assert.match(diagnostics, /refresh-features recovery action missing command guidance/);
+  assert.match(diagnostics, /refresh-features recovery action unexpectedly requires real traffic/);
   assert.match(diagnostics, /refresh-features summary missing refreshFeatureEvidence/);
   assert.match(diagnostics, /refresh-features summary connector parity not clean/);
   assert.match(diagnostics, /refresh-features summary app-tool parity not clean/);

@@ -1403,6 +1403,12 @@ function Test-DiagnosticBundle {
                 if (@($refreshEvidence.guidanceChanged).Count -ne 0) { Add-Failure "refresh-features summary guidance parity not clean" }
                 if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActions")) { Add-Failure "refresh-features summary missing recoveryActions support evidence" }
                 if (-not ($refreshEvidence.PSObject.Properties.Name -contains "recoveryActionIds")) { Add-Failure "refresh-features summary missing recoveryActionIds support evidence" }
+                foreach ($recoveryAction in @($refreshEvidence.recoveryActions)) {
+                    if (-not [string]$recoveryAction.id) { Add-Failure "refresh-features recovery action missing id" }
+                    if (-not [string]$recoveryAction.guidance) { Add-Failure "refresh-features recovery action missing guidance" }
+                    if (@($recoveryAction.commands).Count -lt 1) { Add-Failure "refresh-features recovery action missing command guidance" }
+                    if ($recoveryAction.requiresRealTraffic -eq $true) { Add-Failure "refresh-features recovery action unexpectedly requires real traffic" }
+                }
             }
         }
         $optionalRealProviderSummary = @($summary | Where-Object { $_.file -eq "latest-real-third-party-provider.json" } | Select-Object -First 1)[0]
