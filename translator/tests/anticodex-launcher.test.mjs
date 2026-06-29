@@ -7108,7 +7108,16 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /combined overall skips report button real click/);
   assert.match(overall, /combined overall skips diagnostics bundle real click/);
   assert.match(overall, /function Clear-ManagerButtonVerifierLock/);
+  assert.match(overall, /function Get-ManagerButtonVerifierLockStatus/);
+  assert.match(overall, /function New-ManagerVerifierBusyCheck/);
   assert.match(overall, /anticodex-manager-button\.lock/);
+  assert.match(overall, /external-owner-alive/);
+  assert.match(overall, /Manager\/UI verifier lock is already held; rerun installed overall serially/);
+  assert.match(overall, /manager-verifier-lock-busy/);
+  assert.ok(
+    overall.indexOf("$managerVerifierLockStatus = Get-ManagerButtonVerifierLockStatus") < overall.indexOf('Invoke-JsonScript "UI state verification"'),
+    "installed overall must check the Manager/UI verifier lock before launching UI-state",
+  );
   assert.match(overall, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.doesNotMatch(overall, /"--action", "mcpSkills", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.doesNotMatch(overall, /--action", "pluginCapabilities"/);

@@ -412,6 +412,88 @@ function Clear-ManagerButtonVerifierLock {
     } catch {}
 }
 
+function Get-ManagerButtonVerifierLockStatus {
+    $lockPath = Join-Path ([IO.Path]::GetTempPath()) "anticodex-manager-button.lock"
+    $status = [pscustomobject]@{
+        path = $lockPath
+        exists = $false
+        blocked = $false
+        pid = $null
+        action = ""
+        startedAt = ""
+        ageMs = 0
+        ownerAlive = $false
+        reason = "absent"
+    }
+    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) { return $status }
+
+    $status.exists = $true
+    try {
+        $item = Get-Item -LiteralPath $lockPath -ErrorAction Stop
+        $status.ageMs = [int]([DateTime]::UtcNow - $item.LastWriteTimeUtc).TotalMilliseconds
+    } catch {}
+
+    try {
+        $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+        if ($lock.pid) { $status.pid = [int]$lock.pid }
+        if ($lock.action) { $status.action = [string]$lock.action }
+        if ($lock.startedAt) { $status.startedAt = [string]$lock.startedAt }
+    } catch {
+        if ($status.ageMs -gt 120000) {
+            Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+            $status.exists = $false
+            $status.reason = "stale-unreadable-lock-removed"
+            return $status
+        }
+        $status.blocked = $true
+        $status.reason = "unreadable-lock"
+        return $status
+    }
+
+    if ($null -ne $status.pid -and $status.pid -gt 0) {
+        $owner = Get-Process -Id $status.pid -ErrorAction SilentlyContinue
+        $status.ownerAlive = ($null -ne $owner)
+        if ($status.ownerAlive -and $status.pid -ne $PID) {
+            $status.blocked = $true
+            $status.reason = "external-owner-alive"
+            return $status
+        }
+        if (-not $status.ownerAlive) {
+            Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+            $status.exists = $false
+            $status.reason = "dead-owner-removed"
+            return $status
+        }
+    }
+    if ($status.ageMs -gt 120000) {
+        Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+        $status.exists = $false
+        $status.reason = "stale-removed"
+        return $status
+    }
+    if ($null -eq $status.pid) {
+        $status.blocked = $true
+        $status.reason = "missing-pid-lock"
+        return $status
+    }
+    $status.reason = "not-blocking"
+    return $status
+}
+
+function New-ManagerVerifierBusyCheck {
+    param($LockStatus, [string]$CoveredBy)
+    return [pscustomobject]@{
+        ok = $false
+        skipped = $true
+        reason = "Manager/UI verifier lock is already held; rerun installed overall serially"
+        coveredBy = $CoveredBy
+        behaviorCovered = $false
+        coverageKind = "manager-verifier-lock-busy"
+        lock = $LockStatus
+        durationMs = 0
+    }
+}
+
 function Invoke-JsonScript {
     param(
         [string]$Name,
@@ -1194,8 +1276,12 @@ $uiProbeTimeoutSec = [Math]::Max(1, [Math]::Min($TimeoutSec, [Math]::Max(1, $Sub
 $uiStateArgs = @("-BaseUrl", $BaseUrl, "-TimeoutSec", "$uiProbeTimeoutSec")
 if ($Fast) { $uiStateArgs += @("-Fast") }
 if ($Fast -or $SkipManagerActionProbe) { $uiStateArgs += @("-SkipManagerActionProbe") }
+$managerVerifierLockStatus = Get-ManagerButtonVerifierLockStatus
 $checks.uiState = if ($SkipUiStateProbe) {
     New-SkippedCheck "SkipUiStateProbe avoids reopening the embedded Manager from inside a Manager action" "test-anticodex-ui-state.ps1"
+} elseif ($managerVerifierLockStatus.blocked -eq $true) {
+    Add-Failure "Manager/UI verifier lock is already held; rerun installed overall serially"
+    New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-ui-state.ps1"
 } else {
     Invoke-JsonScript "UI state verification" (Join-Path $scriptsRoot "test-anticodex-ui-state.ps1") $uiStateArgs
 }
@@ -1217,7 +1303,15 @@ $checks.uiStateMode = if ($healthMode -eq "third-party") {
     }
 }
 $uiCdpPort = if ($checks.uiState -and (Has-Property $checks.uiState "port")) { [string]$checks.uiState.port } else { "" }
-if ($SkipUiStateProbe) {
+$managerVerifierBusy = ($checks.uiState -and (Has-Property $checks.uiState "coverageKind") -and [string]$checks.uiState.coverageKind -eq "manager-verifier-lock-busy")
+if ($managerVerifierBusy) {
+    $checks.managerButtonMcpSkills = New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-manager-button.mjs"
+    $checks.managerButtonPluginCapabilities = New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-manager-button.mjs"
+    $checks.managerButtonSourcePreflight = New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-manager-button.mjs"
+    $checks.managerButtonSafeActions = New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-manager-button.mjs"
+    $checks.managerButtonReportActions = New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-manager-button.mjs"
+    $checks.managerButtonDiagnosticsBundle = New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-manager-button.mjs"
+} elseif ($SkipUiStateProbe) {
     $checks.managerButtonMcpSkills = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"
     $checks.managerButtonPluginCapabilities = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"
     $checks.managerButtonSourcePreflight = New-SkippedCheck "SkipUiStateProbe skips recursive Manager button smoke from inside the embedded Manager" "test-anticodex-manager-button.mjs"

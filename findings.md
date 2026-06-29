@@ -1230,3 +1230,6 @@
 - MCP worker `forbidden_paths` must stay inside the worker cwd. Passing absolute external paths such as `C:\Users\XD\AppData` fails before the worker starts; put external path bans in the task text and keep schema paths repo-relative.
 - When compressing a child PowerShell verifier result, capture stdout into a variable first. Piping through a nested `powershell.exe -Command "$input | ..."` can expand to an empty pipe in the outer shell and fail before parsing the verifier JSON.
 - MiMoCode job `mcw_mqz813qd_3jk52n` was cancelled after the main/MIMO path already covered ambient-suggestions local-first behavior; it produced no diff and must not be cited as review or implementation evidence.
+- PowerShell does not provide Unix `head` by default. Use `Select-Object -First N` or a bounded PowerShell loop when trimming `rg` output; a missing `head` command can hide the useful search results.
+- MIMO job `dsw_mqz89xvg_cs6era` produced a valid narrower serial-guard patch for only the Manager button click, but the accepted main patch guards before UI-state as well. Treat the worker diff as reviewed-but-not-merged, not the authoritative implementation.
+- MiMoCode job `mcw_mqz89yo4_sqgqox` was cancelled after about four minutes with no diff while the main/MIMO path already covered the Manager serial-guard task; do not cite it as implementation or review evidence.
