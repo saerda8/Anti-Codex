@@ -809,6 +809,22 @@ try {
     Add-Failure "Codex update status check failed: $($_.Exception.Message)"
 }
 
+$sourceHostHashMatchesActive = ($updateStatus.source.hostHash -and $updateStatus.active.hostHash -and $updateStatus.source.hostHash -eq $updateStatus.active.hostHash)
+$sourceCliHashMatchesActive = ($updateStatus.source.cliHash -and $updateStatus.active.cliHash -and $updateStatus.source.cliHash -eq $updateStatus.active.cliHash)
+$activeSourcePackageNameFromMarker = $activeSourcePackageName
+$activeSourcePackageVersionFromMarker = $activeSourcePackageVersion
+$activeSourcePackageVersionEffectiveReason = "marker"
+if (
+    $sourceHostHashMatchesActive -and
+    $sourceCliHashMatchesActive -and
+    [string]$updateStatus.source.packageVersion -and
+    [string]$activeSourcePackageVersion -ne [string]$updateStatus.source.packageVersion
+) {
+    $activeSourcePackageName = [string]$updateStatus.source.packageName
+    $activeSourcePackageVersion = [string]$updateStatus.source.packageVersion
+    $activeSourcePackageVersionEffectiveReason = "source-version-adopted-after-host-cli-hash-match"
+}
+
 $endedAt = [DateTime]::UtcNow
 $elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
 if ($Fast -and $FastMaxElapsedMs -gt 0 -and $elapsedMs -gt $FastMaxElapsedMs) {
@@ -838,8 +854,11 @@ $result = [pscustomobject]@{
         sourcePackageVersion = [string]$updateStatus.source.packageVersion
         activeSourcePackageName = $activeSourcePackageName
         activeSourcePackageVersion = $activeSourcePackageVersion
-        sourceHostHashMatches = ($updateStatus.source.hostHash -and $updateStatus.active.hostHash -and $updateStatus.source.hostHash -eq $updateStatus.active.hostHash)
-        sourceCliHashMatches = ($updateStatus.source.cliHash -and $updateStatus.active.cliHash -and $updateStatus.source.cliHash -eq $updateStatus.active.cliHash)
+        activeSourcePackageNameFromMarker = $activeSourcePackageNameFromMarker
+        activeSourcePackageVersionFromMarker = $activeSourcePackageVersionFromMarker
+        activeSourcePackageVersionEffectiveReason = $activeSourcePackageVersionEffectiveReason
+        sourceHostHashMatches = $sourceHostHashMatchesActive
+        sourceCliHashMatches = $sourceCliHashMatchesActive
         antiCodexPatchScope = @("branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter")
     }
     activeHost = [pscustomobject]@{

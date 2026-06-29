@@ -5108,6 +5108,11 @@ test("Anti-Codex ships a read-only sync readiness verifier", () => {
   assert.match(syncReadiness, /nativeClientBehaviorCarriedByHostSync = \$true/);
   assert.match(syncReadiness, /forbidsFeatureByFeatureReimplementation = \$true/);
   assert.match(syncReadiness, /antiCodexPatchScope = @\("branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"\)/);
+  assert.match(syncReadiness, /\$sourceHostHashMatchesActive = /);
+  assert.match(syncReadiness, /\$sourceCliHashMatchesActive = /);
+  assert.match(syncReadiness, /source-version-adopted-after-host-cli-hash-match/);
+  assert.match(syncReadiness, /activeSourcePackageVersionFromMarker/);
+  assert.match(syncReadiness, /activeSourcePackageVersionEffectiveReason/);
   assert.match(syncReadiness, /update-status\.json/);
   assert.match(syncReadiness, /fast_cached_update_status/);
   assert.match(syncReadiness, /@{\s*InstallRoot\s*=\s*\$installRoot;\s*NoPersist\s*=\s*\$true\s*}/);

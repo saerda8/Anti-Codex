@@ -163,6 +163,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/真实流量验收证据需更新\/未生成/.test(injectSource) || !/missing_report/.test(injectSource) || !/group === "real-traffic"/.test(injectSource)) {
     failures.push("in-app manager is missing real-traffic stale/missing evidence guidance");
   }
+  if (!/sourcePreflight cliIsolation lane: role=/.test(injectSource) || !/sourcePreflight cliIsolation lane:.*mcpManagedHere=/.test(injectSource) || !/sourcePreflight cliIsolation lane:.*mcpOwner=/.test(injectSource)) {
+    failures.push("in-app manager is missing source-preflight CLI isolation account-lane evidence");
+  }
 
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
@@ -262,6 +265,9 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   }
   if (!/真实流量验收证据需更新\/未生成/.test(managerHtml) || !/missing_report/.test(managerHtml) || !/group==="real-traffic"/.test(managerHtml)) {
     failures.push("manager page is missing real-traffic stale/missing evidence guidance");
+  }
+  if (!/sourcePreflight cliIsolation lane: role=/.test(managerHtml) || !/sourcePreflight cliIsolation lane:.*mcpManagedHere=/.test(managerHtml) || !/sourcePreflight cliIsolation lane:.*mcpOwner=/.test(managerHtml)) {
+    failures.push("manager page is missing source-preflight CLI isolation account-lane evidence");
   }
   if (/routes\.latest\?JSON\.stringify\(routeSummary/.test(managerHtml)) {
     failures.push("manager page route empty state collapses provider fields");
@@ -1584,6 +1590,5 @@ const output = {
 console.log(asciiJson(output));
 if (!output.ok) process.exit(1);
 process.exit(0);
-
 
 
