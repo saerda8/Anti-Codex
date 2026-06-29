@@ -195,6 +195,13 @@ After every failure, before another dispatch:
 - Cause classification: useful comparison, but schema/support-chain risk and failed worker validation.
 - Rule change: keep the operator entrypoint as the minimal start/status surface and put signed no-traffic behavior proof in a dedicated verifier report. Do not merge weaker release-gate semantics or worker diffs whose self-test fails.
 
+### 2026-06-30 - Windows-user setup-guidance worker comparison
+
+- Workers: Kilo `klw_mqzr9g64_2noich` and MiMoCode `mcw_mqzr9gyl_t5hgsw` in isolated worktrees.
+- Task: harden the no-traffic setup guidance and release/static contracts before asking the user to create/log into the second Antigravity account.
+- Result: Kilo finished with zero diff and no checks, so it provided no implementation evidence. MiMoCode ended as `caller_timeout_after_valid_changes` with release self-test and focused launcher test passing; the main patch absorbed its useful stricter second-account entrypoint checks for `changedSystem`, `createdUser`, `capturesPassword`, and `storesPassword`.
+- Rule change: account setup guidance must stay report-only. It may explain the manual next step, but it must not open settings, run user-management commands, create users, start login, capture passwords, or claim account proof.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

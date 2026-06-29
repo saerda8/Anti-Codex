@@ -213,6 +213,7 @@ const isAntigravityCliProfilePrepareReport = report?.reportName === "antigravity
 const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravity-cli-dual-account-lanes" || /latest-antigravity-cli-dual-account-lanes\.json$/i.test(path);
 const isAntigravityCliWindowsUserReadinessReport = report?.reportName === "antigravity-cli-windows-user-readiness" || /latest-antigravity-cli-windows-user-readiness\.json$/i.test(path);
 const isWindowsUserAccountPrepareReport = report?.reportName === "windows-user-account-prepare" || /latest-windows-user-account-prepare\.json$/i.test(path);
+const isWindowsUserSetupGuidanceReport = report?.reportName === "windows-user-setup-guidance" || /latest-windows-user-setup-guidance\.json$/i.test(path);
 const isAntigravityAccountIsolationStatusReport = report?.reportName === "antigravity-account-isolation-status" || /latest-antigravity-account-isolation-status\.json$/i.test(path);
 const isSecondAccountLoginEntrypointReport = report?.reportName === "second-antigravity-account-login-entrypoint" || /latest-second-antigravity-account-login-entrypoint\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
@@ -840,6 +841,35 @@ const summary = {
     separateAccountVerified: boolField(report, "separateAccountVerified"),
     loginVerified: boolField(report, "loginVerified"),
   } : null,
+  windowsUserSetupGuidanceEvidence: isWindowsUserSetupGuidanceReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    guidanceSource: has(report, "guidanceSource") ? asString(report.guidanceSource) : null,
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
+    startedLogin: boolField(report, "startedLogin"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
+    opensSettings: boolField(report, "opensSettings"),
+    runsSystemUserCommand: boolField(report, "runsSystemUserCommand"),
+    targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+    readyForInteractiveLogin: boolField(report, "readyForInteractiveLogin"),
+    safeToAskUserForSecondAccountLogin: boolField(report, "safeToAskUserForSecondAccountLogin"),
+    blockedBeforeInteractiveLogin: boolField(report, "blockedBeforeInteractiveLogin"),
+    requiresManualWindowsUserSetup: boolField(report, "requiresManualWindowsUserSetup"),
+    recommendedOperatorAction: has(report, "recommendedOperatorAction") ? asString(report.recommendedOperatorAction) : null,
+    operatorBlockingStage: has(report, "operatorBlockingStage") ? asString(report.operatorBlockingStage) : null,
+    operatorNextStep: has(report, "operatorNextStep") ? asString(report.operatorNextStep) : null,
+    manualSetupCommandHint: has(report, "manualSetupCommandHint") ? asString(report.manualSetupCommandHint) : null,
+    nextProofRequiresInteractiveLogin: boolField(report, "nextProofRequiresInteractiveLogin"),
+    nextProofRequiresRealTraffic: boolField(report, "nextProofRequiresRealTraffic"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    loginVerified: boolField(report, "loginVerified"),
+    releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+  } : null,
   antigravityAccountIsolationStatusEvidence: isAntigravityAccountIsolationStatusReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,
     noTraffic: boolField(report, "noTraffic"),
@@ -883,7 +913,11 @@ const summary = {
     approvedStartBlockedByStatusGate: boolField(report, "approvedStartBlockedByStatusGate"),
     requestedStartLogin: boolField(report, "requestedStartLogin"),
     startedLogin: boolField(report, "startedLogin"),
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
     capturesLoginOutput: boolField(report, "capturesLoginOutput"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
     safeToStartLogin: boolField(report, "safeToStartLogin"),
     requiredStartLoginApproval: has(report, "requiredStartLoginApproval") ? asString(report.requiredStartLoginApproval) : null,
     completionState: has(report, "completionState") ? asString(report.completionState) : null,

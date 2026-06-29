@@ -60,6 +60,7 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-antigravity-account-isolation-status.ps1",
     "scripts\test-anticodex-antigravity-cli-real-smoke.ps1",
     "scripts\test-anticodex-windows-user-account-prepare.ps1",
+    "scripts\test-anticodex-windows-user-setup-guidance.ps1",
     "scripts\test-anticodex-local-connectors.mjs",
     "scripts\test-anticodex-manager-action.ps1",
     "scripts\test-anticodex-manager-button.mjs",

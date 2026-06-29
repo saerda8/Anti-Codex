@@ -57,6 +57,7 @@ const runtimeSyncFiles = [
   "scripts/start-anticodex-antigravity-cli-login-windows-user.ps1",
   "scripts/start-anticodex-second-antigravity-account-login.ps1",
   "scripts/test-anticodex-second-account-login-entrypoint.ps1",
+  "scripts/test-anticodex-windows-user-setup-guidance.ps1",
   "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-windows-user-readiness.ps1",
   "scripts/test-anticodex-antigravity-account-isolation-status.ps1",
@@ -134,6 +135,7 @@ const gateDefinitions = [
   { id: "ambientSuggestions", group: "no-traffic", file: "latest-ambient-suggestions.json", requiredForRelease: true, requireAmbientSuggestionSemantics: true },
   { id: "antigravityCliWindowsUserReadiness", group: "no-traffic", file: "latest-antigravity-cli-windows-user-readiness.json", requiredForRelease: true, requireAntigravityCliWindowsUserReadinessSemantics: true },
   { id: "windowsUserAccountPrepare", group: "no-traffic", file: "latest-windows-user-account-prepare.json", requiredForRelease: true, requireWindowsUserAccountPrepareSemantics: true },
+  { id: "windowsUserSetupGuidance", group: "no-traffic", file: "latest-windows-user-setup-guidance.json", requiredForRelease: true, requireWindowsUserSetupGuidanceSemantics: true },
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
 
@@ -1176,6 +1178,34 @@ function summarizeGate(definition) {
       if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_prepare_separate_account_verified");
       if (report.loginVerified !== false) semanticFailures.push("windows_user_prepare_login_verified");
     }
+    if (definition.requireWindowsUserSetupGuidanceSemantics) {
+      const safeToAskLogin = report.safeToAskUserForSecondAccountLogin === true;
+      if (report.reportName !== "windows-user-setup-guidance") semanticFailures.push("windows_user_setup_guidance_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("windows_user_setup_guidance_no_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("windows_user_setup_guidance_used_real_traffic");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("windows_user_setup_guidance_requested_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("windows_user_setup_guidance_behavior_not_covered");
+      if (report.coverageKind !== "windows-user-setup-guidance-no-traffic") semanticFailures.push("windows_user_setup_guidance_coverage_kind");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("windows_user_setup_guidance_failures");
+      if (report.guidanceSource !== "windows-user-account-prepare") semanticFailures.push("windows_user_setup_guidance_source");
+      if (report.changedSystem !== false) semanticFailures.push("windows_user_setup_guidance_changed_system");
+      if (report.createdUser !== false) semanticFailures.push("windows_user_setup_guidance_created_user");
+      if (report.startedLogin !== false) semanticFailures.push("windows_user_setup_guidance_started_login");
+      if (report.capturesPassword !== false) semanticFailures.push("windows_user_setup_guidance_captures_password");
+      if (report.storesPassword !== false) semanticFailures.push("windows_user_setup_guidance_stores_password");
+      if (report.opensSettings !== false) semanticFailures.push("windows_user_setup_guidance_opens_settings");
+      if (report.runsSystemUserCommand !== false) semanticFailures.push("windows_user_setup_guidance_runs_system_user_command");
+      if (report.blockedBeforeInteractiveLogin !== !safeToAskLogin) semanticFailures.push("windows_user_setup_guidance_blocked_before_login_mismatch");
+      if (!report.operatorBlockingStage) semanticFailures.push("windows_user_setup_guidance_operator_stage_missing");
+      if (!report.operatorNextStep) semanticFailures.push("windows_user_setup_guidance_operator_next_step_missing");
+      if (!report.manualSetupCommandHint) semanticFailures.push("windows_user_setup_guidance_manual_hint_missing");
+      if (report.requiresUserPresence !== true) semanticFailures.push("windows_user_setup_guidance_user_presence_missing");
+      if (report.nextProofRequiresRealTraffic !== true) semanticFailures.push("windows_user_setup_guidance_next_proof_real_traffic_missing");
+      if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_setup_guidance_separate_account_verified");
+      if (report.loginVerified !== false) semanticFailures.push("windows_user_setup_guidance_login_verified");
+      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("windows_user_setup_guidance_release_proof_claimed");
+      if (!report.accountIsolationCaveat) semanticFailures.push("windows_user_setup_guidance_caveat_missing");
+    }
     if (definition.requireAntigravityAccountIsolationStatusSemantics) {
       const safeToAskLogin = report.safeToAskUserForSecondAccountLogin === true;
       if (report.reportName !== "antigravity-account-isolation-status") semanticFailures.push("account_isolation_status_report_name");
@@ -1220,7 +1250,11 @@ function summarizeGate(definition) {
       if (report.approvedStartBlockedByStatusGate !== true) semanticFailures.push("second_account_entrypoint_status_gate_not_enforced");
       if (report.requestedStartLogin !== false) semanticFailures.push("second_account_entrypoint_requested_start_login");
       if (report.startedLogin !== false) semanticFailures.push("second_account_entrypoint_started_login");
+      if (report.changedSystem === true) semanticFailures.push("second_account_entrypoint_changed_system");
+      if (report.createdUser === true) semanticFailures.push("second_account_entrypoint_created_user");
       if (report.capturesLoginOutput !== false) semanticFailures.push("second_account_entrypoint_captures_login_output");
+      if (report.capturesPassword === true) semanticFailures.push("second_account_entrypoint_captures_password");
+      if (report.storesPassword === true) semanticFailures.push("second_account_entrypoint_stores_password");
       if (report.requiredStartLoginApproval !== "start-separate-windows-user-login") semanticFailures.push("second_account_entrypoint_approval_token");
       if (report.safeToStartLogin !== true && !report.readinessBlockingReason) semanticFailures.push("second_account_entrypoint_blocking_reason_missing");
       if (!report.operatorBlockingStage) semanticFailures.push("second_account_entrypoint_operator_stage_missing");
@@ -1694,6 +1728,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["ambientSuggestions", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-ambient-suggestions.ps1"],
   ["antigravityCliWindowsUserReadiness", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-windows-user-readiness.ps1"],
   ["windowsUserAccountPrepare", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1"],
+  ["windowsUserSetupGuidance", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-setup-guidance.ps1"],
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
 ];
@@ -2668,6 +2703,36 @@ if (args.has("--self-test")) {
       loginVerified: true,
     });
 
+    writeFakeLatestReport("latest-windows-user-setup-guidance.json", {
+      ok: true,
+      reportName: "wrong-windows-user-setup-guidance",
+      noTraffic: false,
+      usedRealTraffic: true,
+      requestedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "wrong",
+      failures: ["should not be ignored"],
+      guidanceSource: "wrong",
+      changedSystem: true,
+      createdUser: true,
+      startedLogin: true,
+      capturesPassword: true,
+      storesPassword: true,
+      opensSettings: true,
+      runsSystemUserCommand: true,
+      safeToAskUserForSecondAccountLogin: true,
+      blockedBeforeInteractiveLogin: true,
+      operatorBlockingStage: "",
+      operatorNextStep: "",
+      manualSetupCommandHint: "",
+      requiresUserPresence: false,
+      nextProofRequiresRealTraffic: false,
+      separateAccountVerified: true,
+      loginVerified: true,
+      releaseAcceptableAccountProof: true,
+      accountIsolationCaveat: "",
+    });
+
     writeFakeLatestReport("latest-antigravity-account-isolation-status.json", {
       ok: true,
       reportName: "wrong-account-isolation-status",
@@ -2716,7 +2781,11 @@ if (args.has("--self-test")) {
       approvedStartBlockedByStatusGate: false,
       requestedStartLogin: true,
       startedLogin: true,
+      changedSystem: true,
+      createdUser: true,
       capturesLoginOutput: true,
+      capturesPassword: true,
+      storesPassword: true,
       safeToStartLogin: false,
       requiredStartLoginApproval: "",
       completionState: "ready_for_interactive_login",
@@ -2850,6 +2919,33 @@ if (args.has("--self-test")) {
       "windows_user_prepare_separate_account_verified",
       "windows_user_prepare_login_verified",
     ]);
+    semanticFailures.windowsUserSetupGuidance = assertSemanticFailures("windowsUserSetupGuidance", "self-test failed: semantically invalid Windows-user setup-guidance report satisfied the gate", [
+      "windows_user_setup_guidance_report_name",
+      "windows_user_setup_guidance_no_traffic",
+      "windows_user_setup_guidance_used_real_traffic",
+      "windows_user_setup_guidance_requested_real_traffic",
+      "windows_user_setup_guidance_behavior_not_covered",
+      "windows_user_setup_guidance_coverage_kind",
+      "windows_user_setup_guidance_failures",
+      "windows_user_setup_guidance_source",
+      "windows_user_setup_guidance_changed_system",
+      "windows_user_setup_guidance_created_user",
+      "windows_user_setup_guidance_started_login",
+      "windows_user_setup_guidance_captures_password",
+      "windows_user_setup_guidance_stores_password",
+      "windows_user_setup_guidance_opens_settings",
+      "windows_user_setup_guidance_runs_system_user_command",
+      "windows_user_setup_guidance_blocked_before_login_mismatch",
+      "windows_user_setup_guidance_operator_stage_missing",
+      "windows_user_setup_guidance_operator_next_step_missing",
+      "windows_user_setup_guidance_manual_hint_missing",
+      "windows_user_setup_guidance_user_presence_missing",
+      "windows_user_setup_guidance_next_proof_real_traffic_missing",
+      "windows_user_setup_guidance_separate_account_verified",
+      "windows_user_setup_guidance_login_verified",
+      "windows_user_setup_guidance_release_proof_claimed",
+      "windows_user_setup_guidance_caveat_missing",
+    ]);
     semanticFailures.antigravityAccountIsolationStatus = assertSemanticFailures("antigravityAccountIsolationStatus", "self-test failed: semantically invalid Antigravity account-isolation status report satisfied the gate", [
       "account_isolation_status_report_name",
       "account_isolation_status_no_traffic",
@@ -2893,7 +2989,11 @@ if (args.has("--self-test")) {
       "second_account_entrypoint_status_gate_not_enforced",
       "second_account_entrypoint_requested_start_login",
       "second_account_entrypoint_started_login",
+      "second_account_entrypoint_changed_system",
+      "second_account_entrypoint_created_user",
       "second_account_entrypoint_captures_login_output",
+      "second_account_entrypoint_captures_password",
+      "second_account_entrypoint_stores_password",
       "second_account_entrypoint_approval_token",
       "second_account_entrypoint_blocking_reason_missing",
       "second_account_entrypoint_operator_stage_missing",
