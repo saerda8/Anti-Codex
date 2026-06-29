@@ -1628,7 +1628,9 @@ function collectOrderedNextActions(failureReasons) {
       return leftRank - rightRank || left.order - right.order;
     })
     .map(({ order, ...item }) => item);
-  const requiredGatewayStartNeeded = items.some((item) => item.requiresGatewayStart === true && (item.requiredForRelease === true || item.requiredForShort === true));
+  const requiredGatewayStartNeeded = items.some((item) => item.requiresGatewayStart === true
+    && item.requiresRealTraffic !== true
+    && (item.requiredForRelease === true || item.requiredForShort === true));
   if (requiredGatewayStartNeeded && !items.some((item) => item.id === "startGatewayTranslatorOnly")) {
     items.unshift(action("startGatewayTranslatorOnly", "gateway-start", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-deepcodex.ps1 -TranslatorOnly", {
       requiresGatewayStart: true,
@@ -3635,6 +3637,46 @@ if (args.has("--self-test")) {
     const optionalOnlyPlan = summarizeApprovalPlan(optionalOnlySummary.allActions);
     if (optionalOnlyPlan.firstBlockedAction !== "providerAntigravityReturnOptional") {
       throw new Error("self-test failed: optional-only approval plan should point at the optional action itself");
+    }
+    const realTrafficOnlySummary = summarizeNextActions([
+      {
+        id: "postVerification",
+        group: "real-traffic",
+        requiredForRelease: true,
+        requiredForShort: false,
+        failureReason: "stale_report",
+        failureReasons: ["stale_report"],
+        guidance: "real_traffic_evidence_stale: requires explicit user approval.",
+        orderedActions: [
+          action("postVerification", "real-traffic-final", "echo post-verification", {
+            requiresGatewayStart: true,
+            requiresRealTraffic: true,
+            highImpact: true,
+          }),
+        ],
+      },
+      {
+        id: "accountProxyReadiness",
+        group: "real-traffic",
+        requiredForRelease: true,
+        requiredForShort: false,
+        failureReason: "stale_report",
+        failureReasons: ["stale_report"],
+        guidance: "real_traffic_evidence_stale: requires explicit user approval.",
+        orderedActions: [
+          action("accountProxyReadiness", "real-traffic-low-state", "echo account-proxy", {
+            requiresGatewayStart: true,
+            requiresRealTraffic: true,
+          }),
+        ],
+      },
+    ]);
+    if (realTrafficOnlySummary.allActions.some((item) => item.id === "startGatewayTranslatorOnly")) {
+      throw new Error("self-test failed: real-traffic-only nextActions should not prepend gateway start as a separate blocker");
+    }
+    const realTrafficOnlyPlan = summarizeApprovalPlan(realTrafficOnlySummary.allActions);
+    if (realTrafficOnlyPlan.firstBlockedAction !== "accountProxyReadiness" || realTrafficOnlyPlan.requiredForReleaseCount !== 2) {
+      throw new Error("self-test failed: real-traffic-only approval plan should point at the first required real-traffic gate");
     }
     const failedLatestGate = reasonGates.find((item) => item.id === "coldRelaunch");
     if (!failedLatestGate) throw new Error("self-test failed: coldRelaunch gate missing while checking selected report details");

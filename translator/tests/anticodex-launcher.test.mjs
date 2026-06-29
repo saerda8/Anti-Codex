@@ -11387,6 +11387,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /tool_bridge_not_model_only_or_explicit_native/);
   assert.match(releaseGates, /semantically invalid source-preflight report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid MCP\/Skill report satisfied the gate/);
+  assert.match(releaseGates, /real-traffic-only nextActions should not prepend gateway start as a separate blocker/);
+  assert.match(releaseGates, /real-traffic-only approval plan should point at the first required real-traffic gate/);
   assert.match(releaseGates, /semantically invalid optional real-traffic report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid real provider optional report satisfied the gate/);
   assert.match(releaseGates, /semantically invalid Antigravity return optional report satisfied the gate/);
