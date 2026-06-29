@@ -580,6 +580,14 @@ function Test-ReleaseGateApprovalAndOfflineEvidence {
         if (($blockedActionCount -gt 0 -or $approvalBlockedRiskActionCount -gt 0) -and [string]::IsNullOrWhiteSpace([string]$approvalPlan.firstBlockedAction)) {
             Add-Failure "release-gates approval plan missing first blocked action"
         }
+        $firstBlockedAction = [string]$approvalPlan.firstBlockedAction
+        if ($ReleaseGatesSummary.releaseBlockedOnlyByRequiredRealTraffic -eq $true -and -not [string]::IsNullOrWhiteSpace($firstBlockedAction)) {
+            if ($firstBlockedAction -eq "startGatewayTranslatorOnly") {
+                Add-Failure "release-gates real-traffic-only blocker approval plan points at gateway start"
+            } elseif ($requiredRealTrafficBlockedGates -notcontains $firstBlockedAction) {
+                Add-Failure "release-gates real-traffic-only blocker approval plan first action is not a required real-traffic gate"
+            }
+        }
     }
 }
 

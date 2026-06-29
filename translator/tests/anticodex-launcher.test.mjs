@@ -8105,6 +8105,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates approval plan overcounts gateway actions/);
   assert.match(diagnostics, /release-gates approval plan phase \$phaseName count mismatch/);
   assert.match(diagnostics, /release-gates approval plan phase \$phaseName real-traffic mismatch/);
+  assert.match(diagnostics, /release-gates real-traffic-only blocker approval plan points at gateway start/);
+  assert.match(diagnostics, /release-gates real-traffic-only blocker approval plan first action is not a required real-traffic gate/);
   assert.match(diagnostics, /release-gates semantic failures missing report-only next action/);
   assert.match(diagnostics, /nextActions = @\(\$releaseGatesSummary\.nextActions\)/);
   assert.match(diagnostics, /installedRuntimeEvidence/);
@@ -9152,6 +9154,73 @@ test("diagnostics reports-summary fixture rejects unsafe next action approval me
     assert.ok(payload.failures.includes("release-gates next action postVerification missing explicit approval block"));
     assert.ok(payload.failures.includes("release-gates approval plan undercounts real-traffic actions"));
     assert.ok(payload.failures.includes("release-gates approval plan missing first blocked action"));
+    assert.equal(payload.diagnostics, null);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("diagnostics reports-summary fixture rejects real-traffic-only gateway-start first action", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-diagnostics-real-traffic-first-action-"));
+  try {
+    const summaryPath = join(tempRoot, "reports-summary.json");
+    writeFileSync(summaryPath, JSON.stringify([minimalDiagnosticsReleaseGateSummary({
+      shortReady: true,
+      releaseBlockedOnlyByRequiredRealTraffic: true,
+      requiredRealTrafficBlockedGates: ["postVerification"],
+      missingRequired: ["postVerification"],
+      releaseGateFailures: ["postVerification"],
+      releaseGateFailureReasons: [{
+        id: "postVerification",
+        failureReasons: ["stale_report"],
+        failureReasonsAvailableCount: 1,
+        failureReasonsHiddenCount: 0,
+        reportFailureSamples: ["post verification stale"],
+        reportFailureSampleCodes: ["stale_report"],
+        guidance: "real_traffic_evidence_stale: rerun post verification after explicit approval.",
+        requiredForRelease: true,
+        orderedActions: [],
+      }],
+      nextActions: [{
+        id: "postVerification",
+        gateId: "postVerification",
+        phase: "real-traffic-final",
+        command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10",
+        reason: "stale_report",
+        guidance: "real_traffic_evidence_stale: requires explicit user approval.",
+        requiresRealTraffic: true,
+        highImpact: true,
+        blockedUntilExplicitUserApproval: true,
+      }],
+      nextActionsAvailableCount: 1,
+      nextActionsHiddenCount: 0,
+      nextActionsTruncated: false,
+      approvalPlan: {
+        actionCount: 1,
+        blockedCount: 1,
+        requiresGatewayStartCount: 0,
+        requiresRealTrafficCount: 1,
+        highImpactCount: 1,
+        reportOnlyCount: 0,
+        requiredForShortCount: 0,
+        requiredForReleaseCount: 0,
+        firstBlockedAction: "startGatewayTranslatorOnly",
+      },
+    })]), "utf8");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-diagnostics.ps1"),
+      "-VerifyReportsSummary",
+      summaryPath,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, false);
+    assert.ok(payload.failures.includes("release-gates real-traffic-only blocker approval plan points at gateway start"));
     assert.equal(payload.diagnostics, null);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
