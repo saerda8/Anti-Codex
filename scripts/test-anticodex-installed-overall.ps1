@@ -1284,6 +1284,29 @@ $checks.sourcePreflightPublicDocumentation = try {
         error = $_.Exception.Message
     }
 }
+$checks.sourcePreflightAntigravityCliProfilePrepare = try {
+    $diagForCliProfile = Get-InstalledOverallDiagnosticsSnapshot
+    $sourcePreflightCliProfile = $diagForCliProfile.sourcePreflight
+    $ok = $diagForCliProfile.object -eq "anticodex.diagnostics" `
+        -and (Has-Property $sourcePreflightCliProfile "antigravityCliProfilePrepareOk") `
+        -and $sourcePreflightCliProfile.antigravityCliProfilePrepareOk -eq $true
+    if (-not $ok) {
+        Add-Failure "source preflight antigravity CLI profile prepare status is missing or not green in diagnostics"
+    }
+    [pscustomobject]@{
+        ok = $ok
+        skipped = $false
+        reason = "diagnostics sourcePreflight.antigravityCliProfilePrepareOk must be green"
+        antigravityCliProfilePrepareOk = if (Has-Property $sourcePreflightCliProfile "antigravityCliProfilePrepareOk") { [bool]$sourcePreflightCliProfile.antigravityCliProfilePrepareOk } else { $null }
+        reportName = if (Has-Property $sourcePreflightCliProfile "reportName") { [string]$sourcePreflightCliProfile.reportName } else { "" }
+    }
+} catch {
+    Add-Failure "source preflight antigravity CLI profile prepare status check failed: $($_.Exception.Message)"
+    [pscustomobject]@{
+        ok = $false
+        error = $_.Exception.Message
+    }
+}
 $checks.logDbGuardDiagnostics = try {
     $diagnostics = Get-InstalledOverallDiagnosticsSnapshot
     $guard = $diagnostics.logDbGuard

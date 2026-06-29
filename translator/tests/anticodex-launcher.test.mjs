@@ -7022,6 +7022,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /sourcePreflightPublicDocumentation/);
   assert.match(overall, /sourcePreflight\.publicDocumentationOk/);
   assert.match(overall, /source preflight public documentation status is missing or not green in diagnostics/);
+  assert.match(overall, /sourcePreflightAntigravityCliProfilePrepare/);
+  assert.match(overall, /sourcePreflight\.antigravityCliProfilePrepareOk/);
+  assert.match(overall, /source preflight antigravity CLI profile prepare status is missing or not green in diagnostics/);
   assert.match(overall, /logDbGuardDiagnostics/);
   assert.match(overall, /diagnostics\.logDbGuard/);
   assert.match(overall, /installed overall log database guard is not protected/);
