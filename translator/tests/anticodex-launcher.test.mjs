@@ -12970,7 +12970,10 @@ test("task plan current status does not claim full release readiness while real 
 
 test("current project direction keeps separate Antigravity account lanes for MCP and Anti-Codex", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const findings = readFileSync(resolve(root, "findings.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
+  const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
   const baseline = taskPlan.split("## Phases")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
@@ -12982,8 +12985,61 @@ test("current project direction keeps separate Antigravity account lanes for MCP
   assert.match(baseline, /MCP wiring is handled outside this channel/);
   assert.match(handoffCurrentStatus, /two-account\/profile split/);
   assert.match(handoffCurrentStatus, /Do not run real account\/traffic proof without explicit approval/);
+  assert.match(findings, /Gemini CLI is not usable for the MCP-side account split/);
+  assert.match(findings, /previous single-Antigravity-account fallback is superseded/);
+  assert.match(findings, /isolated Antigravity CLI profile\/account for model text/);
+  assert.match(findings, /do not claim true separate-account proof without explicit approved real account\/traffic evidence/);
+
+  assert.match(antigravityCliPrepare, /separateAccountVerified = \$false/);
+  assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
+
   assert.doesNotMatch(currentStatus, /uses one Antigravity CLI account\/profile/);
   assert.doesNotMatch(baseline, /single-account by default/);
+  assert.doesNotMatch(findings, /uses one Antigravity CLI account\/profile/);
+  assert.doesNotMatch(findings, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(handoffCurrentStatus, /uses one Antigravity CLI account\/profile/);
+});
+
+test("current account-mode docs reject Gemini CLI fallback", () => {
+  const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const findings = readFileSync(resolve(root, "findings.md"), "utf8");
+  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const currentStatus = taskPlan.split("## Goal")[0];
+  const baseline = taskPlan.split("## Phases")[0];
+  const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
+  assert.match(currentStatus, /Gemini CLI is not usable/);
+  assert.match(findings, /Gemini CLI is not usable for the MCP-side account split/);
+  assert.match(handoffCurrentStatus, /two-account\/profile split/);
+
+  assert.match(handoffCurrentStatus, /Do not run real account\/traffic proof without explicit approval/);
+  assert.match(findings, /do not claim true separate-account proof without explicit approved real account\/traffic evidence/);
+
+  assert.doesNotMatch(currentStatus, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(findings, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(handoffCurrentStatus, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(currentStatus, /uses one Antigravity CLI account\/profile/);
+  assert.doesNotMatch(findings, /uses one Antigravity CLI account\/profile/);
+  assert.doesNotMatch(handoffCurrentStatus, /uses one Antigravity CLI account\/profile/);
+  assert.doesNotMatch(baseline, /single-account by default/);
+});
+
+test("Antigravity CLI account isolation scripts keep separate-account proof gated", () => {
+  const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
+  const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
+  const antigravityCliIsolation = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-isolation.ps1"), "utf8");
+  assert.match(antigravityCliPrepare, /separateAccountVerified = \$false/);
+  assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
+
+  assert.match(antigravityCliPrepare, /shared Windows credential store/);
+  assert.match(antigravityCliRealSmoke, /Windows credential store/);
+
+  assert.match(antigravityCliIsolation, /does not launch Antigravity CLI or claim account authorization/);
+
+  assert.doesNotMatch(antigravityCliPrepare, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(antigravityCliRealSmoke, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(antigravityCliIsolation, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(antigravityCliPrepare, /uses one Antigravity CLI account\/profile/);
+  assert.doesNotMatch(antigravityCliRealSmoke, /uses one Antigravity CLI account\/profile/);
 });
 
 test("Antigravity prompt preserves the model-text boundary, not coworker identity", () => {
