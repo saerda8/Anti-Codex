@@ -10931,6 +10931,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /requireSourcePreflightSemantics/);
   assert.match(releaseGates, /source_preflight_upstream_profile_storage/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
+  assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare/);
   assert.match(releaseGates, /source_preflight_local_connector_verifier/);
   assert.match(releaseGates, /source_preflight_public_documentation/);
   assert.match(releaseGates, /prepare-anticodex-antigravity-cli-profile\.ps1/);
@@ -11296,6 +11297,7 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_ordered_history"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_local_connector_verifier"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_isolation_profile"));
+  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_profile_prepare"));
   assert.ok(summary.semanticFailures.optionalRealProvider.includes("optional_real_provider_report_name"));
   assert.ok(summary.semanticFailures.optionalAntigravityReturn.includes("optional_antigravity_return_report_name"));
   assert.ok(summary.semanticFailures.mcpSkills.includes("mcp_skills_changed_shared_mcp"));
