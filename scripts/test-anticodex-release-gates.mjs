@@ -1071,6 +1071,17 @@ function summarizeGate(definition) {
       }
       if (report.antigravityCliProfilePrepareOk !== true || !checks.antigravityCliProfilePrepare || checks.antigravityCliProfilePrepare.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare");
       if (!checks.antigravityCliProfilePrepareRejectsDefaultChild || checks.antigravityCliProfilePrepareRejectsDefaultChild.ok !== true || checks.antigravityCliProfilePrepareRejectsDefaultChild.usedRealTraffic !== false) semanticFailures.push("source_preflight_antigravity_cli_profile_prepare_rejects_default_child");
+      if (report.antigravityCliWindowsUserLoginDryRunOk !== true || !checks.antigravityCliWindowsUserLoginDryRun || checks.antigravityCliWindowsUserLoginDryRun.ok !== true) semanticFailures.push("source_preflight_antigravity_cli_windows_user_login_dry_run");
+      if (checks.antigravityCliWindowsUserLoginDryRun && checks.antigravityCliWindowsUserLoginDryRun.ok === true) {
+        const windowsUserLogin = checks.antigravityCliWindowsUserLoginDryRun.contract || checks.antigravityCliWindowsUserLoginDryRun;
+        if (windowsUserLogin.noTraffic !== true) semanticFailures.push("source_preflight_windows_user_login_no_traffic");
+        if (windowsUserLogin.usedRealTraffic !== false) semanticFailures.push("source_preflight_windows_user_login_used_real_traffic");
+        if (windowsUserLogin.started !== false) semanticFailures.push("source_preflight_windows_user_login_started");
+        if (windowsUserLogin.capturesLoginOutput !== false) semanticFailures.push("source_preflight_windows_user_login_captures_output");
+        if (windowsUserLogin.credentialBoundary !== "separate-windows-user") semanticFailures.push("source_preflight_windows_user_login_credential_boundary");
+        if (windowsUserLogin.expectedCredentialStoreIsolation !== true) semanticFailures.push("source_preflight_windows_user_login_expected_credential_isolation");
+        if (!windowsUserLogin.accountIsolationCaveat) semanticFailures.push("source_preflight_windows_user_login_caveat_missing");
+      }
       if (!checks.antigravityCliProfilePrepare || !checks.antigravityCliProfilePrepare.contract) {
         semanticFailures.push("source_preflight_profile_prepare_contract_missing");
       } else {
@@ -3465,6 +3476,7 @@ if (args.has("--self-test")) {
       "source_preflight_antigravity_cli_isolation_profile",
       "source_preflight_antigravity_cli_profile_prepare",
       "source_preflight_antigravity_cli_profile_prepare_rejects_default_child",
+      "source_preflight_antigravity_cli_windows_user_login_dry_run",
       "source_preflight_local_connector_verifier",
       "source_preflight_public_documentation",
       "source_preflight_public_documentation_client_sync_contract",
@@ -3530,6 +3542,19 @@ if (args.has("--self-test")) {
             accountIsolationCaveat: "",
           },
         },
+        antigravityCliWindowsUserLoginDryRun: {
+          ok: true,
+          contract: {
+            ok: true,
+            noTraffic: false,
+            usedRealTraffic: true,
+            started: true,
+            capturesLoginOutput: true,
+            credentialBoundary: "profile-and-appdata-only",
+            expectedCredentialStoreIsolation: false,
+            accountIsolationCaveat: "",
+          },
+        },
         localConnectorVerifier: { ok: true },
         publicDocumentation: {
           ok: true,
@@ -3553,6 +3578,15 @@ if (args.has("--self-test")) {
       "source_preflight_profile_prepare_isolation_boundary_missing",
       "source_preflight_profile_prepare_isolation_caveat_missing",
     ]);
+    semanticFailures.sourcePreflightWindowsUserLoginContract = assertSemanticFailures("sourcePreflight", "self-test failed: semantically invalid Windows-user login dry-run contract was not rejected", [
+      "source_preflight_windows_user_login_no_traffic",
+      "source_preflight_windows_user_login_used_real_traffic",
+      "source_preflight_windows_user_login_started",
+      "source_preflight_windows_user_login_captures_output",
+      "source_preflight_windows_user_login_credential_boundary",
+      "source_preflight_windows_user_login_expected_credential_isolation",
+      "source_preflight_windows_user_login_caveat_missing",
+    ]);
     writeFakeLatestReport("latest-source-preflight.json", {
       ok: true,
       reportName: "source-preflight",
@@ -3561,6 +3595,7 @@ if (args.has("--self-test")) {
       behaviorCovered: true,
       coverageKind: "source-no-traffic",
       antigravityCliProfilePrepareOk: true,
+      antigravityCliWindowsUserLoginDryRunOk: true,
       failures: [],
       checks: {
         javascriptSyntax: { ok: true },

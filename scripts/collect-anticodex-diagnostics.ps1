@@ -208,6 +208,8 @@ function Read-JsonSummary {
             antigravityCliIsolationProfileOk = $json.antigravityCliIsolationProfileOk
             antigravityCliProfilePrepareOk = $json.antigravityCliProfilePrepareOk
             antigravityCliProfilePrepareContract = $json.antigravityCliProfilePrepareContract
+            antigravityCliWindowsUserLoginDryRunOk = $json.antigravityCliWindowsUserLoginDryRunOk
+            antigravityCliWindowsUserLoginDryRunContract = $json.antigravityCliWindowsUserLoginDryRunContract
             localConnectorVerifierOk = $json.localConnectorVerifierOk
             publicDocumentationOk = $json.publicDocumentationOk
             publicDocumentationClientCopySyncContractOk = $json.publicDocumentationClientCopySyncContractOk

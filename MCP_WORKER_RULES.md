@@ -111,6 +111,14 @@ After every failure, before another dispatch:
 - Cause classification: worker timeout/no valid changes on a narrow patch task.
 - Rule change: record as no-evidence and continue with mainline diff plus direct syntax/focused tests; do not wait on the stale isolated worktree.
 
+### 2026-06-30 - Windows-user login preflight worker comparison
+
+- Workers: MIMO `dsw_mqzm6dsf_eb3ln4` and MiMoCode `mcw_mqzm6el1_ovpzf6`.
+- Task: add no-traffic source-preflight coverage for the separate Windows-user Antigravity CLI login entrypoint.
+- Result: MIMO completed with a scoped three-file direction. MiMoCode returned `caller_timeout_after_valid_changes` and a larger diff that risked source-preflight churn. Neither worker covered release-gate, diagnostics, and Manager support paths.
+- Cause classification: useful partial worker suggestions, but incomplete support-surface coverage.
+- Rule change: for account-boundary evidence fields, do not merge worker patches that only update source-preflight and static tests. The main patch must also update release gates, report summaries, diagnostics, and Manager text.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

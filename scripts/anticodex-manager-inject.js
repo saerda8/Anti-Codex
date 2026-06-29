@@ -1102,7 +1102,7 @@
       }
       if (item.sourcePreflightEvidence) {
         const evidence = item.sourcePreflightEvidence;
-        lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / rejectDefaultChild=${evidence.antigravityCliProfilePrepareRejectsDefaultChildOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"} / clientCopyDocs=${evidence.publicDocumentationClientCopySyncContractOk ? "true" : "false"}`);
+        lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / rejectDefaultChild=${evidence.antigravityCliProfilePrepareRejectsDefaultChildOk ? "true" : "false"} / winUserLogin=${evidence.antigravityCliWindowsUserLoginDryRunOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"} / clientCopyDocs=${evidence.publicDocumentationClientCopySyncContractOk ? "true" : "false"}`);
         lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
         if (evidence.antigravityCliIsolationProfileContract) {
           const c = evidence.antigravityCliIsolationProfileContract;
@@ -1113,6 +1113,11 @@
           lines.push(`  sourcePreflight profilePrepare: traffic=${c.usedRealTraffic ? "true" : "false"} / login=${c.loginVerified ? "true" : "false"} / separateAccount=${c.separateAccountVerified ? "true" : "false"} / coverage=${c.coverageKind || "unknown"} / boundary=${c.accountIsolationBoundary || "unknown"}`);
           lines.push(`  sourcePreflight profilePrepare lane: role=${c.accountLaneRole || "unknown"} / mcpManagedHere=${c.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${c.mcpAccountLaneOwner || "unknown"}`);
           if (c.accountIsolationCaveat) lines.push(`  sourcePreflight profilePrepare caveat: ${c.accountIsolationCaveat}`);
+        }
+        if (evidence.antigravityCliWindowsUserLoginDryRunContract) {
+          const c = evidence.antigravityCliWindowsUserLoginDryRunContract;
+          lines.push(`  sourcePreflight windowsUserLogin: traffic=${c.usedRealTraffic ? "true" : "false"} / started=${c.started ? "true" : "false"} / capturesOutput=${c.capturesLoginOutput ? "true" : "false"} / boundary=${c.credentialBoundary || "unknown"} / expectedCredentialStoreIsolation=${c.expectedCredentialStoreIsolation ? "true" : "false"}`);
+          if (c.accountIsolationCaveat) lines.push(`  sourcePreflight windowsUserLogin caveat: ${c.accountIsolationCaveat}`);
         }
       }
       if (item.logDbGuardEvidence) {
@@ -1135,6 +1140,10 @@
         const evidence = item.antigravityCliRealSmokeEvidence;
         lines.push(`  antigravityCliRealSmoke: login=${evidence.loginVerified ? "true" : "false"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / strictAppData=${evidence.strictWindowsAppDataIsolation ? "true" : "false"} / source=${evidence.profileSource || "unknown"}`);
         lines.push(`  antigravityCliRealSmoke lane: role=${evidence.accountLaneRole || "unknown"} / mcpManagedHere=${evidence.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${evidence.mcpAccountLaneOwner || "unknown"}`);
+        if (evidence.accountIdentityComparison) {
+          const comparison = evidence.accountIdentityComparison;
+          lines.push(`  antigravityCliRealSmoke identity: antiCodexId=${comparison.antiCodexAccountIdPresent ? "present" : "missing"} / mcpId=${comparison.mcpAccountIdPresent ? "present" : "missing"} / distinct=${comparison.accountIdsDiffer === true ? "true" : comparison.accountIdsDiffer === false ? "false" : "unknown"}`);
+        }
         if (evidence.separateAccountVerificationReason) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.separateAccountVerificationReason}`);
         else if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.accountIsolationCaveat}`);
       }

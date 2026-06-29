@@ -523,6 +523,72 @@ function Test-AntigravityCliProfilePrepareRejectsDefaultChild {
     }
 }
 
+function Test-AntigravityCliWindowsUserLoginDryRun {
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $script = Join-Path $SourceRoot "scripts\start-anticodex-antigravity-cli-login-windows-user.ps1"
+    $result = Invoke-SourceProcess `
+        -Name "Antigravity CLI Windows-user login terminal dry-run" `
+        -FilePath $powershell `
+        -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $script,
+            "-WindowsUser", ".\AntiCodexModel",
+            "-DryRun") `
+        -TimeoutSec 30
+    $dryRunJson = ($result.stdoutTail -join "`n")
+    $contractOk = $false
+    $contract = [ordered]@{
+        ok = $false
+        noTraffic = $false
+        usedRealTraffic = $true
+        started = $true
+        capturesLoginOutput = $true
+        credentialBoundary = ""
+        expectedCredentialStoreIsolation = $false
+        accountIsolationCaveat = ""
+    }
+    if ($result.ok -and $dryRunJson) {
+        try {
+            $parsed = $dryRunJson | ConvertFrom-Json
+            $contract.ok = [bool]$parsed.ok
+            $contract.noTraffic = [bool]$parsed.noTraffic
+            $contract.usedRealTraffic = [bool]$parsed.usedRealTraffic
+            $contract.started = [bool]$parsed.started
+            $contract.capturesLoginOutput = [bool]$parsed.capturesLoginOutput
+            $contract.credentialBoundary = [string]$parsed.credentialBoundary
+            $contract.expectedCredentialStoreIsolation = [bool]$parsed.expectedCredentialStoreIsolation
+            $contract.accountIsolationCaveat = [string]$parsed.accountIsolationCaveat
+            $contractOk = $parsed.ok -eq $true `
+                -and $parsed.noTraffic -eq $true `
+                -and $parsed.usedRealTraffic -eq $false `
+                -and $parsed.started -eq $false `
+                -and $parsed.capturesLoginOutput -eq $false `
+                -and $parsed.credentialBoundary -eq "separate-windows-user" `
+                -and $parsed.expectedCredentialStoreIsolation -eq $true `
+                -and [string]$parsed.accountIsolationCaveat
+        } catch {
+            Add-Failure "Antigravity CLI Windows-user login dry-run JSON parse failed"
+        }
+    }
+    if (-not $contractOk -and $result.ok) {
+        Add-Failure "Antigravity CLI Windows-user login dry-run contract not satisfied"
+    }
+    if (-not $result.ok) { Add-Failure "Antigravity CLI Windows-user login dry-run failed" }
+    return [pscustomobject]@{
+        ok = $contractOk
+        name = "Antigravity CLI Windows-user login terminal dry-run"
+        exitCode = $result.exitCode
+        timedOut = $result.timedOut
+        durationMs = $result.durationMs
+        noTraffic = $contract.noTraffic
+        usedRealTraffic = $contract.usedRealTraffic
+        started = $contract.started
+        capturesLoginOutput = $contract.capturesLoginOutput
+        credentialBoundary = $contract.credentialBoundary
+        expectedCredentialStoreIsolation = $contract.expectedCredentialStoreIsolation
+        accountIsolationCaveat = $contract.accountIsolationCaveat
+        contract = $contract
+    }
+}
+
 function Test-LocalConnectorVerifier {
     $node = (Get-Command "node" -ErrorAction Stop).Source
     $script = Join-Path $SourceRoot "scripts\test-anticodex-local-connectors.mjs"
@@ -722,6 +788,7 @@ try {
     $checks["antigravityCliDualAccountLanes"] = Test-AntigravityCliDualAccountLanes
     $checks["antigravityCliProfilePrepare"] = Test-AntigravityCliProfilePrepare
     $checks["antigravityCliProfilePrepareRejectsDefaultChild"] = Test-AntigravityCliProfilePrepareRejectsDefaultChild
+    $checks["antigravityCliWindowsUserLoginDryRun"] = Test-AntigravityCliWindowsUserLoginDryRun
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
@@ -735,11 +802,15 @@ try {
 $elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
 $antigravityCliProfilePrepareOk = $false
 $antigravityCliDualAccountLanesOk = $false
+$antigravityCliWindowsUserLoginDryRunOk = $false
 if ($checks["antigravityCliDualAccountLanes"]) {
     $antigravityCliDualAccountLanesOk = [bool]$checks["antigravityCliDualAccountLanes"].ok
 }
 if ($checks["antigravityCliProfilePrepare"]) {
     $antigravityCliProfilePrepareOk = [bool]$checks["antigravityCliProfilePrepare"].ok
+}
+if ($checks["antigravityCliWindowsUserLoginDryRun"]) {
+    $antigravityCliWindowsUserLoginDryRunOk = [bool]$checks["antigravityCliWindowsUserLoginDryRun"].ok
 }
 $report = [ordered]@{
     ok = ($failures.Count -eq 0)
@@ -750,6 +821,7 @@ $report = [ordered]@{
     coverageKind = "source-no-traffic"
     antigravityCliDualAccountLanesOk = $antigravityCliDualAccountLanesOk
     antigravityCliProfilePrepareOk = $antigravityCliProfilePrepareOk
+    antigravityCliWindowsUserLoginDryRunOk = $antigravityCliWindowsUserLoginDryRunOk
     sourceRoot = Normalize-Path $SourceRoot
     startedAt = $startedAt.ToString("o")
     elapsedMs = $elapsedMs

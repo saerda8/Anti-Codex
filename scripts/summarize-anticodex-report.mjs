@@ -500,6 +500,22 @@ const summary = {
       accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
     };
   })(),
+  antigravityCliWindowsUserLoginDryRunOk: checkOk("antigravityCliWindowsUserLoginDryRun"),
+  antigravityCliWindowsUserLoginDryRunContract: (() => {
+    const contract = checks.antigravityCliWindowsUserLoginDryRun && typeof checks.antigravityCliWindowsUserLoginDryRun === "object"
+      ? checks.antigravityCliWindowsUserLoginDryRun.contract
+      : null;
+    if (!contract || typeof contract !== "object") return null;
+    return {
+      noTraffic: contract.noTraffic === true,
+      usedRealTraffic: contract.usedRealTraffic === true,
+      started: contract.started === true,
+      capturesLoginOutput: contract.capturesLoginOutput === true,
+      credentialBoundary: has(contract, "credentialBoundary") ? asString(contract.credentialBoundary) : null,
+      expectedCredentialStoreIsolation: boolField(contract, "expectedCredentialStoreIsolation"),
+      accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
+    };
+  })(),
   localConnectorVerifierOk: checkOk("localConnectorVerifier"),
   publicDocumentationOk: checkOk("publicDocumentation"),
   publicDocumentationClientCopySyncContractOk: report.reportName === "source-preflight"

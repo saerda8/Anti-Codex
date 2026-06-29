@@ -1157,6 +1157,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /localConnectorVerifierOk/);
   assert.match(managerBridge, /antigravityCliProfilePrepareOk/);
   assert.match(managerInject, /antigravityCliProfilePrepareOk/);
+  assert.match(managerBridge, /winUserLogin=/);
+  assert.match(managerInject, /winUserLogin=/);
+  assert.match(managerBridge, /sourcePreflight windowsUserLogin:/);
+  assert.match(managerInject, /sourcePreflight windowsUserLogin:/);
   assert.match(managerBridge, /sourcePreflight profilePrepare: traffic=/);
   assert.match(managerInject, /sourcePreflight profilePrepare: traffic=/);
   assert.match(managerBridge, /sourcePreflight profilePrepare caveat:/);
@@ -2756,6 +2760,9 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /upstreamProfileStorageOk/);
   assert.match(server, /antigravityCliIsolationProfileOk/);
   assert.match(server, /antigravityCliProfilePrepareOk/);
+  assert.match(server, /antigravityCliWindowsUserLoginDryRunOk/);
+  assert.match(server, /antigravityCliWindowsUserLoginDryRunContract/);
+  assert.match(server, /sourcePreflight windowsUserLogin:/);
   assert.match(server, /sourcePreflight profilePrepare: traffic=/);
   assert.match(server, /sourcePreflight profilePrepare caveat:/);
   assert.match(server, /localConnectorVerifierOk/);
@@ -3270,6 +3277,8 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /appToolGetPostParityClean/);
   assert.match(reportSummarizer, /appToolGetPostParityContentMatches/);
   assert.match(reportSummarizer, /antigravityCliProfilePrepareEvidence/);
+  assert.match(reportSummarizer, /antigravityCliWindowsUserLoginDryRunOk/);
+  assert.match(reportSummarizer, /antigravityCliWindowsUserLoginDryRunContract/);
   assert.match(reportSummarizer, /separateAccountVerified/);
   assert.match(reportSummarizer, /accountIsolationBoundary/);
   assert.match(reportSummarizer, /accountIsolationCaveat/);
@@ -8245,6 +8254,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /"-BaseUrl", \$BaseUrl, "-NoPopup"/);
   assert.match(collector, /antigravityCliProfilePrepareOk = \$json\.antigravityCliProfilePrepareOk/);
   assert.match(collector, /antigravityCliProfilePrepareContract = \$json\.antigravityCliProfilePrepareContract/);
+  assert.match(collector, /antigravityCliWindowsUserLoginDryRunOk = \$json\.antigravityCliWindowsUserLoginDryRunOk/);
+  assert.match(collector, /antigravityCliWindowsUserLoginDryRunContract = \$json\.antigravityCliWindowsUserLoginDryRunContract/);
   assert.match(collector, /publicDocumentationClientCopySyncContractOk = \$json\.publicDocumentationClientCopySyncContractOk/);
   assert.match(collector, /antigravityCliProfilePrepareEvidence = \$json\.antigravityCliProfilePrepareEvidence/);
   assert.match(collector, /antigravityCliRealSmokeEvidence = \$json\.antigravityCliRealSmokeEvidence/);
@@ -8565,6 +8576,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostics source preflight isolation profile claims separate account verified/);
   assert.match(diagnostics, /antigravityCliProfilePrepareOk/);
   assert.match(diagnostics, /antigravityCliProfilePrepareContract/);
+  assert.match(diagnostics, /antigravityCliWindowsUserLoginDryRunOk/);
+  assert.match(diagnostics, /antigravityCliWindowsUserLoginDryRunContract/);
   assert.match(diagnostics, /source-preflight summary missing Antigravity CLI profile prepare contract/);
   assert.match(diagnostics, /source-preflight summary profile prepare claims separate account verified/);
   assert.match(diagnostics, /diagnostics source preflight missing Antigravity CLI profile prepare contract/);
@@ -11570,6 +11583,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare_rejects_default_child/);
+  assert.match(releaseGates, /source_preflight_antigravity_cli_windows_user_login_dry_run/);
+  assert.match(releaseGates, /source_preflight_windows_user_login_credential_boundary/);
+  assert.match(releaseGates, /source_preflight_windows_user_login_expected_credential_isolation/);
   assert.match(releaseGates, /source_preflight_profile_prepare_used_real_traffic/);
   assert.match(releaseGates, /source_preflight_profile_prepare_contract_missing/);
   assert.match(releaseGates, /source_preflight_profile_prepare_login_verified/);
@@ -13173,6 +13189,13 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Test-AntigravityCliProfilePrepare/);
   assert.match(preflight, /function Test-AntigravityCliProfilePrepareRejectsDefaultChild/);
   assert.match(preflight, /checks\["antigravityCliProfilePrepareRejectsDefaultChild"\] = Test-AntigravityCliProfilePrepareRejectsDefaultChild/);
+  assert.match(preflight, /function Test-AntigravityCliWindowsUserLoginDryRun/);
+  assert.match(preflight, /checks\["antigravityCliWindowsUserLoginDryRun"\] = Test-AntigravityCliWindowsUserLoginDryRun/);
+  assert.match(preflight, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);
+  assert.match(preflight, /credentialBoundary -eq "separate-windows-user"/);
+  assert.match(preflight, /expectedCredentialStoreIsolation -eq \$true/);
+  assert.match(preflight, /capturesLoginOutput -eq \$false/);
+  assert.match(preflight, /started -eq \$false/);
   assert.match(preflight, /Antigravity\\anticodex-srcpreflight-bad-child-/);
   assert.match(preflight, /known default Antigravity profile location/);
   assert.match(preflight, /usedRealTraffic -eq \$false/);
@@ -13185,6 +13208,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(preflight, /separateAccountVerified.*\$false/);
   assert.match(preflight, /profile-prepared-no-traffic/);
   assert.match(preflight, /antigravityCliProfilePrepareOk/);
+  assert.match(preflight, /antigravityCliWindowsUserLoginDryRunOk/);
   assert.match(releaseGates, /source_preflight_cli_isolation_account_lane_role/);
   assert.match(releaseGates, /source_preflight_cli_isolation_mcp_lane_managed_by_anticodex/);
   assert.match(releaseGates, /source_preflight_cli_isolation_mcp_lane_owner_mismatch/);

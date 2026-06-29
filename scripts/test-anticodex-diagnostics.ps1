@@ -1233,6 +1233,7 @@ function Test-DiagnosticBundle {
             if ($sourcePreflightSummary.diffWhitespaceOk -ne $true) { Add-Failure "source-preflight summary missing diff whitespace success" }
             if ($sourcePreflightSummary.antigravityCliProfilePrepareOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare success" }
             if ($sourcePreflightSummary.antigravityCliProfilePrepareRejectsDefaultChildOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI profile prepare default-child rejection success" }
+            if ($sourcePreflightSummary.antigravityCliWindowsUserLoginDryRunOk -ne $true) { Add-Failure "source-preflight summary missing Antigravity CLI Windows-user login dry-run success" }
             $profilePrepareContract = $sourcePreflightSummary.antigravityCliProfilePrepareContract
             if (-not $profilePrepareContract) {
                 Add-Failure "source-preflight summary missing Antigravity CLI profile prepare contract"
@@ -1246,6 +1247,18 @@ function Test-DiagnosticBundle {
                 if ($profilePrepareContract.coverageKind -ne "profile-prepared-no-traffic") { Add-Failure "source-preflight summary profile prepare coverage kind mismatch" }
                 if (-not [string]$profilePrepareContract.accountIsolationBoundary) { Add-Failure "source-preflight summary profile prepare missing isolation boundary" }
                 if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "source-preflight summary profile prepare missing isolation caveat" }
+            }
+            $windowsUserLoginContract = $sourcePreflightSummary.antigravityCliWindowsUserLoginDryRunContract
+            if (-not $windowsUserLoginContract) {
+                Add-Failure "source-preflight summary missing Antigravity CLI Windows-user login dry-run contract"
+            } else {
+                if ($windowsUserLoginContract.noTraffic -ne $true) { Add-Failure "source-preflight summary Windows-user login dry-run not marked no-traffic" }
+                if ($windowsUserLoginContract.usedRealTraffic -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run used real traffic" }
+                if ($windowsUserLoginContract.started -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run started a process" }
+                if ($windowsUserLoginContract.capturesLoginOutput -ne $false) { Add-Failure "source-preflight summary Windows-user login dry-run captures login output" }
+                if ($windowsUserLoginContract.credentialBoundary -ne "separate-windows-user") { Add-Failure "source-preflight summary Windows-user login dry-run credential boundary mismatch" }
+                if ($windowsUserLoginContract.expectedCredentialStoreIsolation -ne $true) { Add-Failure "source-preflight summary Windows-user login dry-run missing expected credential-store isolation" }
+                if (-not [string]$windowsUserLoginContract.accountIsolationCaveat) { Add-Failure "source-preflight summary Windows-user login dry-run missing caveat" }
             }
             if ($null -eq $sourcePreflightSummary.skipFullRegression) { Add-Failure "source-preflight summary missing skipFullRegression" }
         }
@@ -2162,6 +2175,11 @@ if ($diagnostics) {
         } elseif ($sourcePreflight.antigravityCliProfilePrepareRejectsDefaultChildOk -ne $true) {
             Add-Failure "diagnostics source preflight Antigravity CLI profile prepare default-child rejection is not green"
         }
+        if (-not (Has-Property $sourcePreflight "antigravityCliWindowsUserLoginDryRunOk")) {
+            Add-Failure "diagnostics source preflight missing Antigravity CLI Windows-user login dry-run result"
+        } elseif ($sourcePreflight.antigravityCliWindowsUserLoginDryRunOk -ne $true) {
+            Add-Failure "diagnostics source preflight Antigravity CLI Windows-user login dry-run is not green"
+        }
         if (-not (Has-Property $sourcePreflight "antigravityCliProfilePrepareContract")) {
             Add-Failure "diagnostics source preflight missing Antigravity CLI profile prepare contract"
         } elseif ($sourcePreflight.antigravityCliProfilePrepareContract) {
@@ -2175,6 +2193,18 @@ if ($diagnostics) {
             if ($profilePrepareContract.coverageKind -ne "profile-prepared-no-traffic") { Add-Failure "diagnostics source preflight profile prepare coverage kind mismatch" }
             if (-not [string]$profilePrepareContract.accountIsolationBoundary) { Add-Failure "diagnostics source preflight profile prepare missing isolation boundary" }
             if (-not [string]$profilePrepareContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight profile prepare missing isolation caveat" }
+        }
+        if (-not (Has-Property $sourcePreflight "antigravityCliWindowsUserLoginDryRunContract")) {
+            Add-Failure "diagnostics source preflight missing Antigravity CLI Windows-user login dry-run contract"
+        } elseif ($sourcePreflight.antigravityCliWindowsUserLoginDryRunContract) {
+            $windowsUserLoginContract = $sourcePreflight.antigravityCliWindowsUserLoginDryRunContract
+            if ($windowsUserLoginContract.noTraffic -ne $true) { Add-Failure "diagnostics source preflight Windows-user login dry-run not marked no-traffic" }
+            if ($windowsUserLoginContract.usedRealTraffic -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run used real traffic" }
+            if ($windowsUserLoginContract.started -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run started a process" }
+            if ($windowsUserLoginContract.capturesLoginOutput -ne $false) { Add-Failure "diagnostics source preflight Windows-user login dry-run captures login output" }
+            if ($windowsUserLoginContract.credentialBoundary -ne "separate-windows-user") { Add-Failure "diagnostics source preflight Windows-user login dry-run credential boundary mismatch" }
+            if ($windowsUserLoginContract.expectedCredentialStoreIsolation -ne $true) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing expected credential-store isolation" }
+            if (-not [string]$windowsUserLoginContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight Windows-user login dry-run missing caveat" }
         }
         if (-not (Has-Property $sourcePreflight "skipFullRegression")) { Add-Failure "diagnostics source preflight missing skipFullRegression" }
     }
