@@ -1777,3 +1777,11 @@ After every failure, before another dispatch:
 - Result: both workers observed or produced changes in files outside their declared writable scope; MiMoCode also left a temporary helper under `translator/tests/_count-patches.mjs` and was cancelled. The helper was removed by the main agent before verification.
 - Cause classification: shared-worktree scope collision plus edit-capable worker autonomy, not product evidence.
 - Rule change: do not run edit-capable workers against the same files the main agent is actively patching. For client-sync hardening, use isolated worktrees or single-file writable scopes, then cherry-pick only after main-agent diff review.
+
+## 2026-06-29 - Worker review of client-sync support paths
+
+- Worker: DeepSeek transport, MIMO `dsw_mqytt3ms_dzh9bs`, and MiMoCode review worktree setup.
+- Task: surface `clientSyncContract` through report summaries, diagnostics, and Manager latest-report text.
+- Result: DeepSeek returned `Transport closed` before work. MIMO completed successfully in an isolated worktree and independently confirmed the support-path direction, but used alternate `contract*` field names that were not merged to avoid schema drift. A third review worktree could not accept the main diff cleanly, so it was abandoned before any product evidence was cited.
+- Cause classification: mixed worker availability and schema-divergence risk, not a product failure.
+- Rule change: for support-path schema work, keep one canonical field family in the main agent patch and use worker diffs only as reviewed suggestions. Do not merge alternate names such as `contractMode` when the accepted schema is `clientSyncMode`.

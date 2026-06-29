@@ -2877,6 +2877,15 @@ function latestManagerReportItem(label, fileName) {
         syncReadinessEvidence: (sync || activeHost) ? {
             noTrafficReady: report?.reportName === "sync-readiness" && report?.noTraffic === true && report?.usedRealTraffic === false && report?.behaviorCovered === true && report?.coverageKind === "installed-no-traffic",
             fullMode: report?.fast === false && report?.skipIconPaletteProbe === false,
+            clientSyncMode: shortSafeText(report?.clientSyncContract?.mode || "", ""),
+            clientSyncMaintenancePath: shortSafeText(report?.clientSyncContract?.maintenancePath || "", ""),
+            nativeClientBehaviorCarriedByHostSync: typeof report?.clientSyncContract?.nativeClientBehaviorCarriedByHostSync === "boolean" ? report.clientSyncContract.nativeClientBehaviorCarriedByHostSync : null,
+            forbidsFeatureByFeatureReimplementation: typeof report?.clientSyncContract?.forbidsFeatureByFeatureReimplementation === "boolean" ? report.clientSyncContract.forbidsFeatureByFeatureReimplementation : null,
+            sourcePackageName: shortSafeText(report?.clientSyncContract?.sourcePackageName || updateStatus?.source?.packageName || "", ""),
+            activeSourcePackageName: shortSafeText(report?.clientSyncContract?.activeSourcePackageName || activeHost?.sourcePackageName || "", ""),
+            clientSyncHostHashMatches: typeof report?.clientSyncContract?.sourceHostHashMatches === "boolean" ? report.clientSyncContract.sourceHostHashMatches : null,
+            clientSyncCliHashMatches: typeof report?.clientSyncContract?.sourceCliHashMatches === "boolean" ? report.clientSyncContract.sourceCliHashMatches : null,
+            antiCodexPatchScope: Array.isArray(report?.clientSyncContract?.antiCodexPatchScope) ? report.clientSyncContract.antiCodexPatchScope.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
             codexVersion: shortSafeText(activeHost?.codexVersion || "", ""),
             sourcePackageVersion: shortSafeText(activeHost?.sourcePackageVersion || "", ""),
             activeHostReady: !!activeHost && activeHost.exists === true && activeHost.markerExists === true && activeHost.manifestValid === true && activeHost.exeExists === true,
@@ -3842,9 +3851,19 @@ function syncReadinessEvidenceFromResult(result){
   const sync=r.sync||{};
   const activeHost=r.activeHost||{};
   const updateStatus=sync.updateStatus||r.updateStatus||{};
+  const clientSyncContract=r.clientSyncContract||{};
   const drift=updateStatus.drift||{};
   const managerBridge=sync.managerBridge||{};
   return {
+    clientSyncMode:clientSyncContract.mode||"",
+    clientSyncMaintenancePath:clientSyncContract.maintenancePath||"",
+    nativeClientBehaviorCarriedByHostSync:typeof clientSyncContract.nativeClientBehaviorCarriedByHostSync==="boolean"?clientSyncContract.nativeClientBehaviorCarriedByHostSync:null,
+    forbidsFeatureByFeatureReimplementation:typeof clientSyncContract.forbidsFeatureByFeatureReimplementation==="boolean"?clientSyncContract.forbidsFeatureByFeatureReimplementation:null,
+    sourcePackageName:clientSyncContract.sourcePackageName||updateStatus.source?.packageName||"",
+    activeSourcePackageName:clientSyncContract.activeSourcePackageName||activeHost.sourcePackageName||"",
+    clientSyncHostHashMatches:typeof clientSyncContract.sourceHostHashMatches==="boolean"?clientSyncContract.sourceHostHashMatches:null,
+    clientSyncCliHashMatches:typeof clientSyncContract.sourceCliHashMatches==="boolean"?clientSyncContract.sourceCliHashMatches:null,
+    antiCodexPatchScope:Array.isArray(clientSyncContract.antiCodexPatchScope)?clientSyncContract.antiCodexPatchScope.filter(Boolean):[],
     codexVersion:activeHost.codexVersion||updateStatus.source?.codexVersion||"",
     sourcePackageVersion:updateStatus.source?.packageVersion||activeHost.sourcePackageVersion||"",
     activePackageVersion:drift.activePackageVersion||updateStatus.active?.packageVersion||"",
@@ -3866,6 +3885,8 @@ function syncReadinessEvidenceFromResult(result){
 function syncReadinessEvidenceLines(evidence){
   const e=evidence||{};
   return [
+    "sync contract: mode="+(e.clientSyncMode||"unknown")+" / path="+(e.clientSyncMaintenancePath||"unknown")+" / nativeHostSync="+triStateText(e.nativeClientBehaviorCarriedByHostSync)+" / noFeatureRebuild="+triStateText(e.forbidsFeatureByFeatureReimplementation),
+    "sync source: source="+(e.sourcePackageName||"unknown")+" / active="+(e.activeSourcePackageName||"unknown")+" / hostMatch="+triStateText(e.clientSyncHostHashMatches)+" / cliMatch="+triStateText(e.clientSyncCliHashMatches)+" / patches="+(Array.isArray(e.antiCodexPatchScope)&&e.antiCodexPatchScope.length?e.antiCodexPatchScope.join(","):"unknown"),
     "sync versions: codex="+(e.codexVersion||"unknown")+" / source="+(e.sourcePackageVersion||"unknown")+" / active="+(e.activePackageVersion||"unknown"),
     "sync drift: state="+(e.updateDriftState||"unknown")+" / reason="+(e.updateStatusReason||"unknown")+" / source="+(e.updateStatusSource||"unknown")+" / hostChanged="+triStateText(e.updateDriftHostChanged)+" / cliChanged="+triStateText(e.updateDriftCliChanged),
     "sync hashes: host="+(String(e.activeHostHash||"").slice(0,8)||"unknown")+"/"+(String(e.sourceHostHash||"").slice(0,8)||"unknown")+" match="+triStateText(e.hostHashMatches)+" / cli="+(String(e.activeCliHash||"").slice(0,8)||"unknown")+"/"+(String(e.sourceCliHash||"").slice(0,8)||"unknown")+" match="+triStateText(e.cliHashMatches),
@@ -4230,6 +4251,7 @@ function latestReportsSummary(result){
     if(item.syncReadinessEvidence){
       const evidence=item.syncReadinessEvidence;
       lines.push("  syncReadiness: noTraffic="+(evidence.noTrafficReady?"true":"check")+" / full="+(evidence.fullMode?"true":"check")+" / host="+(evidence.activeHostReady&&evidence.brandReady?"ok":"check")+" / icons="+(evidence.iconReady?"ok":"check")+" / update="+(evidence.updateReady?"synced":"check")+" / guardrails="+(evidence.guardrailsReady?"ok":"check"));
+      lines.push("  syncReadiness contract: mode="+(evidence.clientSyncMode||"unknown")+" / path="+(evidence.clientSyncMaintenancePath||"unknown")+" / nativeHostSync="+triStateText(evidence.nativeClientBehaviorCarriedByHostSync)+" / noFeatureRebuild="+triStateText(evidence.forbidsFeatureByFeatureReimplementation)+" / patches="+(Array.isArray(evidence.antiCodexPatchScope)&&evidence.antiCodexPatchScope.length?evidence.antiCodexPatchScope.join(","):"unknown"));
       lines.push("  syncReadiness versions: codex="+(evidence.codexVersion||"unknown")+" / source="+(evidence.sourcePackageVersion||"unknown")+" / active="+(evidence.activePackageVersion||"unknown")+" / drift="+(evidence.updateDriftState||"unknown")+" / reason="+(evidence.updateStatusReason||"unknown")+" / updateSource="+(evidence.updateStatusSource||"unknown")+" / hostChanged="+triStateText(evidence.updateDriftHostChanged)+" / cliChanged="+triStateText(evidence.updateDriftCliChanged));
       lines.push("  syncReadiness hashes: host="+(String(evidence.activeHostHash||"").slice(0,8)||"unknown")+"/"+(String(evidence.sourceHostHash||"").slice(0,8)||"unknown")+" match="+triStateText(evidence.hostHashMatches)+" / cli="+(String(evidence.activeCliHash||"").slice(0,8)||"unknown")+"/"+(String(evidence.sourceCliHash||"").slice(0,8)||"unknown")+" match="+triStateText(evidence.cliHashMatches));
       lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / processes="+(evidence.managerBridgeProcessCount??"?")+" / stale="+(evidence.managerBridgeStaleProcessCount??"?")+" / clean="+(evidence.cleanSyncState?"true":"false"));

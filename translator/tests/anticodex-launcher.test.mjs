@@ -724,6 +724,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /function updateOperationStateText/);
   assert.match(managerInject, /function syncReadinessEvidenceFromResult/);
   assert.match(managerInject, /function syncReadinessEvidenceLines/);
+  assert.match(managerInject, /clientSyncMode/);
+  assert.match(managerInject, /sync contract/);
+  assert.match(managerInject, /noFeatureRebuild/);
   assert.match(managerInject, /updateStatus\.source\?\.packageVersion \|\| activeHost\.sourcePackageVersion/);
   assert.match(managerInject, /sourceHostHash/);
   assert.match(managerInject, /hostHashMatches/);
@@ -732,6 +735,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerServerSource, /syncReadinessEvidence:\s*fast\s*\?\s*null\s*:\s*latestManagerReportItem/);
   assert.match(managerServerSource, /function syncReadinessEvidenceFromResult/);
   assert.match(managerServerSource, /syncReadinessEvidenceLines/);
+  assert.match(managerServerSource, /clientSyncMode/);
+  assert.match(managerServerSource, /sync contract/);
+  assert.match(managerServerSource, /noFeatureRebuild/);
   assert.match(managerServerSource, /updateStatus\.source\?\.packageVersion\|\|activeHost\.sourcePackageVersion/);
   assert.match(managerServerSource, /sourceHostHash/);
   assert.match(managerServerSource, /hostHashMatches/);
@@ -3097,6 +3103,10 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /uiIdleEvidence/);
   assert.match(reportSummarizer, /healthySampleCount/);
   assert.match(reportSummarizer, /syncReadinessEvidence/);
+  assert.match(reportSummarizer, /clientSyncMode/);
+  assert.match(reportSummarizer, /clientSyncMaintenancePath/);
+  assert.match(reportSummarizer, /forbidsFeatureByFeatureReimplementation/);
+  assert.match(reportSummarizer, /antiCodexPatchScope/);
   assert.match(reportSummarizer, /shortcutReadyCount/);
   assert.match(reportSummarizer, /codexVersion/);
   assert.match(reportSummarizer, /sourcePackageVersion/);
@@ -3652,6 +3662,19 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
       behaviorCovered: true,
       coverageKind: "installed-no-traffic",
       skipIconPaletteProbe: false,
+      clientSyncContract: {
+        mode: "codex-client-copy-plus-anticodex-patches",
+        maintenancePath: "guarded-host-sync-then-reapply-anticodex-patches",
+        nativeClientBehaviorCarriedByHostSync: true,
+        forbidsFeatureByFeatureReimplementation: true,
+        sourcePackageName: "OpenAI.Codex",
+        sourcePackageVersion: "4.5.6",
+        activeSourcePackageName: "OpenAI.Codex",
+        activeSourcePackageVersion: "4.5.6",
+        sourceHostHashMatches: true,
+        sourceCliHashMatches: true,
+        antiCodexPatchScope: ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"],
+      },
       activeHost: {
         exists: true,
         markerExists: true,
@@ -3708,6 +3731,15 @@ test("report summarizer surfaces sync readiness no-traffic evidence", () => {
     const summary = JSON.parse(result.stdout);
     assert.equal(summary.syncReadinessEvidence.noTrafficReady, true);
     assert.equal(summary.syncReadinessEvidence.fullMode, true);
+    assert.equal(summary.syncReadinessEvidence.clientSyncMode, "codex-client-copy-plus-anticodex-patches");
+    assert.equal(summary.syncReadinessEvidence.clientSyncMaintenancePath, "guarded-host-sync-then-reapply-anticodex-patches");
+    assert.equal(summary.syncReadinessEvidence.nativeClientBehaviorCarriedByHostSync, true);
+    assert.equal(summary.syncReadinessEvidence.forbidsFeatureByFeatureReimplementation, true);
+    assert.equal(summary.syncReadinessEvidence.sourcePackageName, "OpenAI.Codex");
+    assert.equal(summary.syncReadinessEvidence.activeSourcePackageName, "OpenAI.Codex");
+    assert.equal(summary.syncReadinessEvidence.clientSyncHostHashMatches, true);
+    assert.equal(summary.syncReadinessEvidence.clientSyncCliHashMatches, true);
+    assert.deepEqual(summary.syncReadinessEvidence.antiCodexPatchScope, ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"]);
     assert.equal(summary.syncReadinessEvidence.activeHostReady, true);
     assert.equal(summary.syncReadinessEvidence.brandReady, true);
     assert.equal(summary.syncReadinessEvidence.iconReady, true);
@@ -7877,6 +7909,11 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic tool-bridge summary missing native MCP tool call proof/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing same-Cascade resume proof/);
   assert.match(diagnostics, /uiIdleEvidence/);
+  assert.match(diagnostics, /missing client sync mode/);
+  assert.match(diagnostics, /missing client sync maintenance path/);
+  assert.match(diagnostics, /missing no feature-rebuild flag/);
+  assert.match(diagnostics, /wrong client sync mode/);
+  assert.match(diagnostics, /does not reject feature-by-feature rebuild/);
   assert.match(diagnostics, /diagnostic ui-idle summary missing uiIdleEvidence/);
   assert.match(diagnostics, /diagnostic ui-idle summary has reconnect text/);
   assert.match(diagnostics, /syncReadinessEvidence/);

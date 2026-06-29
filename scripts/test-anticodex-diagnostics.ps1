@@ -577,7 +577,22 @@ function Test-SyncReadinessEvidence {
     if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activeCliHash)) { Add-Failure "$Prefix missing active CLI hash" }
     if (-not (Has-Property $SyncEvidence "hostHashMatches")) { Add-Failure "$Prefix missing host hash match flag" }
     if (-not (Has-Property $SyncEvidence "cliHashMatches")) { Add-Failure "$Prefix missing CLI hash match flag" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.clientSyncMode)) { Add-Failure "$Prefix missing client sync mode" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.clientSyncMaintenancePath)) { Add-Failure "$Prefix missing client sync maintenance path" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.sourcePackageName)) { Add-Failure "$Prefix missing source package name" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activeSourcePackageName)) { Add-Failure "$Prefix missing active source package name" }
+    if (-not (Has-Property $SyncEvidence "nativeClientBehaviorCarriedByHostSync")) { Add-Failure "$Prefix missing native client sync flag" }
+    if (-not (Has-Property $SyncEvidence "forbidsFeatureByFeatureReimplementation")) { Add-Failure "$Prefix missing no feature-rebuild flag" }
+    if (-not (Has-Property $SyncEvidence "clientSyncHostHashMatches")) { Add-Failure "$Prefix missing client sync host hash flag" }
+    if (-not (Has-Property $SyncEvidence "clientSyncCliHashMatches")) { Add-Failure "$Prefix missing client sync CLI hash flag" }
+    if (-not $SyncEvidence.antiCodexPatchScope -or @($SyncEvidence.antiCodexPatchScope).Count -lt 1) { Add-Failure "$Prefix missing Anti-Codex patch scope" }
     if ($RequireReady) {
+        if ($SyncEvidence.clientSyncMode -ne "codex-client-copy-plus-anticodex-patches") { Add-Failure "$Prefix wrong client sync mode" }
+        if ($SyncEvidence.clientSyncMaintenancePath -ne "guarded-host-sync-then-reapply-anticodex-patches") { Add-Failure "$Prefix wrong client sync maintenance path" }
+        if ($SyncEvidence.nativeClientBehaviorCarriedByHostSync -ne $true) { Add-Failure "$Prefix does not prove native host sync carries client behavior" }
+        if ($SyncEvidence.forbidsFeatureByFeatureReimplementation -ne $true) { Add-Failure "$Prefix does not reject feature-by-feature rebuild" }
+        if ($SyncEvidence.clientSyncHostHashMatches -ne $true) { Add-Failure "$Prefix client sync host hash mismatch" }
+        if ($SyncEvidence.clientSyncCliHashMatches -ne $true) { Add-Failure "$Prefix client sync CLI hash mismatch" }
         if ($SyncEvidence.noTrafficReady -ne $true) { Add-Failure "$Prefix missing no-traffic attestation" }
         if ($SyncEvidence.fullMode -ne $true) { Add-Failure "$Prefix not full mode" }
         if ($SyncEvidence.activeHostReady -ne $true) { Add-Failure "$Prefix active host not ready" }
