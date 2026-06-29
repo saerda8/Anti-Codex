@@ -194,11 +194,29 @@ function syncReadinessFullEnough(report) {
     && report.sync?.managerBridge?.expectedBaseUrl === "http://127.0.0.1:8484";
 }
 
+function syncReadinessSourceEvidence(report) {
+  const contract = report?.clientSyncContract || {};
+  const source = report?.sync?.updateStatus?.source || {};
+  return {
+    packageName: String(contract.sourcePackageName || source.packageName || ""),
+    packageVersion: String(contract.sourcePackageVersion || source.packageVersion || ""),
+    hostHash: String(source.hostHash || ""),
+    cliHash: String(source.cliHash || ""),
+  };
+}
+
+function syncReadinessSourceEvidenceMatches(report, reference) {
+  const evidence = syncReadinessSourceEvidence(report);
+  const fields = ["packageName", "packageVersion", "hostHash", "cliHash"].filter((field) => reference?.[field]);
+  return fields.length === 0 || fields.every((field) => evidence[field] === reference[field]);
+}
+
 function selectReportPath(definition) {
   const latestPath = join(reportRoot, definition.file);
   if (definition.id !== "syncReadiness") return { path: latestPath, selectedFromHistory: false };
   const latestReport = loadSignedJson(latestPath);
   if (syncReadinessFullEnough(latestReport)) return { path: latestPath, selectedFromHistory: false };
+  const latestSourceEvidence = syncReadinessSourceEvidence(latestReport);
   if (!existsSync(reportRoot)) return { path: latestPath, selectedFromHistory: false };
   const candidates = readdirSync(reportRoot, { withFileTypes: true })
     .filter((entry) => entry.isFile() && /^\d{8}-\d{6}-sync-readiness\.json$/i.test(entry.name))
@@ -208,11 +226,18 @@ function selectReportPath(definition) {
       return Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? ageHours <= maxAgeHours : true;
     })
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+  let mismatchedHistory = null;
   for (const candidate of candidates) {
-    if (syncReadinessFullEnough(loadSignedJson(candidate))) {
+    const candidateReport = loadSignedJson(candidate);
+    if (syncReadinessFullEnough(candidateReport)) {
+      if (!syncReadinessSourceEvidenceMatches(candidateReport, latestSourceEvidence)) {
+        mismatchedHistory ||= candidate;
+        continue;
+      }
       return { path: candidate, selectedFromHistory: true };
     }
   }
+  if (mismatchedHistory) return { path: mismatchedHistory, selectedFromHistory: true, historySourceMismatch: true };
   return { path: latestPath, selectedFromHistory: false };
 }
 
@@ -377,6 +402,7 @@ function summarizeGate(definition) {
     note: definition.note || "",
     error: present ? "" : "missing_report",
     selectedFromHistory: selection.selectedFromHistory === true,
+    historySourceMismatch: selection.historySourceMismatch === true,
     selectedFile: filePath.split(/[\\/]/).pop(),
     reportFailureSamples: [],
   };
@@ -1084,6 +1110,7 @@ function summarizeGate(definition) {
       const sourcePackageVersion = String(clientSyncContract.sourcePackageVersion || "");
       const activeSourcePackageVersion = String(clientSyncContract.activeSourcePackageVersion || "");
       if (report.reportName !== "sync-readiness") semanticFailures.push("sync_readiness_report_name");
+      if (gate.selectedFromHistory === true && gate.historySourceMismatch === true) semanticFailures.push("sync_readiness_history_source_mismatch");
       if (report.noTraffic !== true || report.usedRealTraffic !== false || report.behaviorCovered !== true || report.coverageKind !== "installed-no-traffic") semanticFailures.push("sync_readiness_no_traffic_attestation");
       if (report.fast !== false || report.skipIconPaletteProbe !== false) semanticFailures.push("sync_readiness_full_mode_required");
       if (clientSyncContract.mode !== "codex-client-copy-plus-anticodex-patches"
@@ -2544,6 +2571,18 @@ if (args.has("--self-test")) {
     if (syncReadinessFallbackGate.selectedKind !== "history") throw new Error("self-test failed: history fallback selectedKind was not preserved");
     if (syncReadinessFallbackGate.selectedFile !== "20260624-000000-sync-readiness.json") throw new Error("self-test failed: history fallback selectedFile was not preserved");
     if (!syncReadinessFallbackGate.selectedMtime) throw new Error("self-test failed: history fallback selectedMtime was not preserved");
+    const syncReadinessHistorySourceDriftLatest = loadSignedJson(join(tempRoot, "20260624-000000-sync-readiness.json"));
+    syncReadinessHistorySourceDriftLatest.fast = true;
+    syncReadinessHistorySourceDriftLatest.skipIconPaletteProbe = true;
+    syncReadinessHistorySourceDriftLatest.clientSyncContract.sourcePackageVersion = "26.999.0000.0";
+    syncReadinessHistorySourceDriftLatest.sync.updateStatus.source.packageVersion = "26.999.0000.0";
+    syncReadinessHistorySourceDriftLatest.sync.updateStatus.source.hostHash = "new-host";
+    syncReadinessHistorySourceDriftLatest.sync.updateStatus.source.cliHash = "new-cli";
+    writeFakeLatestReport("latest-sync-readiness.json", syncReadinessHistorySourceDriftLatest);
+    const syncReadinessHistorySourceDriftGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "syncReadiness"));
+    if (syncReadinessHistorySourceDriftGate.satisfied === true || !syncReadinessHistorySourceDriftGate.semanticFailures?.includes("sync_readiness_history_source_mismatch")) {
+      throw new Error("self-test failed: stale sync-readiness history source satisfied the gate");
+    }
     const syncReadinessVersionDriftReport = loadSignedJson(join(tempRoot, "20260624-000000-sync-readiness.json"));
     syncReadinessVersionDriftReport.clientSyncContract.activeSourcePackageVersion = "26.999.0000.0";
     writeFakeLatestReport("latest-sync-readiness.json", syncReadinessVersionDriftReport);

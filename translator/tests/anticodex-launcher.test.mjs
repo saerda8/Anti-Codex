@@ -11353,6 +11353,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /semantically invalid sync-readiness report satisfied the gate/);
   assert.match(releaseGates, /sync_readiness_client_sync_version_mismatch/);
   assert.match(releaseGates, /sync_readiness_client_patch_scope_extra/);
+  assert.match(releaseGates, /sync_readiness_history_source_mismatch/);
+  assert.match(releaseGates, /stale sync-readiness history source satisfied the gate/);
+  assert.match(releaseGates, /function syncReadinessSourceEvidence/);
   assert.match(releaseGates, /sync-readiness extra Anti-Codex patch scope satisfied the gate/);
   assert.match(releaseGates, /id:\s*"syncHost"[\s\S]*?sync-anticodex-launcher\.ps1[\s\S]*?highImpact:\s*true/);
   assert.match(releaseGates, /sync-readiness host-sync action was not marked high-impact/);
