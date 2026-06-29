@@ -3923,6 +3923,11 @@ test("report summarizer surfaces installed overall no-traffic evidence", () => {
       behaviorCovered: true,
       coverageKind: "installed-no-traffic",
       elapsedMs: 1234,
+      health: {
+        modelTextTransport: "cli",
+        modelDiscoverySource: "antigravity-desktop-catalog",
+        antigravityCoworkerDefault: false,
+      },
       checks: {
         branding: { ok: true },
         managerAction: { ok: true, skipped: true, reason: "covered elsewhere", coveredBy: "manager" },
@@ -3943,6 +3948,9 @@ test("report summarizer surfaces installed overall no-traffic evidence", () => {
     assert.equal(summary.installedOverallEvidence.skippedCheckCount, 3);
     assert.equal(summary.installedOverallEvidence.missingSkipMetadataCount, 0);
     assert.deepEqual(summary.installedOverallEvidence.realTrafficSkippedChecks, ["realMiniTool", "realWork"]);
+    assert.equal(summary.installedOverallEvidence.modelTextTransport, "cli");
+    assert.equal(summary.installedOverallEvidence.modelDiscoverySource, "antigravity-desktop-catalog");
+    assert.equal(summary.installedOverallEvidence.antigravityCoworkerDefault, false);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -11310,6 +11318,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /requireInstalledOverallSemantics/);
   assert.match(releaseGates, /installed_overall_coverage_kind/);
+  assert.match(releaseGates, /installed_overall_model_text_transport_not_cli/);
+  assert.match(releaseGates, /installed_overall_model_discovery_source_missing/);
+  assert.match(releaseGates, /installed_overall_antigravity_coworker_default_not_false/);
   assert.match(releaseGates, /installed_overall_real_traffic_skip_missing/);
   assert.match(releaseGates, /allowedFullSkipped = new Set\(\[[\s\S]*"managerButtonMcpSkills"[\s\S]*"managerButtonPluginCapabilities"[\s\S]*"uiIdleStability"/);
   assert.match(releaseGates, /nonBlockingHostSyncCheck/);

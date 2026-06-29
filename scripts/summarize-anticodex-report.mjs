@@ -738,6 +738,9 @@ const summary = {
     skippedChecks: skippedCheckEntries.map((entry) => entry.id).sort(),
     missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
     realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork" || entry.id === "realSmallProject").map((entry) => entry.id).sort(),
+    modelTextTransport: has(report.health || {}, "modelTextTransport") ? asString(report.health.modelTextTransport) : null,
+    modelDiscoverySource: has(report.health || {}, "modelDiscoverySource") ? asString(report.health.modelDiscoverySource) : null,
+    antigravityCoworkerDefault: has(report.health || {}, "antigravityCoworkerDefault") ? boolField(report.health, "antigravityCoworkerDefault") : null,
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),
