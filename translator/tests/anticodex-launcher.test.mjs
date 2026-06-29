@@ -1019,11 +1019,14 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /function failureReasonDisplayLabel/);
   assert.match(managerInject, /function failureReasonDisplayLabel/);
   assert.match(managerServerSource, /function failureReasonDisplayLabel/);
-  for (const marker of ["ageHours", "fresh", "selectedFromHistory", "requiredForShort", "requiredForRelease"]) {
+  for (const marker of ["ageHours", "fresh", "selectedFromHistory", "historySourceMismatch", "requiredForShort", "requiredForRelease"]) {
     assert.match(managerBridge, new RegExp(marker));
     assert.match(managerInject, new RegExp(marker));
     assert.match(managerServerSource, new RegExp(marker));
   }
+  assert.match(managerBridge, /sourceMismatch=/);
+  assert.match(managerInject, /sourceMismatch=/);
+  assert.match(managerServerSource, /sourceMismatch=/);
   assert.match(managerBridge, /blockedUntilExplicitUserApproval/);
   assert.match(managerInject, /blockedUntilExplicitUserApproval/);
   assert.match(managerServerSource, /blockedUntilExplicitUserApproval/);
@@ -2807,6 +2810,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /installedRuntimeEvidence/);
   assert.match(server, /releaseGateSelectedReports/);
   assert.match(server, /releaseGateFailureReasons/);
+  assert.match(server, /historySourceMismatch/);
   assert.match(server, /releaseGateFailureReasons[\s\S]*slice\(0, 64\)/);
   assert.match(server, /actionReasons: /);
   assert.match(server, /actionGuidance: /);
@@ -3089,6 +3093,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(reportSummarizer, /asOfflineSnapshotEvidence/);
   assert.match(reportSummarizer, /selectedKind/);
   assert.match(reportSummarizer, /selectedMtime/);
+  assert.match(reportSummarizer, /historySourceMismatch/);
   assert.match(reportSummarizer, /reportFailureSamples/);
   assert.match(reportSummarizer, /guidance: asString\(gate\.guidance/);
   assert.match(reportSummarizer, /releaseGateSelectedReports/);
@@ -8049,6 +8054,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /release-gates missing optional gate \$missingOptionalId missing optional marker/);
   assert.match(diagnostics, /release-gates summary missing release gate group evidence/);
   assert.match(diagnostics, /selectedFromHistory -eq \$true/);
+  assert.match(diagnostics, /historySourceMismatch -eq \$true/);
+  assert.match(diagnostics, /missing history source mismatch detail/);
   assert.match(diagnostics, /\$syncReadinessReason/);
   assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report detail/);
   assert.match(diagnostics, /release-gates selected history gate \$selectedGateId missing selected report mtime/);

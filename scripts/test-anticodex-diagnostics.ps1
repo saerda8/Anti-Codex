@@ -670,6 +670,9 @@ function Test-ReportsSummary {
             } elseif (@($matchingSelectedReports | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.selectedMtime) }).Count -lt 1) {
                 Add-Failure "release-gates selected history gate $selectedGateId missing selected report mtime"
             }
+            if ($selectedGate.historySourceMismatch -eq $true -and @($matchingSelectedReports | Where-Object { $_.historySourceMismatch -eq $true }).Count -lt 1) {
+                Add-Failure "release-gates selected history gate $selectedGateId missing history source mismatch detail"
+            }
         }
         Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
     }
@@ -1432,8 +1435,14 @@ function Test-DiagnosticBundle {
             Test-ReleaseGateApprovalAndOfflineEvidence $releaseGatesSummary
             if (-not (Has-Property $releaseGatesSummary "releaseGateSelectedReports")) { Add-Failure "release-gates summary missing selected history report details" }
             $syncReadinessReason = @($releaseGatesSummary.releaseGateFailureReasons | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFromHistory -eq $true } | Select-Object -First 1)[0]
-            if ($syncReadinessReason -and @($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile }).Count -lt 1) {
-                Add-Failure "release-gates summary missing sync-readiness selected history report"
+            if ($syncReadinessReason) {
+                $syncReadinessSelectedReports = @($releaseGatesSummary.releaseGateSelectedReports | Where-Object { $_.id -eq "syncReadiness" -and $_.selectedFile })
+                if ($syncReadinessSelectedReports.Count -lt 1) {
+                    Add-Failure "release-gates summary missing sync-readiness selected history report"
+                }
+                if ($syncReadinessReason.historySourceMismatch -eq $true -and @($syncReadinessSelectedReports | Where-Object { $_.historySourceMismatch -eq $true }).Count -lt 1) {
+                    Add-Failure "release-gates summary missing sync-readiness history source mismatch detail"
+                }
             }
             Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
         }

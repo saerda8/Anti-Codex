@@ -3692,6 +3692,7 @@ const releaseGateFailureReasons = gates
       ageHours: gate.ageHours,
       fresh: gate.fresh === true,
       selectedFromHistory: gate.selectedFromHistory === true,
+      historySourceMismatch: gate.historySourceMismatch === true,
       selectedKind: gate.selectedKind || "",
       selectedFile: gate.selectedFile || "",
       selectedMtime: gate.selectedMtime || "",
@@ -3711,6 +3712,11 @@ const releaseGateFailures = gates
       group: gate.group,
       error: gate.error || "",
       failureReason: gate.failureReason || "",
+      selectedFromHistory: gate.selectedFromHistory === true,
+      historySourceMismatch: gate.historySourceMismatch === true,
+      selectedKind: gate.selectedKind || "",
+      selectedFile: gate.selectedFile || "",
+      selectedMtime: gate.selectedMtime || "",
       semanticFailures,
       semanticFailuresAvailableCount: semanticFailures.length,
       semanticFailuresHiddenCount: 0,
@@ -3755,6 +3761,7 @@ const releaseGateSelectedReports = gates
     group: gate.group,
     selectedFile: gate.selectedFile || "",
     selectedMtime: gate.selectedMtime || "",
+    historySourceMismatch: gate.historySourceMismatch === true,
   }))
   .filter((entry) => entry.id && entry.selectedFile);
 

@@ -245,6 +245,8 @@ const releaseGateFailures = Array.isArray(report?.gates)
         semanticFailures,
         semanticFailuresAvailableCount: semanticFailures.length,
         semanticFailuresHiddenCount: 0,
+        selectedFromHistory: gate.selectedFromHistory === true,
+        historySourceMismatch: gate.historySourceMismatch === true,
         selectedKind: asString(gate.selectedKind || ""),
         selectedFile: asString(gate.selectedFile || ""),
         selectedMtime: asString(gate.selectedMtime || ""),
@@ -274,6 +276,7 @@ const releaseGateFailureReasons = rawReleaseGateFailureReasons
       ageHours: has(gate, "ageHours") ? gate.ageHours : null,
       fresh: boolField(gate, "fresh"),
       selectedFromHistory: gate.selectedFromHistory === true,
+      historySourceMismatch: gate.historySourceMismatch === true,
       selectedKind: asString(gate.selectedKind || ""),
       selectedFile: asString(gate.selectedFile || ""),
       selectedMtime: asString(gate.selectedMtime || ""),
@@ -319,6 +322,7 @@ const releaseGateSelectedReports = Array.isArray(report?.releaseGateSelectedRepo
       id: asString(entry.id),
       group: asString(entry.group),
       selectedFile: asString(entry.selectedFile),
+      historySourceMismatch: entry.historySourceMismatch === true,
       ...(asString(entry.selectedMtime) ? { selectedMtime: asString(entry.selectedMtime) } : {}),
     }))
     .filter((entry) => entry.id && entry.selectedFile)
@@ -330,6 +334,7 @@ const releaseGateSelectedReports = Array.isArray(report?.releaseGateSelectedRepo
       id: asString(gate.id),
       group: asString(gate.group),
       selectedFile: asString(gate.selectedFile),
+      historySourceMismatch: gate.historySourceMismatch === true,
       ...(asString(gate.selectedMtime) ? { selectedMtime: asString(gate.selectedMtime) } : {}),
     }))
     .filter((entry) => entry.id && entry.selectedFile)

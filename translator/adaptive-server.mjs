@@ -2504,6 +2504,8 @@ function latestManagerReportItem(label, fileName) {
                     semanticFailures: semanticFailures.slice(0, 8),
                     semanticFailuresAvailableCount: semanticFailures.length,
                     semanticFailuresHiddenCount: Math.max(0, semanticFailures.length - 8),
+                    selectedFromHistory: gate.selectedFromHistory === true,
+                    historySourceMismatch: gate.historySourceMismatch === true,
                     selectedKind: shortSafeText(gate.selectedKind || "", ""),
                     selectedFile: shortSafeText(gate.selectedFile || "", ""),
                     selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
@@ -2536,6 +2538,7 @@ function latestManagerReportItem(label, fileName) {
                 ageHours: Number.isFinite(Number(gate.ageHours)) ? Number(gate.ageHours) : null,
                 fresh: typeof gate.fresh === "boolean" ? gate.fresh : null,
                 selectedFromHistory: gate.selectedFromHistory === true,
+                historySourceMismatch: gate.historySourceMismatch === true,
                 selectedKind: shortSafeText(gate.selectedKind || "", ""),
                 selectedFile: shortSafeText(gate.selectedFile || "", ""),
                 selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
@@ -2573,6 +2576,7 @@ function latestManagerReportItem(label, fileName) {
                 group: shortSafeText(entry.group || "", ""),
                 selectedFile: shortSafeText(entry.selectedFile || "", ""),
                 selectedMtime: shortSafeText(entry.selectedMtime || "", ""),
+                historySourceMismatch: entry.historySourceMismatch === true,
             }))
             .filter((entry) => entry.id && entry.selectedFile)
             .slice(0, 12)
@@ -2584,6 +2588,7 @@ function latestManagerReportItem(label, fileName) {
                 group: shortSafeText(gate.group || "", ""),
                 selectedFile: shortSafeText(gate.selectedFile || "", ""),
                 selectedMtime: shortSafeText(gate.selectedMtime || "", ""),
+                historySourceMismatch: gate.historySourceMismatch === true,
             }))
             .filter((entry) => entry.id && entry.selectedFile)
             .slice(0, 12)
@@ -4111,6 +4116,7 @@ function latestReportsSummary(result){
         if(gate?.ageHours!==undefined&&gate.ageHours!==null&&Number.isFinite(Number(gate.ageHours))) details.push("age="+Number(gate.ageHours).toFixed(1)+"h");
         if(typeof gate?.fresh==="boolean") details.push("fresh="+triStateText(gate.fresh));
         if(typeof gate?.selectedFromHistory==="boolean") details.push("history="+triStateText(gate.selectedFromHistory));
+        if(typeof gate?.historySourceMismatch==="boolean") details.push("sourceMismatch="+triStateText(gate.historySourceMismatch));
         if(typeof gate?.requiredForShort==="boolean"||typeof gate?.requiredForRelease==="boolean") details.push("required="+triStateText(gate.requiredForShort)+"/"+triStateText(gate.requiredForRelease));
         return (gate?.id||"unknown")+":"+reason+(details.length?"["+details.join("/")+"]":"");
       }
@@ -4190,7 +4196,7 @@ function latestReportsSummary(result){
         }
       }
       if(Array.isArray(item.releaseGateSelectedReports)&&item.releaseGateSelectedReports.length){
-        const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile).join(", ");
+        const selectedReports=item.releaseGateSelectedReports.slice(0,6).map((entry)=>entry.id+":"+entry.selectedFile+(entry.historySourceMismatch===true?"[sourceMismatch]":"")).join(", ");
         lines.push("  selectedHistory: "+selectedReports);
       }
       if(Array.isArray(item.releaseGateGroups)&&item.releaseGateGroups.length){
