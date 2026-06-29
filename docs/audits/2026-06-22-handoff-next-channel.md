@@ -1,6 +1,6 @@
 # Anti-Codex Handoff For Next Channel
 
-Date: 2026-06-23
+Date: 2026-06-23, current-status refreshed 2026-06-29
 Branch: main
 
 ## Current State
@@ -8,7 +8,7 @@ Branch: main
 - Anti-Codex is an isolated Codex desktop/runtime copy with an Antigravity entitlement model adapter. Antigravity Desktop/CLI may supply model text, but Antigravity coworker/tool execution is not the default product path.
 - Direction lock: Anti-Codex should remain a guarded Codex client copy plus isolation, branding, and model-adapter changes. Do not reimplement Codex client/tool features one by one through Antigravity Desktop/coworker; use host sync and parity validation when Codex changes.
 - Client sync contract: native Codex updates must be handled as guarded host/client sync plus Anti-Codex patch reapplication. Missing native Codex behavior in Anti-Codex is a sync/parity bug by default, not a prompt to manually rebuild that behavior.
-- Installed runtime on `http://127.0.0.1:8484` was healthy during the last checks: upstream `antigravity-desktop`, account ready, 8 models.
+- Installed runtime on `http://127.0.0.1:8484` was healthy during the latest no-traffic checks: upstream `antigravity-desktop`, CLI model-text transport, account ready, 8 models, session lock idle.
 - Manager is at `native-panel-v85`.
 - Standalone real Manager MCP/Skill and plugin/application button gates pass after local feature refresh. The default standalone real-button script now runs only those two non-disruptive actions; report viewing and diagnostics bundle remain opt-in.
 - `latest-manager-real-buttons.json` is now indexed by Manager latest reports, diagnostic bundle report summaries, and installed overall report-integrity checks.
@@ -16,8 +16,8 @@ Branch: main
 - Latest MCP/Skill evidence: MCP `3/3` with `node_repl`, DeepSeek worker, and Antigravity worker visible; expected shared skill union `126`, missing shared `[]`.
 - Fast UI smoke, full no-traffic UI smoke, and installed no-traffic overall passed. Short non-fast UI smoke now uses explicit timeout budgets and records `dynamicProbeUnavailable` instead of hanging when the embedded dynamic probe times out.
 - Real Antigravity work verifier passed: model `gemini-3.5-flash-low` created a file, executed local `node_repl` MCP, matched the marker, and returned Chinese final text.
-- Source preflight fast gate passed before this handoff.
-- Latest installed passive release gate after `7b2d2c6` reports `shortReady:true`, `releaseReady:true`, `missingRequired:[]`, and `damagedReports:[]`; the optional stability-soak report is present and satisfies semantic checks.
+- Source preflight fast gate passed after the latest model-text boundary cleanup.
+- Current passive release gate reports `shortReady:true`, `releaseReady:false`, `releaseBlockedOnlyByRequiredRealTraffic:true`, `missingShort:[]`, `missingRequired:[postVerification,accountProxyReadiness]`, and `damagedReports:[]`. Older `releaseReady:true` notes below are historical snapshots; do not run the required real-traffic gates without explicit user approval.
 
 ## Important Recent Checks
 
