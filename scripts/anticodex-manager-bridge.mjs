@@ -471,6 +471,11 @@ function latestReportsSummary(result) {
       const evidence = item.sourcePreflightEvidence;
       lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"} / clientCopyDocs=${evidence.publicDocumentationClientCopySyncContractOk ? "true" : "false"}`);
       lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
+      if (evidence.antigravityCliProfilePrepareContract) {
+        const c = evidence.antigravityCliProfilePrepareContract;
+        lines.push(`  sourcePreflight profilePrepare: traffic=${c.usedRealTraffic ? "true" : "false"} / login=${c.loginVerified ? "true" : "false"} / separateAccount=${c.separateAccountVerified ? "true" : "false"} / coverage=${c.coverageKind || "unknown"} / boundary=${c.accountIsolationBoundary || "unknown"}`);
+        if (c.accountIsolationCaveat) lines.push(`  sourcePreflight profilePrepare caveat: ${c.accountIsolationCaveat}`);
+      }
     }
     if (item.logDbGuardEvidence) {
       const evidence = item.logDbGuardEvidence;

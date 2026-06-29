@@ -417,6 +417,20 @@ const summary = {
   upstreamProfileStorageOk: checkOk("upstreamProfileStorage"),
   antigravityCliIsolationProfileOk: checkOk("antigravityCliIsolationProfile"),
   antigravityCliProfilePrepareOk: checkOk("antigravityCliProfilePrepare"),
+  antigravityCliProfilePrepareContract: (() => {
+    const contract = checks.antigravityCliProfilePrepare && typeof checks.antigravityCliProfilePrepare === "object"
+      ? checks.antigravityCliProfilePrepare.contract
+      : null;
+    if (!contract || typeof contract !== "object") return null;
+    return {
+      usedRealTraffic: contract.usedRealTraffic === true,
+      loginVerified: contract.loginVerified === true,
+      separateAccountVerified: contract.separateAccountVerified === true,
+      coverageKind: has(contract, "coverageKind") ? asString(contract.coverageKind) : null,
+      accountIsolationBoundary: has(contract, "accountIsolationBoundary") ? asString(contract.accountIsolationBoundary) : null,
+      accountIsolationCaveat: has(contract, "accountIsolationCaveat") ? asString(contract.accountIsolationCaveat) : null,
+    };
+  })(),
   localConnectorVerifierOk: checkOk("localConnectorVerifier"),
   publicDocumentationOk: checkOk("publicDocumentation"),
   publicDocumentationClientCopySyncContractOk: report.reportName === "source-preflight"

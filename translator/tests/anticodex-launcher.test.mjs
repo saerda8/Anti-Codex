@@ -699,11 +699,11 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v98/);
+  assert.match(managerInject, /native-panel-v99/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
   assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
-  assert.match(syncReadiness, /native-panel-v98/);
-  assert.match(uiState, /native-panel-v98/);
+  assert.match(syncReadiness, /native-panel-v99/);
+  assert.match(uiState, /native-panel-v99/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -957,9 +957,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v98["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v98"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v98"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v99["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v99"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v99"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -1157,6 +1157,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /localConnectorVerifierOk/);
   assert.match(managerBridge, /antigravityCliProfilePrepareOk/);
   assert.match(managerInject, /antigravityCliProfilePrepareOk/);
+  assert.match(managerBridge, /sourcePreflight profilePrepare: traffic=/);
+  assert.match(managerInject, /sourcePreflight profilePrepare: traffic=/);
+  assert.match(managerBridge, /sourcePreflight profilePrepare caveat:/);
+  assert.match(managerInject, /sourcePreflight profilePrepare caveat:/);
   assert.match(managerBridge, /publicDocumentationClientCopySyncContractOk/);
   assert.match(managerInject, /publicDocumentationClientCopySyncContractOk/);
   assert.match(managerBridge, /clientCopyDocs=/);
@@ -1378,7 +1382,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v98/);
+  assert.match(managerOpenInject, /native-panel-v99/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -2415,7 +2419,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v98 manager script/);
+  assert.match(manager, /latest native-panel-v99 manager script/);
   assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -2742,6 +2746,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /upstreamProfileStorageOk/);
   assert.match(server, /antigravityCliIsolationProfileOk/);
   assert.match(server, /antigravityCliProfilePrepareOk/);
+  assert.match(server, /sourcePreflight profilePrepare: traffic=/);
+  assert.match(server, /sourcePreflight profilePrepare caveat:/);
   assert.match(server, /localConnectorVerifierOk/);
   assert.match(server, /publicDocumentationClientCopySyncContractOk/);
   assert.match(server, /client-copy-sync-contract/);
@@ -3531,7 +3537,14 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
         uiStateSelfTest: { ok: true },
         upstreamProfileStorage: { ok: true },
         antigravityCliIsolationProfile: { ok: true },
-        antigravityCliProfilePrepare: { ok: true },
+        antigravityCliProfilePrepare: { ok: true, contract: {
+          usedRealTraffic: false,
+          loginVerified: false,
+          separateAccountVerified: false,
+          coverageKind: "profile-prepared-no-traffic",
+          accountIsolationBoundary: "appdata-isolation",
+          accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
+        } },
         localConnectorVerifier: { ok: true },
         publicDocumentation: {
           ok: true,
@@ -3564,6 +3577,14 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
     assert.equal(summary.upstreamProfileStorageOk, true);
     assert.equal(summary.antigravityCliIsolationProfileOk, true);
     assert.equal(summary.antigravityCliProfilePrepareOk, true);
+    assert.deepEqual(summary.antigravityCliProfilePrepareContract, {
+      usedRealTraffic: false,
+      loginVerified: false,
+      separateAccountVerified: false,
+      coverageKind: "profile-prepared-no-traffic",
+      accountIsolationBoundary: "appdata-isolation",
+      accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
+    });
     assert.equal(summary.localConnectorVerifierOk, true);
     assert.equal(summary.publicDocumentationOk, true);
     assert.equal(summary.publicDocumentationClientCopySyncContractOk, true);
