@@ -617,6 +617,8 @@ function Test-SyncReadinessEvidence {
     }
 }
 
+$AllowedAntigravityModelDiscoverySources = @("antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog")
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1066,6 +1068,7 @@ function Test-DiagnosticBundle {
                 if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 3) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
                 if ([string]$overallEvidence.modelTextTransport -ne "cli") { Add-Failure "diagnostic installed-overall $($entry.Label) summary model text transport is not cli" }
                 if (-not [string]$overallEvidence.modelDiscoverySource) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing model discovery source" }
+                if ([string]$overallEvidence.modelDiscoverySource -and $AllowedAntigravityModelDiscoverySources -notcontains [string]$overallEvidence.modelDiscoverySource) { Add-Failure "diagnostic installed-overall $($entry.Label) summary model discovery source is not allowed" }
                 if ($overallEvidence.antigravityCoworkerDefault -ne $false) { Add-Failure "diagnostic installed-overall $($entry.Label) summary antigravity coworker default is not false" }
             }
         }

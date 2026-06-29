@@ -6997,6 +6997,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Antigravity health missing modelTextTransport/);
   assert.match(overall, /expected cli/);
   assert.match(overall, /Antigravity health missing modelDiscoverySource/);
+  assert.match(overall, /Antigravity model discovery source is '\$healthModelDiscoverySource', expected an allowed catalog source/);
+  assert.match(overall, /antigravity-cli-catalog/);
   assert.match(overall, /Antigravity health missing antigravityCoworkerDefault/);
   assert.match(overall, /Antigravity coworker must not be the default tool execution path/);
   assert.match(overall, /modelTextTransport = \$healthModelTextTransport/);
@@ -7988,6 +7990,8 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing real traffic skipped checks/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary model text transport is not cli/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing model discovery source/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary model discovery source is not allowed/);
+  assert.match(diagnostics, /AllowedAntigravityModelDiscoverySources/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary antigravity coworker default is not false/);
   assert.match(diagnostics, /latest-post-verification\.json/);
   assert.match(diagnostics, /latest-source-preflight\.json/);

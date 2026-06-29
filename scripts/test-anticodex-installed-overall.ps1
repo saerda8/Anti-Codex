@@ -1106,6 +1106,7 @@ $healthModel = $null
 $healthModelTextTransport = ""
 $healthModelDiscoverySource = ""
 $healthAntigravityCoworkerDefault = $null
+$allowedAntigravityModelDiscoverySources = @("antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog")
 
 try {
     $health = Invoke-LocalJson "/health"
@@ -1132,6 +1133,7 @@ try {
         if (-not $healthModelTextTransport) { Add-Failure "Antigravity health missing modelTextTransport" }
         if ($healthModelTextTransport -and $healthModelTextTransport -ne "cli") { Add-Failure "Antigravity model text transport is '$healthModelTextTransport', expected cli" }
         if (-not $healthModelDiscoverySource) { Add-Failure "Antigravity health missing modelDiscoverySource" }
+        if ($healthModelDiscoverySource -and $allowedAntigravityModelDiscoverySources -notcontains $healthModelDiscoverySource) { Add-Failure "Antigravity model discovery source is '$healthModelDiscoverySource', expected an allowed catalog source" }
         if ($null -eq $healthAntigravityCoworkerDefault) { Add-Failure "Antigravity health missing antigravityCoworkerDefault" }
         if ($healthAntigravityCoworkerDefault -eq $true) { Add-Failure "Antigravity coworker must not be the default tool execution path" }
         if ($health.accountReady -ne $true -and (-not $NoTraffic)) { Add-Failure "Antigravity account is not ready: $($health.accountMessage)" }
