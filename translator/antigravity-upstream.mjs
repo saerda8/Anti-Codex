@@ -51,7 +51,7 @@ const ANTIGRAVITY_PROMPT_HEADER = [
   "Default to Simplified Chinese for visible user-facing replies when the user's language or UI locale is Chinese.",
   "Answer in the same language as the latest user message unless the user explicitly asks for another language.",
   "If the latest user message contains Chinese, the final visible answer must be Simplified Chinese, including summaries after tool use.",
-  "You are running inside Anti-Codex, a Codex-style desktop coworker powered by Antigravity.",
+  "You are running inside Anti-Codex, a guarded Codex client copy. Codex-owned tools stay in Anti-Codex; Antigravity supplies model text.",
 ].join("\n");
 
 export function isAntigravityNativeToolBridgeEnabled(options = {}) {

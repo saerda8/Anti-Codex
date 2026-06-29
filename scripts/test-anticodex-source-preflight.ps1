@@ -387,6 +387,10 @@ function Test-PublicDocumentationContracts {
     Add-DocAssertion -File "current public docs" -Name "no-native-bridge-default-wording" -Ok $noNativeBridgeDefaultWordingOk
     Add-DocAssertion -File "docs\marketing\legacy\deepcodex-video-script.md" -Name "legacy-marker" -Ok ($legacyMarketing -match 'archived historical DeepCodex / DeepSeek launch material' -and $legacyMarketing -match 'not a current Anti-Codex launch asset')
 
+    $legacyDeepseekNotes = Read-PublicDoc "docs\DEEPSEEK_RUNTIME_FAILURE_NOTES.md"
+    Add-DocAssertion -File "docs\DEEPSEEK_RUNTIME_FAILURE_NOTES.md" -Name "no-stale-antigravity-desktop-default-provider" -Ok ($legacyDeepseekNotes -notmatch 'defaults to the local Antigravity Desktop provider')
+    Add-DocAssertion -File "docs\DEEPSEEK_RUNTIME_FAILURE_NOTES.md" -Name "legacy-current-boundary-wording" -Ok ($legacyDeepseekNotes -match 'legacy route notes' -and $legacyDeepseekNotes -match 'not the current Anti-Codex default provider')
+
     $failed = @($assertions.ToArray() | Where-Object { -not [bool]$_.ok })
     return [pscustomobject]@{
         ok = ($failed.Count -eq 0)

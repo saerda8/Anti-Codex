@@ -2,9 +2,9 @@
 
 Status: legacy route notes. This file preserves failure lessons from the older
 DeepSeek-focused route. It is not the current Anti-Codex default provider
-description. Current Anti-Codex defaults to the local Antigravity Desktop
-provider, supports explicit third-party provider profiles, and must keep the
-original Codex installation untouched.
+description. Current Anti-Codex defaults to Antigravity CLI/entitlement model
+text; Desktop/coworker is compatibility/diagnostic only, and the original Codex
+installation is untouched.
 
 This document records failure modes observed when DeepSeek is driven through the Codex Desktop runtime. It is intentionally not a translator design spec. The translator should stay a protocol compatibility layer; planner, task completion, and recovery policy belong in the runtime/harness layer.
 

@@ -961,7 +961,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /selectedHistory: syncReadiness:20260624-071841-sync-readiness\.json/);
   assert.match(evidenceSummary, /semanticFailures: ui-idle:ui_idle_missing_samples, ui_idle_no_idle, ui_idle_no_timestamp, ui_idle_bad_state \(\+2 more\)/);
   assert.match(evidenceSummary, /semanticFailures: .*\(\+1 more\)/);
-  assert.match(evidenceSummary, /source snapshot mismatch: stale reports for mcpSkills, pluginCapabilities; refresh MCP\/Skill and plugin capability reports/);
+  assert.match(evidenceSummary, /source snapshot mismatch: stale reports for mcpSkills, pluginCapabilities; refresh local features, MCP\/Skill, and plugin capability reports/);
   assert.match(evidenceSummary, /source snapshot refresh: refresh local features first, then run normal MCP\/Skill and plugin capability verifiers; do not edit latest report JSON by hand/);
   assert.match(evidenceSummary, /modelThinking: models=2\/2 \/ thinking=2\/2 \/ budgetMissing=0/);
   assert.match(evidenceSummary, /modelThinking levels: high, low/);

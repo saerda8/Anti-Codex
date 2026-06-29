@@ -12622,6 +12622,23 @@ test("current docs describe Antigravity as model entitlement, not Desktop cowork
   assert.match(videoScript, /Codex-owned tools stay in Anti-Codex/);
 });
 
+test("Antigravity prompt preserves the model-text boundary, not coworker identity", () => {
+  const upstream = readFileSync(resolve(root, "translator", "antigravity-upstream.mjs"), "utf8");
+
+  assert.match(upstream, /guarded Codex client copy/);
+  assert.match(upstream, /Codex-owned tools stay in Anti-Codex/);
+  assert.match(upstream, /Antigravity supplies model text/);
+  assert.doesNotMatch(upstream, /Codex-style desktop coworker powered by Antigravity/);
+  assert.doesNotMatch(upstream, /powered by Antigravity/);
+});
+
+test("legacy DEEPSEEK_RUNTIME_FAILURE_NOTES has no stale Desktop default-provider wording and carries legacy/current boundary", () => {
+  const notes = readFileSync(resolve(root, "docs", "DEEPSEEK_RUNTIME_FAILURE_NOTES.md"), "utf8");
+  assert.doesNotMatch(notes, /defaults to the local Antigravity Desktop provider/);
+  assert.match(notes, /legacy route notes/);
+  assert.match(notes, /not the current Anti-Codex default provider/);
+});
+
 test("Anti-Codex ships an installed no-traffic missing-history verifier", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-missing-history.mjs"), "utf8");
   const overall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
