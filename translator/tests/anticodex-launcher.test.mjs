@@ -13135,6 +13135,22 @@ test("current account-mode docs reject Gemini CLI fallback", () => {
   assert.doesNotMatch(baseline, /single-account by default/);
 });
 
+test("current status documents optional Antigravity CLI real-smoke account-lane hardening", () => {
+  const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
+  const currentStatus = taskPlan.split("## Goal")[0];
+  const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
+  const combined = currentStatus + "\n" + handoffCurrentStatus;
+
+  assert.match(combined, /optional Antigravity CLI real-smoke reports/i);
+  assert.match(combined, /accountLaneRole/);
+  assert.match(combined, /mcpAccountLaneManagedByAntiCodex/);
+  assert.match(combined, /mcpAccountLaneOwner/);
+  assert.match(combined, /release gate.*reject/i);
+  assert.match(combined, /antigravityCliRealSmoke lane/);
+  assert.match(combined, /diagnostics validate.*optional real-smoke summary/i);
+});
+
 test("Antigravity CLI account isolation scripts keep separate-account proof gated", () => {
   const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
