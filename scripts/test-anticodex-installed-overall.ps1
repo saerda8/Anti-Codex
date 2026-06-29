@@ -1264,17 +1264,23 @@ $checks.diagnostics = if ($Fast) {
 $checks.sourcePreflightPublicDocumentation = try {
     $diagForSourcePreflight = Get-InstalledOverallDiagnosticsSnapshot
     $sourcePreflight = $diagForSourcePreflight.sourcePreflight
+    $publicDocumentationOk = (Has-Property $sourcePreflight "publicDocumentationOk") -and $sourcePreflight.publicDocumentationOk -eq $true
+    $clientCopySyncOk = (Has-Property $sourcePreflight "publicDocumentationClientCopySyncContractOk") -and $sourcePreflight.publicDocumentationClientCopySyncContractOk -eq $true
     $ok = $diagForSourcePreflight.object -eq "anticodex.diagnostics" `
-        -and (Has-Property $sourcePreflight "publicDocumentationOk") `
-        -and $sourcePreflight.publicDocumentationOk -eq $true
-    if (-not $ok) {
+        -and $publicDocumentationOk `
+        -and $clientCopySyncOk
+    if (-not $publicDocumentationOk) {
         Add-Failure "source preflight public documentation status is missing or not green in diagnostics"
+    }
+    if (-not $clientCopySyncOk) {
+        Add-Failure "source preflight publicDocumentationClientCopySyncContractOk is missing or not green in diagnostics"
     }
     [pscustomobject]@{
         ok = $ok
         skipped = $false
-        reason = "diagnostics sourcePreflight.publicDocumentationOk must be green"
+        reason = "diagnostics sourcePreflight.publicDocumentationOk and publicDocumentationClientCopySyncContractOk must be green"
         publicDocumentationOk = if (Has-Property $sourcePreflight "publicDocumentationOk") { [bool]$sourcePreflight.publicDocumentationOk } else { $null }
+        publicDocumentationClientCopySyncContractOk = if (Has-Property $sourcePreflight "publicDocumentationClientCopySyncContractOk") { [bool]$sourcePreflight.publicDocumentationClientCopySyncContractOk } else { $null }
         reportName = if (Has-Property $sourcePreflight "reportName") { [string]$sourcePreflight.reportName } else { "" }
     }
 } catch {

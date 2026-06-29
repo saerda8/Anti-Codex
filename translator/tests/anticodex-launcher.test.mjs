@@ -7100,7 +7100,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$checks\.diagnostics = if \(\$Fast\)/);
   assert.match(overall, /sourcePreflightPublicDocumentation/);
   assert.match(overall, /sourcePreflight\.publicDocumentationOk/);
+  assert.match(overall, /sourcePreflight\.publicDocumentationClientCopySyncContractOk/);
+  assert.match(overall, /publicDocumentationOk and publicDocumentationClientCopySyncContractOk must be green/);
   assert.match(overall, /source preflight public documentation status is missing or not green in diagnostics/);
+  assert.match(overall, /source preflight publicDocumentationClientCopySyncContractOk is missing or not green in diagnostics/);
   assert.match(overall, /sourcePreflightAntigravityCliProfilePrepare/);
   assert.match(overall, /sourcePreflight\.antigravityCliProfilePrepareOk/);
   assert.match(overall, /source preflight antigravity CLI profile prepare status is missing or not green in diagnostics/);
