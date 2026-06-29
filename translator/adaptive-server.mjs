@@ -3023,6 +3023,25 @@ function latestManagerReportItem(label, fileName) {
             loginVerified: report.loginVerified === true,
             accountIsolationCaveat: shortSafeText(report.accountIsolationCaveat || "", ""),
         } : null,
+        windowsUserAccountPrepareEvidence: report?.reportName === "windows-user-account-prepare" ? {
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            currentProcessElevated: report.currentProcessElevated === true,
+            changedSystem: report.changedSystem === true,
+            createdUser: report.createdUser === true,
+            startedLogin: report.startedLogin === true,
+            capturesPassword: report.capturesPassword === true,
+            storesPassword: report.storesPassword === true,
+            canCreateTargetWindowsUser: report.canCreateTargetWindowsUser === true,
+            targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+            targetUserIsCurrentUser: report.targetUserIsCurrentUser === true,
+            readyForInteractiveLogin: report.readyForInteractiveLogin === true,
+            readinessBlockingReason: shortSafeText(report.readinessBlockingReason || "", ""),
+            recommendedOperatorAction: shortSafeText(report.recommendedOperatorAction || "", ""),
+            nextProofRequiresRealTraffic: report.nextProofRequiresRealTraffic === true,
+            separateAccountVerified: report.separateAccountVerified === true,
+            loginVerified: report.loginVerified === true,
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -3459,6 +3478,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("可选回切 Antigravity", "latest-provider-antigravity-return.json"),
         latestManagerReportItem("独立 Antigravity CLI 准备", "latest-antigravity-cli-profile-prepare.json"),
         latestManagerReportItem("Antigravity Windows 用户准备", "latest-antigravity-cli-windows-user-readiness.json"),
+        latestManagerReportItem("Windows 隔离用户准备", "latest-windows-user-account-prepare.json"),
         latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
     ];
     return {
@@ -4210,6 +4230,12 @@ function latestReportsSummary(result){
       lines.push("  antigravityCliWindowsUserReadiness guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / started="+(evidence.started?"true":"false")+" / capturesOutput="+(evidence.capturesLoginOutput?"true":"false")+" / boundary="+(evidence.credentialBoundary||"unknown")+" / separateAccount="+(evidence.separateAccountVerified?"true":"false")+" / login="+(evidence.loginVerified?"true":"false"));
       if(evidence.readinessBlockingReason) lines.push("  antigravityCliWindowsUserReadiness reason: "+evidence.readinessBlockingReason);
       if(evidence.accountIsolationCaveat) lines.push("  antigravityCliWindowsUserReadiness caveat: "+evidence.accountIsolationCaveat);
+    }
+    if(item.windowsUserAccountPrepareEvidence){
+      const evidence=item.windowsUserAccountPrepareEvidence;
+      lines.push("  windowsUserAccountPrepare: elevated="+(evidence.currentProcessElevated?"true":"false")+" / userExists="+(evidence.targetUserExists===true?"true":evidence.targetUserExists===false?"false":"unknown")+" / canCreate="+(evidence.canCreateTargetWindowsUser?"true":"false")+" / action="+(evidence.recommendedOperatorAction||"unknown"));
+      lines.push("  windowsUserAccountPrepare guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
+      if(evidence.readinessBlockingReason) lines.push("  windowsUserAccountPrepare reason: "+evidence.readinessBlockingReason);
     }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;

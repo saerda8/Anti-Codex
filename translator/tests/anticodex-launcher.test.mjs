@@ -13239,6 +13239,8 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(runtimeSync, /Copy-AntiCodexPublicDocs/);
   assert.match(runtimeSync, /README_EN\.md/);
   assert.match(runtimeSync, /docs\\ADAPTIVE_ONE_API_STACK\.md/);
+  assert.match(runtimeSync, /docs\\WINDOWS\.md/);
+  assert.match(runtimeSync, /docs\\DEEPSEEK_RUNTIME_FAILURE_NOTES\.md/);
   assert.match(installer, /Copy-DeepCodexPublicDocs/);
   assert.match(localConnectors, /CODEX_HOME: codexHome/);
 
@@ -13950,6 +13952,7 @@ test("Antigravity CLI profile prepare: MCP account lane owner must be the exact 
 
 test("Antigravity CLI Windows-user readiness is report-only and surfaced before login", () => {
   const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-windows-user-readiness.ps1"), "utf8");
+  const prepare = readFileSync(resolve(root, "scripts", "test-anticodex-windows-user-account-prepare.ps1"), "utf8");
   const dryRunLauncher = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login-windows-user.ps1"), "utf8");
   const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   const diagnostics = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
@@ -13975,17 +13978,43 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(readiness, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.doesNotMatch(readiness, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
 
+  assert.match(prepare, /reportName\s*=\s*"windows-user-account-prepare"/);
+  assert.match(prepare, /test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
+  assert.match(prepare, /changedSystem\s*=\s*\$false/);
+  assert.match(prepare, /createdUser\s*=\s*\$false/);
+  assert.match(prepare, /startedLogin\s*=\s*\$false/);
+  assert.match(prepare, /capturesPassword\s*=\s*\$false/);
+  assert.match(prepare, /storesPassword\s*=\s*\$false/);
+  assert.match(prepare, /currentProcessElevated/);
+  assert.match(prepare, /canCreateTargetWindowsUser/);
+  assert.match(prepare, /create_target_windows_user_with_explicit_user_approval/);
+  assert.match(prepare, /open_elevated_windows_user_settings/);
+  assert.match(prepare, /latest-windows-user-account-prepare\.json/);
+  assert.doesNotMatch(prepare, /^\s*(?:&\s*)?New-LocalUser\b/m);
+  assert.doesNotMatch(prepare, /Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
+
   assert.match(dryRunLauncher, /readinessChecked/);
   assert.match(dryRunLauncher, /target_windows_user_missing/);
   assert.match(summarizer, /isAntigravityCliWindowsUserReadinessReport/);
   assert.match(summarizer, /antigravityCliWindowsUserReadinessEvidence/);
+  assert.match(summarizer, /isWindowsUserAccountPrepareReport/);
+  assert.match(summarizer, /windowsUserAccountPrepareEvidence/);
   assert.match(diagnostics, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.match(diagnostics, /antigravityCliWindowsUserReadinessEvidence/);
+  assert.match(diagnostics, /latest-windows-user-account-prepare\.json/);
+  assert.match(diagnostics, /windowsUserAccountPrepareEvidence/);
   assert.match(installedOverall, /latest-antigravity-cli-windows-user-readiness\.json/);
+  assert.match(installedOverall, /latest-windows-user-account-prepare\.json/);
   assert.match(syncRuntime, /test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
+  assert.match(syncRuntime, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
+  assert.match(releaseGates, /scripts\/test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(managerBridge, /antigravityCliWindowsUserReadiness/);
+  assert.match(managerBridge, /windowsUserAccountPrepare/);
   assert.match(managerInject, /antigravityCliWindowsUserReadiness/);
+  assert.match(managerInject, /windowsUserAccountPrepare/);
   assert.match(server, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.match(server, /antigravityCliWindowsUserReadiness/);
+  assert.match(server, /latest-windows-user-account-prepare\.json/);
+  assert.match(server, /windowsUserAccountPrepare/);
 });

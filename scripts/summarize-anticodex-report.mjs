@@ -212,6 +212,7 @@ const isUiReportSiteSmokeReport = report?.reportName === "ui-report-site-smoke" 
 const isAntigravityCliProfilePrepareReport = report?.reportName === "antigravity-cli-profile-prepare" || /latest-antigravity-cli-profile-prepare\.json$/i.test(path);
 const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravity-cli-dual-account-lanes" || /latest-antigravity-cli-dual-account-lanes\.json$/i.test(path);
 const isAntigravityCliWindowsUserReadinessReport = report?.reportName === "antigravity-cli-windows-user-readiness" || /latest-antigravity-cli-windows-user-readiness\.json$/i.test(path);
+const isWindowsUserAccountPrepareReport = report?.reportName === "windows-user-account-prepare" || /latest-windows-user-account-prepare\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -802,6 +803,31 @@ const summary = {
     separateAccountVerified: boolField(report, "separateAccountVerified"),
     loginVerified: boolField(report, "loginVerified"),
     accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
+  } : null,
+  windowsUserAccountPrepareEvidence: isWindowsUserAccountPrepareReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    currentProcessElevated: boolField(report, "currentProcessElevated"),
+    localUserCommandAvailable: boolField(report, "localUserCommandAvailable"),
+    newLocalUserCommandAvailable: boolField(report, "newLocalUserCommandAvailable"),
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
+    startedLogin: boolField(report, "startedLogin"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
+    canCreateTargetWindowsUser: boolField(report, "canCreateTargetWindowsUser"),
+    targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+    targetUserIsCurrentUser: boolField(report, "targetUserIsCurrentUser"),
+    readyForInteractiveLogin: boolField(report, "readyForInteractiveLogin"),
+    readinessBlockingReason: has(report, "readinessBlockingReason") ? asString(report.readinessBlockingReason) : null,
+    recommendedOperatorAction: has(report, "recommendedOperatorAction") ? asString(report.recommendedOperatorAction) : null,
+    nextProofRequiresInteractiveLogin: boolField(report, "nextProofRequiresInteractiveLogin"),
+    nextProofRequiresRealTraffic: boolField(report, "nextProofRequiresRealTraffic"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    loginVerified: boolField(report, "loginVerified"),
   } : null,
   antigravityCliRealSmokeEvidence: isAntigravityCliRealSmokeReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,

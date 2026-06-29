@@ -1161,6 +1161,12 @@
         if (evidence.readinessBlockingReason) lines.push(`  antigravityCliWindowsUserReadiness reason: ${evidence.readinessBlockingReason}`);
         if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliWindowsUserReadiness caveat: ${evidence.accountIsolationCaveat}`);
       }
+      if (item.windowsUserAccountPrepareEvidence) {
+        const evidence = item.windowsUserAccountPrepareEvidence;
+        lines.push(`  windowsUserAccountPrepare: elevated=${evidence.currentProcessElevated ? "true" : "false"} / userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / canCreate=${evidence.canCreateTargetWindowsUser ? "true" : "false"} / action=${evidence.recommendedOperatorAction || "unknown"}`);
+        lines.push(`  windowsUserAccountPrepare guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
+        if (evidence.readinessBlockingReason) lines.push(`  windowsUserAccountPrepare reason: ${evidence.readinessBlockingReason}`);
+      }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
         lines.push(`  managerButtons: ${actions.join(" | ")}`);

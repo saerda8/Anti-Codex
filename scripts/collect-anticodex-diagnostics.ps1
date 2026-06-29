@@ -231,6 +231,7 @@ function Read-JsonSummary {
             uiReportSiteEvidence = $json.uiReportSiteEvidence
             antigravityCliProfilePrepareEvidence = $json.antigravityCliProfilePrepareEvidence
             antigravityCliWindowsUserReadinessEvidence = $json.antigravityCliWindowsUserReadinessEvidence
+            windowsUserAccountPrepareEvidence = $json.windowsUserAccountPrepareEvidence
             antigravityCliRealSmokeEvidence = $json.antigravityCliRealSmokeEvidence
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
@@ -421,6 +422,7 @@ $latestReports = @(
     "latest-provider-antigravity-return.json",
     "latest-antigravity-cli-profile-prepare.json",
     "latest-antigravity-cli-windows-user-readiness.json",
+    "latest-windows-user-account-prepare.json",
     "latest-antigravity-cli-real-smoke.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",

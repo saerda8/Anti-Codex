@@ -135,6 +135,14 @@ After every failure, before another dispatch:
 - Cause classification: useful direction but incomplete support-surface coverage.
 - Rule change: standalone readiness reports must reuse the existing `start-anticodex-antigravity-cli-login-windows-user.ps1 -DryRun` launcher as the single source of truth, then surface the report through summarizer, Manager bridge/inject/adaptive server, diagnostics, installed-overall inventory, and runtime sync fingerprints.
 
+### 2026-06-30 - Windows-user account prepare Kilo draft not merged
+
+- Worker: Kilo `klw_mqznhoq6_184ox1` in isolated worktree `deepcodex-kilo-user-prepare`.
+- Task: add a default-read-only Windows-user account prepare/check script draft without creating users, starting login, or using real traffic.
+- Result: `caller_timeout_after_valid_changes`; changed only the prepare script and summarizer, and its checks passed, but the draft used a different report-name/file convention and did not cover diagnostics, Manager, installed-overall, runtime sync, or release inventory.
+- Cause classification: useful partial worker direction, but support-surface coverage and naming were incomplete.
+- Rule change: account-boundary reports must keep one canonical report name and one support chain. Do not merge worker drafts that introduce parallel report names or update only the summarizer/script without diagnostics, Manager, installed-runtime inventory, and static launcher contracts.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

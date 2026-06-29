@@ -58,6 +58,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-windows-user-readiness.ps1",
   "scripts/test-anticodex-antigravity-cli-real-smoke.ps1",
+  "scripts/test-anticodex-windows-user-account-prepare.ps1",
   "scripts/test-anticodex-local-connectors.mjs",
   "scripts/test-anticodex-manager-action.ps1",
   "scripts/test-anticodex-manager-button.mjs",
