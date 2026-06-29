@@ -2170,6 +2170,9 @@ test("Anti-Codex ships a Codex host sync script", () => {
 
 test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const requiredRuntimeSourceFiles = new Set(extractQuotedListBlock(runtimeSync, "$requiredSourceFiles = @("));
+  const installerRequiredRuntimeFiles = [...installer.matchAll(/\(Join-Path \$runtime "([^"]+)"\)/g)].map((match) => match[1]);
 
   assert.match(runtimeSync, /Anti-Codex\\runtime/);
   assert.match(runtimeSync, /translator\\antigravity-session-lock\.mjs/);
@@ -2196,6 +2199,13 @@ test("Anti-Codex ships a runtime-only sync script for source patches", () => {
   assert.match(runtimeSync, /scripts\\manage-anticodex\.ps1/);
   assert.match(runtimeSync, /scripts\\check-anticodex-update\.ps1/);
   assert.match(runtimeSync, /-TranslatorOnly/);
+  assert.ok(installerRequiredRuntimeFiles.length >= 6, "installer runtime completeness list should be covered");
+  for (const relative of installerRequiredRuntimeFiles) {
+    assert.ok(
+      requiredRuntimeSourceFiles.has(relative),
+      `${relative} is required by install-anticodex.ps1 but missing from sync-anticodex-runtime.ps1 requiredSourceFiles`,
+    );
+  }
   assert.match(runtimeSync, /\$restartHealthy = \$false/);
   assert.match(runtimeSync, /Wait-AntiCodexHealth -Seconds 1/);
   assert.match(runtimeSync, /\$launchExitCode = if \(\$restartHealthy\) \{ 0 \}/);
