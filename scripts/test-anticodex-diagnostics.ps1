@@ -1709,6 +1709,26 @@ if ($diagnostics) {
     } elseif (Has-Property $diagnostics.accountTracking "fingerprint") {
         Add-Failure "diagnostics account tracking state exposes an account fingerprint"
     }
+    if ($diagnosticMode -eq "antigravity") {
+        if (-not (Has-Property $diagnostics "antigravityCliIsolation")) {
+            Add-Failure "diagnostics missing Antigravity CLI isolation state"
+        } else {
+            $cliIsolation = $diagnostics.antigravityCliIsolation
+            foreach ($field in @("strictWindowsAppDataIsolation", "appDataIsolated", "localAppDataIsolated")) {
+                if (-not (Has-Property $cliIsolation $field)) { Add-Failure "diagnostics Antigravity CLI isolation state missing $field" }
+            }
+            if ($cliIsolation.strictWindowsAppDataIsolation -eq $true) {
+                if ($cliIsolation.appDataIsolated -ne $true) { Add-Failure "strict Antigravity CLI isolation missing APPDATA isolation" }
+                if ($cliIsolation.localAppDataIsolated -ne $true) { Add-Failure "strict Antigravity CLI isolation missing LOCALAPPDATA isolation" }
+                if (-not [string]$cliIsolation.appData) { Add-Failure "strict Antigravity CLI isolation missing APPDATA path" }
+                if (-not [string]$cliIsolation.localAppData) { Add-Failure "strict Antigravity CLI isolation missing LOCALAPPDATA path" }
+            }
+            if ([string]$cliIsolation.profileRoot) {
+                if (-not [string]$cliIsolation.geminiDir) { Add-Failure "Antigravity CLI isolation profileRoot missing Gemini dir" }
+                if (-not [string]$cliIsolation.conversationsDir) { Add-Failure "Antigravity CLI isolation profileRoot missing conversations dir" }
+            }
+        }
+    }
     if (-not $diagnostics.paths.codexHome) { Add-Failure "diagnostics missing Anti-Codex codexHome" }
     if (-not $diagnostics.paths.sharedCodexHome) { Add-Failure "diagnostics missing sharedCodexHome" }
     if ($diagnostics.paths.codexHome -eq $diagnostics.paths.sharedCodexHome) { Add-Failure "Anti-Codex codexHome should be isolated from sharedCodexHome" }

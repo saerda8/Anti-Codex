@@ -7811,6 +7811,10 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /modelThinkingEvidence/);
   assert.match(diagnostics, /diagnostic model-thinking summary missing modelThinkingEvidence/);
   assert.match(diagnostics, /diagnostic model-thinking summary has missing budgets/);
+  assert.match(diagnostics, /antigravityCliIsolation/);
+  assert.match(diagnostics, /strictWindowsAppDataIsolation/);
+  assert.match(diagnostics, /strict Antigravity CLI isolation missing APPDATA isolation/);
+  assert.match(diagnostics, /Antigravity CLI isolation profileRoot missing Gemini dir/);
   assert.match(diagnostics, /toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing toolBridgeEvidence/);
   assert.match(diagnostics, /diagnostic tool-bridge summary missing request envelope/);

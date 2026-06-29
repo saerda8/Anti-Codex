@@ -180,6 +180,22 @@ After every failure, before another dispatch:
 - Cause classification: command-construction failure in worker validation, not product failure.
 - Rule change: do not pass inline parser checks containing `$null`, `$tokens`, `$errors`, or redirection to MCP workers. Use a checked helper script or omit parser checks from worker validation and let the main agent run parser checks directly.
 
+### 2026-06-29 - Forbidden paths must stay inside worker cwd
+
+- Worker: DeepSeek dispatch for Antigravity CLI isolation diagnostics.
+- Task: add diagnostics evidence for CLI profile/AppData isolation.
+- Result: job rejected before start with `forbidden_paths escapes cwd: C:\Users\XD\.codex`.
+- Cause classification: dispatch contract error; `forbidden_paths` is workspace-relative/cwd-bounded, not a place to list global machine paths.
+- Rule change: do not pass global paths such as `C:\Users\XD\.codex` in MCP worker `forbidden_paths`. Mention global no-touch boundaries in the task text instead, and use cwd-contained path restrictions for the tool schema.
+
+### 2026-06-29 - Review-only MCP worker jobs may fail the edit contract
+
+- Worker: MIMO Claude Coworker and MiMoCode Worker review jobs for CLI isolation diagnostics and client-sync docs.
+- Task: review uncommitted changes and edit only if a clear bug was found.
+- Result: both workers returned useful review text and changed no files, but the worker wrapper marked the jobs failed with `no_code_changed`.
+- Cause classification: dispatch contract mismatch, not product failure. These MCP worker entrypoints are optimized for implementation and can treat no-edit review as an unsuccessful job even when the model review itself completed.
+- Rule change: for pure review, either use a worker/tool mode that explicitly supports no-edit results, or expect `no_code_changed` and read the returned review text before judging the worker result.
+
 ### 2026-06-20 - Do not mix escaped regex fragments into PowerShell double quotes
 - Task: search version and sync-readiness summary patterns before bumping Manager v68.
 - Result: PowerShell parsed an escaped quote inside the regex as the end of the command string and failed before running `rg`.

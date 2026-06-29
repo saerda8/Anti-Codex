@@ -791,6 +791,65 @@ test("diagnostics marks local feature snapshots fresh or stale using the startup
   }
 });
 
+function withAntigravityCliEnv(overrides, fn) {
+  const keys = [
+    "ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT",
+    "ANTICODEX_ANTIGRAVITY_CLI_HOME",
+    "ANTICODEX_ANTIGRAVITY_CLI_USERPROFILE",
+    "ANTICODEX_ANTIGRAVITY_CLI_APPDATA",
+    "ANTICODEX_ANTIGRAVITY_CLI_LOCALAPPDATA",
+    "ANTICODEX_ANTIGRAVITY_CLI_GEMINI_DIR",
+    "ANTICODEX_ANTIGRAVITY_CLI_CONVERSATIONS_DIR",
+    "ANTIGRAVITY_CLI_CONVERSATIONS_DIR",
+    "ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of keys) delete process.env[key];
+    for (const [key, value] of Object.entries(overrides)) process.env[key] = value;
+    return fn();
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
+test("diagnostics exposes antigravityCliIsolation with default (no isolation)", () => {
+  withAntigravityCliEnv({}, () => {
+    const payload = diagnosticsPayload({ health: { upstream: "antigravity-desktop" } });
+    assert.ok(payload.antigravityCliIsolation, "antigravityCliIsolation must be present");
+    assert.equal(payload.antigravityCliIsolation.strictWindowsAppDataIsolation, false);
+    assert.equal(payload.antigravityCliIsolation.appDataIsolated, false);
+    assert.equal(payload.antigravityCliIsolation.localAppDataIsolated, false);
+    assert.equal(payload.antigravityCliIsolation.profileRoot, null);
+    assert.equal(payload.antigravityCliIsolation.geminiDir, null);
+    assert.equal(payload.antigravityCliIsolation.conversationsDir, null);
+    assert.equal(payload.antigravityCliIsolation.appData, null);
+    assert.equal(payload.antigravityCliIsolation.localAppData, null);
+  });
+});
+
+test("diagnostics exposes antigravityCliIsolation in strict Windows AppData isolation mode", () => {
+  withAntigravityCliEnv({
+    ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT: "G:\\AntiCodexProfiles\\ag-account-b",
+    ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA: "1",
+  }, () => {
+    const payload = diagnosticsPayload({ health: { upstream: "antigravity-desktop" } });
+    const cli = payload.antigravityCliIsolation;
+
+    assert.equal(cli.strictWindowsAppDataIsolation, true);
+    assert.equal(cli.appDataIsolated, true);
+    assert.equal(cli.localAppDataIsolated, true);
+    assert.equal(cli.profileRoot, "G:\\AntiCodexProfiles\\ag-account-b");
+    assert.equal(cli.geminiDir, "G:\\AntiCodexProfiles\\ag-account-b\\.gemini");
+    assert.equal(cli.conversationsDir, "G:\\AntiCodexProfiles\\ag-account-b\\.gemini\\antigravity-cli\\conversations");
+    assert.equal(cli.appData, "G:\\AntiCodexProfiles\\ag-account-b\\AppData\\Roaming");
+    assert.equal(cli.localAppData, "G:\\AntiCodexProfiles\\ag-account-b\\AppData\\Local");
+  });
+});
+
 test("visible model payload exposes Antigravity native thinking budgets without changing model identity", () => {
   const payload = visibleModelPayload({
     models: [{

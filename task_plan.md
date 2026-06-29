@@ -29,6 +29,11 @@
 ## Goal
 Build an independent Anti-Codex desktop client that is best understood as a separate Codex copy plus an Antigravity-entitlement model adapter, similar in spirit to a cc-switch style model bridge. Anti-Codex should preserve native Codex desktop capabilities and tool behavior while using Antigravity only for model capacity, with process/account isolation, stable model selection, and predictable recovery.
 
+## Client Sync Contract
+- Anti-Codex client behavior must track the current native Codex client by guarded copy/sync. This is a client-parity requirement, not a feature-by-feature rebuild plan.
+- When native Codex updates, the preferred maintenance path is to sync the updated Codex host/client surface, then reapply Anti-Codex branding, isolation, launcher, and model-adapter patches.
+- If a native Codex feature is missing or broken in Anti-Codex after sync, treat it as a sync/parity bug first. Do not rebuild that feature through Antigravity Desktop/coworker unless the user explicitly approves a different architecture.
+
 ## Baseline Principles
 - Do not modify or depend on the running state of the original Codex installation.
 - Treat Codex app-server behavior and schemas as the client contract.

@@ -33,6 +33,7 @@ import { buildChatToolsWithRouting } from "./compat-rules.mjs";
 import { localBackendApiResponse } from "./local-projection/index.mjs";
 import {
     antigravityAccountSnapshot,
+    antigravityCliIsolationEnv,
     antigravityNativeToolCapabilitySummary,
     fetchAvailableAgentModels,
     fetchAntigravityUserStatus,
@@ -1337,6 +1338,24 @@ function diagnosticsPayload({
             restoredToolOutputChars: MAX_RESTORED_TOOL_OUTPUT_CHARS,
             maxQueuedAntigravityRequests: ANTIGRAVITY_MAX_QUEUED_REQUESTS,
         },
+        antigravityCliIsolation: diagnosticsAntigravityCliIsolation(),
+    };
+}
+
+function diagnosticsAntigravityCliIsolation() {
+    const env = antigravityCliIsolationEnv();
+    const profileRoot = process.env.ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT
+        || process.env.ANTICODEX_ANTIGRAVITY_CLI_HOME
+        || null;
+    return {
+        strictWindowsAppDataIsolation: process.env.ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA === "1",
+        appDataIsolated: "APPDATA" in env,
+        localAppDataIsolated: "LOCALAPPDATA" in env,
+        profileRoot,
+        geminiDir: env.GEMINI_DIR || null,
+        conversationsDir: env.ANTIGRAVITY_CLI_CONVERSATIONS_DIR || null,
+        appData: env.APPDATA || null,
+        localAppData: env.LOCALAPPDATA || null,
     };
 }
 
