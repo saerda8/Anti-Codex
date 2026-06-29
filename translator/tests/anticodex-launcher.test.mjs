@@ -669,6 +669,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /syncReadinessEvidence/);
     assert.match(source, /syncReadiness: noTraffic=/);
     assert.match(source, /syncReadiness versions: codex=/);
+    assert.match(source, /activeSource=/);
+    assert.match(source, /versionMatch=/);
     assert.match(source, /syncReadiness hashes: host=/);
     assert.match(source, /updateStatusSource/);
     assert.match(source, /updateStatusReason/);
@@ -7925,6 +7927,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic sync-readiness summary missing syncReadinessEvidence/);
   assert.match(diagnostics, /function Test-SyncReadinessEvidence/);
   assert.match(diagnostics, /missing source package version/);
+  assert.match(diagnostics, /missing active source package version/);
+  assert.match(diagnostics, /missing client sync version match flag/);
+  assert.match(diagnostics, /client sync version mismatch/);
   assert.match(diagnostics, /missing update status reason/);
   assert.match(diagnostics, /missing source host hash/);
   assert.match(diagnostics, /missing host hash match flag/);
@@ -8475,6 +8480,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
         clientSyncCliHashMatches: false,
         antiCodexPatchScope: ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"],
         sourcePackageVersion: "26.623.3245.0",
+        activeSourcePackageVersion: "26.623.3245.0",
+        clientSyncVersionMatches: true,
         activePackageVersion: "26.616.9593.0",
         updateStatusReason: "source_codex_changed",
         sourceHostHash: "SOURCEHOST",
@@ -8509,6 +8516,8 @@ test("diagnostics verifier validates reports-summary fixtures without contacting
     assert.equal(payload.reportsSummary.releaseGates.approvalPlan.reportOnlyCount, 0);
     assert.equal(payload.reportsSummary.releaseGates.installedRuntimeEvidence.satisfied, true);
     assert.equal(payload.reportsSummary.syncReadiness.evidence.sourcePackageVersion, "26.623.3245.0");
+    assert.equal(payload.reportsSummary.syncReadiness.evidence.activeSourcePackageVersion, "26.623.3245.0");
+    assert.equal(payload.reportsSummary.syncReadiness.evidence.clientSyncVersionMatches, true);
     assert.equal(payload.reportsSummary.syncReadiness.evidence.activePackageVersion, "26.616.9593.0");
     assert.equal(payload.reportsSummary.syncReadiness.evidence.hostHashMatches, false);
   } finally {

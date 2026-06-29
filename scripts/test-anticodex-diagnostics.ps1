@@ -569,6 +569,7 @@ function Test-SyncReadinessEvidence {
         return
     }
     if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.sourcePackageVersion)) { Add-Failure "$Prefix missing source package version" }
+    if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activeSourcePackageVersion)) { Add-Failure "$Prefix missing active source package version" }
     if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.activePackageVersion)) { Add-Failure "$Prefix missing active package version" }
     if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.updateStatusReason)) { Add-Failure "$Prefix missing update status reason" }
     if ([string]::IsNullOrWhiteSpace([string]$SyncEvidence.sourceHostHash)) { Add-Failure "$Prefix missing source host hash" }
@@ -585,6 +586,7 @@ function Test-SyncReadinessEvidence {
     if (-not (Has-Property $SyncEvidence "forbidsFeatureByFeatureReimplementation")) { Add-Failure "$Prefix missing no feature-rebuild flag" }
     if (-not (Has-Property $SyncEvidence "clientSyncHostHashMatches")) { Add-Failure "$Prefix missing client sync host hash flag" }
     if (-not (Has-Property $SyncEvidence "clientSyncCliHashMatches")) { Add-Failure "$Prefix missing client sync CLI hash flag" }
+    if (-not (Has-Property $SyncEvidence "clientSyncVersionMatches")) { Add-Failure "$Prefix missing client sync version match flag" }
     if (-not $SyncEvidence.antiCodexPatchScope -or @($SyncEvidence.antiCodexPatchScope).Count -lt 1) { Add-Failure "$Prefix missing Anti-Codex patch scope" }
     if ($RequireReady) {
         if ($SyncEvidence.clientSyncMode -ne "codex-client-copy-plus-anticodex-patches") { Add-Failure "$Prefix wrong client sync mode" }
@@ -593,6 +595,7 @@ function Test-SyncReadinessEvidence {
         if ($SyncEvidence.forbidsFeatureByFeatureReimplementation -ne $true) { Add-Failure "$Prefix does not reject feature-by-feature rebuild" }
         if ($SyncEvidence.clientSyncHostHashMatches -ne $true) { Add-Failure "$Prefix client sync host hash mismatch" }
         if ($SyncEvidence.clientSyncCliHashMatches -ne $true) { Add-Failure "$Prefix client sync CLI hash mismatch" }
+        if ($SyncEvidence.clientSyncVersionMatches -ne $true) { Add-Failure "$Prefix client sync version mismatch" }
         if ($SyncEvidence.noTrafficReady -ne $true) { Add-Failure "$Prefix missing no-traffic attestation" }
         if ($SyncEvidence.fullMode -ne $true) { Add-Failure "$Prefix not full mode" }
         if ($SyncEvidence.activeHostReady -ne $true) { Add-Failure "$Prefix active host not ready" }

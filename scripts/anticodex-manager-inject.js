@@ -850,7 +850,11 @@
       clientSyncHostHashMatches: typeof clientSyncContract.sourceHostHashMatches === "boolean" ? clientSyncContract.sourceHostHashMatches : null,
       clientSyncCliHashMatches: typeof clientSyncContract.sourceCliHashMatches === "boolean" ? clientSyncContract.sourceCliHashMatches : null,
       antiCodexPatchScope: Array.isArray(clientSyncContract.antiCodexPatchScope) ? clientSyncContract.antiCodexPatchScope.filter(Boolean) : [],
-      sourcePackageVersion: updateStatus.source?.packageVersion || activeHost.sourcePackageVersion || "",
+      sourcePackageVersion: clientSyncContract.sourcePackageVersion || updateStatus.source?.packageVersion || activeHost.sourcePackageVersion || "",
+      activeSourcePackageVersion: clientSyncContract.activeSourcePackageVersion || updateStatus.active?.packageVersion || "",
+      clientSyncVersionMatches: clientSyncContract.sourcePackageVersion && clientSyncContract.activeSourcePackageVersion
+        ? String(clientSyncContract.sourcePackageVersion) === String(clientSyncContract.activeSourcePackageVersion)
+        : null,
       activePackageVersion: drift.activePackageVersion || updateStatus.active?.packageVersion || "",
       updateStatusSource: sync.updateStatusSource || updateStatus.sourceType || "",
       updateStatusReason: updateStatus.reason || "",
@@ -872,7 +876,7 @@
     const e = evidence || {};
     return [
       `sync contract: mode=${e.clientSyncMode || "unknown"} / path=${e.clientSyncMaintenancePath || "unknown"} / nativeHostSync=${triStateText(e.nativeClientBehaviorCarriedByHostSync)} / noFeatureRebuild=${triStateText(e.forbidsFeatureByFeatureReimplementation)} / patches=${Array.isArray(e.antiCodexPatchScope) && e.antiCodexPatchScope.length ? e.antiCodexPatchScope.join(",") : "unknown"}`,
-      `\u7248\u672c\uff1aCodex ${e.codexVersion || "\u672a\u77e5"} / source ${e.sourcePackageVersion || "\u672a\u77e5"} / active ${e.activePackageVersion || "\u672a\u77e5"}`,
+      `\u7248\u672c\uff1aCodex ${e.codexVersion || "\u672a\u77e5"} / source ${e.sourcePackageVersion || "\u672a\u77e5"} / active ${e.activePackageVersion || "\u672a\u77e5"} / activeSource ${e.activeSourcePackageVersion || "\u672a\u77e5"} / versionMatch ${triStateText(e.clientSyncVersionMatches)}`,
       `\u6f02\u79fb\uff1astate=${e.updateDriftState || "unknown"} / reason=${e.updateStatusReason || "unknown"} / source=${e.updateStatusSource || "unknown"} / hostChanged=${triStateText(e.updateDriftHostChanged)} / cliChanged=${triStateText(e.updateDriftCliChanged)}`,
       `hash\uff1ahost=${String(e.activeHostHash || "").slice(0, 8) || "unknown"}/${String(e.sourceHostHash || "").slice(0, 8) || "unknown"} match=${triStateText(e.hostHashMatches)} / cli=${String(e.activeCliHash || "").slice(0, 8) || "unknown"}/${String(e.sourceCliHash || "").slice(0, 8) || "unknown"} match=${triStateText(e.cliHashMatches)}`,
       e.managerBridgeProcessCount !== null || e.managerBridgeStaleProcessCount !== null
@@ -1139,7 +1143,7 @@
       if (item.syncReadinessEvidence) {
         const evidence = item.syncReadinessEvidence;
         lines.push(`  syncReadiness: noTraffic=${evidence.noTrafficReady ? "true" : "check"} / full=${evidence.fullMode ? "true" : "check"} / host=${evidence.activeHostReady && evidence.brandReady ? "ok" : "check"} / icons=${evidence.iconReady ? "ok" : "check"} / update=${evidence.updateReady ? "synced" : "check"} / guardrails=${evidence.guardrailsReady ? "ok" : "check"}`);
-        lines.push(`  syncReadiness versions: codex=${evidence.codexVersion || "unknown"} / source=${evidence.sourcePackageVersion || "unknown"} / active=${evidence.activePackageVersion || "unknown"} / drift=${evidence.updateDriftState || "unknown"} / reason=${evidence.updateStatusReason || "unknown"} / updateSource=${evidence.updateStatusSource || "unknown"} / hostChanged=${triStateText(evidence.updateDriftHostChanged)} / cliChanged=${triStateText(evidence.updateDriftCliChanged)}`);
+        lines.push(`  syncReadiness versions: codex=${evidence.codexVersion || "unknown"} / source=${evidence.sourcePackageVersion || "unknown"} / active=${evidence.activePackageVersion || "unknown"} / activeSource=${evidence.activeSourcePackageVersion || "unknown"} / versionMatch=${triStateText(evidence.clientSyncVersionMatches)} / drift=${evidence.updateDriftState || "unknown"} / reason=${evidence.updateStatusReason || "unknown"} / updateSource=${evidence.updateStatusSource || "unknown"} / hostChanged=${triStateText(evidence.updateDriftHostChanged)} / cliChanged=${triStateText(evidence.updateDriftCliChanged)}`);
         lines.push(`  syncReadiness hashes: host=${String(evidence.activeHostHash || "").slice(0, 8) || "unknown"}/${String(evidence.sourceHostHash || "").slice(0, 8) || "unknown"} match=${triStateText(evidence.hostHashMatches)} / cli=${String(evidence.activeCliHash || "").slice(0, 8) || "unknown"}/${String(evidence.sourceCliHash || "").slice(0, 8) || "unknown"} match=${triStateText(evidence.cliHashMatches)}`);
         lines.push(`  syncReadiness shortcuts: ${evidence.shortcutReadyCount ?? 0}/${evidence.shortcutCount ?? 0} / managerBridge=${evidence.managerBridgeReady ? "ok" : "check"} / processes=${evidence.managerBridgeProcessCount ?? "?"} / stale=${evidence.managerBridgeStaleProcessCount ?? "?"} / clean=${evidence.cleanSyncState ? "true" : "false"}`);
       }

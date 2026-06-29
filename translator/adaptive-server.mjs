@@ -2887,7 +2887,11 @@ function latestManagerReportItem(label, fileName) {
             clientSyncCliHashMatches: typeof report?.clientSyncContract?.sourceCliHashMatches === "boolean" ? report.clientSyncContract.sourceCliHashMatches : null,
             antiCodexPatchScope: Array.isArray(report?.clientSyncContract?.antiCodexPatchScope) ? report.clientSyncContract.antiCodexPatchScope.map((item) => shortSafeText(item, "")).filter(Boolean) : [],
             codexVersion: shortSafeText(activeHost?.codexVersion || "", ""),
-            sourcePackageVersion: shortSafeText(activeHost?.sourcePackageVersion || "", ""),
+            sourcePackageVersion: shortSafeText(report?.clientSyncContract?.sourcePackageVersion || updateStatus?.source?.packageVersion || activeHost?.sourcePackageVersion || "", ""),
+            activeSourcePackageVersion: shortSafeText(report?.clientSyncContract?.activeSourcePackageVersion || updateStatus?.active?.packageVersion || "", ""),
+            clientSyncVersionMatches: report?.clientSyncContract?.sourcePackageVersion && report?.clientSyncContract?.activeSourcePackageVersion
+                ? String(report.clientSyncContract.sourcePackageVersion) === String(report.clientSyncContract.activeSourcePackageVersion)
+                : null,
             activeHostReady: !!activeHost && activeHost.exists === true && activeHost.markerExists === true && activeHost.manifestValid === true && activeHost.exeExists === true,
             brandReady: activeHost?.productName === "Anti-Codex" && activeHost?.fileDescription === "Anti-Codex" && activeHost?.originalFilename === "Anti-Codex.exe",
             iconReady: activeHost?.hostIconExists === true && activeHost?.trayIconExists === true && activeHost?.appRootIconExists === true && activeHost?.hostIconPalette?.ok === true && activeHost?.trayIconPalette?.ok === true && activeHost?.appRootIconPalette?.ok === true && (!sync?.desktopShortcutIconPalette || sync.desktopShortcutIconPalette.ok === true),
@@ -3865,7 +3869,9 @@ function syncReadinessEvidenceFromResult(result){
     clientSyncCliHashMatches:typeof clientSyncContract.sourceCliHashMatches==="boolean"?clientSyncContract.sourceCliHashMatches:null,
     antiCodexPatchScope:Array.isArray(clientSyncContract.antiCodexPatchScope)?clientSyncContract.antiCodexPatchScope.filter(Boolean):[],
     codexVersion:activeHost.codexVersion||updateStatus.source?.codexVersion||"",
-    sourcePackageVersion:updateStatus.source?.packageVersion||activeHost.sourcePackageVersion||"",
+    sourcePackageVersion:clientSyncContract.sourcePackageVersion||updateStatus.source?.packageVersion||activeHost.sourcePackageVersion||"",
+    activeSourcePackageVersion:clientSyncContract.activeSourcePackageVersion||updateStatus.active?.packageVersion||"",
+    clientSyncVersionMatches:clientSyncContract.sourcePackageVersion&&clientSyncContract.activeSourcePackageVersion?String(clientSyncContract.sourcePackageVersion)===String(clientSyncContract.activeSourcePackageVersion):null,
     activePackageVersion:drift.activePackageVersion||updateStatus.active?.packageVersion||"",
     updateStatusSource:sync.updateStatusSource||updateStatus.sourceType||"",
     updateStatusReason:updateStatus.reason||"",
@@ -3887,7 +3893,7 @@ function syncReadinessEvidenceLines(evidence){
   return [
     "sync contract: mode="+(e.clientSyncMode||"unknown")+" / path="+(e.clientSyncMaintenancePath||"unknown")+" / nativeHostSync="+triStateText(e.nativeClientBehaviorCarriedByHostSync)+" / noFeatureRebuild="+triStateText(e.forbidsFeatureByFeatureReimplementation),
     "sync source: source="+(e.sourcePackageName||"unknown")+" / active="+(e.activeSourcePackageName||"unknown")+" / hostMatch="+triStateText(e.clientSyncHostHashMatches)+" / cliMatch="+triStateText(e.clientSyncCliHashMatches)+" / patches="+(Array.isArray(e.antiCodexPatchScope)&&e.antiCodexPatchScope.length?e.antiCodexPatchScope.join(","):"unknown"),
-    "sync versions: codex="+(e.codexVersion||"unknown")+" / source="+(e.sourcePackageVersion||"unknown")+" / active="+(e.activePackageVersion||"unknown"),
+    "sync versions: codex="+(e.codexVersion||"unknown")+" / source="+(e.sourcePackageVersion||"unknown")+" / active="+(e.activePackageVersion||"unknown")+" / activeSource="+(e.activeSourcePackageVersion||"unknown")+" / versionMatch="+triStateText(e.clientSyncVersionMatches),
     "sync drift: state="+(e.updateDriftState||"unknown")+" / reason="+(e.updateStatusReason||"unknown")+" / source="+(e.updateStatusSource||"unknown")+" / hostChanged="+triStateText(e.updateDriftHostChanged)+" / cliChanged="+triStateText(e.updateDriftCliChanged),
     "sync hashes: host="+(String(e.activeHostHash||"").slice(0,8)||"unknown")+"/"+(String(e.sourceHostHash||"").slice(0,8)||"unknown")+" match="+triStateText(e.hostHashMatches)+" / cli="+(String(e.activeCliHash||"").slice(0,8)||"unknown")+"/"+(String(e.sourceCliHash||"").slice(0,8)||"unknown")+" match="+triStateText(e.cliHashMatches),
     (e.managerBridgeProcessCount!==null||e.managerBridgeStaleProcessCount!==null)?("managerBridge: processes="+(e.managerBridgeProcessCount??"?")+" / stale="+(e.managerBridgeStaleProcessCount??"?")):"",
@@ -4252,7 +4258,7 @@ function latestReportsSummary(result){
       const evidence=item.syncReadinessEvidence;
       lines.push("  syncReadiness: noTraffic="+(evidence.noTrafficReady?"true":"check")+" / full="+(evidence.fullMode?"true":"check")+" / host="+(evidence.activeHostReady&&evidence.brandReady?"ok":"check")+" / icons="+(evidence.iconReady?"ok":"check")+" / update="+(evidence.updateReady?"synced":"check")+" / guardrails="+(evidence.guardrailsReady?"ok":"check"));
       lines.push("  syncReadiness contract: mode="+(evidence.clientSyncMode||"unknown")+" / path="+(evidence.clientSyncMaintenancePath||"unknown")+" / nativeHostSync="+triStateText(evidence.nativeClientBehaviorCarriedByHostSync)+" / noFeatureRebuild="+triStateText(evidence.forbidsFeatureByFeatureReimplementation)+" / patches="+(Array.isArray(evidence.antiCodexPatchScope)&&evidence.antiCodexPatchScope.length?evidence.antiCodexPatchScope.join(","):"unknown"));
-      lines.push("  syncReadiness versions: codex="+(evidence.codexVersion||"unknown")+" / source="+(evidence.sourcePackageVersion||"unknown")+" / active="+(evidence.activePackageVersion||"unknown")+" / drift="+(evidence.updateDriftState||"unknown")+" / reason="+(evidence.updateStatusReason||"unknown")+" / updateSource="+(evidence.updateStatusSource||"unknown")+" / hostChanged="+triStateText(evidence.updateDriftHostChanged)+" / cliChanged="+triStateText(evidence.updateDriftCliChanged));
+      lines.push("  syncReadiness versions: codex="+(evidence.codexVersion||"unknown")+" / source="+(evidence.sourcePackageVersion||"unknown")+" / active="+(evidence.activePackageVersion||"unknown")+" / activeSource="+(evidence.activeSourcePackageVersion||"unknown")+" / versionMatch="+triStateText(evidence.clientSyncVersionMatches)+" / drift="+(evidence.updateDriftState||"unknown")+" / reason="+(evidence.updateStatusReason||"unknown")+" / updateSource="+(evidence.updateStatusSource||"unknown")+" / hostChanged="+triStateText(evidence.updateDriftHostChanged)+" / cliChanged="+triStateText(evidence.updateDriftCliChanged));
       lines.push("  syncReadiness hashes: host="+(String(evidence.activeHostHash||"").slice(0,8)||"unknown")+"/"+(String(evidence.sourceHostHash||"").slice(0,8)||"unknown")+" match="+triStateText(evidence.hostHashMatches)+" / cli="+(String(evidence.activeCliHash||"").slice(0,8)||"unknown")+"/"+(String(evidence.sourceCliHash||"").slice(0,8)||"unknown")+" match="+triStateText(evidence.cliHashMatches));
       lines.push("  syncReadiness shortcuts: "+(evidence.shortcutReadyCount??0)+"/"+(evidence.shortcutCount??0)+" / managerBridge="+(evidence.managerBridgeReady?"ok":"check")+" / processes="+(evidence.managerBridgeProcessCount??"?")+" / stale="+(evidence.managerBridgeStaleProcessCount??"?")+" / clean="+(evidence.cleanSyncState?"true":"false"));
     }
