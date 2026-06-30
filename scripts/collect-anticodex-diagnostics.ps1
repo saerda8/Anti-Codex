@@ -206,7 +206,11 @@ function Read-JsonSummary {
             uiStateSelfTestOk = $json.uiStateSelfTestOk
             upstreamProfileStorageOk = $json.upstreamProfileStorageOk
             antigravityCliIsolationProfileOk = $json.antigravityCliIsolationProfileOk
+            antigravityCliIsolationProfileContract = $json.antigravityCliIsolationProfileContract
+            antigravityCliDualAccountLanesOk = $json.antigravityCliDualAccountLanesOk
+            antigravityCliDualAccountLanesContract = $json.antigravityCliDualAccountLanesContract
             antigravityCliProfilePrepareOk = $json.antigravityCliProfilePrepareOk
+            antigravityCliProfilePrepareRejectsDefaultChildOk = $json.antigravityCliProfilePrepareRejectsDefaultChildOk
             antigravityCliProfilePrepareContract = $json.antigravityCliProfilePrepareContract
             antigravityCliWindowsUserLoginDryRunOk = $json.antigravityCliWindowsUserLoginDryRunOk
             antigravityCliWindowsUserLoginDryRunContract = $json.antigravityCliWindowsUserLoginDryRunContract
@@ -230,8 +234,10 @@ function Read-JsonSummary {
             uiComplexProjectEvidence = $json.uiComplexProjectEvidence
             uiReportSiteEvidence = $json.uiReportSiteEvidence
             antigravityCliProfilePrepareEvidence = $json.antigravityCliProfilePrepareEvidence
+            antigravityCliDualAccountLanesEvidence = $json.antigravityCliDualAccountLanesEvidence
             antigravityCliWindowsUserReadinessEvidence = $json.antigravityCliWindowsUserReadinessEvidence
             windowsUserAccountPrepareEvidence = $json.windowsUserAccountPrepareEvidence
+            windowsUserSetupGuidanceEvidence = $json.windowsUserSetupGuidanceEvidence
             secondAccountLoginEntrypointEvidence = $json.secondAccountLoginEntrypointEvidence
             antigravityCliRealSmokeEvidence = $json.antigravityCliRealSmokeEvidence
             skipRequests = $json.skipRequests

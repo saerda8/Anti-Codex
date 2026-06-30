@@ -126,6 +126,31 @@ function Test-SecondAccountLoginEntrypointSummaryEvidence {
     if ($evidence.capturesLoginOutput -ne $false) { Add-Failure "second-account entrypoint summary captures login output" }
     if ($evidence.capturesPassword -ne $false) { Add-Failure "second-account entrypoint summary captures password" }
     if ($evidence.storesPassword -ne $false) { Add-Failure "second-account entrypoint summary stores password" }
+    if (-not ([string]$evidence.approvedLoginCommandTemplate).Contains("start-anticodex-second-antigravity-account-login.ps1") -or -not ([string]$evidence.approvedLoginCommandTemplate).Contains("-StartLoginApproval start-separate-windows-user-login")) {
+        Add-Failure "second-account entrypoint summary approved login command missing"
+    }
+    if (-not ([string]$evidence.nextNoTrafficStatusCommand).Contains("test-anticodex-antigravity-account-isolation-status.ps1")) {
+        Add-Failure "second-account entrypoint summary no-traffic status command missing"
+    }
+    if (-not ([string]$evidence.postLoginProofCommandTemplate).Contains("test-anticodex-antigravity-cli-real-smoke.ps1") -or -not ([string]$evidence.postLoginProofCommandTemplate).Contains("-AllowSeparateAccountProof") -or -not ([string]$evidence.postLoginProofCommandTemplate).Contains("-AccountIsolationBoundary separate-windows-user")) {
+        Add-Failure "second-account entrypoint summary post-login proof command missing"
+    }
+    if (($evidence.canRunPostLoginProof -isnot [bool]) -and $null -eq $evidence.canRunPostLoginProof) {
+        Add-Failure "second-account entrypoint summary post-login proof flag missing"
+    }
+    $postLoginProofPlan = $evidence.postLoginProofPlan
+    if (-not $postLoginProofPlan) {
+        Add-Failure "second-account entrypoint summary post-login proof plan missing"
+    } else {
+        if ([string]$postLoginProofPlan.proofScript -ne "test-anticodex-antigravity-cli-real-smoke.ps1") { Add-Failure "second-account entrypoint summary post-login proof script mismatch" }
+        if ([string]$postLoginProofPlan.accountIsolationBoundary -ne "separate-windows-user") { Add-Failure "second-account entrypoint summary post-login proof boundary mismatch" }
+        if ($postLoginProofPlan.requiresApprovedRealTraffic -ne $true) { Add-Failure "second-account entrypoint summary post-login proof real-traffic flag missing" }
+        if ($postLoginProofPlan.requiresSeparateAccountProofApproval -ne $true) { Add-Failure "second-account entrypoint summary post-login proof approval flag missing" }
+        if ($postLoginProofPlan.requiresDistinctAccountIdentityComparison -ne $true) { Add-Failure "second-account entrypoint summary post-login proof identity flag missing" }
+        if ($postLoginProofPlan.accountIdsMustDiffer -ne $true) { Add-Failure "second-account entrypoint summary post-login proof account-diff flag missing" }
+        if ($postLoginProofPlan.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "second-account entrypoint summary post-login proof MCP owner flag mismatch" }
+        if ([string]$postLoginProofPlan.mcpAccountLaneOwner -ne "external-antigravity-account-not-managed-here") { Add-Failure "second-account entrypoint summary post-login proof MCP owner mismatch" }
+    }
     if ($evidence.separateAccountVerified -ne $false) { Add-Failure "second-account entrypoint summary claims separate account proof" }
     if ($evidence.loginVerified -ne $false) { Add-Failure "second-account entrypoint summary claims login proof" }
     if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account entrypoint summary claims release account proof" }

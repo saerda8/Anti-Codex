@@ -3114,6 +3114,42 @@ function latestManagerReportItem(label, fileName) {
             loginVerified: report.loginVerified === true,
             releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
         } : null,
+        secondAccountLoginEntrypointEvidence: report?.reportName === "second-antigravity-account-login-entrypoint" ? {
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            statusOnlyOk: report.statusOnlyOk === true,
+            missingApprovalBlocked: report.missingApprovalBlocked === true,
+            approvedStartBlockedByStatusGate: report.approvedStartBlockedByStatusGate === true,
+            sameWindowsUserTargetBlocked: report.sameWindowsUserTargetBlocked === true,
+            sameWindowsUserTargetBlockingReason: shortSafeText(report.sameWindowsUserTargetBlockingReason || "", ""),
+            startedLogin: report.startedLogin === true,
+            changedSystem: report.changedSystem === true,
+            createdUser: report.createdUser === true,
+            capturesPassword: report.capturesPassword === true,
+            storesPassword: report.storesPassword === true,
+            safeToStartLogin: report.safeToStartLogin === true,
+            requiredStartLoginApproval: shortSafeText(report.requiredStartLoginApproval || "", ""),
+            approvedLoginCommandTemplate: shortSafeText(report.approvedLoginCommandTemplate || "", ""),
+            nextNoTrafficStatusCommand: shortSafeText(report.nextNoTrafficStatusCommand || "", ""),
+            postLoginProofCommandTemplate: shortSafeText(report.postLoginProofCommandTemplate || "", ""),
+            canRunPostLoginProof: report.canRunPostLoginProof === true,
+            postLoginProofPlan: report.postLoginProofPlan && typeof report.postLoginProofPlan === "object" ? {
+                proofScript: shortSafeText(report.postLoginProofPlan.proofScript || "", ""),
+                accountIsolationBoundary: shortSafeText(report.postLoginProofPlan.accountIsolationBoundary || "", ""),
+                requiresApprovedRealTraffic: report.postLoginProofPlan.requiresApprovedRealTraffic === true,
+                requiresDistinctAccountIdentityComparison: report.postLoginProofPlan.requiresDistinctAccountIdentityComparison === true,
+                accountIdsMustDiffer: report.postLoginProofPlan.accountIdsMustDiffer === true,
+                mcpAccountLaneManagedByAntiCodex: report.postLoginProofPlan.mcpAccountLaneManagedByAntiCodex === true,
+                mcpAccountLaneOwner: shortSafeText(report.postLoginProofPlan.mcpAccountLaneOwner || "", ""),
+            } : null,
+            completionState: shortSafeText(report.completionState || "", ""),
+            readinessBlockingReason: shortSafeText(report.readinessBlockingReason || "", ""),
+            operatorBlockingStage: shortSafeText(report.operatorBlockingStage || "", ""),
+            operatorNextStep: shortSafeText(report.operatorNextStep || "", ""),
+            separateAccountVerified: report.separateAccountVerified === true,
+            loginVerified: report.loginVerified === true,
+            releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -4343,6 +4379,14 @@ function latestReportsSummary(result){
         lines.push("  windowsUserSetupGuidance afterManualSetup: checks="+(Array.isArray(plan.afterManualSetupChecks)&&plan.afterManualSetupChecks.length?plan.afterManualSetupChecks.join(" -> "):"missing")+" / entrypoint="+(plan.finalLoginEntrypoint||"unknown")+" / approval="+(plan.finalLoginApproval||"unknown"));
       }
       if(evidence.manualSetupCommandHint) lines.push("  windowsUserSetupGuidance hint: "+evidence.manualSetupCommandHint);
+    }
+    if(item.secondAccountLoginEntrypointEvidence){
+      const evidence=item.secondAccountLoginEntrypointEvidence;
+      lines.push("  secondAccountLoginEntrypoint: statusOnly="+(evidence.statusOnlyOk?"true":"false")+" / missingApprovalBlocked="+(evidence.missingApprovalBlocked?"true":"false")+" / approvedBlocked="+(evidence.approvedStartBlockedByStatusGate?"true":"false")+" / sameUserBlocked="+(evidence.sameWindowsUserTargetBlocked?"true":"false")+" / safeToStart="+(evidence.safeToStartLogin?"true":"false"));
+      lines.push("  secondAccountLoginEntrypoint guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
+      lines.push("  secondAccountLoginEntrypoint next: stage="+(evidence.operatorBlockingStage||"unknown")+" / reason="+(evidence.readinessBlockingReason||"none")+" / approval="+(evidence.requiredStartLoginApproval||"unknown")+" / canRunPostLoginProof="+(evidence.canRunPostLoginProof?"true":"false"));
+      if(evidence.approvedLoginCommandTemplate) lines.push("  secondAccountLoginEntrypoint loginCommand: "+evidence.approvedLoginCommandTemplate);
+      if(evidence.postLoginProofCommandTemplate) lines.push("  secondAccountLoginEntrypoint proofCommand: "+evidence.postLoginProofCommandTemplate);
     }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;

@@ -1183,6 +1183,14 @@
         }
         if (evidence.manualSetupCommandHint) lines.push(`  windowsUserSetupGuidance hint: ${evidence.manualSetupCommandHint}`);
       }
+      if (item.secondAccountLoginEntrypointEvidence) {
+        const evidence = item.secondAccountLoginEntrypointEvidence;
+        lines.push(`  secondAccountLoginEntrypoint: statusOnly=${evidence.statusOnlyOk ? "true" : "false"} / missingApprovalBlocked=${evidence.missingApprovalBlocked ? "true" : "false"} / approvedBlocked=${evidence.approvedStartBlockedByStatusGate ? "true" : "false"} / sameUserBlocked=${evidence.sameWindowsUserTargetBlocked ? "true" : "false"} / safeToStart=${evidence.safeToStartLogin ? "true" : "false"}`);
+        lines.push(`  secondAccountLoginEntrypoint guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
+        lines.push(`  secondAccountLoginEntrypoint next: stage=${evidence.operatorBlockingStage || "unknown"} / reason=${evidence.readinessBlockingReason || "none"} / approval=${evidence.requiredStartLoginApproval || "unknown"} / canRunPostLoginProof=${evidence.canRunPostLoginProof ? "true" : "false"}`);
+        if (evidence.approvedLoginCommandTemplate) lines.push(`  secondAccountLoginEntrypoint loginCommand: ${evidence.approvedLoginCommandTemplate}`);
+        if (evidence.postLoginProofCommandTemplate) lines.push(`  secondAccountLoginEntrypoint proofCommand: ${evidence.postLoginProofCommandTemplate}`);
+      }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
         lines.push(`  managerButtons: ${actions.join(" | ")}`);
