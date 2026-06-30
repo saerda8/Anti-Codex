@@ -946,6 +946,17 @@ function Test-RealTaskCoverageRoadmapSummaryEvidence {
     if ($evidence.coverageKind -ne "real-task-coverage-roadmap-report-only") { Add-Failure "real-task-coverage-roadmap summary coverage kind mismatch" }
     if ([int]$evidence.profileCount -lt $requiredProfiles.Count) { Add-Failure "real-task-coverage-roadmap summary profile count too low" }
     if (@(As-FlatArray $evidence.taskModes).Count -lt 9) { Add-Failure "real-task-coverage-roadmap summary task mode count too low" }
+    $artifactProofs = @(As-FlatArray $evidence.taskArtifactProofs)
+    if ($artifactProofs.Count -lt 5) { Add-Failure "real-task-coverage-roadmap summary missing artifact proof coverage" }
+    if ($null -eq $evidence.missingArtifactProofTaskCount) { Add-Failure "real-task-coverage-roadmap summary missing artifact proof count" }
+    if ($null -eq $evidence.missingArtifactProofTasks) { Add-Failure "real-task-coverage-roadmap summary missing artifact proof task list" }
+    if ([int]$evidence.missingArtifactProofTaskCount -ne 0) { Add-Failure "real-task-coverage-roadmap summary has missing artifact proofs" }
+    foreach ($proof in $artifactProofs) {
+        if (-not [string]$proof.taskMode) { Add-Failure "real-task-coverage-roadmap summary artifact proof missing task mode" }
+        if ([int]$proof.artifactProofCount -lt 1) { Add-Failure "real-task-coverage-roadmap summary artifact proof count too low" }
+        if ($proof.artifactProofComplete -ne $true) { Add-Failure "real-task-coverage-roadmap summary artifact proof incomplete" }
+        if (@(As-FlatArray $proof.missingArtifactProofKeys).Count -ne 0) { Add-Failure "real-task-coverage-roadmap summary artifact proof missing required keys" }
+    }
     $uniqueRefreshTasks = @(As-FlatArray $evidence.uniqueRefreshTasks)
     if ($evidence.approvalRequiredForRefresh -eq $true -and $uniqueRefreshTasks.Count -lt 1) { Add-Failure "real-task-coverage-roadmap summary missing unique refresh tasks" }
     if ($evidence.approvalRequiredForRefresh -eq $true -and $evidence.minimalRefreshCommandPresent -ne $true) { Add-Failure "real-task-coverage-roadmap summary missing minimal refresh command" }

@@ -30,6 +30,30 @@ const taskReportExpectations = {
   "repo-multi-file-edit": ["latest-ui-repo-multi-file-edit-smoke.json", "ui-repo-multi-file-edit-smoke"],
 };
 
+const taskArtifactRequirements = {
+  "local-project": ["doneExact", "indexHasMarker", "readmeNonEmpty"],
+  "coding-project": ["doneExact", "exportsFunction", "testPassed", "cliPassed"],
+  "multi-turn-project": ["firstDoneExact", "followupExact", "changelogHasFinalMarker", "testPassed", "cliPassed"],
+  "report-site": ["doneExact", "reportHasMarker", "htmlHasMarker", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
+  "complex-project": ["doneExact", "exportsFunction", "testPassed", "cliPassed", "sourceUrlCount", "reportUrlCount", "htmlUrlCount", "htmlComplete", "htmlLinksReport"],
+  "repo-file-edit": ["testPassed", "sourceHasLowercase", "sourceHandlesInvalidChars", "sourceTrimsHyphens"],
+  "repo-multi-file-edit": [
+    "exportsNormalizeStatus",
+    "exportsSummarizeRecords",
+    "exportsRenderSummaryHtml",
+    "sourceChangedFromFixture",
+    "testUnchanged",
+    "dataUnchanged",
+    "testPassed",
+    "cliPassed",
+    "htmlComplete",
+    "htmlHasChinese",
+    "htmlMentionsStatuses",
+    "readmeHasChinese",
+    "readmeMentionsCommand",
+  ],
+};
+
 const requiredProfiles = {
   core: ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"],
   agentic: ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"],
@@ -37,28 +61,55 @@ const requiredProfiles = {
   all: ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "report-site", "repo-file-edit", "repo-multi-file-edit"],
 };
 
+function artifactValuePasses(value) {
+  if (value === true) return true;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  if (typeof value === "string") return value.length > 0;
+  return false;
+}
+
+function artifactProofFor(taskMode, report) {
+  const artifactEvidence = report && report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
+  const artifactEvidenceKeys = Object.keys(artifactEvidence).sort();
+  const requiredArtifactProofKeys = taskArtifactRequirements[taskMode] || [];
+  const satisfiedArtifactProofKeys = requiredArtifactProofKeys.filter((key) => artifactValuePasses(artifactEvidence[key]));
+  const missingArtifactProofKeys = requiredArtifactProofKeys.filter((key) => !satisfiedArtifactProofKeys.includes(key));
+  return {
+    artifactEvidenceKeys,
+    requiredArtifactProofKeys,
+    satisfiedArtifactProofKeys,
+    missingArtifactProofKeys,
+    artifactProofCount: satisfiedArtifactProofKeys.length,
+    artifactProofRequired: requiredArtifactProofKeys.length > 0,
+    artifactProofComplete: missingArtifactProofKeys.length === 0,
+  };
+}
+
 function readReport(taskMode) {
   const [file, expectedReportName] = taskReportExpectations[taskMode];
   const path = resolve(reportRoot, file);
   if (!existsSync(path)) {
-    return { taskMode, file, expectedReportName, present: false, parseable: false, ok: false, fresh: false, requestedRealTraffic: false, usedRealTraffic: false, failures: ["report_missing"] };
+    return { taskMode, file, expectedReportName, ...artifactProofFor(taskMode, null), present: false, parseable: false, ok: false, fresh: false, requestedRealTraffic: false, usedRealTraffic: false, failures: ["report_missing"] };
   }
   const ageMs = Date.now() - statSync(path).mtimeMs;
   try {
     const report = JSON.parse(readFileSync(path, "utf8").replace(/^\uFEFF/, ""));
     const failures = [];
+    const artifactProof = artifactProofFor(taskMode, report);
     if (ageMs > maxAgeMs) failures.push("report_stale");
     if (report.ok !== true) failures.push("report_not_ok");
     if (report.reportName !== expectedReportName) failures.push("report_name_mismatch");
     if (report.taskMode !== taskMode) failures.push("task_mode_mismatch");
     if (report.requestedRealTraffic !== true) failures.push("real_traffic_not_requested");
     if (report.usedRealTraffic !== true) failures.push("real_traffic_not_used");
+    if (artifactProof.artifactProofRequired && !artifactProof.artifactProofComplete) failures.push("artifact_proof_missing");
     if (Array.isArray(report.failures) && report.failures.length > 0) failures.push("report_has_failures");
     return {
       taskMode,
       file,
       expectedReportName,
       reportName: String(report.reportName || ""),
+      ...artifactProof,
       present: true,
       parseable: true,
       ok: failures.length === 0,
@@ -70,7 +121,7 @@ function readReport(taskMode) {
       failures,
     };
   } catch (error) {
-    return { taskMode, file, expectedReportName, present: true, parseable: false, ok: false, fresh: false, requestedRealTraffic: false, usedRealTraffic: false, failures: [`report_unparseable:${error.message}`] };
+    return { taskMode, file, expectedReportName, ...artifactProofFor(taskMode, null), present: true, parseable: false, ok: false, fresh: false, requestedRealTraffic: false, usedRealTraffic: false, failures: [`report_unparseable:${error.message}`] };
   }
 }
 
@@ -109,6 +160,21 @@ const profiles = Object.entries(requiredProfiles).map(([profile, tasks]) => prof
 const nextProfilesNeedingRealTraffic = profiles.filter((profile) => profile.approvalRequiredForRefresh).map((profile) => profile.profile);
 const completeProfiles = profiles.filter((profile) => profile.allOk).map((profile) => profile.profile);
 const uniqueRefreshTasks = [...new Set(profiles.flatMap((profile) => profile.refreshTasks))];
+const taskArtifactProofs = Object.values(taskEvidence)
+  .filter((entry) => entry.artifactProofRequired)
+  .map((entry) => ({
+    taskMode: entry.taskMode,
+    file: entry.file,
+    artifactEvidenceKeys: entry.artifactEvidenceKeys,
+    requiredArtifactProofKeys: entry.requiredArtifactProofKeys,
+    satisfiedArtifactProofKeys: entry.satisfiedArtifactProofKeys,
+    missingArtifactProofKeys: entry.missingArtifactProofKeys,
+    artifactProofCount: entry.artifactProofCount,
+    artifactProofComplete: entry.artifactProofComplete,
+  }));
+const missingArtifactProofTasks = taskArtifactProofs
+  .filter((entry) => entry.artifactProofComplete !== true)
+  .map((entry) => entry.taskMode);
 const minimalRefreshCommandParts = [
   process.execPath,
   "scripts\\test-anticodex-desktop-task-suite.mjs",
@@ -136,6 +202,10 @@ const payload = {
   taskModes: Object.keys(taskReportExpectations),
   profiles,
   taskEvidence: Object.values(taskEvidence),
+  taskArtifactRequirements,
+  taskArtifactProofs,
+  missingArtifactProofTasks,
+  missingArtifactProofTaskCount: missingArtifactProofTasks.length,
   completeProfiles,
   nextProfilesNeedingRealTraffic,
   uniqueRefreshTasks,

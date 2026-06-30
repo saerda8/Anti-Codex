@@ -770,6 +770,8 @@ function summarizeGate(definition) {
       const uniqueRefreshTasks = Array.isArray(report.uniqueRefreshTasks) ? report.uniqueRefreshTasks.map((item) => String(item || "")) : [];
       const completeProfiles = Array.isArray(report.completeProfiles) ? report.completeProfiles.map((item) => String(item || "")) : [];
       const nextProfiles = Array.isArray(report.nextProfilesNeedingRealTraffic) ? report.nextProfilesNeedingRealTraffic.map((item) => String(item || "")) : [];
+      const taskArtifactProofs = Array.isArray(report.taskArtifactProofs) ? report.taskArtifactProofs : [];
+      const hasMissingArtifactProofTaskCount = Object.prototype.hasOwnProperty.call(report, "missingArtifactProofTaskCount");
       if (report.reportName !== "real-task-coverage-roadmap") semanticFailures.push("real_task_coverage_roadmap_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("real_task_coverage_roadmap_real_traffic_requested");
       if (report.usedRealTraffic !== false) semanticFailures.push("real_task_coverage_roadmap_used_real_traffic");
@@ -788,6 +790,17 @@ function summarizeGate(definition) {
       if (taskModes.length < 9) semanticFailures.push("real_task_coverage_roadmap_task_modes_missing");
       for (const profileName of ["core", "agentic"]) {
         if (!completeProfiles.includes(profileName)) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_not_complete`);
+      }
+      if (taskArtifactProofs.length < 5) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
+      if (!Array.isArray(report.missingArtifactProofTasks)) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
+      if (!hasMissingArtifactProofTaskCount) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
+      if (Number(report.missingArtifactProofTaskCount || 0) !== 0) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
+      for (const proof of taskArtifactProofs) {
+        const taskMode = String(proof?.taskMode || "unknown").replaceAll("-", "_");
+        const missingKeys = Array.isArray(proof?.missingArtifactProofKeys) ? proof.missingArtifactProofKeys : [];
+        if (proof?.artifactProofComplete !== true) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_incomplete`);
+        if (Number(proof?.artifactProofCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_count`);
+        if (missingKeys.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_missing_keys`);
       }
       if (report.approvalRequiredForRefresh === true) {
         if (uniqueRefreshTasks.length < 1) semanticFailures.push("real_task_coverage_roadmap_unique_refresh_tasks_missing");
