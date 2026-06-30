@@ -110,6 +110,18 @@ $report = [ordered]@{
     operatorBlockingStage = $operatorBlockingStage
     operatorNextStep = $operatorNextStep
     manualSetupCommandHint = $manualSetupCommandHint
+    readinessCheckSequence = @(
+        "create_target_windows_user",
+        "windows_user_account_prepare",
+        "account_isolation_status",
+        "second_account_login_entrypoint_with_explicit_approval"
+    )
+    operatorChecklist = @(
+        [ordered]@{ stage = "create_target_windows_user"; startsLogin = $false; usesRealTraffic = $false; description = "create or verify the separate local Windows user named AntiCodexModel" }
+        [ordered]@{ stage = "windows_user_account_prepare"; startsLogin = $false; usesRealTraffic = $false; description = "rerun the Windows-user account-prepare report until it is safe to ask for login" }
+        [ordered]@{ stage = "account_isolation_status"; startsLogin = $false; usesRealTraffic = $false; description = "rerun the account-isolation status report and confirm the target SID boundary" }
+        [ordered]@{ stage = "second_account_login_entrypoint_with_explicit_approval"; startsLogin = $true; usesRealTraffic = $false; description = "only then use the second-account login entrypoint with the exact approval token and the user present" }
+    )
     requiresUserPresence = $true
     nextProofRequiresInteractiveLogin = $readyForInteractiveLogin
     nextProofRequiresRealTraffic = $true

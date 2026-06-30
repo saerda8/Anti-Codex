@@ -1168,6 +1168,14 @@
         lines.push(`  windowsUserAccountPrepare next: safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / canProceedLogin=${evidence.canProceedToInteractiveLogin ? "true" : "false"} / blockedBeforeLogin=${evidence.blockedBeforeInteractiveLogin ? "true" : "false"} / stage=${evidence.operatorBlockingStage || "unknown"} / next=${evidence.operatorNextStep || "unknown"}`);
         if (evidence.readinessBlockingReason) lines.push(`  windowsUserAccountPrepare reason: ${evidence.readinessBlockingReason}`);
       }
+      if (item.windowsUserSetupGuidanceEvidence) {
+        const evidence = item.windowsUserSetupGuidanceEvidence;
+        lines.push(`  windowsUserSetupGuidance: userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / stage=${evidence.operatorBlockingStage || "unknown"} / next=${evidence.operatorNextStep || "unknown"}`);
+        lines.push(`  windowsUserSetupGuidance guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
+        lines.push(`  windowsUserSetupGuidance sequence: ${Array.isArray(evidence.readinessCheckSequence) && evidence.readinessCheckSequence.length ? evidence.readinessCheckSequence.join(" -> ") : "missing"}`);
+        lines.push(`  windowsUserSetupGuidance checklist: stages=${Array.isArray(evidence.operatorChecklistStages) && evidence.operatorChecklistStages.length ? evidence.operatorChecklistStages.join(" -> ") : "missing"} / loginSteps=${evidence.operatorChecklistStartsLoginCount ?? 0} / realTrafficSteps=${evidence.operatorChecklistUsesRealTrafficCount ?? 0}`);
+        if (evidence.manualSetupCommandHint) lines.push(`  windowsUserSetupGuidance hint: ${evidence.manualSetupCommandHint}`);
+      }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
         lines.push(`  managerButtons: ${actions.join(" | ")}`);

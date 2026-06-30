@@ -1215,6 +1215,21 @@ function summarizeGate(definition) {
       if (!report.operatorBlockingStage) semanticFailures.push("windows_user_setup_guidance_operator_stage_missing");
       if (!report.operatorNextStep) semanticFailures.push("windows_user_setup_guidance_operator_next_step_missing");
       if (!report.manualSetupCommandHint) semanticFailures.push("windows_user_setup_guidance_manual_hint_missing");
+      const expectedSetupSequence = [
+        "create_target_windows_user",
+        "windows_user_account_prepare",
+        "account_isolation_status",
+        "second_account_login_entrypoint_with_explicit_approval",
+      ];
+      const readinessCheckSequence = Array.isArray(report.readinessCheckSequence) ? report.readinessCheckSequence : [];
+      if (readinessCheckSequence.join("|") !== expectedSetupSequence.join("|")) semanticFailures.push("windows_user_setup_guidance_sequence_mismatch");
+      const operatorChecklist = Array.isArray(report.operatorChecklist) ? report.operatorChecklist : [];
+      const operatorChecklistStages = operatorChecklist.map((entry) => entry?.stage || "");
+      if (operatorChecklist.length !== expectedSetupSequence.length) semanticFailures.push("windows_user_setup_guidance_checklist_missing");
+      if (operatorChecklistStages.join("|") !== expectedSetupSequence.join("|")) semanticFailures.push("windows_user_setup_guidance_checklist_order_mismatch");
+      if (operatorChecklist.some((entry) => entry?.usesRealTraffic === true)) semanticFailures.push("windows_user_setup_guidance_checklist_real_traffic");
+      if (operatorChecklist.slice(0, 3).some((entry) => entry?.startsLogin === true)) semanticFailures.push("windows_user_setup_guidance_checklist_starts_login_too_early");
+      if (operatorChecklist.length === expectedSetupSequence.length && operatorChecklist[3]?.startsLogin !== true) semanticFailures.push("windows_user_setup_guidance_checklist_login_step_missing");
       if (report.requiresUserPresence !== true) semanticFailures.push("windows_user_setup_guidance_user_presence_missing");
       if (report.nextProofRequiresRealTraffic !== true) semanticFailures.push("windows_user_setup_guidance_next_proof_real_traffic_missing");
       if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_setup_guidance_separate_account_verified");
@@ -2978,6 +2993,9 @@ if (args.has("--self-test")) {
       "windows_user_setup_guidance_operator_stage_missing",
       "windows_user_setup_guidance_operator_next_step_missing",
       "windows_user_setup_guidance_manual_hint_missing",
+      "windows_user_setup_guidance_sequence_mismatch",
+      "windows_user_setup_guidance_checklist_missing",
+      "windows_user_setup_guidance_checklist_order_mismatch",
       "windows_user_setup_guidance_user_presence_missing",
       "windows_user_setup_guidance_next_proof_real_traffic_missing",
       "windows_user_setup_guidance_separate_account_verified",

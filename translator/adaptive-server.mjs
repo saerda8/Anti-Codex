@@ -3059,6 +3059,32 @@ function latestManagerReportItem(label, fileName) {
             separateAccountVerified: report.separateAccountVerified === true,
             loginVerified: report.loginVerified === true,
         } : null,
+        windowsUserSetupGuidanceEvidence: report?.reportName === "windows-user-setup-guidance" ? {
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            changedSystem: report.changedSystem === true,
+            createdUser: report.createdUser === true,
+            startedLogin: report.startedLogin === true,
+            capturesPassword: report.capturesPassword === true,
+            storesPassword: report.storesPassword === true,
+            opensSettings: report.opensSettings === true,
+            runsSystemUserCommand: report.runsSystemUserCommand === true,
+            targetUserExists: report.targetUserExists === true ? true : report.targetUserExists === false ? false : null,
+            readyForInteractiveLogin: report.readyForInteractiveLogin === true,
+            safeToAskUserForSecondAccountLogin: report.safeToAskUserForSecondAccountLogin === true,
+            blockedBeforeInteractiveLogin: report.blockedBeforeInteractiveLogin === true,
+            operatorBlockingStage: shortSafeText(report.operatorBlockingStage || "", ""),
+            operatorNextStep: shortSafeText(report.operatorNextStep || "", ""),
+            manualSetupCommandHint: shortSafeText(report.manualSetupCommandHint || "", ""),
+            readinessCheckSequence: Array.isArray(report.readinessCheckSequence) ? report.readinessCheckSequence.map((entry) => shortSafeText(entry || "", "")).filter(Boolean) : [],
+            operatorChecklistStages: Array.isArray(report.operatorChecklist) ? report.operatorChecklist.map((entry) => shortSafeText(entry?.stage || "", "")).filter(Boolean) : [],
+            operatorChecklistStartsLoginCount: Array.isArray(report.operatorChecklist) ? report.operatorChecklist.filter((entry) => entry?.startsLogin === true).length : 0,
+            operatorChecklistUsesRealTrafficCount: Array.isArray(report.operatorChecklist) ? report.operatorChecklist.filter((entry) => entry?.usesRealTraffic === true).length : 0,
+            nextProofRequiresRealTraffic: report.nextProofRequiresRealTraffic === true,
+            separateAccountVerified: report.separateAccountVerified === true,
+            loginVerified: report.loginVerified === true,
+            releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -4263,6 +4289,14 @@ function latestReportsSummary(result){
       lines.push("  windowsUserAccountPrepare guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
       lines.push("  windowsUserAccountPrepare next: safeToAskLogin="+(evidence.safeToAskUserForSecondAccountLogin?"true":"false")+" / canProceedLogin="+(evidence.canProceedToInteractiveLogin?"true":"false")+" / blockedBeforeLogin="+(evidence.blockedBeforeInteractiveLogin?"true":"false")+" / stage="+(evidence.operatorBlockingStage||"unknown")+" / next="+(evidence.operatorNextStep||"unknown"));
       if(evidence.readinessBlockingReason) lines.push("  windowsUserAccountPrepare reason: "+evidence.readinessBlockingReason);
+    }
+    if(item.windowsUserSetupGuidanceEvidence){
+      const evidence=item.windowsUserSetupGuidanceEvidence;
+      lines.push("  windowsUserSetupGuidance: userExists="+(evidence.targetUserExists===true?"true":evidence.targetUserExists===false?"false":"unknown")+" / safeToAskLogin="+(evidence.safeToAskUserForSecondAccountLogin?"true":"false")+" / stage="+(evidence.operatorBlockingStage||"unknown")+" / next="+(evidence.operatorNextStep||"unknown"));
+      lines.push("  windowsUserSetupGuidance guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
+      lines.push("  windowsUserSetupGuidance sequence: "+(Array.isArray(evidence.readinessCheckSequence)&&evidence.readinessCheckSequence.length?evidence.readinessCheckSequence.join(" -> "):"missing"));
+      lines.push("  windowsUserSetupGuidance checklist: stages="+(Array.isArray(evidence.operatorChecklistStages)&&evidence.operatorChecklistStages.length?evidence.operatorChecklistStages.join(" -> "):"missing")+" / loginSteps="+(evidence.operatorChecklistStartsLoginCount??0)+" / realTrafficSteps="+(evidence.operatorChecklistUsesRealTrafficCount??0));
+      if(evidence.manualSetupCommandHint) lines.push("  windowsUserSetupGuidance hint: "+evidence.manualSetupCommandHint);
     }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;

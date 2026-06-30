@@ -209,6 +209,14 @@ After every failure, before another dispatch:
 - Result: Kilo ended as `caller_timeout_after_valid_changes` with two requested checks passing and a useful Manager/server summary suggestion. The main patch kept the SID boundary fields but surfaced only presence/match booleans in summaries instead of raw SID text. MiMoCode produced a release-gate draft but failed `node scripts\test-anticodex-release-gates.mjs --self-test`, so it was not merged.
 - Rule change: display-name separation is not enough for a ready second-account login. Ready evidence must prove the target Windows user has a SID, the current user has a SID, and the two do not match; support summaries should avoid printing raw SID values unless explicitly needed for debugging.
 
+### 2026-06-30 - Windows-user setup-checklist Kilo partial
+
+- Job: `klw_mqzvxrcr_7hjy57`.
+- Task: add a no-traffic ordered operator checklist to Windows-user setup guidance.
+- Result: `partial_caller_timeout` after valid changes; both requested checks passed, but the diff only covered the guidance script and focused test and left release-gate, summary, Manager bridge, and embedded Manager support incomplete.
+- Cause classification: useful narrow worker diff with incomplete support-surface coverage.
+- Rule change: account-isolation operator-step patches must carry the ordered checklist through report generation, release gates, report summaries, Manager bridge text, embedded Manager text, and focused tests before being accepted.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`
