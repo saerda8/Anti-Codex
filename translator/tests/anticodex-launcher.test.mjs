@@ -3408,6 +3408,7 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(summary.mcpSkillEvidence.mcpRealListPassed, 7);
     assert.equal(summary.mcpSkillEvidence.mcpRealListToolCount, 42);
     assert.deepEqual(summary.mcpSkillEvidence.mcpRealListServers, ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"]);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpRealListPassedServers, ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"]);
     assert.equal(summary.mcpSkillEvidence.skillCount, 126);
     assert.equal(summary.mcpSkillEvidence.skillSharedCount, 100);
     assert.equal(summary.mcpSkillEvidence.agentsSkillCount, 26);
@@ -8525,6 +8526,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /appToolRegistryFingerprintMatches/);
   assert.match(diagnostics, /mcpRealListCount/);
   assert.match(diagnostics, /MCP\/Skill summary missing MCP real tools\/list count evidence/);
+  assert.match(diagnostics, /\$RequiredWorkerMcpServers = @\(/);
+  assert.match(diagnostics, /MCP\/Skill summary missing worker MCP real tools\/list evidence/);
+  assert.doesNotMatch(diagnostics, /mcpRealListPassed -lt 2/);
   assert.match(diagnostics, /MCP\/Skill short-budget summary missing reused source snapshot proof/);
   assert.match(diagnostics, /MCP\/Skill short-budget summary missing skill fingerprint skipped proof/);
   assert.match(diagnostics, /MCP\/Skill summary app-tool registry content mismatch/);
@@ -11697,6 +11701,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /mcp_skills_conflicting_duplicate_skills/);
   assert.match(releaseGates, /Number\(skills\.expectedSharedCount \|\| 0\) < Number\(skills\.count \|\| 0\)/);
   assert.match(releaseGates, /mcp_skills_real_call_not_passed/);
+  assert.match(releaseGates, /mcp_skills_missing_worker_real_list/);
   assert.match(releaseGates, /mcp_skills_no_agents_skills/);
   assert.match(releaseGates, /requireUsedRealTraffic/);
   assert.match(releaseGates, /expected_usedRealTraffic_true/);

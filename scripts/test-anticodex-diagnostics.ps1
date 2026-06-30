@@ -8,6 +8,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:verifierStartedAt = [DateTime]::UtcNow
+$RequiredWorkerMcpServers = @(
+    "antigravity-code-worker",
+    "deepseek-code-worker",
+    "deveco-code-worker",
+    "kilo-worker",
+    "mimo-claude-coworker",
+    "mimocode-worker",
+    "opencode-worker"
+)
 
 if (-not $BaseUrl) {
     if (-not $VerifyReportsSummary) {
@@ -1657,9 +1666,12 @@ function Test-DiagnosticBundle {
                 if ($mcpSkillEvidence.hasNodeRepl -ne $true) { Add-Failure "MCP/Skill summary missing node_repl evidence" }
                 if ($mcpSkillEvidence.mcpSmokePassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP smoke evidence" }
                 if ($mcpSkillEvidence.mcpRealCallPassed -ne $true) { Add-Failure "MCP/Skill summary missing MCP real-call evidence" }
-                if ([int]$mcpSkillEvidence.mcpRealListCount -lt 2) { Add-Failure "MCP/Skill summary missing MCP real tools/list count evidence" }
-                if ([int]$mcpSkillEvidence.mcpRealListPassed -lt 2) { Add-Failure "MCP/Skill summary missing MCP real tools/list passed evidence" }
-                if ([int]$mcpSkillEvidence.mcpRealListToolCount -lt 2) { Add-Failure "MCP/Skill summary missing MCP real tools/list tool count evidence" }
+                if ([int]$mcpSkillEvidence.mcpRealListCount -lt $RequiredWorkerMcpServers.Count) { Add-Failure "MCP/Skill summary missing MCP real tools/list count evidence" }
+                if ([int]$mcpSkillEvidence.mcpRealListPassed -lt $RequiredWorkerMcpServers.Count) { Add-Failure "MCP/Skill summary missing MCP real tools/list passed evidence" }
+                if ([int]$mcpSkillEvidence.mcpRealListToolCount -lt $RequiredWorkerMcpServers.Count) { Add-Failure "MCP/Skill summary missing MCP real tools/list tool count evidence" }
+                $mcpRealListPassedServers = @(As-FlatArray $mcpSkillEvidence.mcpRealListPassedServers | ForEach-Object { [string]$_ })
+                $missingWorkerMcpRealList = @($RequiredWorkerMcpServers | Where-Object { $mcpRealListPassedServers -notcontains $_ })
+                if ($missingWorkerMcpRealList.Count -ne 0) { Add-Failure "MCP/Skill summary missing worker MCP real tools/list evidence: $($missingWorkerMcpRealList -join ', ')" }
                 if ([int]$mcpSkillEvidence.skillCount -lt 1) { Add-Failure "MCP/Skill summary has no skills" }
                 if ([int]$mcpSkillEvidence.expectedSharedSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing expected shared skill count" }
                 if ([int]$mcpSkillEvidence.agentsSkillCount -lt 1) { Add-Failure "MCP/Skill summary missing .agents skill count" }

@@ -24,6 +24,15 @@ const strict = args.has("--strict");
 const strictOptionalRealTraffic = args.has("--strict-optional-real-traffic");
 const compactStatus = args.has("--compact-status") || args.has("--status");
 const startedAt = Date.now();
+const REQUIRED_WORKER_MCP_SERVERS = [
+  "antigravity-code-worker",
+  "deepseek-code-worker",
+  "deveco-code-worker",
+  "kilo-worker",
+  "mimo-claude-coworker",
+  "mimocode-worker",
+  "opencode-worker",
+];
 function currentSourceRoot() {
   return resolve(args.get("--source-root") || join(dirname(fileURLToPath(import.meta.url)), ".."));
 }
@@ -1025,6 +1034,12 @@ function summarizeGate(definition) {
       const appToolRegistry = appTools.registry && typeof appTools.registry === "object" ? appTools.registry : {};
       const mcpSmoke = mcp.smoke || {};
       const mcpRealCall = mcpSmoke.realCall || {};
+      const mcpRealList = Array.isArray(mcpSmoke.realList) ? mcpSmoke.realList : [];
+      const passedRealListServers = new Set(mcpRealList
+        .filter((entry) => entry && entry.passed === true)
+        .map((entry) => String(entry.server || ""))
+        .filter(Boolean));
+      const missingWorkerRealList = REQUIRED_WORKER_MCP_SERVERS.filter((server) => !passedRealListServers.has(server));
       if (Number(mcp.count || 0) < 1) semanticFailures.push("mcp_skills_no_mcp_servers");
       if (Number(mcp.sharedCount || 0) < 1) semanticFailures.push("mcp_skills_no_shared_mcp_servers");
       if (!isEmptyArray(mcp.missingShared)) semanticFailures.push("mcp_skills_missing_shared_mcp");
@@ -1033,6 +1048,7 @@ function summarizeGate(definition) {
       if (mcp.hasNodeRepl !== true) semanticFailures.push("mcp_skills_missing_node_repl");
       if (mcpSmoke.passed !== true) semanticFailures.push("mcp_skills_smoke_not_passed");
       if (mcpRealCall.passed !== true) semanticFailures.push("mcp_skills_real_call_not_passed");
+      if (missingWorkerRealList.length > 0) semanticFailures.push("mcp_skills_missing_worker_real_list");
       if (Number(skills.count || 0) < 1) semanticFailures.push("mcp_skills_no_local_skills");
       if (Number(skills.sharedCount || 0) < 1) semanticFailures.push("mcp_skills_no_shared_skills");
       if (Number(skills.agentsCount || 0) < 1) semanticFailures.push("mcp_skills_no_agents_skills");
@@ -4033,6 +4049,7 @@ if (args.has("--self-test")) {
       "mcp_skills_missing_node_repl",
       "mcp_skills_smoke_not_passed",
       "mcp_skills_real_call_not_passed",
+      "mcp_skills_missing_worker_real_list",
       "mcp_skills_no_agents_skills",
       "mcp_skills_expected_shared_count",
       "mcp_skills_missing_shared_skills",
@@ -4467,7 +4484,11 @@ if (args.has("--self-test")) {
         extraLocal: [],
         changedShared: [],
         hasNodeRepl: true,
-        smoke: { passed: true, realCall: { passed: true } },
+        smoke: {
+          passed: true,
+          realCall: { passed: true },
+          realList: REQUIRED_WORKER_MCP_SERVERS.map((server) => ({ server, passed: true, toolCount: 1 })),
+        },
       },
       skills: {
         count: 2,

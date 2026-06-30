@@ -251,6 +251,10 @@ const mcpRealListToolCount = mcpRealList
   ? mcpRealList.reduce((total, entry) => total + (Number.isFinite(Number(entry?.toolCount)) ? Number(entry.toolCount) : 0), 0)
   : null;
 const mcpRealListServers = mcpRealList ? mcpRealList.map((entry) => asString(entry?.server)).filter(Boolean) : [];
+const mcpRealListPassedServers = mcpRealList ? mcpRealList
+  .filter((entry) => entry && entry.passed === true)
+  .map((entry) => asString(entry?.server))
+  .filter(Boolean) : [];
 const realAntigravityEvidence = report && report.realAntigravityEvidence ? report.realAntigravityEvidence : null;
 const toolBridge = report && report.toolBridge ? report.toolBridge : null;
 const compatibilityTools = report && report.compatibilityTools ? report.compatibilityTools : null;
@@ -1403,6 +1407,7 @@ const summary = {
     mcpRealListPassed,
     mcpRealListToolCount,
     mcpRealListServers,
+    mcpRealListPassedServers,
     skillCount: skills && has(skills, "count") ? skills.count : null,
     skillSharedCount: skills && has(skills, "sharedCount") ? skills.sharedCount : null,
     agentsSkillCount: skills && has(skills, "agentsCount") ? skills.agentsCount : null,
