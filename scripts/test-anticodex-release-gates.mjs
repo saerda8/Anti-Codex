@@ -863,6 +863,7 @@ function summarizeGate(definition) {
       const releaseGates = report.releaseRealTrafficGates && typeof report.releaseRealTrafficGates === "object" ? report.releaseRealTrafficGates : {};
       const account = report.accountIsolation && typeof report.accountIsolation === "object" ? report.accountIsolation : {};
       const orderedActions = Array.isArray(report.orderedActions) ? report.orderedActions : [];
+      const preLoginChecklist = Array.isArray(report.preLoginChecklist) ? report.preLoginChecklist : [];
       const gateIds = Array.isArray(releaseGates.gateIds) ? releaseGates.gateIds.map((item) => String(item || "")) : [];
       const refreshTasks = Array.isArray(refresh.uniqueRefreshTasks) ? refresh.uniqueRefreshTasks.map((item) => String(item || "")) : [];
       const refreshCommandArgs = Array.isArray(refresh.commandArgs) ? refresh.commandArgs.map((item) => String(item || "")) : [];
@@ -892,6 +893,18 @@ function summarizeGate(definition) {
       if (Number(report.requiresRealTrafficCount || 0) < 1) semanticFailures.push("real_approval_plan_real_traffic_actions_missing");
       if (Number(report.operatorSetupBlockedCount || 0) < 1) semanticFailures.push("real_approval_plan_operator_setup_blockers_missing");
       if (typeof report.nextNoTrafficAction !== "string" || !report.nextNoTrafficAction) semanticFailures.push("real_approval_plan_next_no_traffic_action_missing");
+      if (report.preLoginChecklistComplete !== true) semanticFailures.push("real_approval_plan_pre_login_checklist_incomplete");
+      for (const checklistId of ["windows-user-account-prepare", "account-isolation-status", "second-account-login-entrypoint-status"]) {
+        const entry = preLoginChecklist.find((item) => String(item?.id || "") === checklistId);
+        if (!entry) {
+          semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_missing`);
+          continue;
+        }
+        if (entry.noTraffic !== true) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_not_no_traffic`);
+        if (entry.mustPassBeforeLogin !== true) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_not_required`);
+        if (typeof entry.command !== "string" || !entry.command) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_command_missing`);
+        if (typeof entry.report !== "string" || !entry.report) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_report_missing`);
+      }
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("real_approval_plan_failures");
     }
     if (definition.requireGoalReadinessSemantics) {

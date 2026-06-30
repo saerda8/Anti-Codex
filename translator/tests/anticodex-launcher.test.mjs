@@ -12938,6 +12938,11 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(plan, /commandArgs/);
   assert.match(plan, /approvalSummary/);
   assert.match(plan, /releaseRealTrafficGates/);
+  assert.match(plan, /preLoginChecklist/);
+  assert.match(plan, /preLoginChecklistComplete/);
+  assert.match(plan, /windows-user-account-prepare/);
+  assert.match(plan, /account-isolation-status/);
+  assert.match(plan, /second-account-login-entrypoint-status/);
   assert.match(plan, /requiredActions/);
   assert.match(plan, /optionalActions/);
   assert.match(plan, /requiredReleaseRealTrafficActionCount/);
@@ -12960,6 +12965,8 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(releaseGates, /real_approval_plan_required_release_actions_missing/);
   assert.match(releaseGates, /real_approval_plan_refresh_command_args_missing/);
   assert.match(releaseGates, /real_approval_plan_refresh_approval_summary_missing/);
+  assert.match(releaseGates, /real_approval_plan_pre_login_checklist_incomplete/);
+  assert.match(releaseGates, /real_approval_plan_pre_login_\$\{checklistId\.replaceAll\("-", "_"\)\}_missing/);
   assert.match(releaseGates, /scripts\/test-anticodex-real-approval-plan\.mjs/);
   assert.match(installedOverall, /latest-real-approval-plan\.json/);
   assert.match(signer, /latest-real-approval-plan\.json/);

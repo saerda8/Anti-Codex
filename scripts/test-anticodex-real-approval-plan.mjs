@@ -124,6 +124,32 @@ const accountIsolation = {
   accountSetupBlocked,
   requiresSeparateWindowsUser: true,
 };
+const preLoginChecklist = [
+  {
+    id: "windows-user-account-prepare",
+    report: "latest-windows-user-account-prepare.json",
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1",
+    noTraffic: true,
+    mustPassBeforeLogin: true,
+    expectedReadyField: "readyForInteractiveLogin",
+  },
+  {
+    id: "account-isolation-status",
+    report: "latest-antigravity-account-isolation-status.json",
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1",
+    noTraffic: true,
+    mustPassBeforeLogin: true,
+    expectedReadyField: "safeToAskUserForSecondAccountLogin",
+  },
+  {
+    id: "second-account-login-entrypoint-status",
+    report: "latest-second-antigravity-account-login-entrypoint.json",
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1",
+    noTraffic: true,
+    mustPassBeforeLogin: true,
+    expectedReadyField: "safeToStartLogin",
+  },
+];
 
 const orderedActions = [
   makeAction("rerun-no-traffic-status", "report-only", "node scripts\\test-anticodex-real-approval-plan.mjs", { reason: "refresh_plan_only" }),
@@ -174,6 +200,9 @@ const payload = {
   realTaskRefresh,
   releaseRealTrafficGates,
   accountIsolation,
+  preLoginChecklist,
+  preLoginChecklistComplete: preLoginChecklist.every((item) => item.noTraffic === true && item.mustPassBeforeLogin === true && item.report && item.command),
+  preLoginChecklistCount: preLoginChecklist.length,
   orderedActions,
   blockedUntilExplicitUserApprovalCount: orderedActions.filter((item) => item.blockedUntilExplicitUserApproval).length,
   requiresRealTrafficCount: orderedActions.filter((item) => item.requiresRealTraffic).length,
