@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,12 +27,31 @@ const selectedTasks = String(args.get("--tasks") || defaultTasks.join(","))
   .map((item) => item.trim())
   .filter(Boolean);
 const keepArtifacts = args.has("--keep-artifacts");
-const perTaskReports = {
-  "exact-marker": "latest-ui-chat-smoke.json",
-  "local-project": "latest-ui-local-project-smoke.json",
-  "repo-file-edit": "latest-ui-repo-file-edit-smoke.json",
-  "repo-multi-file-edit": "latest-ui-repo-multi-file-edit-smoke.json",
+const taskReportExpectations = {
+  "exact-marker": {
+    file: "latest-ui-chat-smoke.json",
+    expectedReportName: "ui-chat-smoke",
+    expectedTaskMode: "exact-marker",
+  },
+  "local-project": {
+    file: "latest-ui-local-project-smoke.json",
+    expectedReportName: "ui-local-project-smoke",
+    expectedTaskMode: "local-project",
+  },
+  "repo-file-edit": {
+    file: "latest-ui-repo-file-edit-smoke.json",
+    expectedReportName: "ui-repo-file-edit-smoke",
+    expectedTaskMode: "repo-file-edit",
+  },
+  "repo-multi-file-edit": {
+    file: "latest-ui-repo-multi-file-edit-smoke.json",
+    expectedReportName: "ui-repo-multi-file-edit-smoke",
+    expectedTaskMode: "repo-multi-file-edit",
+  },
 };
+const perTaskReports = Object.fromEntries(
+  Object.entries(taskReportExpectations).map(([taskMode, expectation]) => [taskMode, expectation.file]),
+);
 
 function timeoutForTask(taskMode) {
   if (args.has("--timeout-ms")) return Math.max(15_000, Number(args.get("--timeout-ms") || 0));
@@ -72,6 +91,76 @@ function parseChildPayload(stdout) {
     const jsonLine = trimmed.split(/\r?\n/).reverse().find((line) => line.trim().startsWith("{") && line.trim().endsWith("}"));
     return jsonLine ? JSON.parse(jsonLine) : null;
   }
+}
+
+function auditLatestRealTaskEvidence() {
+  const evidence = {};
+  const failures = [];
+  for (const taskMode of selectedTasks) {
+    const expectation = taskReportExpectations[taskMode];
+    if (!expectation) {
+      failures.push(`${taskMode}_latest_real_report_expectation_missing`);
+      evidence[taskMode] = {
+        taskMode,
+        ok: false,
+        failure: "latest_real_report_expectation_missing",
+      };
+      continue;
+    }
+
+    const reportPath = resolve(reportRoot, expectation.file);
+    const item = {
+      taskMode,
+      reportPath,
+      expectedReportName: expectation.expectedReportName,
+      expectedTaskMode: expectation.expectedTaskMode,
+      present: existsSync(reportPath),
+      parseable: false,
+      ok: false,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      reportName: "",
+      actualTaskMode: "",
+      coverageKind: "",
+      markerPresent: false,
+      elapsedMs: null,
+      mtime: null,
+      failures: [],
+    };
+    if (!item.present) {
+      item.failures.push("latest_real_report_missing");
+    } else {
+      try {
+        const parsed = JSON.parse(readFileSync(reportPath, "utf8"));
+        item.parseable = true;
+        item.ok = parsed.ok === true;
+        item.requestedRealTraffic = parsed.requestedRealTraffic === true;
+        item.usedRealTraffic = parsed.usedRealTraffic === true;
+        item.reportName = String(parsed.reportName || "");
+        item.actualTaskMode = String(parsed.taskMode || "");
+        item.coverageKind = String(parsed.coverageKind || "");
+        item.markerPresent = typeof parsed.marker === "string" && parsed.marker.length > 0;
+        item.elapsedMs = Number.isFinite(Number(parsed.elapsedMs)) ? Number(parsed.elapsedMs) : null;
+        item.mtime = statSync(reportPath).mtime.toISOString();
+        if (!item.ok) item.failures.push("latest_real_report_not_ok");
+        if (!item.requestedRealTraffic) item.failures.push("latest_real_report_not_requested_real_traffic");
+        if (!item.usedRealTraffic) item.failures.push("latest_real_report_not_used_real_traffic");
+        if (item.reportName !== expectation.expectedReportName) item.failures.push("latest_real_report_name_mismatch");
+        if (item.actualTaskMode !== expectation.expectedTaskMode) item.failures.push("latest_real_report_task_mode_mismatch");
+      } catch (error) {
+        item.failures.push(`latest_real_report_unparseable:${error.message}`);
+      }
+    }
+    if (item.failures.length > 0) {
+      failures.push(...item.failures.map((failure) => `${taskMode}_${failure}`));
+    }
+    evidence[taskMode] = item;
+  }
+  return {
+    complete: failures.length === 0,
+    failures,
+    evidence,
+  };
 }
 
 function gitStatusForFixturePaths() {
@@ -200,6 +289,7 @@ if (!existsSync(uiSmokeScript)) failures.push("ui_smoke_script_missing");
 for (const task of tasks) {
   if (task.ok !== true) failures.push(`${task.taskMode}_failed`);
 }
+const realTaskAudit = auditLatestRealTaskEvidence();
 
 const payload = {
   ok: failures.length === 0,
@@ -215,6 +305,9 @@ const payload = {
   selectedTasks,
   perTaskReports,
   tasks,
+  latestRealTaskEvidence: realTaskAudit.evidence,
+  realTaskEvidenceComplete: realTaskAudit.complete,
+  realTaskEvidenceFailures: realTaskAudit.failures,
   failures,
   elapsedMs: Date.now() - startedAt,
 };

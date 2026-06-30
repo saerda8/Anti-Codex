@@ -12436,6 +12436,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
 
   assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
@@ -12453,6 +12454,14 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /usedRealTraffic: allowRealTraffic && !dryRun/);
   assert.match(suite, /mode: dryRun \? "dry-run" : "real-traffic"/);
   assert.match(suite, /perTaskReports/);
+  assert.match(suite, /latestRealTaskEvidence/);
+  assert.match(suite, /realTaskEvidenceComplete/);
+  assert.match(suite, /realTaskEvidenceFailures/);
+  assert.match(suite, /expectedReportName/);
+  assert.match(suite, /expectedTaskMode/);
+  assert.match(summarizer, /desktopTaskSuiteEvidence/);
+  assert.match(summarizer, /realTaskEvidenceComplete/);
+  assert.match(summarizer, /realTaskEvidenceTasks/);
   assert.doesNotMatch(suite, /Promise\.all/);
   assert.match(releaseGates, /scripts\/test-anticodex-desktop-task-suite\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-desktop-task-suite\.mjs/);
