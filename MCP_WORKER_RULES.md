@@ -95,6 +95,14 @@ After every failure, before another dispatch:
 - Cause classification: external CLI/transport failure, not a code review result.
 - Rule change: when DeepSeek transport closes before edit, do not keep retrying the same dispatch. Route the small scoped task to another available worker or the main agent, then record the failure.
 
+### 2026-06-30 - MiMoCode diagnostics setup-plan partial
+
+- Job: `mcw_mqzwung1_fxdq43`
+- Task: add diagnostics validation for Windows-user setup-guidance `operatorSetupPlan`.
+- Result: `failed` after about 196 seconds with two scoped file changes. Focused launcher test passed, but live diagnostics failed with `diagnostics missing windowsUserSetupGuidanceEvidence`.
+- Cause classification: useful scoped patch, but it validated a live diagnostics field before exposing that field from the server.
+- Rule change: when adding diagnostics validation for a report-summary evidence field, first confirm whether live `/anticodex/diagnostics` exposes that evidence. If not, update the live diagnostics payload in the same patch or keep the check limited to `-VerifyReportsSummary`.
+
 ### 2026-06-30 - MIMO start rejected workspace-external forbidden paths
 
 - Job: no job id; `mimo_start_implementation` rejected the request before worker launch.

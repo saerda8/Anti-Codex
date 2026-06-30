@@ -40,6 +40,51 @@ function As-FlatArray {
     return $items
 }
 
+function Test-WindowsUserSetupGuidanceOperatorSetupPlan {
+    param(
+        $Evidence,
+        [string]$Prefix
+    )
+
+    if (-not $Evidence) {
+        Add-Failure "$Prefix missing windowsUserSetupGuidanceEvidence"
+        return
+    }
+    if (-not (Has-Property $Evidence "operatorSetupPlan")) {
+        Add-Failure "$Prefix missing operatorSetupPlan"
+        return
+    }
+    $plan = $Evidence.operatorSetupPlan
+    if (-not $plan) {
+        Add-Failure "$Prefix operatorSetupPlan is empty"
+        return
+    }
+    if ([string]$plan.targetLocalWindowsUser -ne "AntiCodexModel") { Add-Failure "$Prefix setup plan target mismatch" }
+    if ([string]$plan.setupMode -ne "manual-only") { Add-Failure "$Prefix setup plan not manual-only" }
+    if ([string]$plan.preferredSurface -ne "windows-settings-other-users") { Add-Failure "$Prefix setup plan surface mismatch" }
+    if ($plan.antiCodexCreatesUser -ne $false) { Add-Failure "$Prefix setup plan creates users" }
+    if ($plan.antiCodexOpensSettings -ne $false) { Add-Failure "$Prefix setup plan opens settings" }
+    if ($plan.antiCodexStartsLogin -ne $false) { Add-Failure "$Prefix setup plan starts login" }
+    if ($plan.antiCodexCapturesPassword -ne $false) { Add-Failure "$Prefix setup plan captures password" }
+    if ($plan.antiCodexStoresPassword -ne $false) { Add-Failure "$Prefix setup plan stores password" }
+    if ($plan.antiCodexUsesRealTraffic -ne $false) { Add-Failure "$Prefix setup plan uses real traffic" }
+    if ($plan.rawUserManagementCommandProvided -ne $false) { Add-Failure "$Prefix setup plan provides raw user command" }
+    $afterChecks = @($plan.afterManualSetupChecks | ForEach-Object { [string]$_ })
+    $expectedAfterChecks = @("windows_user_account_prepare", "account_isolation_status")
+    if ($afterChecks.Count -ne $expectedAfterChecks.Count) {
+        Add-Failure "$Prefix setup plan after-checks mismatch"
+    } else {
+        for ($i = 0; $i -lt $expectedAfterChecks.Count; $i++) {
+            if ($afterChecks[$i] -ne $expectedAfterChecks[$i]) {
+                Add-Failure "$Prefix setup plan after-checks mismatch"
+                break
+            }
+        }
+    }
+    if ([string]$plan.finalLoginEntrypoint -ne "start-anticodex-second-antigravity-account-login.ps1") { Add-Failure "$Prefix setup plan entrypoint mismatch" }
+    if ([string]$plan.finalLoginApproval -ne "start-separate-windows-user-login") { Add-Failure "$Prefix setup plan approval mismatch" }
+}
+
 function Get-NonNegativeIntProperty {
     param(
         $Value,
@@ -1308,6 +1353,12 @@ function Test-DiagnosticBundle {
                 if (-not [string]$dualLanesEvidence.accountIsolationCaveat) { Add-Failure "diagnostic dual account lanes summary missing accountIsolationCaveat" }
             }
         }
+        $windowsUserSetupGuidanceSummary = @($summary | Where-Object { $_.file -eq "latest-windows-user-setup-guidance.json" } | Select-Object -First 1)[0]
+        if (-not $windowsUserSetupGuidanceSummary) {
+            Add-Failure "diagnostic reports summary missing latest-windows-user-setup-guidance.json"
+        } else {
+            Test-WindowsUserSetupGuidanceOperatorSetupPlan $windowsUserSetupGuidanceSummary.windowsUserSetupGuidanceEvidence "diagnostic windows-user setup-guidance summary"
+        }
         $antigravityCliRealSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-cli-real-smoke.json" } | Select-Object -First 1)[0]
         if ($antigravityCliRealSmokeSummary) {
             $realSmokeEvidence = $antigravityCliRealSmokeSummary.antigravityCliRealSmokeEvidence
@@ -2222,6 +2273,8 @@ if ($diagnostics) {
         }
         if (-not (Has-Property $sourcePreflight "skipFullRegression")) { Add-Failure "diagnostics source preflight missing skipFullRegression" }
     }
+    Test-WindowsUserSetupGuidanceOperatorSetupPlan $diagnostics.windowsUserSetupGuidanceEvidence "diagnostics windows-user setup guidance"
+
     if (-not (Has-Property $diagnostics "lifecycle")) {
         Add-Failure "diagnostics missing translator lifecycle status"
     } else {

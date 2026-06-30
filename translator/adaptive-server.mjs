@@ -1305,6 +1305,7 @@ function diagnosticsPayload({
         shortcutRepair,
         sourcePreflight,
         syncReadinessEvidence: fast ? null : latestManagerReportItem("Sync readiness", "latest-sync-readiness.json").syncReadinessEvidence,
+        windowsUserSetupGuidanceEvidence: fast ? null : latestManagerReportItem("Windows setup guidance", "latest-windows-user-setup-guidance.json").windowsUserSetupGuidanceEvidence,
         antigravityRetries: {
             count: ANTIGRAVITY_RETRY_AUDIT.count,
             latest: ANTIGRAVITY_RETRY_AUDIT.latest,
