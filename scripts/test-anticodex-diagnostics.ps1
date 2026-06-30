@@ -1033,7 +1033,21 @@ function Test-RealApprovalPlanSummaryEvidence {
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "real-approval-plan summary behavior not covered" }
     if ($evidence.coverageKind -ne "real-approval-plan-report-only") { Add-Failure "real-approval-plan summary coverage kind mismatch" }
     if ($evidence.realTaskRefreshNeeded -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh need" }
-    if (@(As-FlatArray $evidence.realTaskRefreshTasks).Count -lt 1) { Add-Failure "real-approval-plan summary missing real task refresh tasks" }
+    $refreshTasks = @(As-FlatArray $evidence.realTaskRefreshTasks)
+    if ($refreshTasks.Count -lt 1) { Add-Failure "real-approval-plan summary missing real task refresh tasks" }
+    $refreshScenarios = @(As-FlatArray $evidence.realTaskRefreshPendingScenarios)
+    if ($refreshScenarios.Count -lt $refreshTasks.Count) { Add-Failure "real-approval-plan summary missing real task refresh scenarios" }
+    foreach ($taskMode in $refreshTasks) {
+        $scenario = @($refreshScenarios | Where-Object { [string]$_.taskMode -eq [string]$taskMode } | Select-Object -First 1)[0]
+        if (-not $scenario) {
+            Add-Failure "real-approval-plan summary missing refresh scenario for $taskMode"
+            continue
+        }
+        if (-not [string]$scenario.workType) { Add-Failure "real-approval-plan summary refresh scenario missing work type for $taskMode" }
+        if ($scenario.realTrafficRequired -ne $true) { Add-Failure "real-approval-plan summary refresh scenario not marked real traffic for $taskMode" }
+        if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "real-approval-plan summary refresh scenario missing acceptance evidence for $taskMode" }
+        if ($scenario.expectedResultPresent -ne $true) { Add-Failure "real-approval-plan summary refresh scenario missing expected result for $taskMode" }
+    }
     if ($evidence.realTaskRefreshCommandPresent -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh command" }
     if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "real-approval-plan summary missing release real-traffic-only blocker" }
     if (@(As-FlatArray $evidence.releaseRealTrafficGateIds).Count -lt 1) { Add-Failure "real-approval-plan summary missing release real-traffic gates" }

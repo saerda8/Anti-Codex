@@ -12954,6 +12954,9 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(plan, /realTaskRefresh/);
   assert.match(plan, /commandArgs/);
   assert.match(plan, /approvalSummary/);
+  assert.match(plan, /function asObjectArray/);
+  assert.match(plan, /pendingRealTaskScenarios/);
+  assert.match(plan, /expectedResultPresent/);
   assert.match(plan, /releaseRealTrafficGates/);
   assert.match(plan, /preLoginChecklist/);
   assert.match(plan, /preLoginChecklistComplete/);
@@ -12971,12 +12974,15 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(summarizer, /realApprovalPlanEvidence/);
   assert.match(summarizer, /requiredReleaseRealTrafficActionCount/);
   assert.match(summarizer, /optionalReleaseRealTrafficActionCount/);
+  assert.match(summarizer, /realTaskRefreshPendingScenarios/);
   assert.match(summarizer, /preLoginChecklistComplete/);
   assert.match(summarizer, /preLoginChecklistIds/);
   assert.match(collector, /latest-real-approval-plan\.json/);
   assert.match(collector, /realApprovalPlanEvidence = \$json\.realApprovalPlanEvidence/);
   assert.match(diagnostics, /real-approval-plan summary missing realApprovalPlanEvidence/);
   assert.match(diagnostics, /real-approval-plan summary missing required release real-traffic actions/);
+  assert.match(diagnostics, /real-approval-plan summary missing real task refresh scenarios/);
+  assert.match(diagnostics, /real-approval-plan summary refresh scenario missing expected result/);
   assert.match(diagnostics, /real-approval-plan summary missing optional release real-traffic action count/);
   assert.match(diagnostics, /real-approval-plan summary missing complete pre-login checklist/);
   assert.match(diagnostics, /real-approval-plan summary missing pre-login checklist id/);

@@ -29,6 +29,10 @@ function asArray(value) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
+function asObjectArray(value) {
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
+}
+
 function makeAction(id, phase, command, options = {}) {
   return {
     id,
@@ -55,6 +59,15 @@ const release = releaseReport.report || {};
 const account = accountReport.report || {};
 
 const uniqueRefreshTasks = asArray(roadmap.uniqueRefreshTasks);
+const pendingRealTaskScenarios = asObjectArray(roadmap.pendingRealTaskScenarios)
+  .map((item) => ({
+    taskMode: String(item.taskMode || ""),
+    workType: String(item.workType || ""),
+    realTrafficRequired: item.realTrafficRequired === true,
+    acceptanceEvidence: asArray(item.acceptanceEvidence),
+    expectedResultPresent: typeof item.expectedResult === "string" && item.expectedResult.trim().length > 0,
+  }))
+  .filter((item) => item.taskMode);
 const requiredRealTrafficBlockedGates = asArray(release.requiredRealTrafficBlockedGates);
 const releaseNextActions = Array.isArray(release.nextActions) ? release.nextActions : [];
 const releaseRealTrafficActions = releaseNextActions
@@ -89,6 +102,7 @@ const roadmapRefreshApprovalSummary = roadmap.refreshApprovalSummary && typeof r
 const realTaskRefresh = {
   needed: uniqueRefreshTasks.length > 0,
   uniqueRefreshTasks,
+  pendingRealTaskScenarios,
   command: minimalRefreshCommand,
   commandArgs: minimalRefreshCommandArgs,
   approvalSummary: {

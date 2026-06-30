@@ -1330,6 +1330,13 @@ const summary = {
     coverageKind: asString(report.coverageKind),
     realTaskRefreshNeeded: boolField(report.realTaskRefresh || {}, "needed"),
     realTaskRefreshTasks: Array.isArray(report.realTaskRefresh?.uniqueRefreshTasks) ? asStringArray(report.realTaskRefresh.uniqueRefreshTasks) : [],
+    realTaskRefreshPendingScenarios: Array.isArray(report.realTaskRefresh?.pendingRealTaskScenarios) ? report.realTaskRefresh.pendingRealTaskScenarios.map((item) => ({
+      taskMode: asString(item?.taskMode),
+      workType: asString(item?.workType),
+      realTrafficRequired: boolField(item || {}, "realTrafficRequired"),
+      acceptanceEvidence: Array.isArray(item?.acceptanceEvidence) ? asStringArray(item.acceptanceEvidence) : [],
+      expectedResultPresent: boolField(item || {}, "expectedResultPresent"),
+    })) : [],
     realTaskRefreshCommandPresent: typeof report.realTaskRefresh?.command === "string" && report.realTaskRefresh.command.includes("--allow-real-traffic"),
     releaseBlockedOnlyByRequiredRealTraffic: boolField(report.releaseRealTrafficGates || {}, "releaseBlockedOnlyByRequiredRealTraffic"),
     releaseRealTrafficGateIds: Array.isArray(report.releaseRealTrafficGates?.gateIds) ? asStringArray(report.releaseRealTrafficGates.gateIds) : [],
