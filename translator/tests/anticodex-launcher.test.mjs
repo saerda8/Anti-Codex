@@ -12717,6 +12717,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /workerMcp/);
   assert.match(goalReadiness, /desktopAgenticTasks/);
   assert.match(goalReadiness, /agenticCapabilityMatrix/);
+  assert.match(goalReadiness, /realTaskCoverageRoadmap/);
+  assert.match(goalReadiness, /real_task_coverage_refresh_required/);
+  assert.match(summarizer, /realTaskCoverageNextProfilesNeedingRealTraffic/);
+  assert.match(diagnostics, /goal-readiness summary missing real-task coverage roadmap proof/);
   assert.match(goalReadiness, /antigravityAccountIsolation/);
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });

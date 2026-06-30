@@ -821,6 +821,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.workerMcpProven -ne $true) { Add-Failure "goal-readiness summary missing worker MCP proof" }
     if ($evidence.desktopAgenticTasksProven -ne $true) { Add-Failure "goal-readiness summary missing desktop agentic task proof" }
     if ($evidence.agenticCapabilityMatrixProven -ne $true) { Add-Failure "goal-readiness summary missing agentic capability matrix proof" }
+    if ($evidence.realTaskCoverageRoadmapProven -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage roadmap proof" }
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
@@ -832,6 +833,11 @@ function Test-GoalReadinessSummaryEvidence {
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
     if (@(As-FlatArray $evidence.agenticStaleCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has stale agentic capabilities" }
     if ([int]$evidence.agenticOkCapabilityCount -lt 5) { Add-Failure "goal-readiness summary agentic capability count too low" }
+    if (@(As-FlatArray $evidence.realTaskCoverageMissingProfiles).Count -ne 0) { Add-Failure "goal-readiness summary has missing real-task coverage profiles" }
+    if (@(As-FlatArray $evidence.realTaskCoverageCompleteProfiles).Count -lt 2) { Add-Failure "goal-readiness summary has too few complete real-task coverage profiles" }
+    $realTaskRefreshBlockers = @(As-FlatArray $evidence.realTaskCoverageNextProfilesNeedingRealTraffic)
+    if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $realTaskRefreshBlockers.Count -lt 1) { Add-Failure "goal-readiness summary missing real-task coverage refresh blockers" }
+    if ($null -eq $evidence.realTaskCoverageApprovalRequiredForRefresh) { Add-Failure "goal-readiness summary missing real-task coverage approval requirement" }
     if ($evidence.accountReleaseAcceptableProof -ne $false) { Add-Failure "goal-readiness summary account proof unexpectedly acceptable" }
     if (-not [string]$evidence.accountCompletionState) { Add-Failure "goal-readiness summary missing account completion state" }
     if (-not [string]$evidence.accountBlockingReason) { Add-Failure "goal-readiness summary missing account blocking reason" }

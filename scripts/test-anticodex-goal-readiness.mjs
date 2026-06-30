@@ -54,6 +54,7 @@ const syncReadiness = readReport("latest-sync-readiness.json");
 const mcpSkills = readReport("latest-mcp-skills.json");
 const desktopSuite = readReport("latest-desktop-task-suite.json");
 const capabilityMatrixReport = readReport("latest-agentic-capability-matrix.json");
+const realTaskCoverageRoadmapReport = readReport("latest-real-task-coverage-roadmap.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
 const releaseGates = readReport("latest-release-gates.json");
 
@@ -111,6 +112,36 @@ const agenticCapabilityMatrix = {
   capabilityCount: Array.isArray(matrix.capabilities) ? matrix.capabilities.length : 0,
   okCapabilityCount: Array.isArray(matrix.capabilities) ? matrix.capabilities.filter((item) => item?.ok === true).length : 0,
 };
+const roadmap = realTaskCoverageRoadmapReport.report || {};
+const roadmapProfiles = Array.isArray(roadmap.profiles) ? roadmap.profiles : [];
+const roadmapProfileByName = new Map(roadmapProfiles.map((item) => [String(item?.profile || ""), item]));
+const requiredRoadmapProfiles = ["core", "agentic", "extended", "all"];
+const missingRoadmapProfiles = requiredRoadmapProfiles.filter((profile) => !roadmapProfileByName.has(profile));
+const nextRoadmapProfilesNeedingRealTraffic = Array.isArray(roadmap.nextProfilesNeedingRealTraffic)
+  ? roadmap.nextProfilesNeedingRealTraffic.map(String).filter(Boolean)
+  : [];
+const realTaskCoverageRoadmap = {
+  reportPresent: realTaskCoverageRoadmapReport.present,
+  reportOk: roadmap.ok === true,
+  coverageKind: String(roadmap.coverageKind || ""),
+  requestedRealTraffic: roadmap.requestedRealTraffic === true,
+  usedRealTraffic: roadmap.usedRealTraffic === true,
+  requiredProfiles: Array.isArray(roadmap.requiredProfiles) ? roadmap.requiredProfiles.map(String) : [],
+  completeProfiles: Array.isArray(roadmap.completeProfiles) ? roadmap.completeProfiles.map(String) : [],
+  missingProfiles: missingRoadmapProfiles,
+  nextProfilesNeedingRealTraffic: nextRoadmapProfilesNeedingRealTraffic,
+  approvalRequiredForRefresh: roadmap.approvalRequiredForRefresh === true,
+  realTrafficApprovalReason: String(roadmap.realTrafficApprovalReason || ""),
+  recommendedNoTrafficNextStep: String(roadmap.recommendedNoTrafficNextStep || ""),
+  profiles: roadmapProfiles.map((item) => ({
+    profile: String(item?.profile || ""),
+    taskCount: Number(item?.taskCount || 0),
+    okTaskCount: Number(item?.okTaskCount || 0),
+    allOk: item?.allOk === true,
+    refreshTasks: Array.isArray(item?.refreshTasks) ? item.refreshTasks.map(String) : [],
+    approvalRequiredForRefresh: item?.approvalRequiredForRefresh === true,
+  })),
+};
 
 const isolation = accountIsolation.report || {};
 const antigravityAccountIsolation = {
@@ -161,6 +192,11 @@ const proven = {
     && agenticCapabilityMatrix.missingCapabilities.length === 0
     && agenticCapabilityMatrix.staleCapabilities.length === 0
     && agenticCapabilityMatrix.okCapabilityCount >= 5,
+  realTaskCoverageRoadmap: realTaskCoverageRoadmap.reportOk
+    && realTaskCoverageRoadmap.coverageKind === "real-task-coverage-roadmap-report-only"
+    && realTaskCoverageRoadmap.requestedRealTraffic === false
+    && realTaskCoverageRoadmap.usedRealTraffic === false
+    && realTaskCoverageRoadmap.missingProfiles.length === 0,
   releaseShortPath: releaseGateStatus.reportOk
     && releaseGateStatus.shortReady
     && releaseGateStatus.missingShort.length === 0
@@ -179,6 +215,8 @@ if (!proven.codexClientCopy) blockers.push("codex_client_copy_evidence_missing_o
 if (!proven.workerMcp) blockers.push("worker_mcp_real_list_incomplete");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
+if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
+for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) blockers.push(`real_task_coverage_refresh_required:${profile}`);
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
@@ -186,11 +224,13 @@ const goalComplete = proven.codexClientCopy
   && proven.workerMcp
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
+  && proven.realTaskCoverageRoadmap
+  && realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic.length === 0
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -205,6 +245,7 @@ const payload = {
   workerMcp,
   desktopAgenticTasks,
   agenticCapabilityMatrix,
+  realTaskCoverageRoadmap,
   antigravityAccountIsolation,
   releaseGateStatus,
   nextRequiredUserAction: antigravityAccountIsolation.safeToAskUserForSecondAccountLogin
