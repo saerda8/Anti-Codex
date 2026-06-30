@@ -12450,6 +12450,8 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
 
   assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
   assert.match(suite, /--suite-profile/);
@@ -12474,6 +12476,11 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /realTaskEvidenceFresh/);
   assert.match(suite, /maxRealEvidenceAgeHours/);
   assert.match(suite, /realTaskEvidenceFailures/);
+  assert.match(suite, /realTaskEvidenceRefreshPlan/);
+  assert.match(suite, /requiresExplicitUserApproval/);
+  assert.match(suite, /realTrafficApprovalReason = "real_traffic_required"/);
+  assert.match(suite, /staleTaskModes/);
+  assert.match(suite, /hardFailureTaskModes/);
   assert.match(suite, /latest_real_report_stale/);
   assert.match(suite, /expectedReportName/);
   assert.match(suite, /expectedTaskMode/);
@@ -12482,7 +12489,13 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(summarizer, /realTaskEvidenceComplete/);
   assert.match(summarizer, /realTaskEvidenceFresh/);
   assert.match(summarizer, /realTaskEvidenceFreshnessFailureCount/);
+  assert.match(summarizer, /realTaskEvidenceRefreshPlan/);
+  assert.match(summarizer, /requiresExplicitUserApproval/);
   assert.match(summarizer, /realTaskEvidenceTasks/);
+  assert.match(managerBridge, /desktopTaskSuite: profile=/);
+  assert.match(managerBridge, /desktopTaskSuite refresh: needed=/);
+  assert.match(managerInject, /desktopTaskSuite: profile=/);
+  assert.match(managerInject, /desktopTaskSuite refresh: needed=/);
   assert.doesNotMatch(suite, /Promise\.all/);
   assert.match(releaseGates, /scripts\/test-anticodex-desktop-task-suite\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-desktop-task-suite\.mjs/);
@@ -12535,6 +12548,12 @@ test("desktop task suite dry-run audits stale latest real task evidence without 
     assert.ok(report.realTaskEvidenceFailures.some((failure) => failure === "repo-multi-file-edit_latest_real_report_stale"));
     assert.equal(report.latestRealTaskEvidence["repo-multi-file-edit"].fresh, false);
     assert.ok(report.latestRealTaskEvidence["repo-multi-file-edit"].ageMs > 24 * 60 * 60 * 1000);
+    assert.deepEqual(report.realTaskEvidenceRefreshPlan.staleTaskModes, ["repo-multi-file-edit"]);
+    assert.deepEqual(report.realTaskEvidenceRefreshPlan.hardFailureTaskModes, []);
+    assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
+    assert.equal(report.realTaskEvidenceRefreshPlan.approvalReason, "real_traffic_required");
+    assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
+    assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--tasks repo-multi-file-edit"), true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -12566,6 +12585,11 @@ test("desktop task suite supports an extended concrete task matrix without using
     assert.equal(report.perTaskReports["multi-turn-project"], "latest-ui-multi-turn-project-smoke.json");
     assert.equal(report.perTaskReports["report-site"], "latest-ui-report-site-smoke.json");
     assert.equal(report.perTaskReports["complex-project"], "latest-ui-complex-project-smoke.json");
+    assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
+    assert.deepEqual(report.realTaskEvidenceRefreshPlan.hardFailureTaskModes.sort(), report.selectedTasks.slice().sort());
+    assert.deepEqual(report.realTaskEvidenceRefreshPlan.staleTaskModes, []);
+    assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--suite-profile extended"), true);
+    assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

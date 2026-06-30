@@ -1119,6 +1119,15 @@ const summary = {
     realTaskEvidenceFresh: boolField(report, "realTaskEvidenceFresh"),
     realTaskEvidenceFailureCount: Array.isArray(report.realTaskEvidenceFailures) ? report.realTaskEvidenceFailures.length : null,
     realTaskEvidenceFreshnessFailureCount: Array.isArray(report.realTaskEvidenceFreshnessFailures) ? report.realTaskEvidenceFreshnessFailures.length : null,
+    realTaskEvidenceRefreshPlan: report.realTaskEvidenceRefreshPlan && typeof report.realTaskEvidenceRefreshPlan === "object" ? {
+      needed: boolField(report.realTaskEvidenceRefreshPlan, "needed"),
+      requiresExplicitUserApproval: boolField(report.realTaskEvidenceRefreshPlan, "requiresExplicitUserApproval"),
+      approvalReason: has(report.realTaskEvidenceRefreshPlan, "approvalReason") ? asString(report.realTaskEvidenceRefreshPlan.approvalReason) : null,
+      commandPreviewPresent: typeof report.realTaskEvidenceRefreshPlan.commandPreview === "string" && report.realTaskEvidenceRefreshPlan.commandPreview.trim().length > 0,
+      refreshTaskModes: Array.isArray(report.realTaskEvidenceRefreshPlan.refreshTaskModes) ? report.realTaskEvidenceRefreshPlan.refreshTaskModes.map(asString).filter(Boolean) : [],
+      hardFailureTaskModes: Array.isArray(report.realTaskEvidenceRefreshPlan.hardFailureTaskModes) ? report.realTaskEvidenceRefreshPlan.hardFailureTaskModes.map(asString).filter(Boolean) : [],
+      staleTaskModes: Array.isArray(report.realTaskEvidenceRefreshPlan.staleTaskModes) ? report.realTaskEvidenceRefreshPlan.staleTaskModes.map(asString).filter(Boolean) : [],
+    } : null,
     realTaskEvidenceTasks: report.latestRealTaskEvidence && typeof report.latestRealTaskEvidence === "object" ? Object.entries(report.latestRealTaskEvidence).map(([taskMode, item]) => ({
       taskMode: asString(taskMode),
       present: boolField(item || {}, "present"),

@@ -35,6 +35,7 @@ const selectedTasks = String(args.get("--tasks") || defaultTasks.join(","))
   .map((item) => item.trim())
   .filter(Boolean);
 const keepArtifacts = args.has("--keep-artifacts");
+const realTrafficApprovalReason = "real_traffic_required";
 const maxRealEvidenceAgeHours = Math.max(1, Number(args.get("--max-real-evidence-age-hours") || 24));
 const maxRealEvidenceAgeMs = maxRealEvidenceAgeHours * 60 * 60 * 1000;
 const taskReportExpectations = {
@@ -220,6 +221,56 @@ function auditLatestRealTaskEvidence() {
   };
 }
 
+function taskModesFromFailures(failures) {
+  const modes = [];
+  const seen = new Set();
+  for (const failure of failures) {
+    const text = String(failure || "");
+    const marker = "_latest_real_report_";
+    const index = text.indexOf(marker);
+    if (index <= 0) continue;
+    const taskMode = text.slice(0, index);
+    if (!taskMode || seen.has(taskMode)) continue;
+    seen.add(taskMode);
+    modes.push(taskMode);
+  }
+  return modes;
+}
+
+function quoteCommandPart(value) {
+  const text = String(value || "");
+  if (/^[A-Za-z0-9_./:=\\-]+$/.test(text)) return text;
+  return `"${text.replaceAll('"', '\\"')}"`;
+}
+
+function buildRealTaskEvidenceRefreshPlan(realTaskAudit) {
+  const hardFailureTaskModes = taskModesFromFailures(realTaskAudit.hardFailures);
+  const staleTaskModes = taskModesFromFailures(realTaskAudit.freshnessFailures);
+  const refreshTaskModes = [...new Set([...hardFailureTaskModes, ...staleTaskModes])];
+  const canUseSuiteProfile = refreshTaskModes.length === selectedTasks.length
+    && refreshTaskModes.every((taskMode) => selectedTasks.includes(taskMode))
+    && !args.has("--tasks");
+  const command = [
+    process.execPath,
+    resolve(sourceRoot, "scripts", "test-anticodex-desktop-task-suite.mjs"),
+    "--suite-profile",
+    suiteProfile,
+  ];
+  if (!canUseSuiteProfile && refreshTaskModes.length > 0) {
+    command.push("--tasks", refreshTaskModes.join(","));
+  }
+  command.push("--allow-real-traffic");
+  return {
+    needed: refreshTaskModes.length > 0,
+    requiresExplicitUserApproval: refreshTaskModes.length > 0,
+    approvalReason: refreshTaskModes.length > 0 ? realTrafficApprovalReason : "",
+    commandPreview: command.map(quoteCommandPart).join(" "),
+    refreshTaskModes,
+    hardFailureTaskModes,
+    staleTaskModes,
+  };
+}
+
 function gitStatusForFixturePaths() {
   const child = spawnSync("git", [
     "status",
@@ -347,6 +398,7 @@ for (const task of tasks) {
   if (task.ok !== true) failures.push(`${task.taskMode}_failed`);
 }
 const realTaskAudit = auditLatestRealTaskEvidence();
+const realTaskEvidenceRefreshPlan = buildRealTaskEvidenceRefreshPlan(realTaskAudit);
 
 const payload = {
   ok: failures.length === 0,
@@ -370,6 +422,7 @@ const payload = {
   realTaskEvidenceFailures: realTaskAudit.failures,
   realTaskEvidenceHardFailures: realTaskAudit.hardFailures,
   realTaskEvidenceFreshnessFailures: realTaskAudit.freshnessFailures,
+  realTaskEvidenceRefreshPlan,
   failures,
   elapsedMs: Date.now() - startedAt,
 };

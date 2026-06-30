@@ -1217,6 +1217,12 @@
         lines.push(`  installedOverall model: transport=${evidence.modelTextTransport || "unknown"} / discovery=${evidence.modelDiscoverySource || "unknown"} / coworkerDefault=${evidence.antigravityCoworkerDefault === false ? "false" : "check"}`);
         lines.push(`  installedOverall checks: ok=${evidence.okCheckCount ?? 0}/${evidence.checkCount ?? 0} / skipped=${evidence.skippedCheckCount ?? 0} / realSkipped=${Array.isArray(evidence.realTrafficSkippedChecks) ? evidence.realTrafficSkippedChecks.join(",") : ""}`);
       }
+      if (item.desktopTaskSuiteEvidence) {
+        const evidence = item.desktopTaskSuiteEvidence;
+        const plan = evidence.realTaskEvidenceRefreshPlan || {};
+        lines.push(`  desktopTaskSuite: profile=${evidence.suiteProfile || "unknown"} / tasks=${evidence.selectedTaskCount ?? "unknown"} / complete=${evidence.realTaskEvidenceComplete ? "true" : "false"} / fresh=${evidence.realTaskEvidenceFresh ? "true" : "false"} / stale=${evidence.realTaskEvidenceFreshnessFailureCount ?? "unknown"}`);
+        lines.push(`  desktopTaskSuite refresh: needed=${plan.needed ? "true" : "false"} / approval=${plan.requiresExplicitUserApproval ? "true" : "false"} / reason=${plan.approvalReason || "none"} / tasks=${Array.isArray(plan.refreshTaskModes) && plan.refreshTaskModes.length ? plan.refreshTaskModes.join(",") : "none"}`);
+      }
       if (item.toolBridgeEvidence) {
         const evidence = item.toolBridgeEvidence;
         lines.push(`  toolBridge: mode=${evidence.mode || "unknown"} / transport=${evidence.transport || "unknown"} / adapter=${evidence.localAdapter || "unknown"}`);
