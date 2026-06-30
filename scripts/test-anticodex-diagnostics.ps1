@@ -1256,7 +1256,7 @@ function Invoke-LocalJson {
             if ($remainingBudgetMs -lt 250) {
                 throw "verifier budget exhausted before $Path request attempt $attempt"
             }
-            $requestTimeoutSec = [Math]::Max(1, [Math]::Min(8, [Math]::Min($TimeoutSec, [int][Math]::Ceiling($remainingBudgetMs / 1000))))
+            $requestTimeoutSec = [Math]::Max(1, [Math]::Min(30, [Math]::Min($TimeoutSec, [int][Math]::Ceiling($remainingBudgetMs / 1000))))
             return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $requestTimeoutSec
         } catch {
             $lastError = $_.Exception.Message

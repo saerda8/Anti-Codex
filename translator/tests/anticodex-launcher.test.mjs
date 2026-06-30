@@ -12504,6 +12504,13 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /requiresExplicitUserApproval/);
   assert.match(suite, /commandArgs: \[\.\.\.command\]/);
   assert.match(suite, /approvalSummary/);
+  assert.match(suite, /taskScenarioCatalog/);
+  assert.match(suite, /selectedTaskScenarios/);
+  assert.match(suite, /workType/);
+  assert.match(suite, /profileCoverage/);
+  assert.match(suite, /mutatesRepoFixture/);
+  assert.match(suite, /expectedEvidence/);
+  assert.match(suite, /two-step-multi-file-repo-task/);
   assert.match(suite, /taskCount: refreshTaskModes\.length/);
   assert.match(suite, /realTrafficApprovalReason = "real_traffic_required"/);
   assert.match(suite, /staleTaskModes/);
@@ -12523,6 +12530,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(diagnostics, /desktopTaskSuiteEvidence/);
   assert.match(diagnostics, /desktop-task-suite summary missing desktopTaskSuiteEvidence/);
   assert.match(diagnostics, /desktop-task-suite summary real task evidence is not fresh/);
+  assert.match(diagnostics, /Min\(30,\s*\[Math\]::Min\(\$TimeoutSec/);
   assert.match(diagnostics, /agentic-capability-matrix summary missing agenticCapabilityMatrixEvidence/);
   assert.match(diagnostics, /agentic-capability-matrix summary missing required capability/);
   assert.match(collector, /desktopTaskSuiteEvidence = \$json\.desktopTaskSuiteEvidence/);
@@ -12643,6 +12651,10 @@ test("desktop task suite supports an extended concrete task matrix without using
     assert.equal(report.perTaskReports["multi-turn-project"], "latest-ui-multi-turn-project-smoke.json");
     assert.equal(report.perTaskReports["report-site"], "latest-ui-report-site-smoke.json");
     assert.equal(report.perTaskReports["complex-project"], "latest-ui-complex-project-smoke.json");
+    assert.equal(report.taskScenarioCatalog["web-search"].requiresWeb, true);
+    assert.equal(report.taskScenarioCatalog["repo-multi-file-edit"].mutatesRepoFixture, true);
+    assert.ok(report.taskScenarioCatalog["complex-project"].expectedEvidence.includes("sources-json"));
+    assert.ok(report.selectedTaskScenarios["coding-project"].expectedEvidence.includes("node-test-passed"));
     assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
     assert.deepEqual(report.realTaskEvidenceRefreshPlan.hardFailureTaskModes.sort(), report.selectedTasks.slice().sort());
     assert.deepEqual(report.realTaskEvidenceRefreshPlan.staleTaskModes, []);
@@ -12675,6 +12687,8 @@ test("desktop task suite supports an agentic concrete task matrix without using 
       "complex-project",
       "repo-multi-file-edit",
     ]);
+    assert.equal(report.selectedTaskScenarios["report-site"].requiresWeb, true);
+    assert.equal(report.selectedTaskScenarios["repo-multi-file-edit"].workType, "two-step-multi-file-repo-task");
     assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--suite-profile agentic"), true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
