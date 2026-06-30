@@ -44,6 +44,7 @@ const defaultReports = [
   "latest-cancellation.json",
   "latest-web-tools.json",
   "latest-desktop-task-suite.json",
+  "latest-real-approval-plan.json",
   "latest-ui-local-project-smoke.json",
   "latest-ui-coding-project-smoke.json",
   "latest-ui-multi-turn-project-smoke.json",

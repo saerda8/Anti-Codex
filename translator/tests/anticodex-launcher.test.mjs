@@ -6595,7 +6595,7 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(overall, /Fast tool bridge verification/);
   assert.match(
     overall,
-    /\[int\]\$DiagnosticsTimeoutSec\s*=\s*20[\s\S]*\/anticodex\/diagnostics[\s\S]*\$DiagnosticsTimeoutSec/,
+    /\[int\]\$DiagnosticsTimeoutSec\s*=\s*60[\s\S]*\/anticodex\/diagnostics[\s\S]*\$DiagnosticsTimeoutSec/,
   );
 
   assert.doesNotMatch(bridge, /Stop-Process/);
@@ -12758,6 +12758,35 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(releaseGates, /scripts\/test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(installedOverall, /latest-real-task-coverage-roadmap\.json/);
   assert.match(server, /latest-real-task-coverage-roadmap\.json/);
+});
+
+test("Anti-Codex ships a no-traffic real approval execution plan", () => {
+  const plan = readFileSync(resolve(root, "scripts", "test-anticodex-real-approval-plan.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(plan, /reportName: "real-approval-plan"/);
+  assert.match(plan, /requestedRealTraffic: false/);
+  assert.match(plan, /usedRealTraffic: false/);
+  assert.match(plan, /realTaskRefresh/);
+  assert.match(plan, /releaseRealTrafficGates/);
+  assert.match(plan, /accountIsolation/);
+  assert.match(plan, /blockedUntilExplicitUserApproval/);
+  assert.match(plan, /target_windows_user_missing/);
+  assert.match(plan, /uniqueRefreshTasks/);
+  assert.match(summarizer, /realApprovalPlanEvidence/);
+  assert.match(collector, /latest-real-approval-plan\.json/);
+  assert.match(collector, /realApprovalPlanEvidence = \$json\.realApprovalPlanEvidence/);
+  assert.match(diagnostics, /real-approval-plan summary missing realApprovalPlanEvidence/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-real-approval-plan\.mjs/);
+  assert.match(installedOverall, /latest-real-approval-plan\.json/);
+  assert.match(signer, /latest-real-approval-plan\.json/);
+  assert.match(server, /latest-real-approval-plan\.json/);
 });
 
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {

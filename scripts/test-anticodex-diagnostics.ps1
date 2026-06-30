@@ -950,6 +950,38 @@ function Test-RealTaskCoverageRoadmapSummaryEvidence {
     if (-not [string]$evidence.recommendedNoTrafficNextStep) { Add-Failure "real-task-coverage-roadmap summary missing next step" }
 }
 
+function Test-RealApprovalPlanSummaryEvidence {
+    param($RealApprovalPlanSummary)
+    if (-not $RealApprovalPlanSummary) {
+        Add-Failure "diagnostic reports summary missing latest-real-approval-plan.json"
+        return
+    }
+
+    $evidence = $RealApprovalPlanSummary.realApprovalPlanEvidence
+    if (-not $evidence) {
+        Add-Failure "real-approval-plan summary missing realApprovalPlanEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "real-approval-plan") { Add-Failure "real-approval-plan summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "real-approval-plan summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "real-approval-plan summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "real-approval-plan summary behavior not covered" }
+    if ($evidence.coverageKind -ne "real-approval-plan-report-only") { Add-Failure "real-approval-plan summary coverage kind mismatch" }
+    if ($evidence.realTaskRefreshNeeded -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh need" }
+    if (@(As-FlatArray $evidence.realTaskRefreshTasks).Count -lt 1) { Add-Failure "real-approval-plan summary missing real task refresh tasks" }
+    if ($evidence.realTaskRefreshCommandPresent -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh command" }
+    if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "real-approval-plan summary missing release real-traffic-only blocker" }
+    if (@(As-FlatArray $evidence.releaseRealTrafficGateIds).Count -lt 1) { Add-Failure "real-approval-plan summary missing release real-traffic gates" }
+    if ($evidence.accountTargetUserMissing -ne $true) { Add-Failure "real-approval-plan summary missing target-user setup blocker" }
+    if ($evidence.accountSetupBlocked -ne $true) { Add-Failure "real-approval-plan summary missing account setup blocker" }
+    if ([int]$evidence.orderedActionCount -lt 4) { Add-Failure "real-approval-plan summary ordered action count too low" }
+    if ([int]$evidence.blockedUntilExplicitUserApprovalCount -lt 1) { Add-Failure "real-approval-plan summary missing explicit approval blockers" }
+    if ([int]$evidence.requiresRealTrafficCount -lt 1) { Add-Failure "real-approval-plan summary missing real traffic actions" }
+    if ([int]$evidence.operatorSetupBlockedCount -lt 1) { Add-Failure "real-approval-plan summary missing operator setup blockers" }
+    if (-not [string]$evidence.nextNoTrafficAction) { Add-Failure "real-approval-plan summary missing next no-traffic action" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -969,6 +1001,7 @@ function Test-ReportsSummary {
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
     $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
+    $realApprovalPlanSummary = @($summary | Where-Object { $_.file -eq "latest-real-approval-plan.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -1014,6 +1047,7 @@ function Test-ReportsSummary {
     Test-GoalReadinessSummaryEvidence $goalReadinessSummary
     Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
     Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
+    Test-RealApprovalPlanSummaryEvidence $realApprovalPlanSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

@@ -243,6 +243,7 @@ function Read-JsonSummary {
             goalReadinessEvidence = $json.goalReadinessEvidence
             agenticCapabilityMatrixEvidence = $json.agenticCapabilityMatrixEvidence
             realTaskCoverageRoadmapEvidence = $json.realTaskCoverageRoadmapEvidence
+            realApprovalPlanEvidence = $json.realApprovalPlanEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -398,6 +399,7 @@ $latestReports = @(
     "latest-goal-readiness.json",
     "latest-agentic-capability-matrix.json",
     "latest-real-task-coverage-roadmap.json",
+    "latest-real-approval-plan.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

@@ -202,6 +202,7 @@ const isAccountProxyReport = report?.reportName === "account-proxy-readiness" ||
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
 const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-coverage-roadmap" || /latest-real-task-coverage-roadmap\.json$/i.test(path);
+const isRealApprovalPlanReport = report?.reportName === "real-approval-plan" || /latest-real-approval-plan\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1265,6 +1266,27 @@ const summary = {
       approvalRequiredForRefresh: boolField(item || {}, "approvalRequiredForRefresh"),
       refreshCommandPresent: typeof item?.refreshCommand === "string" && item.refreshCommand.includes("test-anticodex-desktop-task-suite.mjs --suite-profile"),
     })) : [],
+  } : null,
+  realApprovalPlanEvidence: isRealApprovalPlanReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    realTaskRefreshNeeded: boolField(report.realTaskRefresh || {}, "needed"),
+    realTaskRefreshTasks: Array.isArray(report.realTaskRefresh?.uniqueRefreshTasks) ? asStringArray(report.realTaskRefresh.uniqueRefreshTasks) : [],
+    realTaskRefreshCommandPresent: typeof report.realTaskRefresh?.command === "string" && report.realTaskRefresh.command.includes("--allow-real-traffic"),
+    releaseBlockedOnlyByRequiredRealTraffic: boolField(report.releaseRealTrafficGates || {}, "releaseBlockedOnlyByRequiredRealTraffic"),
+    releaseRealTrafficGateIds: Array.isArray(report.releaseRealTrafficGates?.gateIds) ? asStringArray(report.releaseRealTrafficGates.gateIds) : [],
+    accountCompletionState: asString(report.accountIsolation?.completionState),
+    accountReadinessBlockingReason: asString(report.accountIsolation?.readinessBlockingReason),
+    accountTargetUserMissing: boolField(report.accountIsolation || {}, "targetUserMissing"),
+    accountSetupBlocked: boolField(report.accountIsolation || {}, "accountSetupBlocked"),
+    orderedActionCount: Array.isArray(report.orderedActions) ? report.orderedActions.length : null,
+    blockedUntilExplicitUserApprovalCount: has(report, "blockedUntilExplicitUserApprovalCount") ? report.blockedUntilExplicitUserApprovalCount : null,
+    requiresRealTrafficCount: has(report, "requiresRealTrafficCount") ? report.requiresRealTrafficCount : null,
+    operatorSetupBlockedCount: has(report, "operatorSetupBlockedCount") ? report.operatorSetupBlockedCount : null,
+    nextNoTrafficAction: asString(report.nextNoTrafficAction),
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),
