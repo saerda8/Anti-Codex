@@ -200,6 +200,7 @@ const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
+const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1174,6 +1175,7 @@ const summary = {
     codexClientCopyProven: boolField(report.proven || {}, "codexClientCopy"),
     workerMcpProven: boolField(report.proven || {}, "workerMcp"),
     desktopAgenticTasksProven: boolField(report.proven || {}, "desktopAgenticTasks"),
+    agenticCapabilityMatrixProven: boolField(report.proven || {}, "agenticCapabilityMatrix"),
     releaseShortPathProven: boolField(report.proven || {}, "releaseShortPath"),
     accountIsolationPreparedOnly: boolField(report.proven || {}, "accountIsolationPreparedOnly"),
     blockerCount: Array.isArray(report.blockers) ? report.blockers.length : null,
@@ -1187,9 +1189,41 @@ const summary = {
       : [],
     workerMcpMissingServers: report.workerMcp && Array.isArray(report.workerMcp.missingServers) ? asStringArray(report.workerMcp.missingServers) : [],
     desktopMissingAgenticTasks: report.desktopAgenticTasks && Array.isArray(report.desktopAgenticTasks.missingAgenticTasks) ? asStringArray(report.desktopAgenticTasks.missingAgenticTasks) : [],
+    agenticMissingCapabilities: report.agenticCapabilityMatrix && Array.isArray(report.agenticCapabilityMatrix.missingCapabilities) ? asStringArray(report.agenticCapabilityMatrix.missingCapabilities) : [],
+    agenticStaleCapabilities: report.agenticCapabilityMatrix && Array.isArray(report.agenticCapabilityMatrix.staleCapabilities) ? asStringArray(report.agenticCapabilityMatrix.staleCapabilities) : [],
+    agenticOkCapabilityCount: report.agenticCapabilityMatrix && has(report.agenticCapabilityMatrix, "okCapabilityCount") ? report.agenticCapabilityMatrix.okCapabilityCount : null,
     accountCompletionState: asString(report.antigravityAccountIsolation?.completionState),
     accountBlockingReason: asString(report.antigravityAccountIsolation?.blockingReason),
     accountReleaseAcceptableProof: boolField(report.antigravityAccountIsolation || {}, "releaseAcceptableAccountProof"),
+  } : null,
+  agenticCapabilityMatrixEvidence: isAgenticCapabilityMatrixReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    complete: boolField(report, "complete"),
+    fresh: boolField(report, "fresh"),
+    suiteProfile: asString(report.suiteProfile),
+    desktopTaskSuiteFresh: boolField(report, "desktopTaskSuiteFresh"),
+    desktopTaskSuiteComplete: boolField(report, "desktopTaskSuiteComplete"),
+    desktopTaskSuiteEvidenceFresh: boolField(report, "desktopTaskSuiteEvidenceFresh"),
+    requiredCapabilities: Array.isArray(report.requiredCapabilities) ? asStringArray(report.requiredCapabilities) : [],
+    missingCapabilities: Array.isArray(report.missingCapabilities) ? asStringArray(report.missingCapabilities) : [],
+    staleCapabilities: Array.isArray(report.staleCapabilities) ? asStringArray(report.staleCapabilities) : [],
+    capabilityCount: Array.isArray(report.capabilities) ? report.capabilities.length : null,
+    okCapabilityCount: Array.isArray(report.capabilities) ? report.capabilities.filter((item) => item?.ok === true).length : null,
+    failedCapabilityCount: Array.isArray(report.capabilities) ? report.capabilities.filter((item) => item?.ok !== true).length : null,
+    capabilities: Array.isArray(report.capabilities) ? report.capabilities.map((item) => ({
+      id: asString(item?.id),
+      taskMode: asString(item?.taskMode),
+      file: asString(item?.file),
+      ok: boolField(item || {}, "ok"),
+      fresh: boolField(item || {}, "fresh"),
+      requestedRealTraffic: boolField(item || {}, "requestedRealTraffic"),
+      usedRealTraffic: boolField(item || {}, "usedRealTraffic"),
+      failureCount: Array.isArray(item?.failures) ? item.failures.length : null,
+    })) : [],
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),

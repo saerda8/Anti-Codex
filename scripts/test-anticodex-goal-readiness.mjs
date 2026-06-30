@@ -53,6 +53,7 @@ function writeReport(payload) {
 const syncReadiness = readReport("latest-sync-readiness.json");
 const mcpSkills = readReport("latest-mcp-skills.json");
 const desktopSuite = readReport("latest-desktop-task-suite.json");
+const capabilityMatrixReport = readReport("latest-agentic-capability-matrix.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
 const releaseGates = readReport("latest-release-gates.json");
 
@@ -97,6 +98,19 @@ const desktopAgenticTasks = {
   realTaskEvidenceFresh: desktopSuite.report?.realTaskEvidenceFresh === true,
   refreshNeeded: desktopSuite.report?.realTaskEvidenceRefreshPlan?.needed === true,
 };
+const matrix = capabilityMatrixReport.report || {};
+const agenticCapabilityMatrix = {
+  reportPresent: capabilityMatrixReport.present,
+  reportOk: matrix.ok === true,
+  complete: matrix.complete === true,
+  fresh: matrix.fresh === true,
+  coverageKind: String(matrix.coverageKind || ""),
+  requiredCapabilities: Array.isArray(matrix.requiredCapabilities) ? matrix.requiredCapabilities.map(String) : [],
+  missingCapabilities: Array.isArray(matrix.missingCapabilities) ? matrix.missingCapabilities.map(String) : [],
+  staleCapabilities: Array.isArray(matrix.staleCapabilities) ? matrix.staleCapabilities.map(String) : [],
+  capabilityCount: Array.isArray(matrix.capabilities) ? matrix.capabilities.length : 0,
+  okCapabilityCount: Array.isArray(matrix.capabilities) ? matrix.capabilities.filter((item) => item?.ok === true).length : 0,
+};
 
 const isolation = accountIsolation.report || {};
 const antigravityAccountIsolation = {
@@ -140,6 +154,13 @@ const proven = {
     && desktopAgenticTasks.realTaskEvidenceComplete
     && desktopAgenticTasks.realTaskEvidenceFresh
     && !desktopAgenticTasks.refreshNeeded,
+  agenticCapabilityMatrix: agenticCapabilityMatrix.reportOk
+    && agenticCapabilityMatrix.complete
+    && agenticCapabilityMatrix.fresh
+    && agenticCapabilityMatrix.coverageKind === "agentic-capability-matrix-report-only"
+    && agenticCapabilityMatrix.missingCapabilities.length === 0
+    && agenticCapabilityMatrix.staleCapabilities.length === 0
+    && agenticCapabilityMatrix.okCapabilityCount >= 5,
   releaseShortPath: releaseGateStatus.reportOk
     && releaseGateStatus.shortReady
     && releaseGateStatus.missingShort.length === 0
@@ -157,17 +178,19 @@ const blockers = [];
 if (!proven.codexClientCopy) blockers.push("codex_client_copy_evidence_missing_or_invalid");
 if (!proven.workerMcp) blockers.push("worker_mcp_real_list_incomplete");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
+if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
 const goalComplete = proven.codexClientCopy
   && proven.workerMcp
   && proven.desktopAgenticTasks
+  && proven.agenticCapabilityMatrix
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -181,6 +204,7 @@ const payload = {
   codexClientCopy,
   workerMcp,
   desktopAgenticTasks,
+  agenticCapabilityMatrix,
   antigravityAccountIsolation,
   releaseGateStatus,
   nextRequiredUserAction: antigravityAccountIsolation.safeToAskUserForSecondAccountLogin

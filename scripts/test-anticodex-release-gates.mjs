@@ -100,6 +100,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-tool-bridge-mode.ps1",
   "scripts/test-anticodex-tool-loop.ps1",
   "scripts/test-anticodex-desktop-task-suite.mjs",
+  "scripts/test-anticodex-agentic-capability-matrix.mjs",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
@@ -149,6 +150,7 @@ const gateDefinitions = [
   { id: "windowsUserSetupGuidance", group: "no-traffic", file: "latest-windows-user-setup-guidance.json", requiredForRelease: true, requireWindowsUserSetupGuidanceSemantics: true },
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
+  { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -690,6 +692,43 @@ function summarizeGate(definition) {
         if (evidence.usedRealTraffic !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_real_traffic_missing`);
         if (evidence.fresh !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_not_fresh`);
         if (Array.isArray(evidence.failures) && evidence.failures.length > 0) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_failures`);
+      }
+    }
+    if (definition.requireAgenticCapabilityMatrixSemantics) {
+      const required = [
+        "coding_project_files_tests_cli",
+        "multi_turn_continuation",
+        "research_report_with_sources",
+        "complex_research_code_site",
+        "repo_multi_file_edit",
+      ];
+      const requiredCapabilities = Array.isArray(report.requiredCapabilities) ? report.requiredCapabilities.map((item) => String(item || "")) : [];
+      const capabilities = Array.isArray(report.capabilities) ? report.capabilities : [];
+      if (report.reportName !== "agentic-capability-matrix") semanticFailures.push("agentic_capability_matrix_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("agentic_capability_matrix_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("agentic_capability_matrix_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("agentic_capability_matrix_behavior_not_covered");
+      if (report.coverageKind !== "agentic-capability-matrix-report-only") semanticFailures.push("agentic_capability_matrix_coverage_kind");
+      if (report.complete !== true) semanticFailures.push("agentic_capability_matrix_incomplete");
+      if (report.fresh !== true) semanticFailures.push("agentic_capability_matrix_not_fresh");
+      if (report.suiteProfile !== "agentic") semanticFailures.push("agentic_capability_matrix_suite_profile");
+      if (report.desktopTaskSuiteFresh !== true) semanticFailures.push("agentic_capability_matrix_desktop_suite_not_fresh");
+      if (report.desktopTaskSuiteComplete !== true) semanticFailures.push("agentic_capability_matrix_desktop_suite_incomplete");
+      if (report.desktopTaskSuiteEvidenceFresh !== true) semanticFailures.push("agentic_capability_matrix_desktop_suite_evidence_not_fresh");
+      if (Array.isArray(report.missingCapabilities) && report.missingCapabilities.length > 0) semanticFailures.push("agentic_capability_matrix_missing_capabilities");
+      if (Array.isArray(report.staleCapabilities) && report.staleCapabilities.length > 0) semanticFailures.push("agentic_capability_matrix_stale_capabilities");
+      for (const capabilityId of required) {
+        if (!requiredCapabilities.includes(capabilityId)) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_not_required`);
+        const entry = capabilities.find((item) => String(item?.id || "") === capabilityId);
+        if (!entry) {
+          semanticFailures.push(`agentic_capability_matrix_${capabilityId}_missing`);
+          continue;
+        }
+        if (entry.ok !== true) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_not_ok`);
+        if (entry.fresh !== true) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_not_fresh`);
+        if (entry.requestedRealTraffic !== true) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_real_traffic_not_requested`);
+        if (entry.usedRealTraffic !== true) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_real_traffic_missing`);
+        if (Array.isArray(entry.failures) && entry.failures.length > 0) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_failures`);
       }
     }
     if (definition.requireToolLoopSemantics) {
@@ -1865,6 +1904,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["windowsUserSetupGuidance", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-setup-guidance.ps1"],
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
+  ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],
 ];
 
 function action(id, phase, command, options = {}) {

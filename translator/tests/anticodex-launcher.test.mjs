@@ -12469,6 +12469,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const agenticCapabilityMatrix = readFileSync(resolve(root, "scripts", "test-anticodex-agentic-capability-matrix.mjs"), "utf8");
 
   assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
   assert.match(suite, /--suite-profile/);
@@ -12503,6 +12504,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /expectedReportName/);
   assert.match(suite, /expectedTaskMode/);
   assert.match(summarizer, /desktopTaskSuiteEvidence/);
+  assert.match(summarizer, /agenticCapabilityMatrixEvidence/);
   assert.match(summarizer, /suiteProfile/);
   assert.match(summarizer, /realTaskEvidenceComplete/);
   assert.match(summarizer, /realTaskEvidenceFresh/);
@@ -12513,22 +12515,40 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(diagnostics, /desktopTaskSuiteEvidence/);
   assert.match(diagnostics, /desktop-task-suite summary missing desktopTaskSuiteEvidence/);
   assert.match(diagnostics, /desktop-task-suite summary real task evidence is not fresh/);
+  assert.match(diagnostics, /agentic-capability-matrix summary missing agenticCapabilityMatrixEvidence/);
+  assert.match(diagnostics, /agentic-capability-matrix summary missing required capability/);
   assert.match(collector, /desktopTaskSuiteEvidence = \$json\.desktopTaskSuiteEvidence/);
+  assert.match(collector, /agenticCapabilityMatrixEvidence = \$json\.agenticCapabilityMatrixEvidence/);
   assert.match(managerBridge, /desktopTaskSuite: profile=/);
   assert.match(managerBridge, /desktopTaskSuite refresh: needed=/);
   assert.match(managerInject, /desktopTaskSuite: profile=/);
   assert.match(managerInject, /desktopTaskSuite refresh: needed=/);
   assert.doesNotMatch(suite, /Promise\.all/);
   assert.match(releaseGates, /scripts\/test-anticodex-desktop-task-suite\.mjs/);
+  assert.match(releaseGates, /scripts\/test-anticodex-agentic-capability-matrix\.mjs/);
   assert.match(releaseGates, /id: "desktopTaskSuite"/);
   assert.match(releaseGates, /latest-desktop-task-suite\.json/);
   assert.match(releaseGates, /requireDesktopTaskSuiteSemantics/);
   assert.match(releaseGates, /desktop_task_suite_real_task_evidence_not_fresh/);
+  assert.match(releaseGates, /id: "agenticCapabilityMatrix"/);
+  assert.match(releaseGates, /latest-agentic-capability-matrix\.json/);
+  assert.match(releaseGates, /requireAgenticCapabilityMatrixSemantics/);
+  assert.match(releaseGates, /agentic_capability_matrix_missing_capabilities/);
   assert.match(runtimeSync, /scripts\\test-anticodex-desktop-task-suite\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-agentic-capability-matrix\.mjs/);
   assert.match(collector, /latest-desktop-task-suite\.json/);
+  assert.match(collector, /latest-agentic-capability-matrix\.json/);
   assert.match(signer, /latest-desktop-task-suite\.json/);
   assert.match(server, /latest-desktop-task-suite\.json/);
+  assert.match(server, /latest-agentic-capability-matrix\.json/);
   assert.match(installedOverall, /latest-desktop-task-suite\.json/);
+  assert.match(installedOverall, /latest-agentic-capability-matrix\.json/);
+  assert.match(agenticCapabilityMatrix, /reportName: "agentic-capability-matrix"/);
+  assert.match(agenticCapabilityMatrix, /requiredCapabilities/);
+  assert.match(agenticCapabilityMatrix, /multi_turn_continuation/);
+  assert.match(agenticCapabilityMatrix, /repo_multi_file_edit/);
+  assert.match(agenticCapabilityMatrix, /requestedRealTraffic: false/);
+  assert.match(agenticCapabilityMatrix, /usedRealTraffic: false/);
   assert.match(uiState, /expectedDailyActionIds[\s\S]*"secondAccountLoginStatus"/);
 });
 
@@ -12696,6 +12716,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /codexClientCopy/);
   assert.match(goalReadiness, /workerMcp/);
   assert.match(goalReadiness, /desktopAgenticTasks/);
+  assert.match(goalReadiness, /agenticCapabilityMatrix/);
   assert.match(goalReadiness, /antigravityAccountIsolation/);
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });
