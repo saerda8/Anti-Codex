@@ -954,6 +954,13 @@ function Test-RealTaskCoverageRoadmapSummaryEvidence {
             continue
         }
         if ([int]$entry.taskCount -lt 1) { Add-Failure "real-task-coverage-roadmap summary profile $profileName has no tasks" }
+        if ([int]$entry.resultProofRequiredCount -lt 1) { Add-Failure "real-task-coverage-roadmap summary profile $profileName missing result proof requirements" }
+        if ([int]$entry.resultProofCompleteCount -lt [int]$entry.resultProofRequiredCount) { Add-Failure "real-task-coverage-roadmap summary profile $profileName result proof count incomplete" }
+        if ($entry.profileResultProofComplete -ne $true) { Add-Failure "real-task-coverage-roadmap summary profile $profileName result proof incomplete" }
+        if (@(As-FlatArray $entry.missingResultProofTasks).Count -ne 0) { Add-Failure "real-task-coverage-roadmap summary profile $profileName has missing result proof tasks" }
+        if ([int]$entry.artifactProofRequiredCount -gt 0 -and [int]$entry.artifactProofCompleteCount -lt [int]$entry.artifactProofRequiredCount) { Add-Failure "real-task-coverage-roadmap summary profile $profileName artifact proof count incomplete" }
+        if ($entry.profileArtifactProofComplete -ne $true) { Add-Failure "real-task-coverage-roadmap summary profile $profileName artifact proof incomplete" }
+        if (@(As-FlatArray $entry.missingArtifactProofTasks).Count -ne 0) { Add-Failure "real-task-coverage-roadmap summary profile $profileName has missing artifact proof tasks" }
         if ($entry.refreshCommandPresent -ne $true) { Add-Failure "real-task-coverage-roadmap summary profile $profileName missing refresh command" }
     }
 

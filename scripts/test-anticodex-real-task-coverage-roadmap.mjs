@@ -187,12 +187,24 @@ function profileStatus(profile, tasks) {
   const missingTasks = entries.filter((entry) => !entry.present).map((entry) => entry.taskMode);
   const staleTasks = entries.filter((entry) => entry.present && entry.fresh !== true).map((entry) => entry.taskMode);
   const failedTasks = entries.filter((entry) => entry.present && entry.ok !== true).map((entry) => entry.taskMode);
+  const artifactProofEntries = entries.filter((entry) => entry.artifactProofRequired);
+  const resultProofEntries = entries.filter((entry) => entry.resultProofRequired);
+  const missingArtifactProofTasks = artifactProofEntries.filter((entry) => entry.artifactProofComplete !== true).map((entry) => entry.taskMode);
+  const missingResultProofTasks = resultProofEntries.filter((entry) => entry.resultProofComplete !== true).map((entry) => entry.taskMode);
   const refreshTasks = [...new Set([...missingTasks, ...staleTasks, ...failedTasks])];
   return {
     profile,
     selectedTasks: tasks,
     taskCount: tasks.length,
     okTaskCount: entries.filter((entry) => entry.ok === true).length,
+    artifactProofRequiredCount: artifactProofEntries.length,
+    artifactProofCompleteCount: artifactProofEntries.filter((entry) => entry.artifactProofComplete === true).length,
+    missingArtifactProofTasks,
+    profileArtifactProofComplete: missingArtifactProofTasks.length === 0,
+    resultProofRequiredCount: resultProofEntries.length,
+    resultProofCompleteCount: resultProofEntries.filter((entry) => entry.resultProofComplete === true).length,
+    missingResultProofTasks,
+    profileResultProofComplete: missingResultProofTasks.length === 0,
     complete: missingTasks.length === 0,
     fresh: staleTasks.length === 0,
     allOk: refreshTasks.length === 0,

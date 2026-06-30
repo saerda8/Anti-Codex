@@ -12780,6 +12780,10 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /resultEvidenceKeys/);
   assert.match(roadmap, /resultProofCount/);
   assert.match(roadmap, /missingResultProofKeys/);
+  assert.match(roadmap, /artifactProofCompleteCount/);
+  assert.match(roadmap, /resultProofCompleteCount/);
+  assert.match(roadmap, /missingResultProofTasks/);
+  assert.match(roadmap, /profileResultProofComplete/);
   assert.match(roadmap, /repo-multi-file-edit/);
   assert.match(roadmap, /htmlComplete/);
   assert.match(summarizer, /realTaskCoverageRoadmapEvidence/);
@@ -12789,6 +12793,7 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(summarizer, /missingArtifactProofTaskCount/);
   assert.match(summarizer, /taskResultProofs/);
   assert.match(summarizer, /missingResultProofTaskCount/);
+  assert.match(summarizer, /profileResultProofComplete/);
   assert.match(collector, /realTaskCoverageRoadmapEvidence = \$json\.realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing minimal refresh command/);
@@ -12796,12 +12801,14 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing artifact proof count/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing result proof coverage/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing result proof count/);
+  assert.match(diagnostics, /real-task-coverage-roadmap summary profile \$profileName result proof incomplete/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(releaseGates, /id:\s*"realTaskCoverageRoadmap"[\s\S]*?file:\s*"latest-real-task-coverage-roadmap\.json"[\s\S]*?requiredForRelease:\s*true/);
   assert.match(releaseGates, /requireRealTaskCoverageRoadmapSemantics:\s*true/);
   assert.match(releaseGates, /real_task_coverage_roadmap_minimal_refresh_command_not_real_traffic/);
   assert.match(releaseGates, /real_task_coverage_roadmap_artifact_proof_missing/);
   assert.match(releaseGates, /real_task_coverage_roadmap_result_proof_missing/);
+  assert.match(releaseGates, /real_task_coverage_roadmap_\$\{profileName\}_result_profile_incomplete/);
   assert.match(releaseGates, /scripts\/test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(installedOverall, /latest-real-task-coverage-roadmap\.json/);
   assert.match(server, /latest-real-task-coverage-roadmap\.json/);

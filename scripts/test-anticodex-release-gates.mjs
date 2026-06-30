@@ -787,6 +787,13 @@ function summarizeGate(definition) {
           continue;
         }
         if (Number(profile.taskCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_task_count`);
+        if (Number(profile.resultProofRequiredCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_result_profile_count`);
+        if (Number(profile.resultProofCompleteCount || 0) < Number(profile.resultProofRequiredCount || 0)) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_result_profile_incomplete`);
+        if (profile.profileResultProofComplete !== true) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_result_profile_incomplete`);
+        if (Array.isArray(profile.missingResultProofTasks) && profile.missingResultProofTasks.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_result_profile_missing_tasks`);
+        if (Number(profile.artifactProofRequiredCount || 0) > 0 && Number(profile.artifactProofCompleteCount || 0) < Number(profile.artifactProofRequiredCount || 0)) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_artifact_profile_incomplete`);
+        if (profile.profileArtifactProofComplete !== true) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_artifact_profile_incomplete`);
+        if (Array.isArray(profile.missingArtifactProofTasks) && profile.missingArtifactProofTasks.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_artifact_profile_missing_tasks`);
         if (typeof profile.refreshCommand !== "string" || !profile.refreshCommand.includes("test-anticodex-desktop-task-suite.mjs")) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_refresh_command_missing`);
       }
       if (taskModes.length < 9) semanticFailures.push("real_task_coverage_roadmap_task_modes_missing");
