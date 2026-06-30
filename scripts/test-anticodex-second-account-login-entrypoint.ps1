@@ -92,7 +92,20 @@ if ($approvedButBlockedResult.exitCode -ne 2 -or -not $approvedButBlocked -or $a
     $failures.Add("approved_start_did_not_respect_status_gate") | Out-Null
 }
 
-foreach ($entry in @($statusOnly, $missingApproval, $approvedButBlocked)) {
+$currentWindowsUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$sameWindowsUserReportRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-same-user-entrypoint-" + [guid]::NewGuid().ToString("N"))
+$sameWindowsUserTargetResult = Invoke-JsonScript -ScriptPath $entrypointScript -Arguments @(
+    "-WindowsUser", $currentWindowsUser,
+    "-ReportRoot", $sameWindowsUserReportRoot,
+    "-StartLogin",
+    "-StartLoginApproval", "start-separate-windows-user-login"
+)
+$sameWindowsUserTarget = $sameWindowsUserTargetResult.parsed
+if ($sameWindowsUserTargetResult.exitCode -ne 2 -or -not $sameWindowsUserTarget -or $sameWindowsUserTarget.error -ne "second_account_login_not_ready" -or $sameWindowsUserTarget.readinessBlockingReason -ne "target_windows_user_is_current_user") {
+    $failures.Add("same_windows_user_target_did_not_block_login") | Out-Null
+}
+
+foreach ($entry in @($statusOnly, $missingApproval, $approvedButBlocked, $sameWindowsUserTarget)) {
     if (-not $entry) { continue }
     if ($entry.usedRealTraffic -ne $false) { $failures.Add("entrypoint_used_real_traffic") | Out-Null }
     if ($entry.requestedRealTraffic -ne $false) { $failures.Add("entrypoint_requested_real_traffic") | Out-Null }
@@ -126,6 +139,10 @@ $report = [ordered]@{
     statusOnlyExitCode = $statusOnlyResult.exitCode
     missingApprovalBlocked = ($missingApprovalResult.exitCode -eq 2 -and $missingApproval.error -eq "explicit_start_login_approval_missing")
     approvedStartBlockedByStatusGate = ($approvedButBlockedResult.exitCode -eq 2 -and $approvedButBlocked.error -eq "second_account_login_not_ready")
+    sameWindowsUserTargetBlocked = ($sameWindowsUserTargetResult.exitCode -eq 2 -and $sameWindowsUserTarget.error -eq "second_account_login_not_ready" -and $sameWindowsUserTarget.readinessBlockingReason -eq "target_windows_user_is_current_user")
+    sameWindowsUserTargetBlockingReason = if ($sameWindowsUserTarget) { [string]$sameWindowsUserTarget.readinessBlockingReason } else { "" }
+    sameWindowsUserTargetStartedLogin = if ($sameWindowsUserTarget) { [bool]$sameWindowsUserTarget.startedLogin } else { $false }
+    sameWindowsUserTargetSafetyFieldsOk = ($sameWindowsUserTarget -and $sameWindowsUserTarget.usedRealTraffic -eq $false -and $sameWindowsUserTarget.requestedRealTraffic -eq $false -and $sameWindowsUserTarget.changedSystem -eq $false -and $sameWindowsUserTarget.createdUser -eq $false -and $sameWindowsUserTarget.capturesLoginOutput -eq $false -and $sameWindowsUserTarget.capturesPassword -eq $false -and $sameWindowsUserTarget.storesPassword -eq $false -and $sameWindowsUserTarget.startedLogin -ne $true)
     requestedStartLogin = $false
     startedLogin = $false
     changedSystem = $false

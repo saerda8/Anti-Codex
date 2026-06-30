@@ -14926,6 +14926,14 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLoginReport, /missingApprovalBlocked/);
   assert.match(secondAccountLoginReport, /approvedStartBlockedByStatusGate/);
   assert.match(secondAccountLoginReport, /statusOnlySafetyFieldsOk/);
+  assert.match(secondAccountLoginReport, /WindowsIdentity\]::GetCurrent\(\)\.Name/);
+  assert.match(secondAccountLoginReport, /sameWindowsUserReportRoot/);
+  assert.match(secondAccountLoginReport, /GetTempPath\(\)/);
+  assert.match(secondAccountLoginReport, /target_windows_user_is_current_user/);
+  assert.match(secondAccountLoginReport, /sameWindowsUserTargetBlocked/);
+  assert.match(secondAccountLoginReport, /sameWindowsUserTargetBlockingReason/);
+  assert.match(secondAccountLoginReport, /sameWindowsUserTargetStartedLogin/);
+  assert.match(secondAccountLoginReport, /sameWindowsUserTargetSafetyFieldsOk/);
   assert.match(secondAccountLoginReport, /entrypoint_requested_real_traffic/);
   assert.match(secondAccountLoginReport, /entrypoint_changed_system/);
   assert.match(secondAccountLoginReport, /entrypoint_created_user/);
@@ -14982,6 +14990,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /runasWorkingDirectory/);
   assert.match(summarizer, /bootstrapKeepsShellOpen/);
   assert.match(summarizer, /secondAccountLoginEntrypointEvidence/);
+  assert.match(summarizer, /sameWindowsUserTargetBlocked/);
+  assert.match(summarizer, /sameWindowsUserTargetBlockingReason/);
+  assert.match(summarizer, /sameWindowsUserTargetStartedLogin/);
+  assert.match(summarizer, /sameWindowsUserTargetSafetyFieldsOk/);
   assert.match(summarizer, /windowsUserSetupGuidanceEvidence/);
   assert.match(summarizer, /readinessCheckSequence/);
   assert.match(summarizer, /operatorChecklistStages/);
@@ -15051,6 +15063,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /scripts\/test-anticodex-second-account-login-entrypoint\.ps1/);
   assert.match(releaseGates, /antigravityCliWindowsUserReadiness/);
   assert.match(releaseGates, /requireAntigravityCliWindowsUserReadinessSemantics/);
+  assert.match(releaseGates, /second_account_entrypoint_same_windows_user_not_blocked/);
+  assert.match(releaseGates, /second_account_entrypoint_same_windows_user_reason/);
+  assert.match(releaseGates, /second_account_entrypoint_same_windows_user_started_login/);
+  assert.match(releaseGates, /second_account_entrypoint_same_windows_user_safety_fields/);
   assert.match(releaseGates, /windowsUserAccountPrepare/);
   assert.match(releaseGates, /requireWindowsUserAccountPrepareSemantics/);
   assert.match(releaseGates, /windowsUserSetupGuidance/);

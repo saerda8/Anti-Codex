@@ -1974,6 +1974,10 @@ function summarizeGate(definition) {
       if (report.statusOnlyOk !== true) semanticFailures.push("second_account_entrypoint_status_only_not_ok");
       if (report.missingApprovalBlocked !== true) semanticFailures.push("second_account_entrypoint_missing_approval_not_blocked");
       if (report.approvedStartBlockedByStatusGate !== true) semanticFailures.push("second_account_entrypoint_status_gate_not_enforced");
+      if (report.sameWindowsUserTargetBlocked !== true) semanticFailures.push("second_account_entrypoint_same_windows_user_not_blocked");
+      if (report.sameWindowsUserTargetBlockingReason !== "target_windows_user_is_current_user") semanticFailures.push("second_account_entrypoint_same_windows_user_reason");
+      if (report.sameWindowsUserTargetStartedLogin !== false) semanticFailures.push("second_account_entrypoint_same_windows_user_started_login");
+      if (report.sameWindowsUserTargetSafetyFieldsOk !== true) semanticFailures.push("second_account_entrypoint_same_windows_user_safety_fields");
       if (report.requestedStartLogin !== false) semanticFailures.push("second_account_entrypoint_requested_start_login");
       if (report.startedLogin !== false) semanticFailures.push("second_account_entrypoint_started_login");
       if (report.changedSystem === true) semanticFailures.push("second_account_entrypoint_changed_system");
@@ -3606,6 +3610,10 @@ if (args.has("--self-test")) {
       statusOnlyOk: false,
       missingApprovalBlocked: false,
       approvedStartBlockedByStatusGate: false,
+      sameWindowsUserTargetBlocked: false,
+      sameWindowsUserTargetBlockingReason: "target_windows_user_missing",
+      sameWindowsUserTargetStartedLogin: true,
+      sameWindowsUserTargetSafetyFieldsOk: false,
       requestedStartLogin: true,
       startedLogin: true,
       changedSystem: true,
@@ -3999,6 +4007,10 @@ if (args.has("--self-test")) {
       "second_account_entrypoint_status_only_not_ok",
       "second_account_entrypoint_missing_approval_not_blocked",
       "second_account_entrypoint_status_gate_not_enforced",
+      "second_account_entrypoint_same_windows_user_not_blocked",
+      "second_account_entrypoint_same_windows_user_reason",
+      "second_account_entrypoint_same_windows_user_started_login",
+      "second_account_entrypoint_same_windows_user_safety_fields",
       "second_account_entrypoint_requested_start_login",
       "second_account_entrypoint_started_login",
       "second_account_entrypoint_changed_system",
