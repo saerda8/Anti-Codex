@@ -12493,6 +12493,11 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /latestRealTaskEvidence/);
   assert.match(suite, /realTaskEvidenceComplete/);
   assert.match(suite, /realTaskEvidenceFresh/);
+  assert.match(suite, /--no-write-report/);
+  assert.match(suite, /noWriteReport = args\.has\("--no-write-report"\)/);
+  assert.match(suite, /if \(noWriteReport\)/);
+  assert.match(suite, /noWriteReport: true/);
+  assert.match(suite, /skipped: true/);
   assert.match(suite, /maxRealEvidenceAgeHours/);
   assert.match(suite, /realTaskEvidenceFailures/);
   assert.match(suite, /realTaskEvidenceRefreshPlan/);
@@ -12666,6 +12671,69 @@ test("desktop task suite supports an agentic concrete task matrix without using 
     assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--suite-profile agentic"), true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("desktop task suite can preview all task refreshes without overwriting latest release evidence", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-desktop-suite-preview-"));
+  try {
+    const agenticReports = {
+      "latest-ui-coding-project-smoke.json": ["ui-coding-project-smoke", "coding-project"],
+      "latest-ui-multi-turn-project-smoke.json": ["ui-multi-turn-project-smoke", "multi-turn-project"],
+      "latest-ui-report-site-smoke.json": ["ui-report-site-smoke", "report-site"],
+      "latest-ui-complex-project-smoke.json": ["ui-complex-project-smoke", "complex-project"],
+      "latest-ui-repo-multi-file-edit-smoke.json": ["ui-repo-multi-file-edit-smoke", "repo-multi-file-edit"],
+    };
+    for (const [file, [reportName, taskMode]] of Object.entries(agenticReports)) {
+      writeFileSync(join(tempRoot, file), `${JSON.stringify({
+        ok: true,
+        reportName,
+        requestedRealTraffic: true,
+        usedRealTraffic: true,
+        taskMode,
+        coverageKind: "desktop-ui-real-traffic",
+        marker: `MARKER_${taskMode}`,
+        elapsedMs: 1000,
+        failures: [],
+      }, null, 2)}\n`, "utf8");
+    }
+
+    const suitePath = resolve(root, "scripts", "test-anticodex-desktop-task-suite.mjs");
+    const agenticResult = spawnSync(process.execPath, [
+      suitePath,
+      "--report-root",
+      tempRoot,
+      "--suite-profile",
+      "agentic",
+    ], { encoding: "utf8" });
+    assert.equal(agenticResult.status, 0, agenticResult.stderr || agenticResult.stdout);
+    const latestPath = join(tempRoot, "latest-desktop-task-suite.json");
+    const latestBefore = readFileSync(latestPath, "utf8");
+    const latestHashBefore = readFileSync(`${latestPath}.sha256`, "utf8");
+    const previewResult = spawnSync(process.execPath, [
+      suitePath,
+      "--report-root",
+      tempRoot,
+      "--suite-profile",
+      "all",
+      "--no-write-report",
+    ], { encoding: "utf8" });
+    assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
+    assert.equal(readFileSync(latestPath, "utf8"), latestBefore);
+    assert.equal(readFileSync(`${latestPath}.sha256`, "utf8"), latestHashBefore);
+
+    const preview = JSON.parse(previewResult.stdout);
+    assert.equal(preview.report.skipped, true);
+    assert.equal(preview.report.noWriteReport, true);
+    assert.equal(preview.suiteProfile, "all");
+    assert.ok(preview.selectedTasks.includes("free-chat"));
+    assert.ok(preview.selectedTasks.includes("web-search"));
+    assert.ok(preview.realTaskEvidenceRefreshPlan.refreshTaskModes.includes("free-chat"));
+    assert.ok(preview.realTaskEvidenceRefreshPlan.refreshTaskModes.includes("web-search"));
+    assert.equal(preview.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
+    assert.equal(preview.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
