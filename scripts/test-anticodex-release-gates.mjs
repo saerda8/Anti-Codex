@@ -1428,6 +1428,7 @@ function summarizeGate(definition) {
       if (phaseSummary.realRequestAttempted !== true) semanticFailures.push("account_proxy_real_request_not_attempted");
       if (phaseSummary.realRequestOk !== true) semanticFailures.push("account_proxy_real_request_not_ok");
       if (phaseSummary.realRequestMode !== "non-stream" && phaseSummary.realRequestMode !== "streaming-fallback") semanticFailures.push("account_proxy_real_request_mode");
+      if (!Number.isFinite(Number(phaseSummary.realRequestAttemptCount)) || Number(phaseSummary.realRequestAttemptCount) < 1) semanticFailures.push("account_proxy_real_request_attempt_count");
       if (antigravityLogSignals.sourcePresent !== true) semanticFailures.push("account_proxy_log_source_missing");
       if (typeof antigravityLogSignals.tailLinesScanned !== "number" || !Number.isFinite(antigravityLogSignals.tailLinesScanned) || antigravityLogSignals.tailLinesScanned < 0) semanticFailures.push("account_proxy_log_scan_missing");
     }
@@ -4179,6 +4180,7 @@ if (args.has("--self-test")) {
       "account_proxy_model_count",
       "account_proxy_real_request_not_attempted",
       "account_proxy_real_request_not_ok",
+      "account_proxy_real_request_attempt_count",
       "account_proxy_log_source_missing",
       "account_proxy_log_scan_missing",
     ]);

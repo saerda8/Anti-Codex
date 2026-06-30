@@ -5,6 +5,8 @@ param(
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$TimeoutSec = 8,
     [int]$RequestTimeoutSec = 90,
+    [int]$RequestAttempts = 3,
+    [int]$TotalRequestTimeoutSec = 180,
     [switch]$AllowUnready
 )
 
@@ -119,26 +121,42 @@ function Invoke-LocalTextSafe {
         [string]$Path,
         [string]$Method = "GET",
         [object]$Body = $null,
-        [int]$Timeout = $TimeoutSec
+        [int]$Timeout = $TimeoutSec,
+        [string]$StopPattern = ""
     )
 
+    $request = $null
+    $response = $null
+    $reader = $null
     try {
-        $args = @{
-            Uri = "$BaseUrl$Path"
-            Method = $Method
-            Proxy = $null
-            TimeoutSec = $Timeout
-        }
+        $request = [Net.HttpWebRequest]::Create("$BaseUrl$Path")
+        $request.Method = $Method
+        $request.Proxy = $null
+        $request.Timeout = [Math]::Max(1, $Timeout) * 1000
+        $request.ReadWriteTimeout = [Math]::Max(1, $Timeout) * 1000
+        $request.Accept = "text/event-stream, application/json, text/plain"
         if ($null -ne $Body) {
             $json = $Body | ConvertTo-Json -Depth 30 -Compress
-            $args.ContentType = "application/json; charset=utf-8"
-            $args.Body = [Text.Encoding]::UTF8.GetBytes($json)
+            $bodyBytes = [Text.Encoding]::UTF8.GetBytes($json)
+            $request.ContentType = "application/json; charset=utf-8"
+            $request.ContentLength = $bodyBytes.Length
+            $stream = $request.GetRequestStream()
+            try { $stream.Write($bodyBytes, 0, $bodyBytes.Length) } finally { $stream.Dispose() }
         }
-        $response = Invoke-WebRequest @args
+        $response = $request.GetResponse()
+        $reader = New-Object IO.StreamReader($response.GetResponseStream())
+        $builder = New-Object Text.StringBuilder
+        $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $Timeout))
+        while (-not $reader.EndOfStream -and [DateTime]::UtcNow -lt $deadline) {
+            $line = $reader.ReadLine()
+            if ($null -eq $line) { break }
+            [void]$builder.AppendLine($line)
+            if ($StopPattern -and $builder.ToString() -match [regex]::Escape($StopPattern)) { break }
+        }
         return [pscustomobject]@{
             ok = $true
             name = $Name
-            text = [string]$response.Content
+            text = [string]$builder.ToString()
             status = [int]$response.StatusCode
             error = $null
         }
@@ -150,6 +168,10 @@ function Invoke-LocalTextSafe {
             status = $null
             error = Get-ErrorPayload $_
         }
+    } finally {
+        if ($reader) { $reader.Dispose() }
+        if ($response) { $response.Dispose() }
+        if ($request) { $request.Abort() }
     }
 }
 
@@ -336,50 +358,102 @@ $accountProbeReady = [bool]($accountResult.ok -and $account -and $account.signed
 $accountProbeStaleButModelsAvailable = [bool]((-not $accountProbeReady) -and $models.Count -gt 0 -and $healthBefore -and [string]$healthBefore.modelTextTransport -eq "cli")
 $requestResult = $null
 $streamRequestResult = $null
+$requestAttemptRecords = New-Object System.Collections.Generic.List[object]
 $requestText = ""
 $requestMode = ""
+$requestBudgetExceeded = $false
 $requestMarker = "ACCOUNT_PROXY_READY_" + (Get-Random -Minimum 10000 -Maximum 99999)
 if ($healthBefore -and ($healthBefore.accountReady -eq $true -or $accountProbeStaleButModelsAvailable) -and $models.Count -gt 0) {
-    $requestMode = "non-stream"
-    $requestResult = Invoke-LocalJsonSafe "real-response" "/v1/responses" "POST" @{
-        model = $selectedModel
-        stream = $false
-        store = $false
-        input = New-MessageInput "Reply with exactly this marker and no extra words: $requestMarker"
-    } $RequestTimeoutSec
-
-    if ($requestResult.ok) {
-        $requestText = Get-AntiCodexResponseText $requestResult.payload
-        if ($requestText -notmatch [regex]::Escape($requestMarker)) {
-            Add-Failure "real request did not echo marker: $requestText"
+    $attemptCount = [Math]::Max(1, $RequestAttempts)
+    $requestBudgetStartedAt = [DateTime]::UtcNow
+    for ($attempt = 1; $attempt -le $attemptCount -and $requestText -notmatch [regex]::Escape($requestMarker); $attempt++) {
+        $remainingSec = [int][Math]::Ceiling($TotalRequestTimeoutSec - ([DateTime]::UtcNow - $requestBudgetStartedAt).TotalSeconds)
+        if ($remainingSec -le 0) {
+            $requestBudgetExceeded = $true
+            break
         }
-    } else {
-        Add-Failure "real request failed: $($requestResult.error.message)"
-    }
+        $callTimeout = [Math]::Max(1, [Math]::Min($RequestTimeoutSec, $remainingSec))
+        $requestMode = "non-stream"
+        $requestResult = Invoke-LocalJsonSafe "real-response" "/v1/responses" "POST" @{
+            model = $selectedModel
+            stream = $false
+            store = $false
+            input = New-MessageInput "Reply with exactly this marker and no extra words: $requestMarker"
+        } $callTimeout
+        $nonStreamText = ""
+        if ($requestResult.ok) {
+            $nonStreamText = Get-AntiCodexResponseText $requestResult.payload
+            if ($nonStreamText -match [regex]::Escape($requestMarker)) {
+                $requestText = $nonStreamText
+                $requestAttemptRecords.Add([pscustomobject]@{
+                    index = $attempt
+                    mode = "non-stream"
+                    ok = $true
+                    markerMatched = $true
+                    error = ""
+                }) | Out-Null
+                break
+            }
+        }
+        $requestAttemptRecords.Add([pscustomobject]@{
+            index = $attempt
+            mode = "non-stream"
+            ok = [bool]$requestResult.ok
+            markerMatched = $false
+            error = if ($requestResult.ok) { "marker_not_matched" } else { $requestResult.error.message }
+        }) | Out-Null
 
-    if ($requestText -notmatch [regex]::Escape($requestMarker)) {
+        $remainingSec = [int][Math]::Ceiling($TotalRequestTimeoutSec - ([DateTime]::UtcNow - $requestBudgetStartedAt).TotalSeconds)
+        if ($remainingSec -le 0) {
+            $requestBudgetExceeded = $true
+            break
+        }
+        $callTimeout = [Math]::Max(1, [Math]::Min($RequestTimeoutSec, $remainingSec))
         $streamRequestResult = Invoke-LocalTextSafe "real-response-stream" "/responses" "POST" @{
             model = $selectedModel
             stream = $true
             store = $false
             input = New-MessageInput "Reply with exactly this marker and no extra words: $requestMarker"
-        } $RequestTimeoutSec
+        } $callTimeout $requestMarker
         if ($streamRequestResult.ok -and $streamRequestResult.text -match [regex]::Escape($requestMarker)) {
             $requestMode = "streaming-fallback"
             $requestText = $requestMarker
-            Remove-FailuresMatching "^real request (failed|did not echo marker):"
             $requestResult = [pscustomobject]@{
                 ok = $true
                 name = "real-response-stream"
                 payload = $null
                 error = $null
             }
-        } elseif ($streamRequestResult.ok) {
-            $requestMode = "streaming-fallback-failed"
-            Add-Failure "streaming real request did not echo marker"
+            $requestAttemptRecords.Add([pscustomobject]@{
+                index = $attempt
+                mode = "streaming-fallback"
+                ok = $true
+                markerMatched = $true
+                error = ""
+            }) | Out-Null
         } else {
             $requestMode = "streaming-fallback-failed"
+            $requestAttemptRecords.Add([pscustomobject]@{
+                index = $attempt
+                mode = "streaming-fallback"
+                ok = [bool]$streamRequestResult.ok
+                markerMatched = $false
+                error = if ($streamRequestResult.ok) { "marker_not_matched" } else { $streamRequestResult.error.message }
+            }) | Out-Null
+        }
+    }
+
+    if ($requestText -notmatch [regex]::Escape($requestMarker)) {
+        if ($requestBudgetExceeded) {
+            Add-Failure "real request timed out after total request budget: ${TotalRequestTimeoutSec}s"
+        } elseif ($streamRequestResult -and $streamRequestResult.ok) {
+            Add-Failure "streaming real request did not echo marker"
+        } elseif ($streamRequestResult) {
             Add-Failure "streaming real request failed: $($streamRequestResult.error.message)"
+        } elseif ($requestResult -and $requestResult.ok) {
+            Add-Failure "real request did not echo marker: $(Get-AntiCodexResponseText $requestResult.payload)"
+        } elseif ($requestResult) {
+            Add-Failure "real request failed: $($requestResult.error.message)"
         }
     }
 }
@@ -484,6 +558,11 @@ $result = [pscustomobject]@{
         error = if ($requestResult -and -not $requestResult.ok) { $requestResult.error } else { $null }
         streamingFallbackAttempted = $null -ne $streamRequestResult
         streamingFallbackOk = if ($streamRequestResult) { [bool]$streamRequestResult.ok -and ($streamRequestResult.text -match [regex]::Escape($requestMarker)) } else { $false }
+        configuredAttempts = [Math]::Max(1, $RequestAttempts)
+        totalBudgetSec = $TotalRequestTimeoutSec
+        budgetExceeded = $requestBudgetExceeded
+        attemptCount = $requestAttemptRecords.Count
+        attempts = $requestAttemptRecords.ToArray()
     }
     phaseSummary = [pscustomobject]@{
         accountOk = $accountProbeReady
@@ -492,6 +571,8 @@ $result = [pscustomobject]@{
         realRequestAttempted = $null -ne $requestResult
         realRequestOk = if ($requestResult) { [bool]$requestResult.ok -and ($requestText -match [regex]::Escape($requestMarker)) } else { $false }
         realRequestMode = $requestMode
+        realRequestAttemptCount = $requestAttemptRecords.Count
+        realRequestBudgetExceeded = $requestBudgetExceeded
         accountError = if (-not $accountResult.ok) { $accountResult.error.message } elseif ($account -and $account.signedIn -ne $true) { "not_signed_in_or_status_unavailable" } else { "" }
         refreshError = if (-not $refreshResult.ok) { $refreshResult.error.message } else { "" }
         realRequestError = if ($requestResult -and -not $requestResult.ok) { $requestResult.error.message } elseif ($streamRequestResult -and -not $streamRequestResult.ok) { $streamRequestResult.error.message } elseif ($null -eq $requestResult) { "not_attempted" } else { "" }

@@ -13306,7 +13306,16 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   assert.match(readiness, /\/responses/);
   assert.match(readiness, /streaming-fallback/);
   assert.match(readiness, /Invoke-LocalTextSafe/);
+  assert.match(readiness, /StopPattern/);
+  assert.match(readiness, /HttpWebRequest/);
+  assert.match(readiness, /request\.Abort\(\)/);
   assert.match(readiness, /Remove-FailuresMatching/);
+  assert.match(readiness, /\[int\]\$RequestAttempts = 3/);
+  assert.match(readiness, /\[int\]\$TotalRequestTimeoutSec = 180/);
+  assert.match(readiness, /configuredAttempts/);
+  assert.match(readiness, /totalBudgetSec/);
+  assert.match(readiness, /budgetExceeded/);
+  assert.match(readiness, /realRequestAttemptCount/);
   assert.match(readiness, /accountProbeStaleButModelsAvailable -and \$realMarkerOk/);
   assert.match(readiness, /\/anticodex\/model-routes/);
   assert.match(readiness, /modelRouteAudit/);
@@ -13350,6 +13359,7 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   assert.match(releaseGates, /accountProbeStaleButModelsAvailable && phaseSummary\.realRequestOk === true/);
   assert.match(releaseGates, /account_proxy_real_request_mode/);
+  assert.match(releaseGates, /account_proxy_real_request_attempt_count/);
 
   assert.doesNotMatch(readiness, /Stop-Process/);
   assert.doesNotMatch(readiness, /Antigravity\.exe/);
