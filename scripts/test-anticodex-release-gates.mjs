@@ -978,8 +978,10 @@ function summarizeGate(definition) {
       const blockedGates = Array.isArray(report.requiredRealTrafficBlockedGates) ? report.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const sequence = Array.isArray(report.approvedRealRunSequence) ? report.approvedRealRunSequence : [];
       const prechecks = Array.isArray(report.noTrafficPrechecks) ? report.noTrafficPrechecks : [];
+      const sourceReports = report.sourceReports && typeof report.sourceReports === "object" ? report.sourceReports : {};
       const realStages = sequence.filter((item) => item?.requiresRealTraffic === true);
       const loginStages = sequence.filter((item) => item?.startsLogin === true);
+      const accountProofStages = sequence.filter((item) => String(item?.id || "") === "separateAccountIdentityProof");
       const mixedOptional = requiredActionIds.filter((id) => optionalActionIds.includes(id));
       const realTaskRefreshNeeded = requiredTaskModes.length > 0 || scenarios.length > 0;
       if (report.reportName !== "approved-real-run-sequence") semanticFailures.push("approved_real_run_sequence_report_name");
@@ -1021,14 +1023,19 @@ function summarizeGate(definition) {
       }
       if (report.optionalActionsSeparated !== true || mixedOptional.length > 0) semanticFailures.push("approved_real_run_sequence_optional_actions_mixed");
       if (report.releaseShortReady !== true) semanticFailures.push("approved_real_run_sequence_short_not_ready");
+      if (sourceReports.secondAccountLoginEntrypoint?.present !== true) semanticFailures.push("approved_real_run_sequence_second_account_entrypoint_source_missing");
       if (report.safeToAskUserForSecondAccountLogin !== false) semanticFailures.push("approved_real_run_sequence_login_safety_mismatch");
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("approved_real_run_sequence_release_proof_claimed");
       if (typeof report.accountReadinessBlockingReason !== "string" || !report.accountReadinessBlockingReason) semanticFailures.push("approved_real_run_sequence_account_blocking_reason_missing");
       if (typeof report.operatorNextAction !== "string" || !report.operatorNextAction) semanticFailures.push("approved_real_run_sequence_operator_next_action_missing");
       if (prechecks.length < 4) semanticFailures.push("approved_real_run_sequence_precheck_count");
       if (prechecks.some((item) => item?.requiresRealTraffic === true || item?.startsLogin === true)) semanticFailures.push("approved_real_run_sequence_precheck_started_traffic_or_login");
+      if (prechecks.some((item) => String(item?.id || "") === "accountIsolationStatus" && !String(item?.command || "").includes("-WindowsUser"))) semanticFailures.push("approved_real_run_sequence_status_command_missing_windows_user");
       if (realStages.some((item) => item?.requiresExplicitUserApproval !== true)) semanticFailures.push("approved_real_run_sequence_real_stage_without_approval");
       if (loginStages.some((item) => item?.requiresExplicitUserApproval !== true || item?.requiresRealTraffic === true)) semanticFailures.push("approved_real_run_sequence_login_stage_contract");
+      if (loginStages.some((item) => !String(item?.command || "").includes("-WindowsUser") || !String(item?.command || "").includes("-StartLoginApproval start-separate-windows-user-login"))) semanticFailures.push("approved_real_run_sequence_login_command_not_isolated");
+      if (accountProofStages.length !== 1) semanticFailures.push("approved_real_run_sequence_account_proof_stage_count");
+      if (accountProofStages.some((item) => !String(item?.command || "").includes("-AllowSeparateAccountProof") || !String(item?.command || "").includes("SeparateAccountProofApprovalId"))) semanticFailures.push("approved_real_run_sequence_account_proof_command_incomplete");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("approved_real_run_sequence_failures");
     }
     if (definition.requireNativeCodexParityTaskMatrixSemantics) {
@@ -1152,6 +1159,7 @@ function summarizeGate(definition) {
       const account = report.accountIsolation && typeof report.accountIsolation === "object" ? report.accountIsolation : {};
       const orderedActions = Array.isArray(report.orderedActions) ? report.orderedActions : [];
       const preLoginChecklist = Array.isArray(report.preLoginChecklist) ? report.preLoginChecklist : [];
+      const sourceReports = report.sourceReports && typeof report.sourceReports === "object" ? report.sourceReports : {};
       const gateIds = Array.isArray(releaseGates.gateIds) ? releaseGates.gateIds.map((item) => String(item || "")) : [];
       const requiredGateIds = Array.isArray(releaseGates.requiredGateIds) ? releaseGates.requiredGateIds.map((item) => String(item || "")) : [];
       const completedGateIds = Array.isArray(releaseGates.completedGateIds) ? releaseGates.completedGateIds.map((item) => String(item || "")) : [];
@@ -1199,6 +1207,7 @@ function summarizeGate(definition) {
       if (Number(report.requiresRealTrafficCount || 0) < 1) semanticFailures.push("real_approval_plan_real_traffic_actions_missing");
       if (Number(report.operatorSetupBlockedCount || 0) < 1) semanticFailures.push("real_approval_plan_operator_setup_blockers_missing");
       if (typeof report.nextNoTrafficAction !== "string" || !report.nextNoTrafficAction) semanticFailures.push("real_approval_plan_next_no_traffic_action_missing");
+      if (sourceReports.secondAccountLoginEntrypoint?.present !== true) semanticFailures.push("real_approval_plan_second_account_entrypoint_source_missing");
       if (report.preLoginChecklistComplete !== true) semanticFailures.push("real_approval_plan_pre_login_checklist_incomplete");
       for (const checklistId of ["windows-user-account-prepare", "account-isolation-status", "second-account-login-entrypoint-status"]) {
         const entry = preLoginChecklist.find((item) => String(item?.id || "") === checklistId);
@@ -1209,8 +1218,15 @@ function summarizeGate(definition) {
         if (entry.noTraffic !== true) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_not_no_traffic`);
         if (entry.mustPassBeforeLogin !== true) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_not_required`);
         if (typeof entry.command !== "string" || !entry.command) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_command_missing`);
+        if (checklistId === "account-isolation-status" && typeof entry.command === "string" && !entry.command.includes("-WindowsUser")) semanticFailures.push("real_approval_plan_account_status_command_missing_windows_user");
         if (typeof entry.report !== "string" || !entry.report) semanticFailures.push(`real_approval_plan_pre_login_${checklistId.replaceAll("-", "_")}_report_missing`);
       }
+      const loginAction = orderedActions.find((item) => String(item?.id || "") === "second-antigravity-account-login");
+      if (!loginAction || !String(loginAction.command || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("real_approval_plan_login_action_missing_approval_token");
+      if (!loginAction || !String(loginAction.command || "").includes("-WindowsUser")) semanticFailures.push("real_approval_plan_login_action_missing_windows_user");
+      const proofAction = orderedActions.find((item) => String(item?.id || "") === "second-account-identity-real-smoke");
+      if (!proofAction || !String(proofAction.command || "").includes("-AllowSeparateAccountProof")) semanticFailures.push("real_approval_plan_proof_action_missing_separate_account_flag");
+      if (!proofAction || !String(proofAction.command || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("real_approval_plan_proof_action_missing_approval_id");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("real_approval_plan_failures");
     }
     if (definition.requireGoalReadinessSemantics) {
@@ -1289,6 +1305,9 @@ function summarizeGate(definition) {
       if (entrypoint.missingApprovalBlocked !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_missing_approval_not_blocked");
       if (entrypoint.approvedStartBlockedByStatusGate !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_gate_not_blocking");
       if (entrypoint.sameWindowsUserTargetBlocked !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_same_user_not_blocked");
+      if (!String(entrypoint.approvedLoginCommandTemplate || "").includes("-WindowsUser") || !String(entrypoint.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("goal_readiness_second_account_entrypoint_login_template_incomplete");
+      if (!String(entrypoint.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1") || !String(entrypoint.nextNoTrafficStatusCommand || "").includes("-WindowsUser")) semanticFailures.push("goal_readiness_second_account_entrypoint_status_template_incomplete");
+      if (!String(entrypoint.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof") || !String(entrypoint.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_template_incomplete");
       if (entrypoint.approvedLoginCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_login_command_missing");
       if (entrypoint.nextNoTrafficStatusCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_command_missing");
       if (entrypoint.postLoginProofCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_command_missing");

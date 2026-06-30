@@ -56,12 +56,14 @@ const approvalReport = readReport("latest-real-approval-plan.json");
 const sequenceReport = readReport("latest-required-real-traffic-sequence.json");
 const releaseReport = readReport("latest-release-gates.json");
 const accountReport = readReport("latest-antigravity-account-isolation-status.json");
+const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
 
 const readiness = readinessReport.report || {};
 const approval = approvalReport.report || {};
 const sequence = sequenceReport.report || {};
 const release = releaseReport.report || {};
 const account = accountReport.report || {};
+const secondAccountLoginEntrypoint = secondAccountLoginEntrypointReport.report || {};
 
 const pendingRealTaskScenarios = asObjectArray(readiness.pendingRealTaskScenarios).map((item) => ({
   taskMode: String(item.taskMode || ""),
@@ -84,8 +86,9 @@ const effectiveReleaseReady = release.releaseReady === true
   || (release.shortReady === true && effectiveReleaseMissing.length === 0 && requiredBlockedGates.length === 0);
 const realTaskCommand = String(approval.realTaskRefresh?.command || "");
 const accountProofPlan = account.postLoginProofPlan && typeof account.postLoginProofPlan === "object" ? account.postLoginProofPlan : {};
-const accountProofCommand = String(accountProofPlan.commandTemplate || "");
-const loginCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-anticodex-second-antigravity-account-login.ps1 -StartLogin -StartLoginApproval start-separate-windows-user-login";
+const accountProofCommand = String(secondAccountLoginEntrypoint.postLoginProofCommandTemplate || accountProofPlan.commandTemplate || "");
+const loginCommand = String(secondAccountLoginEntrypoint.approvedLoginCommandTemplate || "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\\AntiCodexModel -StartLogin -StartLoginApproval start-separate-windows-user-login");
+const noTrafficStatusCommand = String(secondAccountLoginEntrypoint.nextNoTrafficStatusCommand || "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\\AntiCodexModel");
 
 const noTrafficPrechecks = [
   stage("windowsUserAccountPrepare", "no-traffic-precheck", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1", {
@@ -93,7 +96,7 @@ const noTrafficPrechecks = [
     failFastIfNotReady: true,
     evidence: ["readyForInteractiveLogin", "safeToAskUserForSecondAccountLogin"],
   }),
-  stage("accountIsolationStatus", "no-traffic-precheck", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1", {
+  stage("accountIsolationStatus", "no-traffic-precheck", noTrafficStatusCommand, {
     expectedReport: "latest-antigravity-account-isolation-status.json",
     failFastIfNotReady: true,
     evidence: ["safeToAskUserForSecondAccountLogin", "releaseAcceptableAccountProof"],
@@ -169,7 +172,7 @@ const executionBlockedBeforeRealTraffic = account.safeToAskUserForSecondAccountL
   || readiness.releaseAcceptableAccountProof !== true;
 const failures = [];
 
-for (const source of [readinessReport, approvalReport, sequenceReport, releaseReport, accountReport]) {
+for (const source of [readinessReport, approvalReport, sequenceReport, releaseReport, accountReport, secondAccountLoginEntrypointReport]) {
   if (!source.present) failures.push(`missing_${source.fileName}`);
   else if (!source.parseable) failures.push(`unparseable_${source.fileName}`);
 }
@@ -194,7 +197,9 @@ for (const gateId of REQUIRED_RELEASE_GATES) {
 if (!optionalActionsSeparated) failures.push("optional_actions_mixed_into_required_sequence");
 if (realTaskRefreshNeeded && (!realTaskCommand.includes("--allow-real-traffic") || !realTaskCommand.includes("web-search,free-chat"))) failures.push("real_task_refresh_command_not_concrete");
 if (!loginCommand.includes("-StartLoginApproval start-separate-windows-user-login")) failures.push("login_command_missing_approval_token");
+if (!loginCommand.includes("-WindowsUser")) failures.push("login_command_missing_windows_user");
 if (accountProofCommand && !accountProofCommand.includes("SeparateAccountProofApprovalId")) failures.push("account_proof_command_missing_approval_id");
+if (accountProofCommand && !accountProofCommand.includes("-AllowSeparateAccountProof")) failures.push("account_proof_command_missing_separate_account_flag");
 if (executionBlockedBeforeRealTraffic !== true) failures.push("execution_not_blocked_before_real_traffic");
 if (approvedRealRunSequence.some((item) => item.requiresRealTraffic && item.requiresExplicitUserApproval !== true)) failures.push("real_traffic_stage_without_explicit_approval");
 if (approvedRealRunSequence.some((item) => item.startsLogin && item.requiresExplicitUserApproval !== true)) failures.push("login_stage_without_explicit_approval");
@@ -215,6 +220,7 @@ const payload = {
     requiredRealTrafficSequence: { present: sequenceReport.present, parseable: sequenceReport.parseable },
     releaseGates: { present: releaseReport.present, parseable: releaseReport.parseable },
     accountIsolation: { present: accountReport.present, parseable: accountReport.parseable },
+    secondAccountLoginEntrypoint: { present: secondAccountLoginEntrypointReport.present, parseable: secondAccountLoginEntrypointReport.parseable },
   },
   noTrafficPrechecks,
   approvedRealRunSequence,

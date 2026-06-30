@@ -947,6 +947,15 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountLoginEntrypointMissingApprovalBlocked -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint missing-approval guard missing" }
     if ($evidence.secondAccountLoginEntrypointApprovedStartBlockedByStatusGate -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint status gate guard missing" }
     if ($evidence.secondAccountLoginEntrypointSameWindowsUserTargetBlocked -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint same-user guard missing" }
+    if (-not ([string]$evidence.secondAccountLoginEntrypointApprovedLoginCommandTemplate).Contains("start-anticodex-second-antigravity-account-login.ps1") -or -not ([string]$evidence.secondAccountLoginEntrypointApprovedLoginCommandTemplate).Contains("-WindowsUser") -or -not ([string]$evidence.secondAccountLoginEntrypointApprovedLoginCommandTemplate).Contains("-StartLoginApproval start-separate-windows-user-login")) {
+        Add-Failure "goal-readiness summary second-account entrypoint login command template incomplete"
+    }
+    if (-not ([string]$evidence.secondAccountLoginEntrypointNextNoTrafficStatusCommand).Contains("test-anticodex-antigravity-account-isolation-status.ps1") -or -not ([string]$evidence.secondAccountLoginEntrypointNextNoTrafficStatusCommand).Contains("-WindowsUser")) {
+        Add-Failure "goal-readiness summary second-account entrypoint status command incomplete"
+    }
+    if (-not ([string]$evidence.secondAccountLoginEntrypointPostLoginProofCommandTemplate).Contains("test-anticodex-antigravity-cli-real-smoke.ps1") -or -not ([string]$evidence.secondAccountLoginEntrypointPostLoginProofCommandTemplate).Contains("-AllowSeparateAccountProof") -or -not ([string]$evidence.secondAccountLoginEntrypointPostLoginProofCommandTemplate).Contains("SeparateAccountProofApprovalId")) {
+        Add-Failure "goal-readiness summary second-account entrypoint proof command incomplete"
+    }
     if ($evidence.secondAccountLoginEntrypointApprovedLoginCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint login command missing" }
     if ($evidence.secondAccountLoginEntrypointNextNoTrafficStatusCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint status command missing" }
     if ($evidence.secondAccountLoginEntrypointPostLoginProofCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof command missing" }

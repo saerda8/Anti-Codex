@@ -243,6 +243,9 @@ const secondAccountLoginEntrypoint = {
   readinessBlockingReason: String(entrypoint.readinessBlockingReason || ""),
   operatorBlockingStage: String(entrypoint.operatorBlockingStage || ""),
   operatorNextStep: String(entrypoint.operatorNextStep || ""),
+  approvedLoginCommandTemplate: entrypointLoginCommand,
+  nextNoTrafficStatusCommand: entrypointStatusCommand,
+  postLoginProofCommandTemplate: entrypointProofCommand,
   approvedLoginCommandPresent: entrypointLoginCommand.includes("scripts\\start-anticodex-second-antigravity-account-login.ps1")
     && entrypointLoginCommand.includes("-StartLogin")
     && entrypointLoginCommand.includes("-StartLoginApproval start-separate-windows-user-login"),

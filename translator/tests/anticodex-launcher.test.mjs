@@ -12881,11 +12881,16 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /approvedLoginCommandPresent/);
   assert.match(goalReadiness, /nextNoTrafficStatusCommandPresent/);
   assert.match(goalReadiness, /postLoginProofCommandPresent/);
+  assert.match(goalReadiness, /approvedLoginCommandTemplate/);
+  assert.match(goalReadiness, /nextNoTrafficStatusCommand/);
+  assert.match(goalReadiness, /postLoginProofCommandTemplate/);
   assert.match(goalReadiness, /postLoginProofPlanValid/);
   assert.match(goalReadiness, /second_account_login_entrypoint_missing_or_invalid/);
   assert.match(releaseGates, /goal_readiness_second_account_entrypoint_proof_plan_invalid/);
+  assert.match(releaseGates, /goal_readiness_second_account_entrypoint_login_template_incomplete/);
   assert.match(summarizer, /secondAccountLoginEntrypointProven/);
   assert.match(summarizer, /secondAccountLoginEntrypointApprovedLoginCommandPresent/);
+  assert.match(summarizer, /secondAccountLoginEntrypointApprovedLoginCommandTemplate/);
   assert.match(diagnostics, /goal-readiness summary missing second-account login entrypoint proof/);
   assert.match(diagnostics, /goal-readiness summary second-account entrypoint proof plan invalid/);
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
@@ -12998,6 +13003,9 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(plan, /releaseRealTrafficGates/);
   assert.match(plan, /preLoginChecklist/);
   assert.match(plan, /preLoginChecklistComplete/);
+  assert.match(plan, /latest-second-antigravity-account-login-entrypoint\.json/);
+  assert.match(plan, /approvedLoginCommand/);
+  assert.match(plan, /postLoginProofCommand/);
   assert.match(plan, /windows-user-account-prepare/);
   assert.match(plan, /account-isolation-status/);
   assert.match(plan, /second-account-login-entrypoint-status/);
@@ -13033,6 +13041,9 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(releaseGates, /real_approval_plan_refresh_command_args_missing/);
   assert.match(releaseGates, /real_approval_plan_refresh_approval_summary_missing/);
   assert.match(releaseGates, /real_approval_plan_pre_login_checklist_incomplete/);
+  assert.match(releaseGates, /real_approval_plan_second_account_entrypoint_source_missing/);
+  assert.match(releaseGates, /real_approval_plan_login_action_missing_windows_user/);
+  assert.match(releaseGates, /real_approval_plan_proof_action_missing_separate_account_flag/);
   assert.match(releaseGates, /real_approval_plan_pre_login_\$\{checklistId\.replaceAll\("-", "_"\)\}_missing/);
   assert.match(releaseGates, /scripts\/test-anticodex-real-approval-plan\.mjs/);
   assert.match(installedOverall, /latest-real-approval-plan\.json/);
@@ -15239,6 +15250,9 @@ test("approved real run sequence is a no-traffic gate before concrete task execu
   assert.match(verifier, /accountProxyReadiness/);
   assert.match(verifier, /postVerification/);
   assert.match(verifier, /StartLoginApproval start-separate-windows-user-login/);
+  assert.match(verifier, /latest-second-antigravity-account-login-entrypoint\.json/);
+  assert.match(verifier, /login_command_missing_windows_user/);
+  assert.match(verifier, /account_proof_command_missing_separate_account_flag/);
   assert.match(verifier, /SeparateAccountProofApprovalId/);
   assert.doesNotMatch(verifier, /spawn\(|spawnSync\(|exec\(|execSync\(/);
   assert.doesNotMatch(verifier, /["']\.env["']/);
@@ -15254,6 +15268,9 @@ test("approved real run sequence is a no-traffic gate before concrete task execu
   assert.match(releaseGates, /approvedRealRunSequence/);
   assert.match(releaseGates, /requireApprovedRealRunSequenceSemantics/);
   assert.match(releaseGates, /approved_real_run_sequence_login_stage_contract/);
+  assert.match(releaseGates, /approved_real_run_sequence_second_account_entrypoint_source_missing/);
+  assert.match(releaseGates, /approved_real_run_sequence_login_command_not_isolated/);
+  assert.match(releaseGates, /approved_real_run_sequence_account_proof_command_incomplete/);
   assert.match(releaseGates, /test-anticodex-approved-real-run-sequence\.mjs/);
   assert.match(server, /Approved real run sequence/);
   assert.match(managerBridge, /approvedRealRun: blocked=/);

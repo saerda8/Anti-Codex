@@ -53,11 +53,13 @@ const roadmapReport = readReport("latest-real-task-coverage-roadmap.json");
 const goalReport = readReport("latest-goal-readiness.json");
 const releaseReport = readReport("latest-release-gates.json");
 const accountReport = readReport("latest-antigravity-account-isolation-status.json");
+const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
 
 const roadmap = roadmapReport.report || {};
 const goal = goalReport.report || {};
 const release = releaseReport.report || {};
 const account = accountReport.report || {};
+const secondAccountLoginEntrypoint = secondAccountLoginEntrypointReport.report || {};
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
 
 const uniqueRefreshTasks = asArray(roadmap.uniqueRefreshTasks);
@@ -104,6 +106,15 @@ const accountProofPlan = account.postLoginProofPlan && typeof account.postLoginP
 const accountProofCommand = typeof accountProofPlan.commandTemplate === "string"
   ? accountProofPlan.commandTemplate
   : "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -AccountIsolationBoundary separate-windows-user -AllowSeparateAccountProof";
+const approvedLoginCommand = typeof secondAccountLoginEntrypoint.approvedLoginCommandTemplate === "string" && secondAccountLoginEntrypoint.approvedLoginCommandTemplate
+  ? secondAccountLoginEntrypoint.approvedLoginCommandTemplate
+  : "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\\AntiCodexModel -StartLogin -StartLoginApproval start-separate-windows-user-login";
+const nextNoTrafficStatusCommand = typeof secondAccountLoginEntrypoint.nextNoTrafficStatusCommand === "string" && secondAccountLoginEntrypoint.nextNoTrafficStatusCommand
+  ? secondAccountLoginEntrypoint.nextNoTrafficStatusCommand
+  : "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\\AntiCodexModel";
+const postLoginProofCommand = typeof secondAccountLoginEntrypoint.postLoginProofCommandTemplate === "string" && secondAccountLoginEntrypoint.postLoginProofCommandTemplate
+  ? secondAccountLoginEntrypoint.postLoginProofCommandTemplate
+  : accountProofCommand;
 const minimalRefreshCommand = typeof roadmap.minimalRefreshCommand === "string" ? roadmap.minimalRefreshCommand : "";
 const minimalRefreshCommandArgs = asArray(roadmap.minimalRefreshCommandArgs);
 const roadmapRefreshApprovalSummary = roadmap.refreshApprovalSummary && typeof roadmap.refreshApprovalSummary === "object" ? roadmap.refreshApprovalSummary : {};
@@ -162,7 +173,7 @@ const preLoginChecklist = [
   {
     id: "account-isolation-status",
     report: "latest-antigravity-account-isolation-status.json",
-    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1",
+    command: nextNoTrafficStatusCommand,
     noTraffic: true,
     mustPassBeforeLogin: true,
     expectedReadyField: "safeToAskUserForSecondAccountLogin",
@@ -184,13 +195,13 @@ const orderedActions = [
     highImpact: true,
     reason: accountIsolation.readinessBlockingReason,
   }),
-  makeAction("second-antigravity-account-login", "interactive-login", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-anticodex-second-antigravity-account-login.ps1 -StartLogin -StartLoginApproval start-separate-windows-user-login", {
+  makeAction("second-antigravity-account-login", "interactive-login", approvedLoginCommand, {
     startsLogin: true,
     blockedByOperatorSetup: accountSetupBlocked,
     blockedUntilExplicitUserApproval: true,
     reason: accountIsolation.completionState,
   }),
-  makeAction("second-account-identity-real-smoke", "account-proof-real-traffic", accountProofCommand, {
+  makeAction("second-account-identity-real-smoke", "account-proof-real-traffic", postLoginProofCommand, {
     requiresRealTraffic: true,
     blockedByOperatorSetup: accountSetupBlocked,
     blockedUntilExplicitUserApproval: true,
@@ -222,6 +233,7 @@ const payload = {
     goalReadiness: { present: goalReport.present, parseable: goalReport.parseable },
     releaseGates: { present: releaseReport.present, parseable: releaseReport.parseable },
     accountIsolation: { present: accountReport.present, parseable: accountReport.parseable },
+    secondAccountLoginEntrypoint: { present: secondAccountLoginEntrypointReport.present, parseable: secondAccountLoginEntrypointReport.parseable },
   },
   realTaskRefresh,
   releaseRealTrafficGates,
