@@ -58,7 +58,7 @@ const uniqueRefreshTasks = asArray(roadmap.uniqueRefreshTasks);
 const requiredRealTrafficBlockedGates = asArray(release.requiredRealTrafficBlockedGates);
 const releaseNextActions = Array.isArray(release.nextActions) ? release.nextActions : [];
 const releaseRealTrafficActions = releaseNextActions
-  .filter((item) => requiredRealTrafficBlockedGates.includes(String(item?.gateId || item?.id || "")) || item?.requiresRealTraffic === true)
+  .filter((item) => item?.requiresRealTraffic === true)
   .map((item) => makeAction(
     String(item?.id || item?.gateId || "release-real-traffic"),
     String(item?.phase || "real-traffic"),
@@ -71,6 +71,8 @@ const releaseRealTrafficActions = releaseNextActions
       reason: String(item?.reason || ""),
     },
   ));
+const requiredReleaseRealTrafficActions = releaseRealTrafficActions.filter((item) => requiredRealTrafficBlockedGates.includes(item.id));
+const optionalReleaseRealTrafficActions = releaseRealTrafficActions.filter((item) => !requiredRealTrafficBlockedGates.includes(item.id));
 
 const targetUserMissing = account.readinessBlockingReason === "target_windows_user_missing"
   || account.blockingReason === "target_windows_user_missing"
@@ -94,7 +96,10 @@ const realTaskRefresh = {
 const releaseRealTrafficGates = {
   needed: requiredRealTrafficBlockedGates.length > 0,
   gateIds: requiredRealTrafficBlockedGates,
-  actions: releaseRealTrafficActions,
+  actions: requiredReleaseRealTrafficActions,
+  requiredActions: requiredReleaseRealTrafficActions,
+  optionalActions: optionalReleaseRealTrafficActions,
+  optionalGateIds: optionalReleaseRealTrafficActions.map((item) => item.id),
   releaseBlockedOnlyByRequiredRealTraffic: release.releaseBlockedOnlyByRequiredRealTraffic === true,
 };
 
@@ -140,7 +145,7 @@ if (realTaskRefresh.needed) {
     reason: "real_task_coverage_refresh_required",
   }));
 }
-for (const item of releaseRealTrafficActions) orderedActions.push(item);
+for (const item of requiredReleaseRealTrafficActions) orderedActions.push(item);
 
 const payload = {
   ok: true,
@@ -163,6 +168,8 @@ const payload = {
   blockedUntilExplicitUserApprovalCount: orderedActions.filter((item) => item.blockedUntilExplicitUserApproval).length,
   requiresRealTrafficCount: orderedActions.filter((item) => item.requiresRealTraffic).length,
   operatorSetupBlockedCount: orderedActions.filter((item) => item.blockedByOperatorSetup).length,
+  requiredReleaseRealTrafficActionCount: requiredReleaseRealTrafficActions.length,
+  optionalReleaseRealTrafficActionCount: optionalReleaseRealTrafficActions.length,
   nextNoTrafficAction: targetUserMissing ? "create_or_verify_target_windows_user_then_rerun_account_prepare" : "rerun_real_approval_plan",
   elapsedMs: Date.now() - startedAt,
 };

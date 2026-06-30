@@ -1278,6 +1278,8 @@ const summary = {
     realTaskRefreshCommandPresent: typeof report.realTaskRefresh?.command === "string" && report.realTaskRefresh.command.includes("--allow-real-traffic"),
     releaseBlockedOnlyByRequiredRealTraffic: boolField(report.releaseRealTrafficGates || {}, "releaseBlockedOnlyByRequiredRealTraffic"),
     releaseRealTrafficGateIds: Array.isArray(report.releaseRealTrafficGates?.gateIds) ? asStringArray(report.releaseRealTrafficGates.gateIds) : [],
+    requiredReleaseRealTrafficActionCount: has(report, "requiredReleaseRealTrafficActionCount") ? report.requiredReleaseRealTrafficActionCount : null,
+    optionalReleaseRealTrafficActionCount: has(report, "optionalReleaseRealTrafficActionCount") ? report.optionalReleaseRealTrafficActionCount : null,
     accountCompletionState: asString(report.accountIsolation?.completionState),
     accountReadinessBlockingReason: asString(report.accountIsolation?.readinessBlockingReason),
     accountTargetUserMissing: boolField(report.accountIsolation || {}, "targetUserMissing"),

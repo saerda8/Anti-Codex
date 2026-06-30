@@ -973,6 +973,8 @@ function Test-RealApprovalPlanSummaryEvidence {
     if ($evidence.realTaskRefreshCommandPresent -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh command" }
     if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "real-approval-plan summary missing release real-traffic-only blocker" }
     if (@(As-FlatArray $evidence.releaseRealTrafficGateIds).Count -lt 1) { Add-Failure "real-approval-plan summary missing release real-traffic gates" }
+    if ([int]$evidence.requiredReleaseRealTrafficActionCount -lt 1) { Add-Failure "real-approval-plan summary missing required release real-traffic actions" }
+    if ($null -eq $evidence.optionalReleaseRealTrafficActionCount) { Add-Failure "real-approval-plan summary missing optional release real-traffic action count" }
     if ($evidence.accountTargetUserMissing -ne $true) { Add-Failure "real-approval-plan summary missing target-user setup blocker" }
     if ($evidence.accountSetupBlocked -ne $true) { Add-Failure "real-approval-plan summary missing account setup blocker" }
     if ([int]$evidence.orderedActionCount -lt 4) { Add-Failure "real-approval-plan summary ordered action count too low" }
