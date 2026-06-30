@@ -23,10 +23,13 @@ const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA
 const uiSmokeScript = resolve(sourceRoot, "scripts", "test-anticodex-ui-chat-smoke.mjs");
 const suiteProfile = String(args.get("--suite-profile") || "core").toLowerCase();
 const coreTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"];
+const agenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
 const extendedTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit", "web-search", "coding-project", "multi-turn-project", "report-site", "complex-project"];
 const allTasks = ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "report-site", "repo-file-edit", "repo-multi-file-edit"];
 const defaultTasks = suiteProfile === "all"
   ? allTasks
+  : suiteProfile === "agentic"
+    ? agenticTasks
   : suiteProfile === "extended"
     ? extendedTasks
     : coreTasks;

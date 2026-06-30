@@ -12455,6 +12455,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
 
   assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
   assert.match(suite, /--suite-profile/);
+  assert.match(suite, /agenticTasks/);
   assert.match(suite, /extendedTasks/);
   assert.match(suite, /allTasks/);
   assert.match(suite, /dryRun = !allowRealTraffic/);
@@ -12589,6 +12590,36 @@ test("desktop task suite supports an extended concrete task matrix without using
     assert.deepEqual(report.realTaskEvidenceRefreshPlan.hardFailureTaskModes.sort(), report.selectedTasks.slice().sort());
     assert.deepEqual(report.realTaskEvidenceRefreshPlan.staleTaskModes, []);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--suite-profile extended"), true);
+    assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("desktop task suite supports an agentic concrete task matrix without using traffic", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-desktop-suite-agentic-"));
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-desktop-task-suite.mjs"),
+      "--report-root",
+      tempRoot,
+      "--suite-profile",
+      "agentic",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.requestedRealTraffic, false);
+    assert.equal(report.usedRealTraffic, false);
+    assert.equal(report.suiteProfile, "agentic");
+    assert.deepEqual(report.selectedTasks, [
+      "coding-project",
+      "multi-turn-project",
+      "report-site",
+      "complex-project",
+      "repo-multi-file-edit",
+    ]);
+    assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
+    assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--suite-profile agentic"), true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
