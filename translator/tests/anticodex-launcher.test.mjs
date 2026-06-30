@@ -3343,8 +3343,8 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
         refreshSkippedReason: "short_budget_reused_previous_snapshot",
       },
       mcp: {
-        count: 3,
-        sharedCount: 3,
+        count: 8,
+        sharedCount: 8,
         missingShared: ["missing-mcp"],
         extraLocal: ["extra-mcp"],
         changedShared: ["changed-mcp"],
@@ -3356,6 +3356,11 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
           realList: [
             { server: "antigravity-code-worker", passed: true, toolCount: 6 },
             { server: "deepseek-code-worker", passed: true, toolCount: 6 },
+            { server: "deveco-code-worker", passed: true, toolCount: 6 },
+            { server: "kilo-worker", passed: true, toolCount: 6 },
+            { server: "mimo-claude-coworker", passed: true, toolCount: 6 },
+            { server: "mimocode-worker", passed: true, toolCount: 6 },
+            { server: "opencode-worker", passed: true, toolCount: 6 },
           ],
         },
       },
@@ -3387,11 +3392,11 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const summary = JSON.parse(result.stdout);
-    assert.equal(summary.mcpSkillEvidence.mcpCount, 3);
+    assert.equal(summary.mcpSkillEvidence.mcpCount, 8);
     assert.equal(summary.mcpSkillEvidence.hashCacheHitCount, 12000);
     assert.equal(summary.mcpSkillEvidence.hashCacheMissCount, 42);
     assert.equal(summary.mcpSkillEvidence.hashCacheEntryCount, 12042);
-    assert.equal(summary.mcpSkillEvidence.mcpSharedCount, 3);
+    assert.equal(summary.mcpSkillEvidence.mcpSharedCount, 8);
     assert.deepEqual(summary.mcpSkillEvidence.mcpMissingShared, ["missing-mcp"]);
     assert.deepEqual(summary.mcpSkillEvidence.mcpExtraLocal, ["extra-mcp"]);
     assert.deepEqual(summary.mcpSkillEvidence.mcpChangedShared, ["changed-mcp"]);
@@ -3399,10 +3404,10 @@ test("report summarizer surfaces MCP and shared skill evidence values", () => {
     assert.equal(summary.mcpSkillEvidence.hasNodeRepl, true);
     assert.equal(summary.mcpSkillEvidence.mcpSmokePassed, true);
     assert.equal(summary.mcpSkillEvidence.mcpRealCallPassed, true);
-    assert.equal(summary.mcpSkillEvidence.mcpRealListCount, 2);
-    assert.equal(summary.mcpSkillEvidence.mcpRealListPassed, 2);
-    assert.equal(summary.mcpSkillEvidence.mcpRealListToolCount, 12);
-    assert.deepEqual(summary.mcpSkillEvidence.mcpRealListServers, ["antigravity-code-worker", "deepseek-code-worker"]);
+    assert.equal(summary.mcpSkillEvidence.mcpRealListCount, 7);
+    assert.equal(summary.mcpSkillEvidence.mcpRealListPassed, 7);
+    assert.equal(summary.mcpSkillEvidence.mcpRealListToolCount, 42);
+    assert.deepEqual(summary.mcpSkillEvidence.mcpRealListServers, ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"]);
     assert.equal(summary.mcpSkillEvidence.skillCount, 126);
     assert.equal(summary.mcpSkillEvidence.skillSharedCount, 100);
     assert.equal(summary.mcpSkillEvidence.agentsSkillCount, 26);
@@ -7356,7 +7361,14 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$report\.shortBudgetMode -ne \$true/);
   assert.match(overall, /\[string\]\$capabilities\.capabilityState -ne "degraded_short_budget"/);
   assert.match(overall, /\$capabilities\.smoke\.checked -eq \$true/);
-  assert.match(overall, /realListPassed -ge 2/);
+  assert.match(overall, /\$expectedWorkerMcpServers = @\(/);
+  assert.match(overall, /"mimo-claude-coworker"/);
+  assert.match(overall, /"mimocode-worker"/);
+  assert.match(overall, /"deveco-code-worker"/);
+  assert.match(overall, /"opencode-worker"/);
+  assert.match(overall, /"kilo-worker"/);
+  assert.match(overall, /\$missingWorkerMcpRealList\.Count -eq 0/);
+  assert.doesNotMatch(overall, /realListPassed -ge 2/);
   assert.match(overall, /\$report\.skills\.fingerprintSkipped -ne \$true/);
   assert.match(overall, /connectorParityClean = \$true/);
   assert.match(overall, /appToolParityClean = \$true/);

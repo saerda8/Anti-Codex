@@ -158,6 +158,17 @@ function Get-FreshMcpSkillsReportCheck {
         if (-not $integrity.signed -or $integrity.valid -ne $true) { return $null }
         $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
         $realListPassed = @($report.mcp.smoke.realList | Where-Object { $_.passed -eq $true }).Count
+        $expectedWorkerMcpServers = @(
+            "antigravity-code-worker",
+            "deepseek-code-worker",
+            "deveco-code-worker",
+            "kilo-worker",
+            "mimo-claude-coworker",
+            "mimocode-worker",
+            "opencode-worker"
+        )
+        $passedRealListServers = @($report.mcp.smoke.realList | Where-Object { $_.passed -eq $true } | ForEach-Object { [string]$_.server })
+        $missingWorkerMcpRealList = @($expectedWorkerMcpServers | Where-Object { $passedRealListServers -notcontains $_ })
         $sourceFingerprint = if ($report.sourceSnapshot) { [string]$report.sourceSnapshot.fingerprint } else { "" }
         $acceptable = (
             $report.ok -eq $true -and
@@ -166,7 +177,7 @@ function Get-FreshMcpSkillsReportCheck {
             [string]$report.capabilityState -eq "ready" -and
             $report.mcp.smoke.passed -eq $true -and
             $report.mcp.smoke.realCall.passed -eq $true -and
-            $realListPassed -ge 2 -and
+            $missingWorkerMcpRealList.Count -eq 0 -and
             $report.skills.fingerprintSkipped -ne $true -and
             $sourceFingerprint
         )
@@ -187,6 +198,9 @@ function Get-FreshMcpSkillsReportCheck {
             mcpPassed = [bool]$report.mcp.smoke.passed
             realCallPassed = [bool]$report.mcp.smoke.realCall.passed
             realListPassed = $realListPassed
+            expectedWorkerMcpServers = $expectedWorkerMcpServers
+            passedRealListServers = $passedRealListServers
+            missingWorkerMcpRealList = $missingWorkerMcpRealList
             skillFingerprintSkipped = [bool]$report.skills.fingerprintSkipped
             sourceFingerprint = $sourceFingerprint
             durationMs = 0
