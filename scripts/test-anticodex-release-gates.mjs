@@ -1230,6 +1230,25 @@ function summarizeGate(definition) {
       if (operatorChecklist.some((entry) => entry?.usesRealTraffic === true)) semanticFailures.push("windows_user_setup_guidance_checklist_real_traffic");
       if (operatorChecklist.slice(0, 3).some((entry) => entry?.startsLogin === true)) semanticFailures.push("windows_user_setup_guidance_checklist_starts_login_too_early");
       if (operatorChecklist.length === expectedSetupSequence.length && operatorChecklist[3]?.startsLogin !== true) semanticFailures.push("windows_user_setup_guidance_checklist_login_step_missing");
+      const operatorSetupPlan = report.operatorSetupPlan && typeof report.operatorSetupPlan === "object" ? report.operatorSetupPlan : null;
+      if (!operatorSetupPlan) {
+        semanticFailures.push("windows_user_setup_guidance_setup_plan_missing");
+      } else {
+        if (operatorSetupPlan.targetLocalWindowsUser !== "AntiCodexModel") semanticFailures.push("windows_user_setup_guidance_setup_plan_target");
+        if (operatorSetupPlan.setupMode !== "manual-only") semanticFailures.push("windows_user_setup_guidance_setup_plan_mode");
+        if (operatorSetupPlan.preferredSurface !== "windows-settings-other-users") semanticFailures.push("windows_user_setup_guidance_setup_plan_surface");
+        if (operatorSetupPlan.antiCodexCreatesUser !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_creates_user");
+        if (operatorSetupPlan.antiCodexOpensSettings !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_opens_settings");
+        if (operatorSetupPlan.antiCodexStartsLogin !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_starts_login");
+        if (operatorSetupPlan.antiCodexCapturesPassword !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_captures_password");
+        if (operatorSetupPlan.antiCodexStoresPassword !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_stores_password");
+        if (operatorSetupPlan.antiCodexUsesRealTraffic !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_uses_real_traffic");
+        if (operatorSetupPlan.rawUserManagementCommandProvided !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_raw_command");
+        const afterManualSetupChecks = Array.isArray(operatorSetupPlan.afterManualSetupChecks) ? operatorSetupPlan.afterManualSetupChecks : [];
+        if (afterManualSetupChecks.join("|") !== "windows_user_account_prepare|account_isolation_status") semanticFailures.push("windows_user_setup_guidance_setup_plan_after_checks");
+        if (operatorSetupPlan.finalLoginEntrypoint !== "start-anticodex-second-antigravity-account-login.ps1") semanticFailures.push("windows_user_setup_guidance_setup_plan_entrypoint");
+        if (operatorSetupPlan.finalLoginApproval !== "start-separate-windows-user-login") semanticFailures.push("windows_user_setup_guidance_setup_plan_approval");
+      }
       if (report.requiresUserPresence !== true) semanticFailures.push("windows_user_setup_guidance_user_presence_missing");
       if (report.nextProofRequiresRealTraffic !== true) semanticFailures.push("windows_user_setup_guidance_next_proof_real_traffic_missing");
       if (report.separateAccountVerified !== false) semanticFailures.push("windows_user_setup_guidance_separate_account_verified");
@@ -2996,6 +3015,7 @@ if (args.has("--self-test")) {
       "windows_user_setup_guidance_sequence_mismatch",
       "windows_user_setup_guidance_checklist_missing",
       "windows_user_setup_guidance_checklist_order_mismatch",
+      "windows_user_setup_guidance_setup_plan_missing",
       "windows_user_setup_guidance_user_presence_missing",
       "windows_user_setup_guidance_next_proof_real_traffic_missing",
       "windows_user_setup_guidance_separate_account_verified",

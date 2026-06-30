@@ -541,6 +541,11 @@ function latestReportsSummary(result) {
       lines.push(`  windowsUserSetupGuidance guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
       lines.push(`  windowsUserSetupGuidance sequence: ${Array.isArray(evidence.readinessCheckSequence) && evidence.readinessCheckSequence.length ? evidence.readinessCheckSequence.join(" -> ") : "missing"}`);
       lines.push(`  windowsUserSetupGuidance checklist: stages=${Array.isArray(evidence.operatorChecklistStages) && evidence.operatorChecklistStages.length ? evidence.operatorChecklistStages.join(" -> ") : "missing"} / loginSteps=${evidence.operatorChecklistStartsLoginCount ?? 0} / realTrafficSteps=${evidence.operatorChecklistUsesRealTrafficCount ?? 0}`);
+      if (evidence.operatorSetupPlan) {
+        const plan = evidence.operatorSetupPlan;
+        lines.push(`  windowsUserSetupGuidance setupPlan: target=${plan.targetLocalWindowsUser || "unknown"} / mode=${plan.setupMode || "unknown"} / surface=${plan.preferredSurface || "unknown"} / createsUser=${plan.antiCodexCreatesUser ? "true" : "false"} / opensSettings=${plan.antiCodexOpensSettings ? "true" : "false"} / startsLogin=${plan.antiCodexStartsLogin ? "true" : "false"} / rawCommand=${plan.rawUserManagementCommandProvided ? "true" : "false"}`);
+        lines.push(`  windowsUserSetupGuidance afterManualSetup: checks=${Array.isArray(plan.afterManualSetupChecks) && plan.afterManualSetupChecks.length ? plan.afterManualSetupChecks.join(" -> ") : "missing"} / entrypoint=${plan.finalLoginEntrypoint || "unknown"} / approval=${plan.finalLoginApproval || "unknown"}`);
+      }
       if (evidence.manualSetupCommandHint) lines.push(`  windowsUserSetupGuidance hint: ${evidence.manualSetupCommandHint}`);
     }
     if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {

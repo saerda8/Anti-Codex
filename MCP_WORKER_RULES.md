@@ -217,6 +217,14 @@ After every failure, before another dispatch:
 - Cause classification: useful narrow worker diff with incomplete support-surface coverage.
 - Rule change: account-isolation operator-step patches must carry the ordered checklist through report generation, release gates, report summaries, Manager bridge text, embedded Manager text, and focused tests before being accepted.
 
+### 2026-06-30 - OpenCode manual setup-plan draft
+
+- Job: `ocw_mqzwfz94_4f6d5g`.
+- Task: add a no-traffic manual setup preview to Windows-user setup guidance.
+- Result: completed with two checks passing and a useful two-file draft, but it duplicated `manualSetupPlan` and `operatorSetupPlan` and did not cover release gates or support summaries.
+- Cause classification: useful scoped implementation with schema normalization required.
+- Rule change: manual setup guidance must expose one canonical `operatorSetupPlan` with machine-checkable false booleans for system-changing behavior. Do not include raw user-management commands in report fields; keep release gates and Manager summaries aligned with the canonical schema.
+
 ### 2026-06-29 - MiMoCode cancelled after no diff
 
 - Job: `mcw_mqysj1b3_wd2ce2`

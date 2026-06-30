@@ -128,6 +128,24 @@ $report = [ordered]@{
     separateAccountVerified = $false
     loginVerified = $false
     releaseAcceptableAccountProof = $false
+    operatorSetupPlan = [ordered]@{
+        targetLocalWindowsUser = "AntiCodexModel"
+        setupMode = "manual-only"
+        preferredSurface = "windows-settings-other-users"
+        antiCodexCreatesUser = $false
+        antiCodexOpensSettings = $false
+        antiCodexStartsLogin = $false
+        antiCodexCapturesPassword = $false
+        antiCodexStoresPassword = $false
+        antiCodexUsesRealTraffic = $false
+        rawUserManagementCommandProvided = $false
+        afterManualSetupChecks = @(
+            "windows_user_account_prepare",
+            "account_isolation_status"
+        )
+        finalLoginEntrypoint = "start-anticodex-second-antigravity-account-login.ps1"
+        finalLoginApproval = "start-separate-windows-user-login"
+    }
     accountIsolationCaveat = "This report gives setup guidance only. It does not create Windows users, start login, capture passwords, or prove distinct Antigravity account identity."
     failures = @($failures)
     warnings = @($warnings)

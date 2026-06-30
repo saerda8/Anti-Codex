@@ -3080,6 +3080,21 @@ function latestManagerReportItem(label, fileName) {
             operatorChecklistStages: Array.isArray(report.operatorChecklist) ? report.operatorChecklist.map((entry) => shortSafeText(entry?.stage || "", "")).filter(Boolean) : [],
             operatorChecklistStartsLoginCount: Array.isArray(report.operatorChecklist) ? report.operatorChecklist.filter((entry) => entry?.startsLogin === true).length : 0,
             operatorChecklistUsesRealTrafficCount: Array.isArray(report.operatorChecklist) ? report.operatorChecklist.filter((entry) => entry?.usesRealTraffic === true).length : 0,
+            operatorSetupPlan: report.operatorSetupPlan && typeof report.operatorSetupPlan === "object" ? {
+                targetLocalWindowsUser: shortSafeText(report.operatorSetupPlan.targetLocalWindowsUser || "", ""),
+                setupMode: shortSafeText(report.operatorSetupPlan.setupMode || "", ""),
+                preferredSurface: shortSafeText(report.operatorSetupPlan.preferredSurface || "", ""),
+                antiCodexCreatesUser: report.operatorSetupPlan.antiCodexCreatesUser === true,
+                antiCodexOpensSettings: report.operatorSetupPlan.antiCodexOpensSettings === true,
+                antiCodexStartsLogin: report.operatorSetupPlan.antiCodexStartsLogin === true,
+                antiCodexCapturesPassword: report.operatorSetupPlan.antiCodexCapturesPassword === true,
+                antiCodexStoresPassword: report.operatorSetupPlan.antiCodexStoresPassword === true,
+                antiCodexUsesRealTraffic: report.operatorSetupPlan.antiCodexUsesRealTraffic === true,
+                rawUserManagementCommandProvided: report.operatorSetupPlan.rawUserManagementCommandProvided === true,
+                afterManualSetupChecks: Array.isArray(report.operatorSetupPlan.afterManualSetupChecks) ? report.operatorSetupPlan.afterManualSetupChecks.map((entry) => shortSafeText(entry || "", "")).filter(Boolean) : [],
+                finalLoginEntrypoint: shortSafeText(report.operatorSetupPlan.finalLoginEntrypoint || "", ""),
+                finalLoginApproval: shortSafeText(report.operatorSetupPlan.finalLoginApproval || "", ""),
+            } : null,
             nextProofRequiresRealTraffic: report.nextProofRequiresRealTraffic === true,
             separateAccountVerified: report.separateAccountVerified === true,
             loginVerified: report.loginVerified === true,
@@ -4296,6 +4311,11 @@ function latestReportsSummary(result){
       lines.push("  windowsUserSetupGuidance guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
       lines.push("  windowsUserSetupGuidance sequence: "+(Array.isArray(evidence.readinessCheckSequence)&&evidence.readinessCheckSequence.length?evidence.readinessCheckSequence.join(" -> "):"missing"));
       lines.push("  windowsUserSetupGuidance checklist: stages="+(Array.isArray(evidence.operatorChecklistStages)&&evidence.operatorChecklistStages.length?evidence.operatorChecklistStages.join(" -> "):"missing")+" / loginSteps="+(evidence.operatorChecklistStartsLoginCount??0)+" / realTrafficSteps="+(evidence.operatorChecklistUsesRealTrafficCount??0));
+      if(evidence.operatorSetupPlan){
+        const plan=evidence.operatorSetupPlan;
+        lines.push("  windowsUserSetupGuidance setupPlan: target="+(plan.targetLocalWindowsUser||"unknown")+" / mode="+(plan.setupMode||"unknown")+" / surface="+(plan.preferredSurface||"unknown")+" / createsUser="+(plan.antiCodexCreatesUser?"true":"false")+" / opensSettings="+(plan.antiCodexOpensSettings?"true":"false")+" / startsLogin="+(plan.antiCodexStartsLogin?"true":"false")+" / rawCommand="+(plan.rawUserManagementCommandProvided?"true":"false"));
+        lines.push("  windowsUserSetupGuidance afterManualSetup: checks="+(Array.isArray(plan.afterManualSetupChecks)&&plan.afterManualSetupChecks.length?plan.afterManualSetupChecks.join(" -> "):"missing")+" / entrypoint="+(plan.finalLoginEntrypoint||"unknown")+" / approval="+(plan.finalLoginApproval||"unknown"));
+      }
       if(evidence.manualSetupCommandHint) lines.push("  windowsUserSetupGuidance hint: "+evidence.manualSetupCommandHint);
     }
     if(item.uiChatSmokeEvidence){
