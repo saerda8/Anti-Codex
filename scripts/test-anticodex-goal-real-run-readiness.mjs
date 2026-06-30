@@ -60,11 +60,15 @@ const uniqueRefreshTasks = asStringArray(approval.realTaskRefresh?.uniqueRefresh
 const realTaskRefreshNeeded = approval.realTaskRefresh?.needed === true;
 const missingTaskScenarios = uniqueRefreshTasks.filter((taskMode) => !pendingRealTaskScenarios.some((item) => item.taskMode === taskMode));
 const requiredReleaseGateIds = asStringArray(sequence.requiredGateIds);
+const completedRequiredGateIds = asStringArray(sequence.completedRequiredGateIds);
+const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const requiredCommands = asStringArray(sequence.commands);
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const requiredRealTrafficBlockedGates = asStringArray(release.requiredRealTrafficBlockedGates);
+const effectiveReleaseReady = release.releaseReady === true
+  || (release.shortReady === true && requiredReleaseMissing.length === 0 && requiredRealTrafficBlockedGates.length === 0);
 const releaseBlockedOnlyByRequiredRealTrafficForGoal = release.releaseBlockedOnlyByRequiredRealTraffic === true
   || (requiredReleaseMissing.length > 0
     && requiredReleaseMissing.length === requiredRealTrafficBlockedGates.length
@@ -75,7 +79,7 @@ if (account.safeToAskUserForSecondAccountLogin !== true) blockingStages.push("se
 if (account.separateAccountVerified === true || account.releaseAcceptableAccountProof === true) blockingStages.push("unexpected_account_proof_claim");
 if (approval.realTaskRefresh?.needed === true) blockingStages.push("real_task_refresh_requires_explicit_approval");
 if (requiredRealTrafficBlockedGates.length > 0) blockingStages.push("release_gates_require_explicit_real_traffic");
-if (release.releaseReady !== true) blockingStages.push("release_not_ready");
+if (effectiveReleaseReady !== true) blockingStages.push("release_not_ready");
 
 const failures = [];
 for (const source of [approvalReport, goalReport, roadmapReport, sequenceReport, releaseReport, accountReport]) {
@@ -94,12 +98,16 @@ if (missingTaskScenarios.length > 0) failures.push(`missing_pending_task_scenari
 if (pendingRealTaskScenarios.some((item) => item.realTrafficRequired !== true || item.acceptanceEvidence.length < 1 || item.expectedResultPresent !== true)) failures.push("incomplete_pending_task_scenarios");
 for (const requiredGate of ["accountProxyReadiness", "postVerification"]) {
   if (!requiredReleaseGateIds.includes(requiredGate)) failures.push(`missing_required_gate:${requiredGate}`);
-  if (!requiredActionIds.includes(requiredGate)) failures.push(`missing_required_action:${requiredGate}`);
+  if (requiredReleaseComplete) {
+    if (!completedRequiredGateIds.includes(requiredGate)) failures.push(`missing_completed_required_gate:${requiredGate}`);
+  } else if (!requiredActionIds.includes(requiredGate)) {
+    failures.push(`missing_required_action:${requiredGate}`);
+  }
 }
 if (requiredCommands.length < requiredActionIds.length) failures.push("missing_required_real_traffic_commands");
 if (sequence.noOptionalActionsInRequiredSequence !== true) failures.push("optional_actions_mixed_into_required_sequence");
 if (release.shortReady !== true) failures.push("short_path_not_ready");
-if (releaseBlockedOnlyByRequiredRealTrafficForGoal !== true) failures.push("release_not_blocked_only_by_required_real_traffic");
+if (effectiveReleaseReady !== true && releaseBlockedOnlyByRequiredRealTrafficForGoal !== true) failures.push("release_not_ready_or_blocked_only_by_required_real_traffic");
 if (account.readinessBlockingReason !== "target_windows_user_missing" && account.safeToAskUserForSecondAccountLogin !== true) failures.push("account_blocking_reason_unexpected");
 
 const payload = {
@@ -130,11 +138,13 @@ const payload = {
   realTaskRefreshCommandPresent: typeof approval.realTaskRefresh?.command === "string" && approval.realTaskRefresh.command.includes("--allow-real-traffic"),
   realTaskRefreshCommandArgs: asStringArray(approval.realTaskRefresh?.commandArgs),
   requiredReleaseGateIds,
+  completedRequiredGateIds,
+  requiredReleaseComplete,
   requiredActionIds,
   requiredCommandCount: requiredCommands.length,
   requiredRealTrafficBlockedGates,
   releaseShortReady: release.shortReady === true,
-  releaseReady: release.releaseReady === true,
+  releaseReady: effectiveReleaseReady,
   releaseBlockedOnlyByRequiredRealTraffic: releaseBlockedOnlyByRequiredRealTrafficForGoal,
   missingRequired: requiredReleaseMissing,
   goalComplete: goal.goalComplete === true,

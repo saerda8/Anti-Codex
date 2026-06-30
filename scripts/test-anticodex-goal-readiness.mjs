@@ -183,7 +183,9 @@ const realApprovalPlan = {
   nextNoTrafficAction: String(approvalPlan.nextNoTrafficAction || ""),
   requiredReleaseRealTrafficActionCount: Number(approvalPlan.requiredReleaseRealTrafficActionCount || 0),
   optionalReleaseRealTrafficActionCount: Number(approvalPlan.optionalReleaseRealTrafficActionCount || 0),
-  requiredReleaseGateIds: Array.isArray(approvalPlan.releaseRealTrafficGates?.gateIds) ? approvalPlan.releaseRealTrafficGates.gateIds.map(String) : [],
+  requiredReleaseGateIds: Array.isArray(approvalPlan.releaseRealTrafficGates?.requiredGateIds) ? approvalPlan.releaseRealTrafficGates.requiredGateIds.map(String) : [],
+  completedRequiredGateIds: Array.isArray(approvalPlan.releaseRealTrafficGates?.completedGateIds) ? approvalPlan.releaseRealTrafficGates.completedGateIds.map(String) : [],
+  requiredReleaseComplete: approvalPlan.releaseRealTrafficGates?.requiredReleaseComplete === true,
   optionalReleaseGateIds: Array.isArray(approvalPlan.releaseRealTrafficGates?.optionalGateIds) ? approvalPlan.releaseRealTrafficGates.optionalGateIds.map(String) : [],
   orderedActionCount: Array.isArray(approvalPlan.orderedActions) ? approvalPlan.orderedActions.length : 0,
 };
@@ -213,11 +215,13 @@ const effectiveReleaseBlockedOnlyByRequiredRealTraffic = gates.releaseBlockedOnl
   || (effectiveMissingRequired.length > 0
     && effectiveMissingRequired.length === effectiveRequiredRealTrafficBlockedGates.length
     && effectiveMissingRequired.every((gateId) => effectiveRequiredRealTrafficBlockedGates.includes(gateId)));
+const effectiveReleaseReady = gates.releaseReady === true
+  || (gates.shortReady === true && effectiveMissingRequired.length === 0 && effectiveRequiredRealTrafficBlockedGates.length === 0);
 const releaseGateStatus = {
   reportPresent: releaseGates.present,
   reportOk: gates.ok === true,
   shortReady: gates.shortReady === true,
-  releaseReady: gates.releaseReady === true,
+  releaseReady: effectiveReleaseReady,
   releaseBlockedOnlyByRequiredRealTraffic: effectiveReleaseBlockedOnlyByRequiredRealTraffic,
   missingShort: Array.isArray(gates.missingShort) ? gates.missingShort.map(String) : [],
   missingRequired: effectiveMissingRequired,
@@ -257,13 +261,13 @@ const proven = {
     && realApprovalPlan.coverageKind === "real-approval-plan-report-only"
     && realApprovalPlan.requestedRealTraffic === false
     && realApprovalPlan.usedRealTraffic === false
-    && realApprovalPlan.requiredReleaseRealTrafficActionCount > 0
+    && (realApprovalPlan.requiredReleaseComplete || realApprovalPlan.requiredReleaseRealTrafficActionCount > 0)
     && realApprovalPlan.optionalReleaseRealTrafficActionCount >= 0
     && realApprovalPlan.nextNoTrafficAction.length > 0,
   releaseShortPath: releaseGateStatus.reportOk
     && releaseGateStatus.shortReady
     && releaseGateStatus.missingShort.length === 0
-    && releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic,
+    && (releaseGateStatus.releaseReady || releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic),
   accountIsolationPreparedOnly: antigravityAccountIsolation.reportOk
     && antigravityAccountIsolation.completionState === "blocked_before_interactive_login"
     && antigravityAccountIsolation.safeToAskUserForSecondAccountLogin === false

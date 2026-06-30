@@ -875,6 +875,8 @@ function summarizeGate(definition) {
       const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
       const optionalActionIds = Array.isArray(report.optionalActionIds) ? report.optionalActionIds.map((item) => String(item || "")) : [];
       const requiredGateIds = Array.isArray(report.requiredGateIds) ? report.requiredGateIds.map((item) => String(item || "")) : [];
+      const completedRequiredGateIds = Array.isArray(report.completedRequiredGateIds) ? report.completedRequiredGateIds.map((item) => String(item || "")) : [];
+      const requiredReleaseComplete = report.requiredReleaseComplete === true;
       const commands = Array.isArray(report.commands) ? report.commands.map((item) => String(item || "")) : [];
       const mixedOptional = requiredActionIds.filter((id) => optionalActionIds.includes(id));
       if (report.reportName !== "required-real-traffic-sequence") semanticFailures.push("required_real_traffic_sequence_report_name");
@@ -884,13 +886,22 @@ function summarizeGate(definition) {
       if (report.coverageKind !== "required-real-traffic-sequence-report-only") semanticFailures.push("required_real_traffic_sequence_coverage_kind");
       if (report.approvalPlanPresent !== true) semanticFailures.push("required_real_traffic_sequence_approval_plan_missing");
       if (report.approvalPlanReportName !== "real-approval-plan") semanticFailures.push("required_real_traffic_sequence_approval_plan_name");
-      if (Number(report.requiredActionCount || 0) < 1) semanticFailures.push("required_real_traffic_sequence_required_actions_missing");
       if (Number(report.optionalActionCount || 0) < 1) semanticFailures.push("required_real_traffic_sequence_optional_actions_missing");
       if (report.noOptionalActionsInRequiredSequence !== true || mixedOptional.length > 0) semanticFailures.push("required_real_traffic_sequence_optional_actions_mixed");
-      if (report.blockedUntilExplicitUserApproval !== true) semanticFailures.push("required_real_traffic_sequence_not_approval_blocked");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_gate_missing`);
-        if (!requiredActionIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_action_missing`);
+        if (requiredReleaseComplete) {
+          if (!completedRequiredGateIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_completed_gate_missing`);
+        } else {
+          if (!requiredActionIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_action_missing`);
+        }
+      }
+      if (requiredReleaseComplete) {
+        if (Number(report.requiredActionCount || 0) !== 0) semanticFailures.push("required_real_traffic_sequence_completed_with_pending_actions");
+        if (report.blockedUntilExplicitUserApproval !== false) semanticFailures.push("required_real_traffic_sequence_completed_still_approval_blocked");
+      } else {
+        if (Number(report.requiredActionCount || 0) < 1) semanticFailures.push("required_real_traffic_sequence_required_actions_missing");
+        if (report.blockedUntilExplicitUserApproval !== true) semanticFailures.push("required_real_traffic_sequence_not_approval_blocked");
       }
       if (commands.length < requiredActionIds.length) semanticFailures.push("required_real_traffic_sequence_commands_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("required_real_traffic_sequence_failures");
@@ -900,6 +911,8 @@ function summarizeGate(definition) {
       const refreshScenarios = Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios : [];
       const missingTaskScenarios = Array.isArray(report.missingTaskScenarios) ? report.missingTaskScenarios.map((item) => String(item || "")) : [];
       const requiredGateIds = Array.isArray(report.requiredReleaseGateIds) ? report.requiredReleaseGateIds.map((item) => String(item || "")) : [];
+      const completedRequiredGateIds = Array.isArray(report.completedRequiredGateIds) ? report.completedRequiredGateIds.map((item) => String(item || "")) : [];
+      const requiredReleaseComplete = report.requiredReleaseComplete === true;
       const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
       const blockedGates = Array.isArray(report.requiredRealTrafficBlockedGates) ? report.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const blockingStages = Array.isArray(report.blockingStages) ? report.blockingStages.map((item) => String(item || "")) : [];
@@ -935,14 +948,18 @@ function summarizeGate(definition) {
       if (missingTaskScenarios.length > 0) semanticFailures.push("goal_real_run_readiness_missing_task_scenarios");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_gate_missing`);
-        if (!requiredActionIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_action_missing`);
-        if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_blocked_gate_missing`);
+        if (requiredReleaseComplete) {
+          if (!completedRequiredGateIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_completed_gate_missing`);
+        } else {
+          if (!requiredActionIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_action_missing`);
+          if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_blocked_gate_missing`);
+        }
       }
       if (Number(report.requiredCommandCount || 0) < requiredActionIds.length) semanticFailures.push("goal_real_run_readiness_commands_missing");
       if (report.releaseShortReady !== true) semanticFailures.push("goal_real_run_readiness_short_not_ready");
-      if (report.releaseReady !== false) semanticFailures.push("goal_real_run_readiness_release_ready_mismatch");
-      if (report.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_real_run_readiness_release_not_blocked_only_by_real_traffic");
-      for (const stage of ["second_account_login_not_ready", "release_gates_require_explicit_real_traffic"]) {
+      if (report.releaseReady !== true && report.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_real_run_readiness_release_not_ready_or_blocked_only_by_real_traffic");
+      const requiredStages = report.releaseReady === true ? ["second_account_login_not_ready"] : ["second_account_login_not_ready", "release_gates_require_explicit_real_traffic"];
+      for (const stage of requiredStages) {
         if (!blockingStages.includes(stage)) semanticFailures.push(`goal_real_run_readiness_${stage}_missing`);
       }
       if (report.realTaskRefreshNeeded === true && !blockingStages.includes("real_task_refresh_requires_explicit_approval")) semanticFailures.push("goal_real_run_readiness_real_task_refresh_stage_missing");
@@ -955,6 +972,8 @@ function summarizeGate(definition) {
       const scenarios = Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios : [];
       const requiredGateIds = Array.isArray(report.requiredReleaseGateIds) ? report.requiredReleaseGateIds.map((item) => String(item || "")) : [];
       const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
+      const completedRequiredGateIds = Array.isArray(report.completedRequiredGateIds) ? report.completedRequiredGateIds.map((item) => String(item || "")) : [];
+      const requiredReleaseComplete = report.requiredReleaseComplete === true;
       const optionalActionIds = Array.isArray(report.optionalActionIds) ? report.optionalActionIds.map((item) => String(item || "")) : [];
       const blockedGates = Array.isArray(report.requiredRealTrafficBlockedGates) ? report.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const sequence = Array.isArray(report.approvedRealRunSequence) ? report.approvedRealRunSequence : [];
@@ -993,12 +1012,15 @@ function summarizeGate(definition) {
       }
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_gate_missing`);
-        if (!requiredActionIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_action_missing`);
-        if (!blockedGates.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_blocked_gate_missing`);
+        if (requiredReleaseComplete) {
+          if (!completedRequiredGateIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_completed_gate_missing`);
+        } else {
+          if (!requiredActionIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_action_missing`);
+          if (!blockedGates.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_blocked_gate_missing`);
+        }
       }
       if (report.optionalActionsSeparated !== true || mixedOptional.length > 0) semanticFailures.push("approved_real_run_sequence_optional_actions_mixed");
       if (report.releaseShortReady !== true) semanticFailures.push("approved_real_run_sequence_short_not_ready");
-      if (report.releaseReady !== false) semanticFailures.push("approved_real_run_sequence_release_ready_mismatch");
       if (report.safeToAskUserForSecondAccountLogin !== false) semanticFailures.push("approved_real_run_sequence_login_safety_mismatch");
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("approved_real_run_sequence_release_proof_claimed");
       if (typeof report.accountReadinessBlockingReason !== "string" || !report.accountReadinessBlockingReason) semanticFailures.push("approved_real_run_sequence_account_blocking_reason_missing");
@@ -1131,6 +1153,9 @@ function summarizeGate(definition) {
       const orderedActions = Array.isArray(report.orderedActions) ? report.orderedActions : [];
       const preLoginChecklist = Array.isArray(report.preLoginChecklist) ? report.preLoginChecklist : [];
       const gateIds = Array.isArray(releaseGates.gateIds) ? releaseGates.gateIds.map((item) => String(item || "")) : [];
+      const requiredGateIds = Array.isArray(releaseGates.requiredGateIds) ? releaseGates.requiredGateIds.map((item) => String(item || "")) : [];
+      const completedGateIds = Array.isArray(releaseGates.completedGateIds) ? releaseGates.completedGateIds.map((item) => String(item || "")) : [];
+      const requiredReleaseComplete = releaseGates.requiredReleaseComplete === true;
       const refreshTasks = Array.isArray(refresh.uniqueRefreshTasks) ? refresh.uniqueRefreshTasks.map((item) => String(item || "")) : [];
       const refreshCommandArgs = Array.isArray(refresh.commandArgs) ? refresh.commandArgs.map((item) => String(item || "")) : [];
       const refreshApprovalSummary = refresh.approvalSummary && typeof refresh.approvalSummary === "object" ? refresh.approvalSummary : {};
@@ -1151,11 +1176,21 @@ function summarizeGate(definition) {
         if (typeof refresh.command === "string" && refresh.command.includes("--allow-real-traffic")) semanticFailures.push("real_approval_plan_unexpected_refresh_command");
         if (refreshCommandArgs.length > 0) semanticFailures.push("real_approval_plan_unexpected_refresh_command_args");
       }
-      if (releaseGates.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("real_approval_plan_release_not_blocked_only_by_real_traffic");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
-        if (!gateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_gate_missing`);
+        if (!requiredGateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_required_gate_missing`);
+        if (requiredReleaseComplete) {
+          if (!completedGateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_completed_gate_missing`);
+        } else if (!gateIds.includes(gateId)) {
+          semanticFailures.push(`real_approval_plan_${gateId}_gate_missing`);
+        }
       }
-      if (Number(report.requiredReleaseRealTrafficActionCount || 0) < 1) semanticFailures.push("real_approval_plan_required_release_actions_missing");
+      if (requiredReleaseComplete) {
+        if (releaseGates.releaseBlockedOnlyByRequiredRealTraffic !== false) semanticFailures.push("real_approval_plan_completed_still_blocked_by_real_traffic");
+        if (Number(report.requiredReleaseRealTrafficActionCount || 0) !== 0) semanticFailures.push("real_approval_plan_completed_with_required_actions");
+      } else {
+        if (releaseGates.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("real_approval_plan_release_not_blocked_only_by_real_traffic");
+        if (Number(report.requiredReleaseRealTrafficActionCount || 0) < 1) semanticFailures.push("real_approval_plan_required_release_actions_missing");
+      }
       if (report.optionalReleaseRealTrafficActionCount === undefined || report.optionalReleaseRealTrafficActionCount === null) semanticFailures.push("real_approval_plan_optional_release_actions_missing");
       if (account.targetUserMissing !== true) semanticFailures.push("real_approval_plan_target_user_missing_not_recorded");
       if (account.accountSetupBlocked !== true) semanticFailures.push("real_approval_plan_account_setup_not_blocked");
@@ -1188,6 +1223,8 @@ function summarizeGate(definition) {
       const requiredWorkerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
       const blockedGates = Array.isArray(releaseGateStatus.requiredRealTrafficBlockedGates) ? releaseGateStatus.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const blockers = Array.isArray(report.blockers) ? report.blockers.map((item) => String(item || "")) : [];
+      const completedApprovalGates = Array.isArray(approval.completedRequiredGateIds) ? approval.completedRequiredGateIds.map((item) => String(item || "")) : [];
+      const requiredReleaseComplete = approval.requiredReleaseComplete === true;
       if (report.reportName !== "goal-readiness") semanticFailures.push("goal_readiness_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("goal_readiness_real_traffic_requested");
       if (report.usedRealTraffic !== false) semanticFailures.push("goal_readiness_used_real_traffic");
@@ -1205,11 +1242,19 @@ function summarizeGate(definition) {
       if (Array.isArray(worker.incompleteToolCountServers) && worker.incompleteToolCountServers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_tool_count_incomplete");
       if (blockers.includes("worker_mcp_tool_count_incomplete")) semanticFailures.push("goal_readiness_worker_mcp_tool_count_blocker_present");
       if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
-      if (releaseGateStatus.releaseReady === true) semanticFailures.push("goal_readiness_release_unexpectedly_ready");
-      if (releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_readiness_release_not_blocked_only_by_real_traffic");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
-        if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_readiness_${gateId}_blocked_gate_missing`);
-        if (!blockers.includes(`required_real_traffic_gate_blocked:${gateId}`)) semanticFailures.push(`goal_readiness_${gateId}_blocker_missing`);
+        if (requiredReleaseComplete) {
+          if (!completedApprovalGates.includes(gateId)) semanticFailures.push(`goal_readiness_${gateId}_completed_gate_missing`);
+        } else {
+          if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_readiness_${gateId}_blocked_gate_missing`);
+          if (!blockers.includes(`required_real_traffic_gate_blocked:${gateId}`)) semanticFailures.push(`goal_readiness_${gateId}_blocker_missing`);
+        }
+      }
+      if (requiredReleaseComplete) {
+        if (releaseGateStatus.releaseReady !== true) semanticFailures.push("goal_readiness_release_not_ready_after_completed_required_gates");
+      } else {
+        if (releaseGateStatus.releaseReady === true) semanticFailures.push("goal_readiness_release_unexpectedly_ready");
+        if (releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_readiness_release_not_blocked_only_by_real_traffic");
       }
       if (!blockers.includes("second_antigravity_account_real_proof_missing")) semanticFailures.push("goal_readiness_account_real_proof_blocker_missing");
       if (Array.isArray(roadmap.missingProfiles) && roadmap.missingProfiles.length > 0) semanticFailures.push("goal_readiness_roadmap_missing_profiles");
@@ -1228,7 +1273,11 @@ function summarizeGate(definition) {
         if (roadmap.minimalRefreshCommandPresent !== true) semanticFailures.push("goal_readiness_refresh_command_missing");
         if (roadmap.minimalRefreshCommandRequiresRealTraffic !== true) semanticFailures.push("goal_readiness_refresh_command_not_real_traffic");
       }
-      if (Number(approval.requiredReleaseRealTrafficActionCount || 0) < 1) semanticFailures.push("goal_readiness_required_approval_actions_missing");
+      if (requiredReleaseComplete) {
+        if (Number(approval.requiredReleaseRealTrafficActionCount || 0) !== 0) semanticFailures.push("goal_readiness_completed_release_still_has_required_actions");
+      } else if (Number(approval.requiredReleaseRealTrafficActionCount || 0) < 1) {
+        semanticFailures.push("goal_readiness_required_approval_actions_missing");
+      }
       if (approval.optionalReleaseRealTrafficActionCount === undefined || approval.optionalReleaseRealTrafficActionCount === null) semanticFailures.push("goal_readiness_optional_approval_actions_missing");
       if (account.releaseAcceptableAccountProof !== false) semanticFailures.push("goal_readiness_account_proof_unexpectedly_acceptable");
       if (typeof report.nextRequiredUserAction !== "string" || !report.nextRequiredUserAction) semanticFailures.push("goal_readiness_next_user_action_missing");
@@ -3730,8 +3779,6 @@ if (args.has("--self-test")) {
       "goal_real_run_readiness_accountProxyReadiness_blocked_gate_missing",
       "goal_real_run_readiness_commands_missing",
       "goal_real_run_readiness_short_not_ready",
-      "goal_real_run_readiness_release_ready_mismatch",
-      "goal_real_run_readiness_release_not_blocked_only_by_real_traffic",
       "goal_real_run_readiness_second_account_login_not_ready_missing",
       "goal_real_run_readiness_operator_next_action_missing",
       "goal_real_run_readiness_failures",
@@ -3784,7 +3831,6 @@ if (args.has("--self-test")) {
       "approved_real_run_sequence_accountProxyReadiness_blocked_gate_missing",
       "approved_real_run_sequence_optional_actions_mixed",
       "approved_real_run_sequence_short_not_ready",
-      "approved_real_run_sequence_release_ready_mismatch",
       "approved_real_run_sequence_login_safety_mismatch",
       "approved_real_run_sequence_release_proof_claimed",
       "approved_real_run_sequence_account_blocking_reason_missing",

@@ -14,6 +14,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
 
 const startedAt = Date.now();
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
+const REQUIRED_RELEASE_GATES = ["accountProxyReadiness", "postVerification"];
 
 function readReport(fileName) {
   const path = resolve(reportRoot, fileName);
@@ -75,6 +76,8 @@ const effectiveReleaseBlockedOnlyByRequiredRealTraffic = release.releaseBlockedO
   || (effectiveMissingRequired.length > 0
     && effectiveMissingRequired.length === requiredRealTrafficBlockedGates.length
     && effectiveMissingRequired.every((gateId) => requiredRealTrafficBlockedGates.includes(gateId)));
+const effectiveReleaseReady = release.releaseReady === true
+  || (release.shortReady === true && effectiveMissingRequired.length === 0 && requiredRealTrafficBlockedGates.length === 0);
 const releaseNextActions = Array.isArray(release.nextActions) ? release.nextActions : [];
 const releaseRealTrafficActions = releaseNextActions
   .filter((item) => item?.requiresRealTraffic === true)
@@ -126,6 +129,9 @@ const realTaskRefresh = {
 const releaseRealTrafficGates = {
   needed: requiredRealTrafficBlockedGates.length > 0,
   gateIds: requiredRealTrafficBlockedGates,
+  requiredGateIds: REQUIRED_RELEASE_GATES,
+  completedGateIds: effectiveReleaseReady && requiredRealTrafficBlockedGates.length === 0 ? REQUIRED_RELEASE_GATES : [],
+  requiredReleaseComplete: effectiveReleaseReady && requiredRealTrafficBlockedGates.length === 0,
   actions: requiredReleaseRealTrafficActions,
   requiredActions: requiredReleaseRealTrafficActions,
   optionalActions: optionalReleaseRealTrafficActions,

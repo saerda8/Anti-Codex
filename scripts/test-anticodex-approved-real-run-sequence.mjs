@@ -73,9 +73,15 @@ const pendingRealTaskScenarios = asObjectArray(readiness.pendingRealTaskScenario
 const uniqueRefreshTasks = asStringArray(readiness.uniqueRefreshTasks);
 const realTaskRefreshNeeded = readiness.realTaskRefreshNeeded === true;
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
+const completedRequiredGateIds = asStringArray(sequence.completedRequiredGateIds);
+const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const optionalActionIds = asStringArray(sequence.optionalActionIds);
 const requiredGateIds = asStringArray(sequence.requiredGateIds);
 const requiredBlockedGates = asStringArray(readiness.requiredRealTrafficBlockedGates);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const effectiveReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
+const effectiveReleaseReady = release.releaseReady === true
+  || (release.shortReady === true && effectiveReleaseMissing.length === 0 && requiredBlockedGates.length === 0);
 const realTaskCommand = String(approval.realTaskRefresh?.command || "");
 const accountProofPlan = account.postLoginProofPlan && typeof account.postLoginProofPlan === "object" ? account.postLoginProofPlan : {};
 const accountProofCommand = String(accountProofPlan.commandTemplate || "");
@@ -178,8 +184,12 @@ for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
 }
 for (const gateId of REQUIRED_RELEASE_GATES) {
   if (!requiredGateIds.includes(gateId)) failures.push(`missing_required_gate:${gateId}`);
-  if (!requiredActionIds.includes(gateId)) failures.push(`missing_required_action:${gateId}`);
-  if (!requiredBlockedGates.includes(gateId)) failures.push(`missing_blocked_gate:${gateId}`);
+  if (requiredReleaseComplete) {
+    if (!completedRequiredGateIds.includes(gateId)) failures.push(`missing_completed_required_gate:${gateId}`);
+  } else {
+    if (!requiredActionIds.includes(gateId)) failures.push(`missing_required_action:${gateId}`);
+    if (!requiredBlockedGates.includes(gateId)) failures.push(`missing_blocked_gate:${gateId}`);
+  }
 }
 if (!optionalActionsSeparated) failures.push("optional_actions_mixed_into_required_sequence");
 if (realTaskRefreshNeeded && (!realTaskCommand.includes("--allow-real-traffic") || !realTaskCommand.includes("web-search,free-chat"))) failures.push("real_task_refresh_command_not_concrete");
@@ -188,7 +198,6 @@ if (accountProofCommand && !accountProofCommand.includes("SeparateAccountProofAp
 if (executionBlockedBeforeRealTraffic !== true) failures.push("execution_not_blocked_before_real_traffic");
 if (approvedRealRunSequence.some((item) => item.requiresRealTraffic && item.requiresExplicitUserApproval !== true)) failures.push("real_traffic_stage_without_explicit_approval");
 if (approvedRealRunSequence.some((item) => item.startsLogin && item.requiresExplicitUserApproval !== true)) failures.push("login_stage_without_explicit_approval");
-if (release.releaseReady === true) failures.push("release_unexpectedly_ready");
 if (release.shortReady !== true) failures.push("short_path_not_ready");
 
 const payload = {
@@ -217,11 +226,13 @@ const payload = {
   pendingRealTaskScenarios,
   requiredReleaseGateIds: REQUIRED_RELEASE_GATES,
   requiredActionIds,
+  completedRequiredGateIds,
+  requiredReleaseComplete,
   optionalActionIds,
   optionalActionsSeparated,
   requiredRealTrafficBlockedGates: requiredBlockedGates,
   releaseShortReady: release.shortReady === true,
-  releaseReady: release.releaseReady === true,
+  releaseReady: effectiveReleaseReady,
   accountCompletionState: String(account.completionState || ""),
   accountReadinessBlockingReason: String(account.readinessBlockingReason || account.blockingReason || ""),
   safeToAskUserForSecondAccountLogin: account.safeToAskUserForSecondAccountLogin === true,

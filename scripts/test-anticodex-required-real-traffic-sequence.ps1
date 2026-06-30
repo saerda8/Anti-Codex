@@ -51,11 +51,19 @@ function Write-Report {
 
 $approvalPath = Join-Path $ReportRoot "latest-real-approval-plan.json"
 $approval = Read-JsonFile $approvalPath
+$expectedRequiredGateIds = @("accountProxyReadiness", "postVerification")
+$releaseGates = $approval.releaseRealTrafficGates
+$requiredReleaseComplete = ($releaseGates.requiredReleaseComplete -eq $true)
 $requiredActions = @(As-Array $approval.releaseRealTrafficGates.requiredActions)
 if ($requiredActions.Count -eq 0) {
     $requiredActions = @(As-Array $approval.releaseRealTrafficGates.actions)
 }
 $optionalActions = @(As-Array $approval.releaseRealTrafficGates.optionalActions)
+$requiredGateIds = @(As-Array $releaseGates.requiredGateIds | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+if ($requiredGateIds.Count -eq 0) {
+    $requiredGateIds = @(As-Array $releaseGates.gateIds | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+$completedRequiredGateIds = @(As-Array $releaseGates.completedGateIds | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $requiredIds = @($requiredActions | ForEach-Object { [string]$_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $optionalIds = @($optionalActions | ForEach-Object { [string]$_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $mixedOptional = @($requiredIds | Where-Object { $optionalIds -contains $_ })
@@ -65,7 +73,17 @@ $failures = New-Object System.Collections.Generic.List[string]
 if (-not $approval) { $failures.Add("missing_latest_real_approval_plan") | Out-Null }
 if ($approval.usedRealTraffic -ne $false) { $failures.Add("approval_plan_used_real_traffic") | Out-Null }
 if ($approval.requestedRealTraffic -ne $false) { $failures.Add("approval_plan_requested_real_traffic") | Out-Null }
-if ($requiredActions.Count -lt 1) { $failures.Add("missing_required_actions") | Out-Null }
+foreach ($gateId in $expectedRequiredGateIds) {
+    if ($requiredGateIds -notcontains $gateId) { $failures.Add("missing_required_gate:$gateId") | Out-Null }
+}
+if ($requiredReleaseComplete) {
+    foreach ($gateId in $expectedRequiredGateIds) {
+        if ($completedRequiredGateIds -notcontains $gateId) { $failures.Add("missing_completed_required_gate:$gateId") | Out-Null }
+    }
+    if ($requiredActions.Count -gt 0) { $failures.Add("completed_release_still_has_required_actions") | Out-Null }
+} elseif ($requiredActions.Count -lt 1) {
+    $failures.Add("missing_required_actions") | Out-Null
+}
 if ($mixedOptional.Count -gt 0) { $failures.Add("optional_actions_mixed_into_required_sequence") | Out-Null }
 foreach ($action in $requiredActions) {
     if ($action.requiresRealTraffic -ne $true) { $failures.Add("required_action_not_marked_real_traffic:$($action.id)") | Out-Null }
@@ -83,13 +101,15 @@ $payload = [ordered]@{
     approvalPlanPath = $approvalPath
     approvalPlanPresent = ($null -ne $approval)
     approvalPlanReportName = [string]$approval.reportName
-    requiredGateIds = @(As-Array $approval.releaseRealTrafficGates.gateIds | ForEach-Object { [string]$_ })
+    requiredReleaseComplete = $requiredReleaseComplete
+    requiredGateIds = $requiredGateIds
+    completedRequiredGateIds = $completedRequiredGateIds
     requiredActionIds = $requiredIds
     optionalActionIds = $optionalIds
     requiredActionCount = $requiredActions.Count
     optionalActionCount = $optionalActions.Count
     noOptionalActionsInRequiredSequence = ($mixedOptional.Count -eq 0)
-    blockedUntilExplicitUserApproval = ($requiredActions.Count -gt 0 -and @($requiredActions | Where-Object { $_.blockedUntilExplicitUserApproval -ne $true }).Count -eq 0)
+    blockedUntilExplicitUserApproval = (-not $requiredReleaseComplete -and $requiredActions.Count -gt 0 -and @($requiredActions | Where-Object { $_.blockedUntilExplicitUserApproval -ne $true }).Count -eq 0)
     commands = $commands
     failures = @($failures)
     elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
