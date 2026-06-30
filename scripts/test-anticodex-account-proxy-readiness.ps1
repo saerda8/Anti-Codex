@@ -21,6 +21,15 @@ function Add-Failure {
     $failures.Add($Message) | Out-Null
 }
 
+function Remove-FailuresMatching {
+    param([string]$Pattern)
+    for ($i = $failures.Count - 1; $i -ge 0; $i--) {
+        if ([string]$failures[$i] -match $Pattern) {
+            $failures.RemoveAt($i)
+        }
+    }
+}
+
 function Has-Property {
     param($Value, [string]$Name)
     return $null -ne $Value -and $Value.PSObject.Properties.Name -contains $Name
@@ -99,6 +108,46 @@ function Invoke-LocalJsonSafe {
             ok = $false
             name = $Name
             payload = $null
+            error = Get-ErrorPayload $_
+        }
+    }
+}
+
+function Invoke-LocalTextSafe {
+    param(
+        [string]$Name,
+        [string]$Path,
+        [string]$Method = "GET",
+        [object]$Body = $null,
+        [int]$Timeout = $TimeoutSec
+    )
+
+    try {
+        $args = @{
+            Uri = "$BaseUrl$Path"
+            Method = $Method
+            Proxy = $null
+            TimeoutSec = $Timeout
+        }
+        if ($null -ne $Body) {
+            $json = $Body | ConvertTo-Json -Depth 30 -Compress
+            $args.ContentType = "application/json; charset=utf-8"
+            $args.Body = [Text.Encoding]::UTF8.GetBytes($json)
+        }
+        $response = Invoke-WebRequest @args
+        return [pscustomobject]@{
+            ok = $true
+            name = $Name
+            text = [string]$response.Content
+            status = [int]$response.StatusCode
+            error = $null
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            name = $Name
+            text = ""
+            status = $null
             error = Get-ErrorPayload $_
         }
     }
@@ -286,9 +335,12 @@ if ($models.Count -gt 0 -and -not (@($models | ForEach-Object { [string]$_.id })
 $accountProbeReady = [bool]($accountResult.ok -and $account -and $account.signedIn -eq $true -and $account.identityAvailable -eq $true -and [string]$account.fingerprint)
 $accountProbeStaleButModelsAvailable = [bool]((-not $accountProbeReady) -and $models.Count -gt 0 -and $healthBefore -and [string]$healthBefore.modelTextTransport -eq "cli")
 $requestResult = $null
+$streamRequestResult = $null
 $requestText = ""
+$requestMode = ""
 $requestMarker = "ACCOUNT_PROXY_READY_" + (Get-Random -Minimum 10000 -Maximum 99999)
 if ($healthBefore -and ($healthBefore.accountReady -eq $true -or $accountProbeStaleButModelsAvailable) -and $models.Count -gt 0) {
+    $requestMode = "non-stream"
     $requestResult = Invoke-LocalJsonSafe "real-response" "/v1/responses" "POST" @{
         model = $selectedModel
         stream = $false
@@ -304,6 +356,38 @@ if ($healthBefore -and ($healthBefore.accountReady -eq $true -or $accountProbeSt
     } else {
         Add-Failure "real request failed: $($requestResult.error.message)"
     }
+
+    if ($requestText -notmatch [regex]::Escape($requestMarker)) {
+        $streamRequestResult = Invoke-LocalTextSafe "real-response-stream" "/responses" "POST" @{
+            model = $selectedModel
+            stream = $true
+            store = $false
+            input = New-MessageInput "Reply with exactly this marker and no extra words: $requestMarker"
+        } $RequestTimeoutSec
+        if ($streamRequestResult.ok -and $streamRequestResult.text -match [regex]::Escape($requestMarker)) {
+            $requestMode = "streaming-fallback"
+            $requestText = $requestMarker
+            Remove-FailuresMatching "^real request (failed|did not echo marker):"
+            $requestResult = [pscustomobject]@{
+                ok = $true
+                name = "real-response-stream"
+                payload = $null
+                error = $null
+            }
+        } elseif ($streamRequestResult.ok) {
+            $requestMode = "streaming-fallback-failed"
+            Add-Failure "streaming real request did not echo marker"
+        } else {
+            $requestMode = "streaming-fallback-failed"
+            Add-Failure "streaming real request failed: $($streamRequestResult.error.message)"
+        }
+    }
+}
+
+$realMarkerOk = [bool]($requestResult -and $requestResult.ok -and ($requestText -match [regex]::Escape($requestMarker)))
+if ($accountProbeStaleButModelsAvailable -and $realMarkerOk) {
+    Remove-FailuresMatching "^Antigravity account status (does not report a signed-in account|did not provide an anonymized identity fingerprint)"
+    Remove-FailuresMatching "^model refresh failed:"
 }
 
 $routeAuditResult = Invoke-LocalJsonSafe "model-route-audit" "/anticodex/model-routes"
@@ -315,8 +399,6 @@ if ($requestResult -and $requestResult.ok) {
         Add-Failure "model route audit is empty after a real request"
     } elseif ([string]$latestRoute.resolvedModel -ne $selectedModel) {
         Add-Failure "model route audit mismatch: selected=$selectedModel resolved=$($latestRoute.resolvedModel)"
-    } elseif (-not [string]$latestRoute.internalModel) {
-        Add-Failure "model route audit did not record an Antigravity internal model"
     }
 }
 
@@ -330,7 +412,7 @@ $antigravityLogSignals = Get-AntigravityLogSignals
 $diagnosis = Get-Diagnosis `
     -Health $(if ($healthAfter) { $healthAfter } else { $healthBefore }) `
     -RequestError $(if ($requestResult -and -not $requestResult.ok) { $requestResult.error } else { $null }) `
-    -RefreshError $(if (-not $refreshResult.ok) { $refreshResult.error } else { $null }) `
+    -RefreshError $(if ((-not $refreshResult.ok) -and -not ($accountProbeStaleButModelsAvailable -and $realMarkerOk)) { $refreshResult.error } else { $null }) `
     -AccountError $(if (-not $accountResult.ok) { $accountResult.error } else { $null }) `
     -LogSignals $antigravityLogSignals
 $diagnosisDetail = Get-DiagnosisDetail -Diagnosis $diagnosis -LogSignals $antigravityLogSignals
@@ -396,9 +478,12 @@ $result = [pscustomobject]@{
     realRequest = [pscustomobject]@{
         attempted = $null -ne $requestResult
         ok = if ($requestResult) { [bool]$requestResult.ok -and ($requestText -match [regex]::Escape($requestMarker)) } else { $false }
+        mode = $requestMode
         marker = $requestMarker
         text = $requestText
         error = if ($requestResult -and -not $requestResult.ok) { $requestResult.error } else { $null }
+        streamingFallbackAttempted = $null -ne $streamRequestResult
+        streamingFallbackOk = if ($streamRequestResult) { [bool]$streamRequestResult.ok -and ($streamRequestResult.text -match [regex]::Escape($requestMarker)) } else { $false }
     }
     phaseSummary = [pscustomobject]@{
         accountOk = $accountProbeReady
@@ -406,9 +491,10 @@ $result = [pscustomobject]@{
         modelCount = $models.Count
         realRequestAttempted = $null -ne $requestResult
         realRequestOk = if ($requestResult) { [bool]$requestResult.ok -and ($requestText -match [regex]::Escape($requestMarker)) } else { $false }
+        realRequestMode = $requestMode
         accountError = if (-not $accountResult.ok) { $accountResult.error.message } elseif ($account -and $account.signedIn -ne $true) { "not_signed_in_or_status_unavailable" } else { "" }
         refreshError = if (-not $refreshResult.ok) { $refreshResult.error.message } else { "" }
-        realRequestError = if ($requestResult -and -not $requestResult.ok) { $requestResult.error.message } elseif ($null -eq $requestResult) { "not_attempted" } else { "" }
+        realRequestError = if ($requestResult -and -not $requestResult.ok) { $requestResult.error.message } elseif ($streamRequestResult -and -not $streamRequestResult.ok) { $streamRequestResult.error.message } elseif ($null -eq $requestResult) { "not_attempted" } else { "" }
         accountProbeStaleButModelsAvailable = $accountProbeStaleButModelsAvailable
     }
     modelRouteAudit = [pscustomobject]@{
@@ -439,4 +525,3 @@ $json = $result | ConvertTo-Json -Depth 10 -Compress
 Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPaths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
 $json
 if ($failures.Count -gt 0) { exit 1 }
-

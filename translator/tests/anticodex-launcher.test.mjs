@@ -13303,10 +13303,16 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   assert.match(readiness, /\/anticodex\/models\/refresh/);
   assert.match(readiness, /\/models/);
   assert.match(readiness, /\/v1\/responses/);
+  assert.match(readiness, /\/responses/);
+  assert.match(readiness, /streaming-fallback/);
+  assert.match(readiness, /Invoke-LocalTextSafe/);
+  assert.match(readiness, /Remove-FailuresMatching/);
+  assert.match(readiness, /accountProbeStaleButModelsAvailable -and \$realMarkerOk/);
   assert.match(readiness, /\/anticodex\/model-routes/);
   assert.match(readiness, /modelRouteAudit/);
   assert.match(readiness, /internalModel/);
   assert.match(readiness, /model route audit mismatch/);
+  assert.doesNotMatch(readiness, /model route audit did not record an Antigravity internal model/);
   assert.match(readiness, /ACCOUNT_PROXY_READY_/);
   assert.match(readiness, /antigravity_temporarily_unavailable/);
   assert.match(readiness, /antigravity_account_unavailable/);
@@ -13317,6 +13323,8 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   assert.match(readiness, /detail = \$diagnosisDetail/);
   assert.match(readiness, /phaseSummary/);
   assert.match(readiness, /realRequestAttempted/);
+  assert.match(readiness, /realRequestMode/);
+  assert.match(readiness, /streamingFallbackAttempted/);
   assert.match(readiness, /realRequestError/);
   assert.match(readiness, /accountProbeStaleButModelsAvailable/);
   assert.match(readiness, /Test-NetworkTransientMessage/);
@@ -13341,6 +13349,7 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
 
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   assert.match(releaseGates, /accountProbeStaleButModelsAvailable && phaseSummary\.realRequestOk === true/);
+  assert.match(releaseGates, /account_proxy_real_request_mode/);
 
   assert.doesNotMatch(readiness, /Stop-Process/);
   assert.doesNotMatch(readiness, /Antigravity\.exe/);

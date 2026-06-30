@@ -1427,6 +1427,7 @@ function summarizeGate(definition) {
       if (Number(phaseSummary.modelCount || 0) < 1) semanticFailures.push("account_proxy_model_count");
       if (phaseSummary.realRequestAttempted !== true) semanticFailures.push("account_proxy_real_request_not_attempted");
       if (phaseSummary.realRequestOk !== true) semanticFailures.push("account_proxy_real_request_not_ok");
+      if (phaseSummary.realRequestMode !== "non-stream" && phaseSummary.realRequestMode !== "streaming-fallback") semanticFailures.push("account_proxy_real_request_mode");
       if (antigravityLogSignals.sourcePresent !== true) semanticFailures.push("account_proxy_log_source_missing");
       if (typeof antigravityLogSignals.tailLinesScanned !== "number" || !Number.isFinite(antigravityLogSignals.tailLinesScanned) || antigravityLogSignals.tailLinesScanned < 0) semanticFailures.push("account_proxy_log_scan_missing");
     }
