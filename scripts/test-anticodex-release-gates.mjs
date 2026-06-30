@@ -101,7 +101,9 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-tool-loop.ps1",
   "scripts/test-anticodex-desktop-task-suite.mjs",
   "scripts/test-anticodex-agentic-capability-matrix.mjs",
+  "scripts/test-anticodex-goal-readiness.mjs",
   "scripts/test-anticodex-real-task-coverage-roadmap.mjs",
+  "scripts/test-anticodex-real-approval-plan.mjs",
   "scripts/test-anticodex-required-real-traffic-sequence.ps1",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
@@ -153,6 +155,9 @@ const gateDefinitions = [
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
   { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
+  { id: "realTaskCoverageRoadmap", group: "no-traffic", file: "latest-real-task-coverage-roadmap.json", requiredForRelease: true, requireRealTaskCoverageRoadmapSemantics: true },
+  { id: "realApprovalPlan", group: "no-traffic", file: "latest-real-approval-plan.json", requiredForRelease: true, requireRealApprovalPlanSemantics: true },
+  { id: "goalReadiness", group: "no-traffic", file: "latest-goal-readiness.json", requiredForRelease: true, requireGoalReadinessSemantics: true },
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
@@ -757,6 +762,109 @@ function summarizeGate(definition) {
       }
       if (commands.length < requiredActionIds.length) semanticFailures.push("required_real_traffic_sequence_commands_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("required_real_traffic_sequence_failures");
+    }
+    if (definition.requireRealTaskCoverageRoadmapSemantics) {
+      const requiredProfiles = Array.isArray(report.requiredProfiles) ? report.requiredProfiles.map((item) => String(item || "")) : [];
+      const profiles = Array.isArray(report.profiles) ? report.profiles : [];
+      const taskModes = Array.isArray(report.taskModes) ? report.taskModes.map((item) => String(item || "")) : [];
+      const uniqueRefreshTasks = Array.isArray(report.uniqueRefreshTasks) ? report.uniqueRefreshTasks.map((item) => String(item || "")) : [];
+      const completeProfiles = Array.isArray(report.completeProfiles) ? report.completeProfiles.map((item) => String(item || "")) : [];
+      const nextProfiles = Array.isArray(report.nextProfilesNeedingRealTraffic) ? report.nextProfilesNeedingRealTraffic.map((item) => String(item || "")) : [];
+      if (report.reportName !== "real-task-coverage-roadmap") semanticFailures.push("real_task_coverage_roadmap_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("real_task_coverage_roadmap_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("real_task_coverage_roadmap_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("real_task_coverage_roadmap_behavior_not_covered");
+      if (report.coverageKind !== "real-task-coverage-roadmap-report-only") semanticFailures.push("real_task_coverage_roadmap_coverage_kind");
+      for (const profileName of ["core", "agentic", "extended", "all"]) {
+        if (!requiredProfiles.includes(profileName)) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_profile_not_required`);
+        const profile = profiles.find((item) => String(item?.profile || "") === profileName);
+        if (!profile) {
+          semanticFailures.push(`real_task_coverage_roadmap_${profileName}_profile_missing`);
+          continue;
+        }
+        if (Number(profile.taskCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_task_count`);
+        if (typeof profile.refreshCommand !== "string" || !profile.refreshCommand.includes("test-anticodex-desktop-task-suite.mjs")) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_refresh_command_missing`);
+      }
+      if (taskModes.length < 9) semanticFailures.push("real_task_coverage_roadmap_task_modes_missing");
+      for (const profileName of ["core", "agentic"]) {
+        if (!completeProfiles.includes(profileName)) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_not_complete`);
+      }
+      if (report.approvalRequiredForRefresh === true) {
+        if (uniqueRefreshTasks.length < 1) semanticFailures.push("real_task_coverage_roadmap_unique_refresh_tasks_missing");
+        if (report.minimalRefreshCommandRequiresRealTraffic !== true) semanticFailures.push("real_task_coverage_roadmap_minimal_refresh_command_not_real_traffic");
+        if (typeof report.minimalRefreshCommand !== "string" || !report.minimalRefreshCommand.includes("test-anticodex-desktop-task-suite.mjs") || !report.minimalRefreshCommand.includes("--tasks") || !report.minimalRefreshCommand.includes("--allow-real-traffic")) semanticFailures.push("real_task_coverage_roadmap_minimal_refresh_command_missing");
+        if (nextProfiles.length < 1) semanticFailures.push("real_task_coverage_roadmap_next_profiles_missing");
+      }
+      if (typeof report.realTrafficApprovalReason !== "string" || !report.realTrafficApprovalReason) semanticFailures.push("real_task_coverage_roadmap_approval_reason_missing");
+      if (typeof report.recommendedNoTrafficNextStep !== "string" || !report.recommendedNoTrafficNextStep) semanticFailures.push("real_task_coverage_roadmap_next_step_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("real_task_coverage_roadmap_failures");
+    }
+    if (definition.requireRealApprovalPlanSemantics) {
+      const refresh = report.realTaskRefresh && typeof report.realTaskRefresh === "object" ? report.realTaskRefresh : {};
+      const releaseGates = report.releaseRealTrafficGates && typeof report.releaseRealTrafficGates === "object" ? report.releaseRealTrafficGates : {};
+      const account = report.accountIsolation && typeof report.accountIsolation === "object" ? report.accountIsolation : {};
+      const orderedActions = Array.isArray(report.orderedActions) ? report.orderedActions : [];
+      const gateIds = Array.isArray(releaseGates.gateIds) ? releaseGates.gateIds.map((item) => String(item || "")) : [];
+      const refreshTasks = Array.isArray(refresh.uniqueRefreshTasks) ? refresh.uniqueRefreshTasks.map((item) => String(item || "")) : [];
+      if (report.reportName !== "real-approval-plan") semanticFailures.push("real_approval_plan_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("real_approval_plan_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("real_approval_plan_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("real_approval_plan_behavior_not_covered");
+      if (report.coverageKind !== "real-approval-plan-report-only") semanticFailures.push("real_approval_plan_coverage_kind");
+      if (refresh.needed !== true) semanticFailures.push("real_approval_plan_refresh_not_needed");
+      if (refreshTasks.length < 1) semanticFailures.push("real_approval_plan_refresh_tasks_missing");
+      if (typeof refresh.command !== "string" || !refresh.command.includes("--allow-real-traffic")) semanticFailures.push("real_approval_plan_refresh_command_missing");
+      if (releaseGates.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("real_approval_plan_release_not_blocked_only_by_real_traffic");
+      for (const gateId of ["accountProxyReadiness", "postVerification"]) {
+        if (!gateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_gate_missing`);
+      }
+      if (Number(report.requiredReleaseRealTrafficActionCount || 0) < 1) semanticFailures.push("real_approval_plan_required_release_actions_missing");
+      if (report.optionalReleaseRealTrafficActionCount === undefined || report.optionalReleaseRealTrafficActionCount === null) semanticFailures.push("real_approval_plan_optional_release_actions_missing");
+      if (account.targetUserMissing !== true) semanticFailures.push("real_approval_plan_target_user_missing_not_recorded");
+      if (account.accountSetupBlocked !== true) semanticFailures.push("real_approval_plan_account_setup_not_blocked");
+      if (orderedActions.length < 4) semanticFailures.push("real_approval_plan_ordered_actions_missing");
+      if (Number(report.blockedUntilExplicitUserApprovalCount || 0) < 1) semanticFailures.push("real_approval_plan_explicit_approval_blockers_missing");
+      if (Number(report.requiresRealTrafficCount || 0) < 1) semanticFailures.push("real_approval_plan_real_traffic_actions_missing");
+      if (Number(report.operatorSetupBlockedCount || 0) < 1) semanticFailures.push("real_approval_plan_operator_setup_blockers_missing");
+      if (typeof report.nextNoTrafficAction !== "string" || !report.nextNoTrafficAction) semanticFailures.push("real_approval_plan_next_no_traffic_action_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("real_approval_plan_failures");
+    }
+    if (definition.requireGoalReadinessSemantics) {
+      const proven = report.proven && typeof report.proven === "object" ? report.proven : {};
+      const releaseGateStatus = report.releaseGateStatus && typeof report.releaseGateStatus === "object" ? report.releaseGateStatus : {};
+      const roadmap = report.realTaskCoverageRoadmap && typeof report.realTaskCoverageRoadmap === "object" ? report.realTaskCoverageRoadmap : {};
+      const approval = report.realApprovalPlan && typeof report.realApprovalPlan === "object" ? report.realApprovalPlan : {};
+      const account = report.antigravityAccountIsolation && typeof report.antigravityAccountIsolation === "object" ? report.antigravityAccountIsolation : {};
+      const blockedGates = Array.isArray(releaseGateStatus.requiredRealTrafficBlockedGates) ? releaseGateStatus.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
+      const blockers = Array.isArray(report.blockers) ? report.blockers.map((item) => String(item || "")) : [];
+      if (report.reportName !== "goal-readiness") semanticFailures.push("goal_readiness_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("goal_readiness_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("goal_readiness_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("goal_readiness_behavior_not_covered");
+      if (report.coverageKind !== "goal-readiness-report-only") semanticFailures.push("goal_readiness_coverage_kind");
+      if (report.goalComplete === true) semanticFailures.push("goal_readiness_goal_unexpectedly_complete");
+      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "accountIsolationPreparedOnly"]) {
+        if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
+      }
+      if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
+      if (releaseGateStatus.releaseReady === true) semanticFailures.push("goal_readiness_release_unexpectedly_ready");
+      if (releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_readiness_release_not_blocked_only_by_real_traffic");
+      for (const gateId of ["accountProxyReadiness", "postVerification"]) {
+        if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_readiness_${gateId}_blocked_gate_missing`);
+        if (!blockers.includes(`required_real_traffic_gate_blocked:${gateId}`)) semanticFailures.push(`goal_readiness_${gateId}_blocker_missing`);
+      }
+      if (!blockers.includes("second_antigravity_account_real_proof_missing")) semanticFailures.push("goal_readiness_account_real_proof_blocker_missing");
+      if (Array.isArray(roadmap.missingProfiles) && roadmap.missingProfiles.length > 0) semanticFailures.push("goal_readiness_roadmap_missing_profiles");
+      if (roadmap.approvalRequiredForRefresh === true) {
+        if (!Array.isArray(roadmap.uniqueRefreshTasks) || roadmap.uniqueRefreshTasks.length < 1) semanticFailures.push("goal_readiness_refresh_tasks_missing");
+        if (roadmap.minimalRefreshCommandPresent !== true) semanticFailures.push("goal_readiness_refresh_command_missing");
+        if (roadmap.minimalRefreshCommandRequiresRealTraffic !== true) semanticFailures.push("goal_readiness_refresh_command_not_real_traffic");
+      }
+      if (Number(approval.requiredReleaseRealTrafficActionCount || 0) < 1) semanticFailures.push("goal_readiness_required_approval_actions_missing");
+      if (approval.optionalReleaseRealTrafficActionCount === undefined || approval.optionalReleaseRealTrafficActionCount === null) semanticFailures.push("goal_readiness_optional_approval_actions_missing");
+      if (account.releaseAcceptableAccountProof !== false) semanticFailures.push("goal_readiness_account_proof_unexpectedly_acceptable");
+      if (typeof report.nextRequiredUserAction !== "string" || !report.nextRequiredUserAction) semanticFailures.push("goal_readiness_next_user_action_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_readiness_failures");
     }
     if (definition.requireToolLoopSemantics) {
       const finalText = String(report.final_text || "");
@@ -1932,6 +2040,9 @@ const noTrafficEvidenceRefreshOrder = [
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
   ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],
+  ["realTaskCoverageRoadmap", "no-traffic-local", "node scripts\\test-anticodex-real-task-coverage-roadmap.mjs"],
+  ["realApprovalPlan", "no-traffic-local", "node scripts\\test-anticodex-real-approval-plan.mjs"],
+  ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
   ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
 ];
 

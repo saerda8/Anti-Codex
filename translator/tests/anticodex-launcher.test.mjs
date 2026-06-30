@@ -12684,7 +12684,6 @@ test("optional and special latest reports stay visible without becoming release-
   const specialReports = [
     "latest-antigravity-cli-profile-prepare.json",
     "latest-diagnostics.json",
-    "latest-goal-readiness.json",
     "latest-release-gates.json",
     "latest-shortcut-repair.json",
     "latest-ui-coding-project-smoke.json",
@@ -12710,6 +12709,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(collector, /goalReadinessEvidence = \$json\.goalReadinessEvidence/);
   assert.match(diagnostics, /goal-readiness summary missing goalReadinessEvidence/);
   assert.match(diagnostics, /goal-readiness summary unexpectedly claims goal complete/);
+  assert.match(releaseGates, /id:\s*"goalReadiness"[\s\S]*?file:\s*"latest-goal-readiness\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireGoalReadinessSemantics:\s*true/);
+  assert.match(releaseGates, /goal_readiness_release_not_blocked_only_by_real_traffic/);
+  assert.match(releaseGates, /scripts\/test-anticodex-goal-readiness\.mjs/);
   assert.match(goalReadiness, /reportName: "goal-readiness"/);
   assert.match(goalReadiness, /requestedRealTraffic: false/);
   assert.match(goalReadiness, /usedRealTraffic: false/);
@@ -12763,6 +12766,9 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing minimal refresh command/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-task-coverage-roadmap\.mjs/);
+  assert.match(releaseGates, /id:\s*"realTaskCoverageRoadmap"[\s\S]*?file:\s*"latest-real-task-coverage-roadmap\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireRealTaskCoverageRoadmapSemantics:\s*true/);
+  assert.match(releaseGates, /real_task_coverage_roadmap_minimal_refresh_command_not_real_traffic/);
   assert.match(releaseGates, /scripts\/test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(installedOverall, /latest-real-task-coverage-roadmap\.json/);
   assert.match(server, /latest-real-task-coverage-roadmap\.json/);
@@ -12777,6 +12783,7 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
 
   assert.match(plan, /reportName: "real-approval-plan"/);
   assert.match(plan, /requestedRealTraffic: false/);
@@ -12800,6 +12807,10 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(diagnostics, /real-approval-plan summary missing required release real-traffic actions/);
   assert.match(diagnostics, /real-approval-plan summary missing optional release real-traffic action count/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-approval-plan\.mjs/);
+  assert.match(releaseGates, /id:\s*"realApprovalPlan"[\s\S]*?file:\s*"latest-real-approval-plan\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireRealApprovalPlanSemantics:\s*true/);
+  assert.match(releaseGates, /real_approval_plan_required_release_actions_missing/);
+  assert.match(releaseGates, /scripts\/test-anticodex-real-approval-plan\.mjs/);
   assert.match(installedOverall, /latest-real-approval-plan\.json/);
   assert.match(signer, /latest-real-approval-plan\.json/);
   assert.match(server, /latest-real-approval-plan\.json/);
