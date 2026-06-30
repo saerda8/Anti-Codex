@@ -12456,6 +12456,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
   const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
@@ -12504,6 +12505,10 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(summarizer, /realTaskEvidenceRefreshPlan/);
   assert.match(summarizer, /requiresExplicitUserApproval/);
   assert.match(summarizer, /realTaskEvidenceTasks/);
+  assert.match(diagnostics, /desktopTaskSuiteEvidence/);
+  assert.match(diagnostics, /desktop-task-suite summary missing desktopTaskSuiteEvidence/);
+  assert.match(diagnostics, /desktop-task-suite summary real task evidence is not fresh/);
+  assert.match(collector, /desktopTaskSuiteEvidence = \$json\.desktopTaskSuiteEvidence/);
   assert.match(managerBridge, /desktopTaskSuite: profile=/);
   assert.match(managerBridge, /desktopTaskSuite refresh: needed=/);
   assert.match(managerInject, /desktopTaskSuite: profile=/);

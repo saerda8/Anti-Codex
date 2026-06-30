@@ -239,6 +239,7 @@ function Read-JsonSummary {
             uiIdleEvidence = $json.uiIdleEvidence
             syncReadinessEvidence = $json.syncReadinessEvidence
             installedOverallEvidence = $json.installedOverallEvidence
+            desktopTaskSuiteEvidence = $json.desktopTaskSuiteEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state

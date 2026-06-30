@@ -701,6 +701,7 @@ function Test-SyncReadinessEvidence {
 }
 
 $AllowedAntigravityModelDiscoverySources = @("antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog")
+$RequiredAgenticDesktopTaskSuiteTasks = @("coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit")
 
 function Test-RefreshFeaturesSummarySupportEvidence {
     param($RefreshFeaturesSummary)
@@ -731,6 +732,63 @@ function Test-RefreshFeaturesSummarySupportEvidence {
     }
 }
 
+function Test-DesktopTaskSuiteSummaryEvidence {
+    param($DesktopTaskSuiteSummary)
+    if (-not $DesktopTaskSuiteSummary) {
+        Add-Failure "diagnostic reports summary missing latest-desktop-task-suite.json"
+        return
+    }
+
+    $evidence = $DesktopTaskSuiteSummary.desktopTaskSuiteEvidence
+    if (-not $evidence) {
+        Add-Failure "desktop-task-suite summary missing desktopTaskSuiteEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "desktop-task-suite") { Add-Failure "desktop-task-suite summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "desktop-task-suite summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "desktop-task-suite summary used real traffic" }
+    if ($evidence.dryRun -ne $true) { Add-Failure "desktop-task-suite summary is not dry-run" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "desktop-task-suite summary behavior not covered" }
+    if ($evidence.coverageKind -ne "desktop-task-suite-dry-run") { Add-Failure "desktop-task-suite summary coverage kind mismatch" }
+    if ($evidence.suiteProfile -ne "agentic") { Add-Failure "desktop-task-suite summary is not agentic profile" }
+    if ($evidence.realTaskEvidenceComplete -ne $true) { Add-Failure "desktop-task-suite summary real task evidence is incomplete" }
+    if ($evidence.realTaskEvidenceFresh -ne $true) { Add-Failure "desktop-task-suite summary real task evidence is not fresh" }
+    if ([int]$evidence.realTaskEvidenceFailureCount -ne 0) { Add-Failure "desktop-task-suite summary has real task evidence failures" }
+    if ([int]$evidence.realTaskEvidenceFreshnessFailureCount -ne 0) { Add-Failure "desktop-task-suite summary has freshness failures" }
+
+    $plan = $evidence.realTaskEvidenceRefreshPlan
+    if (-not $plan) {
+        Add-Failure "desktop-task-suite summary missing refresh plan"
+    } else {
+        if ($plan.needed -ne $false) { Add-Failure "desktop-task-suite summary says refresh is needed" }
+        if ($plan.requiresExplicitUserApproval -ne $false) { Add-Failure "desktop-task-suite summary unexpectedly requires approval" }
+        if ($plan.commandPreviewPresent -ne $true) { Add-Failure "desktop-task-suite summary missing command preview" }
+    }
+
+    $selectedTasks = @(As-FlatArray $evidence.selectedTasks | ForEach-Object { [string]$_ })
+    $taskEvidence = @(As-FlatArray $evidence.realTaskEvidenceTasks)
+    foreach ($task in $RequiredAgenticDesktopTaskSuiteTasks) {
+        if ($selectedTasks -notcontains $task) {
+            Add-Failure "desktop-task-suite summary missing selected task $task"
+        }
+        $entry = @($taskEvidence | Where-Object { [string]$_.taskMode -eq $task } | Select-Object -First 1)[0]
+        if (-not $entry) {
+            Add-Failure "desktop-task-suite summary missing task evidence $task"
+            continue
+        }
+        if ($entry.present -ne $true) { Add-Failure "desktop-task-suite summary task $task report missing" }
+        if ($entry.parseable -ne $true) { Add-Failure "desktop-task-suite summary task $task report unparseable" }
+        if ($entry.ok -ne $true) { Add-Failure "desktop-task-suite summary task $task not ok" }
+        if ($entry.requestedRealTraffic -ne $true) { Add-Failure "desktop-task-suite summary task $task did not request real traffic" }
+        if ($entry.usedRealTraffic -ne $true) { Add-Failure "desktop-task-suite summary task $task did not use real traffic" }
+        if ($entry.fresh -ne $true) { Add-Failure "desktop-task-suite summary task $task is not fresh" }
+        if ($entry.reportNameMatches -ne $true) { Add-Failure "desktop-task-suite summary task $task reportName mismatch" }
+        if ($entry.taskModeMatches -ne $true) { Add-Failure "desktop-task-suite summary task $task taskMode mismatch" }
+        if ([int]$entry.failureCount -ne 0) { Add-Failure "desktop-task-suite summary task $task has failures" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -746,6 +804,7 @@ function Test-ReportsSummary {
     $localConnectorsSummary = @($summary | Where-Object { $_.file -eq "latest-local-connectors.json" } | Select-Object -First 1)[0]
     $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
     $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
+    $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -787,6 +846,7 @@ function Test-ReportsSummary {
         Test-InstalledRuntimeEvidence $releaseGatesSummary.installedRuntimeEvidence
     }
     Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary
+    Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
@@ -865,6 +925,12 @@ function Test-ReportsSummary {
             [pscustomobject]@{
                 ok = $syncReadinessSummary.ok
                 evidence = $syncReadinessSummary.syncReadinessEvidence
+            }
+        } else { $null }
+        desktopTaskSuite = if ($desktopTaskSuiteSummary) {
+            [pscustomobject]@{
+                ok = $desktopTaskSuiteSummary.ok
+                evidence = $desktopTaskSuiteSummary.desktopTaskSuiteEvidence
             }
         } else { $null }
     }
@@ -1137,6 +1203,8 @@ function Test-DiagnosticBundle {
                 if ([int]$uiEvidence.missingModelTextCount -ne 0) { Add-Failure "diagnostic ui-idle summary missing model text" }
             }
         }
+        $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
+        Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
         $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
         if (-not $syncReadinessSummary) {
             Add-Failure "diagnostic reports summary missing latest-sync-readiness.json"

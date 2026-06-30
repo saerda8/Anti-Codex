@@ -180,6 +180,7 @@
 - Older statements below that describe native MCP or prompt-mediated Antigravity tooling as the default are historical. The authoritative default contract is Codex-owned tools with Antigravity supplying model text only; native Antigravity tooling is explicit opt-in.
 
 - 2026-06-30 desktop-task-suite release evidence: the agentic desktop task suite summary report must be directly verified by release/report surfaces; do not rely solely on scattered individual UI smoke reports.
+- 2026-06-30 diagnostic collector summary-field migration: after adding a new safe summary object such as `desktopTaskSuiteEvidence`, a first installed collector run can fail while reports/runtime files are being refreshed; rerun once after runtime sync before treating `The property 'Count' cannot be found on this object` as product evidence. The real fix is to add the field to `Read-JsonSummary`, then verify a fresh bundle's `reports-summary.json`.
 
 ## Confirmed Facts
 - Anti-Codex now has an installed runtime-config verifier. It reads `%APPDATA%\anticodex\codex-home-deepseek-app\config.toml` and fails if the isolated config points at remote ChatGPT/OpenAI account endpoints, uses non-file auth, loses the generated model catalog, or re-enables Responses WebSocket / remote plugin feature flags.
