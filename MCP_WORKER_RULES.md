@@ -103,6 +103,14 @@ After every failure, before another dispatch:
 - Cause classification: useful scoped patch, but it validated a live diagnostics field before exposing that field from the server.
 - Rule change: when adding diagnostics validation for a report-summary evidence field, first confirm whether live `/anticodex/diagnostics` exposes that evidence. If not, update the live diagnostics payload in the same patch or keep the check limited to `-VerifyReportsSummary`.
 
+### 2026-06-30 - Kilo second-account Manager action no-evidence
+
+- Job: `klw_mqzxcln8_cqxl0r`
+- Task: add a safe Manager action for second Antigravity account status-only checks in an isolated worktree.
+- Result: cancelled after about 212 seconds with zero changed files and no checks.
+- Cause classification: slow worker/no evidence on a small low-coupling task, not a code review result.
+- Rule change: after a slow worker has no diff after two status windows, cancel it and retry a materially smaller one-file task with a different worker before the main agent takes over.
+
 ### 2026-06-30 - MIMO start rejected workspace-external forbidden paths
 
 - Job: no job id; `mimo_start_implementation` rejected the request before worker launch.

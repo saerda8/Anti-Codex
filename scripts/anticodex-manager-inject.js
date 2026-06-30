@@ -49,6 +49,7 @@
     ["overallNoTraffic", "\u6574\u4f53\u68c0\u67e5\uff08\u4e0d\u8017\u6d41\u91cf\uff09"],
     ["diagnosticsBundle", "\u751f\u6210\u8bca\u65ad\u5305"],
     ["viewLatestReports", "\u67e5\u770b\u6700\u65b0\u62a5\u544a"],
+    ["secondAccountLoginStatus", "\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff08\u4e0d\u767b\u5f55\uff09"],
     ["postVerificationFull", "\u9a8c\u8bc1\u540e\u5b8c\u6574\u68c0\u67e5\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
   ];
   const DAILY_ACTION_IDS = new Set([
@@ -64,6 +65,7 @@
     "pluginCapabilities",
     "diagnosticsBundle",
     "viewLatestReports",
+    "secondAccountLoginStatus",
   ]);
   const HIGH_IMPACT_ACTION_IDS = new Set([
     "syncHost",
@@ -1416,6 +1418,13 @@
     if (action === "repairShortcuts") return [
       `\u5feb\u6377\u65b9\u5f0f\u4fee\u590d\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`,
       `\u5df2\u4fee\u590d\uff1a${r.repairedCount ?? r.shortcuts?.length ?? "\u672a\u77e5"}`,
+      failureSummaryLine(r),
+    ].filter(Boolean).join("\n");
+    if (action === "secondAccountLoginStatus") return [
+      `\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff1a${r.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
+      r.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
+      r.targetWindowsUser ? `Windows \u7528\u6237\uff1a${r.targetWindowsUser}` : "",
+      r.readinessBlockingReason ? `\u963b\u788d\uff1a${r.readinessBlockingReason}` : "",
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
     if (action === "mcpSkills") return [

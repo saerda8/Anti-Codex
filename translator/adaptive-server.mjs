@@ -2369,6 +2369,13 @@ const MANAGER_ACTIONS = Object.freeze({
         singletonProcessPattern: "test-anticodex-post-verification\\.ps1",
         backgroundLockMaxMs: 20 * 60_000,
     },
+    secondAccountLoginStatus: {
+        label: "\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff08\u4e0d\u767b\u5f55\uff09",
+        script: "start-anticodex-second-antigravity-account-login.ps1",
+        args: [],
+        timeoutMs: 30_000,
+        foregroundSingleton: true,
+    },
 });
 
 const CLEAN_MANAGER_ACTION_LABELS = Object.freeze({
@@ -3978,6 +3985,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
         <button data-action="pluginCapabilities" data-manager-action="pluginCapabilities">检查插件/应用</button>
         <button data-action="diagnosticsBundle" data-manager-action="diagnosticsBundle">生成诊断包</button>
         <button data-action="viewLatestReports" data-manager-action="viewLatestReports">查看最新报告</button>
+        <button data-action="secondAccountLoginStatus" data-manager-action="secondAccountLoginStatus">第二账号状态检查（不登录）</button>
       </div>
     </section>
     <section class="action-section" data-action-group="high-impact" data-tone="danger">

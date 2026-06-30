@@ -868,6 +868,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "refreshModels",
     "refreshStatus",
     "repairShortcuts",
+    "secondAccountLoginStatus",
     "sourcePreflight",
     "syncReadiness",
     "updateCheck",
@@ -1441,6 +1442,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.ok(actionNames.includes("repairShortcuts"), "data-action list must include repairShortcuts");
   assert.ok(actionNames.includes("sourcePreflight"), "data-action list must include sourcePreflight");
   assert.ok(actionNames.includes("viewLatestReports"), "data-action list must include viewLatestReports");
+  assert.ok(actionNames.includes("secondAccountLoginStatus"), "data-action list must include secondAccountLoginStatus");
   assert.match(html, /data-action="repairShortcuts"/, "fallback manager must expose repair-shortcuts action");
   assert.match(html, /data-action="upstreamConfig"/, "fallback manager must expose third-party API configuration");
   assert.match(html, /data-action="fastOverallNoTraffic"/, "fallback manager must expose no-traffic fast check");
@@ -1461,6 +1463,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "refreshModels",
     "refreshStatus",
     "repairShortcuts",
+    "secondAccountLoginStatus",
     "sourcePreflight",
     "stabilitySoak",
     "syncHost",
@@ -7651,6 +7654,9 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
 
   assert.match(verifier, /args\.get\("--port"\)/);
+  assert.match(verifier, /function discoverAntiCodexCdpPorts\(\)/);
+  assert.match(verifier, /ProcessName -eq 'Anti-Codex\.exe'/);
+  assert.match(verifier, /\[\.\.\.discoverAntiCodexCdpPorts\(\), 58318, 58317\]/);
   assert.match(verifier, /args\.get\("--actions"\)/);
   assert.match(verifier, /const actions = /);
   assert.match(verifier, /for \(const actionName of actions\)/);
@@ -7686,6 +7692,7 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.doesNotMatch(verifier, /window\.__ANTICODEX_MANAGER_ACTION_QUEUE__ = \[\]/);
   assert.match(verifier, /lastActionResult\?\.managerSummary \|\| ""/);
   assert.match(verifier, /function managerSummaryFromActionPayload/);
+  assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*\\u7b2c\\u4e8c Antigravity \\u8d26\\u53f7\\u72b6\\u6001\\u68c0\\u67e5/);
   assert.match(verifier, /const realCallPassed = result\.mcp\?\.smoke\?\.realCall\?\.passed === true/);
   assert.match(verifier, /result\.mcp\?\.realCallPassed === true/);
   assert.match(verifier, /drainedPayloads\[item\.action\] = payload/);
@@ -14058,6 +14065,16 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLogin, /second_account_login_not_ready/);
   assert.match(secondAccountLogin, /safeToStartLogin/);
   assert.doesNotMatch(secondAccountLogin, /New-LocalUser|Add-LocalGroupMember|Invoke-RestMethod|Invoke-WebRequest|\.env/);
+
+  const secondAccountManagerAction = server.match(/secondAccountLoginStatus:\s*\{[\s\S]*?\n    \},/)?.[0] || "";
+  assert.match(secondAccountManagerAction, /script: "start-anticodex-second-antigravity-account-login\.ps1"/);
+  assert.match(secondAccountManagerAction, /args: \[\]/);
+  assert.match(secondAccountManagerAction, /foregroundSingleton: true/);
+  assert.doesNotMatch(secondAccountManagerAction, /StartLogin|StartLoginApproval|AllowRealTraffic|AllowSeparateAccountProof/);
+  assert.match(managerInject, /\["secondAccountLoginStatus", "\\u7b2c\\u4e8c Antigravity/);
+  assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u7b2c\\u4e8c Antigravity \\u8d26\\u53f7\\u72b6\\u6001\\u68c0\\u67e5/);
+  assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u767b\\u5f55\\u51c6\\u5907/);
+  assert.match(server, /data-manager-action="secondAccountLoginStatus"/);
 
   assert.match(secondAccountLoginReport, /reportName = "second-antigravity-account-login-entrypoint"/);
   assert.match(secondAccountLoginReport, /latest-second-antigravity-account-login-entrypoint\.json/);

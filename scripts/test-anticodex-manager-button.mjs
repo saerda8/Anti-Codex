@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -9,7 +10,10 @@ import path from "node:path";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
-const ports = String(args.get("--ports") || args.get("--port") || "58318,58317").split(",").map((value) => Number(value.trim())).filter(Number.isFinite);
+const explicitPorts = args.get("--ports") || args.get("--port") || "";
+const ports = explicitPorts
+  ? String(explicitPorts).split(",").map((value) => Number(value.trim())).filter(Number.isFinite)
+  : [...new Set([...discoverAntiCodexCdpPorts(), 58318, 58317])];
 const baseUrl = String(args.get("--base-url") || process.env.ANTICODEX_MANAGER_API || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const simulatePendingReopen = args.has("--verify-pending-reopen");
 const defaultAction = String(args.get("--action") || (simulatePendingReopen ? "refreshFeatures" : "updateCheck"));
@@ -114,6 +118,30 @@ function hasLatestReportFieldEvidence(text) {
     || (value.includes("\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7") && value.includes("latest-missing-history.json"));
 }
 
+function discoverAntiCodexCdpPorts() {
+  if (process.platform !== "win32") return [];
+  try {
+    const output = execFileSync("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "$ErrorActionPreference='SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $_.ProcessName -eq 'Anti-Codex.exe' -and $_.CommandLine -match '--remote-debugging-port=' } | ForEach-Object { $_.CommandLine }",
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    const discovered = [];
+    for (const match of output.matchAll(/--remote-debugging-port=(\d+)/g)) {
+      const port = Number(match[1]);
+      if (Number.isFinite(port) && port > 0) discovered.push(port);
+    }
+    return discovered;
+  } catch {
+    return [];
+  }
+}
+
 function hasActionSpecificResult(actionName, text) {
   if (actionName === "fastOverallNoTraffic") return text.includes("\u5feb\u901f\u68c0\u67e5") && text.includes("\u8017\u65f6");
   if (actionName === "syncReadiness") return text.includes("\u5b89\u88c5/\u540c\u6b65\u68c0\u67e5") && text.includes("\u901a\u8fc7");
@@ -121,6 +149,7 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "sourcePreflight") return text.includes("\u6e90\u7801\u9884\u68c0") && text.includes("\u8017\u65f6");
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
+  if (actionName === "secondAccountLoginStatus") return text.includes("\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5") && (text.includes("\u901a\u8fc7") || text.includes("\u9700\u8981\u5904\u7406"));
   if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1") && text.includes("sourceSnapshot: files=");
   if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55"));
   if (actionName === "viewLatestReports") return text.includes("\u62a5\u544a") && (text.includes("\u5df2\u627e\u5230") || text.includes("\u8fd8\u6ca1\u6709")) && hasLatestReportFieldEvidence(text);
@@ -241,6 +270,13 @@ function managerSummaryFromActionPayload(actionName, payload) {
       `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
       `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1a${realCallPassed ? "node_repl \u901a\u8fc7" : "\u5f85\u590d\u6838"}`,
     ].join("\n");
+  }
+  if (actionName === "secondAccountLoginStatus") {
+    return [
+      `\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u901a\u8fc7"}`,
+      result.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
+      result.readinessBlockingReason ? `\u963b\u788d\uff1a${result.readinessBlockingReason}` : "",
+    ].filter(Boolean).join("\n");
   }
   if (actionName === "pluginCapabilities") {
     const capabilities = result.capabilities || {};
