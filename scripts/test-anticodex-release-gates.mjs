@@ -845,9 +845,11 @@ function summarizeGate(definition) {
     if (definition.requireGoalReadinessSemantics) {
       const proven = report.proven && typeof report.proven === "object" ? report.proven : {};
       const releaseGateStatus = report.releaseGateStatus && typeof report.releaseGateStatus === "object" ? report.releaseGateStatus : {};
+      const worker = report.workerMcp && typeof report.workerMcp === "object" ? report.workerMcp : {};
       const roadmap = report.realTaskCoverageRoadmap && typeof report.realTaskCoverageRoadmap === "object" ? report.realTaskCoverageRoadmap : {};
       const approval = report.realApprovalPlan && typeof report.realApprovalPlan === "object" ? report.realApprovalPlan : {};
       const account = report.antigravityAccountIsolation && typeof report.antigravityAccountIsolation === "object" ? report.antigravityAccountIsolation : {};
+      const requiredWorkerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
       const blockedGates = Array.isArray(releaseGateStatus.requiredRealTrafficBlockedGates) ? releaseGateStatus.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const blockers = Array.isArray(report.blockers) ? report.blockers.map((item) => String(item || "")) : [];
       if (report.reportName !== "goal-readiness") semanticFailures.push("goal_readiness_report_name");
@@ -859,6 +861,13 @@ function summarizeGate(definition) {
       for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "accountIsolationPreparedOnly"]) {
         if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
       }
+      if (Number(worker.passedServerCount || 0) < requiredWorkerServers.length) semanticFailures.push("goal_readiness_worker_mcp_passed_count");
+      const toolCountByServer = worker.toolCountByServer && typeof worker.toolCountByServer === "object" ? worker.toolCountByServer : {};
+      for (const server of requiredWorkerServers) {
+        if (Number(toolCountByServer[server] || 0) < 1) semanticFailures.push(`goal_readiness_worker_mcp_tool_count:${server}`);
+      }
+      if (Array.isArray(worker.incompleteToolCountServers) && worker.incompleteToolCountServers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_tool_count_incomplete");
+      if (blockers.includes("worker_mcp_tool_count_incomplete")) semanticFailures.push("goal_readiness_worker_mcp_tool_count_blocker_present");
       if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
       if (releaseGateStatus.releaseReady === true) semanticFailures.push("goal_readiness_release_unexpectedly_ready");
       if (releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_readiness_release_not_blocked_only_by_real_traffic");

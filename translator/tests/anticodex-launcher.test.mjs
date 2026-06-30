@@ -12718,6 +12718,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /usedRealTraffic: false/);
   assert.match(goalReadiness, /codexClientCopy/);
   assert.match(goalReadiness, /workerMcp/);
+  assert.match(goalReadiness, /passedServerCount/);
+  assert.match(goalReadiness, /toolCountByServer/);
+  assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
   assert.match(goalReadiness, /desktopAgenticTasks/);
   assert.match(goalReadiness, /agenticCapabilityMatrix/);
   assert.match(goalReadiness, /realTaskCoverageRoadmap/);

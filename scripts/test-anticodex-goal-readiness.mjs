@@ -76,12 +76,22 @@ const codexClientCopy = {
 const mcpRealList = Array.isArray(mcpSkills.report?.mcp?.smoke?.realList) ? mcpSkills.report.mcp.smoke.realList : [];
 const mcpPassedServers = mcpRealList.filter((entry) => entry?.passed === true).map((entry) => String(entry.server || "")).filter(Boolean);
 const missingWorkerMcpServers = requiredWorkerMcpServers.filter((server) => !mcpPassedServers.includes(server));
+const workerToolCountByServer = Object.fromEntries(
+  requiredWorkerMcpServers.map((server) => {
+    const entry = mcpRealList.find((item) => String(item?.server || "") === server);
+    return [server, Number(entry?.toolCount || 0)];
+  }),
+);
+const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
 const workerMcp = {
   reportPresent: mcpSkills.present,
   reportOk: mcpSkills.report?.ok === true,
   requiredServers: requiredWorkerMcpServers,
   passedServers: mcpPassedServers,
+  passedServerCount: mcpPassedServers.length,
   missingServers: missingWorkerMcpServers,
+  toolCountByServer: workerToolCountByServer,
+  incompleteToolCountServers: incompleteWorkerToolCountServers,
   allRequiredPassed: missingWorkerMcpServers.length === 0,
 };
 
@@ -204,7 +214,7 @@ const proven = {
     && codexClientCopy.nativeClientBehaviorCarriedByHostSync
     && codexClientCopy.forbidsFeatureByFeatureReimplementation
     && codexClientCopy.versionMatches,
-  workerMcp: workerMcp.reportOk && workerMcp.allRequiredPassed,
+  workerMcp: workerMcp.reportOk && workerMcp.allRequiredPassed && workerMcp.incompleteToolCountServers.length === 0,
   desktopAgenticTasks: desktopAgenticTasks.reportOk
     && desktopAgenticTasks.suiteProfile === "agentic"
     && desktopAgenticTasks.dryRun
@@ -248,6 +258,7 @@ const proven = {
 const blockers = [];
 if (!proven.codexClientCopy) blockers.push("codex_client_copy_evidence_missing_or_invalid");
 if (!proven.workerMcp) blockers.push("worker_mcp_real_list_incomplete");
+if (workerMcp.incompleteToolCountServers.length > 0) blockers.push("worker_mcp_tool_count_incomplete");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");

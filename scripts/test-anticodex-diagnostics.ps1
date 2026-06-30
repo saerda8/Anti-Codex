@@ -830,6 +830,14 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing real-traffic-only release blocker" }
     if (@(As-FlatArray $evidence.requiredRealTrafficBlockedGates).Count -lt 1) { Add-Failure "goal-readiness summary missing required real-traffic blocked gates" }
     if (@(As-FlatArray $evidence.workerMcpMissingServers).Count -ne 0) { Add-Failure "goal-readiness summary has missing worker MCP servers" }
+    if ([int]$evidence.workerMcpPassedServerCount -lt $RequiredWorkerMcpServers.Count) { Add-Failure "goal-readiness summary worker MCP passed server count too low" }
+    if (-not $evidence.workerMcpToolCountByServer) { Add-Failure "goal-readiness summary missing worker MCP tool counts" }
+    else {
+        foreach ($server in $RequiredWorkerMcpServers) {
+            if ([int]$evidence.workerMcpToolCountByServer.$server -lt 1) { Add-Failure "goal-readiness summary missing worker MCP tool count for $server" }
+        }
+    }
+    if (@(As-FlatArray $evidence.workerMcpIncompleteToolCountServers).Count -ne 0) { Add-Failure "goal-readiness summary has incomplete worker MCP tool counts" }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
     if (@(As-FlatArray $evidence.agenticStaleCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has stale agentic capabilities" }

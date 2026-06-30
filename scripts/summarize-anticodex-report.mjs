@@ -1193,6 +1193,9 @@ const summary = {
       ? asStringArray(report.releaseGateStatus.requiredRealTrafficBlockedGates)
       : [],
     workerMcpMissingServers: report.workerMcp && Array.isArray(report.workerMcp.missingServers) ? asStringArray(report.workerMcp.missingServers) : [],
+    workerMcpPassedServerCount: report.workerMcp && has(report.workerMcp, "passedServerCount") ? report.workerMcp.passedServerCount : null,
+    workerMcpToolCountByServer: report.workerMcp && report.workerMcp.toolCountByServer && typeof report.workerMcp.toolCountByServer === "object" ? report.workerMcp.toolCountByServer : null,
+    workerMcpIncompleteToolCountServers: report.workerMcp && Array.isArray(report.workerMcp.incompleteToolCountServers) ? asStringArray(report.workerMcp.incompleteToolCountServers) : [],
     desktopMissingAgenticTasks: report.desktopAgenticTasks && Array.isArray(report.desktopAgenticTasks.missingAgenticTasks) ? asStringArray(report.desktopAgenticTasks.missingAgenticTasks) : [],
     agenticMissingCapabilities: report.agenticCapabilityMatrix && Array.isArray(report.agenticCapabilityMatrix.missingCapabilities) ? asStringArray(report.agenticCapabilityMatrix.missingCapabilities) : [],
     agenticStaleCapabilities: report.agenticCapabilityMatrix && Array.isArray(report.agenticCapabilityMatrix.staleCapabilities) ? asStringArray(report.agenticCapabilityMatrix.staleCapabilities) : [],
