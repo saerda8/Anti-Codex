@@ -12546,6 +12546,8 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(releaseGates, /latest-desktop-task-suite\.json/);
   assert.match(releaseGates, /requireDesktopTaskSuiteSemantics/);
   assert.match(releaseGates, /desktop_task_suite_real_task_evidence_not_fresh/);
+  assert.match(releaseGates, /desktop_task_suite_\$\{task\.replaceAll\("-", "_"\)\}_scenario_missing/);
+  assert.match(releaseGates, /desktop_task_suite_\$\{task\.replaceAll\("-", "_"\)\}_selected_scenario_missing/);
   assert.match(releaseGates, /id: "agenticCapabilityMatrix"/);
   assert.match(releaseGates, /latest-agentic-capability-matrix\.json/);
   assert.match(releaseGates, /requireAgenticCapabilityMatrixSemantics/);

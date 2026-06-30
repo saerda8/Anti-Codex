@@ -671,6 +671,8 @@ function summarizeGate(definition) {
       const selectedTasks = Array.isArray(report.selectedTasks) ? report.selectedTasks.map((task) => String(task || "")) : [];
       const latestRealTaskEvidence = report.latestRealTaskEvidence && typeof report.latestRealTaskEvidence === "object" ? report.latestRealTaskEvidence : {};
       const refreshPlan = report.realTaskEvidenceRefreshPlan && typeof report.realTaskEvidenceRefreshPlan === "object" ? report.realTaskEvidenceRefreshPlan : {};
+      const taskScenarioCatalog = report.taskScenarioCatalog && typeof report.taskScenarioCatalog === "object" ? report.taskScenarioCatalog : {};
+      const selectedTaskScenarios = report.selectedTaskScenarios && typeof report.selectedTaskScenarios === "object" ? report.selectedTaskScenarios : {};
       if (report.reportName !== "desktop-task-suite") semanticFailures.push("desktop_task_suite_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("desktop_task_suite_real_traffic_requested");
       if (report.usedRealTraffic !== false) semanticFailures.push("desktop_task_suite_used_real_traffic");
@@ -688,7 +690,23 @@ function summarizeGate(definition) {
       if (refreshPlan.requiresExplicitUserApproval !== false) semanticFailures.push("desktop_task_suite_refresh_approval_required");
       for (const task of requiredAgenticDesktopTaskSuiteTasks) {
         const evidence = latestRealTaskEvidence[task] && typeof latestRealTaskEvidence[task] === "object" ? latestRealTaskEvidence[task] : null;
+        const scenario = taskScenarioCatalog[task] && typeof taskScenarioCatalog[task] === "object" ? taskScenarioCatalog[task] : null;
+        const selectedScenario = selectedTaskScenarios[task] && typeof selectedTaskScenarios[task] === "object" ? selectedTaskScenarios[task] : null;
         if (!selectedTasks.includes(task)) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_not_selected`);
+        if (!scenario) {
+          semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_missing`);
+        } else {
+          const evidenceKeys = Array.isArray(scenario.expectedEvidence) ? scenario.expectedEvidence.map((item) => String(item || "")) : [];
+          const profileCoverage = Array.isArray(scenario.profileCoverage) ? scenario.profileCoverage.map((item) => String(item || "")) : [];
+          if (scenario.taskMode !== task) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_task_mismatch`);
+          if (typeof scenario.workType !== "string" || !scenario.workType) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_work_type_missing`);
+          if (!profileCoverage.includes("agentic")) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_profile_missing`);
+          if (typeof scenario.requiresWeb !== "boolean") semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_requires_web_missing`);
+          if (typeof scenario.mutatesRepoFixture !== "boolean") semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_repo_mutation_missing`);
+          if (evidenceKeys.length < 1) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_expected_evidence_missing`);
+          if (typeof scenario.reportFile !== "string" || !scenario.reportFile) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_scenario_report_file_missing`);
+        }
+        if (!selectedScenario || selectedScenario.taskMode !== task) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_selected_scenario_missing`);
         if (!evidence) {
           semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_evidence_missing`);
           continue;
