@@ -181,25 +181,29 @@ $moved = New-Object System.Collections.Generic.List[object]
 $warnings = New-Object System.Collections.Generic.List[string]
 $stoppedProcesses = @()
 $stopTargets = @()
+$wouldStopProcesses = @()
 $originalCodexBefore = @()
 
 if (-not $SkipProcessStop) {
     $originalCodexBefore = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
     $stopTargets = @(Get-AntiCodexProcesses -RuntimeRootFull $runtimeRootFull -StateRootFull $stateRootFull)
+    $wouldStopProcesses = @($stopTargets | ForEach-Object {
+        [pscustomobject]@{ pid = [int]$_.ProcessId; name = [string]$_.Name; executablePath = [string]$_.ExecutablePath }
+    })
     $stopPids = @($stopTargets | ForEach-Object { [int]$_.ProcessId })
     $intersection = @($originalCodexBefore | Where-Object { $stopPids -contains $_ })
     if ($intersection.Count -gt 0) {
         throw "refusing to stop original Codex process ids: $($intersection -join ', ')"
     }
-    Stop-ProcessList $stopTargets
-    $stopped = Wait-Until -TimeoutSeconds $StopTimeoutSec -Predicate {
-        @(Get-AntiCodexProcesses -RuntimeRootFull $runtimeRootFull -StateRootFull $stateRootFull).Count -eq 0
-    }
-    $stoppedProcesses = @($stopTargets | ForEach-Object {
-        [pscustomobject]@{ pid = [int]$_.ProcessId; name = [string]$_.Name; executablePath = [string]$_.ExecutablePath }
-    })
-    if (-not $stopped) {
-        $warnings.Add("some Anti-Codex processes were still visible after stop timeout") | Out-Null
+    if (-not $WhatIfOnly) {
+        Stop-ProcessList $stopTargets
+        $stopped = Wait-Until -TimeoutSeconds $StopTimeoutSec -Predicate {
+            @(Get-AntiCodexProcesses -RuntimeRootFull $runtimeRootFull -StateRootFull $stateRootFull).Count -eq 0
+        }
+        $stoppedProcesses = @($wouldStopProcesses)
+        if (-not $stopped) {
+            $warnings.Add("some Anti-Codex processes were still visible after stop timeout") | Out-Null
+        }
     }
 }
 
@@ -334,6 +338,8 @@ $result = [pscustomobject]@{
     whatIfOnly = [bool]$WhatIfOnly
     stateRoot = $stateRootFull
     backupDir = $backupDir
+    wouldStopProcessCount = @($wouldStopProcesses).Count
+    wouldStopProcesses = @($wouldStopProcesses)
     stoppedProcessCount = @($stoppedProcesses).Count
     stoppedProcesses = @($stoppedProcesses)
     moved = @($moved.ToArray())

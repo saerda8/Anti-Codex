@@ -272,6 +272,8 @@ test("Anti-Codex conversation cleanup preserves project roots and native Codex i
   assert.match(cleanup, /deepcodex/);
   assert.match(cleanup, /Stop-Process/);
   assert.match(cleanup, /Get-AntiCodexProcesses/);
+  assert.match(cleanup, /wouldStopProcessCount/);
+  assert.match(cleanup, /if \(-not \$WhatIfOnly\) \{\s*Stop-ProcessList \$stopTargets/);
   assert.match(cleanup, /AppData\\Roaming\\anticodex/);
   assert.match(cleanup, /AppData\\Local\\Anti-Codex/);
   assert.match(cleanup, /Get-OriginalCodexMainProcesses/);
