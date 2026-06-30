@@ -5523,6 +5523,8 @@ test("Anti-Codex ships a repeatable installed stability soak script", () => {
   assert.match(soak, /\/cancel/);
   assert.match(soak, /return ,\[object\[\]\]/);
   assert.match(soak, /LONGCTX_HEAD/);
+  assert.match(soak, /Final instruction: return one Chinese sentence containing both/);
+  assert.match(soak, /temperature = 0/);
   assert.match(soak, /marker_tool/);
   assert.match(soak, /marker=`"\$toolMarker`"/);
   assert.match(soak, /toolPromptAttempts/);

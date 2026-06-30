@@ -255,13 +255,14 @@ foreach ($index in 1..3) {
 $longHead = "LONGCTX_HEAD_" + (Get-Random -Minimum 10000 -Maximum 99999)
 $longTail = "LONGCTX_TAIL_" + (Get-Random -Minimum 10000 -Maximum 99999)
 $longBody = $longHead + "`n" + ($LongContextFill * [Math]::Max(1, $LongContextRepeat)) + "`n" + $longTail
-$longPrompt = "Return one Chinese sentence containing both $longHead and $longTail.`n`n$longBody"
+$longPrompt = "Return one Chinese sentence containing both $longHead and $longTail.`n`n$longBody`n`nFinal instruction: return one Chinese sentence containing both $longHead and $longTail."
 $longInput = New-MessageInput $longPrompt
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $longResponse = Invoke-AntiCodexResponse @{
     model = $Model
     stream = $false
     store = $true
+    temperature = 0
     input = $longInput
 }
 $sw.Stop()
