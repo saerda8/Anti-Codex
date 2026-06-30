@@ -1263,6 +1263,13 @@ const summary = {
     completeProfiles: Array.isArray(report.completeProfiles) ? asStringArray(report.completeProfiles) : [],
     nextProfilesNeedingRealTraffic: Array.isArray(report.nextProfilesNeedingRealTraffic) ? asStringArray(report.nextProfilesNeedingRealTraffic) : [],
     uniqueRefreshTasks: Array.isArray(report.uniqueRefreshTasks) ? asStringArray(report.uniqueRefreshTasks) : [],
+    pendingRealTaskScenarios: Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios.map((item) => ({
+      taskMode: asString(item?.taskMode),
+      workType: asString(item?.workType),
+      realTrafficRequired: boolField(item || {}, "realTrafficRequired"),
+      acceptanceEvidence: Array.isArray(item?.acceptanceEvidence) ? asStringArray(item.acceptanceEvidence) : [],
+      expectedResultPresent: typeof item?.expectedResult === "string" && item.expectedResult.trim().length > 0,
+    })) : [],
     missingArtifactProofTasks: Array.isArray(report.missingArtifactProofTasks) ? asStringArray(report.missingArtifactProofTasks) : [],
     missingArtifactProofTaskCount: has(report, "missingArtifactProofTaskCount") ? report.missingArtifactProofTaskCount : null,
     missingResultProofTasks: Array.isArray(report.missingResultProofTasks) ? asStringArray(report.missingResultProofTasks) : [],

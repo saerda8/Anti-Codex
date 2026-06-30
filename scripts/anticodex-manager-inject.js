@@ -1223,6 +1223,13 @@
         lines.push(`  desktopTaskSuite: profile=${evidence.suiteProfile || "unknown"} / tasks=${evidence.selectedTaskCount ?? "unknown"} / complete=${evidence.realTaskEvidenceComplete ? "true" : "false"} / fresh=${evidence.realTaskEvidenceFresh ? "true" : "false"} / stale=${evidence.realTaskEvidenceFreshnessFailureCount ?? "unknown"}`);
         lines.push(`  desktopTaskSuite refresh: needed=${plan.needed ? "true" : "false"} / approval=${plan.requiresExplicitUserApproval ? "true" : "false"} / reason=${plan.approvalReason || "none"} / tasks=${Array.isArray(plan.refreshTaskModes) && plan.refreshTaskModes.length ? plan.refreshTaskModes.join(",") : "none"}`);
       }
+      if (item.realTaskCoverageRoadmapEvidence) {
+        const evidence = item.realTaskCoverageRoadmapEvidence;
+        const scenarios = Array.isArray(evidence.pendingRealTaskScenarios) ? evidence.pendingRealTaskScenarios : [];
+        const scenarioText = scenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ");
+        lines.push(`  realTaskCoverage next: profiles=${Array.isArray(evidence.nextProfilesNeedingRealTraffic) && evidence.nextProfilesNeedingRealTraffic.length ? evidence.nextProfilesNeedingRealTraffic.join(",") : "none"} / tasks=${Array.isArray(evidence.uniqueRefreshTasks) && evidence.uniqueRefreshTasks.length ? evidence.uniqueRefreshTasks.join(",") : "none"} / approval=${evidence.approvalRequiredForRefresh ? "true" : "false"}`);
+        if (scenarioText) lines.push(`  realTaskCoverage scenarios: ${scenarioText}`);
+      }
       if (item.realApprovalPlanEvidence) {
         const evidence = item.realApprovalPlanEvidence;
         lines.push(`  realApprovalPlan preLogin: complete=${evidence.preLoginChecklistComplete ? "true" : "false"} / checks=${evidence.preLoginChecklistCount ?? "unknown"} / next=${evidence.nextNoTrafficAction || "unknown"}`);

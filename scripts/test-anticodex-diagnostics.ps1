@@ -995,6 +995,19 @@ function Test-RealTaskCoverageRoadmapSummaryEvidence {
     }
     $uniqueRefreshTasks = @(As-FlatArray $evidence.uniqueRefreshTasks)
     if ($evidence.approvalRequiredForRefresh -eq $true -and $uniqueRefreshTasks.Count -lt 1) { Add-Failure "real-task-coverage-roadmap summary missing unique refresh tasks" }
+    $pendingScenarios = @(As-FlatArray $evidence.pendingRealTaskScenarios)
+    if ($evidence.approvalRequiredForRefresh -eq $true -and $pendingScenarios.Count -lt $uniqueRefreshTasks.Count) { Add-Failure "real-task-coverage-roadmap summary missing pending real task scenarios" }
+    foreach ($taskMode in $uniqueRefreshTasks) {
+        $scenario = @($pendingScenarios | Where-Object { [string]$_.taskMode -eq [string]$taskMode } | Select-Object -First 1)[0]
+        if (-not $scenario) {
+            Add-Failure "real-task-coverage-roadmap summary missing pending scenario for $taskMode"
+            continue
+        }
+        if (-not [string]$scenario.workType) { Add-Failure "real-task-coverage-roadmap summary pending scenario missing work type for $taskMode" }
+        if ($scenario.realTrafficRequired -ne $true) { Add-Failure "real-task-coverage-roadmap summary pending scenario not marked real traffic for $taskMode" }
+        if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "real-task-coverage-roadmap summary pending scenario missing acceptance evidence for $taskMode" }
+        if ($scenario.expectedResultPresent -ne $true) { Add-Failure "real-task-coverage-roadmap summary pending scenario missing expected result for $taskMode" }
+    }
     if ($evidence.approvalRequiredForRefresh -eq $true -and $evidence.minimalRefreshCommandPresent -ne $true) { Add-Failure "real-task-coverage-roadmap summary missing minimal refresh command" }
     if ($evidence.approvalRequiredForRefresh -eq $true -and $evidence.minimalRefreshCommandRequiresRealTraffic -ne $true) { Add-Failure "real-task-coverage-roadmap summary minimal refresh command is not marked real traffic" }
     if (-not [string]$evidence.realTrafficApprovalReason) { Add-Failure "real-task-coverage-roadmap summary missing approval reason" }

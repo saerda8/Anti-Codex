@@ -67,6 +67,79 @@ const taskResultRequirements = {
   "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete"],
 };
 
+const taskScenarioCatalog = {
+  "exact-marker": {
+    taskMode: "exact-marker",
+    workType: "chat-contract",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["assistant-reply-marker", "latest-ui-chat-smoke-report"],
+    expectedResult: "Assistant returns exact marker in chat reply",
+  },
+  "free-chat": {
+    taskMode: "free-chat",
+    workType: "open-ended-chat",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["assistant-reply-marker", "latest-ui-free-chat-smoke-report"],
+    expectedResult: "Assistant replies with marker in free-form conversation",
+  },
+  "web-search": {
+    taskMode: "web-search",
+    workType: "web-research-answer",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["assistant-reply-marker", "source-url-answer", "latest-ui-web-search-smoke-report"],
+    expectedResult: "Assistant returns answer with source URLs after web search",
+  },
+  "local-project": {
+    taskMode: "local-project",
+    workType: "local-artifact-creation",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["index-html", "readme-md", "done-marker"],
+    expectedResult: "Assistant creates local index.html, readme, and marks done",
+  },
+  "coding-project": {
+    taskMode: "coding-project",
+    workType: "new-node-cli-project",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["package-json", "node-test-passed", "cli-output-verified", "done-marker"],
+    expectedResult: "Assistant scaffolds Node CLI project with passing tests and CLI output",
+  },
+  "multi-turn-project": {
+    taskMode: "multi-turn-project",
+    workType: "multi-turn-project-continuation",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["first-turn-marker", "followup-marker", "changelog-marker", "node-test-passed"],
+    expectedResult: "Assistant completes two-turn project with changelog and passing tests",
+  },
+  "report-site": {
+    taskMode: "report-site",
+    workType: "web-backed-report-site",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["report-md", "index-html", "three-source-urls", "done-marker"],
+    expectedResult: "Assistant produces report.md with source URLs and linked index.html",
+  },
+  "complex-project": {
+    taskMode: "complex-project",
+    workType: "web-backed-tested-dashboard-project",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["sources-json", "analyzer-test-passed", "cli-output-verified", "report-md", "index-html"],
+    expectedResult: "Assistant builds dashboard with sources, analyzer tests, CLI, and HTML report",
+  },
+  "repo-file-edit": {
+    taskMode: "repo-file-edit",
+    workType: "single-file-repo-test-fix",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["target-source-changed", "acceptance-test-passed", "fixture-cleanup"],
+    expectedResult: "Assistant edits single repo file so acceptance test passes and fixture is clean",
+  },
+  "repo-multi-file-edit": {
+    taskMode: "repo-multi-file-edit",
+    workType: "two-step-multi-file-repo-task",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["readme-created", "source-changed", "test-passed", "cli-output-verified", "offline-html"],
+    expectedResult: "Assistant creates readme, edits source, and verifies with test, CLI, and offline HTML",
+  },
+};
+
 const requiredProfiles = {
   core: ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"],
   agentic: ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"],
@@ -257,6 +330,10 @@ const taskResultProofs = Object.values(taskEvidence)
 const missingResultProofTasks = taskResultProofs
   .filter((entry) => entry.resultProofComplete !== true)
   .map((entry) => entry.taskMode);
+const pendingRealTaskScenarios = uniqueRefreshTasks.map((taskMode) => ({
+  ...(taskScenarioCatalog[taskMode] || { taskMode, workType: "unknown", realTrafficRequired: true, acceptanceEvidence: [], expectedResult: "" }),
+  realTrafficRequired: true,
+}));
 const minimalRefreshCommandParts = [
   process.execPath,
   "scripts\\test-anticodex-desktop-task-suite.mjs",
@@ -305,6 +382,7 @@ const payload = {
   completeProfiles,
   nextProfilesNeedingRealTraffic,
   uniqueRefreshTasks,
+  pendingRealTaskScenarios,
   minimalRefreshCommand,
   minimalRefreshCommandArgs,
   minimalRefreshCommandRequiresRealTraffic: uniqueRefreshTasks.length > 0,

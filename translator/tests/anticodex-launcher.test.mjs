@@ -12862,6 +12862,8 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
 
   assert.match(roadmap, /reportName: "real-task-coverage-roadmap"/);
   assert.match(roadmap, /requestedRealTraffic: false/);
@@ -12871,6 +12873,11 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /all/);
   assert.match(roadmap, /approvalRequiredForRefresh/);
   assert.match(roadmap, /uniqueRefreshTasks/);
+  assert.match(roadmap, /pendingRealTaskScenarios/);
+  assert.match(roadmap, /realTrafficRequired/);
+  assert.match(roadmap, /acceptanceEvidence/);
+  assert.match(roadmap, /expectedResult/);
+  assert.match(roadmap, /workType/);
   assert.match(roadmap, /minimalRefreshCommand/);
   assert.match(roadmap, /minimalRefreshCommandArgs/);
   assert.match(roadmap, /refreshApprovalSummary/);
@@ -12898,9 +12905,13 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(summarizer, /taskResultProofs/);
   assert.match(summarizer, /missingResultProofTaskCount/);
   assert.match(summarizer, /profileResultProofComplete/);
+  assert.match(summarizer, /pendingRealTaskScenarios/);
+  assert.match(summarizer, /expectedResultPresent/);
   assert.match(collector, /realTaskCoverageRoadmapEvidence = \$json\.realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing minimal refresh command/);
+  assert.match(diagnostics, /real-task-coverage-roadmap summary missing pending real task scenarios/);
+  assert.match(diagnostics, /real-task-coverage-roadmap summary pending scenario missing expected result/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing artifact proof coverage/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing artifact proof count/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing result proof coverage/);
@@ -12918,6 +12929,10 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(releaseGates, /scripts\/test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(installedOverall, /latest-real-task-coverage-roadmap\.json/);
   assert.match(server, /latest-real-task-coverage-roadmap\.json/);
+  assert.match(managerBridge, /realTaskCoverage next:/);
+  assert.match(managerBridge, /realTaskCoverage scenarios:/);
+  assert.match(managerInject, /realTaskCoverage next:/);
+  assert.match(managerInject, /realTaskCoverage scenarios:/);
 });
 
 test("Anti-Codex ships a no-traffic real approval execution plan", () => {
