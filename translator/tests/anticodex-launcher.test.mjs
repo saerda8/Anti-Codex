@@ -12812,6 +12812,9 @@ test("Anti-Codex ships a no-traffic required real traffic sequence verifier", ()
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
 
   assert.match(sequence, /reportName\s*=\s*"required-real-traffic-sequence"/);
   assert.match(sequence, /requestedRealTraffic\s*=\s*\$false/);
@@ -12823,6 +12826,13 @@ test("Anti-Codex ships a no-traffic required real traffic sequence verifier", ()
   assert.match(sequence, /blockedUntilExplicitUserApproval/);
   assert.match(sequence, /requiredActionCount/);
   assert.match(sequence, /optionalActionCount/);
+  assert.match(releaseGates, /requireRequiredRealTrafficSequenceSemantics/);
+  assert.match(releaseGates, /required_real_traffic_sequence_optional_actions_mixed/);
+  assert.match(releaseGates, /scripts\/test-anticodex-required-real-traffic-sequence\.ps1/);
+  assert.match(summarizer, /requiredRealTrafficSequenceEvidence/);
+  assert.match(collector, /requiredRealTrafficSequenceEvidence = \$json\.requiredRealTrafficSequenceEvidence/);
+  assert.match(diagnostics, /required-real-traffic-sequence summary missing requiredRealTrafficSequenceEvidence/);
+  assert.match(diagnostics, /required-real-traffic-sequence summary mixed optional actions/);
   assert.match(runtimeSync, /scripts\\test-anticodex-required-real-traffic-sequence\.ps1/);
   assert.match(collector, /latest-required-real-traffic-sequence\.json/);
   assert.match(installedOverall, /latest-required-real-traffic-sequence\.json/);

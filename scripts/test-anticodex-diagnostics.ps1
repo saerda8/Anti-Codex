@@ -988,6 +988,43 @@ function Test-RealApprovalPlanSummaryEvidence {
     if (-not [string]$evidence.nextNoTrafficAction) { Add-Failure "real-approval-plan summary missing next no-traffic action" }
 }
 
+function Test-RequiredRealTrafficSequenceSummaryEvidence {
+    param($RequiredRealTrafficSequenceSummary)
+    if (-not $RequiredRealTrafficSequenceSummary) {
+        Add-Failure "diagnostic reports summary missing latest-required-real-traffic-sequence.json"
+        return
+    }
+
+    $evidence = $RequiredRealTrafficSequenceSummary.requiredRealTrafficSequenceEvidence
+    if (-not $evidence) {
+        Add-Failure "required-real-traffic-sequence summary missing requiredRealTrafficSequenceEvidence"
+        return
+    }
+
+    $requiredActionIds = @(As-FlatArray $evidence.requiredActionIds)
+    $optionalActionIds = @(As-FlatArray $evidence.optionalActionIds)
+    $requiredGateIds = @(As-FlatArray $evidence.requiredGateIds)
+    $mixedOptional = @($requiredActionIds | Where-Object { $optionalActionIds -contains $_ })
+
+    if ($evidence.reportName -ne "required-real-traffic-sequence") { Add-Failure "required-real-traffic-sequence summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "required-real-traffic-sequence summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "required-real-traffic-sequence summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "required-real-traffic-sequence summary behavior not covered" }
+    if ($evidence.coverageKind -ne "required-real-traffic-sequence-report-only") { Add-Failure "required-real-traffic-sequence summary coverage kind mismatch" }
+    if ($evidence.approvalPlanPresent -ne $true) { Add-Failure "required-real-traffic-sequence summary missing approval plan" }
+    if ($evidence.approvalPlanReportName -ne "real-approval-plan") { Add-Failure "required-real-traffic-sequence summary approval plan name mismatch" }
+    if ([int]$evidence.requiredActionCount -lt 1) { Add-Failure "required-real-traffic-sequence summary missing required actions" }
+    if ([int]$evidence.optionalActionCount -lt 1) { Add-Failure "required-real-traffic-sequence summary missing optional action count" }
+    if ($evidence.noOptionalActionsInRequiredSequence -ne $true -or $mixedOptional.Count -gt 0) { Add-Failure "required-real-traffic-sequence summary mixed optional actions" }
+    if ($evidence.blockedUntilExplicitUserApproval -ne $true) { Add-Failure "required-real-traffic-sequence summary not approval blocked" }
+    foreach ($gateId in @("accountProxyReadiness", "postVerification")) {
+        if ($requiredGateIds -notcontains $gateId) { Add-Failure "required-real-traffic-sequence summary missing required gate $gateId" }
+        if ($requiredActionIds -notcontains $gateId) { Add-Failure "required-real-traffic-sequence summary missing required action $gateId" }
+    }
+    if ([int]$evidence.commandCount -lt $requiredActionIds.Count) { Add-Failure "required-real-traffic-sequence summary missing commands" }
+    if ([int]$evidence.failureCount -ne 0) { Add-Failure "required-real-traffic-sequence summary has failures" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1008,6 +1045,7 @@ function Test-ReportsSummary {
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
     $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
     $realApprovalPlanSummary = @($summary | Where-Object { $_.file -eq "latest-real-approval-plan.json" } | Select-Object -First 1)[0]
+    $requiredRealTrafficSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-required-real-traffic-sequence.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -1054,6 +1092,7 @@ function Test-ReportsSummary {
     Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
     Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
     Test-RealApprovalPlanSummaryEvidence $realApprovalPlanSummary
+    Test-RequiredRealTrafficSequenceSummaryEvidence $requiredRealTrafficSequenceSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

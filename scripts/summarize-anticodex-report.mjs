@@ -203,6 +203,7 @@ const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
 const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-coverage-roadmap" || /latest-real-task-coverage-roadmap\.json$/i.test(path);
 const isRealApprovalPlanReport = report?.reportName === "real-approval-plan" || /latest-real-approval-plan\.json$/i.test(path);
+const isRequiredRealTrafficSequenceReport = report?.reportName === "required-real-traffic-sequence" || /latest-required-real-traffic-sequence\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1293,6 +1294,24 @@ const summary = {
     requiresRealTrafficCount: has(report, "requiresRealTrafficCount") ? report.requiresRealTrafficCount : null,
     operatorSetupBlockedCount: has(report, "operatorSetupBlockedCount") ? report.operatorSetupBlockedCount : null,
     nextNoTrafficAction: asString(report.nextNoTrafficAction),
+  } : null,
+  requiredRealTrafficSequenceEvidence: isRequiredRealTrafficSequenceReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    approvalPlanPresent: boolField(report, "approvalPlanPresent"),
+    approvalPlanReportName: asString(report.approvalPlanReportName),
+    requiredGateIds: Array.isArray(report.requiredGateIds) ? asStringArray(report.requiredGateIds) : [],
+    requiredActionIds: Array.isArray(report.requiredActionIds) ? asStringArray(report.requiredActionIds) : [],
+    optionalActionIds: Array.isArray(report.optionalActionIds) ? asStringArray(report.optionalActionIds) : [],
+    requiredActionCount: has(report, "requiredActionCount") ? report.requiredActionCount : null,
+    optionalActionCount: has(report, "optionalActionCount") ? report.optionalActionCount : null,
+    noOptionalActionsInRequiredSequence: boolField(report, "noOptionalActionsInRequiredSequence"),
+    blockedUntilExplicitUserApproval: boolField(report, "blockedUntilExplicitUserApproval"),
+    commandCount: Array.isArray(report.commands) ? report.commands.length : null,
+    failureCount: Array.isArray(report.failures) ? report.failures.length : null,
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),

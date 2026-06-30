@@ -102,6 +102,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-desktop-task-suite.mjs",
   "scripts/test-anticodex-agentic-capability-matrix.mjs",
   "scripts/test-anticodex-real-task-coverage-roadmap.mjs",
+  "scripts/test-anticodex-required-real-traffic-sequence.ps1",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
@@ -152,6 +153,7 @@ const gateDefinitions = [
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
   { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
+  { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -731,6 +733,30 @@ function summarizeGate(definition) {
         if (entry.usedRealTraffic !== true) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_real_traffic_missing`);
         if (Array.isArray(entry.failures) && entry.failures.length > 0) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_failures`);
       }
+    }
+    if (definition.requireRequiredRealTrafficSequenceSemantics) {
+      const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
+      const optionalActionIds = Array.isArray(report.optionalActionIds) ? report.optionalActionIds.map((item) => String(item || "")) : [];
+      const requiredGateIds = Array.isArray(report.requiredGateIds) ? report.requiredGateIds.map((item) => String(item || "")) : [];
+      const commands = Array.isArray(report.commands) ? report.commands.map((item) => String(item || "")) : [];
+      const mixedOptional = requiredActionIds.filter((id) => optionalActionIds.includes(id));
+      if (report.reportName !== "required-real-traffic-sequence") semanticFailures.push("required_real_traffic_sequence_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("required_real_traffic_sequence_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("required_real_traffic_sequence_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("required_real_traffic_sequence_behavior_not_covered");
+      if (report.coverageKind !== "required-real-traffic-sequence-report-only") semanticFailures.push("required_real_traffic_sequence_coverage_kind");
+      if (report.approvalPlanPresent !== true) semanticFailures.push("required_real_traffic_sequence_approval_plan_missing");
+      if (report.approvalPlanReportName !== "real-approval-plan") semanticFailures.push("required_real_traffic_sequence_approval_plan_name");
+      if (Number(report.requiredActionCount || 0) < 1) semanticFailures.push("required_real_traffic_sequence_required_actions_missing");
+      if (Number(report.optionalActionCount || 0) < 1) semanticFailures.push("required_real_traffic_sequence_optional_actions_missing");
+      if (report.noOptionalActionsInRequiredSequence !== true || mixedOptional.length > 0) semanticFailures.push("required_real_traffic_sequence_optional_actions_mixed");
+      if (report.blockedUntilExplicitUserApproval !== true) semanticFailures.push("required_real_traffic_sequence_not_approval_blocked");
+      for (const gateId of ["accountProxyReadiness", "postVerification"]) {
+        if (!requiredGateIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_gate_missing`);
+        if (!requiredActionIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_action_missing`);
+      }
+      if (commands.length < requiredActionIds.length) semanticFailures.push("required_real_traffic_sequence_commands_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("required_real_traffic_sequence_failures");
     }
     if (definition.requireToolLoopSemantics) {
       const finalText = String(report.final_text || "");
@@ -1906,6 +1932,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
   ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],
+  ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
 ];
 
 function action(id, phase, command, options = {}) {

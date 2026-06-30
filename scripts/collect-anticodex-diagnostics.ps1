@@ -244,6 +244,7 @@ function Read-JsonSummary {
             agenticCapabilityMatrixEvidence = $json.agenticCapabilityMatrixEvidence
             realTaskCoverageRoadmapEvidence = $json.realTaskCoverageRoadmapEvidence
             realApprovalPlanEvidence = $json.realApprovalPlanEvidence
+            requiredRealTrafficSequenceEvidence = $json.requiredRealTrafficSequenceEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
