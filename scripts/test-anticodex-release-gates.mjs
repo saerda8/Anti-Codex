@@ -868,6 +868,11 @@ function summarizeGate(definition) {
       }
       if (!blockers.includes("second_antigravity_account_real_proof_missing")) semanticFailures.push("goal_readiness_account_real_proof_blocker_missing");
       if (Array.isArray(roadmap.missingProfiles) && roadmap.missingProfiles.length > 0) semanticFailures.push("goal_readiness_roadmap_missing_profiles");
+      if (Number(roadmap.artifactProofTaskCount || 0) < 5) semanticFailures.push("goal_readiness_artifact_proof_missing");
+      if (Number(roadmap.missingArtifactProofTaskCount || 0) !== 0) semanticFailures.push("goal_readiness_artifact_proof_missing");
+      if (Array.isArray(roadmap.missingArtifactProofTasks) && roadmap.missingArtifactProofTasks.length > 0) semanticFailures.push("goal_readiness_artifact_proof_missing");
+      if (roadmap.artifactProofComplete !== true) semanticFailures.push("goal_readiness_artifact_proof_missing");
+      if (blockers.includes("real_task_artifact_proof_missing")) semanticFailures.push("goal_readiness_artifact_proof_blocker_present");
       if (roadmap.approvalRequiredForRefresh === true) {
         if (!Array.isArray(roadmap.uniqueRefreshTasks) || roadmap.uniqueRefreshTasks.length < 1) semanticFailures.push("goal_readiness_refresh_tasks_missing");
         if (roadmap.minimalRefreshCommandPresent !== true) semanticFailures.push("goal_readiness_refresh_command_missing");

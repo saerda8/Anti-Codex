@@ -836,6 +836,11 @@ function Test-GoalReadinessSummaryEvidence {
     if ([int]$evidence.agenticOkCapabilityCount -lt 5) { Add-Failure "goal-readiness summary agentic capability count too low" }
     if (@(As-FlatArray $evidence.realTaskCoverageMissingProfiles).Count -ne 0) { Add-Failure "goal-readiness summary has missing real-task coverage profiles" }
     if (@(As-FlatArray $evidence.realTaskCoverageCompleteProfiles).Count -lt 2) { Add-Failure "goal-readiness summary has too few complete real-task coverage profiles" }
+    if ([int]$evidence.realTaskCoverageArtifactProofTaskCount -lt 5) { Add-Failure "goal-readiness summary missing real-task artifact proof coverage" }
+    if ($null -eq $evidence.realTaskCoverageMissingArtifactProofTaskCount) { Add-Failure "goal-readiness summary missing real-task artifact proof count" }
+    if ([int]$evidence.realTaskCoverageMissingArtifactProofTaskCount -ne 0) { Add-Failure "goal-readiness summary has missing real-task artifact proofs" }
+    if (@(As-FlatArray $evidence.realTaskCoverageMissingArtifactProofTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing real-task artifact proof tasks" }
+    if ($evidence.realTaskCoverageArtifactProofComplete -ne $true) { Add-Failure "goal-readiness summary real-task artifact proof incomplete" }
     $realTaskRefreshBlockers = @(As-FlatArray $evidence.realTaskCoverageNextProfilesNeedingRealTraffic)
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $realTaskRefreshBlockers.Count -lt 1) { Add-Failure "goal-readiness summary missing real-task coverage refresh blockers" }
     $realTaskUniqueRefreshTasks = @(As-FlatArray $evidence.realTaskCoverageUniqueRefreshTasks)

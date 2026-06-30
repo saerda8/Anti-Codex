@@ -12721,6 +12721,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /desktopAgenticTasks/);
   assert.match(goalReadiness, /agenticCapabilityMatrix/);
   assert.match(goalReadiness, /realTaskCoverageRoadmap/);
+  assert.match(goalReadiness, /artifactProofTaskCount/);
+  assert.match(goalReadiness, /missingArtifactProofTaskCount/);
+  assert.match(goalReadiness, /real_task_artifact_proof_missing/);
   assert.match(goalReadiness, /latest-real-approval-plan\.json/);
   assert.match(goalReadiness, /realApprovalPlan/);
   assert.match(goalReadiness, /requiredReleaseRealTrafficActionCount/);
@@ -12729,9 +12732,11 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /uniqueRefreshTasks/);
   assert.match(goalReadiness, /minimalRefreshCommandPresent/);
   assert.match(summarizer, /realTaskCoverageNextProfilesNeedingRealTraffic/);
+  assert.match(summarizer, /realTaskCoverageArtifactProofComplete/);
   assert.match(summarizer, /realApprovalPlanRequiredReleaseActionCount/);
   assert.match(summarizer, /realApprovalPlanOptionalReleaseActionCount/);
   assert.match(diagnostics, /goal-readiness summary missing real-task coverage roadmap proof/);
+  assert.match(diagnostics, /goal-readiness summary missing real-task artifact proof coverage/);
   assert.match(diagnostics, /goal-readiness summary missing real-approval plan proof/);
   assert.match(diagnostics, /goal-readiness summary missing required real-approval release actions/);
   assert.match(goalReadiness, /antigravityAccountIsolation/);

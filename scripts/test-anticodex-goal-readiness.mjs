@@ -121,6 +121,10 @@ const missingRoadmapProfiles = requiredRoadmapProfiles.filter((profile) => !road
 const nextRoadmapProfilesNeedingRealTraffic = Array.isArray(roadmap.nextProfilesNeedingRealTraffic)
   ? roadmap.nextProfilesNeedingRealTraffic.map(String).filter(Boolean)
   : [];
+const roadmapArtifactProofs = Array.isArray(roadmap.taskArtifactProofs) ? roadmap.taskArtifactProofs : [];
+const roadmapMissingArtifactProofTasks = Array.isArray(roadmap.missingArtifactProofTasks)
+  ? roadmap.missingArtifactProofTasks.map(String).filter(Boolean)
+  : [];
 const realTaskCoverageRoadmap = {
   reportPresent: realTaskCoverageRoadmapReport.present,
   reportOk: roadmap.ok === true,
@@ -132,6 +136,10 @@ const realTaskCoverageRoadmap = {
   missingProfiles: missingRoadmapProfiles,
   nextProfilesNeedingRealTraffic: nextRoadmapProfilesNeedingRealTraffic,
   uniqueRefreshTasks: Array.isArray(roadmap.uniqueRefreshTasks) ? roadmap.uniqueRefreshTasks.map(String).filter(Boolean) : [],
+  artifactProofTaskCount: roadmapArtifactProofs.length,
+  missingArtifactProofTaskCount: Number(roadmap.missingArtifactProofTaskCount || 0),
+  missingArtifactProofTasks: roadmapMissingArtifactProofTasks,
+  artifactProofComplete: roadmapArtifactProofs.length >= 5 && Number(roadmap.missingArtifactProofTaskCount || 0) === 0 && roadmapMissingArtifactProofTasks.length === 0,
   minimalRefreshCommandPresent: typeof roadmap.minimalRefreshCommand === "string" && roadmap.minimalRefreshCommand.includes("test-anticodex-desktop-task-suite.mjs") && roadmap.minimalRefreshCommand.includes("--tasks") && roadmap.minimalRefreshCommand.includes("--allow-real-traffic"),
   minimalRefreshCommandRequiresRealTraffic: roadmap.minimalRefreshCommandRequiresRealTraffic === true,
   approvalRequiredForRefresh: roadmap.approvalRequiredForRefresh === true,
@@ -215,7 +223,8 @@ const proven = {
     && realTaskCoverageRoadmap.coverageKind === "real-task-coverage-roadmap-report-only"
     && realTaskCoverageRoadmap.requestedRealTraffic === false
     && realTaskCoverageRoadmap.usedRealTraffic === false
-    && realTaskCoverageRoadmap.missingProfiles.length === 0,
+    && realTaskCoverageRoadmap.missingProfiles.length === 0
+    && realTaskCoverageRoadmap.artifactProofComplete,
   realApprovalPlan: realApprovalPlan.reportOk
     && realApprovalPlan.coverageKind === "real-approval-plan-report-only"
     && realApprovalPlan.requestedRealTraffic === false
@@ -242,6 +251,7 @@ if (!proven.workerMcp) blockers.push("worker_mcp_real_list_incomplete");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
+if (!realTaskCoverageRoadmap.artifactProofComplete) blockers.push("real_task_artifact_proof_missing");
 if (!proven.realApprovalPlan) blockers.push("real_approval_plan_missing_or_invalid");
 for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) blockers.push(`real_task_coverage_refresh_required:${profile}`);
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
