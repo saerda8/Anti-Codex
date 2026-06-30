@@ -46,6 +46,7 @@ def rel(path, root):
         return path.replace("\\", "/")
 
 allowed_name_patterns = [
+    re.compile(r"^ambient-suggestions(/.*)?$", re.I),
     re.compile(r"^electron-user-data-adaptive/OnDeviceHeadSuggestModel(/.*)?$", re.I),
     re.compile(r"^skills/gstack/scripts/proactive-suggestions\.json$", re.I),
     re.compile(r"^skills/gstack/scripts/resolvers/preamble/generate-proactive-prompt\.ts$", re.I),

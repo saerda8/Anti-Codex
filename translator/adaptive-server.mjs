@@ -3513,6 +3513,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("整体检查", "latest-installed-overall.json"),
         latestManagerReportItem("验证后完整检查", "latest-post-verification.json"),
         latestManagerReportItem("普通聊天流式", "latest-codex-responses.json"),
+        latestManagerReportItem("Desktop task suite", "latest-desktop-task-suite.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),

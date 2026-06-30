@@ -12132,6 +12132,7 @@ test("Anti-Codex guards against ambient background suggestions without real traf
   assert.match(verifier, /columnHits/);
   assert.match(verifier, /targetHits/);
   assert.match(verifier, /shared-plugin-host\/skills\/gstack\/scripts\/proactive-suggestions/);
+  assert.match(verifier, /\^ambient-suggestions\(\/\.\*\)\?\$/);
   assert.match(verifier, /discards_proactive/);
   assert.match(verifier, /reloads_proactive/);
 
@@ -12425,6 +12426,41 @@ test("Anti-Codex completes verified desktop artifact tool loops without reopenin
   assert.match(server, /const artifactCompletion = deterministicArtifactCompletionResponse\(parsed, chatBody\)/);
   assert.match(server, /settleAntigravitySessionLease\(sessionLease, fmt\)/);
   assert.match(server, /artifactCompletion[\s\S]*?return parsed\.stream === false \? jsonResponse\(res, 200, fmt\) : pipeSSE\(res, fmt\)/);
+});
+
+test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
+  const suite = readFileSync(resolve(root, "scripts", "test-anticodex-desktop-task-suite.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
+
+  assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
+  assert.match(suite, /dryRun = !allowRealTraffic/);
+  assert.match(suite, /latest-desktop-task-suite\.json/);
+  assert.match(suite, /createHash\("sha256"\)/);
+  assert.match(suite, /test-anticodex-ui-chat-smoke\.mjs/);
+  assert.match(suite, /"exact-marker"/);
+  assert.match(suite, /"local-project"/);
+  assert.match(suite, /"repo-file-edit"/);
+  assert.match(suite, /"repo-multi-file-edit"/);
+  assert.match(suite, /for \(const task of selectedTasks\)/);
+  assert.match(suite, /spawnSync\(process\.execPath/);
+  assert.match(suite, /requestedRealTraffic: allowRealTraffic/);
+  assert.match(suite, /usedRealTraffic: allowRealTraffic && !dryRun/);
+  assert.match(suite, /mode: dryRun \? "dry-run" : "real-traffic"/);
+  assert.match(suite, /perTaskReports/);
+  assert.doesNotMatch(suite, /Promise\.all/);
+  assert.match(releaseGates, /scripts\/test-anticodex-desktop-task-suite\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-desktop-task-suite\.mjs/);
+  assert.match(collector, /latest-desktop-task-suite\.json/);
+  assert.match(signer, /latest-desktop-task-suite\.json/);
+  assert.match(server, /latest-desktop-task-suite\.json/);
+  assert.match(installedOverall, /latest-desktop-task-suite\.json/);
+  assert.match(uiState, /expectedDailyActionIds[\s\S]*"secondAccountLoginStatus"/);
 });
 
 test("optional and special latest reports stay visible without becoming release-required", () => {

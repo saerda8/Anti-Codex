@@ -759,6 +759,7 @@ function Test-ReportEncoding {
         "latest-ui-idle-stability.json",
         "latest-sync-readiness.json",
         "latest-codex-responses.json",
+        "latest-desktop-task-suite.json",
         "latest-ui-chat-smoke.json",
         "latest-ui-web-search-smoke.json",
         "latest-ui-local-project-smoke.json",

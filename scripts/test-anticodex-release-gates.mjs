@@ -90,6 +90,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-third-party-provider.mjs",
   "scripts/test-anticodex-tool-bridge-mode.ps1",
   "scripts/test-anticodex-tool-loop.ps1",
+  "scripts/test-anticodex-desktop-task-suite.mjs",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",

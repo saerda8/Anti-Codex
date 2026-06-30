@@ -390,6 +390,7 @@ $latestReports = @(
     "latest-account-proxy-readiness.json",
     "latest-post-verification.json",
     "latest-codex-responses.json",
+    "latest-desktop-task-suite.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

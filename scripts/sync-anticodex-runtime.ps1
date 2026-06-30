@@ -91,6 +91,7 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-ui-state.mjs",
     "scripts\test-anticodex-ui-state.ps1",
     "scripts\test-anticodex-ui-idle-stability.ps1",
+    "scripts\test-anticodex-desktop-task-suite.mjs",
     "scripts\test-anticodex-ui-chat-smoke.mjs",
     "scripts\test-anticodex-web-tools.ps1",
     "translator\adaptive-server.mjs",

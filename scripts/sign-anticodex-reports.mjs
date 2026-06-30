@@ -43,6 +43,7 @@ const defaultReports = [
   "latest-compaction-resume.json",
   "latest-cancellation.json",
   "latest-web-tools.json",
+  "latest-desktop-task-suite.json",
   "latest-ui-local-project-smoke.json",
   "latest-ui-coding-project-smoke.json",
   "latest-ui-multi-turn-project-smoke.json",
