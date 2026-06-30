@@ -3516,6 +3516,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Desktop task suite", "latest-desktop-task-suite.json"),
         latestManagerReportItem("Goal readiness", "latest-goal-readiness.json"),
         latestManagerReportItem("Agentic capability matrix", "latest-agentic-capability-matrix.json"),
+        latestManagerReportItem("Real task coverage roadmap", "latest-real-task-coverage-roadmap.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),

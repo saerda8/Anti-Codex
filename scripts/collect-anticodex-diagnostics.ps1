@@ -242,6 +242,7 @@ function Read-JsonSummary {
             desktopTaskSuiteEvidence = $json.desktopTaskSuiteEvidence
             goalReadinessEvidence = $json.goalReadinessEvidence
             agenticCapabilityMatrixEvidence = $json.agenticCapabilityMatrixEvidence
+            realTaskCoverageRoadmapEvidence = $json.realTaskCoverageRoadmapEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -396,6 +397,7 @@ $latestReports = @(
     "latest-desktop-task-suite.json",
     "latest-goal-readiness.json",
     "latest-agentic-capability-matrix.json",
+    "latest-real-task-coverage-roadmap.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

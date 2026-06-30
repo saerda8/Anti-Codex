@@ -896,6 +896,46 @@ function Test-AgenticCapabilityMatrixSummaryEvidence {
     if (@(As-FlatArray $evidence.staleCapabilities).Count -ne 0) { Add-Failure "agentic-capability-matrix summary has stale capabilities" }
 }
 
+function Test-RealTaskCoverageRoadmapSummaryEvidence {
+    param($RealTaskCoverageRoadmapSummary)
+    if (-not $RealTaskCoverageRoadmapSummary) {
+        Add-Failure "diagnostic reports summary missing latest-real-task-coverage-roadmap.json"
+        return
+    }
+
+    $evidence = $RealTaskCoverageRoadmapSummary.realTaskCoverageRoadmapEvidence
+    if (-not $evidence) {
+        Add-Failure "real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence"
+        return
+    }
+
+    $requiredProfiles = @("core", "agentic", "extended", "all")
+    $profiles = @(As-FlatArray $evidence.profiles)
+    $profileNames = @(As-FlatArray $evidence.requiredProfiles | ForEach-Object { [string]$_ })
+    foreach ($profileName in $requiredProfiles) {
+        if ($profileNames -notcontains $profileName) {
+            Add-Failure "real-task-coverage-roadmap summary missing required profile $profileName"
+        }
+        $entry = @($profiles | Where-Object { [string]$_.profile -eq $profileName } | Select-Object -First 1)[0]
+        if (-not $entry) {
+            Add-Failure "real-task-coverage-roadmap summary missing profile entry $profileName"
+            continue
+        }
+        if ([int]$entry.taskCount -lt 1) { Add-Failure "real-task-coverage-roadmap summary profile $profileName has no tasks" }
+        if ($entry.refreshCommandPresent -ne $true) { Add-Failure "real-task-coverage-roadmap summary profile $profileName missing refresh command" }
+    }
+
+    if ($evidence.reportName -ne "real-task-coverage-roadmap") { Add-Failure "real-task-coverage-roadmap summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "real-task-coverage-roadmap summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "real-task-coverage-roadmap summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "real-task-coverage-roadmap summary behavior not covered" }
+    if ($evidence.coverageKind -ne "real-task-coverage-roadmap-report-only") { Add-Failure "real-task-coverage-roadmap summary coverage kind mismatch" }
+    if ([int]$evidence.profileCount -lt $requiredProfiles.Count) { Add-Failure "real-task-coverage-roadmap summary profile count too low" }
+    if (@(As-FlatArray $evidence.taskModes).Count -lt 9) { Add-Failure "real-task-coverage-roadmap summary task mode count too low" }
+    if (-not [string]$evidence.realTrafficApprovalReason) { Add-Failure "real-task-coverage-roadmap summary missing approval reason" }
+    if (-not [string]$evidence.recommendedNoTrafficNextStep) { Add-Failure "real-task-coverage-roadmap summary missing next step" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -914,6 +954,7 @@ function Test-ReportsSummary {
     $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
+    $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -958,6 +999,7 @@ function Test-ReportsSummary {
     Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
     Test-GoalReadinessSummaryEvidence $goalReadinessSummary
     Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
+    Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
@@ -1054,6 +1096,12 @@ function Test-ReportsSummary {
             [pscustomobject]@{
                 ok = $agenticCapabilityMatrixSummary.ok
                 evidence = $agenticCapabilityMatrixSummary.agenticCapabilityMatrixEvidence
+            }
+        } else { $null }
+        realTaskCoverageRoadmap = if ($realTaskCoverageRoadmapSummary) {
+            [pscustomobject]@{
+                ok = $realTaskCoverageRoadmapSummary.ok
+                evidence = $realTaskCoverageRoadmapSummary.realTaskCoverageRoadmapEvidence
             }
         } else { $null }
     }
@@ -1332,6 +1380,8 @@ function Test-DiagnosticBundle {
         Test-GoalReadinessSummaryEvidence $goalReadinessSummary
         $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
         Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
+        $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
+        Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
         $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
         if (-not $syncReadinessSummary) {
             Add-Failure "diagnostic reports summary missing latest-sync-readiness.json"

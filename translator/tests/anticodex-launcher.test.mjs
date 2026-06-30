@@ -12721,6 +12721,33 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });
 
+test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
+  const roadmap = readFileSync(resolve(root, "scripts", "test-anticodex-real-task-coverage-roadmap.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(roadmap, /reportName: "real-task-coverage-roadmap"/);
+  assert.match(roadmap, /requestedRealTraffic: false/);
+  assert.match(roadmap, /usedRealTraffic: false/);
+  assert.match(roadmap, /requiredProfiles/);
+  assert.match(roadmap, /extended/);
+  assert.match(roadmap, /all/);
+  assert.match(roadmap, /approvalRequiredForRefresh/);
+  assert.match(roadmap, /test-anticodex-desktop-task-suite\.mjs --suite-profile/);
+  assert.match(summarizer, /realTaskCoverageRoadmapEvidence/);
+  assert.match(collector, /realTaskCoverageRoadmapEvidence = \$json\.realTaskCoverageRoadmapEvidence/);
+  assert.match(diagnostics, /real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-real-task-coverage-roadmap\.mjs/);
+  assert.match(releaseGates, /scripts\/test-anticodex-real-task-coverage-roadmap\.mjs/);
+  assert.match(installedOverall, /latest-real-task-coverage-roadmap\.json/);
+  assert.match(server, /latest-real-task-coverage-roadmap\.json/);
+});
+
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {
   const toolBridge = readFileSync(resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"), "utf8");
 

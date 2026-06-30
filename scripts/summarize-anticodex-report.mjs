@@ -201,6 +201,7 @@ const isMissingHistoryReport = report?.reportName === "missing-history" || /late
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
+const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-coverage-roadmap" || /latest-real-task-coverage-roadmap\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1223,6 +1224,35 @@ const summary = {
       requestedRealTraffic: boolField(item || {}, "requestedRealTraffic"),
       usedRealTraffic: boolField(item || {}, "usedRealTraffic"),
       failureCount: Array.isArray(item?.failures) ? item.failures.length : null,
+    })) : [],
+  } : null,
+  realTaskCoverageRoadmapEvidence: isRealTaskCoverageRoadmapReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    requiredProfiles: Array.isArray(report.requiredProfiles) ? asStringArray(report.requiredProfiles) : [],
+    taskModes: Array.isArray(report.taskModes) ? asStringArray(report.taskModes) : [],
+    profileCount: Array.isArray(report.profiles) ? report.profiles.length : null,
+    completeProfiles: Array.isArray(report.completeProfiles) ? asStringArray(report.completeProfiles) : [],
+    nextProfilesNeedingRealTraffic: Array.isArray(report.nextProfilesNeedingRealTraffic) ? asStringArray(report.nextProfilesNeedingRealTraffic) : [],
+    approvalRequiredForRefresh: boolField(report, "approvalRequiredForRefresh"),
+    realTrafficApprovalReason: asString(report.realTrafficApprovalReason),
+    recommendedNoTrafficNextStep: asString(report.recommendedNoTrafficNextStep),
+    profiles: Array.isArray(report.profiles) ? report.profiles.map((item) => ({
+      profile: asString(item?.profile),
+      taskCount: item && has(item, "taskCount") ? item.taskCount : null,
+      okTaskCount: item && has(item, "okTaskCount") ? item.okTaskCount : null,
+      complete: boolField(item || {}, "complete"),
+      fresh: boolField(item || {}, "fresh"),
+      allOk: boolField(item || {}, "allOk"),
+      missingTasks: Array.isArray(item?.missingTasks) ? asStringArray(item.missingTasks) : [],
+      staleTasks: Array.isArray(item?.staleTasks) ? asStringArray(item.staleTasks) : [],
+      failedTasks: Array.isArray(item?.failedTasks) ? asStringArray(item.failedTasks) : [],
+      refreshTasks: Array.isArray(item?.refreshTasks) ? asStringArray(item.refreshTasks) : [],
+      approvalRequiredForRefresh: boolField(item || {}, "approvalRequiredForRefresh"),
+      refreshCommandPresent: typeof item?.refreshCommand === "string" && item.refreshCommand.includes("test-anticodex-desktop-task-suite.mjs --suite-profile"),
     })) : [],
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
