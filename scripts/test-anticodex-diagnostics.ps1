@@ -1068,6 +1068,64 @@ function Test-RealApprovalPlanSummaryEvidence {
     if (-not [string]$evidence.nextNoTrafficAction) { Add-Failure "real-approval-plan summary missing next no-traffic action" }
 }
 
+function Test-NativeCodexParityTaskMatrixSummaryEvidence {
+    param($NativeCodexParityTaskMatrixSummary)
+    if (-not $NativeCodexParityTaskMatrixSummary) {
+        Add-Failure "diagnostic reports summary missing latest-native-codex-parity-task-matrix.json"
+        return
+    }
+
+    $evidence = $NativeCodexParityTaskMatrixSummary.nativeCodexParityTaskMatrixEvidence
+    if (-not $evidence) {
+        Add-Failure "native-codex-parity-task-matrix summary missing nativeCodexParityTaskMatrixEvidence"
+        return
+    }
+
+    $groups = @(As-FlatArray $evidence.parityGroupIds | ForEach-Object { [string]$_ })
+    foreach ($groupId in @("conversation", "research", "projectCreation", "codingAndRepoEditing", "multiTurnAgentic", "toolUse")) {
+        if ($groups -notcontains $groupId) { Add-Failure "native-codex-parity-task-matrix summary missing group $groupId" }
+    }
+    $taskModes = @(As-FlatArray $evidence.taskModes | ForEach-Object { [string]$_ })
+    foreach ($taskMode in @("exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "report-site", "complex-project", "repo-file-edit", "repo-multi-file-edit")) {
+        if ($taskModes -notcontains $taskMode) { Add-Failure "native-codex-parity-task-matrix summary missing task $taskMode" }
+    }
+    $toolTaskModes = @(As-FlatArray $evidence.toolTaskModes | ForEach-Object { [string]$_ })
+    foreach ($taskMode in @("tool-loop", "mcp-tool-loop", "custom-tool-loop")) {
+        if ($toolTaskModes -notcontains $taskMode) { Add-Failure "native-codex-parity-task-matrix summary missing tool task $taskMode" }
+    }
+
+    if ($evidence.reportName -ne "native-codex-parity-task-matrix") { Add-Failure "native-codex-parity-task-matrix summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "native-codex-parity-task-matrix summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "native-codex-parity-task-matrix summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "native-codex-parity-task-matrix summary behavior not covered" }
+    if ($evidence.coverageKind -ne "native-codex-parity-task-matrix-report-only") { Add-Failure "native-codex-parity-task-matrix summary coverage kind mismatch" }
+    if ($evidence.codexOwnedTools -ne $true) { Add-Failure "native-codex-parity-task-matrix summary missing Codex-owned tools boundary" }
+    if ($evidence.antigravityModelTextOnly -ne $true) { Add-Failure "native-codex-parity-task-matrix summary missing model-text boundary" }
+    if ($evidence.realTrafficStillRequired -eq $true) {
+        $pendingTasks = @(As-FlatArray $evidence.pendingRefreshTaskModes | ForEach-Object { [string]$_ })
+        foreach ($taskMode in @("web-search", "free-chat")) {
+            if ($pendingTasks -notcontains $taskMode) { Add-Failure "native-codex-parity-task-matrix summary pending task modes missing" }
+        }
+        $scenarios = @(As-FlatArray $evidence.pendingRealTaskScenarios)
+        if ($scenarios.Count -lt $pendingTasks.Count) { Add-Failure "native-codex-parity-task-matrix summary missing pending real task scenarios" }
+        foreach ($taskMode in $pendingTasks) {
+            $scenario = @($scenarios | Where-Object { [string]$_.taskMode -eq [string]$taskMode } | Select-Object -First 1)[0]
+            if (-not $scenario) {
+                Add-Failure "native-codex-parity-task-matrix summary missing pending scenario for $taskMode"
+                continue
+            }
+            if (-not [string]$scenario.workType) { Add-Failure "native-codex-parity-task-matrix summary pending scenario missing work type for $taskMode" }
+            if ($scenario.realTrafficRequired -ne $true) { Add-Failure "native-codex-parity-task-matrix summary pending scenario not marked real traffic for $taskMode" }
+            if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "native-codex-parity-task-matrix summary pending scenario missing acceptance evidence for $taskMode" }
+            if ($scenario.expectedResultPresent -ne $true) { Add-Failure "native-codex-parity-task-matrix summary pending scenario missing expected result for $taskMode" }
+        }
+        $args = @(As-FlatArray $evidence.minimalRefreshCommandArgs | ForEach-Object { [string]$_ })
+        if (-not ($args -contains "--allow-real-traffic")) { Add-Failure "native-codex-parity-task-matrix summary missing approved real traffic command args" }
+        if ($evidence.minimalRefreshCommandPresent -ne $true) { Add-Failure "native-codex-parity-task-matrix summary missing minimal refresh command" }
+    }
+    if ([int]$evidence.failureCount -ne 0) { Add-Failure "native-codex-parity-task-matrix summary has failures" }
+}
+
 function Test-RequiredRealTrafficSequenceSummaryEvidence {
     param($RequiredRealTrafficSequenceSummary)
     if (-not $RequiredRealTrafficSequenceSummary) {
@@ -1252,6 +1310,7 @@ function Test-ReportsSummary {
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
     $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
+    $nativeCodexParityTaskMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-native-codex-parity-task-matrix.json" } | Select-Object -First 1)[0]
     $realApprovalPlanSummary = @($summary | Where-Object { $_.file -eq "latest-real-approval-plan.json" } | Select-Object -First 1)[0]
     $requiredRealTrafficSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-required-real-traffic-sequence.json" } | Select-Object -First 1)[0]
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
@@ -1301,6 +1360,7 @@ function Test-ReportsSummary {
     Test-GoalReadinessSummaryEvidence $goalReadinessSummary
     Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
     Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
+    Test-NativeCodexParityTaskMatrixSummaryEvidence $nativeCodexParityTaskMatrixSummary
     Test-RealApprovalPlanSummaryEvidence $realApprovalPlanSummary
     Test-RequiredRealTrafficSequenceSummaryEvidence $requiredRealTrafficSequenceSummary
     Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary
@@ -1693,6 +1753,8 @@ function Test-DiagnosticBundle {
         Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
         $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
         Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
+        $nativeCodexParityTaskMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-native-codex-parity-task-matrix.json" } | Select-Object -First 1)[0]
+        Test-NativeCodexParityTaskMatrixSummaryEvidence $nativeCodexParityTaskMatrixSummary
         $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
         if (-not $syncReadinessSummary) {
             Add-Failure "diagnostic reports summary missing latest-sync-readiness.json"

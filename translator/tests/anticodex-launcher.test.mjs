@@ -199,9 +199,13 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /\$translatorLoopbackUrl = "http:\/\/127\.0\.0\.1:\$\(\$env:TRANSLATOR_PORT\)"/);
   assert.match(launcher, /Test-AntiCodexTranslatorHealth \$translatorLoopbackUrl/);
   assert.match(launcher, /profile\.transport/);
+  assert.match(launcher, /function Test-AntiCodexRequiresAntigravityDesktop/);
+  assert.match(launcher, /Antigravity CLI model text transport; Antigravity Desktop is not required/);
   assert.match(server, /modelTextTransport/);
   assert.match(server, /process\.env\.ANTICODEX_ANTIGRAVITY_TRANSPORT \|\| "cli"/);
-  assert.match(server, /modelDiscoverySource:\s*antigravityMode \? "antigravity-desktop-catalog" : "upstream-profile"/);
+  assert.match(server, /function antigravityModelDiscoverySource/);
+  assert.match(server, /antigravity-cli-catalog/);
+  assert.match(server, /modelDiscoverySource:\s*antigravityMode \? antigravityModelDiscoverySource\(modelTextTransport\) : "upstream-profile"/);
   assert.match(server, /antigravityCoworkerDefault:\s*false/);
   assert.match(server, /模型传输/);
   assert.match(server, /模型发现/);
@@ -431,13 +435,22 @@ test("translator watchdog does not restart for Antigravity account or proxy read
   assert.doesNotMatch(healthFunction, /accountReady|accountState|antigravityCircuitState|antigravityCircuitRetryAfterMs/);
 });
 
-test("shared launcher watchdog restores Antigravity Desktop while Anti-Codex is open", () => {
+test("tool bridge verifier allows slow diagnostics during UI overall checks", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"), "utf8");
+
+  assert.match(verifier, /Min\(30,\s*\[Math\]::Min\(\$TimeoutSec/);
+  assert.doesNotMatch(verifier, /Min\(8,\s*\[Math\]::Min\(\$TimeoutSec/);
+});
+
+test("shared launcher only restores Antigravity Desktop when transport requires it", () => {
   const sharedLauncher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
   const desktopHelper = readFileSync(resolve(root, "scripts", "antigravity-desktop.ps1"), "utf8");
 
   assert.match(sharedLauncher, /antigravity-desktop\.ps1/);
+  assert.match(sharedLauncher, /function Test-AntiCodexRequiresAntigravityDesktop/);
   assert.match(sharedLauncher, /function Ensure-AntigravityDesktopRunning/);
+  assert.match(sharedLauncher, /if \(-not \(Test-AntiCodexRequiresAntigravityDesktop\)\) \{ return \$true \}/);
   assert.match(sharedLauncher, /ANTIGRAVITY_RESTART_COOLDOWN_SECONDS/);
   assert.match(sharedLauncher, /antigravityRestartNotBefore/);
   assert.match(sharedLauncher, /Antigravity Desktop restart deferred until/i);
@@ -446,7 +459,9 @@ test("shared launcher watchdog restores Antigravity Desktop while Anti-Codex is 
   assert.match(sharedLauncher, /ANTIGRAVITY_DESKTOP_PATH/);
   assert.match(sharedLauncher, /Ensure-AntigravityDesktopRunning/);
   assert.match(launcher, /antigravity-desktop\.ps1/);
+  assert.match(launcher, /Test-AntiCodexRequiresAntigravityDesktop \$antiCodexUsesAntigravity/);
   assert.match(launcher, /Resolve-AntigravityDesktopPath/);
+  assert.match(launcher, /Antigravity CLI model text transport; Antigravity Desktop is not required/);
   assert.match(desktopHelper, /function Resolve-AntigravityDesktopPath/);
   assert.match(desktopHelper, /function Get-AntigravityMainProcess/);
   assert.match(desktopHelper, /DisplayIcon/);
@@ -13037,6 +13052,52 @@ test("Anti-Codex ships a no-traffic required real traffic sequence verifier", ()
   assert.match(server, /latest-required-real-traffic-sequence\.json/);
 });
 
+test("Anti-Codex ships a no-traffic native Codex parity task matrix", () => {
+  const matrix = readFileSync(resolve(root, "scripts", "test-anticodex-native-codex-parity-tasks.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+
+  assert.match(matrix, /reportName: "native-codex-parity-task-matrix"/);
+  assert.match(matrix, /coverageKind: "native-codex-parity-task-matrix-report-only"/);
+  assert.match(matrix, /requestedRealTraffic: false/);
+  assert.match(matrix, /usedRealTraffic: false/);
+  assert.match(matrix, /nativeCodexParityComplete/);
+  assert.match(matrix, /parityGroups/);
+  assert.match(matrix, /conversation/);
+  assert.match(matrix, /research/);
+  assert.match(matrix, /projectCreation/);
+  assert.match(matrix, /codingAndRepoEditing/);
+  assert.match(matrix, /multiTurnAgentic/);
+  assert.match(matrix, /toolUse/);
+  assert.match(matrix, /free-chat/);
+  assert.match(matrix, /web-search/);
+  assert.match(matrix, /repo-multi-file-edit/);
+  assert.match(matrix, /pendingRealTaskScenarios/);
+  assert.match(matrix, /realTrafficStillRequired/);
+  assert.match(matrix, /minimalRefreshCommandArgs/);
+  assert.match(summarizer, /nativeCodexParityTaskMatrixEvidence/);
+  assert.match(collector, /nativeCodexParityTaskMatrixEvidence = \$json\.nativeCodexParityTaskMatrixEvidence/);
+  assert.match(diagnostics, /native-codex-parity-task-matrix summary missing nativeCodexParityTaskMatrixEvidence/);
+  assert.match(diagnostics, /native-codex-parity-task-matrix summary missing pending real task scenarios/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-native-codex-parity-tasks\.mjs/);
+  assert.match(installedOverall, /latest-native-codex-parity-task-matrix\.json/);
+  assert.match(signer, /latest-native-codex-parity-task-matrix\.json/);
+  assert.match(server, /latest-native-codex-parity-task-matrix\.json/);
+  assert.match(releaseGates, /id:\s*"nativeCodexParityTaskMatrix"[\s\S]*?file:\s*"latest-native-codex-parity-task-matrix\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireNativeCodexParityTaskMatrixSemantics:\s*true/);
+  assert.match(releaseGates, /native_codex_parity_task_matrix_pending_task_modes_missing/);
+  assert.match(managerBridge, /nativeParity: complete=/);
+  assert.match(managerInject, /nativeParity: complete=/);
+});
+
 test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
   const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-real-run-readiness.mjs"), "utf8");
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
@@ -13321,7 +13382,7 @@ test("Anti-Codex selects third-party upstream without changing its persistent st
   assert.match(sharedLauncher, /elseif \(\$env:UPSTREAM_API_KEY\)/);
   const antigravityWatchdog = sharedLauncher.match(/function Ensure-AntigravityDesktopRunning \{[\s\S]*?\n\}/)?.[0];
   assert.ok(antigravityWatchdog, "missing Antigravity watchdog");
-  assert.match(antigravityWatchdog, /if \(-not \$USES_ANTIGRAVITY_UPSTREAM\) \{ return \$true \}/);
+  assert.match(antigravityWatchdog, /if \(-not \(Test-AntiCodexRequiresAntigravityDesktop\)\) \{ return \$true \}/);
   assert.match(sharedLauncher, /if \(\$USES_ANTIGRAVITY_UPSTREAM -and \[DateTime\]::UtcNow -ge \$antigravityCatalogWatchNext\)/);
   assert.match(manager, /anticodex-upstream-profile\.ps1/);
   assert.match(manager, /ANTICODEX_ACTIVE_UPSTREAM/);

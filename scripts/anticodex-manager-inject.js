@@ -1230,6 +1230,10 @@
         lines.push(`  realTaskCoverage next: profiles=${Array.isArray(evidence.nextProfilesNeedingRealTraffic) && evidence.nextProfilesNeedingRealTraffic.length ? evidence.nextProfilesNeedingRealTraffic.join(",") : "none"} / tasks=${Array.isArray(evidence.uniqueRefreshTasks) && evidence.uniqueRefreshTasks.length ? evidence.uniqueRefreshTasks.join(",") : "none"} / approval=${evidence.approvalRequiredForRefresh ? "true" : "false"}`);
         if (scenarioText) lines.push(`  realTaskCoverage scenarios: ${scenarioText}`);
       }
+      if (item.nativeCodexParityTaskMatrixEvidence) {
+        const evidence = item.nativeCodexParityTaskMatrixEvidence;
+        lines.push(`  nativeParity: complete=${evidence.nativeCodexParityComplete ? "true" : "false"} / proven=${evidence.provenTaskCount ?? "unknown"} / pending=${Array.isArray(evidence.pendingRefreshTaskModes) && evidence.pendingRefreshTaskModes.length ? evidence.pendingRefreshTaskModes.join(",") : "none"} / tools=${evidence.codexOwnedTools ? "codex-owned" : "unknown"}`);
+      }
       if (item.realApprovalPlanEvidence) {
         const evidence = item.realApprovalPlanEvidence;
         lines.push(`  realApprovalPlan preLogin: complete=${evidence.preLoginChecklistComplete ? "true" : "false"} / checks=${evidence.preLoginChecklistCount ?? "unknown"} / next=${evidence.nextNoTrafficAction || "unknown"}`);

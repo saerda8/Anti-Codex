@@ -56,6 +56,13 @@ function Test-AntiCodexTranslatorMatchesConfiguredUpstream {
     return ([string]$profile.baseUrl).TrimEnd("/") -eq ([string]$env:UPSTREAM_URL).TrimEnd("/")
 }
 
+function Test-AntiCodexRequiresAntigravityDesktop {
+    param([bool]$UsesAntigravity)
+    if (-not $UsesAntigravity) { return $false }
+    $transport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "cli" }
+    return $transport.ToLowerInvariant() -ne "cli"
+}
+
 function Activate-AntiCodexWindow {
     param($Process)
     try {
@@ -174,7 +181,7 @@ if ($env:DEEPCODEX_WORKSPACE) {
     $env:ANTICODEX_WORKSPACE = $env:DEEPCODEX_WORKSPACE
 }
 
-if ($antiCodexUsesAntigravity) {
+if (Test-AntiCodexRequiresAntigravityDesktop $antiCodexUsesAntigravity) {
     $antigravityDesktopHelper = Join-Path $PSScriptRoot "antigravity-desktop.ps1"
     if (-not (Test-Path -LiteralPath $antigravityDesktopHelper)) {
         Write-Error "Anti-Codex could not find its Antigravity Desktop helper."
@@ -209,6 +216,8 @@ if ($antiCodexUsesAntigravity) {
             exit 1
         }
     }
+} elseif ($antiCodexUsesAntigravity) {
+    Write-Host "Anti-Codex is using Antigravity CLI model text transport; Antigravity Desktop is not required for this launch."
 } else {
     Write-Host "Anti-Codex is using a third-party API profile; Antigravity Desktop is not required for this launch."
 }

@@ -578,6 +578,12 @@ function antigravityVisibleModelIds(payload) {
     return extractAvailableAgentModels(payload).map((model) => model.id);
 }
 
+function antigravityModelDiscoverySource(transport = process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT || "cli") {
+    return String(transport || "cli").toLowerCase() === "cli"
+        ? "antigravity-cli-catalog"
+        : "antigravity-desktop-catalog";
+}
+
 function translatorHealthPayload({
     upstream = upstreamDisplayName(),
     profile = PROFILE?.provider || "unknown",
@@ -596,7 +602,7 @@ function translatorHealthPayload({
         upstream,
         profile,
         modelTextTransport,
-        modelDiscoverySource: antigravityMode ? "antigravity-desktop-catalog" : "upstream-profile",
+        modelDiscoverySource: antigravityMode ? antigravityModelDiscoverySource(modelTextTransport) : "upstream-profile",
         antigravityCoworkerDefault: false,
         internalTools,
         upstreamProfile: currentUpstreamHealthProfile(),
@@ -3514,6 +3520,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("验证后完整检查", "latest-post-verification.json"),
         latestManagerReportItem("普通聊天流式", "latest-codex-responses.json"),
         latestManagerReportItem("Desktop task suite", "latest-desktop-task-suite.json"),
+        latestManagerReportItem("Native Codex parity task matrix", "latest-native-codex-parity-task-matrix.json"),
         latestManagerReportItem("Goal readiness", "latest-goal-readiness.json"),
         latestManagerReportItem("Agentic capability matrix", "latest-agentic-capability-matrix.json"),
         latestManagerReportItem("Real task coverage roadmap", "latest-real-task-coverage-roadmap.json"),

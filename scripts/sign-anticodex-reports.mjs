@@ -44,6 +44,7 @@ const defaultReports = [
   "latest-cancellation.json",
   "latest-web-tools.json",
   "latest-desktop-task-suite.json",
+  "latest-native-codex-parity-task-matrix.json",
   "latest-real-approval-plan.json",
   "latest-required-real-traffic-sequence.json",
   "latest-goal-real-run-readiness.json",

@@ -216,6 +216,7 @@ const isAccountProxyReport = report?.reportName === "account-proxy-readiness" ||
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
 const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-coverage-roadmap" || /latest-real-task-coverage-roadmap\.json$/i.test(path);
+const isNativeCodexParityTaskMatrixReport = report?.reportName === "native-codex-parity-task-matrix" || /latest-native-codex-parity-task-matrix\.json$/i.test(path);
 const isRealApprovalPlanReport = report?.reportName === "real-approval-plan" || /latest-real-approval-plan\.json$/i.test(path);
 const isRequiredRealTrafficSequenceReport = report?.reportName === "required-real-traffic-sequence" || /latest-required-real-traffic-sequence\.json$/i.test(path);
 const isGoalRealRunReadinessReport = report?.reportName === "goal-real-run-readiness" || /latest-goal-real-run-readiness\.json$/i.test(path);
@@ -1337,6 +1338,42 @@ const summary = {
       resultProofCount: has(item || {}, "resultProofCount") ? item.resultProofCount : null,
       resultProofComplete: boolField(item || {}, "resultProofComplete"),
     })) : [],
+  } : null,
+  nativeCodexParityTaskMatrixEvidence: isNativeCodexParityTaskMatrixReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    nativeCodexParityComplete: boolField(report, "nativeCodexParityComplete"),
+    realTrafficStillRequired: boolField(report, "realTrafficStillRequired"),
+    parityGroupIds: Array.isArray(report.parityGroupIds) ? asStringArray(report.parityGroupIds) : [],
+    taskModes: Array.isArray(report.taskModes) ? asStringArray(report.taskModes) : [],
+    toolTaskModes: Array.isArray(report.toolTaskModes) ? asStringArray(report.toolTaskModes) : [],
+    provenTaskModes: Array.isArray(report.provenTaskModes) ? asStringArray(report.provenTaskModes) : [],
+    provenTaskCount: has(report, "provenTaskCount") ? report.provenTaskCount : null,
+    pendingGroups: Array.isArray(report.pendingGroups) ? asStringArray(report.pendingGroups) : [],
+    pendingRefreshTaskModes: Array.isArray(report.pendingRefreshTaskModes) ? asStringArray(report.pendingRefreshTaskModes) : [],
+    missingTaskModes: Array.isArray(report.missingTaskModes) ? asStringArray(report.missingTaskModes) : [],
+    failedTaskModes: Array.isArray(report.failedTaskModes) ? asStringArray(report.failedTaskModes) : [],
+    pendingRealTaskScenarios: Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios.map((item) => ({
+      taskMode: asString(item?.taskMode),
+      workType: asString(item?.workType),
+      realTrafficRequired: boolField(item || {}, "realTrafficRequired"),
+      acceptanceEvidence: Array.isArray(item?.acceptanceEvidence) ? asStringArray(item.acceptanceEvidence) : [],
+      expectedResultPresent: boolField(item || {}, "expectedResultPresent"),
+    })) : [],
+    minimalRefreshCommandPresent: typeof report.minimalRefreshCommand === "string" && report.minimalRefreshCommand.includes("test-anticodex-desktop-task-suite.mjs") && report.minimalRefreshCommand.includes("--allow-real-traffic"),
+    minimalRefreshCommandArgs: Array.isArray(report.minimalRefreshCommandArgs) ? asStringArray(report.minimalRefreshCommandArgs) : [],
+    codexOwnedTools: boolField(report, "codexOwnedTools"),
+    antigravityModelTextOnly: boolField(report, "antigravityModelTextOnly"),
+    roadmapPresent: boolField(report, "roadmapPresent"),
+    roadmapFresh: boolField(report, "roadmapFresh"),
+    roadmapApprovalRequiredForRefresh: boolField(report, "roadmapApprovalRequiredForRefresh"),
+    agenticCapabilityMatrixPresent: boolField(report, "agenticCapabilityMatrixPresent"),
+    agenticCapabilityMatrixFresh: boolField(report, "agenticCapabilityMatrixFresh"),
+    agenticCapabilityMatrixComplete: boolField(report, "agenticCapabilityMatrixComplete"),
+    failureCount: Array.isArray(report.failures) ? report.failures.length : null,
   } : null,
   realApprovalPlanEvidence: isRealApprovalPlanReport ? {
     reportName: asString(report.reportName),

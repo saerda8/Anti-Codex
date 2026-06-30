@@ -100,6 +100,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-tool-bridge-mode.ps1",
   "scripts/test-anticodex-tool-loop.ps1",
   "scripts/test-anticodex-desktop-task-suite.mjs",
+  "scripts/test-anticodex-native-codex-parity-tasks.mjs",
   "scripts/test-anticodex-agentic-capability-matrix.mjs",
   "scripts/test-anticodex-goal-readiness.mjs",
   "scripts/test-anticodex-goal-real-run-readiness.mjs",
@@ -158,6 +159,7 @@ const gateDefinitions = [
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
   { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
   { id: "realTaskCoverageRoadmap", group: "no-traffic", file: "latest-real-task-coverage-roadmap.json", requiredForRelease: true, requireRealTaskCoverageRoadmapSemantics: true },
+  { id: "nativeCodexParityTaskMatrix", group: "no-traffic", file: "latest-native-codex-parity-task-matrix.json", requiredForRelease: true, requireNativeCodexParityTaskMatrixSemantics: true },
   { id: "realApprovalPlan", group: "no-traffic", file: "latest-real-approval-plan.json", requiredForRelease: true, requireRealApprovalPlanSemantics: true },
   { id: "goalReadiness", group: "no-traffic", file: "latest-goal-readiness.json", requiredForRelease: true, requireGoalReadinessSemantics: true },
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
@@ -885,6 +887,44 @@ function summarizeGate(definition) {
       if (realStages.some((item) => item?.requiresExplicitUserApproval !== true)) semanticFailures.push("approved_real_run_sequence_real_stage_without_approval");
       if (loginStages.some((item) => item?.requiresExplicitUserApproval !== true || item?.requiresRealTraffic === true)) semanticFailures.push("approved_real_run_sequence_login_stage_contract");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("approved_real_run_sequence_failures");
+    }
+    if (definition.requireNativeCodexParityTaskMatrixSemantics) {
+      const parityGroupIds = Array.isArray(report.parityGroupIds) ? report.parityGroupIds.map((item) => String(item || "")) : [];
+      const taskModes = Array.isArray(report.taskModes) ? report.taskModes.map((item) => String(item || "")) : [];
+      const toolTaskModes = Array.isArray(report.toolTaskModes) ? report.toolTaskModes.map((item) => String(item || "")) : [];
+      const pendingRefreshTaskModes = Array.isArray(report.pendingRefreshTaskModes) ? report.pendingRefreshTaskModes.map((item) => String(item || "")) : [];
+      const pendingRealTaskScenarios = Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios : [];
+      const minimalRefreshCommandArgs = Array.isArray(report.minimalRefreshCommandArgs) ? report.minimalRefreshCommandArgs.map((item) => String(item || "")) : [];
+      if (report.reportName !== "native-codex-parity-task-matrix") semanticFailures.push("native_codex_parity_task_matrix_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("native_codex_parity_task_matrix_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("native_codex_parity_task_matrix_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("native_codex_parity_task_matrix_behavior_not_covered");
+      if (report.coverageKind !== "native-codex-parity-task-matrix-report-only") semanticFailures.push("native_codex_parity_task_matrix_coverage_kind");
+      for (const groupId of ["conversation", "research", "projectCreation", "codingAndRepoEditing", "multiTurnAgentic", "toolUse"]) {
+        if (!parityGroupIds.includes(groupId)) semanticFailures.push(`native_codex_parity_task_matrix_${groupId}_group_missing`);
+      }
+      for (const taskMode of ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "report-site", "complex-project", "repo-file-edit", "repo-multi-file-edit"]) {
+        if (!taskModes.includes(taskMode)) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_task_missing`);
+      }
+      for (const toolMode of ["tool-loop", "mcp-tool-loop", "custom-tool-loop"]) {
+        if (!toolTaskModes.includes(toolMode)) semanticFailures.push(`native_codex_parity_task_matrix_${toolMode.replaceAll("-", "_")}_missing`);
+      }
+      for (const taskMode of ["web-search", "free-chat"]) {
+        if (report.realTrafficStillRequired === true && !pendingRefreshTaskModes.includes(taskMode)) semanticFailures.push("native_codex_parity_task_matrix_pending_task_modes_missing");
+        const scenario = pendingRealTaskScenarios.find((item) => String(item?.taskMode || "") === taskMode);
+        if (report.realTrafficStillRequired === true && !scenario) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_scenario_missing`);
+        if (scenario) {
+          if (typeof scenario.workType !== "string" || !scenario.workType) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_work_type_missing`);
+          if (scenario.realTrafficRequired !== true) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_not_real_traffic`);
+          if (!Array.isArray(scenario.acceptanceEvidence) || scenario.acceptanceEvidence.length < 1) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_acceptance_missing`);
+        }
+      }
+      if (report.realTrafficStillRequired === true) {
+        if (!minimalRefreshCommandArgs.some((item) => item.includes("test-anticodex-desktop-task-suite.mjs")) || !minimalRefreshCommandArgs.includes("--allow-real-traffic")) semanticFailures.push("native_codex_parity_task_matrix_minimal_refresh_command_args_missing");
+      }
+      if (report.codexOwnedTools !== true) semanticFailures.push("native_codex_parity_task_matrix_codex_tools_missing");
+      if (report.antigravityModelTextOnly !== true) semanticFailures.push("native_codex_parity_task_matrix_model_text_boundary_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("native_codex_parity_task_matrix_failures");
     }
     if (definition.requireRealTaskCoverageRoadmapSemantics) {
       const requiredProfiles = Array.isArray(report.requiredProfiles) ? report.requiredProfiles.map((item) => String(item || "")) : [];
@@ -2243,6 +2283,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
   ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],
   ["realTaskCoverageRoadmap", "no-traffic-local", "node scripts\\test-anticodex-real-task-coverage-roadmap.mjs"],
+  ["nativeCodexParityTaskMatrix", "no-traffic-local", "node scripts\\test-anticodex-native-codex-parity-tasks.mjs"],
   ["realApprovalPlan", "no-traffic-local", "node scripts\\test-anticodex-real-approval-plan.mjs"],
   ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
   ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
@@ -3475,6 +3516,41 @@ if (args.has("--self-test")) {
     semanticFailures.realTaskCoverageRoadmapProfileProofs = assertSemanticFailures("realTaskCoverageRoadmap", "self-test failed: roadmap profile-level result proof rollup weakness satisfied the gate", [
       "real_task_coverage_roadmap_core_result_profile_incomplete",
       "real_task_coverage_roadmap_core_result_profile_missing_tasks",
+    ]);
+    writeFakeLatestReport("latest-native-codex-parity-task-matrix.json", {
+      ok: true,
+      reportName: "wrong-native-codex-parity-task-matrix",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      nativeCodexParityComplete: true,
+      realTrafficStillRequired: true,
+      parityGroupIds: ["conversation"],
+      taskModes: ["coding-project"],
+      toolTaskModes: [],
+      pendingRefreshTaskModes: [],
+      pendingRealTaskScenarios: [],
+      minimalRefreshCommandArgs: [],
+      codexOwnedTools: false,
+      antigravityModelTextOnly: false,
+      failures: ["fake"],
+    });
+    semanticFailures.nativeCodexParityTaskMatrix = assertSemanticFailures("nativeCodexParityTaskMatrix", "self-test failed: semantically invalid native Codex parity task matrix satisfied the gate", [
+      "native_codex_parity_task_matrix_report_name",
+      "native_codex_parity_task_matrix_real_traffic_requested",
+      "native_codex_parity_task_matrix_used_real_traffic",
+      "native_codex_parity_task_matrix_behavior_not_covered",
+      "native_codex_parity_task_matrix_coverage_kind",
+      "native_codex_parity_task_matrix_research_group_missing",
+      "native_codex_parity_task_matrix_tool_loop_missing",
+      "native_codex_parity_task_matrix_pending_task_modes_missing",
+      "native_codex_parity_task_matrix_web_search_scenario_missing",
+      "native_codex_parity_task_matrix_free_chat_scenario_missing",
+      "native_codex_parity_task_matrix_minimal_refresh_command_args_missing",
+      "native_codex_parity_task_matrix_codex_tools_missing",
+      "native_codex_parity_task_matrix_model_text_boundary_missing",
+      "native_codex_parity_task_matrix_failures",
     ]);
     writeFakeLatestReport("latest-goal-real-run-readiness.json", {
       ok: true,

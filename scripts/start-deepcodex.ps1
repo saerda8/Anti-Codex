@@ -136,6 +136,12 @@ if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
 }
 $USES_ANTIGRAVITY_UPSTREAM = $env:TRANSLATOR_UPSTREAM_MODE -eq "antigravity"
 
+function Test-AntiCodexRequiresAntigravityDesktop {
+    if (-not $USES_ANTIGRAVITY_UPSTREAM) { return $false }
+    $transport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "cli" }
+    return $transport.ToLowerInvariant() -ne "cli"
+}
+
 function Update-AntiCodexUpstreamEnvironment {
     if (-not $IS_ANTICODEX_INSTALL_ROOT -or -not (Test-Path -LiteralPath $ANTICODEX_UPSTREAM_PROFILE_SCRIPT -PathType Leaf)) {
         return
@@ -247,7 +253,7 @@ function Protect-AntiCodexLogDb {
 
 if (Test-Path -LiteralPath $ANTIGRAVITY_DESKTOP_HELPER) {
     . $ANTIGRAVITY_DESKTOP_HELPER
-} elseif ($USES_ANTIGRAVITY_UPSTREAM) {
+} elseif (Test-AntiCodexRequiresAntigravityDesktop) {
     throw "Antigravity Desktop helper is missing: $ANTIGRAVITY_DESKTOP_HELPER"
 }
 
@@ -2038,7 +2044,7 @@ if ($DEEPCODEX_WORKSPACE) {
 }
 
 function Ensure-AntigravityDesktopRunning {
-    if (-not $USES_ANTIGRAVITY_UPSTREAM) { return $true }
+    if (-not (Test-AntiCodexRequiresAntigravityDesktop)) { return $true }
     $running = Get-AntigravityMainProcess
     if ($running) {
         $env:ANTIGRAVITY_DESKTOP_PATH = [string]$running.ExecutablePath
