@@ -1111,6 +1111,7 @@ const summary = {
     dryRun: boolField(report, "dryRun"),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    suiteProfile: has(report, "suiteProfile") ? asString(report.suiteProfile) : null,
     selectedTasks: Array.isArray(report.selectedTasks) ? report.selectedTasks.map(asString).filter(Boolean) : [],
     selectedTaskCount: Array.isArray(report.selectedTasks) ? report.selectedTasks.length : 0,
     maxRealEvidenceAgeHours: has(report, "maxRealEvidenceAgeHours") ? report.maxRealEvidenceAgeHours : null,

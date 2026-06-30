@@ -12440,6 +12440,9 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
 
   assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
+  assert.match(suite, /--suite-profile/);
+  assert.match(suite, /extendedTasks/);
+  assert.match(suite, /allTasks/);
   assert.match(suite, /dryRun = !allowRealTraffic/);
   assert.match(suite, /latest-desktop-task-suite\.json/);
   assert.match(suite, /createHash\("sha256"\)/);
@@ -12463,6 +12466,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /expectedReportName/);
   assert.match(suite, /expectedTaskMode/);
   assert.match(summarizer, /desktopTaskSuiteEvidence/);
+  assert.match(summarizer, /suiteProfile/);
   assert.match(summarizer, /realTaskEvidenceComplete/);
   assert.match(summarizer, /realTaskEvidenceFresh/);
   assert.match(summarizer, /realTaskEvidenceFreshnessFailureCount/);
@@ -12519,6 +12523,37 @@ test("desktop task suite dry-run audits stale latest real task evidence without 
     assert.ok(report.realTaskEvidenceFailures.some((failure) => failure === "repo-multi-file-edit_latest_real_report_stale"));
     assert.equal(report.latestRealTaskEvidence["repo-multi-file-edit"].fresh, false);
     assert.ok(report.latestRealTaskEvidence["repo-multi-file-edit"].ageMs > 24 * 60 * 60 * 1000);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("desktop task suite supports an extended concrete task matrix without using traffic", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-desktop-suite-profile-"));
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-desktop-task-suite.mjs"),
+      "--report-root",
+      tempRoot,
+      "--suite-profile",
+      "extended",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.requestedRealTraffic, false);
+    assert.equal(report.usedRealTraffic, false);
+    assert.equal(report.suiteProfile, "extended");
+    assert.ok(report.selectedTasks.includes("exact-marker"));
+    assert.ok(report.selectedTasks.includes("web-search"));
+    assert.ok(report.selectedTasks.includes("coding-project"));
+    assert.ok(report.selectedTasks.includes("multi-turn-project"));
+    assert.ok(report.selectedTasks.includes("report-site"));
+    assert.ok(report.selectedTasks.includes("complex-project"));
+    assert.equal(report.perTaskReports["web-search"], "latest-ui-web-search-smoke.json");
+    assert.equal(report.perTaskReports["coding-project"], "latest-ui-coding-project-smoke.json");
+    assert.equal(report.perTaskReports["multi-turn-project"], "latest-ui-multi-turn-project-smoke.json");
+    assert.equal(report.perTaskReports["report-site"], "latest-ui-report-site-smoke.json");
+    assert.equal(report.perTaskReports["complex-project"], "latest-ui-complex-project-smoke.json");
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

@@ -21,7 +21,15 @@ const scriptRoot = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = resolve(args.get("--source-root") || join(scriptRoot, ".."));
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const uiSmokeScript = resolve(sourceRoot, "scripts", "test-anticodex-ui-chat-smoke.mjs");
-const defaultTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"];
+const suiteProfile = String(args.get("--suite-profile") || "core").toLowerCase();
+const coreTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"];
+const extendedTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit", "web-search", "coding-project", "multi-turn-project", "report-site", "complex-project"];
+const allTasks = ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "report-site", "repo-file-edit", "repo-multi-file-edit"];
+const defaultTasks = suiteProfile === "all"
+  ? allTasks
+  : suiteProfile === "extended"
+    ? extendedTasks
+    : coreTasks;
 const selectedTasks = String(args.get("--tasks") || defaultTasks.join(","))
   .split(",")
   .map((item) => item.trim())
@@ -35,10 +43,40 @@ const taskReportExpectations = {
     expectedReportName: "ui-chat-smoke",
     expectedTaskMode: "exact-marker",
   },
+  "free-chat": {
+    file: "latest-ui-free-chat-smoke.json",
+    expectedReportName: "ui-free-chat-smoke",
+    expectedTaskMode: "free-chat",
+  },
+  "web-search": {
+    file: "latest-ui-web-search-smoke.json",
+    expectedReportName: "ui-web-search-smoke",
+    expectedTaskMode: "web-search",
+  },
   "local-project": {
     file: "latest-ui-local-project-smoke.json",
     expectedReportName: "ui-local-project-smoke",
     expectedTaskMode: "local-project",
+  },
+  "coding-project": {
+    file: "latest-ui-coding-project-smoke.json",
+    expectedReportName: "ui-coding-project-smoke",
+    expectedTaskMode: "coding-project",
+  },
+  "multi-turn-project": {
+    file: "latest-ui-multi-turn-project-smoke.json",
+    expectedReportName: "ui-multi-turn-project-smoke",
+    expectedTaskMode: "multi-turn-project",
+  },
+  "report-site": {
+    file: "latest-ui-report-site-smoke.json",
+    expectedReportName: "ui-report-site-smoke",
+    expectedTaskMode: "report-site",
+  },
+  "complex-project": {
+    file: "latest-ui-complex-project-smoke.json",
+    expectedReportName: "ui-complex-project-smoke",
+    expectedTaskMode: "complex-project",
   },
   "repo-file-edit": {
     file: "latest-ui-repo-file-edit-smoke.json",
@@ -59,7 +97,9 @@ function timeoutForTask(taskMode) {
   if (args.has("--timeout-ms")) return Math.max(15_000, Number(args.get("--timeout-ms") || 0));
   if (taskMode === "repo-multi-file-edit") return 360_000;
   if (taskMode === "repo-file-edit") return 240_000;
-  if (taskMode === "local-project") return 180_000;
+  if (taskMode === "multi-turn-project") return 240_000;
+  if (taskMode === "complex-project") return 240_000;
+  if (taskMode === "local-project" || taskMode === "coding-project" || taskMode === "report-site" || taskMode === "web-search") return 180_000;
   return 120_000;
 }
 
@@ -319,6 +359,7 @@ const payload = {
   coverageKind: dryRun ? "desktop-task-suite-dry-run" : "desktop-task-suite-real-traffic",
   sourceRoot,
   reportRoot,
+  suiteProfile,
   selectedTasks,
   perTaskReports,
   tasks,
