@@ -12510,6 +12510,10 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(managerInject, /desktopTaskSuite refresh: needed=/);
   assert.doesNotMatch(suite, /Promise\.all/);
   assert.match(releaseGates, /scripts\/test-anticodex-desktop-task-suite\.mjs/);
+  assert.match(releaseGates, /id: "desktopTaskSuite"/);
+  assert.match(releaseGates, /latest-desktop-task-suite\.json/);
+  assert.match(releaseGates, /requireDesktopTaskSuiteSemantics/);
+  assert.match(releaseGates, /desktop_task_suite_real_task_evidence_not_fresh/);
   assert.match(runtimeSync, /scripts\\test-anticodex-desktop-task-suite\.mjs/);
   assert.match(collector, /latest-desktop-task-suite\.json/);
   assert.match(signer, /latest-desktop-task-suite\.json/);

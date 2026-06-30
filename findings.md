@@ -179,6 +179,8 @@
 - Translator-owned `web_search` and `web_fetch` remain local tools. Known internal tools retry one failed execution once and preserve the concrete final error instead of misreporting a transient failure as an unavailable tool.
 - Older statements below that describe native MCP or prompt-mediated Antigravity tooling as the default are historical. The authoritative default contract is Codex-owned tools with Antigravity supplying model text only; native Antigravity tooling is explicit opt-in.
 
+- 2026-06-30 desktop-task-suite release evidence: the agentic desktop task suite summary report must be directly verified by release/report surfaces; do not rely solely on scattered individual UI smoke reports.
+
 ## Confirmed Facts
 - Anti-Codex now has an installed runtime-config verifier. It reads `%APPDATA%\anticodex\codex-home-deepseek-app\config.toml` and fails if the isolated config points at remote ChatGPT/OpenAI account endpoints, uses non-file auth, loses the generated model catalog, or re-enables Responses WebSocket / remote plugin feature flags.
 - The installed overall verifier now runs that runtime-config check by default. Latest installed proof reports `runtimeConfig.ok:true`, local gateway URLs, file auth, isolated Anti-Codex Codex home, and `responses_websockets`, `responses_websockets_v2`, `plugins`, `plugin_sharing`, and `remote_plugin` all set to `false`.

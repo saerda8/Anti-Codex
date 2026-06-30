@@ -111,6 +111,7 @@ const runtimeSyncFiles = [
 ];
 
 const allowedAntiCodexPatchScope = ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"];
+const requiredAgenticDesktopTaskSuiteTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
 
 const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true, requireInstalledOverallSemantics: true, expectedFast: true, expectedReportName: "installed-overall-fast", expectedCoverageKind: "installed-fast-no-traffic" },
@@ -151,6 +152,7 @@ const gateDefinitions = [
   { id: "uiRepoMultiFileEditSmoke", group: "real-traffic", file: "latest-ui-repo-multi-file-edit-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-repo-multi-file-edit-smoke", taskMode: "repo-multi-file-edit", prefix: "ui_repo_multi_file_edit_smoke", requiredFiles: ["source", "test", "data", "readme", "html"], markerOptional: true, requireRepoMultiFileEdit: true } },
   { id: "uiComplexProjectSmoke", group: "real-traffic", file: "latest-ui-complex-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-complex-project-smoke", taskMode: "complex-project", prefix: "ui_complex_project_smoke", requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"], requireSourceJsonUrls: 3, requireCodingProject: true, requireReportSite: true } },
   { id: "uiReportSiteSmoke", group: "real-traffic", file: "latest-ui-report-site-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-report-site-smoke", taskMode: "report-site", prefix: "ui_report_site_smoke", requiredFiles: ["reportMd", "indexHtml", "doneTxt"], requireReportSite: true } },
+  { id: "desktopTaskSuite", group: "real-traffic", file: "latest-desktop-task-suite.json", requiredForRelease: true, requireDesktopTaskSuiteSemantics: true },
   { id: "toolLoop", group: "real-traffic", file: "latest-tool-loop.json", requiredForRelease: true, requireToolLoopSemantics: "standard" },
   { id: "nativeToolLoop", group: "real-traffic", file: "latest-native-tool-loop.json", requiredForRelease: false, requireToolLoopSemantics: "native", note: "Opt-in native bridge diagnostic; default Anti-Codex uses Codex-owned tools over the CLI model transport." },
   { id: "nativeMultiToolLoop", group: "real-traffic", file: "latest-native-multi-tool-loop.json", requiredForRelease: false, requireToolLoopSemantics: "native-multi", note: "Opt-in native bridge diagnostic; default Anti-Codex uses Codex-owned tools over the CLI model transport." },
@@ -644,6 +646,41 @@ function summarizeGate(definition) {
         if (Number(artifact.sharedUrlCount || 0) < 1) semanticFailures.push(`${prefix}_shared_urls_missing`);
         if (artifact.htmlComplete !== true) semanticFailures.push(`${prefix}_html_not_complete`);
         if (artifact.htmlLinksReport !== true) semanticFailures.push(`${prefix}_html_report_link_missing`);
+      }
+    }
+    if (definition.requireDesktopTaskSuiteSemantics) {
+      const selectedTasks = Array.isArray(report.selectedTasks) ? report.selectedTasks.map((task) => String(task || "")) : [];
+      const latestRealTaskEvidence = report.latestRealTaskEvidence && typeof report.latestRealTaskEvidence === "object" ? report.latestRealTaskEvidence : {};
+      const refreshPlan = report.realTaskEvidenceRefreshPlan && typeof report.realTaskEvidenceRefreshPlan === "object" ? report.realTaskEvidenceRefreshPlan : {};
+      if (report.reportName !== "desktop-task-suite") semanticFailures.push("desktop_task_suite_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("desktop_task_suite_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("desktop_task_suite_used_real_traffic");
+      if (report.dryRun !== true) semanticFailures.push("desktop_task_suite_not_dry_run");
+      if (report.mode !== "dry-run") semanticFailures.push("desktop_task_suite_mode");
+      if (report.behaviorCovered !== true) semanticFailures.push("desktop_task_suite_behavior_not_covered");
+      if (report.coverageKind !== "desktop-task-suite-dry-run") semanticFailures.push("desktop_task_suite_coverage_kind");
+      if (report.suiteProfile !== "agentic") semanticFailures.push("desktop_task_suite_profile_not_agentic");
+      if (report.realTaskEvidenceComplete !== true) semanticFailures.push("desktop_task_suite_real_task_evidence_incomplete");
+      if (report.realTaskEvidenceFresh !== true) semanticFailures.push("desktop_task_suite_real_task_evidence_not_fresh");
+      if (Array.isArray(report.realTaskEvidenceFailures) && report.realTaskEvidenceFailures.length > 0) semanticFailures.push("desktop_task_suite_real_task_evidence_failures");
+      if (Array.isArray(report.realTaskEvidenceHardFailures) && report.realTaskEvidenceHardFailures.length > 0) semanticFailures.push("desktop_task_suite_real_task_evidence_hard_failures");
+      if (Array.isArray(report.realTaskEvidenceFreshnessFailures) && report.realTaskEvidenceFreshnessFailures.length > 0) semanticFailures.push("desktop_task_suite_real_task_evidence_freshness_failures");
+      if (refreshPlan.needed !== false) semanticFailures.push("desktop_task_suite_refresh_needed");
+      if (refreshPlan.requiresExplicitUserApproval !== false) semanticFailures.push("desktop_task_suite_refresh_approval_required");
+      for (const task of requiredAgenticDesktopTaskSuiteTasks) {
+        const evidence = latestRealTaskEvidence[task] && typeof latestRealTaskEvidence[task] === "object" ? latestRealTaskEvidence[task] : null;
+        if (!selectedTasks.includes(task)) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_not_selected`);
+        if (!evidence) {
+          semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_evidence_missing`);
+          continue;
+        }
+        if (evidence.present !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_report_missing`);
+        if (evidence.parseable !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_report_unparseable`);
+        if (evidence.ok !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_not_ok`);
+        if (evidence.requestedRealTraffic !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_real_traffic_not_requested`);
+        if (evidence.usedRealTraffic !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_real_traffic_missing`);
+        if (evidence.fresh !== true) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_not_fresh`);
+        if (Array.isArray(evidence.failures) && evidence.failures.length > 0) semanticFailures.push(`desktop_task_suite_${task.replaceAll("-", "_")}_failures`);
       }
     }
     if (definition.requireToolLoopSemantics) {
@@ -1760,6 +1797,7 @@ const realTrafficRefreshOrder = [
   ["uiRepoMultiFileEditSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode repo-multi-file-edit --timeout-ms 300000"],
   ["uiComplexProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode complex-project --timeout-ms 180000"],
   ["uiReportSiteSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode report-site --timeout-ms 150000"],
+  ["desktopTaskSuite", "real-traffic-low-state", "node scripts\\test-anticodex-desktop-task-suite.mjs --suite-profile agentic --allow-real-traffic"],
   ["toolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-tool-loop.ps1 -TimeoutSec 90"],
   ["customToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-custom-tool-loop.ps1 -TimeoutSec 90"],
   ["nativeToolLoop", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-native-tool-loop.ps1 -TimeoutSec 90"],
