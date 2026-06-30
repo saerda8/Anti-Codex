@@ -9,6 +9,22 @@ import { fileURLToPath } from "node:url";
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
   const key = process.argv[i];
+  if (key === "--help" || key === "-h") {
+    console.log(`Usage: node scripts/test-anticodex-desktop-task-suite.mjs [options]
+
+Options:
+  --allow-real-traffic     Run tasks with real traffic (default: dry-run)
+  --suite-profile <name>   Profile: core, agentic, extended, all (default: core)
+  --tasks <list>           Comma-separated task modes to run
+  --source-root <path>     Root of source tree
+  --report-root <path>     Directory for report output
+  --timeout-ms <ms>        Override per-task timeout
+  --max-real-evidence-age-hours <h>  Max age for real evidence (default: 24)
+  --keep-artifacts         Do not clean fixture artifacts after repo tasks
+  --allow-dirty-fixtures   Skip dirty-fixture check before tasks
+  --help, -h               Show this help message`);
+    process.exit(0);
+  }
   if (!key.startsWith("--")) continue;
   const value = process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[++i] : "1";
   args.set(key, value);
