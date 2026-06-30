@@ -20,6 +20,7 @@ Options:
   --report-root <path>     Directory for report output
   --timeout-ms <ms>        Override per-task timeout
   --max-real-evidence-age-hours <h>  Max age for real evidence (default: 24)
+  --no-write-report        Print JSON without writing latest/history reports
   --keep-artifacts         Do not clean fixture artifacts after repo tasks
   --allow-dirty-fixtures   Skip dirty-fixture check before tasks
   --help, -h               Show this help message`);
@@ -53,6 +54,7 @@ const selectedTasks = String(args.get("--tasks") || defaultTasks.join(","))
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);
+const noWriteReport = args.has("--no-write-report");
 const keepArtifacts = args.has("--keep-artifacts");
 const realTrafficApprovalReason = "real_traffic_required";
 const maxRealEvidenceAgeHours = Math.max(1, Number(args.get("--max-real-evidence-age-hours") || 24));
@@ -446,6 +448,18 @@ const payload = {
   elapsedMs: Date.now() - startedAt,
 };
 
-const report = writeReport(payload);
-console.log(JSON.stringify({ ...payload, report }));
+if (noWriteReport) {
+  console.log(JSON.stringify({
+    ...payload,
+    report: {
+      skipped: true,
+      noWriteReport: true,
+      latest: "",
+      history: "",
+    },
+  }));
+} else {
+  const report = writeReport(payload);
+  console.log(JSON.stringify({ ...payload, report }));
+}
 if (!payload.ok) process.exit(1);
