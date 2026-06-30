@@ -12876,6 +12876,18 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /goal-readiness summary missing real-approval plan proof/);
   assert.match(diagnostics, /goal-readiness summary missing required real-approval release actions/);
   assert.match(goalReadiness, /antigravityAccountIsolation/);
+  assert.match(goalReadiness, /latest-second-antigravity-account-login-entrypoint\.json/);
+  assert.match(goalReadiness, /secondAccountLoginEntrypoint/);
+  assert.match(goalReadiness, /approvedLoginCommandPresent/);
+  assert.match(goalReadiness, /nextNoTrafficStatusCommandPresent/);
+  assert.match(goalReadiness, /postLoginProofCommandPresent/);
+  assert.match(goalReadiness, /postLoginProofPlanValid/);
+  assert.match(goalReadiness, /second_account_login_entrypoint_missing_or_invalid/);
+  assert.match(releaseGates, /goal_readiness_second_account_entrypoint_proof_plan_invalid/);
+  assert.match(summarizer, /secondAccountLoginEntrypointProven/);
+  assert.match(summarizer, /secondAccountLoginEntrypointApprovedLoginCommandPresent/);
+  assert.match(diagnostics, /goal-readiness summary missing second-account login entrypoint proof/);
+  assert.match(diagnostics, /goal-readiness summary second-account entrypoint proof plan invalid/);
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });
 

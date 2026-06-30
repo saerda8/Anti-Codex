@@ -886,6 +886,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.realTaskCoverageRoadmapProven -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage roadmap proof" }
     if ($evidence.realApprovalPlanProven -ne $true) { Add-Failure "goal-readiness summary missing real-approval plan proof" }
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
+    if ($evidence.secondAccountLoginEntrypointProven -ne $true) { Add-Failure "goal-readiness summary missing second-account login entrypoint proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
     $requiredBlockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
@@ -938,6 +939,19 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.accountReleaseAcceptableProof -ne $false) { Add-Failure "goal-readiness summary account proof unexpectedly acceptable" }
     if (-not [string]$evidence.accountCompletionState) { Add-Failure "goal-readiness summary missing account completion state" }
     if (-not [string]$evidence.accountBlockingReason) { Add-Failure "goal-readiness summary missing account blocking reason" }
+    if ($evidence.secondAccountLoginEntrypointReportName -ne "second-antigravity-account-login-entrypoint") { Add-Failure "goal-readiness summary second-account entrypoint report name mismatch" }
+    if ($evidence.secondAccountLoginEntrypointNoTraffic -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint not no-traffic" }
+    if ($evidence.secondAccountLoginEntrypointUsedRealTraffic -ne $false) { Add-Failure "goal-readiness summary second-account entrypoint used real traffic" }
+    if ($evidence.secondAccountLoginEntrypointCoverageKind -ne "second-account-login-entrypoint-no-traffic") { Add-Failure "goal-readiness summary second-account entrypoint coverage kind mismatch" }
+    if ($evidence.secondAccountLoginEntrypointStatusOnlyOk -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint status-only check missing" }
+    if ($evidence.secondAccountLoginEntrypointMissingApprovalBlocked -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint missing-approval guard missing" }
+    if ($evidence.secondAccountLoginEntrypointApprovedStartBlockedByStatusGate -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint status gate guard missing" }
+    if ($evidence.secondAccountLoginEntrypointSameWindowsUserTargetBlocked -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint same-user guard missing" }
+    if ($evidence.secondAccountLoginEntrypointApprovedLoginCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint login command missing" }
+    if ($evidence.secondAccountLoginEntrypointNextNoTrafficStatusCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint status command missing" }
+    if ($evidence.secondAccountLoginEntrypointPostLoginProofCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof command missing" }
+    if ($evidence.secondAccountLoginEntrypointPostLoginProofPlanPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof plan missing" }
+    if ($evidence.secondAccountLoginEntrypointPostLoginProofPlanValid -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof plan invalid" }
     if (-not [string]$evidence.nextRequiredUserAction) { Add-Failure "goal-readiness summary missing next required user action" }
     if ([int]$evidence.blockerCount -lt 1) { Add-Failure "goal-readiness summary missing blockers" }
     if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }

@@ -1220,6 +1220,7 @@ function summarizeGate(definition) {
       const roadmap = report.realTaskCoverageRoadmap && typeof report.realTaskCoverageRoadmap === "object" ? report.realTaskCoverageRoadmap : {};
       const approval = report.realApprovalPlan && typeof report.realApprovalPlan === "object" ? report.realApprovalPlan : {};
       const account = report.antigravityAccountIsolation && typeof report.antigravityAccountIsolation === "object" ? report.antigravityAccountIsolation : {};
+      const entrypoint = report.secondAccountLoginEntrypoint && typeof report.secondAccountLoginEntrypoint === "object" ? report.secondAccountLoginEntrypoint : {};
       const requiredWorkerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
       const blockedGates = Array.isArray(releaseGateStatus.requiredRealTrafficBlockedGates) ? releaseGateStatus.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const blockers = Array.isArray(report.blockers) ? report.blockers.map((item) => String(item || "")) : [];
@@ -1231,7 +1232,7 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push("goal_readiness_behavior_not_covered");
       if (report.coverageKind !== "goal-readiness-report-only") semanticFailures.push("goal_readiness_coverage_kind");
       if (report.goalComplete === true) semanticFailures.push("goal_readiness_goal_unexpectedly_complete");
-      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "accountIsolationPreparedOnly"]) {
+      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "accountIsolationPreparedOnly"]) {
         if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
       }
       if (Number(worker.passedServerCount || 0) < requiredWorkerServers.length) semanticFailures.push("goal_readiness_worker_mcp_passed_count");
@@ -1280,6 +1281,18 @@ function summarizeGate(definition) {
       }
       if (approval.optionalReleaseRealTrafficActionCount === undefined || approval.optionalReleaseRealTrafficActionCount === null) semanticFailures.push("goal_readiness_optional_approval_actions_missing");
       if (account.releaseAcceptableAccountProof !== false) semanticFailures.push("goal_readiness_account_proof_unexpectedly_acceptable");
+      if (entrypoint.reportName !== "second-antigravity-account-login-entrypoint") semanticFailures.push("goal_readiness_second_account_entrypoint_report_name");
+      if (entrypoint.noTraffic !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_not_no_traffic");
+      if (entrypoint.usedRealTraffic !== false) semanticFailures.push("goal_readiness_second_account_entrypoint_used_real_traffic");
+      if (entrypoint.coverageKind !== "second-account-login-entrypoint-no-traffic") semanticFailures.push("goal_readiness_second_account_entrypoint_coverage_kind");
+      if (entrypoint.statusOnlyOk !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_only_missing");
+      if (entrypoint.missingApprovalBlocked !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_missing_approval_not_blocked");
+      if (entrypoint.approvedStartBlockedByStatusGate !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_gate_not_blocking");
+      if (entrypoint.sameWindowsUserTargetBlocked !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_same_user_not_blocked");
+      if (entrypoint.approvedLoginCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_login_command_missing");
+      if (entrypoint.nextNoTrafficStatusCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_command_missing");
+      if (entrypoint.postLoginProofCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_command_missing");
+      if (entrypoint.postLoginProofPlanValid !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_plan_invalid");
       if (typeof report.nextRequiredUserAction !== "string" || !report.nextRequiredUserAction) semanticFailures.push("goal_readiness_next_user_action_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_readiness_failures");
     }

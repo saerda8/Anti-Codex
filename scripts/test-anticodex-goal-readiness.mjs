@@ -57,6 +57,7 @@ const capabilityMatrixReport = readReport("latest-agentic-capability-matrix.json
 const realTaskCoverageRoadmapReport = readReport("latest-real-task-coverage-roadmap.json");
 const realApprovalPlanReport = readReport("latest-real-approval-plan.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
+const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
 const releaseGates = readReport("latest-release-gates.json");
 
 const sync = syncReadiness.report || {};
@@ -206,6 +207,66 @@ const antigravityAccountIsolation = {
   postLoginProofPlanPresent: !!isolation.postLoginProofPlan,
 };
 
+const entrypoint = secondAccountLoginEntrypointReport.report || {};
+const entrypointLoginCommand = String(entrypoint.approvedLoginCommandTemplate || "");
+const entrypointStatusCommand = String(entrypoint.nextNoTrafficStatusCommand || "");
+const entrypointProofCommand = String(entrypoint.postLoginProofCommandTemplate || "");
+const entrypointProofPlan = entrypoint.postLoginProofPlan && typeof entrypoint.postLoginProofPlan === "object" ? entrypoint.postLoginProofPlan : {};
+const entrypointRequiredIdentityInputs = Array.isArray(entrypointProofPlan.requiredAccountIdentityInputs)
+  ? entrypointProofPlan.requiredAccountIdentityInputs.map(String).filter(Boolean)
+  : [];
+const secondAccountLoginEntrypoint = {
+  reportPresent: secondAccountLoginEntrypointReport.present,
+  reportOk: entrypoint.ok === true,
+  reportName: String(entrypoint.reportName || ""),
+  noTraffic: entrypoint.noTraffic === true,
+  requestedRealTraffic: entrypoint.requestedRealTraffic === true,
+  usedRealTraffic: entrypoint.usedRealTraffic === true,
+  behaviorCovered: entrypoint.behaviorCovered === true,
+  coverageKind: String(entrypoint.coverageKind || ""),
+  statusOnlyOk: entrypoint.statusOnlyOk === true,
+  missingApprovalBlocked: entrypoint.missingApprovalBlocked === true,
+  approvedStartBlockedByStatusGate: entrypoint.approvedStartBlockedByStatusGate === true,
+  sameWindowsUserTargetBlocked: entrypoint.sameWindowsUserTargetBlocked === true,
+  sameWindowsUserTargetStartedLogin: entrypoint.sameWindowsUserTargetStartedLogin === true,
+  sameWindowsUserTargetSafetyFieldsOk: entrypoint.sameWindowsUserTargetSafetyFieldsOk === true,
+  requestedStartLogin: entrypoint.requestedStartLogin === true,
+  startedLogin: entrypoint.startedLogin === true,
+  changedSystem: entrypoint.changedSystem === true,
+  createdUser: entrypoint.createdUser === true,
+  capturesLoginOutput: entrypoint.capturesLoginOutput === true,
+  capturesPassword: entrypoint.capturesPassword === true,
+  storesPassword: entrypoint.storesPassword === true,
+  safeToStartLogin: entrypoint.safeToStartLogin === true,
+  canRunPostLoginProof: entrypoint.canRunPostLoginProof === true,
+  completionState: String(entrypoint.completionState || ""),
+  readinessBlockingReason: String(entrypoint.readinessBlockingReason || ""),
+  operatorBlockingStage: String(entrypoint.operatorBlockingStage || ""),
+  operatorNextStep: String(entrypoint.operatorNextStep || ""),
+  approvedLoginCommandPresent: entrypointLoginCommand.includes("scripts\\start-anticodex-second-antigravity-account-login.ps1")
+    && entrypointLoginCommand.includes("-StartLogin")
+    && entrypointLoginCommand.includes("-StartLoginApproval start-separate-windows-user-login"),
+  nextNoTrafficStatusCommandPresent: entrypointStatusCommand.includes("scripts\\test-anticodex-antigravity-account-isolation-status.ps1"),
+  postLoginProofCommandPresent: entrypointProofCommand.includes("scripts\\test-anticodex-antigravity-cli-real-smoke.ps1")
+    && entrypointProofCommand.includes("-AllowSeparateAccountProof")
+    && entrypointProofCommand.includes("-AccountIsolationBoundary separate-windows-user"),
+  postLoginProofPlanPresent: !!entrypoint.postLoginProofPlan,
+  postLoginProofPlanValid: String(entrypointProofPlan.proofScript || "") === "test-anticodex-antigravity-cli-real-smoke.ps1"
+    && String(entrypointProofPlan.accountIsolationBoundary || "") === "separate-windows-user"
+    && entrypointProofPlan.requiresInteractiveLoginComplete === true
+    && entrypointProofPlan.requiresApprovedRealTraffic === true
+    && entrypointProofPlan.requiresSeparateAccountProofApproval === true
+    && entrypointProofPlan.requiresDistinctAccountIdentityComparison === true
+    && entrypointRequiredIdentityInputs.includes("AntiCodexAccountId")
+    && entrypointRequiredIdentityInputs.includes("McpAccountId")
+    && entrypointProofPlan.accountIdsMustDiffer === true
+    && entrypointProofPlan.mcpAccountLaneManagedByAntiCodex === false
+    && String(entrypointProofPlan.mcpAccountLaneOwner || "") === "external-antigravity-account-not-managed-here",
+  separateAccountVerified: entrypoint.separateAccountVerified === true,
+  loginVerified: entrypoint.loginVerified === true,
+  releaseAcceptableAccountProof: entrypoint.releaseAcceptableAccountProof === true,
+};
+
 const gates = releaseGates.report || {};
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
@@ -268,6 +329,33 @@ const proven = {
     && releaseGateStatus.shortReady
     && releaseGateStatus.missingShort.length === 0
     && (releaseGateStatus.releaseReady || releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic),
+  secondAccountLoginEntrypoint: secondAccountLoginEntrypoint.reportOk
+    && secondAccountLoginEntrypoint.reportName === "second-antigravity-account-login-entrypoint"
+    && secondAccountLoginEntrypoint.noTraffic
+    && secondAccountLoginEntrypoint.requestedRealTraffic === false
+    && secondAccountLoginEntrypoint.usedRealTraffic === false
+    && secondAccountLoginEntrypoint.behaviorCovered
+    && secondAccountLoginEntrypoint.coverageKind === "second-account-login-entrypoint-no-traffic"
+    && secondAccountLoginEntrypoint.statusOnlyOk
+    && secondAccountLoginEntrypoint.missingApprovalBlocked
+    && secondAccountLoginEntrypoint.approvedStartBlockedByStatusGate
+    && secondAccountLoginEntrypoint.sameWindowsUserTargetBlocked
+    && secondAccountLoginEntrypoint.sameWindowsUserTargetStartedLogin === false
+    && secondAccountLoginEntrypoint.sameWindowsUserTargetSafetyFieldsOk
+    && secondAccountLoginEntrypoint.requestedStartLogin === false
+    && secondAccountLoginEntrypoint.startedLogin === false
+    && secondAccountLoginEntrypoint.changedSystem === false
+    && secondAccountLoginEntrypoint.createdUser === false
+    && secondAccountLoginEntrypoint.capturesLoginOutput === false
+    && secondAccountLoginEntrypoint.capturesPassword === false
+    && secondAccountLoginEntrypoint.storesPassword === false
+    && secondAccountLoginEntrypoint.approvedLoginCommandPresent
+    && secondAccountLoginEntrypoint.nextNoTrafficStatusCommandPresent
+    && secondAccountLoginEntrypoint.postLoginProofCommandPresent
+    && secondAccountLoginEntrypoint.postLoginProofPlanPresent
+    && secondAccountLoginEntrypoint.postLoginProofPlanValid
+    && secondAccountLoginEntrypoint.separateAccountVerified === false
+    && secondAccountLoginEntrypoint.releaseAcceptableAccountProof === false,
   accountIsolationPreparedOnly: antigravityAccountIsolation.reportOk
     && antigravityAccountIsolation.completionState === "blocked_before_interactive_login"
     && antigravityAccountIsolation.safeToAskUserForSecondAccountLogin === false
@@ -289,6 +377,7 @@ if (!realTaskCoverageRoadmap.resultProofComplete) blockers.push("real_task_resul
 if (!proven.realApprovalPlan) blockers.push("real_approval_plan_missing_or_invalid");
 for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) blockers.push(`real_task_coverage_refresh_required:${profile}`);
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
+if (!proven.secondAccountLoginEntrypoint) blockers.push("second_account_login_entrypoint_missing_or_invalid");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
 const goalComplete = proven.codexClientCopy
@@ -297,12 +386,13 @@ const goalComplete = proven.codexClientCopy
   && proven.agenticCapabilityMatrix
   && proven.realTaskCoverageRoadmap
   && proven.realApprovalPlan
+  && proven.secondAccountLoginEntrypoint
   && realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic.length === 0
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -320,6 +410,7 @@ const payload = {
   realTaskCoverageRoadmap,
   realApprovalPlan,
   antigravityAccountIsolation,
+  secondAccountLoginEntrypoint,
   releaseGateStatus,
   nextRequiredUserAction: antigravityAccountIsolation.safeToAskUserForSecondAccountLogin
     ? "login_second_antigravity_account_with_explicit_approval"
