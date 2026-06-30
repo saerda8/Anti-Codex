@@ -95,7 +95,12 @@ if ($approvedButBlockedResult.exitCode -ne 2 -or -not $approvedButBlocked -or $a
 foreach ($entry in @($statusOnly, $missingApproval, $approvedButBlocked)) {
     if (-not $entry) { continue }
     if ($entry.usedRealTraffic -ne $false) { $failures.Add("entrypoint_used_real_traffic") | Out-Null }
+    if ($entry.requestedRealTraffic -ne $false) { $failures.Add("entrypoint_requested_real_traffic") | Out-Null }
+    if ($entry.changedSystem -ne $false) { $failures.Add("entrypoint_changed_system") | Out-Null }
+    if ($entry.createdUser -ne $false) { $failures.Add("entrypoint_created_user") | Out-Null }
     if ($entry.capturesLoginOutput -ne $false) { $failures.Add("entrypoint_captures_login_output") | Out-Null }
+    if ($entry.capturesPassword -ne $false) { $failures.Add("entrypoint_captures_password") | Out-Null }
+    if ($entry.storesPassword -ne $false) { $failures.Add("entrypoint_stores_password") | Out-Null }
     if ($entry.startedLogin -eq $true) { $failures.Add("entrypoint_started_login_before_ready") | Out-Null }
     if ($entry.separateAccountVerified -ne $false) { $failures.Add("entrypoint_claimed_separate_account") | Out-Null }
     if ($entry.loginVerified -ne $false) { $failures.Add("entrypoint_claimed_login") | Out-Null }
@@ -117,6 +122,7 @@ $report = [ordered]@{
     coverageKind = "second-account-login-entrypoint-no-traffic"
     windowsUser = $WindowsUser
     statusOnlyOk = ($statusOnlyResult.ok -and $statusOnly.ok -eq $true)
+    statusOnlySafetyFieldsOk = ($statusOnly -and $statusOnly.requestedRealTraffic -eq $false -and $statusOnly.changedSystem -eq $false -and $statusOnly.createdUser -eq $false -and $statusOnly.capturesPassword -eq $false -and $statusOnly.storesPassword -eq $false)
     statusOnlyExitCode = $statusOnlyResult.exitCode
     missingApprovalBlocked = ($missingApprovalResult.exitCode -eq 2 -and $missingApproval.error -eq "explicit_start_login_approval_missing")
     approvedStartBlockedByStatusGate = ($approvedButBlockedResult.exitCode -eq 2 -and $approvedButBlocked.error -eq "second_account_login_not_ready")

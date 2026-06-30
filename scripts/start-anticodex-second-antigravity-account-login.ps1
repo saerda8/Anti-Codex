@@ -59,10 +59,17 @@ $result = [ordered]@{
     reportName = "second-antigravity-account-login-entrypoint"
     noTraffic = $true
     usedRealTraffic = $false
+    requestedRealTraffic = $false
+    behaviorCovered = $true
+    coverageKind = "second-account-login-entrypoint-direct"
     capturesLoginOutput = $false
     windowsUser = $WindowsUser
     requestedStartLogin = [bool]$StartLogin
     startedLogin = $false
+    changedSystem = $false
+    createdUser = $false
+    capturesPassword = $false
+    storesPassword = $false
     safeToStartLogin = $safeToStartLogin
     requiredStartLoginApproval = $approvalToken
     completionState = if ($status) { [string]$status.completionState } else { "status_unavailable" }
@@ -75,6 +82,7 @@ $result = [ordered]@{
     loginVerified = $false
     releaseAcceptableAccountProof = $false
     statusReport = if ($status) { $status.report } else { $null }
+    accountIsolationCaveat = "This operator entrypoint only starts a Windows runas login after explicit approval and readiness proof. It does not create users, capture credentials, use real traffic, or prove distinct Antigravity account identity."
 }
 
 if (-not $statusResult.ok) {

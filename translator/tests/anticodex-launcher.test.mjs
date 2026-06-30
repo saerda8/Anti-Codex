@@ -14895,6 +14895,14 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLogin, /explicit_start_login_approval_missing/);
   assert.match(secondAccountLogin, /second_account_login_not_ready/);
   assert.match(secondAccountLogin, /safeToStartLogin/);
+  assert.match(secondAccountLogin, /requestedRealTraffic = \$false/);
+  assert.match(secondAccountLogin, /behaviorCovered = \$true/);
+  assert.match(secondAccountLogin, /coverageKind = "second-account-login-entrypoint-direct"/);
+  assert.match(secondAccountLogin, /changedSystem = \$false/);
+  assert.match(secondAccountLogin, /createdUser = \$false/);
+  assert.match(secondAccountLogin, /capturesPassword = \$false/);
+  assert.match(secondAccountLogin, /storesPassword = \$false/);
+  assert.match(secondAccountLogin, /accountIsolationCaveat/);
   assert.doesNotMatch(secondAccountLogin, /New-LocalUser|Add-LocalGroupMember|Invoke-RestMethod|Invoke-WebRequest|\.env/);
 
   const secondAccountManagerAction = server.match(/secondAccountLoginStatus:\s*\{[\s\S]*?\n    \},/)?.[0] || "";
@@ -14917,6 +14925,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLoginReport, /createdUser = \$false/);
   assert.match(secondAccountLoginReport, /missingApprovalBlocked/);
   assert.match(secondAccountLoginReport, /approvedStartBlockedByStatusGate/);
+  assert.match(secondAccountLoginReport, /statusOnlySafetyFieldsOk/);
+  assert.match(secondAccountLoginReport, /entrypoint_requested_real_traffic/);
+  assert.match(secondAccountLoginReport, /entrypoint_changed_system/);
+  assert.match(secondAccountLoginReport, /entrypoint_created_user/);
   assert.match(secondAccountLoginReport, /capturesPassword = \$false/);
   assert.match(secondAccountLoginReport, /storesPassword = \$false/);
   assert.match(secondAccountLoginReport, /StartLoginApproval", "start-separate-windows-user-login"/);
