@@ -7610,7 +7610,7 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
 
   assert.match(managerButtons, /test-anticodex-manager-button\.mjs/);
   assert.match(managerButtonHelper, /bootstrapManagerActionToken/);
-  assert.match(managerButtonHelper, /MANAGER_BOOTSTRAP_MAX_ATTEMPTS = 3/);
+  assert.match(managerButtonHelper, /MANAGER_BOOTSTRAP_MAX_ATTEMPTS = 5/);
   assert.match(managerButtonHelper, /managerBootstrapRetryBudgetMs/);
   assert.match(managerButtonHelper, /managerBootstrapRequestTimeoutMs/);
   assert.match(managerButtonHelper, /Manager bootstrap failed after/);
@@ -7695,6 +7695,8 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*\\u7b2c\\u4e8c Antigravity \\u8d26\\u53f7\\u72b6\\u6001\\u68c0\\u67e5/);
   assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*operatorBlockingStage/);
   assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*operatorNextStep/);
+  assert.match(verifier, /operatorStepDisplayText/);
+  assert.match(verifier, /open_elevated_windows_user_settings_then_rerun_prepare[\s\S]*\\u6253\\u5f00 Windows \\u8bbe\\u7f6e/);
   assert.match(verifier, /const realCallPassed = result\.mcp\?\.smoke\?\.realCall\?\.passed === true/);
   assert.match(verifier, /result\.mcp\?\.realCallPassed === true/);
   assert.match(verifier, /drainedPayloads\[item\.action\] = payload/);
@@ -14078,6 +14080,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u767b\\u5f55\\u51c6\\u5907/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*operatorBlockingStage/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*operatorNextStep/);
+  assert.match(managerInject, /operatorStepDisplayText/);
+  assert.match(managerInject, /open_elevated_windows_user_settings_then_rerun_prepare[\s\S]*\\u6253\\u5f00 Windows \\u8bbe\\u7f6e/);
   assert.match(server, /data-manager-action="secondAccountLoginStatus"/);
 
   assert.match(secondAccountLoginReport, /reportName = "second-antigravity-account-login-entrypoint"/);

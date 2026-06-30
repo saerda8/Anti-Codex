@@ -31,7 +31,7 @@ if (simulatePendingReopen) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.lock");
 let managerActionToken = "";
-const MANAGER_BOOTSTRAP_MAX_ATTEMPTS = 3;
+const MANAGER_BOOTSTRAP_MAX_ATTEMPTS = 5;
 
 async function acquireManagerButtonLock() {
   const deadline = Date.now() + Math.max(10000, timeoutMs + 5000);
@@ -258,6 +258,16 @@ function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode) {
 `;
 }
 
+function operatorStepDisplayText(step) {
+  const value = String(step || "");
+  if (value === "open_elevated_windows_user_settings_then_rerun_prepare") return "\u6253\u5f00 Windows \u8bbe\u7f6e / \u5176\u4ed6\u7528\u6237\uff0c\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel\uff0c\u7136\u540e\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
+  if (value === "create_target_windows_user") return "\u5148\u5728 Windows \u4e2d\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel \u7528\u6237";
+  if (value === "run_account_isolation_status") return "\u91cd\u65b0\u8fd0\u884c\u8d26\u53f7\u9694\u79bb\u72b6\u6001\u68c0\u67e5";
+  if (value === "run_windows_user_interactive_login_with_user_present") return "\u7b49\u7528\u6237\u660e\u786e\u6279\u51c6\u540e\uff0c\u4f7f\u7528\u72ec\u7acb Windows \u7528\u6237\u542f\u52a8\u7b2c\u4e8c Antigravity \u767b\u5f55";
+  if (value === "verify_windows_user_manually_then_rerun_prepare") return "\u624b\u52a8\u786e\u8ba4 Windows \u7528\u6237\u540e\uff0c\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
+  return value;
+}
+
 function managerSummaryFromActionPayload(actionName, payload) {
   const result = payload?.result || payload || {};
   if (actionName === "refreshStatus") return `\u5237\u65b0\u72b6\u6001\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u5b8c\u6210"}`;
@@ -277,7 +287,7 @@ function managerSummaryFromActionPayload(actionName, payload) {
       result.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
       result.readinessBlockingReason ? `\u963b\u788d\uff1a${result.readinessBlockingReason}` : "",
       result.operatorBlockingStage ? `\u9636\u6bb5\uff1a${result.operatorBlockingStage}` : "",
-      result.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${result.operatorNextStep}` : "",
+      result.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${operatorStepDisplayText(result.operatorNextStep)}` : "",
     ].filter(Boolean).join("\n");
   }
   if (actionName === "pluginCapabilities") {

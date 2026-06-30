@@ -1385,6 +1385,16 @@
     return "\u57fa\u7840\u804a\u5929\u3001\u6d41\u5f0f\u548c\u5de5\u5177\u8c03\u7528\u5df2\u9a8c\u8bc1";
   }
 
+  function operatorStepDisplayText(step) {
+    const value = String(step || "");
+    if (value === "open_elevated_windows_user_settings_then_rerun_prepare") return "\u6253\u5f00 Windows \u8bbe\u7f6e / \u5176\u4ed6\u7528\u6237\uff0c\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel\uff0c\u7136\u540e\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
+    if (value === "create_target_windows_user") return "\u5148\u5728 Windows \u4e2d\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel \u7528\u6237";
+    if (value === "run_account_isolation_status") return "\u91cd\u65b0\u8fd0\u884c\u8d26\u53f7\u9694\u79bb\u72b6\u6001\u68c0\u67e5";
+    if (value === "run_windows_user_interactive_login_with_user_present") return "\u7b49\u7528\u6237\u660e\u786e\u6279\u51c6\u540e\uff0c\u4f7f\u7528\u72ec\u7acb Windows \u7528\u6237\u542f\u52a8\u7b2c\u4e8c Antigravity \u767b\u5f55";
+    if (value === "verify_windows_user_manually_then_rerun_prepare") return "\u624b\u52a8\u786e\u8ba4 Windows \u7528\u6237\u540e\uff0c\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
+    return value;
+  }
+
   function summaryText(action, payload) {
     const r = payload?.result || payload || {};
     const unwrapped = r?.result && typeof r.result === "object" ? r.result : r;
@@ -1426,7 +1436,7 @@
       r.targetWindowsUser ? `Windows \u7528\u6237\uff1a${r.targetWindowsUser}` : "",
       r.readinessBlockingReason ? `\u963b\u788d\uff1a${r.readinessBlockingReason}` : "",
       r.operatorBlockingStage ? `\u9636\u6bb5\uff1a${r.operatorBlockingStage}` : "",
-      r.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${r.operatorNextStep}` : "",
+      r.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${operatorStepDisplayText(r.operatorNextStep)}` : "",
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
     if (action === "mcpSkills") return [
