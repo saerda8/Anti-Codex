@@ -14897,6 +14897,11 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLogin, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);
   assert.match(secondAccountLogin, /StartLoginApproval/);
   assert.match(secondAccountLogin, /start-separate-windows-user-login/);
+  assert.match(secondAccountLogin, /approvedLoginCommandTemplate/);
+  assert.match(secondAccountLogin, /nextNoTrafficStatusCommand/);
+  assert.match(secondAccountLogin, /postLoginProofCommandTemplate/);
+  assert.match(secondAccountLogin, /canRunPostLoginProof/);
+  assert.match(secondAccountLogin, /postLoginProofPlan/);
   assert.match(secondAccountLogin, /explicit_start_login_approval_missing/);
   assert.match(secondAccountLogin, /second_account_login_not_ready/);
   assert.match(secondAccountLogin, /safeToStartLogin/);
@@ -14945,6 +14950,11 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLoginReport, /capturesPassword = \$false/);
   assert.match(secondAccountLoginReport, /storesPassword = \$false/);
   assert.match(secondAccountLoginReport, /StartLoginApproval", "start-separate-windows-user-login"/);
+  assert.match(secondAccountLoginReport, /approvedLoginCommandTemplate/);
+  assert.match(secondAccountLoginReport, /nextNoTrafficStatusCommand/);
+  assert.match(secondAccountLoginReport, /postLoginProofCommandTemplate/);
+  assert.match(secondAccountLoginReport, /canRunPostLoginProof/);
+  assert.match(secondAccountLoginReport, /postLoginProofPlan/);
   assert.match(secondAccountLoginReport, /releaseAcceptableAccountProof = \$false/);
   assert.doesNotMatch(secondAccountLoginReport, /New-LocalUser|Add-LocalGroupMember|Invoke-RestMethod|Invoke-WebRequest|\.env/);
 

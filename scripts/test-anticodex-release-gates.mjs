@@ -1986,6 +1986,20 @@ function summarizeGate(definition) {
       if (report.capturesPassword === true) semanticFailures.push("second_account_entrypoint_captures_password");
       if (report.storesPassword === true) semanticFailures.push("second_account_entrypoint_stores_password");
       if (report.requiredStartLoginApproval !== "start-separate-windows-user-login") semanticFailures.push("second_account_entrypoint_approval_token");
+      if (!String(report.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1")
+        || !String(report.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("second_account_entrypoint_login_command_template_missing");
+      if (!String(report.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("second_account_entrypoint_status_command_missing");
+      if (!String(report.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
+        || !String(report.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof")
+        || !String(report.postLoginProofCommandTemplate || "").includes("-AccountIsolationBoundary separate-windows-user")) semanticFailures.push("second_account_entrypoint_post_login_proof_command_missing");
+      if (typeof report.canRunPostLoginProof !== "boolean") semanticFailures.push("second_account_entrypoint_post_login_flag_missing");
+      const postLoginProofPlan = report.postLoginProofPlan || {};
+      if (postLoginProofPlan.proofScript !== "test-anticodex-antigravity-cli-real-smoke.ps1"
+        || postLoginProofPlan.accountIsolationBoundary !== "separate-windows-user"
+        || postLoginProofPlan.requiresApprovedRealTraffic !== true
+        || postLoginProofPlan.requiresDistinctAccountIdentityComparison !== true
+        || postLoginProofPlan.accountIdsMustDiffer !== true
+        || postLoginProofPlan.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("second_account_entrypoint_post_login_proof_plan_invalid");
       if (report.safeToStartLogin !== true && !report.readinessBlockingReason) semanticFailures.push("second_account_entrypoint_blocking_reason_missing");
       if (!report.operatorBlockingStage) semanticFailures.push("second_account_entrypoint_operator_stage_missing");
       if (!report.operatorNextStep) semanticFailures.push("second_account_entrypoint_operator_next_step_missing");
@@ -3623,6 +3637,18 @@ if (args.has("--self-test")) {
       storesPassword: true,
       safeToStartLogin: false,
       requiredStartLoginApproval: "",
+      approvedLoginCommandTemplate: "",
+      nextNoTrafficStatusCommand: "",
+      postLoginProofCommandTemplate: "",
+      canRunPostLoginProof: null,
+      postLoginProofPlan: {
+        proofScript: "wrong",
+        accountIsolationBoundary: "profile-and-appdata-only",
+        requiresApprovedRealTraffic: false,
+        requiresDistinctAccountIdentityComparison: false,
+        accountIdsMustDiffer: false,
+        mcpAccountLaneManagedByAntiCodex: true,
+      },
       completionState: "ready_for_interactive_login",
       readinessBlockingReason: "",
       operatorBlockingStage: "",
