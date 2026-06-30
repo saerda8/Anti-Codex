@@ -7693,6 +7693,8 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.match(verifier, /lastActionResult\?\.managerSummary \|\| ""/);
   assert.match(verifier, /function managerSummaryFromActionPayload/);
   assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*\\u7b2c\\u4e8c Antigravity \\u8d26\\u53f7\\u72b6\\u6001\\u68c0\\u67e5/);
+  assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*operatorBlockingStage/);
+  assert.match(verifier, /actionName === "secondAccountLoginStatus"[\s\S]*operatorNextStep/);
   assert.match(verifier, /const realCallPassed = result\.mcp\?\.smoke\?\.realCall\?\.passed === true/);
   assert.match(verifier, /result\.mcp\?\.realCallPassed === true/);
   assert.match(verifier, /drainedPayloads\[item\.action\] = payload/);
@@ -14074,6 +14076,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerInject, /\["secondAccountLoginStatus", "\\u7b2c\\u4e8c Antigravity/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u7b2c\\u4e8c Antigravity \\u8d26\\u53f7\\u72b6\\u6001\\u68c0\\u67e5/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u767b\\u5f55\\u51c6\\u5907/);
+  assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*operatorBlockingStage/);
+  assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*operatorNextStep/);
   assert.match(server, /data-manager-action="secondAccountLoginStatus"/);
 
   assert.match(secondAccountLoginReport, /reportName = "second-antigravity-account-login-entrypoint"/);

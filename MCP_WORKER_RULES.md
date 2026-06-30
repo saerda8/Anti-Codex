@@ -111,6 +111,14 @@ After every failure, before another dispatch:
 - Cause classification: slow worker/no evidence on a small low-coupling task, not a code review result.
 - Rule change: after a slow worker has no diff after two status windows, cancel it and retry a materially smaller one-file task with a different worker before the main agent takes over.
 
+### 2026-06-30 - OpenCode second-account Manager next-step no-evidence
+
+- Job: `ocw_mqzyg2bk_89nrr4`
+- Task: add operator stage/next-step text to the second-account Manager status summary in an isolated worktree.
+- Result: cancelled after about 71 seconds with zero changed files and no checks.
+- Cause classification: slow worker/no evidence on a tiny low-coupling task, not a code review result.
+- Rule change: if a one-behavior Manager text patch has no diff after two status windows, record the no-evidence result and let the main agent apply the surgical patch with direct focused tests.
+
 ### 2026-06-30 - MIMO start rejected workspace-external forbidden paths
 
 - Job: no job id; `mimo_start_implementation` rejected the request before worker launch.

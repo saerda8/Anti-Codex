@@ -1425,6 +1425,8 @@
       r.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
       r.targetWindowsUser ? `Windows \u7528\u6237\uff1a${r.targetWindowsUser}` : "",
       r.readinessBlockingReason ? `\u963b\u788d\uff1a${r.readinessBlockingReason}` : "",
+      r.operatorBlockingStage ? `\u9636\u6bb5\uff1a${r.operatorBlockingStage}` : "",
+      r.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${r.operatorNextStep}` : "",
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
     if (action === "mcpSkills") return [

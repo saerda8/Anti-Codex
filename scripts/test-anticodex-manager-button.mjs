@@ -276,6 +276,8 @@ function managerSummaryFromActionPayload(actionName, payload) {
       `\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u901a\u8fc7"}`,
       result.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
       result.readinessBlockingReason ? `\u963b\u788d\uff1a${result.readinessBlockingReason}` : "",
+      result.operatorBlockingStage ? `\u9636\u6bb5\uff1a${result.operatorBlockingStage}` : "",
+      result.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${result.operatorNextStep}` : "",
     ].filter(Boolean).join("\n");
   }
   if (actionName === "pluginCapabilities") {
