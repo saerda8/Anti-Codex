@@ -400,6 +400,7 @@ $latestReports = @(
     "latest-agentic-capability-matrix.json",
     "latest-real-task-coverage-roadmap.json",
     "latest-real-approval-plan.json",
+    "latest-required-real-traffic-sequence.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

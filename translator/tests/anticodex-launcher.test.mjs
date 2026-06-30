@@ -12805,6 +12805,31 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(server, /latest-real-approval-plan\.json/);
 });
 
+test("Anti-Codex ships a no-traffic required real traffic sequence verifier", () => {
+  const sequence = readFileSync(resolve(root, "scripts", "test-anticodex-required-real-traffic-sequence.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(sequence, /reportName\s*=\s*"required-real-traffic-sequence"/);
+  assert.match(sequence, /requestedRealTraffic\s*=\s*\$false/);
+  assert.match(sequence, /usedRealTraffic\s*=\s*\$false/);
+  assert.match(sequence, /latest-real-approval-plan\.json/);
+  assert.match(sequence, /requiredActions/);
+  assert.match(sequence, /optionalActions/);
+  assert.match(sequence, /noOptionalActionsInRequiredSequence/);
+  assert.match(sequence, /blockedUntilExplicitUserApproval/);
+  assert.match(sequence, /requiredActionCount/);
+  assert.match(sequence, /optionalActionCount/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-required-real-traffic-sequence\.ps1/);
+  assert.match(collector, /latest-required-real-traffic-sequence\.json/);
+  assert.match(installedOverall, /latest-required-real-traffic-sequence\.json/);
+  assert.match(signer, /latest-required-real-traffic-sequence\.json/);
+  assert.match(server, /latest-required-real-traffic-sequence\.json/);
+});
+
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {
   const toolBridge = readFileSync(resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"), "utf8");
 
