@@ -1166,6 +1166,73 @@ function Test-GoalRealRunReadinessSummaryEvidence {
     if ([int]$evidence.failureCount -ne 0) { Add-Failure "goal-real-run-readiness summary has failures" }
 }
 
+function Test-ApprovedRealRunSequenceSummaryEvidence {
+    param($ApprovedRealRunSequenceSummary)
+    if (-not $ApprovedRealRunSequenceSummary) {
+        Add-Failure "diagnostic reports summary missing latest-approved-real-run-sequence.json"
+        return
+    }
+
+    $evidence = $ApprovedRealRunSequenceSummary.approvedRealRunSequenceEvidence
+    if (-not $evidence) {
+        Add-Failure "approved-real-run-sequence summary missing approvedRealRunSequenceEvidence"
+        return
+    }
+
+    $taskModes = @(As-FlatArray $evidence.requiredRealTaskModes)
+    $scenarios = @(As-FlatArray $evidence.pendingRealTaskScenarios)
+    $requiredGateIds = @(As-FlatArray $evidence.requiredReleaseGateIds)
+    $requiredActionIds = @(As-FlatArray $evidence.requiredActionIds)
+    $optionalActionIds = @(As-FlatArray $evidence.optionalActionIds)
+    $blockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
+    $prechecks = @(As-FlatArray $evidence.noTrafficPrechecks)
+    $sequence = @(As-FlatArray $evidence.approvedRealRunSequence)
+    $realStages = @($sequence | Where-Object { $_.requiresRealTraffic -eq $true })
+    $loginStages = @($sequence | Where-Object { $_.startsLogin -eq $true })
+    $mixedOptional = @($requiredActionIds | Where-Object { $optionalActionIds -contains $_ })
+
+    if ($evidence.reportName -ne "approved-real-run-sequence") { Add-Failure "approved-real-run-sequence summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "approved-real-run-sequence summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "approved-real-run-sequence summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "approved-real-run-sequence summary behavior not covered" }
+    if ($evidence.coverageKind -ne "approved-real-run-sequence-report-only") { Add-Failure "approved-real-run-sequence summary coverage kind mismatch" }
+    if ($evidence.executionBlockedBeforeRealTraffic -ne $true) { Add-Failure "approved-real-run-sequence summary not blocked before real traffic" }
+    if ($evidence.readyToRequestUserApproval -ne $false) { Add-Failure "approved-real-run-sequence summary ready too early" }
+    if ([int]$evidence.sequenceStageCount -lt 8 -or $sequence.Count -lt 8) { Add-Failure "approved-real-run-sequence summary stage count too low" }
+    if ([int]$evidence.realTrafficStageCount -lt 4 -or $realStages.Count -lt 4) { Add-Failure "approved-real-run-sequence summary real stage count too low" }
+    if ([int]$evidence.startsLoginStageCount -ne 1 -or $loginStages.Count -ne 1) { Add-Failure "approved-real-run-sequence summary login stage count mismatch" }
+    if ([int]$evidence.explicitApprovalStageCount -lt $realStages.Count) { Add-Failure "approved-real-run-sequence summary approval stage count too low" }
+    foreach ($taskMode in @("web-search", "free-chat")) {
+        if ($taskModes -notcontains $taskMode) { Add-Failure "approved-real-run-sequence summary missing task mode $taskMode" }
+        $scenario = @($scenarios | Where-Object { [string]$_.taskMode -eq $taskMode } | Select-Object -First 1)[0]
+        if (-not $scenario) {
+            Add-Failure "approved-real-run-sequence summary missing scenario $taskMode"
+            continue
+        }
+        if (-not [string]$scenario.workType) { Add-Failure "approved-real-run-sequence scenario missing work type $taskMode" }
+        if ($scenario.realTrafficRequired -ne $true) { Add-Failure "approved-real-run-sequence scenario not real traffic $taskMode" }
+        if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "approved-real-run-sequence scenario missing acceptance evidence $taskMode" }
+        if ($scenario.expectedResultPresent -ne $true) { Add-Failure "approved-real-run-sequence scenario missing expected result $taskMode" }
+    }
+    foreach ($gateId in @("accountProxyReadiness", "postVerification")) {
+        if ($requiredGateIds -notcontains $gateId) { Add-Failure "approved-real-run-sequence summary missing required gate $gateId" }
+        if ($requiredActionIds -notcontains $gateId) { Add-Failure "approved-real-run-sequence summary missing required action $gateId" }
+        if ($blockedGates -notcontains $gateId) { Add-Failure "approved-real-run-sequence summary missing blocked gate $gateId" }
+    }
+    if ($evidence.optionalActionsSeparated -ne $true -or $mixedOptional.Count -gt 0) { Add-Failure "approved-real-run-sequence summary mixed optional actions" }
+    if ($evidence.releaseShortReady -ne $true) { Add-Failure "approved-real-run-sequence summary short path not ready" }
+    if ($evidence.releaseReady -ne $false) { Add-Failure "approved-real-run-sequence summary release ready mismatch" }
+    if ($evidence.safeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "approved-real-run-sequence summary login safety mismatch" }
+    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "approved-real-run-sequence summary claimed account proof" }
+    if (-not [string]$evidence.accountReadinessBlockingReason) { Add-Failure "approved-real-run-sequence summary missing account blocking reason" }
+    if (-not [string]$evidence.operatorNextAction) { Add-Failure "approved-real-run-sequence summary missing operator next action" }
+    if ($prechecks.Count -lt 4) { Add-Failure "approved-real-run-sequence summary precheck count too low" }
+    if (@($prechecks | Where-Object { $_.requiresRealTraffic -eq $true -or $_.startsLogin -eq $true }).Count -gt 0) { Add-Failure "approved-real-run-sequence summary precheck starts traffic or login" }
+    if (@($realStages | Where-Object { $_.requiresExplicitUserApproval -ne $true }).Count -gt 0) { Add-Failure "approved-real-run-sequence summary real stage without approval" }
+    if (@($loginStages | Where-Object { $_.requiresExplicitUserApproval -ne $true -or $_.requiresRealTraffic -eq $true }).Count -gt 0) { Add-Failure "approved-real-run-sequence summary login stage contract mismatch" }
+    if ([int]$evidence.failureCount -ne 0) { Add-Failure "approved-real-run-sequence summary has failures" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1188,6 +1255,7 @@ function Test-ReportsSummary {
     $realApprovalPlanSummary = @($summary | Where-Object { $_.file -eq "latest-real-approval-plan.json" } | Select-Object -First 1)[0]
     $requiredRealTrafficSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-required-real-traffic-sequence.json" } | Select-Object -First 1)[0]
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
+    $approvedRealRunSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-approved-real-run-sequence.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -1236,6 +1304,7 @@ function Test-ReportsSummary {
     Test-RealApprovalPlanSummaryEvidence $realApprovalPlanSummary
     Test-RequiredRealTrafficSequenceSummaryEvidence $requiredRealTrafficSequenceSummary
     Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary
+    Test-ApprovedRealRunSequenceSummaryEvidence $approvedRealRunSequenceSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

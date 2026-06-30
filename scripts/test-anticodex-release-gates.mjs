@@ -106,6 +106,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-real-task-coverage-roadmap.mjs",
   "scripts/test-anticodex-real-approval-plan.mjs",
   "scripts/test-anticodex-required-real-traffic-sequence.ps1",
+  "scripts/test-anticodex-approved-real-run-sequence.mjs",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
@@ -161,6 +162,7 @@ const gateDefinitions = [
   { id: "goalReadiness", group: "no-traffic", file: "latest-goal-readiness.json", requiredForRelease: true, requireGoalReadinessSemantics: true },
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
   { id: "goalRealRunReadiness", group: "no-traffic", file: "latest-goal-real-run-readiness.json", requiredForRelease: true, requireGoalRealRunReadinessSemantics: true },
+  { id: "approvedRealRunSequence", group: "no-traffic", file: "latest-approved-real-run-sequence.json", requiredForRelease: true, requireApprovedRealRunSequenceSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -830,6 +832,59 @@ function summarizeGate(definition) {
       }
       if (typeof report.operatorNextAction !== "string" || !report.operatorNextAction) semanticFailures.push("goal_real_run_readiness_operator_next_action_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_real_run_readiness_failures");
+    }
+    if (definition.requireApprovedRealRunSequenceSemantics) {
+      const requiredTaskModes = Array.isArray(report.requiredRealTaskModes) ? report.requiredRealTaskModes.map((item) => String(item || "")) : [];
+      const scenarios = Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios : [];
+      const requiredGateIds = Array.isArray(report.requiredReleaseGateIds) ? report.requiredReleaseGateIds.map((item) => String(item || "")) : [];
+      const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
+      const optionalActionIds = Array.isArray(report.optionalActionIds) ? report.optionalActionIds.map((item) => String(item || "")) : [];
+      const blockedGates = Array.isArray(report.requiredRealTrafficBlockedGates) ? report.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
+      const sequence = Array.isArray(report.approvedRealRunSequence) ? report.approvedRealRunSequence : [];
+      const prechecks = Array.isArray(report.noTrafficPrechecks) ? report.noTrafficPrechecks : [];
+      const realStages = sequence.filter((item) => item?.requiresRealTraffic === true);
+      const loginStages = sequence.filter((item) => item?.startsLogin === true);
+      const mixedOptional = requiredActionIds.filter((id) => optionalActionIds.includes(id));
+      if (report.reportName !== "approved-real-run-sequence") semanticFailures.push("approved_real_run_sequence_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("approved_real_run_sequence_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("approved_real_run_sequence_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("approved_real_run_sequence_behavior_not_covered");
+      if (report.coverageKind !== "approved-real-run-sequence-report-only") semanticFailures.push("approved_real_run_sequence_coverage_kind");
+      if (report.executionBlockedBeforeRealTraffic !== true) semanticFailures.push("approved_real_run_sequence_not_blocked_before_real_traffic");
+      if (report.readyToRequestUserApproval !== false) semanticFailures.push("approved_real_run_sequence_ready_too_early");
+      if (Number(report.sequenceStageCount || 0) < 8 || sequence.length < 8) semanticFailures.push("approved_real_run_sequence_stage_count");
+      if (Number(report.realTrafficStageCount || 0) < 4 || realStages.length < 4) semanticFailures.push("approved_real_run_sequence_real_stage_count");
+      if (Number(report.startsLoginStageCount || 0) !== 1 || loginStages.length !== 1) semanticFailures.push("approved_real_run_sequence_login_stage_count");
+      if (Number(report.explicitApprovalStageCount || 0) < realStages.length) semanticFailures.push("approved_real_run_sequence_approval_stage_count");
+      for (const taskMode of ["web-search", "free-chat"]) {
+        if (!requiredTaskModes.includes(taskMode)) semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_task_missing`);
+        const scenario = scenarios.find((item) => String(item?.taskMode || "") === taskMode);
+        if (!scenario) {
+          semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_scenario_missing`);
+          continue;
+        }
+        if (typeof scenario.workType !== "string" || !scenario.workType) semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_work_type_missing`);
+        if (scenario.realTrafficRequired !== true) semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_not_real_traffic`);
+        if (!Array.isArray(scenario.acceptanceEvidence) || scenario.acceptanceEvidence.length < 1) semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_acceptance_missing`);
+        if (scenario.expectedResultPresent !== true) semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_expected_missing`);
+      }
+      for (const gateId of ["accountProxyReadiness", "postVerification"]) {
+        if (!requiredGateIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_gate_missing`);
+        if (!requiredActionIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_action_missing`);
+        if (!blockedGates.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_blocked_gate_missing`);
+      }
+      if (report.optionalActionsSeparated !== true || mixedOptional.length > 0) semanticFailures.push("approved_real_run_sequence_optional_actions_mixed");
+      if (report.releaseShortReady !== true) semanticFailures.push("approved_real_run_sequence_short_not_ready");
+      if (report.releaseReady !== false) semanticFailures.push("approved_real_run_sequence_release_ready_mismatch");
+      if (report.safeToAskUserForSecondAccountLogin !== false) semanticFailures.push("approved_real_run_sequence_login_safety_mismatch");
+      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("approved_real_run_sequence_release_proof_claimed");
+      if (typeof report.accountReadinessBlockingReason !== "string" || !report.accountReadinessBlockingReason) semanticFailures.push("approved_real_run_sequence_account_blocking_reason_missing");
+      if (typeof report.operatorNextAction !== "string" || !report.operatorNextAction) semanticFailures.push("approved_real_run_sequence_operator_next_action_missing");
+      if (prechecks.length < 4) semanticFailures.push("approved_real_run_sequence_precheck_count");
+      if (prechecks.some((item) => item?.requiresRealTraffic === true || item?.startsLogin === true)) semanticFailures.push("approved_real_run_sequence_precheck_started_traffic_or_login");
+      if (realStages.some((item) => item?.requiresExplicitUserApproval !== true)) semanticFailures.push("approved_real_run_sequence_real_stage_without_approval");
+      if (loginStages.some((item) => item?.requiresExplicitUserApproval !== true || item?.requiresRealTraffic === true)) semanticFailures.push("approved_real_run_sequence_login_stage_contract");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("approved_real_run_sequence_failures");
     }
     if (definition.requireRealTaskCoverageRoadmapSemantics) {
       const requiredProfiles = Array.isArray(report.requiredProfiles) ? report.requiredProfiles.map((item) => String(item || "")) : [];
@@ -2192,6 +2247,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
   ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
   ["goalRealRunReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-real-run-readiness.mjs"],
+  ["approvedRealRunSequence", "no-traffic-local", "node scripts\\test-anticodex-approved-real-run-sequence.mjs"],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -3473,6 +3529,65 @@ if (args.has("--self-test")) {
       "goal_real_run_readiness_second_account_login_not_ready_missing",
       "goal_real_run_readiness_operator_next_action_missing",
       "goal_real_run_readiness_failures",
+    ]);
+    writeFakeLatestReport("latest-approved-real-run-sequence.json", {
+      ok: true,
+      reportName: "wrong-approved-real-run-sequence",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      executionBlockedBeforeRealTraffic: false,
+      readyToRequestUserApproval: true,
+      sequenceStageCount: 2,
+      explicitApprovalStageCount: 0,
+      realTrafficStageCount: 0,
+      startsLoginStageCount: 0,
+      requiredRealTaskModes: ["coding-project"],
+      pendingRealTaskScenarios: [],
+      requiredReleaseGateIds: ["postVerification"],
+      requiredActionIds: ["postVerification"],
+      optionalActionIds: ["postVerification"],
+      optionalActionsSeparated: false,
+      requiredRealTrafficBlockedGates: ["postVerification"],
+      releaseShortReady: false,
+      releaseReady: true,
+      accountReadinessBlockingReason: "",
+      safeToAskUserForSecondAccountLogin: true,
+      releaseAcceptableAccountProof: true,
+      noTrafficPrechecks: [{ id: "bad", requiresRealTraffic: true, startsLogin: true }],
+      approvedRealRunSequence: [{ id: "bad", startsLogin: true, requiresExplicitUserApproval: false, requiresRealTraffic: true }],
+      operatorNextAction: "",
+      failures: ["fake"],
+    });
+    semanticFailures.approvedRealRunSequence = assertSemanticFailures("approvedRealRunSequence", "self-test failed: semantically invalid approved-real-run-sequence report satisfied the gate", [
+      "approved_real_run_sequence_report_name",
+      "approved_real_run_sequence_real_traffic_requested",
+      "approved_real_run_sequence_used_real_traffic",
+      "approved_real_run_sequence_behavior_not_covered",
+      "approved_real_run_sequence_coverage_kind",
+      "approved_real_run_sequence_not_blocked_before_real_traffic",
+      "approved_real_run_sequence_ready_too_early",
+      "approved_real_run_sequence_stage_count",
+      "approved_real_run_sequence_real_stage_count",
+      "approved_real_run_sequence_login_stage_count",
+      "approved_real_run_sequence_web_search_task_missing",
+      "approved_real_run_sequence_free_chat_task_missing",
+      "approved_real_run_sequence_accountProxyReadiness_gate_missing",
+      "approved_real_run_sequence_accountProxyReadiness_action_missing",
+      "approved_real_run_sequence_accountProxyReadiness_blocked_gate_missing",
+      "approved_real_run_sequence_optional_actions_mixed",
+      "approved_real_run_sequence_short_not_ready",
+      "approved_real_run_sequence_release_ready_mismatch",
+      "approved_real_run_sequence_login_safety_mismatch",
+      "approved_real_run_sequence_release_proof_claimed",
+      "approved_real_run_sequence_account_blocking_reason_missing",
+      "approved_real_run_sequence_operator_next_action_missing",
+      "approved_real_run_sequence_precheck_count",
+      "approved_real_run_sequence_precheck_started_traffic_or_login",
+      "approved_real_run_sequence_real_stage_without_approval",
+      "approved_real_run_sequence_login_stage_contract",
+      "approved_real_run_sequence_failures",
     ]);
     semanticFailures.ambientSuggestions = assertSemanticFailures("ambientSuggestions", "self-test failed: semantically invalid ambient-suggestions report satisfied the gate", [
       "expected_no_real_traffic",

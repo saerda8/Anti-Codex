@@ -1244,6 +1244,14 @@
         lines.push(`  goalRealRun: ready=${evidence.readyForUserApprovedRealRun ? "true" : "false"} / accountSafe=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / releaseReady=${evidence.releaseReady ? "true" : "false"} / blockers=${blockers}`);
         lines.push(`  goalRealRun tasks: ${tasks}`);
       }
+      if (item.approvedRealRunSequenceEvidence) {
+        const evidence = item.approvedRealRunSequenceEvidence;
+        const tasks = Array.isArray(evidence.pendingRealTaskScenarios) && evidence.pendingRealTaskScenarios.length
+          ? evidence.pendingRealTaskScenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ")
+          : "none";
+        lines.push(`  approvedRealRun: blocked=${evidence.executionBlockedBeforeRealTraffic ? "true" : "false"} / stages=${evidence.sequenceStageCount ?? "unknown"} / real=${evidence.realTrafficStageCount ?? "unknown"} / login=${evidence.startsLoginStageCount ?? "unknown"} / approvals=${evidence.explicitApprovalStageCount ?? "unknown"}`);
+        lines.push(`  approvedRealRun tasks: ${tasks}`);
+      }
       if (item.toolBridgeEvidence) {
         const evidence = item.toolBridgeEvidence;
         lines.push(`  toolBridge: mode=${evidence.mode || "unknown"} / transport=${evidence.transport || "unknown"} / adapter=${evidence.localAdapter || "unknown"}`);

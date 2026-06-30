@@ -14946,3 +14946,54 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /operatorSetupPlan/);
   assert.match(server, /rawUserManagementCommandProvided/);
 });
+
+test("approved real run sequence is a no-traffic gate before concrete task execution", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-approved-real-run-sequence.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+
+  assert.match(verifier, /reportName:\s*"approved-real-run-sequence"/);
+  assert.match(verifier, /requestedRealTraffic:\s*false/);
+  assert.match(verifier, /usedRealTraffic:\s*false/);
+  assert.match(verifier, /coverageKind:\s*"approved-real-run-sequence-report-only"/);
+  assert.match(verifier, /executionBlockedBeforeRealTraffic/);
+  assert.match(verifier, /readyToRequestUserApproval:\s*false/);
+  assert.match(verifier, /latest-goal-real-run-readiness\.json/);
+  assert.match(verifier, /latest-real-approval-plan\.json/);
+  assert.match(verifier, /latest-required-real-traffic-sequence\.json/);
+  assert.match(verifier, /latest-antigravity-account-isolation-status\.json/);
+  assert.match(verifier, /web-search/);
+  assert.match(verifier, /free-chat/);
+  assert.match(verifier, /accountProxyReadiness/);
+  assert.match(verifier, /postVerification/);
+  assert.match(verifier, /StartLoginApproval start-separate-windows-user-login/);
+  assert.match(verifier, /SeparateAccountProofApprovalId/);
+  assert.doesNotMatch(verifier, /spawn\(|spawnSync\(|exec\(|execSync\(/);
+  assert.doesNotMatch(verifier, /["']\.env["']/);
+
+  for (const surface of [collector, diagnostics, installedOverall, signer, releaseGates, server]) {
+    assert.match(surface, /latest-approved-real-run-sequence\.json/);
+  }
+  assert.match(runtimeSync, /test-anticodex-approved-real-run-sequence\.mjs/);
+  assert.match(summarizer, /reportName === "approved-real-run-sequence"/);
+  assert.match(summarizer, /approvedRealRunSequenceEvidence/);
+  assert.match(collector, /approvedRealRunSequenceEvidence/);
+  assert.match(diagnostics, /Test-ApprovedRealRunSequenceSummaryEvidence/);
+  assert.match(releaseGates, /approvedRealRunSequence/);
+  assert.match(releaseGates, /requireApprovedRealRunSequenceSemantics/);
+  assert.match(releaseGates, /approved_real_run_sequence_login_stage_contract/);
+  assert.match(releaseGates, /test-anticodex-approved-real-run-sequence\.mjs/);
+  assert.match(server, /Approved real run sequence/);
+  assert.match(managerBridge, /approvedRealRun: blocked=/);
+  assert.match(managerBridge, /approvedRealRun tasks:/);
+  assert.match(managerInject, /approvedRealRun: blocked=/);
+  assert.match(managerInject, /approvedRealRun tasks:/);
+});

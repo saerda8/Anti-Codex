@@ -79,6 +79,20 @@ function asOrderedActions(value) {
   })).filter((item) => item.id).slice(0, 32);
 }
 
+function asApprovedRealRunStages(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    id: asString(item?.id),
+    phase: asString(item?.phase),
+    requiresRealTraffic: item?.requiresRealTraffic === true,
+    startsLogin: item?.startsLogin === true,
+    requiresExplicitUserApproval: item?.requiresExplicitUserApproval === true,
+    failFastIfNotReady: item?.failFastIfNotReady === true,
+    expectedReport: asString(item?.expectedReport || ""),
+    evidence: Array.isArray(item?.evidence) ? asStringArray(item.evidence) : [],
+  })).filter((item) => item.id).slice(0, 16);
+}
+
 function asOfflineSnapshotEvidence(value) {
   if (!value || typeof value !== "object") return null;
   return {
@@ -205,6 +219,7 @@ const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-covera
 const isRealApprovalPlanReport = report?.reportName === "real-approval-plan" || /latest-real-approval-plan\.json$/i.test(path);
 const isRequiredRealTrafficSequenceReport = report?.reportName === "required-real-traffic-sequence" || /latest-required-real-traffic-sequence\.json$/i.test(path);
 const isGoalRealRunReadinessReport = report?.reportName === "goal-real-run-readiness" || /latest-goal-real-run-readiness\.json$/i.test(path);
+const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-run-sequence" || /latest-approved-real-run-sequence\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1410,6 +1425,42 @@ const summary = {
     blockingStages: Array.isArray(report.blockingStages) ? asStringArray(report.blockingStages) : [],
     nextNoTrafficAction: asString(report.nextNoTrafficAction),
     operatorNextAction: asString(report.operatorNextAction),
+    failureCount: Array.isArray(report.failures) ? report.failures.length : null,
+  } : null,
+  approvedRealRunSequenceEvidence: isApprovedRealRunSequenceReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    executionBlockedBeforeRealTraffic: boolField(report, "executionBlockedBeforeRealTraffic"),
+    readyToRequestUserApproval: boolField(report, "readyToRequestUserApproval"),
+    sequenceStageCount: has(report, "sequenceStageCount") ? report.sequenceStageCount : null,
+    explicitApprovalStageCount: has(report, "explicitApprovalStageCount") ? report.explicitApprovalStageCount : null,
+    realTrafficStageCount: has(report, "realTrafficStageCount") ? report.realTrafficStageCount : null,
+    startsLoginStageCount: has(report, "startsLoginStageCount") ? report.startsLoginStageCount : null,
+    requiredRealTaskModes: Array.isArray(report.requiredRealTaskModes) ? asStringArray(report.requiredRealTaskModes) : [],
+    pendingRealTaskScenarios: Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios.map((item) => ({
+      taskMode: asString(item?.taskMode),
+      workType: asString(item?.workType),
+      realTrafficRequired: boolField(item || {}, "realTrafficRequired"),
+      acceptanceEvidence: Array.isArray(item?.acceptanceEvidence) ? asStringArray(item.acceptanceEvidence) : [],
+      expectedResultPresent: boolField(item || {}, "expectedResultPresent"),
+    })) : [],
+    requiredReleaseGateIds: Array.isArray(report.requiredReleaseGateIds) ? asStringArray(report.requiredReleaseGateIds) : [],
+    requiredActionIds: Array.isArray(report.requiredActionIds) ? asStringArray(report.requiredActionIds) : [],
+    optionalActionIds: Array.isArray(report.optionalActionIds) ? asStringArray(report.optionalActionIds) : [],
+    optionalActionsSeparated: boolField(report, "optionalActionsSeparated"),
+    requiredRealTrafficBlockedGates: Array.isArray(report.requiredRealTrafficBlockedGates) ? asStringArray(report.requiredRealTrafficBlockedGates) : [],
+    releaseShortReady: boolField(report, "releaseShortReady"),
+    releaseReady: boolField(report, "releaseReady"),
+    accountCompletionState: asString(report.accountCompletionState),
+    accountReadinessBlockingReason: asString(report.accountReadinessBlockingReason),
+    safeToAskUserForSecondAccountLogin: boolField(report, "safeToAskUserForSecondAccountLogin"),
+    releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+    operatorNextAction: asString(report.operatorNextAction),
+    noTrafficPrechecks: asApprovedRealRunStages(report.noTrafficPrechecks),
+    approvedRealRunSequence: asApprovedRealRunStages(report.approvedRealRunSequence),
     failureCount: Array.isArray(report.failures) ? report.failures.length : null,
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {

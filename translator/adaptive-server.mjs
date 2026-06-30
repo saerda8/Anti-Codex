@@ -3520,6 +3520,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Real approval plan", "latest-real-approval-plan.json"),
         latestManagerReportItem("Required real traffic sequence", "latest-required-real-traffic-sequence.json"),
         latestManagerReportItem("Goal real run readiness", "latest-goal-real-run-readiness.json"),
+        latestManagerReportItem("Approved real run sequence", "latest-approved-real-run-sequence.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
