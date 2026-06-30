@@ -2945,6 +2945,75 @@ test("strict pseudo tool routing rejects unavailable Antigravity tool names", ()
   assert.match(formatted.output[0].content[0].text, /not available/i);
 });
 
+test("strict pseudo tool routing accepts shell_command alias for exec_command", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_shell_alias",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="shell_command"><parameter name="command">pwd</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "list files" }, {
+    shell_command: {
+      codexName: "exec_command",
+      type: "function",
+      shellAlias: true,
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "function_call");
+  assert.equal(formatted.output[0].name, "exec_command");
+  assert.deepEqual(JSON.parse(formatted.output[0].arguments), { cmd: "pwd" });
+});
+
+test("strict chat tool routing accepts shell_command alias for exec_command", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_chat_shell_alias",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_shell_alias",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "pwd" }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, { model: "antigravity", input: "list files" }, {
+    shell_command: {
+      codexName: "exec_command",
+      type: "function",
+      shellAlias: true,
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "function_call");
+  assert.equal(formatted.output[0].name, "exec_command");
+  assert.deepEqual(JSON.parse(formatted.output[0].arguments), { cmd: "pwd" });
+});
+
 test("strict pseudo tool routing rejects calls missing required schema parameters", () => {
   const formatted = chatToResponsesFormat({
     id: "chatcmpl_strict_missing_required",

@@ -5766,6 +5766,22 @@ function invalidToolArgumentsMessage(name, reason) {
     return `Anti-Codex rejected tool request "${name}": ${reason}. Retry with the exact parameters from the exposed Codex tool schema.`;
 }
 
+function normalizeShellAliasArguments(args, codexName, upstreamName) {
+    if (!["exec_command", "shell_command"].includes(codexName) || !["exec_command", "shell_command"].includes(upstreamName) || codexName === upstreamName) return args;
+    let parsed = null;
+    try { parsed = JSON.parse(args || "{}"); } catch { return args; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return args;
+    const next = { ...parsed };
+    if (codexName === "exec_command" && upstreamName === "shell_command" && typeof next.command === "string" && typeof next.cmd !== "string") {
+        next.cmd = next.command;
+        delete next.command;
+    } else if (codexName === "shell_command" && upstreamName === "exec_command" && typeof next.cmd === "string" && typeof next.command !== "string") {
+        next.command = next.cmd;
+        delete next.cmd;
+    }
+    return JSON.stringify(next);
+}
+
 function messageOutput(text) {
     return { type: "message", id: messageId(), role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };
 }
@@ -8128,6 +8144,7 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
                 if (typeof parsed.content === "string") args = parsed.content;
             } catch { /* not json, use as-is */ }
         }
+        if (!isCustom) args = normalizeShellAliasArguments(args, codexName, upstreamName);
         if (!isCustom) args = repairLocalArtifactToolArguments(args, codexName, originalRequest);
         if (isCustom) {
             output.push({ type: "custom_tool_call", id: functionCallId(), status: "completed", call_id: tc.id || `call_${randomUUID().replaceAll("-", "")}`, name: codexName, input: args });
@@ -8165,6 +8182,7 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
             continue;
         }
         args = unwrapCustomArguments(args, route);
+        if (!isCustom) args = normalizeShellAliasArguments(args, codexName, upstreamName);
         if (!isCustom) args = repairLocalArtifactToolArguments(args, codexName, originalRequest);
         if (isCustom) {
             output.push({ type: "custom_tool_call", id: functionCallId(), status: "completed", call_id: tc.id || `call_${randomUUID().replaceAll("-", "")}`, name: codexName, input: args });

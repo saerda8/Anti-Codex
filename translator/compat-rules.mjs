@@ -354,6 +354,7 @@ export function buildChatToolsWithRouting(parsed, options = {}) {
       namespace: null,
       parameters: cl.metadata.parameters || { type: "object", properties: {} },
     };
+    addShellCommandAlias(chatTools, routing, name, cl.metadata);
   }
 
   // Inject internal tools for missing capabilities
@@ -366,6 +367,59 @@ export function buildChatToolsWithRouting(parsed, options = {}) {
   }
 
   return { tools: chatTools, routing };
+}
+
+function shellCommandAliasName(name) {
+  if (name === "exec_command") return "shell_command";
+  if (name === "shell_command") return "exec_command";
+  return "";
+}
+
+function shellCommandAliasParameters(parameters, aliasName) {
+  const source = parameters && typeof parameters === "object"
+    ? parameters
+    : { type: "object", properties: {} };
+  const properties = { ...(source.properties || {}) };
+  if (aliasName === "shell_command") {
+    properties.command = properties.command || properties.cmd || { type: "string" };
+  } else if (aliasName === "exec_command") {
+    properties.cmd = properties.cmd || properties.command || { type: "string" };
+  }
+  const required = Array.isArray(source.required)
+    ? source.required.map((name) => {
+        if (aliasName === "shell_command" && name === "cmd") return "command";
+        if (aliasName === "exec_command" && name === "command") return "cmd";
+        return name;
+      })
+    : [];
+  return {
+    ...source,
+    properties,
+    ...(required.length ? { required } : {}),
+  };
+}
+
+function addShellCommandAlias(chatTools, routing, name, metadata = {}) {
+  const aliasName = shellCommandAliasName(name);
+  if (!aliasName || routing[aliasName] || chatTools.some(t => t.function?.name === aliasName)) return;
+  const parameters = shellCommandAliasParameters(metadata.parameters, aliasName);
+  chatTools.push({
+    type: "function",
+    function: {
+      name: aliasName,
+      description: `Alias for ${name}; Anti-Codex maps it back to the native Codex shell tool.`,
+      parameters,
+    },
+  });
+  routing[aliasName] = {
+    codexName: name,
+    chatName: aliasName,
+    type: "function",
+    namespace: null,
+    aliasOnly: true,
+    shellAlias: true,
+    parameters,
+  };
 }
 
 function isTranslatorHiddenTool(name) {

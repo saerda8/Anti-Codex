@@ -456,9 +456,9 @@ async function waitForDesktopToolTurnSettled(ws, marker, waitMs = 120_000) {
         };
         const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
         const labels = buttons.map((button) => \`\${button.getAttribute('aria-label') || ''} \${button.innerText || ''}\`.trim());
-        const busy = labels.some((label) => /^(?:停止|Stop)$/i.test(label))
-          || buttons.some((button) => /正在思考|Thinking/i.test(button.innerText || ''));
-        return { busy, labels: labels.filter(Boolean).slice(-20) };
+        const hasStopButton = labels.some((label) => /^(?:停止|Stop)$/i.test(label));
+        const thinkingTextSeen = labels.some((label) => /正在思考|Thinking/i.test(label));
+        return { busy: hasStopButton, hasStopButton, thinkingTextSeen, labels: labels.filter(Boolean).slice(-20) };
       })()`,
       returnByValue: true,
       awaitPromise: true,
@@ -1747,37 +1747,45 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   } else if (prep?.hasSendButton !== true) {
     failures.push("send button was not found in the composer controls");
   } else {
+    const domClick = await ws.send("Runtime.evaluate", {
+      expression: sendButtonProbeExpression(prompt, { click: true }),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    const domClickValue = domClick.result?.result?.value || {};
+    clicked = domClickValue.clicked === true;
+    submitEvidence = {
+      ...domClickValue,
+      clicked,
+      clickMethod: "dom-click",
+      clickPoint: prep?.selected?.rect
+        ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
+        : null,
+    };
+    submitSucceeded = clicked
+      ? await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000)
+      : false;
+
     const rect = prep?.selected?.rect || null;
     if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
-      failures.push("send button coordinates were not available");
-    } else {
+      if (!submitSucceeded) failures.push("send button coordinates were not available");
+    } else if (!submitSucceeded) {
       const x = rect.x + (rect.w / 2);
       const y = rect.y + (rect.h / 2);
       await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
       await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
       await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
       clicked = true;
+      submitEvidence.mouseFallback = true;
+      submitEvidence.clickMethod = "dom-click-cdp-mouse-fallback";
+      submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
     }
-    const click = await ws.send("Runtime.evaluate", {
-      expression: sendButtonProbeExpression(prompt),
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    submitEvidence = {
-      ...(click.result?.result?.value || {}),
-      clicked,
-      clickMethod: "cdp-mouse",
-      clickPoint: prep?.selected?.rect
-        ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
-        : null,
-    };
-    submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
     if (!submitSucceeded) {
       await pressComposerEnter(ws);
       submitEvidence.enterFallback = true;
       submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
       if (submitSucceeded) {
-        submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
+        submitEvidence.clickMethod = `${submitEvidence.clickMethod}-enter-fallback`;
       }
     }
   }

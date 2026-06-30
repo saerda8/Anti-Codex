@@ -12283,6 +12283,9 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /inLoopIdleDiagnostics/);
   assert.match(verifier, /inLoopIdleObserved/);
   assert.match(verifier, /composerCleared/);
+  assert.match(verifier, /clickMethod: "dom-click"/);
+  assert.match(verifier, /mouseFallback/);
+  assert.match(verifier, /enterFallback/);
   assert.match(verifier, /sessionLockClear/);
   assert.match(verifier, /timing/);
   assert.match(verifier, /submitCompletedAt/);
@@ -12303,6 +12306,9 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /latest-\$\{reportName\}\.json/);
   assert.match(verifier, /function responseHistoryHasToolOutputMarker/);
   assert.match(verifier, /function waitForDesktopToolTurnSettled/);
+  assert.match(verifier, /hasStopButton/);
+  assert.match(verifier, /thinkingTextSeen/);
+  assert.doesNotMatch(verifier, /buttons\.some\(\(button\) => \/正在思考\|Thinking\/i\.test\(button\.innerText \|\| ''\)\)/);
   assert.match(verifier, /desktop tool result did not settle into response history before the follow-up/);
   assert.match(verifier, /follow-up was not submitted because turn1 tool output was not settled/);
   assert.match(verifier, /taskMode === "complex-project"/);

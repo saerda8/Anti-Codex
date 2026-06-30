@@ -1,6 +1,6 @@
 # Anti-Codex Handoff For Next Channel
 
-Date: 2026-06-23, current-status refreshed 2026-06-30
+Date: 2026-06-23, current-status refreshed 2026-07-01
 Branch: main
 
 ## Current State
@@ -75,6 +75,9 @@ Branch: main
 - `latest-goal-readiness.json` now consumes `latest-real-approval-plan.json` directly. Current goal-readiness proves the approval plan is present, no-traffic, has required release actions, keeps optional real-traffic action count separate, and still reports `goalComplete:false` until account proof, task refreshes, and release real-traffic gates are approved and refreshed.
 - Source preflight fast gate passed after the latest model-text boundary cleanup.
 - Current passive release gate reports `shortReady:true`, `releaseReady:false`, `releaseBlockedOnlyByRequiredRealTraffic:true`, `missingShort:[]`, `missingRequired:[postVerification,accountProxyReadiness]`, and `damagedReports:[]`. Older ready-state notes below are historical snapshots; do not run the required real-traffic gates without explicit user approval.
+- Latest visible agentic desktop validation: a refreshed real `multi-turn-project` smoke passed in about 84 seconds after shell-command alias and UI-submit/idle verifier hardening. The refreshed agentic dry-run now reports all five release-grade concrete task modes fresh and passing: coding project, multi-turn project, report site, complex project, and repo multi-file edit. The fix keeps tool execution Codex-owned; Antigravity supplies model text only.
+- Conversation cleanup note: validation chats shown in the Anti-Codex sidebar are smoke-task conversations under the isolated `deepcodex` project. They were cleared once with backup `C:\Users\XD\AppData\Roaming\anticodex\conversation-backups\cleanup-20260701-011658`, but new real smokes can recreate them. Preserve project-root state when cleaning.
+- Runtime launch note: if `Start-Process powershell.exe` returns Access denied during sync/restart, do not classify it as an Anti-Codex health failure. Run the installed `start-deepcodex.ps1 -TranslatorOnly` in the current PowerShell process, then verify health and UI state.
 
 ## Important Recent Checks
 

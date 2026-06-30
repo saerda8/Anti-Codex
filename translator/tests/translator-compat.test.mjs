@@ -540,6 +540,45 @@ compatTest("buildChatToolsWithRouting routing metadata maps chat names back to C
   assert.equal(patchRoute.formatSyntax, "lark");
 });
 
+test("buildChatToolsWithRouting accepts shell command aliases for current and legacy Codex tool names", () => {
+  const execOnly = buildChatToolsWithRouting({
+    tool_choice: "auto",
+    tools: [{
+      type: "function",
+      name: "exec_command",
+      description: "Run a shell command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+      },
+    }],
+  });
+  assert.ok(execOnly.tools.some((tool) => tool.function?.name === "exec_command"));
+  assert.ok(execOnly.tools.some((tool) => tool.function?.name === "shell_command"));
+  assert.equal(execOnly.routing.shell_command.codexName, "exec_command");
+  assert.equal(execOnly.routing.shell_command.shellAlias, true);
+  assert.deepEqual(execOnly.routing.shell_command.parameters.required, ["command"]);
+
+  const shellOnly = buildChatToolsWithRouting({
+    tool_choice: "auto",
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    }],
+  });
+  assert.ok(shellOnly.tools.some((tool) => tool.function?.name === "shell_command"));
+  assert.ok(shellOnly.tools.some((tool) => tool.function?.name === "exec_command"));
+  assert.equal(shellOnly.routing.exec_command.codexName, "shell_command");
+  assert.equal(shellOnly.routing.exec_command.shellAlias, true);
+  assert.deepEqual(shellOnly.routing.exec_command.parameters.required, ["cmd"]);
+});
+
 compatTest("buildChatToolsWithRouting custom apply_patch has argument handling notes", () => {
   const { tools } = buildChatToolsWithRouting(fixture);
   const patch = tools.find((t) => t.function.name === "apply_patch");
