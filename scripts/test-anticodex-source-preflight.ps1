@@ -53,6 +53,114 @@ function Read-TextSafe {
     try { return [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8) } catch { return "" }
 }
 
+function ConvertTo-TailLines {
+    param(
+        [AllowNull()][object]$Value,
+        [int]$Count = 40
+    )
+    $text = if ($null -eq $Value) { "" } else { [string]$Value }
+    return (($text -split "\r?\n") | Select-Object -Last $Count)
+}
+
+function ConvertTo-PowerShellLiteral {
+    param([string]$Value)
+    return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Test-PowerShellFileInvocation {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments
+    )
+    if (-not $FilePath -or ([IO.Path]::GetFileName($FilePath) -ine "powershell.exe")) { return $false }
+    for ($i = 0; $i -lt $Arguments.Count; $i++) {
+        if ([string]$Arguments[$i] -ieq "-File" -and ($i + 1) -lt $Arguments.Count) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Invoke-InProcessPowerShellFile {
+    param(
+        [string]$Name,
+        [string[]]$Arguments,
+        [int]$TimeoutSec,
+        [DateTime]$CheckStartedAt
+    )
+    $fileIndex = -1
+    for ($i = 0; $i -lt $Arguments.Count; $i++) {
+        if ([string]$Arguments[$i] -ieq "-File") {
+            $fileIndex = $i
+            break
+        }
+    }
+    if ($fileIndex -lt 0 -or ($fileIndex + 1) -ge $Arguments.Count) {
+        throw "PowerShell -File invocation missing script path"
+    }
+    $scriptPath = [string]$Arguments[$fileIndex + 1]
+    $scriptArgs = @()
+    if (($fileIndex + 2) -lt $Arguments.Count) {
+        $scriptArgs = @($Arguments[($fileIndex + 2)..($Arguments.Count - 1)])
+    }
+    $parts = New-Object System.Collections.Generic.List[string]
+    $parts.Add("&") | Out-Null
+    $parts.Add((ConvertTo-PowerShellLiteral $scriptPath)) | Out-Null
+    foreach ($arg in $scriptArgs) {
+        $text = [string]$arg
+        if ($text -match '^-[A-Za-z][A-Za-z0-9_-]*$') {
+            $parts.Add($text) | Out-Null
+        } else {
+            $parts.Add((ConvertTo-PowerShellLiteral $text)) | Out-Null
+        }
+    }
+    $command = ($parts -join " ")
+    $ps = [System.Management.Automation.PowerShell]::Create()
+    try {
+        [void]$ps.AddScript($command)
+        $async = $ps.BeginInvoke()
+        $timedOut = -not $async.AsyncWaitHandle.WaitOne([Math]::Max(1, $TimeoutSec) * 1000)
+        if ($timedOut) {
+            try { $ps.Stop() } catch {}
+            $output = @()
+        } else {
+            $output = @($ps.EndInvoke($async))
+        }
+        $stdout = (($output | ForEach-Object { [string]$_ }) -join "`n")
+        $stderrItems = New-Object System.Collections.Generic.List[string]
+        foreach ($item in @($ps.Streams.Error)) {
+            if ($item) { $stderrItems.Add([string]$item) | Out-Null }
+        }
+        $stderr = ($stderrItems.ToArray() -join "`n")
+        $durationMs = [int]([DateTime]::UtcNow - $CheckStartedAt).TotalMilliseconds
+        $exitCode = if ($timedOut) { -1 } elseif ($ps.HadErrors -or $ps.InvocationStateInfo.State -eq "Failed") { 1 } else { 0 }
+        return [pscustomobject]@{
+            ok = (-not $timedOut -and $exitCode -eq 0)
+            name = $Name
+            exitCode = $exitCode
+            timedOut = $timedOut
+            durationMs = $durationMs
+            stdoutTail = ConvertTo-TailLines $stdout
+            stderrTail = ConvertTo-TailLines $stderr
+            inProcessPowerShell = $true
+        }
+    } catch {
+        $durationMs = [int]([DateTime]::UtcNow - $CheckStartedAt).TotalMilliseconds
+        return [pscustomobject]@{
+            ok = $false
+            name = $Name
+            exitCode = 1
+            timedOut = $false
+            durationMs = $durationMs
+            stdoutTail = @()
+            stderrTail = ConvertTo-TailLines $_.Exception.Message
+            inProcessPowerShell = $true
+        }
+    } finally {
+        try { $ps.Dispose() } catch {}
+    }
+}
+
 function Invoke-SourceProcess {
     param(
         [string]$Name,
@@ -65,6 +173,9 @@ function Invoke-SourceProcess {
     $stderrPath = [IO.Path]::GetTempFileName()
     $checkStartedAt = [DateTime]::UtcNow
     try {
+        if (Test-PowerShellFileInvocation -FilePath $FilePath -Arguments $Arguments) {
+            return Invoke-InProcessPowerShellFile -Name $Name -Arguments $Arguments -TimeoutSec $TimeoutSec -CheckStartedAt $checkStartedAt
+        }
         $process = Start-Process -FilePath $FilePath `
             -ArgumentList $Arguments `
             -WorkingDirectory $SourceRoot `
@@ -93,8 +204,8 @@ function Invoke-SourceProcess {
             exitCode = $exitCode
             timedOut = $timedOut
             durationMs = $durationMs
-            stdoutTail = (($stdout -split "\r?\n") | Select-Object -Last 40)
-            stderrTail = (($stderr -split "\r?\n") | Select-Object -Last 40)
+            stdoutTail = ConvertTo-TailLines $stdout
+            stderrTail = ConvertTo-TailLines $stderr
         }
     } finally {
         Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
