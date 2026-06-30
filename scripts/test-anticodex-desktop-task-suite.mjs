@@ -445,11 +445,13 @@ function cleanupFixtureArtifacts() {
   };
 }
 
-function writeReport(payload) {
+function writeReport(payload, options = {}) {
   mkdirSync(reportRoot, { recursive: true });
-  const latest = resolve(reportRoot, "latest-desktop-task-suite.json");
+  const latestName = options.latestName || "latest-desktop-task-suite.json";
+  const historySuffix = options.historySuffix || "desktop-task-suite";
+  const latest = resolve(reportRoot, latestName);
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
-  const history = resolve(reportRoot, `${stamp}-desktop-task-suite.json`);
+  const history = resolve(reportRoot, `${stamp}-${historySuffix}.json`);
   const json = `${JSON.stringify({ ...payload, report: { latest, history } }, null, 2)}\n`;
   for (const file of [latest, history]) {
     const temp = `${file}.${process.pid}.tmp`;
@@ -458,6 +460,33 @@ function writeReport(payload) {
     writeFileSync(`${file}.sha256`, `${createHash("sha256").update(json).digest("hex")}\n`, "ascii");
   }
   return { latest, history };
+}
+
+function reportLabelForSuite() {
+  const profile = suiteProfile.replace(/[^a-z0-9_-]/gi, "-") || "custom";
+  const defaultSet = defaultTasks.join(",");
+  const selectedSet = selectedTasks.join(",");
+  if (selectedSet === defaultSet) return profile;
+  const hash = createHash("sha256").update(selectedSet).digest("hex").slice(0, 8);
+  return `${profile}-custom-${hash}`;
+}
+
+function hasReleaseAgenticSelection() {
+  if (suiteProfile !== "agentic") return false;
+  return agenticTasks.every((task) => selectedTasks.includes(task));
+}
+
+function buildDryRunTasks() {
+  return selectedTasks.map((taskMode) => {
+    const command = taskCommand(taskMode);
+    return {
+      taskMode,
+      ok: true,
+      skipped: true,
+      command: command.map((part) => String(part)),
+      reportPath: reportPathForTask(taskMode),
+    };
+  });
 }
 
 function runTask(taskMode) {
@@ -552,6 +581,24 @@ const payload = {
   elapsedMs: Date.now() - startedAt,
 };
 
+const releaseSummaryPayload = dryRun ? payload : {
+  ...payload,
+  requestedRealTraffic: false,
+  usedRealTraffic: false,
+  mode: "dry-run",
+  dryRun: true,
+  coverageKind: "desktop-task-suite-dry-run",
+  tasks: buildDryRunTasks(),
+};
+const releaseSummaryEligible = hasReleaseAgenticSelection();
+const profileLabel = reportLabelForSuite();
+const summaryReportOptions = releaseSummaryEligible
+  ? {}
+  : {
+      latestName: `latest-desktop-task-suite-${profileLabel}.json`,
+      historySuffix: `desktop-task-suite-${profileLabel}`,
+    };
+
 if (noWriteReport) {
   console.log(JSON.stringify({
     ...payload,
@@ -563,7 +610,24 @@ if (noWriteReport) {
     },
   }));
 } else {
-  const report = writeReport(payload);
-  console.log(JSON.stringify({ ...payload, report }));
+  const realTrafficReport = dryRun ? null : writeReport(payload, {
+    latestName: "latest-desktop-task-suite-real.json",
+    historySuffix: "desktop-task-suite-real",
+  });
+  const summaryReport = writeReport(releaseSummaryPayload, summaryReportOptions);
+  console.log(JSON.stringify({
+    ...payload,
+    releaseSummaryEligible,
+    report: dryRun ? summaryReport : realTrafficReport,
+    profileSummaryReport: summaryReport,
+    releaseSummaryReport: releaseSummaryEligible
+      ? summaryReport
+      : {
+          skipped: true,
+          reason: "not_agentic_release_suite",
+          latest: "",
+          history: "",
+        },
+  }));
 }
 if (!payload.ok) process.exit(1);
