@@ -837,6 +837,10 @@ function Test-GoalReadinessSummaryEvidence {
     if (@(As-FlatArray $evidence.realTaskCoverageCompleteProfiles).Count -lt 2) { Add-Failure "goal-readiness summary has too few complete real-task coverage profiles" }
     $realTaskRefreshBlockers = @(As-FlatArray $evidence.realTaskCoverageNextProfilesNeedingRealTraffic)
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $realTaskRefreshBlockers.Count -lt 1) { Add-Failure "goal-readiness summary missing real-task coverage refresh blockers" }
+    $realTaskUniqueRefreshTasks = @(As-FlatArray $evidence.realTaskCoverageUniqueRefreshTasks)
+    if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $realTaskUniqueRefreshTasks.Count -lt 1) { Add-Failure "goal-readiness summary missing real-task coverage unique refresh tasks" }
+    if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $evidence.realTaskCoverageMinimalRefreshCommandPresent -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage minimal refresh command" }
+    if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $evidence.realTaskCoverageMinimalRefreshCommandRequiresRealTraffic -ne $true) { Add-Failure "goal-readiness summary minimal refresh command is not marked real traffic" }
     if ($null -eq $evidence.realTaskCoverageApprovalRequiredForRefresh) { Add-Failure "goal-readiness summary missing real-task coverage approval requirement" }
     if ($evidence.accountReleaseAcceptableProof -ne $false) { Add-Failure "goal-readiness summary account proof unexpectedly acceptable" }
     if (-not [string]$evidence.accountCompletionState) { Add-Failure "goal-readiness summary missing account completion state" }
@@ -938,6 +942,10 @@ function Test-RealTaskCoverageRoadmapSummaryEvidence {
     if ($evidence.coverageKind -ne "real-task-coverage-roadmap-report-only") { Add-Failure "real-task-coverage-roadmap summary coverage kind mismatch" }
     if ([int]$evidence.profileCount -lt $requiredProfiles.Count) { Add-Failure "real-task-coverage-roadmap summary profile count too low" }
     if (@(As-FlatArray $evidence.taskModes).Count -lt 9) { Add-Failure "real-task-coverage-roadmap summary task mode count too low" }
+    $uniqueRefreshTasks = @(As-FlatArray $evidence.uniqueRefreshTasks)
+    if ($evidence.approvalRequiredForRefresh -eq $true -and $uniqueRefreshTasks.Count -lt 1) { Add-Failure "real-task-coverage-roadmap summary missing unique refresh tasks" }
+    if ($evidence.approvalRequiredForRefresh -eq $true -and $evidence.minimalRefreshCommandPresent -ne $true) { Add-Failure "real-task-coverage-roadmap summary missing minimal refresh command" }
+    if ($evidence.approvalRequiredForRefresh -eq $true -and $evidence.minimalRefreshCommandRequiresRealTraffic -ne $true) { Add-Failure "real-task-coverage-roadmap summary minimal refresh command is not marked real traffic" }
     if (-not [string]$evidence.realTrafficApprovalReason) { Add-Failure "real-task-coverage-roadmap summary missing approval reason" }
     if (-not [string]$evidence.recommendedNoTrafficNextStep) { Add-Failure "real-task-coverage-roadmap summary missing next step" }
 }

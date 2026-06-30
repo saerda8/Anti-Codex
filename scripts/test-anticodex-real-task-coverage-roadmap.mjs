@@ -99,9 +99,29 @@ function profileStatus(profile, tasks) {
   };
 }
 
+function quoteCommandPart(value) {
+  const text = String(value || "");
+  if (/^[A-Za-z0-9_./:=\\-]+$/.test(text)) return text;
+  return `"${text.replaceAll('"', '\\"')}"`;
+}
+
 const profiles = Object.entries(requiredProfiles).map(([profile, tasks]) => profileStatus(profile, tasks));
 const nextProfilesNeedingRealTraffic = profiles.filter((profile) => profile.approvalRequiredForRefresh).map((profile) => profile.profile);
 const completeProfiles = profiles.filter((profile) => profile.allOk).map((profile) => profile.profile);
+const uniqueRefreshTasks = [...new Set(profiles.flatMap((profile) => profile.refreshTasks))];
+const minimalRefreshCommandParts = [
+  process.execPath,
+  "scripts\\test-anticodex-desktop-task-suite.mjs",
+  "--suite-profile",
+  "all",
+];
+if (uniqueRefreshTasks.length > 0) {
+  minimalRefreshCommandParts.push("--tasks", uniqueRefreshTasks.join(","));
+}
+minimalRefreshCommandParts.push("--allow-real-traffic");
+const minimalRefreshCommand = uniqueRefreshTasks.length > 0
+  ? minimalRefreshCommandParts.map(quoteCommandPart).join(" ")
+  : "";
 
 const payload = {
   ok: true,
@@ -118,6 +138,9 @@ const payload = {
   taskEvidence: Object.values(taskEvidence),
   completeProfiles,
   nextProfilesNeedingRealTraffic,
+  uniqueRefreshTasks,
+  minimalRefreshCommand,
+  minimalRefreshCommandRequiresRealTraffic: uniqueRefreshTasks.length > 0,
   approvalRequiredForRefresh: nextProfilesNeedingRealTraffic.length > 0,
   realTrafficApprovalReason: "explicit_user_approval_required_for_desktop_task_refresh",
   recommendedNoTrafficNextStep: nextProfilesNeedingRealTraffic.length > 0

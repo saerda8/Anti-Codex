@@ -12719,6 +12719,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /agenticCapabilityMatrix/);
   assert.match(goalReadiness, /realTaskCoverageRoadmap/);
   assert.match(goalReadiness, /real_task_coverage_refresh_required/);
+  assert.match(goalReadiness, /uniqueRefreshTasks/);
+  assert.match(goalReadiness, /minimalRefreshCommandPresent/);
   assert.match(summarizer, /realTaskCoverageNextProfilesNeedingRealTraffic/);
   assert.match(diagnostics, /goal-readiness summary missing real-task coverage roadmap proof/);
   assert.match(goalReadiness, /antigravityAccountIsolation/);
@@ -12742,10 +12744,16 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /extended/);
   assert.match(roadmap, /all/);
   assert.match(roadmap, /approvalRequiredForRefresh/);
+  assert.match(roadmap, /uniqueRefreshTasks/);
+  assert.match(roadmap, /minimalRefreshCommand/);
+  assert.match(roadmap, /--tasks/);
   assert.match(roadmap, /test-anticodex-desktop-task-suite\.mjs --suite-profile/);
   assert.match(summarizer, /realTaskCoverageRoadmapEvidence/);
+  assert.match(summarizer, /minimalRefreshCommandPresent/);
+  assert.match(summarizer, /uniqueRefreshTasks/);
   assert.match(collector, /realTaskCoverageRoadmapEvidence = \$json\.realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence/);
+  assert.match(diagnostics, /real-task-coverage-roadmap summary missing minimal refresh command/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(releaseGates, /scripts\/test-anticodex-real-task-coverage-roadmap\.mjs/);
   assert.match(installedOverall, /latest-real-task-coverage-roadmap\.json/);
