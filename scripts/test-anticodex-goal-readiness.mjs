@@ -55,6 +55,7 @@ const mcpSkills = readReport("latest-mcp-skills.json");
 const desktopSuite = readReport("latest-desktop-task-suite.json");
 const capabilityMatrixReport = readReport("latest-agentic-capability-matrix.json");
 const realTaskCoverageRoadmapReport = readReport("latest-real-task-coverage-roadmap.json");
+const realApprovalPlanReport = readReport("latest-real-approval-plan.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
 const releaseGates = readReport("latest-release-gates.json");
 
@@ -146,6 +147,21 @@ const realTaskCoverageRoadmap = {
   })),
 };
 
+const approvalPlan = realApprovalPlanReport.report || {};
+const realApprovalPlan = {
+  reportPresent: realApprovalPlanReport.present,
+  reportOk: approvalPlan.ok === true,
+  coverageKind: String(approvalPlan.coverageKind || ""),
+  requestedRealTraffic: approvalPlan.requestedRealTraffic === true,
+  usedRealTraffic: approvalPlan.usedRealTraffic === true,
+  nextNoTrafficAction: String(approvalPlan.nextNoTrafficAction || ""),
+  requiredReleaseRealTrafficActionCount: Number(approvalPlan.requiredReleaseRealTrafficActionCount || 0),
+  optionalReleaseRealTrafficActionCount: Number(approvalPlan.optionalReleaseRealTrafficActionCount || 0),
+  requiredReleaseGateIds: Array.isArray(approvalPlan.releaseRealTrafficGates?.gateIds) ? approvalPlan.releaseRealTrafficGates.gateIds.map(String) : [],
+  optionalReleaseGateIds: Array.isArray(approvalPlan.releaseRealTrafficGates?.optionalGateIds) ? approvalPlan.releaseRealTrafficGates.optionalGateIds.map(String) : [],
+  orderedActionCount: Array.isArray(approvalPlan.orderedActions) ? approvalPlan.orderedActions.length : 0,
+};
+
 const isolation = accountIsolation.report || {};
 const antigravityAccountIsolation = {
   reportPresent: accountIsolation.present,
@@ -200,6 +216,13 @@ const proven = {
     && realTaskCoverageRoadmap.requestedRealTraffic === false
     && realTaskCoverageRoadmap.usedRealTraffic === false
     && realTaskCoverageRoadmap.missingProfiles.length === 0,
+  realApprovalPlan: realApprovalPlan.reportOk
+    && realApprovalPlan.coverageKind === "real-approval-plan-report-only"
+    && realApprovalPlan.requestedRealTraffic === false
+    && realApprovalPlan.usedRealTraffic === false
+    && realApprovalPlan.requiredReleaseRealTrafficActionCount > 0
+    && realApprovalPlan.optionalReleaseRealTrafficActionCount >= 0
+    && realApprovalPlan.nextNoTrafficAction.length > 0,
   releaseShortPath: releaseGateStatus.reportOk
     && releaseGateStatus.shortReady
     && releaseGateStatus.missingShort.length === 0
@@ -219,6 +242,7 @@ if (!proven.workerMcp) blockers.push("worker_mcp_real_list_incomplete");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
+if (!proven.realApprovalPlan) blockers.push("real_approval_plan_missing_or_invalid");
 for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) blockers.push(`real_task_coverage_refresh_required:${profile}`);
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
@@ -228,12 +252,13 @@ const goalComplete = proven.codexClientCopy
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
   && proven.realTaskCoverageRoadmap
+  && proven.realApprovalPlan
   && realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic.length === 0
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -249,6 +274,7 @@ const payload = {
   desktopAgenticTasks,
   agenticCapabilityMatrix,
   realTaskCoverageRoadmap,
+  realApprovalPlan,
   antigravityAccountIsolation,
   releaseGateStatus,
   nextRequiredUserAction: antigravityAccountIsolation.safeToAskUserForSecondAccountLogin

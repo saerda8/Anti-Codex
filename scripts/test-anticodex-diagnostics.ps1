@@ -822,6 +822,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.desktopAgenticTasksProven -ne $true) { Add-Failure "goal-readiness summary missing desktop agentic task proof" }
     if ($evidence.agenticCapabilityMatrixProven -ne $true) { Add-Failure "goal-readiness summary missing agentic capability matrix proof" }
     if ($evidence.realTaskCoverageRoadmapProven -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage roadmap proof" }
+    if ($evidence.realApprovalPlanProven -ne $true) { Add-Failure "goal-readiness summary missing real-approval plan proof" }
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
@@ -842,6 +843,9 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $evidence.realTaskCoverageMinimalRefreshCommandPresent -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage minimal refresh command" }
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $evidence.realTaskCoverageMinimalRefreshCommandRequiresRealTraffic -ne $true) { Add-Failure "goal-readiness summary minimal refresh command is not marked real traffic" }
     if ($null -eq $evidence.realTaskCoverageApprovalRequiredForRefresh) { Add-Failure "goal-readiness summary missing real-task coverage approval requirement" }
+    if ([int]$evidence.realApprovalPlanRequiredReleaseActionCount -lt 1) { Add-Failure "goal-readiness summary missing required real-approval release actions" }
+    if ($null -eq $evidence.realApprovalPlanOptionalReleaseActionCount) { Add-Failure "goal-readiness summary missing optional real-approval action count" }
+    if (-not [string]$evidence.realApprovalPlanNextNoTrafficAction) { Add-Failure "goal-readiness summary missing real-approval next no-traffic action" }
     if ($evidence.accountReleaseAcceptableProof -ne $false) { Add-Failure "goal-readiness summary account proof unexpectedly acceptable" }
     if (-not [string]$evidence.accountCompletionState) { Add-Failure "goal-readiness summary missing account completion state" }
     if (-not [string]$evidence.accountBlockingReason) { Add-Failure "goal-readiness summary missing account blocking reason" }
