@@ -849,6 +849,11 @@ function Test-GoalReadinessSummaryEvidence {
     if ([int]$evidence.realTaskCoverageMissingArtifactProofTaskCount -ne 0) { Add-Failure "goal-readiness summary has missing real-task artifact proofs" }
     if (@(As-FlatArray $evidence.realTaskCoverageMissingArtifactProofTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing real-task artifact proof tasks" }
     if ($evidence.realTaskCoverageArtifactProofComplete -ne $true) { Add-Failure "goal-readiness summary real-task artifact proof incomplete" }
+    if ([int]$evidence.realTaskCoverageResultProofTaskCount -lt 9) { Add-Failure "goal-readiness summary missing real-task result proof coverage" }
+    if ($null -eq $evidence.realTaskCoverageMissingResultProofTaskCount) { Add-Failure "goal-readiness summary missing real-task result proof count" }
+    if ([int]$evidence.realTaskCoverageMissingResultProofTaskCount -ne 0) { Add-Failure "goal-readiness summary has missing real-task result proofs" }
+    if (@(As-FlatArray $evidence.realTaskCoverageMissingResultProofTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing real-task result proof tasks" }
+    if ($evidence.realTaskCoverageResultProofComplete -ne $true) { Add-Failure "goal-readiness summary real-task result proof incomplete" }
     $realTaskRefreshBlockers = @(As-FlatArray $evidence.realTaskCoverageNextProfilesNeedingRealTraffic)
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $realTaskRefreshBlockers.Count -lt 1) { Add-Failure "goal-readiness summary missing real-task coverage refresh blockers" }
     $realTaskUniqueRefreshTasks = @(As-FlatArray $evidence.realTaskCoverageUniqueRefreshTasks)
@@ -969,6 +974,17 @@ function Test-RealTaskCoverageRoadmapSummaryEvidence {
         if ([int]$proof.artifactProofCount -lt 1) { Add-Failure "real-task-coverage-roadmap summary artifact proof count too low" }
         if ($proof.artifactProofComplete -ne $true) { Add-Failure "real-task-coverage-roadmap summary artifact proof incomplete" }
         if (@(As-FlatArray $proof.missingArtifactProofKeys).Count -ne 0) { Add-Failure "real-task-coverage-roadmap summary artifact proof missing required keys" }
+    }
+    $resultProofs = @(As-FlatArray $evidence.taskResultProofs)
+    if ($resultProofs.Count -lt 9) { Add-Failure "real-task-coverage-roadmap summary missing result proof coverage" }
+    if ($null -eq $evidence.missingResultProofTaskCount) { Add-Failure "real-task-coverage-roadmap summary missing result proof count" }
+    if ($null -eq $evidence.missingResultProofTasks) { Add-Failure "real-task-coverage-roadmap summary missing result proof task list" }
+    if ([int]$evidence.missingResultProofTaskCount -ne 0) { Add-Failure "real-task-coverage-roadmap summary has missing result proofs" }
+    foreach ($proof in $resultProofs) {
+        if (-not [string]$proof.taskMode) { Add-Failure "real-task-coverage-roadmap summary result proof missing task mode" }
+        if ([int]$proof.resultProofCount -lt 1) { Add-Failure "real-task-coverage-roadmap summary result proof count too low" }
+        if ($proof.resultProofComplete -ne $true) { Add-Failure "real-task-coverage-roadmap summary result proof incomplete" }
+        if (@(As-FlatArray $proof.missingResultProofKeys).Count -ne 0) { Add-Failure "real-task-coverage-roadmap summary result proof missing required keys" }
     }
     $uniqueRefreshTasks = @(As-FlatArray $evidence.uniqueRefreshTasks)
     if ($evidence.approvalRequiredForRefresh -eq $true -and $uniqueRefreshTasks.Count -lt 1) { Add-Failure "real-task-coverage-roadmap summary missing unique refresh tasks" }

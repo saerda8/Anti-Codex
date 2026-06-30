@@ -771,7 +771,9 @@ function summarizeGate(definition) {
       const completeProfiles = Array.isArray(report.completeProfiles) ? report.completeProfiles.map((item) => String(item || "")) : [];
       const nextProfiles = Array.isArray(report.nextProfilesNeedingRealTraffic) ? report.nextProfilesNeedingRealTraffic.map((item) => String(item || "")) : [];
       const taskArtifactProofs = Array.isArray(report.taskArtifactProofs) ? report.taskArtifactProofs : [];
+      const taskResultProofs = Array.isArray(report.taskResultProofs) ? report.taskResultProofs : [];
       const hasMissingArtifactProofTaskCount = Object.prototype.hasOwnProperty.call(report, "missingArtifactProofTaskCount");
+      const hasMissingResultProofTaskCount = Object.prototype.hasOwnProperty.call(report, "missingResultProofTaskCount");
       if (report.reportName !== "real-task-coverage-roadmap") semanticFailures.push("real_task_coverage_roadmap_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("real_task_coverage_roadmap_real_traffic_requested");
       if (report.usedRealTraffic !== false) semanticFailures.push("real_task_coverage_roadmap_used_real_traffic");
@@ -801,6 +803,17 @@ function summarizeGate(definition) {
         if (proof?.artifactProofComplete !== true) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_incomplete`);
         if (Number(proof?.artifactProofCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_count`);
         if (missingKeys.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_missing_keys`);
+      }
+      if (taskResultProofs.length < 9) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
+      if (!Array.isArray(report.missingResultProofTasks)) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
+      if (!hasMissingResultProofTaskCount) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
+      if (Number(report.missingResultProofTaskCount || 0) !== 0) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
+      for (const proof of taskResultProofs) {
+        const taskMode = String(proof?.taskMode || "unknown").replaceAll("-", "_");
+        const missingKeys = Array.isArray(proof?.missingResultProofKeys) ? proof.missingResultProofKeys : [];
+        if (proof?.resultProofComplete !== true) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_result_incomplete`);
+        if (Number(proof?.resultProofCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_result_count`);
+        if (missingKeys.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_result_missing_keys`);
       }
       if (report.approvalRequiredForRefresh === true) {
         if (uniqueRefreshTasks.length < 1) semanticFailures.push("real_task_coverage_roadmap_unique_refresh_tasks_missing");
@@ -882,6 +895,11 @@ function summarizeGate(definition) {
       if (Array.isArray(roadmap.missingArtifactProofTasks) && roadmap.missingArtifactProofTasks.length > 0) semanticFailures.push("goal_readiness_artifact_proof_missing");
       if (roadmap.artifactProofComplete !== true) semanticFailures.push("goal_readiness_artifact_proof_missing");
       if (blockers.includes("real_task_artifact_proof_missing")) semanticFailures.push("goal_readiness_artifact_proof_blocker_present");
+      if (Number(roadmap.resultProofTaskCount || 0) < 9) semanticFailures.push("goal_readiness_result_proof_missing");
+      if (Number(roadmap.missingResultProofTaskCount || 0) !== 0) semanticFailures.push("goal_readiness_result_proof_missing");
+      if (Array.isArray(roadmap.missingResultProofTasks) && roadmap.missingResultProofTasks.length > 0) semanticFailures.push("goal_readiness_result_proof_missing");
+      if (roadmap.resultProofComplete !== true) semanticFailures.push("goal_readiness_result_proof_missing");
+      if (blockers.includes("real_task_result_proof_missing")) semanticFailures.push("goal_readiness_result_proof_blocker_present");
       if (roadmap.approvalRequiredForRefresh === true) {
         if (!Array.isArray(roadmap.uniqueRefreshTasks) || roadmap.uniqueRefreshTasks.length < 1) semanticFailures.push("goal_readiness_refresh_tasks_missing");
         if (roadmap.minimalRefreshCommandPresent !== true) semanticFailures.push("goal_readiness_refresh_command_missing");
