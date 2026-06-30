@@ -12856,6 +12856,8 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /approvalRequiredForRefresh/);
   assert.match(roadmap, /uniqueRefreshTasks/);
   assert.match(roadmap, /minimalRefreshCommand/);
+  assert.match(roadmap, /minimalRefreshCommandArgs/);
+  assert.match(roadmap, /refreshApprovalSummary/);
   assert.match(roadmap, /--tasks/);
   assert.match(roadmap, /test-anticodex-desktop-task-suite\.mjs --suite-profile/);
   assert.match(roadmap, /taskArtifactRequirements/);
@@ -12892,6 +12894,8 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(releaseGates, /id:\s*"realTaskCoverageRoadmap"[\s\S]*?file:\s*"latest-real-task-coverage-roadmap\.json"[\s\S]*?requiredForRelease:\s*true/);
   assert.match(releaseGates, /requireRealTaskCoverageRoadmapSemantics:\s*true/);
   assert.match(releaseGates, /real_task_coverage_roadmap_minimal_refresh_command_not_real_traffic/);
+  assert.match(releaseGates, /real_task_coverage_roadmap_minimal_refresh_command_args_missing/);
+  assert.match(releaseGates, /real_task_coverage_roadmap_refresh_approval_summary_missing/);
   assert.match(releaseGates, /real_task_coverage_roadmap_artifact_proof_missing/);
   assert.match(releaseGates, /real_task_coverage_roadmap_result_proof_missing/);
   assert.match(releaseGates, /real_task_coverage_roadmap_\$\{profileName\}_result_profile_incomplete/);
@@ -12915,6 +12919,8 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(plan, /requestedRealTraffic: false/);
   assert.match(plan, /usedRealTraffic: false/);
   assert.match(plan, /realTaskRefresh/);
+  assert.match(plan, /commandArgs/);
+  assert.match(plan, /approvalSummary/);
   assert.match(plan, /releaseRealTrafficGates/);
   assert.match(plan, /requiredActions/);
   assert.match(plan, /optionalActions/);
@@ -12936,6 +12942,8 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(releaseGates, /id:\s*"realApprovalPlan"[\s\S]*?file:\s*"latest-real-approval-plan\.json"[\s\S]*?requiredForRelease:\s*true/);
   assert.match(releaseGates, /requireRealApprovalPlanSemantics:\s*true/);
   assert.match(releaseGates, /real_approval_plan_required_release_actions_missing/);
+  assert.match(releaseGates, /real_approval_plan_refresh_command_args_missing/);
+  assert.match(releaseGates, /real_approval_plan_refresh_approval_summary_missing/);
   assert.match(releaseGates, /scripts\/test-anticodex-real-approval-plan\.mjs/);
   assert.match(installedOverall, /latest-real-approval-plan\.json/);
   assert.match(signer, /latest-real-approval-plan\.json/);

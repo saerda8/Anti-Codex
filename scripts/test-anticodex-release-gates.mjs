@@ -770,6 +770,8 @@ function summarizeGate(definition) {
       const uniqueRefreshTasks = Array.isArray(report.uniqueRefreshTasks) ? report.uniqueRefreshTasks.map((item) => String(item || "")) : [];
       const completeProfiles = Array.isArray(report.completeProfiles) ? report.completeProfiles.map((item) => String(item || "")) : [];
       const nextProfiles = Array.isArray(report.nextProfilesNeedingRealTraffic) ? report.nextProfilesNeedingRealTraffic.map((item) => String(item || "")) : [];
+      const minimalRefreshCommandArgs = Array.isArray(report.minimalRefreshCommandArgs) ? report.minimalRefreshCommandArgs.map((item) => String(item || "")) : [];
+      const refreshApprovalSummary = report.refreshApprovalSummary && typeof report.refreshApprovalSummary === "object" ? report.refreshApprovalSummary : {};
       const taskArtifactProofs = Array.isArray(report.taskArtifactProofs) ? report.taskArtifactProofs : [];
       const taskResultProofs = Array.isArray(report.taskResultProofs) ? report.taskResultProofs : [];
       const hasMissingArtifactProofTaskCount = Object.prototype.hasOwnProperty.call(report, "missingArtifactProofTaskCount");
@@ -826,6 +828,12 @@ function summarizeGate(definition) {
         if (uniqueRefreshTasks.length < 1) semanticFailures.push("real_task_coverage_roadmap_unique_refresh_tasks_missing");
         if (report.minimalRefreshCommandRequiresRealTraffic !== true) semanticFailures.push("real_task_coverage_roadmap_minimal_refresh_command_not_real_traffic");
         if (typeof report.minimalRefreshCommand !== "string" || !report.minimalRefreshCommand.includes("test-anticodex-desktop-task-suite.mjs") || !report.minimalRefreshCommand.includes("--tasks") || !report.minimalRefreshCommand.includes("--allow-real-traffic")) semanticFailures.push("real_task_coverage_roadmap_minimal_refresh_command_missing");
+        if (minimalRefreshCommandArgs.length < 1 || !minimalRefreshCommandArgs.some((item) => item.includes("test-anticodex-desktop-task-suite.mjs")) || !minimalRefreshCommandArgs.includes("--tasks") || !minimalRefreshCommandArgs.includes("--allow-real-traffic")) semanticFailures.push("real_task_coverage_roadmap_minimal_refresh_command_args_missing");
+        if (refreshApprovalSummary.requiresExplicitUserApproval !== true) semanticFailures.push("real_task_coverage_roadmap_refresh_approval_summary_missing");
+        if (String(refreshApprovalSummary.approvalReason || "") === "") semanticFailures.push("real_task_coverage_roadmap_refresh_approval_summary_missing");
+        if (Number(refreshApprovalSummary.taskCount || 0) !== uniqueRefreshTasks.length) semanticFailures.push("real_task_coverage_roadmap_refresh_approval_task_count");
+        const summaryTasks = Array.isArray(refreshApprovalSummary.refreshTaskModes) ? refreshApprovalSummary.refreshTaskModes.map((item) => String(item || "")) : [];
+        if (summaryTasks.length !== uniqueRefreshTasks.length || uniqueRefreshTasks.some((taskMode) => !summaryTasks.includes(taskMode))) semanticFailures.push("real_task_coverage_roadmap_refresh_approval_tasks");
         if (nextProfiles.length < 1) semanticFailures.push("real_task_coverage_roadmap_next_profiles_missing");
       }
       if (typeof report.realTrafficApprovalReason !== "string" || !report.realTrafficApprovalReason) semanticFailures.push("real_task_coverage_roadmap_approval_reason_missing");
@@ -839,6 +847,8 @@ function summarizeGate(definition) {
       const orderedActions = Array.isArray(report.orderedActions) ? report.orderedActions : [];
       const gateIds = Array.isArray(releaseGates.gateIds) ? releaseGates.gateIds.map((item) => String(item || "")) : [];
       const refreshTasks = Array.isArray(refresh.uniqueRefreshTasks) ? refresh.uniqueRefreshTasks.map((item) => String(item || "")) : [];
+      const refreshCommandArgs = Array.isArray(refresh.commandArgs) ? refresh.commandArgs.map((item) => String(item || "")) : [];
+      const refreshApprovalSummary = refresh.approvalSummary && typeof refresh.approvalSummary === "object" ? refresh.approvalSummary : {};
       if (report.reportName !== "real-approval-plan") semanticFailures.push("real_approval_plan_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("real_approval_plan_real_traffic_requested");
       if (report.usedRealTraffic !== false) semanticFailures.push("real_approval_plan_used_real_traffic");
@@ -847,6 +857,10 @@ function summarizeGate(definition) {
       if (refresh.needed !== true) semanticFailures.push("real_approval_plan_refresh_not_needed");
       if (refreshTasks.length < 1) semanticFailures.push("real_approval_plan_refresh_tasks_missing");
       if (typeof refresh.command !== "string" || !refresh.command.includes("--allow-real-traffic")) semanticFailures.push("real_approval_plan_refresh_command_missing");
+      if (refreshCommandArgs.length < 1 || !refreshCommandArgs.some((item) => item.includes("test-anticodex-desktop-task-suite.mjs")) || !refreshCommandArgs.includes("--tasks") || !refreshCommandArgs.includes("--allow-real-traffic")) semanticFailures.push("real_approval_plan_refresh_command_args_missing");
+      if (refreshApprovalSummary.requiresExplicitUserApproval !== true) semanticFailures.push("real_approval_plan_refresh_approval_summary_missing");
+      if (String(refreshApprovalSummary.approvalReason || "") === "") semanticFailures.push("real_approval_plan_refresh_approval_summary_missing");
+      if (Number(refreshApprovalSummary.taskCount || 0) !== refreshTasks.length) semanticFailures.push("real_approval_plan_refresh_approval_task_count");
       if (releaseGates.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("real_approval_plan_release_not_blocked_only_by_real_traffic");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (!gateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_gate_missing`);
@@ -2446,6 +2460,14 @@ if (args.has("--self-test")) {
         approvalRequiredForRefresh: true,
         minimalRefreshCommandRequiresRealTraffic: true,
         minimalRefreshCommand: "node scripts/test-anticodex-desktop-task-suite.mjs --tasks web-search --allow-real-traffic",
+        minimalRefreshCommandArgs: ["node", "scripts/test-anticodex-desktop-task-suite.mjs", "--tasks", "web-search", "--allow-real-traffic"],
+        refreshApprovalSummary: {
+          requiresExplicitUserApproval: true,
+          approvalReason: "explicit_user_approval_required_for_desktop_task_refresh",
+          taskCount: 1,
+          refreshTaskModes: ["web-search"],
+          nextProfilesNeedingRealTraffic: ["extended"],
+        },
         realTrafficApprovalReason: "Some roadmap refreshes require explicit approved real traffic.",
         recommendedNoTrafficNextStep: "Keep no-traffic gates green while waiting for approval.",
         failures: [],

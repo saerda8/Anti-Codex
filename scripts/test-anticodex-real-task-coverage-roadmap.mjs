@@ -267,9 +267,19 @@ if (uniqueRefreshTasks.length > 0) {
   minimalRefreshCommandParts.push("--tasks", uniqueRefreshTasks.join(","));
 }
 minimalRefreshCommandParts.push("--allow-real-traffic");
+const minimalRefreshCommandArgs = uniqueRefreshTasks.length > 0
+  ? [...minimalRefreshCommandParts]
+  : [];
 const minimalRefreshCommand = uniqueRefreshTasks.length > 0
   ? minimalRefreshCommandParts.map(quoteCommandPart).join(" ")
   : "";
+const refreshApprovalSummary = {
+  requiresExplicitUserApproval: uniqueRefreshTasks.length > 0,
+  approvalReason: uniqueRefreshTasks.length > 0 ? "explicit_user_approval_required_for_desktop_task_refresh" : "",
+  taskCount: uniqueRefreshTasks.length,
+  refreshTaskModes: uniqueRefreshTasks,
+  nextProfilesNeedingRealTraffic,
+};
 
 const payload = {
   ok: true,
@@ -296,7 +306,9 @@ const payload = {
   nextProfilesNeedingRealTraffic,
   uniqueRefreshTasks,
   minimalRefreshCommand,
+  minimalRefreshCommandArgs,
   minimalRefreshCommandRequiresRealTraffic: uniqueRefreshTasks.length > 0,
+  refreshApprovalSummary,
   approvalRequiredForRefresh: nextProfilesNeedingRealTraffic.length > 0,
   realTrafficApprovalReason: "explicit_user_approval_required_for_desktop_task_refresh",
   recommendedNoTrafficNextStep: nextProfilesNeedingRealTraffic.length > 0

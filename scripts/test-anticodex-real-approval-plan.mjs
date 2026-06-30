@@ -83,11 +83,21 @@ const accountProofCommand = typeof accountProofPlan.commandTemplate === "string"
   ? accountProofPlan.commandTemplate
   : "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -AccountIsolationBoundary separate-windows-user -AllowSeparateAccountProof";
 const minimalRefreshCommand = typeof roadmap.minimalRefreshCommand === "string" ? roadmap.minimalRefreshCommand : "";
+const minimalRefreshCommandArgs = asArray(roadmap.minimalRefreshCommandArgs);
+const roadmapRefreshApprovalSummary = roadmap.refreshApprovalSummary && typeof roadmap.refreshApprovalSummary === "object" ? roadmap.refreshApprovalSummary : {};
 
 const realTaskRefresh = {
   needed: uniqueRefreshTasks.length > 0,
   uniqueRefreshTasks,
   command: minimalRefreshCommand,
+  commandArgs: minimalRefreshCommandArgs,
+  approvalSummary: {
+    requiresExplicitUserApproval: roadmapRefreshApprovalSummary.requiresExplicitUserApproval === true || uniqueRefreshTasks.length > 0,
+    approvalReason: String(roadmapRefreshApprovalSummary.approvalReason || (uniqueRefreshTasks.length > 0 ? "explicit_user_approval_required_for_desktop_task_refresh" : "")),
+    taskCount: Number.isFinite(Number(roadmapRefreshApprovalSummary.taskCount)) ? Number(roadmapRefreshApprovalSummary.taskCount) : uniqueRefreshTasks.length,
+    refreshTaskModes: asArray(roadmapRefreshApprovalSummary.refreshTaskModes).length > 0 ? asArray(roadmapRefreshApprovalSummary.refreshTaskModes) : uniqueRefreshTasks,
+    nextProfilesNeedingRealTraffic: asArray(roadmapRefreshApprovalSummary.nextProfilesNeedingRealTraffic).length > 0 ? asArray(roadmapRefreshApprovalSummary.nextProfilesNeedingRealTraffic) : asArray(roadmap.nextProfilesNeedingRealTraffic),
+  },
   requiresRealTraffic: uniqueRefreshTasks.length > 0,
   blockedUntilExplicitUserApproval: uniqueRefreshTasks.length > 0,
   nextProfilesNeedingRealTraffic: asArray(roadmap.nextProfilesNeedingRealTraffic),
