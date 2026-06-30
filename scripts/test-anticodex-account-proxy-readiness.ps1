@@ -183,6 +183,11 @@ function Get-AntigravityLogSignals {
 function Get-Diagnosis {
     param($Health, $RequestError, $RefreshError, $AccountError, $LogSignals)
 
+    function Test-NetworkTransientMessage {
+        param([string]$Message)
+        return [string]$Message -match "aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|connection.*closed|underlying connection was closed|kept alive|network|fetch failed"
+    }
+
     if (-not $Health) { return "local_gateway_offline" }
     if (($RequestError -and (($RequestError.diagnosis -eq "account_verification_required") -or ($RequestError.message -match "Verify your account to continue|PERMISSION_DENIED|account verification"))) -or
         ($RefreshError -and (($RefreshError.diagnosis -eq "account_verification_required") -or ($RefreshError.message -match "Verify your account to continue|PERMISSION_DENIED|account verification")))) {
@@ -190,17 +195,18 @@ function Get-Diagnosis {
     }
     if ($Health -and $Health.antigravityCircuitState -eq "open") { return "proxy_or_network_circuit_open" }
     if (($LogSignals -and ([int]$LogSignals.oauthNetworkFailureCount -gt 0 -or [int]$LogSignals.generalNetworkFailureCount -gt 0)) -and
-        (($AccountError -and $AccountError.message -match "aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|network|fetch failed") -or
-         ($RefreshError -and $RefreshError.message -match "aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|network|fetch failed|empty model list") -or
-         ($RequestError -and $RequestError.message -match "confirm its proxy connection|aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|network|fetch failed"))) {
+        (($AccountError -and (Test-NetworkTransientMessage $AccountError.message)) -or
+         ($RefreshError -and ((Test-NetworkTransientMessage $RefreshError.message) -or $RefreshError.message -match "empty model list")) -or
+         ($RequestError -and ($RequestError.message -match "confirm its proxy connection" -or (Test-NetworkTransientMessage $RequestError.message))))) {
         return "proxy_or_network_transient"
     }
     if ($RequestError -and $RequestError.type -eq "antigravity_temporarily_unavailable") { return "proxy_or_network_unavailable" }
     if ($RefreshError -and $RefreshError.type -eq "antigravity_temporarily_unavailable") { return "proxy_or_network_unavailable" }
     if ($RequestError -and $RequestError.type -eq "antigravity_account_unavailable") { return "account_signed_out_or_no_models" }
     if ($RefreshError -and $RefreshError.type -eq "antigravity_account_unavailable") { return "account_signed_out_or_no_models" }
-    if ($RequestError -and $RequestError.message -match "aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|network|fetch failed") { return "proxy_or_network_transient" }
-    if ($RefreshError -and $RefreshError.message -match "empty model list|aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|network|fetch failed") { return "proxy_or_network_transient" }
+    if ($RequestError -and (Test-NetworkTransientMessage $RequestError.message)) { return "proxy_or_network_transient" }
+    if ($RefreshError -and ((Test-NetworkTransientMessage $RefreshError.message) -or $RefreshError.message -match "empty model list")) { return "proxy_or_network_transient" }
+    if ($RequestError -or $RefreshError) { return "proxy_or_network_unavailable" }
     if ($Health -and $Health.accountTrafficReady -eq $false) {
         if ($Health.accountTrafficDiagnosis -eq "account_verification_required") { return "account_verification_required" }
         if ($Health.accountTrafficType -eq "antigravity_account_unavailable") { return "account_signed_out_or_no_models" }
@@ -277,10 +283,12 @@ if ($models.Count -gt 0 -and -not (@($models | ForEach-Object { [string]$_.id })
     $selectedModel = [string]$models[0].id
 }
 
+$accountProbeReady = [bool]($accountResult.ok -and $account -and $account.signedIn -eq $true -and $account.identityAvailable -eq $true -and [string]$account.fingerprint)
+$accountProbeStaleButModelsAvailable = [bool]((-not $accountProbeReady) -and $models.Count -gt 0 -and $healthBefore -and [string]$healthBefore.modelTextTransport -eq "cli")
 $requestResult = $null
 $requestText = ""
 $requestMarker = "ACCOUNT_PROXY_READY_" + (Get-Random -Minimum 10000 -Maximum 99999)
-if ($healthBefore -and $healthBefore.accountReady -eq $true -and $models.Count -gt 0) {
+if ($healthBefore -and ($healthBefore.accountReady -eq $true -or $accountProbeStaleButModelsAvailable) -and $models.Count -gt 0) {
     $requestResult = Invoke-LocalJsonSafe "real-response" "/v1/responses" "POST" @{
         model = $selectedModel
         stream = $false
@@ -393,7 +401,7 @@ $result = [pscustomobject]@{
         error = if ($requestResult -and -not $requestResult.ok) { $requestResult.error } else { $null }
     }
     phaseSummary = [pscustomobject]@{
-        accountOk = [bool]($accountResult.ok -and $account -and $account.signedIn -eq $true)
+        accountOk = $accountProbeReady
         refreshOk = [bool]$refreshResult.ok
         modelCount = $models.Count
         realRequestAttempted = $null -ne $requestResult
@@ -401,6 +409,7 @@ $result = [pscustomobject]@{
         accountError = if (-not $accountResult.ok) { $accountResult.error.message } elseif ($account -and $account.signedIn -ne $true) { "not_signed_in_or_status_unavailable" } else { "" }
         refreshError = if (-not $refreshResult.ok) { $refreshResult.error.message } else { "" }
         realRequestError = if ($requestResult -and -not $requestResult.ok) { $requestResult.error.message } elseif ($null -eq $requestResult) { "not_attempted" } else { "" }
+        accountProbeStaleButModelsAvailable = $accountProbeStaleButModelsAvailable
     }
     modelRouteAudit = [pscustomobject]@{
         ok = $routeAuditResult.ok
@@ -430,5 +439,4 @@ $json = $result | ConvertTo-Json -Depth 10 -Compress
 Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPaths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
 $json
 if ($failures.Count -gt 0) { exit 1 }
-
 

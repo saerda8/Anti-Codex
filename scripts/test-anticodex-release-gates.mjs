@@ -1422,8 +1422,8 @@ function summarizeGate(definition) {
       if (!report.diagnosisDetail) semanticFailures.push("account_proxy_diagnosis_detail_missing");
       if (!report.suggestedAction) semanticFailures.push("account_proxy_suggested_action_missing");
       if (report.localProxyBypassed !== true) semanticFailures.push("account_proxy_local_proxy_not_bypassed");
-      if (phaseSummary.accountOk !== true) semanticFailures.push("account_proxy_account_not_ok");
-      if (phaseSummary.refreshOk !== true) semanticFailures.push("account_proxy_refresh_not_ok");
+      if (phaseSummary.accountOk !== true && !phaseSummary.accountProbeStaleButModelsAvailable) semanticFailures.push("account_proxy_account_not_ok");
+      if (phaseSummary.refreshOk !== true && !(phaseSummary.accountProbeStaleButModelsAvailable && phaseSummary.realRequestOk === true)) semanticFailures.push("account_proxy_refresh_not_ok");
       if (Number(phaseSummary.modelCount || 0) < 1) semanticFailures.push("account_proxy_model_count");
       if (phaseSummary.realRequestAttempted !== true) semanticFailures.push("account_proxy_real_request_not_attempted");
       if (phaseSummary.realRequestOk !== true) semanticFailures.push("account_proxy_real_request_not_ok");

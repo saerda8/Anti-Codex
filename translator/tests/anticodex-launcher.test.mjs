@@ -13318,6 +13318,10 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   assert.match(readiness, /phaseSummary/);
   assert.match(readiness, /realRequestAttempted/);
   assert.match(readiness, /realRequestError/);
+  assert.match(readiness, /accountProbeStaleButModelsAvailable/);
+  assert.match(readiness, /Test-NetworkTransientMessage/);
+  assert.match(readiness, /underlying connection was closed/);
+  assert.match(readiness, /if \(\$RequestError -or \$RefreshError\) \{ return "proxy_or_network_unavailable" \}/);
   assert.match(readiness, /Get-AntigravityLogSignals/);
   assert.match(readiness, /sourceFresh/);
   assert.match(readiness, /tokenRefreshMissingCount/);
@@ -13334,6 +13338,9 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   assert.match(readiness, /Proxy\s*=\s*\$null/);
   assert.match(readiness, /\[Text\.Encoding\]::UTF8\.GetBytes/);
   assert.match(readiness, /ConvertTo-Json/);
+
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  assert.match(releaseGates, /accountProbeStaleButModelsAvailable && phaseSummary\.realRequestOk === true/);
 
   assert.doesNotMatch(readiness, /Stop-Process/);
   assert.doesNotMatch(readiness, /Antigravity\.exe/);
