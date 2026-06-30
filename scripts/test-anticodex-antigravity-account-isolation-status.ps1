@@ -130,6 +130,21 @@ $finalProofPlan = [ordered]@{
     acceptsProfileAndAppDataOnlyProof = $false
     releaseAcceptableAccountProof = $false
 }
+$postLoginProofPlan = [ordered]@{
+    proofScript = "test-anticodex-antigravity-cli-real-smoke.ps1"
+    commandTemplate = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary separate-windows-user -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>"
+    accountIsolationBoundary = "separate-windows-user"
+    requiresInteractiveLoginComplete = $true
+    requiresApprovedRealTraffic = $true
+    requiresSeparateAccountProofApproval = $true
+    requiresDistinctAccountIdentityComparison = $true
+    requiredAccountIdentityInputs = @("AntiCodexAccountId", "McpAccountId")
+    accountIdsMustDiffer = $true
+    mcpAccountLaneManagedByAntiCodex = $false
+    mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
+    canRunAfterInteractiveLogin = ($safeToAskLogin -and $canProceedToInteractiveLogin)
+    blockedReason = if ($safeToAskLogin -and $canProceedToInteractiveLogin) { "" } else { $readinessBlockingReason }
+}
 
 $elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
 $report = [ordered]@{
@@ -169,6 +184,7 @@ $report = [ordered]@{
     nextProofRequiresInteractiveLogin = $readyForInteractiveLogin
     nextProofRequiresRealTraffic = $true
     finalProofPlan = $finalProofPlan
+    postLoginProofPlan = $postLoginProofPlan
     loginVerified = $false
     separateAccountVerified = $false
     releaseAcceptableAccountProof = $false

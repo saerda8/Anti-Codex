@@ -1296,6 +1296,22 @@ function summarizeGate(definition) {
       if (!finalProofPlan || finalProofPlan.accountIdsMustDiffer !== true) semanticFailures.push("account_isolation_status_final_proof_account_ids_must_differ");
       if (finalProofPlan && finalProofPlan.acceptsProfileAndAppDataOnlyProof === true) semanticFailures.push("account_isolation_status_final_proof_accepts_profile_only");
       if (finalProofPlan && finalProofPlan.releaseAcceptableAccountProof !== false) semanticFailures.push("account_isolation_status_final_proof_release_claimed");
+      const postLoginProofPlan = report.postLoginProofPlan && typeof report.postLoginProofPlan === "object" ? report.postLoginProofPlan : null;
+      const requiredIdentityInputs = Array.isArray(postLoginProofPlan?.requiredAccountIdentityInputs) ? postLoginProofPlan.requiredAccountIdentityInputs.map((item) => String(item || "")) : [];
+      if (!postLoginProofPlan) semanticFailures.push("account_isolation_status_post_login_proof_plan_missing");
+      if (!postLoginProofPlan || postLoginProofPlan.proofScript !== "test-anticodex-antigravity-cli-real-smoke.ps1") semanticFailures.push("account_isolation_status_post_login_proof_script");
+      if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")) semanticFailures.push("account_isolation_status_post_login_proof_command_missing");
+      if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("-AllowSeparateAccountProof")) semanticFailures.push("account_isolation_status_post_login_proof_approval_switch_missing");
+      if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("-SeparateAccountProofApprovalId <explicit-user-approval-id>")) semanticFailures.push("account_isolation_status_post_login_proof_approval_id_missing");
+      if (!postLoginProofPlan || postLoginProofPlan.accountIsolationBoundary !== "separate-windows-user") semanticFailures.push("account_isolation_status_post_login_proof_wrong_boundary");
+      if (!postLoginProofPlan || postLoginProofPlan.requiresInteractiveLoginComplete !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_login");
+      if (!postLoginProofPlan || postLoginProofPlan.requiresApprovedRealTraffic !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_real_traffic");
+      if (!postLoginProofPlan || postLoginProofPlan.requiresSeparateAccountProofApproval !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_approval");
+      if (!postLoginProofPlan || postLoginProofPlan.requiresDistinctAccountIdentityComparison !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_identity");
+      if (!requiredIdentityInputs.includes("AntiCodexAccountId") || !requiredIdentityInputs.includes("McpAccountId")) semanticFailures.push("account_isolation_status_post_login_proof_identity_inputs");
+      if (!postLoginProofPlan || postLoginProofPlan.accountIdsMustDiffer !== true) semanticFailures.push("account_isolation_status_post_login_proof_account_ids_must_differ");
+      if (!postLoginProofPlan || postLoginProofPlan.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("account_isolation_status_post_login_proof_mcp_managed_here");
+      if (!postLoginProofPlan || postLoginProofPlan.mcpAccountLaneOwner !== "external-antigravity-account-not-managed-here") semanticFailures.push("account_isolation_status_post_login_proof_mcp_owner");
       if (report.separateAccountVerified !== false) semanticFailures.push("account_isolation_status_separate_account_verified");
       if (report.loginVerified !== false) semanticFailures.push("account_isolation_status_login_verified");
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("account_isolation_status_release_proof_claimed");
@@ -3065,6 +3081,20 @@ if (args.has("--self-test")) {
       "account_isolation_status_final_proof_requires_real_traffic",
       "account_isolation_status_final_proof_requires_distinct_identity",
       "account_isolation_status_final_proof_account_ids_must_differ",
+      "account_isolation_status_post_login_proof_plan_missing",
+      "account_isolation_status_post_login_proof_script",
+      "account_isolation_status_post_login_proof_command_missing",
+      "account_isolation_status_post_login_proof_approval_switch_missing",
+      "account_isolation_status_post_login_proof_approval_id_missing",
+      "account_isolation_status_post_login_proof_wrong_boundary",
+      "account_isolation_status_post_login_proof_requires_login",
+      "account_isolation_status_post_login_proof_requires_real_traffic",
+      "account_isolation_status_post_login_proof_requires_approval",
+      "account_isolation_status_post_login_proof_requires_identity",
+      "account_isolation_status_post_login_proof_identity_inputs",
+      "account_isolation_status_post_login_proof_account_ids_must_differ",
+      "account_isolation_status_post_login_proof_mcp_managed_here",
+      "account_isolation_status_post_login_proof_mcp_owner",
       "account_isolation_status_separate_account_verified",
       "account_isolation_status_login_verified",
       "account_isolation_status_release_proof_claimed",

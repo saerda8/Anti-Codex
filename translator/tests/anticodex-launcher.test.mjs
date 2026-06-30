@@ -14247,6 +14247,14 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(status, /targetUserSidMatchesCurrentUser/);
   assert.match(status, /targetUserIdentityBoundaryOk/);
   assert.match(status, /finalProofPlan/);
+  assert.match(status, /postLoginProofPlan/);
+  assert.match(status, /proofScript = "test-anticodex-antigravity-cli-real-smoke\.ps1"/);
+  assert.match(status, /requiresInteractiveLoginComplete = \$true/);
+  assert.match(status, /requiresSeparateAccountProofApproval = \$true/);
+  assert.match(status, /requiredAccountIdentityInputs = @\("AntiCodexAccountId", "McpAccountId"\)/);
+  assert.match(status, /commandTemplate/);
+  assert.match(status, /-AllowSeparateAccountProof/);
+  assert.match(status, /-SeparateAccountProofApprovalId <explicit-user-approval-id>/);
   assert.match(status, /requiresSeparateWindowsUserCredentialBoundary/);
   assert.match(status, /requiresInteractiveLogin/);
   assert.match(status, /requiresApprovedRealTraffic/);
@@ -14379,6 +14387,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /antigravityAccountIsolationStatusEvidence/);
   assert.match(summarizer, /releaseAcceptableAccountProof/);
   assert.match(summarizer, /finalProofPlan/);
+  assert.match(summarizer, /postLoginProofPlan/);
+  assert.match(summarizer, /proofScript/);
+  assert.match(summarizer, /commandTemplate/);
+  assert.match(summarizer, /requiredAccountIdentityInputs/);
   assert.match(summarizer, /requiresDistinctAccountIdentityComparison/);
   assert.match(diagnostics, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.match(diagnostics, /antigravityCliWindowsUserReadinessEvidence/);
@@ -14430,6 +14442,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /requireWindowsUserSetupGuidanceSemantics/);
   assert.match(releaseGates, /antigravityAccountIsolationStatus/);
   assert.match(releaseGates, /requireAntigravityAccountIsolationStatusSemantics/);
+  assert.match(releaseGates, /account_isolation_status_post_login_proof_plan_missing/);
+  assert.match(releaseGates, /account_isolation_status_post_login_proof_command_missing/);
+  assert.match(releaseGates, /account_isolation_status_post_login_proof_requires_identity/);
+  assert.match(releaseGates, /account_isolation_status_post_login_proof_wrong_boundary/);
   assert.match(releaseGates, /windows_user_readiness_started_login/);
   assert.match(releaseGates, /windows_user_readiness_target_sid_matches_current_user/);
   assert.match(releaseGates, /windows_user_readiness_identity_boundary_unverified/);
