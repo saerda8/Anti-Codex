@@ -3,7 +3,8 @@ param(
     [string]$SourceRoot = "",
     [string]$ReportRoot = "",
     [int]$SubcheckTimeoutSec = 120,
-    [switch]$SkipFullRegression
+    [switch]$SkipFullRegression,
+    [switch]$SelfTestProcessLauncher
 )
 
 $ErrorActionPreference = "Stop"
@@ -210,6 +211,78 @@ function Invoke-SourceProcess {
     } finally {
         Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Test-ProcessLauncherSelfTest {
+    $node = (Get-Command "node" -ErrorAction Stop).Source
+    $powershell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-srcpreflight-launcher-selftest-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+    try {
+        $successScript = Join-Path $tempRoot "success.ps1"
+        $failureScript = Join-Path $tempRoot "failure.ps1"
+        Set-Content -LiteralPath $successScript -Encoding UTF8 -Value @'
+param([string]$Name, [switch]$Flag)
+[pscustomobject]@{ name = $Name; flag = [bool]$Flag } | ConvertTo-Json -Compress
+exit 0
+'@
+        Set-Content -LiteralPath $failureScript -Encoding UTF8 -Value @'
+"intentional-failure-output"
+exit 7
+'@
+        $success = Invoke-SourceProcess `
+            -Name "process launcher self-test success" `
+            -FilePath $powershell `
+            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $successScript, "-Name", "anticodex", "-Flag") `
+            -TimeoutSec 10
+        $failure = Invoke-SourceProcess `
+            -Name "process launcher self-test failure" `
+            -FilePath $powershell `
+            -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $failureScript) `
+            -TimeoutSec 10
+        $nodeCheck = Invoke-SourceProcess `
+            -Name "process launcher self-test node" `
+            -FilePath $node `
+            -Arguments @("-e", "console.log('node-external-ok')") `
+            -TimeoutSec 10
+
+        $successText = (($success.stdoutTail + $success.stderrTail) -join "`n")
+        $failureText = (($failure.stdoutTail + $failure.stderrTail) -join "`n")
+        $nodeText = (($nodeCheck.stdoutTail + $nodeCheck.stderrTail) -join "`n")
+        $checks = [ordered]@{
+            powershellSuccessOk = ($success.ok -eq $true)
+            powershellSuccessInProcess = ($success.inProcessPowerShell -eq $true)
+            powershellSuccessArgsBound = ($successText -match '"name":"anticodex"' -and $successText -match '"flag":true')
+            powershellFailureNonzero = ($failure.ok -eq $false -and [int]$failure.exitCode -ne 0)
+            powershellFailureStayedInProcess = ($failure.inProcessPowerShell -eq $true)
+            powershellFailureOutputCaptured = ($failureText -match "intentional-failure-output")
+            nodeExternalOk = ($nodeCheck.ok -eq $true -and $nodeText -match "node-external-ok")
+            nodeNotInProcessPowerShell = ($nodeCheck.PSObject.Properties.Name -notcontains "inProcessPowerShell")
+        }
+        $failed = @($checks.GetEnumerator() | Where-Object { $_.Value -ne $true } | ForEach-Object { $_.Key })
+        $result = [ordered]@{
+            ok = ($failed.Count -eq 0)
+            reportName = "source-preflight-process-launcher-self-test"
+            noTraffic = $true
+            usedRealTraffic = $false
+            behaviorCovered = ($failed.Count -eq 0)
+            coverageKind = "source-preflight-process-launcher-self-test"
+            checks = $checks
+            failed = $failed
+            success = $success
+            failure = $failure
+            node = $nodeCheck
+        }
+        $result | ConvertTo-Json -Depth 16 -Compress
+        if ($failed.Count -gt 0) { exit 1 }
+        exit 0
+    } finally {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if ($SelfTestProcessLauncher) {
+    Test-ProcessLauncherSelfTest
 }
 
 function Get-SourceJsonReportText {
