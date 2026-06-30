@@ -1287,6 +1287,15 @@ function summarizeGate(definition) {
       if (!report.operatorBlockingStage) semanticFailures.push("account_isolation_status_operator_stage_missing");
       if (!report.operatorNextStep) semanticFailures.push("account_isolation_status_operator_next_step_missing");
       if (report.nextProofRequiresRealTraffic !== true) semanticFailures.push("account_isolation_status_next_proof_real_traffic_missing");
+      const finalProofPlan = report.finalProofPlan && typeof report.finalProofPlan === "object" ? report.finalProofPlan : null;
+      if (!finalProofPlan) semanticFailures.push("account_isolation_status_final_proof_plan_missing");
+      if (!finalProofPlan || finalProofPlan.requiresSeparateWindowsUserCredentialBoundary !== true) semanticFailures.push("account_isolation_status_final_proof_requires_credential_boundary");
+      if (!finalProofPlan || finalProofPlan.requiresInteractiveLogin !== true) semanticFailures.push("account_isolation_status_final_proof_requires_interactive_login");
+      if (!finalProofPlan || finalProofPlan.requiresApprovedRealTraffic !== true) semanticFailures.push("account_isolation_status_final_proof_requires_real_traffic");
+      if (!finalProofPlan || finalProofPlan.requiresDistinctAccountIdentityComparison !== true) semanticFailures.push("account_isolation_status_final_proof_requires_distinct_identity");
+      if (!finalProofPlan || finalProofPlan.accountIdsMustDiffer !== true) semanticFailures.push("account_isolation_status_final_proof_account_ids_must_differ");
+      if (finalProofPlan && finalProofPlan.acceptsProfileAndAppDataOnlyProof === true) semanticFailures.push("account_isolation_status_final_proof_accepts_profile_only");
+      if (finalProofPlan && finalProofPlan.releaseAcceptableAccountProof !== false) semanticFailures.push("account_isolation_status_final_proof_release_claimed");
       if (report.separateAccountVerified !== false) semanticFailures.push("account_isolation_status_separate_account_verified");
       if (report.loginVerified !== false) semanticFailures.push("account_isolation_status_login_verified");
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("account_isolation_status_release_proof_claimed");
@@ -3050,6 +3059,12 @@ if (args.has("--self-test")) {
       "account_isolation_status_operator_stage_missing",
       "account_isolation_status_operator_next_step_missing",
       "account_isolation_status_next_proof_real_traffic_missing",
+      "account_isolation_status_final_proof_plan_missing",
+      "account_isolation_status_final_proof_requires_credential_boundary",
+      "account_isolation_status_final_proof_requires_interactive_login",
+      "account_isolation_status_final_proof_requires_real_traffic",
+      "account_isolation_status_final_proof_requires_distinct_identity",
+      "account_isolation_status_final_proof_account_ids_must_differ",
       "account_isolation_status_separate_account_verified",
       "account_isolation_status_login_verified",
       "account_isolation_status_release_proof_claimed",

@@ -120,6 +120,17 @@ $completionState = if ($targetUserIsCurrentUser) {
     "ready_for_interactive_login"
 }
 
+$finalProofPlan = [ordered]@{
+    requiresSeparateWindowsUserCredentialBoundary = $true
+    requiresInteractiveLogin = $true
+    requiresApprovedRealTraffic = $true
+    requiresDistinctAccountIdentityComparison = $true
+    accountIdsMustDiffer = $true
+    requiresExplicitSeparateAccountProofApproval = $true
+    acceptsProfileAndAppDataOnlyProof = $false
+    releaseAcceptableAccountProof = $false
+}
+
 $elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
 $report = [ordered]@{
     ok = ($failures.Count -eq 0)
@@ -157,6 +168,7 @@ $report = [ordered]@{
     operatorNextStep = $operatorNextStep
     nextProofRequiresInteractiveLogin = $readyForInteractiveLogin
     nextProofRequiresRealTraffic = $true
+    finalProofPlan = $finalProofPlan
     loginVerified = $false
     separateAccountVerified = $false
     releaseAcceptableAccountProof = $false

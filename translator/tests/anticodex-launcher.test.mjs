@@ -14072,6 +14072,12 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(status, /targetWindowsUserSid/);
   assert.match(status, /targetUserSidMatchesCurrentUser/);
   assert.match(status, /targetUserIdentityBoundaryOk/);
+  assert.match(status, /finalProofPlan/);
+  assert.match(status, /requiresSeparateWindowsUserCredentialBoundary/);
+  assert.match(status, /requiresInteractiveLogin/);
+  assert.match(status, /requiresApprovedRealTraffic/);
+  assert.match(status, /requiresDistinctAccountIdentityComparison/);
+  assert.match(status, /accountIdsMustDiffer/);
   assert.match(status, /releaseAcceptableAccountProof\s*=\s*\$false/);
   assert.doesNotMatch(status, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
 
@@ -14198,6 +14204,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /canProceedToInteractiveLogin/);
   assert.match(summarizer, /antigravityAccountIsolationStatusEvidence/);
   assert.match(summarizer, /releaseAcceptableAccountProof/);
+  assert.match(summarizer, /finalProofPlan/);
+  assert.match(summarizer, /requiresDistinctAccountIdentityComparison/);
   assert.match(diagnostics, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.match(diagnostics, /antigravityCliWindowsUserReadinessEvidence/);
   assert.match(diagnostics, /latest-windows-user-account-prepare\.json/);
@@ -14268,6 +14276,12 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /windows_user_setup_guidance_setup_plan_raw_command/);
   assert.match(releaseGates, /windows_user_setup_guidance_setup_plan_entrypoint/);
   assert.match(releaseGates, /account_isolation_status_release_proof_claimed/);
+  assert.match(releaseGates, /account_isolation_status_final_proof_plan_missing/);
+  assert.match(releaseGates, /account_isolation_status_final_proof_requires_credential_boundary/);
+  assert.match(releaseGates, /account_isolation_status_final_proof_requires_interactive_login/);
+  assert.match(releaseGates, /account_isolation_status_final_proof_requires_real_traffic/);
+  assert.match(releaseGates, /account_isolation_status_final_proof_requires_distinct_identity/);
+  assert.match(releaseGates, /account_isolation_status_final_proof_account_ids_must_differ/);
   assert.match(releaseGates, /account_isolation_status_target_sid_matches_current_user/);
   assert.match(releaseGates, /account_isolation_status_identity_boundary_unverified/);
   assert.match(releaseGates, /source_preflight_windows_user_login_runas_workdir_missing/);
