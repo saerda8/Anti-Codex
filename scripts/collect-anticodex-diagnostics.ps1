@@ -241,6 +241,7 @@ function Read-JsonSummary {
             installedOverallEvidence = $json.installedOverallEvidence
             desktopTaskSuiteEvidence = $json.desktopTaskSuiteEvidence
             goalReadinessEvidence = $json.goalReadinessEvidence
+            longTaskLandingMatrixEvidence = $json.longTaskLandingMatrixEvidence
             agenticCapabilityMatrixEvidence = $json.agenticCapabilityMatrixEvidence
             realTaskCoverageRoadmapEvidence = $json.realTaskCoverageRoadmapEvidence
             nativeCodexParityTaskMatrixEvidence = $json.nativeCodexParityTaskMatrixEvidence
@@ -400,6 +401,7 @@ $latestReports = @(
     "latest-post-verification.json",
     "latest-codex-responses.json",
     "latest-desktop-task-suite.json",
+    "latest-long-task-landing-matrix.json",
     "latest-native-codex-parity-task-matrix.json",
     "latest-goal-readiness.json",
     "latest-agentic-capability-matrix.json",

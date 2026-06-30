@@ -872,6 +872,81 @@ function Test-GoalReadinessSummaryEvidence {
     if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }
 }
 
+function Test-LongTaskLandingMatrixSummaryEvidence {
+    param($LongTaskLandingMatrixSummary)
+    if (-not $LongTaskLandingMatrixSummary) {
+        Add-Failure "diagnostic reports summary missing latest-long-task-landing-matrix.json"
+        return
+    }
+
+    $evidence = $LongTaskLandingMatrixSummary.longTaskLandingMatrixEvidence
+    if (-not $evidence) {
+        Add-Failure "long-task-landing-matrix summary missing longTaskLandingMatrixEvidence"
+        return
+    }
+
+    $required = @("coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit")
+    $requiredEvidence = @(As-FlatArray $evidence.requiredLongTaskModes | ForEach-Object { [string]$_ })
+    $taskResults = @(As-FlatArray $evidence.taskResults)
+    foreach ($taskMode in $required) {
+        if ($requiredEvidence -notcontains $taskMode) {
+            Add-Failure "long-task-landing-matrix summary missing required task $taskMode"
+        }
+        $entry = @($taskResults | Where-Object { [string]$_.taskMode -eq $taskMode } | Select-Object -First 1)[0]
+        if (-not $entry) {
+            Add-Failure "long-task-landing-matrix summary missing task entry $taskMode"
+            continue
+        }
+        if ($entry.ok -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode not ok" }
+        if ($entry.fresh -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode not fresh" }
+        if ($entry.requestedRealTraffic -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode did not request real traffic" }
+        if ($entry.usedRealTraffic -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode did not use real traffic" }
+        if ($entry.reportOk -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode report not ok" }
+        if ($entry.capabilityOk -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode capability not ok" }
+        if ($entry.artifactProofComplete -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode artifact proof missing" }
+        if ($entry.resultProofComplete -ne $true) { Add-Failure "long-task-landing-matrix summary task $taskMode result proof missing" }
+        if ([int]$entry.requiredArtifactKeyCount -lt 1) { Add-Failure "long-task-landing-matrix summary task $taskMode missing artifact requirements" }
+        if ([int]$entry.requiredFileCount -lt 1) { Add-Failure "long-task-landing-matrix summary task $taskMode missing file requirements" }
+        if ([int]$entry.fileEvidenceCount -lt 1) { Add-Failure "long-task-landing-matrix summary task $taskMode missing file evidence" }
+        if ([int]$entry.failureCount -ne 0) { Add-Failure "long-task-landing-matrix summary task $taskMode has failures" }
+    }
+
+    if ($evidence.reportName -ne "long-task-landing-matrix") { Add-Failure "long-task-landing-matrix summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "long-task-landing-matrix summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "long-task-landing-matrix summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "long-task-landing-matrix summary behavior not covered" }
+    if ($evidence.coverageKind -ne "long-task-landing-matrix-report-only") { Add-Failure "long-task-landing-matrix summary coverage kind mismatch" }
+    if ($evidence.longTaskLandingComplete -ne $true) { Add-Failure "long-task-landing-matrix summary is incomplete" }
+    if ($evidence.codexClientCopy -ne $true) { Add-Failure "long-task-landing-matrix summary missing client-copy boundary" }
+    if ($evidence.antigravityModelTextOnly -ne $true) { Add-Failure "long-task-landing-matrix summary missing model-text boundary" }
+    if ($evidence.agenticCapabilityMatrixPresent -ne $true) { Add-Failure "long-task-landing-matrix summary missing agentic matrix" }
+    if ($evidence.agenticCapabilityMatrixComplete -ne $true) { Add-Failure "long-task-landing-matrix summary agentic matrix incomplete" }
+    if ($evidence.realTaskCoverageRoadmapPresent -ne $true) { Add-Failure "long-task-landing-matrix summary missing real-task roadmap" }
+    if ([int]$evidence.longTaskCount -lt $required.Count) { Add-Failure "long-task-landing-matrix summary task count too low" }
+    if ([int]$evidence.landedLongTaskCount -lt $required.Count) { Add-Failure "long-task-landing-matrix summary landed task count too low" }
+    if (@(As-FlatArray $evidence.failedLongTaskModes).Count -ne 0) { Add-Failure "long-task-landing-matrix summary has failed tasks" }
+    if ($evidence.broaderRealTrafficStillRequired -eq $true) {
+        $pendingTasks = @(As-FlatArray $evidence.pendingRealTaskModes | ForEach-Object { [string]$_ })
+        foreach ($taskMode in @("web-search", "free-chat")) {
+            if ($pendingTasks -notcontains $taskMode) { Add-Failure "long-task-landing-matrix summary missing pending task $taskMode" }
+        }
+        $pendingScenarios = @(As-FlatArray $evidence.pendingRealTaskScenarios)
+        if ($pendingScenarios.Count -lt $pendingTasks.Count) { Add-Failure "long-task-landing-matrix summary missing pending scenarios" }
+        foreach ($taskMode in $pendingTasks) {
+            $scenario = @($pendingScenarios | Where-Object { [string]$_.taskMode -eq [string]$taskMode } | Select-Object -First 1)[0]
+            if (-not $scenario) {
+                Add-Failure "long-task-landing-matrix summary missing pending scenario for $taskMode"
+                continue
+            }
+            if (-not [string]$scenario.workType) { Add-Failure "long-task-landing-matrix summary pending scenario missing work type for $taskMode" }
+            if ($scenario.realTrafficRequired -ne $true) { Add-Failure "long-task-landing-matrix summary pending scenario not marked real traffic for $taskMode" }
+            if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "long-task-landing-matrix summary pending scenario missing acceptance evidence for $taskMode" }
+            if ($scenario.expectedResultPresent -ne $true) { Add-Failure "long-task-landing-matrix summary pending scenario missing expected result for $taskMode" }
+        }
+        if ($evidence.minimalRefreshCommandPresent -ne $true) { Add-Failure "long-task-landing-matrix summary missing minimal refresh command" }
+    }
+}
+
 function Test-AgenticCapabilityMatrixSummaryEvidence {
     param($AgenticCapabilityMatrixSummary)
     if (-not $AgenticCapabilityMatrixSummary) {
@@ -1308,6 +1383,7 @@ function Test-ReportsSummary {
     $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
     $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
+    $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
     $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
     $nativeCodexParityTaskMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-native-codex-parity-task-matrix.json" } | Select-Object -First 1)[0]
@@ -1358,6 +1434,7 @@ function Test-ReportsSummary {
     Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary
     Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
     Test-GoalReadinessSummaryEvidence $goalReadinessSummary
+    Test-LongTaskLandingMatrixSummaryEvidence $longTaskLandingMatrixSummary
     Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
     Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
     Test-NativeCodexParityTaskMatrixSummaryEvidence $nativeCodexParityTaskMatrixSummary
@@ -1749,6 +1826,8 @@ function Test-DiagnosticBundle {
         Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
         $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
         Test-GoalReadinessSummaryEvidence $goalReadinessSummary
+        $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
+        Test-LongTaskLandingMatrixSummaryEvidence $longTaskLandingMatrixSummary
         $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
         Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
         $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]

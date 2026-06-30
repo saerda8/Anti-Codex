@@ -3520,6 +3520,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("验证后完整检查", "latest-post-verification.json"),
         latestManagerReportItem("普通聊天流式", "latest-codex-responses.json"),
         latestManagerReportItem("Desktop task suite", "latest-desktop-task-suite.json"),
+        latestManagerReportItem("Long task landing matrix", "latest-long-task-landing-matrix.json"),
         latestManagerReportItem("Native Codex parity task matrix", "latest-native-codex-parity-task-matrix.json"),
         latestManagerReportItem("Goal readiness", "latest-goal-readiness.json"),
         latestManagerReportItem("Agentic capability matrix", "latest-agentic-capability-matrix.json"),

@@ -100,6 +100,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-tool-bridge-mode.ps1",
   "scripts/test-anticodex-tool-loop.ps1",
   "scripts/test-anticodex-desktop-task-suite.mjs",
+  "scripts/test-anticodex-long-task-landing-matrix.mjs",
   "scripts/test-anticodex-native-codex-parity-tasks.mjs",
   "scripts/test-anticodex-agentic-capability-matrix.mjs",
   "scripts/test-anticodex-goal-readiness.mjs",
@@ -157,6 +158,7 @@ const gateDefinitions = [
   { id: "windowsUserSetupGuidance", group: "no-traffic", file: "latest-windows-user-setup-guidance.json", requiredForRelease: true, requireWindowsUserSetupGuidanceSemantics: true },
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
+  { id: "longTaskLandingMatrix", group: "no-traffic", file: "latest-long-task-landing-matrix.json", requiredForRelease: true, requireLongTaskLandingMatrixSemantics: true },
   { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
   { id: "realTaskCoverageRoadmap", group: "no-traffic", file: "latest-real-task-coverage-roadmap.json", requiredForRelease: true, requireRealTaskCoverageRoadmapSemantics: true },
   { id: "nativeCodexParityTaskMatrix", group: "no-traffic", file: "latest-native-codex-parity-task-matrix.json", requiredForRelease: true, requireNativeCodexParityTaskMatrixSemantics: true },
@@ -762,6 +764,66 @@ function summarizeGate(definition) {
         if (entry.usedRealTraffic !== true) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_real_traffic_missing`);
         if (Array.isArray(entry.failures) && entry.failures.length > 0) semanticFailures.push(`agentic_capability_matrix_${capabilityId}_failures`);
       }
+    }
+    if (definition.requireLongTaskLandingMatrixSemantics) {
+      const requiredTaskModes = [
+        "coding-project",
+        "multi-turn-project",
+        "report-site",
+        "complex-project",
+        "repo-multi-file-edit",
+      ];
+      const taskModes = Array.isArray(report.requiredLongTaskModes) ? report.requiredLongTaskModes.map((item) => String(item || "")) : [];
+      const taskResults = Array.isArray(report.taskResults) ? report.taskResults : [];
+      const pendingRealTaskModes = Array.isArray(report.pendingRealTaskModes) ? report.pendingRealTaskModes.map((item) => String(item || "")) : [];
+      const pendingRealTaskScenarios = Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios : [];
+      if (report.reportName !== "long-task-landing-matrix") semanticFailures.push("long_task_landing_matrix_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("long_task_landing_matrix_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("long_task_landing_matrix_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("long_task_landing_matrix_behavior_not_covered");
+      if (report.coverageKind !== "long-task-landing-matrix-report-only") semanticFailures.push("long_task_landing_matrix_coverage_kind");
+      if (report.longTaskLandingComplete !== true) semanticFailures.push("long_task_landing_matrix_incomplete");
+      if (report.codexClientCopy !== true) semanticFailures.push("long_task_landing_matrix_client_copy_missing");
+      if (report.antigravityModelTextOnly !== true) semanticFailures.push("long_task_landing_matrix_model_text_boundary_missing");
+      if (report.agenticCapabilityMatrixPresent !== true || report.agenticCapabilityMatrixComplete !== true) semanticFailures.push("long_task_landing_matrix_agentic_matrix_missing");
+      if (report.realTaskCoverageRoadmapPresent !== true) semanticFailures.push("long_task_landing_matrix_roadmap_missing");
+      if (Number(report.longTaskCount || 0) < requiredTaskModes.length) semanticFailures.push("long_task_landing_matrix_task_count");
+      if (Number(report.landedLongTaskCount || 0) < requiredTaskModes.length) semanticFailures.push("long_task_landing_matrix_landed_count");
+      if (Array.isArray(report.failedLongTaskModes) && report.failedLongTaskModes.length > 0) semanticFailures.push("long_task_landing_matrix_failed_tasks");
+      for (const taskMode of requiredTaskModes) {
+        if (!taskModes.includes(taskMode)) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_not_required`);
+        const entry = taskResults.find((item) => String(item?.taskMode || "") === taskMode);
+        if (!entry) {
+          semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_missing`);
+          continue;
+        }
+        if (entry.ok !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_not_ok`);
+        if (entry.fresh !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_not_fresh`);
+        if (entry.requestedRealTraffic !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_real_traffic_not_requested`);
+        if (entry.usedRealTraffic !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_real_traffic_missing`);
+        if (entry.reportOk !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_report_not_ok`);
+        if (entry.capabilityOk !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_capability_not_ok`);
+        if (entry.artifactProofComplete !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_artifact_proof_missing`);
+        if (entry.resultProofComplete !== true) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_result_proof_missing`);
+        if (!Array.isArray(entry.requiredArtifactKeys) || entry.requiredArtifactKeys.length < 1) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_artifact_requirements_missing`);
+        if (!Array.isArray(entry.requiredFiles) || entry.requiredFiles.length < 1) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_file_requirements_missing`);
+        if (Array.isArray(entry.failures) && entry.failures.length > 0) semanticFailures.push(`long_task_landing_matrix_${taskMode.replaceAll("-", "_")}_failures`);
+      }
+      if (report.broaderRealTrafficStillRequired === true) {
+        for (const taskMode of ["web-search", "free-chat"]) {
+          if (!pendingRealTaskModes.includes(taskMode)) semanticFailures.push(`long_task_landing_matrix_pending_${taskMode.replaceAll("-", "_")}_missing`);
+          const scenario = pendingRealTaskScenarios.find((item) => String(item?.taskMode || "") === taskMode);
+          if (!scenario) {
+            semanticFailures.push(`long_task_landing_matrix_pending_${taskMode.replaceAll("-", "_")}_scenario_missing`);
+            continue;
+          }
+          if (typeof scenario.workType !== "string" || !scenario.workType) semanticFailures.push(`long_task_landing_matrix_pending_${taskMode.replaceAll("-", "_")}_work_type_missing`);
+          if (scenario.realTrafficRequired !== true) semanticFailures.push(`long_task_landing_matrix_pending_${taskMode.replaceAll("-", "_")}_not_real_traffic`);
+          if (!Array.isArray(scenario.acceptanceEvidence) || scenario.acceptanceEvidence.length < 1) semanticFailures.push(`long_task_landing_matrix_pending_${taskMode.replaceAll("-", "_")}_acceptance_missing`);
+          if (scenario.expectedResultPresent !== true) semanticFailures.push(`long_task_landing_matrix_pending_${taskMode.replaceAll("-", "_")}_expected_missing`);
+        }
+      }
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("long_task_landing_matrix_failures");
     }
     if (definition.requireRequiredRealTrafficSequenceSemantics) {
       const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
@@ -2281,6 +2343,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["windowsUserSetupGuidance", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-setup-guidance.ps1"],
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
+  ["longTaskLandingMatrix", "no-traffic-local", "node scripts\\test-anticodex-long-task-landing-matrix.mjs"],
   ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],
   ["realTaskCoverageRoadmap", "no-traffic-local", "node scripts\\test-anticodex-real-task-coverage-roadmap.mjs"],
   ["nativeCodexParityTaskMatrix", "no-traffic-local", "node scripts\\test-anticodex-native-codex-parity-tasks.mjs"],

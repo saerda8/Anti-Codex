@@ -214,6 +214,7 @@ const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
+const isLongTaskLandingMatrixReport = report?.reportName === "long-task-landing-matrix" || /latest-long-task-landing-matrix\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
 const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-coverage-roadmap" || /latest-real-task-coverage-roadmap\.json$/i.test(path);
 const isNativeCodexParityTaskMatrixReport = report?.reportName === "native-codex-parity-task-matrix" || /latest-native-codex-parity-task-matrix\.json$/i.test(path);
@@ -1265,6 +1266,51 @@ const summary = {
       fresh: boolField(item || {}, "fresh"),
       requestedRealTraffic: boolField(item || {}, "requestedRealTraffic"),
       usedRealTraffic: boolField(item || {}, "usedRealTraffic"),
+      failureCount: Array.isArray(item?.failures) ? item.failures.length : null,
+    })) : [],
+  } : null,
+  longTaskLandingMatrixEvidence: isLongTaskLandingMatrixReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    longTaskLandingComplete: boolField(report, "longTaskLandingComplete"),
+    codexClientCopy: boolField(report, "codexClientCopy"),
+    antigravityModelTextOnly: boolField(report, "antigravityModelTextOnly"),
+    longTaskCount: has(report, "longTaskCount") ? report.longTaskCount : null,
+    landedLongTaskCount: has(report, "landedLongTaskCount") ? report.landedLongTaskCount : null,
+    failedLongTaskModes: Array.isArray(report.failedLongTaskModes) ? asStringArray(report.failedLongTaskModes) : [],
+    requiredLongTaskModes: Array.isArray(report.requiredLongTaskModes) ? asStringArray(report.requiredLongTaskModes) : [],
+    agenticCapabilityMatrixPresent: boolField(report, "agenticCapabilityMatrixPresent"),
+    agenticCapabilityMatrixComplete: boolField(report, "agenticCapabilityMatrixComplete"),
+    realTaskCoverageRoadmapPresent: boolField(report, "realTaskCoverageRoadmapPresent"),
+    broaderRealTrafficStillRequired: boolField(report, "broaderRealTrafficStillRequired"),
+    pendingRealTaskModes: Array.isArray(report.pendingRealTaskModes) ? asStringArray(report.pendingRealTaskModes) : [],
+    pendingRealTaskScenarios: Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios.map((item) => ({
+      taskMode: asString(item?.taskMode),
+      workType: asString(item?.workType),
+      realTrafficRequired: boolField(item || {}, "realTrafficRequired"),
+      acceptanceEvidence: Array.isArray(item?.acceptanceEvidence) ? asStringArray(item.acceptanceEvidence) : [],
+      expectedResultPresent: boolField(item || {}, "expectedResultPresent"),
+    })) : [],
+    minimalRefreshCommandPresent: typeof report.minimalRefreshCommand === "string" && report.minimalRefreshCommand.includes("test-anticodex-desktop-task-suite.mjs") && report.minimalRefreshCommand.includes("--allow-real-traffic"),
+    taskResults: Array.isArray(report.taskResults) ? report.taskResults.map((item) => ({
+      taskMode: asString(item?.taskMode),
+      capabilityId: asString(item?.capabilityId),
+      file: asString(item?.file),
+      expectedWorkProduct: asString(item?.expectedWorkProduct),
+      ok: boolField(item || {}, "ok"),
+      fresh: boolField(item || {}, "fresh"),
+      requestedRealTraffic: boolField(item || {}, "requestedRealTraffic"),
+      usedRealTraffic: boolField(item || {}, "usedRealTraffic"),
+      reportOk: boolField(item || {}, "reportOk"),
+      capabilityOk: boolField(item || {}, "capabilityOk"),
+      artifactProofComplete: boolField(item || {}, "artifactProofComplete"),
+      resultProofComplete: boolField(item || {}, "resultProofComplete"),
+      requiredArtifactKeyCount: Array.isArray(item?.requiredArtifactKeys) ? item.requiredArtifactKeys.length : null,
+      requiredFileCount: Array.isArray(item?.requiredFiles) ? item.requiredFiles.length : null,
+      fileEvidenceCount: Array.isArray(item?.fileEvidenceKeys) ? item.fileEvidenceKeys.length : null,
       failureCount: Array.isArray(item?.failures) ? item.failures.length : null,
     })) : [],
   } : null,
