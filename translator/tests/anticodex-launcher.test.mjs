@@ -13037,6 +13037,59 @@ test("Anti-Codex ships a no-traffic required real traffic sequence verifier", ()
   assert.match(server, /latest-required-real-traffic-sequence\.json/);
 });
 
+test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
+  const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-real-run-readiness.mjs"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+
+  assert.match(readiness, /reportName: "goal-real-run-readiness"/);
+  assert.match(readiness, /requestedRealTraffic: false/);
+  assert.match(readiness, /usedRealTraffic: false/);
+  assert.match(readiness, /coverageKind: "goal-real-run-readiness-report-only"/);
+  assert.match(readiness, /readyForUserApprovedRealRun: false/);
+  assert.match(readiness, /pendingRealTaskScenarios/);
+  assert.match(readiness, /uniqueRefreshTasks/);
+  assert.match(readiness, /web-search/);
+  assert.match(readiness, /free-chat/);
+  assert.match(readiness, /second_account_login_not_ready/);
+  assert.match(readiness, /real_task_refresh_requires_explicit_approval/);
+  assert.match(readiness, /release_gates_require_explicit_real_traffic/);
+  assert.match(readiness, /accountProxyReadiness/);
+  assert.match(readiness, /postVerification/);
+  assert.match(summarizer, /goalRealRunReadinessEvidence/);
+  assert.match(summarizer, /readyForUserApprovedRealRun/);
+  assert.match(summarizer, /pendingRealTaskScenarios/);
+  assert.match(collector, /goalRealRunReadinessEvidence = \$json\.goalRealRunReadinessEvidence/);
+  assert.match(collector, /latest-goal-real-run-readiness\.json/);
+  assert.match(diagnostics, /goal-real-run-readiness summary missing goalRealRunReadinessEvidence/);
+  assert.match(diagnostics, /goal-real-run-readiness summary missing refresh task \$taskMode/);
+  assert.match(diagnostics, /goal-real-run-readiness summary missing blocked gate \$gateId/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-goal-real-run-readiness\.mjs/);
+  assert.match(installedOverall, /latest-goal-real-run-readiness\.json/);
+  assert.match(signer, /latest-goal-real-run-readiness\.json/);
+  assert.match(server, /latest-goal-real-run-readiness\.json/);
+  assert.match(managerBridge, /goalRealRun: ready=/);
+  assert.match(managerBridge, /goalRealRun tasks:/);
+  assert.match(managerInject, /goalRealRun: ready=/);
+  assert.match(managerInject, /goalRealRun tasks:/);
+  assert.match(releaseGates, /id:\s*"goalRealRunReadiness"[\s\S]*?file:\s*"latest-goal-real-run-readiness\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireGoalRealRunReadinessSemantics:\s*true/);
+  assert.match(releaseGates, /goal_real_run_readiness_web_search_task_missing/);
+  assert.match(releaseGates, /goal_real_run_readiness_free_chat_task_missing/);
+  assert.match(releaseGates, /goal_real_run_readiness_accountProxyReadiness_gate_missing/);
+  assert.match(releaseGates, /semantically invalid goal-real-run-readiness report satisfied the gate/);
+  assert.match(releaseGates, /node scripts\\\\test-anticodex-goal-real-run-readiness\.mjs/);
+  assert.match(releaseGates, /scripts\/test-anticodex-goal-real-run-readiness\.mjs/);
+});
+
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {
   const toolBridge = readFileSync(resolve(root, "scripts", "test-anticodex-tool-bridge-mode.ps1"), "utf8");
 

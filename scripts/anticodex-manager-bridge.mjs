@@ -600,6 +600,15 @@ function latestReportsSummary(result) {
       lines.push(`  realApprovalPlan preLogin: complete=${evidence.preLoginChecklistComplete ? "true" : "false"} / checks=${evidence.preLoginChecklistCount ?? "unknown"} / next=${evidence.nextNoTrafficAction || "unknown"}`);
       lines.push(`  realApprovalPlan preLogin checks: ${Array.isArray(evidence.preLoginChecklistIds) && evidence.preLoginChecklistIds.length ? evidence.preLoginChecklistIds.join(" -> ") : "missing"}`);
     }
+    if (item.goalRealRunReadinessEvidence) {
+      const evidence = item.goalRealRunReadinessEvidence;
+      const blockers = Array.isArray(evidence.blockingStages) && evidence.blockingStages.length ? evidence.blockingStages.join(",") : "none";
+      const tasks = Array.isArray(evidence.pendingRealTaskScenarios) && evidence.pendingRealTaskScenarios.length
+        ? evidence.pendingRealTaskScenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ")
+        : "none";
+      lines.push(`  goalRealRun: ready=${evidence.readyForUserApprovedRealRun ? "true" : "false"} / accountSafe=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / releaseReady=${evidence.releaseReady ? "true" : "false"} / blockers=${blockers}`);
+      lines.push(`  goalRealRun tasks: ${tasks}`);
+    }
     if (item.toolBridgeEvidence) {
       const evidence = item.toolBridgeEvidence;
       lines.push(`  toolBridge: mode=${evidence.mode || "unknown"} / transport=${evidence.transport || "unknown"} / adapter=${evidence.localAdapter || "unknown"}`);

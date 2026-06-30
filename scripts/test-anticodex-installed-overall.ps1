@@ -779,6 +779,7 @@ function Test-ReportEncoding {
         "latest-real-task-coverage-roadmap.json",
         "latest-real-approval-plan.json",
         "latest-required-real-traffic-sequence.json",
+        "latest-goal-real-run-readiness.json",
         "latest-ui-chat-smoke.json",
         "latest-ui-web-search-smoke.json",
         "latest-ui-local-project-smoke.json",

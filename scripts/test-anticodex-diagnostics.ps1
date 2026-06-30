@@ -1105,6 +1105,67 @@ function Test-RequiredRealTrafficSequenceSummaryEvidence {
     if ([int]$evidence.failureCount -ne 0) { Add-Failure "required-real-traffic-sequence summary has failures" }
 }
 
+function Test-GoalRealRunReadinessSummaryEvidence {
+    param($GoalRealRunReadinessSummary)
+    if (-not $GoalRealRunReadinessSummary) {
+        Add-Failure "diagnostic reports summary missing latest-goal-real-run-readiness.json"
+        return
+    }
+
+    $evidence = $GoalRealRunReadinessSummary.goalRealRunReadinessEvidence
+    if (-not $evidence) {
+        Add-Failure "goal-real-run-readiness summary missing goalRealRunReadinessEvidence"
+        return
+    }
+
+    $refreshTasks = @(As-FlatArray $evidence.uniqueRefreshTasks)
+    $refreshScenarios = @(As-FlatArray $evidence.pendingRealTaskScenarios)
+    $requiredGateIds = @(As-FlatArray $evidence.requiredReleaseGateIds)
+    $requiredActionIds = @(As-FlatArray $evidence.requiredActionIds)
+    $blockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
+    $blockingStages = @(As-FlatArray $evidence.blockingStages)
+
+    if ($evidence.reportName -ne "goal-real-run-readiness") { Add-Failure "goal-real-run-readiness summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "goal-real-run-readiness summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "goal-real-run-readiness summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "goal-real-run-readiness summary behavior not covered" }
+    if ($evidence.coverageKind -ne "goal-real-run-readiness-report-only") { Add-Failure "goal-real-run-readiness summary coverage kind mismatch" }
+    if ($evidence.readyForUserApprovedRealRun -ne $false) { Add-Failure "goal-real-run-readiness summary incorrectly marked ready" }
+    if ($evidence.safeToAskUserForSecondAccountLogin -ne $true -and -not [string]$evidence.accountReadinessBlockingReason) { Add-Failure "goal-real-run-readiness summary missing account blocking reason" }
+    if ($evidence.separateAccountVerified -ne $false) { Add-Failure "goal-real-run-readiness summary claimed separate account proof" }
+    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "goal-real-run-readiness summary claimed release account proof" }
+    if ($evidence.realTaskRefreshNeeded -ne $true) { Add-Failure "goal-real-run-readiness summary missing real task refresh need" }
+    foreach ($taskMode in @("web-search", "free-chat")) {
+        if ($refreshTasks -notcontains $taskMode) { Add-Failure "goal-real-run-readiness summary missing refresh task $taskMode" }
+        $scenario = @($refreshScenarios | Where-Object { [string]$_.taskMode -eq $taskMode } | Select-Object -First 1)[0]
+        if (-not $scenario) {
+            Add-Failure "goal-real-run-readiness summary missing scenario $taskMode"
+            continue
+        }
+        if (-not [string]$scenario.workType) { Add-Failure "goal-real-run-readiness scenario missing work type $taskMode" }
+        if ($scenario.realTrafficRequired -ne $true) { Add-Failure "goal-real-run-readiness scenario not real traffic $taskMode" }
+        if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "goal-real-run-readiness scenario missing acceptance evidence $taskMode" }
+        if ($scenario.expectedResultPresent -ne $true) { Add-Failure "goal-real-run-readiness scenario missing expected result $taskMode" }
+    }
+    if ($refreshScenarios.Count -lt $refreshTasks.Count) { Add-Failure "goal-real-run-readiness summary scenario count lower than refresh tasks" }
+    if (@(As-FlatArray $evidence.missingTaskScenarios).Count -ne 0) { Add-Failure "goal-real-run-readiness summary has missing task scenarios" }
+    if ($evidence.realTaskRefreshCommandPresent -ne $true) { Add-Failure "goal-real-run-readiness summary missing real task refresh command" }
+    foreach ($gateId in @("accountProxyReadiness", "postVerification")) {
+        if ($requiredGateIds -notcontains $gateId) { Add-Failure "goal-real-run-readiness summary missing required gate $gateId" }
+        if ($requiredActionIds -notcontains $gateId) { Add-Failure "goal-real-run-readiness summary missing required action $gateId" }
+        if ($blockedGates -notcontains $gateId) { Add-Failure "goal-real-run-readiness summary missing blocked gate $gateId" }
+    }
+    if ([int]$evidence.requiredCommandCount -lt $requiredActionIds.Count) { Add-Failure "goal-real-run-readiness summary missing required commands" }
+    if ($evidence.releaseShortReady -ne $true) { Add-Failure "goal-real-run-readiness summary short path not ready" }
+    if ($evidence.releaseReady -ne $false) { Add-Failure "goal-real-run-readiness summary release ready mismatch" }
+    if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "goal-real-run-readiness summary missing real-traffic-only blocker" }
+    foreach ($stage in @("second_account_login_not_ready", "real_task_refresh_requires_explicit_approval", "release_gates_require_explicit_real_traffic")) {
+        if ($blockingStages -notcontains $stage) { Add-Failure "goal-real-run-readiness summary missing blocking stage $stage" }
+    }
+    if (-not [string]$evidence.operatorNextAction) { Add-Failure "goal-real-run-readiness summary missing operator next action" }
+    if ([int]$evidence.failureCount -ne 0) { Add-Failure "goal-real-run-readiness summary has failures" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1126,6 +1187,7 @@ function Test-ReportsSummary {
     $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
     $realApprovalPlanSummary = @($summary | Where-Object { $_.file -eq "latest-real-approval-plan.json" } | Select-Object -First 1)[0]
     $requiredRealTrafficSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-required-real-traffic-sequence.json" } | Select-Object -First 1)[0]
+    $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -1173,6 +1235,7 @@ function Test-ReportsSummary {
     Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
     Test-RealApprovalPlanSummaryEvidence $realApprovalPlanSummary
     Test-RequiredRealTrafficSequenceSummaryEvidence $requiredRealTrafficSequenceSummary
+    Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
@@ -1275,6 +1338,12 @@ function Test-ReportsSummary {
             [pscustomobject]@{
                 ok = $realTaskCoverageRoadmapSummary.ok
                 evidence = $realTaskCoverageRoadmapSummary.realTaskCoverageRoadmapEvidence
+            }
+        } else { $null }
+        goalRealRunReadiness = if ($goalRealRunReadinessSummary) {
+            [pscustomobject]@{
+                ok = $goalRealRunReadinessSummary.ok
+                evidence = $goalRealRunReadinessSummary.goalRealRunReadinessEvidence
             }
         } else { $null }
     }

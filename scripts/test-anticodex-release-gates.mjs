@@ -102,6 +102,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-desktop-task-suite.mjs",
   "scripts/test-anticodex-agentic-capability-matrix.mjs",
   "scripts/test-anticodex-goal-readiness.mjs",
+  "scripts/test-anticodex-goal-real-run-readiness.mjs",
   "scripts/test-anticodex-real-task-coverage-roadmap.mjs",
   "scripts/test-anticodex-real-approval-plan.mjs",
   "scripts/test-anticodex-required-real-traffic-sequence.ps1",
@@ -159,6 +160,7 @@ const gateDefinitions = [
   { id: "realApprovalPlan", group: "no-traffic", file: "latest-real-approval-plan.json", requiredForRelease: true, requireRealApprovalPlanSemantics: true },
   { id: "goalReadiness", group: "no-traffic", file: "latest-goal-readiness.json", requiredForRelease: true, requireGoalReadinessSemantics: true },
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
+  { id: "goalRealRunReadiness", group: "no-traffic", file: "latest-goal-real-run-readiness.json", requiredForRelease: true, requireGoalRealRunReadinessSemantics: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
@@ -780,6 +782,54 @@ function summarizeGate(definition) {
       }
       if (commands.length < requiredActionIds.length) semanticFailures.push("required_real_traffic_sequence_commands_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("required_real_traffic_sequence_failures");
+    }
+    if (definition.requireGoalRealRunReadinessSemantics) {
+      const refreshTasks = Array.isArray(report.uniqueRefreshTasks) ? report.uniqueRefreshTasks.map((item) => String(item || "")) : [];
+      const refreshScenarios = Array.isArray(report.pendingRealTaskScenarios) ? report.pendingRealTaskScenarios : [];
+      const missingTaskScenarios = Array.isArray(report.missingTaskScenarios) ? report.missingTaskScenarios.map((item) => String(item || "")) : [];
+      const requiredGateIds = Array.isArray(report.requiredReleaseGateIds) ? report.requiredReleaseGateIds.map((item) => String(item || "")) : [];
+      const requiredActionIds = Array.isArray(report.requiredActionIds) ? report.requiredActionIds.map((item) => String(item || "")) : [];
+      const blockedGates = Array.isArray(report.requiredRealTrafficBlockedGates) ? report.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
+      const blockingStages = Array.isArray(report.blockingStages) ? report.blockingStages.map((item) => String(item || "")) : [];
+      if (report.reportName !== "goal-real-run-readiness") semanticFailures.push("goal_real_run_readiness_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("goal_real_run_readiness_real_traffic_requested");
+      if (report.usedRealTraffic !== false) semanticFailures.push("goal_real_run_readiness_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("goal_real_run_readiness_behavior_not_covered");
+      if (report.coverageKind !== "goal-real-run-readiness-report-only") semanticFailures.push("goal_real_run_readiness_coverage_kind");
+      if (report.readyForUserApprovedRealRun !== false) semanticFailures.push("goal_real_run_readiness_unexpectedly_ready");
+      if (report.safeToAskUserForSecondAccountLogin !== true && (typeof report.accountReadinessBlockingReason !== "string" || !report.accountReadinessBlockingReason.trim())) semanticFailures.push("goal_real_run_readiness_account_blocking_reason_missing");
+      if (report.separateAccountVerified === true) semanticFailures.push("goal_real_run_readiness_separate_account_claimed");
+      if (report.releaseAcceptableAccountProof === true) semanticFailures.push("goal_real_run_readiness_release_account_proof_claimed");
+      if (report.realTaskRefreshNeeded !== true) semanticFailures.push("goal_real_run_readiness_refresh_not_needed");
+      for (const taskMode of ["web-search", "free-chat"]) {
+        if (!refreshTasks.includes(taskMode)) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_task_missing`);
+        const scenario = refreshScenarios.find((item) => String(item?.taskMode || "") === taskMode);
+        if (!scenario) {
+          semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_scenario_missing`);
+          continue;
+        }
+        if (typeof scenario.workType !== "string" || !scenario.workType) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_work_type_missing`);
+        if (scenario.realTrafficRequired !== true) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_not_real_traffic`);
+        if (!Array.isArray(scenario.acceptanceEvidence) || scenario.acceptanceEvidence.length < 1) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_acceptance_missing`);
+        if (scenario.expectedResultPresent !== true) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_expected_missing`);
+      }
+      if (refreshScenarios.length < refreshTasks.length) semanticFailures.push("goal_real_run_readiness_scenarios_incomplete");
+      if (missingTaskScenarios.length > 0) semanticFailures.push("goal_real_run_readiness_missing_task_scenarios");
+      if (report.realTaskRefreshCommandPresent !== true) semanticFailures.push("goal_real_run_readiness_refresh_command_missing");
+      for (const gateId of ["accountProxyReadiness", "postVerification"]) {
+        if (!requiredGateIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_gate_missing`);
+        if (!requiredActionIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_action_missing`);
+        if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_blocked_gate_missing`);
+      }
+      if (Number(report.requiredCommandCount || 0) < requiredActionIds.length) semanticFailures.push("goal_real_run_readiness_commands_missing");
+      if (report.releaseShortReady !== true) semanticFailures.push("goal_real_run_readiness_short_not_ready");
+      if (report.releaseReady !== false) semanticFailures.push("goal_real_run_readiness_release_ready_mismatch");
+      if (report.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_real_run_readiness_release_not_blocked_only_by_real_traffic");
+      for (const stage of ["second_account_login_not_ready", "real_task_refresh_requires_explicit_approval", "release_gates_require_explicit_real_traffic"]) {
+        if (!blockingStages.includes(stage)) semanticFailures.push(`goal_real_run_readiness_${stage}_missing`);
+      }
+      if (typeof report.operatorNextAction !== "string" || !report.operatorNextAction) semanticFailures.push("goal_real_run_readiness_operator_next_action_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_real_run_readiness_failures");
     }
     if (definition.requireRealTaskCoverageRoadmapSemantics) {
       const requiredProfiles = Array.isArray(report.requiredProfiles) ? report.requiredProfiles.map((item) => String(item || "")) : [];
@@ -2141,6 +2191,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["realApprovalPlan", "no-traffic-local", "node scripts\\test-anticodex-real-approval-plan.mjs"],
   ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
   ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
+  ["goalRealRunReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-real-run-readiness.mjs"],
 ];
 
 function action(id, phase, command, options = {}) {
@@ -3368,6 +3419,60 @@ if (args.has("--self-test")) {
     semanticFailures.realTaskCoverageRoadmapProfileProofs = assertSemanticFailures("realTaskCoverageRoadmap", "self-test failed: roadmap profile-level result proof rollup weakness satisfied the gate", [
       "real_task_coverage_roadmap_core_result_profile_incomplete",
       "real_task_coverage_roadmap_core_result_profile_missing_tasks",
+    ]);
+    writeFakeLatestReport("latest-goal-real-run-readiness.json", {
+      ok: true,
+      reportName: "wrong-goal-real-run-readiness",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: false,
+      coverageKind: "real-traffic",
+      readyForUserApprovedRealRun: true,
+      safeToAskUserForSecondAccountLogin: false,
+      accountReadinessBlockingReason: "",
+      separateAccountVerified: true,
+      releaseAcceptableAccountProof: true,
+      realTaskRefreshNeeded: false,
+      uniqueRefreshTasks: ["coding-project"],
+      pendingRealTaskScenarios: [],
+      missingTaskScenarios: ["web-search", "free-chat"],
+      realTaskRefreshCommandPresent: false,
+      requiredReleaseGateIds: ["postVerification"],
+      requiredActionIds: ["postVerification"],
+      requiredCommandCount: 0,
+      requiredRealTrafficBlockedGates: ["postVerification"],
+      releaseShortReady: false,
+      releaseReady: true,
+      releaseBlockedOnlyByRequiredRealTraffic: false,
+      blockingStages: [],
+      operatorNextAction: "",
+      failures: ["fake"],
+    });
+    semanticFailures.goalRealRunReadiness = assertSemanticFailures("goalRealRunReadiness", "self-test failed: semantically invalid goal-real-run-readiness report satisfied the gate", [
+      "goal_real_run_readiness_report_name",
+      "goal_real_run_readiness_real_traffic_requested",
+      "goal_real_run_readiness_used_real_traffic",
+      "goal_real_run_readiness_behavior_not_covered",
+      "goal_real_run_readiness_coverage_kind",
+      "goal_real_run_readiness_unexpectedly_ready",
+      "goal_real_run_readiness_account_blocking_reason_missing",
+      "goal_real_run_readiness_separate_account_claimed",
+      "goal_real_run_readiness_release_account_proof_claimed",
+      "goal_real_run_readiness_refresh_not_needed",
+      "goal_real_run_readiness_web_search_task_missing",
+      "goal_real_run_readiness_free_chat_task_missing",
+      "goal_real_run_readiness_missing_task_scenarios",
+      "goal_real_run_readiness_refresh_command_missing",
+      "goal_real_run_readiness_accountProxyReadiness_gate_missing",
+      "goal_real_run_readiness_accountProxyReadiness_action_missing",
+      "goal_real_run_readiness_accountProxyReadiness_blocked_gate_missing",
+      "goal_real_run_readiness_commands_missing",
+      "goal_real_run_readiness_short_not_ready",
+      "goal_real_run_readiness_release_ready_mismatch",
+      "goal_real_run_readiness_release_not_blocked_only_by_real_traffic",
+      "goal_real_run_readiness_second_account_login_not_ready_missing",
+      "goal_real_run_readiness_operator_next_action_missing",
+      "goal_real_run_readiness_failures",
     ]);
     semanticFailures.ambientSuggestions = assertSemanticFailures("ambientSuggestions", "self-test failed: semantically invalid ambient-suggestions report satisfied the gate", [
       "expected_no_real_traffic",
