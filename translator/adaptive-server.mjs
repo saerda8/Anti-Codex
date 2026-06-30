@@ -3520,6 +3520,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("验证后完整检查", "latest-post-verification.json"),
         latestManagerReportItem("普通聊天流式", "latest-codex-responses.json"),
         latestManagerReportItem("Desktop task suite", "latest-desktop-task-suite.json"),
+        latestManagerReportItem("CLI transport boundary", "latest-cli-transport-boundary.json"),
         latestManagerReportItem("Long task landing matrix", "latest-long-task-landing-matrix.json"),
         latestManagerReportItem("Native Codex parity task matrix", "latest-native-codex-parity-task-matrix.json"),
         latestManagerReportItem("Goal readiness", "latest-goal-readiness.json"),
@@ -7904,11 +7905,22 @@ function deterministicCompactionRecall(originalRequest) {
         : "";
 }
 
-function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolCall = false, hasWebToolEvidence = false, isCompactionRecall = false } = {}) {
+function userTextRequiresToolForCompletion(userText = "") {
+    const value = String(userText || "");
+    if (!value.trim()) return false;
+    const asksForEvaluationOnly = /(?:Anti-Codex|Codex).{0,80}(?:how|judge|check|tell|working|run through|run-through|usable)|(?:\u5224\u65ad|\u8dd1\u901a|\u6b63\u5e38\u5c0f\u4efb\u52a1|\u5ba2\u6237\u7aef\u63a5\u5165|\u662f\u5426\u6b63\u5e38|\u600e\u4e48\u5224\u65ad)/iu.test(value);
+    const hasExplicitToolWork = /(?:search the web|web_search|web_fetch|source URLs?|create (?:a |an )?.*(?:file|project|report|site)|write .*file|edit only this file|fixture directory|local project|node --test|run .*command|PowerShell file commands|modify|fix|implement|generate .*project|(?:run|use|call|execute).{0,60}\btool\b|marker tool|list .*files?|read .*files?|inspect .*files?|video|audio|remotion|npm install|ffmpeg|\u4e0a\u7f51\u641c\u7d22|\u641c\u7d22\u7f51\u9875|\u521b\u5efa.*\u6587\u4ef6|\u5199\u5165|\u4fee\u6539\u6587\u4ef6|\u8fd0\u884c\u547d\u4ee4|\u751f\u6210.*\u9879\u76ee|\u672c\u5730\u9879\u76ee|\u6d4b\u8bd5\u6587\u4ef6|\u5de5\u5177|\u8fd0\u884c.*\u5de5\u5177|\u6267\u884c.*\u5de5\u5177|\u505a\u89c6\u9891|\u751f\u6210.*\u89c6\u9891|\u97f3\u9891)/iu.test(value);
+    if (asksForEvaluationOnly && !hasExplicitToolWork) return false;
+    if (artifactMarkerRequirementFromUserText(value)) return true;
+    return hasExplicitToolWork;
+}
+
+function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolCall = false, hasWebToolEvidence = false, isCompactionRecall = false, userText = "" } = {}) {
     if (hasToolCall) return false;
     if (assistantTextLooksLikeLongContextMarkerEcho(text)) return false;
     if (/(?:requires a complete freeform patch\/tool body|Regenerate a valid patch body|Do not bypass this by writing ordinary source files)/i.test(String(text || ""))) return false;
     if (isCompactionRecall) return false;
+    if (!hasToolEvidence && !hasWebToolEvidence && !userTextRequiresToolForCompletion(userText)) return false;
     if (!assistantTextLooksLikeWebToolUnavailableClaim(text) && assistantTextLooksLikeHonestNoEvidenceBlocker(text)) return false;
     if (assistantTextLooksLikeWebToolUnavailableClaim(text) && !hasWebToolEvidence) return true;
     if (!assistantTextLooksLikeUnsupportedToolClaim(text)) return false;
@@ -8024,7 +8036,7 @@ function guardAssistantToolClaims(output, originalRequest = null, options = {}) 
         if (item?.type !== "message" || !Array.isArray(item.content)) return item;
         const nextContent = item.content.map(part => {
             const isCompactionRecall = part?.type === "output_text" && assistantTextLooksLikeCompactionRecall(part.text, request);
-            if (part?.type !== "output_text" || !shouldBlockAssistantToolClaim(part.text, { hasToolEvidence: hasPriorToolEvidence, hasWebToolEvidence, isCompactionRecall })) return part;
+            if (part?.type !== "output_text" || !shouldBlockAssistantToolClaim(part.text, { hasToolEvidence: hasPriorToolEvidence, hasWebToolEvidence, isCompactionRecall, userText: latestUserTextFromRequest(request) })) return part;
             changed = true;
             return { ...part, text: blockedToolClaimMessageFor(part.text, { hasWebToolEvidence }) };
         });
@@ -8299,6 +8311,7 @@ async function callUpstreamWithInternalTools(body, dependencies = {}) {
                 hasToolEvidence,
                 hasWebToolEvidence,
                 hasToolCall: hasExternalCalls,
+                userText: latestUserTextFromChatMessages(working.messages),
             });
             const artifactMismatch = !hasExternalCalls
                 ? artifactMarkerMismatchForChat(working.messages, assistantText)
@@ -8434,7 +8447,7 @@ async function callAntigravityWithInternalTools(chatBody, dependencies = {}) {
         if (preparedBody?._internalWebEvidence) {
             const assistantText = extractAssistantText(result.json);
             const missingSourceUrl = webEvidenceHasSourceUrls(preparedBody._internalWebEvidence) && !/https?:\/\//i.test(assistantText);
-            if (shouldBlockAssistantToolClaim(assistantText, { hasToolEvidence: false, hasWebToolEvidence: false })
+            if (shouldBlockAssistantToolClaim(assistantText, { hasToolEvidence: false, hasWebToolEvidence: false, userText: preparedBody._internalWebUserText || latestUserTextForInternalWeb(preparedBody) })
                 || assistantTextLooksLikeHonestNoEvidenceBlocker(assistantText)
                 || assistantTextLooksLikeMissingToolDetour(assistantText)
                 || missingSourceUrl) {
@@ -9820,6 +9833,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                     hasToolEvidence: requestHasToolEvidence(parsed),
                     hasToolCall: false,
                     hasWebToolEvidence,
+                    userText: latestUserTextFromRequest(parsed) || latestUserTextFromChatMessages(workingChatBody.messages || []),
                 });
             if (!shouldBlockFakeClaim) break;
             if (fakeToolClaimStreamReplays >= MAX_FAKE_TOOL_CLAIM_REPLAYS) {
@@ -10147,6 +10161,7 @@ class ChatToResponsesStreamMapper {
                 hasToolEvidence: requestHasToolEvidence(this.original),
                 hasToolCall: this.toolCalls.size > 0,
                 hasWebToolEvidence,
+                userText: latestUserTextFromRequest(this.original),
             })
                 ? blockedToolClaimMessageFor(this.text, { hasWebToolEvidence })
                 : sanitizeMarkdownUrlFormatting(this.text);
@@ -10186,6 +10201,7 @@ class ChatToResponsesStreamMapper {
                 hasToolEvidence: requestHasToolEvidence(this.original),
                 hasToolCall: this.toolCalls.size > 0,
                 hasWebToolEvidence,
+                userText: latestUserTextFromRequest(this.original),
             })
                 ? blockedToolClaimMessageFor(this.text, { hasWebToolEvidence })
                 : sanitizeMarkdownUrlFormatting(this.text);

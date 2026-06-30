@@ -214,6 +214,7 @@ const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
+const isCliTransportBoundaryReport = report?.reportName === "cli-transport-boundary" || /latest-cli-transport-boundary\.json$/i.test(path);
 const isLongTaskLandingMatrixReport = report?.reportName === "long-task-landing-matrix" || /latest-long-task-landing-matrix\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
 const isRealTaskCoverageRoadmapReport = report?.reportName === "real-task-coverage-roadmap" || /latest-real-task-coverage-roadmap\.json$/i.test(path);
@@ -1267,6 +1268,37 @@ const summary = {
       requestedRealTraffic: boolField(item || {}, "requestedRealTraffic"),
       usedRealTraffic: boolField(item || {}, "usedRealTraffic"),
       failureCount: Array.isArray(item?.failures) ? item.failures.length : null,
+    })) : [],
+  } : null,
+  cliTransportBoundaryEvidence: isCliTransportBoundaryReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    cliTransportBoundaryComplete: boolField(report, "cliTransportBoundaryComplete"),
+    modelTextTransport: asString(report.modelTextTransport || ""),
+    modelDiscoverySource: asString(report.modelDiscoverySource || ""),
+    antigravityCoworkerDefaultFalse: boolField(report, "antigravityCoworkerDefault"),
+    antigravityDesktopRequiredForCliTransport: boolField(report, "antigravityDesktopRequiredForCliTransport"),
+    antigravityDesktopProcessAbsenceRequired: boolField(report, "antigravityDesktopProcessAbsenceRequired"),
+    desktopProcessObservationPolicy: asString(report.desktopProcessObservationPolicy || ""),
+    codexOwnedTools: boolField(report, "codexOwnedTools"),
+    antigravityModelTextOnly: boolField(report, "antigravityModelTextOnly"),
+    staticCheckCount: Array.isArray(report.staticChecks) ? report.staticChecks.length : null,
+    healthCheckCount: Array.isArray(report.healthChecks) ? report.healthChecks.length : null,
+    failedCheckIds: [
+      ...(Array.isArray(report.staticChecks) ? report.staticChecks : []),
+      ...(Array.isArray(report.healthChecks) ? report.healthChecks : []),
+    ].filter((item) => item?.ok !== true).map((item) => asString(item?.id || "")).filter(Boolean),
+    staticChecks: Array.isArray(report.staticChecks) ? report.staticChecks.map((item) => ({
+      id: asString(item?.id),
+      ok: boolField(item || {}, "ok"),
+      file: asString(item?.file || ""),
+    })) : [],
+    healthChecks: Array.isArray(report.healthChecks) ? report.healthChecks.map((item) => ({
+      id: asString(item?.id),
+      ok: boolField(item || {}, "ok"),
     })) : [],
   } : null,
   longTaskLandingMatrixEvidence: isLongTaskLandingMatrixReport ? {

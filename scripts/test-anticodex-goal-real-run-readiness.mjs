@@ -57,11 +57,13 @@ const pendingRealTaskScenarios = asObjectArray(approval.realTaskRefresh?.pending
 })).filter((item) => item.taskMode);
 
 const uniqueRefreshTasks = asStringArray(approval.realTaskRefresh?.uniqueRefreshTasks);
+const realTaskRefreshNeeded = approval.realTaskRefresh?.needed === true;
 const missingTaskScenarios = uniqueRefreshTasks.filter((taskMode) => !pendingRealTaskScenarios.some((item) => item.taskMode === taskMode));
 const requiredReleaseGateIds = asStringArray(sequence.requiredGateIds);
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const requiredCommands = asStringArray(sequence.commands);
-const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => gateId !== "goalRealRunReadiness");
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const requiredRealTrafficBlockedGates = asStringArray(release.requiredRealTrafficBlockedGates);
 const releaseBlockedOnlyByRequiredRealTrafficForGoal = release.releaseBlockedOnlyByRequiredRealTraffic === true
   || (requiredReleaseMissing.length > 0
@@ -84,8 +86,8 @@ if (approval.requestedRealTraffic !== false || approval.usedRealTraffic !== fals
 if (goal.requestedRealTraffic !== false || goal.usedRealTraffic !== false) failures.push("goal_readiness_not_no_traffic");
 if (roadmap.requestedRealTraffic !== false || roadmap.usedRealTraffic !== false) failures.push("roadmap_not_no_traffic");
 if (sequence.requestedRealTraffic !== false || sequence.usedRealTraffic !== false) failures.push("required_sequence_not_no_traffic");
-if (uniqueRefreshTasks.length < 1) failures.push("missing_real_task_refresh_tasks");
-for (const taskMode of EXPECTED_REAL_TASK_MODES) {
+if (realTaskRefreshNeeded && uniqueRefreshTasks.length < 1) failures.push("missing_real_task_refresh_tasks");
+for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
   if (!uniqueRefreshTasks.includes(taskMode)) failures.push(`missing_expected_real_task:${taskMode}`);
 }
 if (missingTaskScenarios.length > 0) failures.push(`missing_pending_task_scenarios:${missingTaskScenarios.join(",")}`);
@@ -121,7 +123,7 @@ const payload = {
   accountReadinessBlockingReason: String(account.readinessBlockingReason || ""),
   separateAccountVerified: account.separateAccountVerified === true,
   releaseAcceptableAccountProof: account.releaseAcceptableAccountProof === true,
-  realTaskRefreshNeeded: approval.realTaskRefresh?.needed === true,
+  realTaskRefreshNeeded,
   uniqueRefreshTasks,
   pendingRealTaskScenarios,
   missingTaskScenarios,

@@ -48,7 +48,6 @@ const reportName = taskMode === "web-search"
   : "ui-chat-smoke";
 const projectTaskModes = new Set([
   "exact-marker",
-  "free-chat",
   "web-search",
   "local-project",
   "coding-project",
@@ -112,6 +111,9 @@ let promptText = String(args.get("--prompt") || (taskMode === "web-search"
     : `Reply with exactly ${marker} and nothing else.`));
 if (!args.get("--prompt") && taskMode === "web-search") {
   promptText = `Search the web for recent Codex updates, answer briefly in Chinese with source URLs, and put ${marker} on its own final line.`;
+}
+if (!args.get("--prompt") && taskMode === "free-chat") {
+  promptText = `用中文简短回答：如果 Anti-Codex 是 Codex 客户端接入另一个模型，正常小任务应该怎么判断是否跑通？最后单独一行写 ${marker}。`;
 }
 if (!args.get("--prompt") && taskMode === "local-project") {
   promptText = `Create a very small local HTML report in ${artifactDir}. Use PowerShell file commands to create exactly these files: index.html, README.md, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. index.html must be a simple offline page with one heading, one status paragraph, and the exact marker ${marker}. README.md must describe the files. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
@@ -830,14 +832,16 @@ function repoMultiFileArtifactCompleteForWait(evidence, phase = "full") {
 }
 
 function repoMultiArtifactIdleSettle(turn, phase, evidence) {
+  const artifactComplete = repoMultiFileArtifactCompleteForWait(evidence, phase);
+  const inLoopIdleObserved = Boolean(turn?.inLoopIdleDiagnostics);
   return {
-    ok: Boolean(turn?.artifactCompletionObserved) && Boolean(turn?.inLoopIdleDiagnostics),
+    ok: artifactComplete && inLoopIdleObserved,
     kind: "artifact_idle_without_history_wait",
     phase,
     historyToolOutputRequired: false,
     historyToolOutputSeen: responseHistoryHasToolOutputMarker(marker),
-    artifactComplete: repoMultiFileArtifactCompleteForWait(evidence, phase),
-    inLoopIdleObserved: Boolean(turn?.inLoopIdleDiagnostics),
+    artifactComplete,
+    inLoopIdleObserved,
     diagnostics: turn?.inLoopIdleDiagnostics || null,
   };
 }
@@ -1296,6 +1300,33 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     evidence.error = error instanceof Error ? error.message : String(error);
   }
   return evidence;
+}
+
+async function waitForArtifactEvidence(check, complete, waitMs = 90_000) {
+  const deadline = Date.now() + waitMs;
+  let evidence = check();
+  while (Date.now() < deadline) {
+    if (complete(evidence)) return evidence;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+    evidence = check();
+  }
+  return evidence;
+}
+
+function multiTurnProjectArtifactComplete(evidence) {
+  return evidence?.files?.packageJson === true
+    && evidence?.files?.wordTally === true
+    && evidence?.files?.testFile === true
+    && evidence?.files?.doneTxt === true
+    && evidence?.files?.followupTxt === true
+    && evidence?.files?.changelogMd === true
+    && evidence.firstDoneExact === true
+    && evidence.followupExact === true
+    && evidence.changelogHasFinalMarker === true
+    && evidence.exportsTallyWords === true
+    && evidence.exportsUniqueWords === true
+    && evidence.testPassed === true
+    && evidence.cliPassed === true;
 }
 
 function collectComplexProjectArtifactFailures(artifactEvidence) {
@@ -1991,7 +2022,11 @@ async function main() {
           activeReconnectEvidence: [],
         };
       failures.push(...turn2.failures.map((failure) => `turn2: ${failure}`));
-      artifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
+      artifactEvidence = await waitForArtifactEvidence(
+        () => verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker),
+        multiTurnProjectArtifactComplete,
+        Math.min(timeoutMs, 120_000),
+      );
       if (!artifactEvidence?.files?.packageJson) failures.push("multi-turn package.json was not created");
       if (!artifactEvidence?.files?.wordTally) failures.push("multi-turn word-tally.mjs was not created");
       if (!artifactEvidence?.files?.testFile) failures.push("multi-turn word-tally.test.mjs was not created");
@@ -2118,7 +2153,11 @@ async function main() {
         implementationPrompt = buildRepoMultiFileImplementationPrompt(collectRepoMultiFileEditFailures(firstArtifactEvidence));
         makeWritable(repoMultiFileSource);
         turn2 = await submitDesktopPromptAndWait(ws, implementationPrompt, marker, timeoutMs, { requiresProjectChat });
-        artifactEvidence = verifyRepoMultiFileEditFixture();
+        artifactEvidence = await waitForArtifactEvidence(
+          () => verifyRepoMultiFileEditFixture(),
+          (evidence) => collectRepoMultiFileEditFailures(evidence).length === 0,
+          Math.min(timeoutMs, 120_000),
+        );
         finalTurnSettle = repoMultiArtifactIdleSettle(turn2, "full", artifactEvidence);
         finalArtifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
       }
@@ -2368,11 +2407,14 @@ async function main() {
     if (taskMode === "free-chat") {
       if (composer.includes(promptText)) failures.push("composer still contains the submitted prompt");
       if (!answerSample.trim()) failures.push("assistant free-chat reply was not observed in the desktop UI");
+      if (/Anti-Codex(?:\s+blocked|.{0,24}宸叉嫤鎴|.{0,24}已拦截)|blocked this completion|没有实际 tool call|娌℃湁瀹為檯 tool call/i.test(answerSample)) {
+        failures.push("free-chat answer was replaced by a guard-blocked response");
+      }
       const answerWithoutChrome = answerSample.replace(/\n+完全访问[\s\S]*$/u, "").trim();
       const hasSubstantiveFreeChatAnswer = /https?:\/\/|GPT|GBT|OpenAI|release|Release|ping/i.test(answerWithoutChrome)
         || (/(发布|模型|官方)/.test(answerWithoutChrome) && answerWithoutChrome.length > 80);
       if (!hasSubstantiveFreeChatAnswer && /正在思考|已处理|停止了|重新连接|处理中|正在运行/.test(answerWithoutChrome)) failures.push("free-chat answer only showed transient thinking/tool state");
-      if (!/(发布|GPT|GBT|OpenAI|模型|没有|暂无|未知|预计|官方|ping)/i.test(answerWithoutChrome)) failures.push("free-chat answer did not contain a final user-facing answer");
+      if (!/(发布|GPT|GBT|OpenAI|模型|没有|暂无|未知|预计|官方|ping|测试|退出|日志|文件|产物|冒烟|跑通|命令)/i.test(answerWithoutChrome)) failures.push("free-chat answer did not contain a final user-facing answer");
     }
     if (taskMode === "web-search" && answerSample) lastSample = answerSample;
     if (taskMode === "web-search") {

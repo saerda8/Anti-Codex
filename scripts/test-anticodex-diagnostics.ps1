@@ -872,6 +872,37 @@ function Test-GoalReadinessSummaryEvidence {
     if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }
 }
 
+function Test-CliTransportBoundarySummaryEvidence {
+    param($CliTransportBoundarySummary)
+    if (-not $CliTransportBoundarySummary) {
+        Add-Failure "diagnostic reports summary missing latest-cli-transport-boundary.json"
+        return
+    }
+
+    $evidence = $CliTransportBoundarySummary.cliTransportBoundaryEvidence
+    if (-not $evidence) {
+        Add-Failure "cli-transport-boundary summary missing cliTransportBoundaryEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "cli-transport-boundary") { Add-Failure "cli-transport-boundary summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "cli-transport-boundary summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "cli-transport-boundary summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "cli-transport-boundary summary behavior not covered" }
+    if ($evidence.coverageKind -ne "cli-transport-boundary-report-only") { Add-Failure "cli-transport-boundary summary coverage kind mismatch" }
+    if ($evidence.cliTransportBoundaryComplete -ne $true) { Add-Failure "cli-transport-boundary summary incomplete" }
+    if ($evidence.modelTextTransport -ne "cli") { Add-Failure "cli-transport-boundary summary model transport is not cli" }
+    if ($evidence.modelDiscoverySource -ne "antigravity-cli-catalog") { Add-Failure "cli-transport-boundary summary discovery source is not CLI catalog" }
+    if ($evidence.antigravityCoworkerDefaultFalse -ne $true) { Add-Failure "cli-transport-boundary summary coworker default is not false" }
+    if ($evidence.antigravityDesktopRequiredForCliTransport -ne $false) { Add-Failure "cli-transport-boundary summary says Desktop is required for CLI" }
+    if ($evidence.antigravityDesktopProcessAbsenceRequired -ne $false) { Add-Failure "cli-transport-boundary summary incorrectly requires Desktop process absence" }
+    if ($evidence.codexOwnedTools -ne $true) { Add-Failure "cli-transport-boundary summary missing Codex-owned tools boundary" }
+    if ($evidence.antigravityModelTextOnly -ne $true) { Add-Failure "cli-transport-boundary summary missing model-text-only boundary" }
+    if ([int]$evidence.staticCheckCount -lt 7) { Add-Failure "cli-transport-boundary summary static check count too low" }
+    if ([int]$evidence.healthCheckCount -lt 5) { Add-Failure "cli-transport-boundary summary health check count too low" }
+    if (@(As-FlatArray $evidence.failedCheckIds).Count -ne 0) { Add-Failure "cli-transport-boundary summary has failed checks" }
+}
+
 function Test-LongTaskLandingMatrixSummaryEvidence {
     param($LongTaskLandingMatrixSummary)
     if (-not $LongTaskLandingMatrixSummary) {
@@ -1383,6 +1414,7 @@ function Test-ReportsSummary {
     $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
     $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
+    $cliTransportBoundarySummary = @($summary | Where-Object { $_.file -eq "latest-cli-transport-boundary.json" } | Select-Object -First 1)[0]
     $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
     $realTaskCoverageRoadmapSummary = @($summary | Where-Object { $_.file -eq "latest-real-task-coverage-roadmap.json" } | Select-Object -First 1)[0]
@@ -1434,6 +1466,7 @@ function Test-ReportsSummary {
     Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary
     Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
     Test-GoalReadinessSummaryEvidence $goalReadinessSummary
+    Test-CliTransportBoundarySummaryEvidence $cliTransportBoundarySummary
     Test-LongTaskLandingMatrixSummaryEvidence $longTaskLandingMatrixSummary
     Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary
     Test-RealTaskCoverageRoadmapSummaryEvidence $realTaskCoverageRoadmapSummary
@@ -1826,6 +1859,8 @@ function Test-DiagnosticBundle {
         Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
         $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
         Test-GoalReadinessSummaryEvidence $goalReadinessSummary
+        $cliTransportBoundarySummary = @($summary | Where-Object { $_.file -eq "latest-cli-transport-boundary.json" } | Select-Object -First 1)[0]
+        Test-CliTransportBoundarySummaryEvidence $cliTransportBoundarySummary
         $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
         Test-LongTaskLandingMatrixSummaryEvidence $longTaskLandingMatrixSummary
         $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]

@@ -774,6 +774,7 @@ function Test-ReportEncoding {
         "latest-sync-readiness.json",
         "latest-codex-responses.json",
         "latest-desktop-task-suite.json",
+        "latest-cli-transport-boundary.json",
         "latest-long-task-landing-matrix.json",
         "latest-native-codex-parity-task-matrix.json",
         "latest-goal-readiness.json",

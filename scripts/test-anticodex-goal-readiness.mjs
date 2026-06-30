@@ -205,15 +205,24 @@ const antigravityAccountIsolation = {
 };
 
 const gates = releaseGates.report || {};
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
+const effectiveMissingRequired = rawMissingRequired.filter((gateId) => !selfCycleGateIds.has(gateId));
+const effectiveRequiredRealTrafficBlockedGates = Array.isArray(gates.requiredRealTrafficBlockedGates) ? gates.requiredRealTrafficBlockedGates.map(String) : [];
+const effectiveReleaseBlockedOnlyByRequiredRealTraffic = gates.releaseBlockedOnlyByRequiredRealTraffic === true
+  || (effectiveMissingRequired.length > 0
+    && effectiveMissingRequired.length === effectiveRequiredRealTrafficBlockedGates.length
+    && effectiveMissingRequired.every((gateId) => effectiveRequiredRealTrafficBlockedGates.includes(gateId)));
 const releaseGateStatus = {
   reportPresent: releaseGates.present,
   reportOk: gates.ok === true,
   shortReady: gates.shortReady === true,
   releaseReady: gates.releaseReady === true,
-  releaseBlockedOnlyByRequiredRealTraffic: gates.releaseBlockedOnlyByRequiredRealTraffic === true,
+  releaseBlockedOnlyByRequiredRealTraffic: effectiveReleaseBlockedOnlyByRequiredRealTraffic,
   missingShort: Array.isArray(gates.missingShort) ? gates.missingShort.map(String) : [],
-  missingRequired: Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [],
-  requiredRealTrafficBlockedGates: Array.isArray(gates.requiredRealTrafficBlockedGates) ? gates.requiredRealTrafficBlockedGates.map(String) : [],
+  missingRequired: effectiveMissingRequired,
+  rawMissingRequired,
+  requiredRealTrafficBlockedGates: effectiveRequiredRealTrafficBlockedGates,
 };
 
 const proven = {

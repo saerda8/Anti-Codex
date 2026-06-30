@@ -71,6 +71,7 @@ const pendingRealTaskScenarios = asObjectArray(readiness.pendingRealTaskScenario
   expectedResultPresent: item.expectedResultPresent === true,
 })).filter((item) => item.taskMode);
 const uniqueRefreshTasks = asStringArray(readiness.uniqueRefreshTasks);
+const realTaskRefreshNeeded = readiness.realTaskRefreshNeeded === true;
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const optionalActionIds = asStringArray(sequence.optionalActionIds);
 const requiredGateIds = asStringArray(sequence.requiredGateIds);
@@ -125,15 +126,17 @@ const approvedRealRunSequence = [
     expectedReport: "latest-antigravity-cli-real-smoke.json",
     evidence: ["separateAccountVerified", "accountIdentityComparison", "SeparateAccountProofApprovalId"],
   }),
-  stage("refreshConcreteRealTasks", "real-task-refresh", realTaskCommand, {
-    requiresRealTraffic: true,
-    requiresExplicitUserApproval: true,
-    requiresGatewayStart: true,
-    highImpact: true,
-    failFastIfNotReady: true,
-    expectedReport: "latest-desktop-task-suite.json",
-    evidence: ["web-search", "free-chat", "usedRealTraffic"],
-  }),
+  ...(realTaskRefreshNeeded ? [
+    stage("refreshConcreteRealTasks", "real-task-refresh", realTaskCommand, {
+      requiresRealTraffic: true,
+      requiresExplicitUserApproval: true,
+      requiresGatewayStart: true,
+      highImpact: true,
+      failFastIfNotReady: true,
+      expectedReport: "latest-desktop-task-suite.json",
+      evidence: ["web-search", "free-chat", "usedRealTraffic"],
+    }),
+  ] : []),
   stage("accountProxyReadiness", "required-release-real-traffic", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-account-proxy-readiness.ps1 -TimeoutSec 120", {
     requiresRealTraffic: true,
     requiresExplicitUserApproval: true,
@@ -167,7 +170,7 @@ for (const source of [readinessReport, approvalReport, sequenceReport, releaseRe
 for (const sourceReport of [readiness, approval, sequence]) {
   if (sourceReport.requestedRealTraffic !== false || sourceReport.usedRealTraffic !== false) failures.push(`${sourceReport.reportName || "source"}_not_no_traffic`);
 }
-for (const taskMode of EXPECTED_REAL_TASK_MODES) {
+for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
   if (!uniqueRefreshTasks.includes(taskMode)) failures.push(`missing_real_task:${taskMode}`);
   const scenario = pendingRealTaskScenarios.find((item) => item.taskMode === taskMode);
   if (!scenario) failures.push(`missing_real_task_scenario:${taskMode}`);
@@ -179,7 +182,7 @@ for (const gateId of REQUIRED_RELEASE_GATES) {
   if (!requiredBlockedGates.includes(gateId)) failures.push(`missing_blocked_gate:${gateId}`);
 }
 if (!optionalActionsSeparated) failures.push("optional_actions_mixed_into_required_sequence");
-if (!realTaskCommand.includes("--allow-real-traffic") || !realTaskCommand.includes("web-search,free-chat")) failures.push("real_task_refresh_command_not_concrete");
+if (realTaskRefreshNeeded && (!realTaskCommand.includes("--allow-real-traffic") || !realTaskCommand.includes("web-search,free-chat"))) failures.push("real_task_refresh_command_not_concrete");
 if (!loginCommand.includes("-StartLoginApproval start-separate-windows-user-login")) failures.push("login_command_missing_approval_token");
 if (accountProofCommand && !accountProofCommand.includes("SeparateAccountProofApprovalId")) failures.push("account_proof_command_missing_approval_id");
 if (executionBlockedBeforeRealTraffic !== true) failures.push("execution_not_blocked_before_real_traffic");
@@ -210,7 +213,7 @@ const payload = {
   explicitApprovalStageCount: approvedRealRunSequence.filter((item) => item.requiresExplicitUserApproval).length,
   realTrafficStageCount: approvedRealRunSequence.filter((item) => item.requiresRealTraffic).length,
   startsLoginStageCount: approvedRealRunSequence.filter((item) => item.startsLogin).length,
-  requiredRealTaskModes: EXPECTED_REAL_TASK_MODES,
+  requiredRealTaskModes: realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : [],
   pendingRealTaskScenarios,
   requiredReleaseGateIds: REQUIRED_RELEASE_GATES,
   requiredActionIds,

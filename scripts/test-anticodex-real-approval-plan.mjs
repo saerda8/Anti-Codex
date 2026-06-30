@@ -57,6 +57,7 @@ const roadmap = roadmapReport.report || {};
 const goal = goalReport.report || {};
 const release = releaseReport.report || {};
 const account = accountReport.report || {};
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
 
 const uniqueRefreshTasks = asArray(roadmap.uniqueRefreshTasks);
 const pendingRealTaskScenarios = asObjectArray(roadmap.pendingRealTaskScenarios)
@@ -69,6 +70,11 @@ const pendingRealTaskScenarios = asObjectArray(roadmap.pendingRealTaskScenarios)
   }))
   .filter((item) => item.taskMode);
 const requiredRealTrafficBlockedGates = asArray(release.requiredRealTrafficBlockedGates);
+const effectiveMissingRequired = asArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
+const effectiveReleaseBlockedOnlyByRequiredRealTraffic = release.releaseBlockedOnlyByRequiredRealTraffic === true
+  || (effectiveMissingRequired.length > 0
+    && effectiveMissingRequired.length === requiredRealTrafficBlockedGates.length
+    && effectiveMissingRequired.every((gateId) => requiredRealTrafficBlockedGates.includes(gateId)));
 const releaseNextActions = Array.isArray(release.nextActions) ? release.nextActions : [];
 const releaseRealTrafficActions = releaseNextActions
   .filter((item) => item?.requiresRealTraffic === true)
@@ -124,7 +130,7 @@ const releaseRealTrafficGates = {
   requiredActions: requiredReleaseRealTrafficActions,
   optionalActions: optionalReleaseRealTrafficActions,
   optionalGateIds: optionalReleaseRealTrafficActions.map((item) => item.id),
-  releaseBlockedOnlyByRequiredRealTraffic: release.releaseBlockedOnlyByRequiredRealTraffic === true,
+  releaseBlockedOnlyByRequiredRealTraffic: effectiveReleaseBlockedOnlyByRequiredRealTraffic,
 };
 
 const accountIsolation = {

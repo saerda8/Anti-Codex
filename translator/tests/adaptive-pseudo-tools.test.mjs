@@ -399,6 +399,26 @@ test("chat response blocks fake tool execution claims without tool calls", () =>
   assert.doesNotMatch(formatted.output[0].content[0].text, /请继续时/);
 });
 
+test("chat response does not block evaluation advice that mentions files and commands", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: "\u53ef\u4ee5\u7528\u666e\u901a\u804a\u5929\u3001\u6587\u4ef6\u521b\u5efa\u3001\u547d\u4ee4\u6267\u884c\u548c\u7ed3\u679c\u9a8c\u8bc1\u6765\u5224\u65ad\u662f\u5426\u8dd1\u901a\u3002",
+      },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: "\u5982\u679c Anti-Codex \u662f Codex \u5ba2\u6237\u7aef\u63a5\u5165\u53e6\u4e00\u4e2a\u6a21\u578b\uff0c\u6b63\u5e38\u5c0f\u4efb\u52a1\u5e94\u8be5\u600e\u4e48\u5224\u65ad\u662f\u5426\u8dd1\u901a\uff1f",
+  });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.doesNotMatch(formatted.output[0].content[0].text, /Anti-Codex/);
+  assert.match(formatted.output[0].content[0].text, /\u6587\u4ef6\u521b\u5efa/);
+});
+
 test("system prompt does not expose legacy DeepCodex product identity", () => {
   const block = buildSystemBlock();
 

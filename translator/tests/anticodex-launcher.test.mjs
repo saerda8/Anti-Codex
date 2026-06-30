@@ -13098,6 +13098,91 @@ test("Anti-Codex ships a no-traffic native Codex parity task matrix", () => {
   assert.match(managerInject, /nativeParity: complete=/);
 });
 
+test("Anti-Codex ships a no-traffic long task landing matrix verifier", () => {
+  const matrix = readFileSync(resolve(root, "scripts", "test-anticodex-long-task-landing-matrix.mjs"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+
+  assert.match(matrix, /reportName: "long-task-landing-matrix"/);
+  assert.match(matrix, /coverageKind: "long-task-landing-matrix-report-only"/);
+  assert.match(matrix, /requestedRealTraffic: false/);
+  assert.match(matrix, /usedRealTraffic: false/);
+  assert.match(matrix, /requiredLongTasks/);
+  assert.match(matrix, /coding-project/);
+  assert.match(matrix, /multi-turn-project/);
+  assert.match(matrix, /report-site/);
+  assert.match(matrix, /complex-project/);
+  assert.match(matrix, /repo-multi-file-edit/);
+  assert.match(matrix, /agenticCapabilityMatrix/);
+  assert.match(matrix, /realTaskCoverageRoadmap/);
+  assert.match(matrix, /longTaskLandingComplete/);
+  assert.match(matrix, /codexClientCopy: true/);
+  assert.match(matrix, /antigravityModelTextOnly: true/);
+  assert.match(matrix, /latest-long-task-landing-matrix\.json/);
+  assert.match(summarizer, /longTaskLandingMatrixEvidence/);
+  assert.match(collector, /longTaskLandingMatrixEvidence = \$json\.longTaskLandingMatrixEvidence/);
+  assert.match(collector, /latest-long-task-landing-matrix\.json/);
+  assert.match(diagnostics, /long-task-landing-matrix summary missing longTaskLandingMatrixEvidence/);
+  assert.match(diagnostics, /long-task-landing-matrix summary task \$taskMode not ok/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-long-task-landing-matrix\.mjs/);
+  assert.match(installedOverall, /latest-long-task-landing-matrix\.json/);
+  assert.match(signer, /latest-long-task-landing-matrix\.json/);
+  assert.match(server, /latest-long-task-landing-matrix\.json/);
+  assert.match(releaseGates, /id:\s*"longTaskLandingMatrix"[\s\S]*?file:\s*"latest-long-task-landing-matrix\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireLongTaskLandingMatrixSemantics:\s*true/);
+  assert.match(releaseGates, /long_task_landing_matrix_landed_count/);
+  assert.match(releaseGates, /node scripts\\\\test-anticodex-long-task-landing-matrix\.mjs/);
+});
+
+test("Anti-Codex ships a no-traffic CLI model transport boundary verifier", () => {
+  const boundary = readFileSync(resolve(root, "scripts", "test-anticodex-cli-transport-boundary.mjs"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+
+  assert.match(boundary, /reportName: "cli-transport-boundary"/);
+  assert.match(boundary, /requestedRealTraffic: false/);
+  assert.match(boundary, /usedRealTraffic: false/);
+  assert.match(boundary, /coverageKind: "cli-transport-boundary-report-only"/);
+  assert.match(boundary, /modelTextTransport: String\(health\.modelTextTransport \|\| ""\)/);
+  assert.match(boundary, /modelDiscoverySource: String\(health\.modelDiscoverySource \|\| ""\)/);
+  assert.match(boundary, /antigravityDesktopRequiredForCliTransport: false/);
+  assert.match(boundary, /antigravityDesktopProcessAbsenceRequired: false/);
+  assert.match(boundary, /codexOwnedTools: true/);
+  assert.match(boundary, /antigravityModelTextOnly: true/);
+  assert.match(boundary, /health-model-text-transport-cli/);
+  assert.match(boundary, /health-model-discovery-cli-catalog/);
+  assert.match(boundary, /health-antigravity-coworker-disabled/);
+  assert.match(boundary, /latest-cli-transport-boundary\.json/);
+  assert.match(summarizer, /cliTransportBoundaryEvidence/);
+  assert.match(summarizer, /antigravityDesktopRequiredForCliTransport/);
+  assert.match(summarizer, /antigravityDesktopProcessAbsenceRequired/);
+  assert.match(collector, /cliTransportBoundaryEvidence = \$json\.cliTransportBoundaryEvidence/);
+  assert.match(collector, /latest-cli-transport-boundary\.json/);
+  assert.match(diagnostics, /cli-transport-boundary summary missing cliTransportBoundaryEvidence/);
+  assert.match(diagnostics, /cli-transport-boundary summary model transport is not cli/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-cli-transport-boundary\.mjs/);
+  assert.match(installedOverall, /latest-cli-transport-boundary\.json/);
+  assert.match(signer, /latest-cli-transport-boundary\.json/);
+  assert.match(server, /latest-cli-transport-boundary\.json/);
+  assert.match(releaseGates, /id:\s*"cliTransportBoundary"[\s\S]*?file:\s*"latest-cli-transport-boundary\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /requireCliTransportBoundarySemantics:\s*true/);
+  assert.match(releaseGates, /cli_transport_boundary_model_text_transport_not_cli/);
+  assert.match(releaseGates, /cli_transport_boundary_desktop_required/);
+  assert.match(releaseGates, /node scripts\\\\test-anticodex-cli-transport-boundary\.mjs/);
+});
+
 test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
   const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-real-run-readiness.mjs"), "utf8");
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
