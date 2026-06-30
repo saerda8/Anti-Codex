@@ -94,6 +94,43 @@ function Test-WindowsUserSetupGuidanceOperatorSetupPlan {
     if ([string]$plan.finalLoginApproval -ne "start-separate-windows-user-login") { Add-Failure "$Prefix setup plan approval mismatch" }
 }
 
+function Test-SecondAccountLoginEntrypointSummaryEvidence {
+    param($SecondAccountLoginEntrypointSummary)
+
+    if (-not $SecondAccountLoginEntrypointSummary) {
+        Add-Failure "diagnostic reports summary missing latest-second-antigravity-account-login-entrypoint.json"
+        return
+    }
+
+    $evidence = $SecondAccountLoginEntrypointSummary.secondAccountLoginEntrypointEvidence
+    if (-not $evidence) {
+        Add-Failure "second-account entrypoint summary missing secondAccountLoginEntrypointEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "second-antigravity-account-login-entrypoint") { Add-Failure "second-account entrypoint summary reportName mismatch" }
+    if ($evidence.noTraffic -ne $true) { Add-Failure "second-account entrypoint summary not marked no-traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "second-account entrypoint summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "second-account entrypoint summary behavior not covered" }
+    if ($evidence.coverageKind -ne "second-account-login-entrypoint-no-traffic") { Add-Failure "second-account entrypoint summary coverage kind mismatch" }
+    if ($evidence.statusOnlyOk -ne $true) { Add-Failure "second-account entrypoint summary status-only path failed" }
+    if ($evidence.missingApprovalBlocked -ne $true) { Add-Failure "second-account entrypoint summary missing approval not blocked" }
+    if ($evidence.approvedStartBlockedByStatusGate -ne $true) { Add-Failure "second-account entrypoint summary status gate not enforced" }
+    if ($evidence.sameWindowsUserTargetBlocked -ne $true) { Add-Failure "second-account entrypoint summary same Windows user not blocked" }
+    if ([string]$evidence.sameWindowsUserTargetBlockingReason -ne "target_windows_user_is_current_user") { Add-Failure "second-account entrypoint summary same Windows user reason mismatch" }
+    if ($evidence.sameWindowsUserTargetStartedLogin -ne $false) { Add-Failure "second-account entrypoint summary same Windows user started login" }
+    if ($evidence.sameWindowsUserTargetSafetyFieldsOk -ne $true) { Add-Failure "second-account entrypoint summary same Windows user safety fields missing" }
+    if ($evidence.startedLogin -ne $false) { Add-Failure "second-account entrypoint summary started login early" }
+    if ($evidence.changedSystem -ne $false) { Add-Failure "second-account entrypoint summary changed system" }
+    if ($evidence.createdUser -ne $false) { Add-Failure "second-account entrypoint summary created user" }
+    if ($evidence.capturesLoginOutput -ne $false) { Add-Failure "second-account entrypoint summary captures login output" }
+    if ($evidence.capturesPassword -ne $false) { Add-Failure "second-account entrypoint summary captures password" }
+    if ($evidence.storesPassword -ne $false) { Add-Failure "second-account entrypoint summary stores password" }
+    if ($evidence.separateAccountVerified -ne $false) { Add-Failure "second-account entrypoint summary claims separate account proof" }
+    if ($evidence.loginVerified -ne $false) { Add-Failure "second-account entrypoint summary claims login proof" }
+    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account entrypoint summary claims release account proof" }
+}
+
 function Get-NonNegativeIntProperty {
     param(
         $Value,
@@ -826,9 +863,14 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
-    if ($evidence.releaseReady -eq $true) { Add-Failure "goal-readiness summary unexpectedly claims release ready" }
-    if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing real-traffic-only release blocker" }
-    if (@(As-FlatArray $evidence.requiredRealTrafficBlockedGates).Count -lt 1) { Add-Failure "goal-readiness summary missing required real-traffic blocked gates" }
+    $requiredBlockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
+    if ($evidence.releaseReady -eq $true) {
+        if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $false) { Add-Failure "goal-readiness summary release-ready state still claims real-traffic-only blocker" }
+        if ($requiredBlockedGates.Count -ne 0) { Add-Failure "goal-readiness summary release-ready state still has required real-traffic blocked gates" }
+    } else {
+        if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing real-traffic-only release blocker" }
+        if ($requiredBlockedGates.Count -lt 1) { Add-Failure "goal-readiness summary missing required real-traffic blocked gates" }
+    }
     if (@(As-FlatArray $evidence.workerMcpMissingServers).Count -ne 0) { Add-Failure "goal-readiness summary has missing worker MCP servers" }
     if ([int]$evidence.workerMcpPassedServerCount -lt $RequiredWorkerMcpServers.Count) { Add-Failure "goal-readiness summary worker MCP passed server count too low" }
     if (-not $evidence.workerMcpToolCountByServer) { Add-Failure "goal-readiness summary missing worker MCP tool counts" }
@@ -861,7 +903,11 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $evidence.realTaskCoverageMinimalRefreshCommandPresent -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage minimal refresh command" }
     if ($evidence.realTaskCoverageApprovalRequiredForRefresh -eq $true -and $evidence.realTaskCoverageMinimalRefreshCommandRequiresRealTraffic -ne $true) { Add-Failure "goal-readiness summary minimal refresh command is not marked real traffic" }
     if ($null -eq $evidence.realTaskCoverageApprovalRequiredForRefresh) { Add-Failure "goal-readiness summary missing real-task coverage approval requirement" }
-    if ([int]$evidence.realApprovalPlanRequiredReleaseActionCount -lt 1) { Add-Failure "goal-readiness summary missing required real-approval release actions" }
+    if ($evidence.releaseReady -eq $true) {
+        if ([int]$evidence.realApprovalPlanRequiredReleaseActionCount -ne 0) { Add-Failure "goal-readiness summary release-ready state still has required real-approval release actions" }
+    } elseif ([int]$evidence.realApprovalPlanRequiredReleaseActionCount -lt 1) {
+        Add-Failure "goal-readiness summary missing required real-approval release actions"
+    }
     if ($null -eq $evidence.realApprovalPlanOptionalReleaseActionCount) { Add-Failure "goal-readiness summary missing optional real-approval action count" }
     if (-not [string]$evidence.realApprovalPlanNextNoTrafficAction) { Add-Failure "goal-readiness summary missing real-approval next no-traffic action" }
     if ($evidence.accountReleaseAcceptableProof -ne $false) { Add-Failure "goal-readiness summary account proof unexpectedly acceptable" }
@@ -1138,26 +1184,42 @@ function Test-RealApprovalPlanSummaryEvidence {
     if ($evidence.usedRealTraffic -ne $false) { Add-Failure "real-approval-plan summary used real traffic" }
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "real-approval-plan summary behavior not covered" }
     if ($evidence.coverageKind -ne "real-approval-plan-report-only") { Add-Failure "real-approval-plan summary coverage kind mismatch" }
-    if ($evidence.realTaskRefreshNeeded -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh need" }
     $refreshTasks = @(As-FlatArray $evidence.realTaskRefreshTasks)
-    if ($refreshTasks.Count -lt 1) { Add-Failure "real-approval-plan summary missing real task refresh tasks" }
     $refreshScenarios = @(As-FlatArray $evidence.realTaskRefreshPendingScenarios)
-    if ($refreshScenarios.Count -lt $refreshTasks.Count) { Add-Failure "real-approval-plan summary missing real task refresh scenarios" }
-    foreach ($taskMode in $refreshTasks) {
-        $scenario = @($refreshScenarios | Where-Object { [string]$_.taskMode -eq [string]$taskMode } | Select-Object -First 1)[0]
-        if (-not $scenario) {
-            Add-Failure "real-approval-plan summary missing refresh scenario for $taskMode"
-            continue
+    if ($evidence.realTaskRefreshNeeded -eq $true) {
+        if ($refreshTasks.Count -lt 1) { Add-Failure "real-approval-plan summary missing real task refresh tasks" }
+        if ($refreshScenarios.Count -lt $refreshTasks.Count) { Add-Failure "real-approval-plan summary missing real task refresh scenarios" }
+        foreach ($taskMode in $refreshTasks) {
+            $scenario = @($refreshScenarios | Where-Object { [string]$_.taskMode -eq [string]$taskMode } | Select-Object -First 1)[0]
+            if (-not $scenario) {
+                Add-Failure "real-approval-plan summary missing refresh scenario for $taskMode"
+                continue
+            }
+            if (-not [string]$scenario.workType) { Add-Failure "real-approval-plan summary refresh scenario missing work type for $taskMode" }
+            if ($scenario.realTrafficRequired -ne $true) { Add-Failure "real-approval-plan summary refresh scenario not marked real traffic for $taskMode" }
+            if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "real-approval-plan summary refresh scenario missing acceptance evidence for $taskMode" }
+            if ($scenario.expectedResultPresent -ne $true) { Add-Failure "real-approval-plan summary refresh scenario missing expected result for $taskMode" }
         }
-        if (-not [string]$scenario.workType) { Add-Failure "real-approval-plan summary refresh scenario missing work type for $taskMode" }
-        if ($scenario.realTrafficRequired -ne $true) { Add-Failure "real-approval-plan summary refresh scenario not marked real traffic for $taskMode" }
-        if (@(As-FlatArray $scenario.acceptanceEvidence).Count -lt 1) { Add-Failure "real-approval-plan summary refresh scenario missing acceptance evidence for $taskMode" }
-        if ($scenario.expectedResultPresent -ne $true) { Add-Failure "real-approval-plan summary refresh scenario missing expected result for $taskMode" }
+        if ($evidence.realTaskRefreshCommandPresent -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh command" }
+    } else {
+        if ($refreshTasks.Count -ne 0) { Add-Failure "real-approval-plan summary has refresh tasks while refresh not needed" }
+        if ($refreshScenarios.Count -ne 0) { Add-Failure "real-approval-plan summary has refresh scenarios while refresh not needed" }
+        if ($evidence.realTaskRefreshCommandPresent -ne $false) { Add-Failure "real-approval-plan summary has refresh command while refresh not needed" }
     }
-    if ($evidence.realTaskRefreshCommandPresent -ne $true) { Add-Failure "real-approval-plan summary missing real task refresh command" }
-    if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "real-approval-plan summary missing release real-traffic-only blocker" }
-    if (@(As-FlatArray $evidence.releaseRealTrafficGateIds).Count -lt 1) { Add-Failure "real-approval-plan summary missing release real-traffic gates" }
-    if ([int]$evidence.requiredReleaseRealTrafficActionCount -lt 1) { Add-Failure "real-approval-plan summary missing required release real-traffic actions" }
+    if ($evidence.requiredReleaseComplete -eq $true) {
+        if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $false) { Add-Failure "real-approval-plan summary complete release still claims real-traffic-only blocker" }
+        if ([int]$evidence.requiredReleaseRealTrafficActionCount -ne 0) { Add-Failure "real-approval-plan summary complete release still has required release real-traffic actions" }
+        $requiredGateIds = @(As-FlatArray $evidence.requiredReleaseGateIds | ForEach-Object { [string]$_ })
+        $completedGateIds = @(As-FlatArray $evidence.completedRequiredGateIds | ForEach-Object { [string]$_ })
+        foreach ($gateId in @("accountProxyReadiness", "postVerification")) {
+            if ($requiredGateIds -notcontains $gateId) { Add-Failure "real-approval-plan summary missing required release gate $gateId" }
+            if ($completedGateIds -notcontains $gateId) { Add-Failure "real-approval-plan summary missing completed release gate $gateId" }
+        }
+    } else {
+        if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "real-approval-plan summary missing release real-traffic-only blocker" }
+        if (@(As-FlatArray $evidence.releaseRealTrafficGateIds).Count -lt 1) { Add-Failure "real-approval-plan summary missing release real-traffic gates" }
+        if ([int]$evidence.requiredReleaseRealTrafficActionCount -lt 1) { Add-Failure "real-approval-plan summary missing required release real-traffic actions" }
+    }
     if ($null -eq $evidence.optionalReleaseRealTrafficActionCount) { Add-Failure "real-approval-plan summary missing optional release real-traffic action count" }
     if ($evidence.accountTargetUserMissing -ne $true) { Add-Failure "real-approval-plan summary missing target-user setup blocker" }
     if ($evidence.accountSetupBlocked -ne $true) { Add-Failure "real-approval-plan summary missing account setup blocker" }
@@ -1454,6 +1516,7 @@ function Test-ReportsSummary {
     $requiredRealTrafficSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-required-real-traffic-sequence.json" } | Select-Object -First 1)[0]
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
     $approvedRealRunSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-approved-real-run-sequence.json" } | Select-Object -First 1)[0]
+    $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -1506,6 +1569,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $requiredRealTrafficSequenceSummary) { Test-RequiredRealTrafficSequenceSummaryEvidence $requiredRealTrafficSequenceSummary }
     if ($RequireReleaseReady -or $goalRealRunReadinessSummary) { Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary }
     if ($RequireReleaseReady -or $approvedRealRunSequenceSummary) { Test-ApprovedRealRunSequenceSummaryEvidence $approvedRealRunSequenceSummary }
+    if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

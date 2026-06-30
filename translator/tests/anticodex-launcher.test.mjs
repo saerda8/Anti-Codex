@@ -8306,6 +8306,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(collector, /antigravityCliWindowsUserLoginDryRunContract = \$json\.antigravityCliWindowsUserLoginDryRunContract/);
   assert.match(collector, /publicDocumentationClientCopySyncContractOk = \$json\.publicDocumentationClientCopySyncContractOk/);
   assert.match(collector, /antigravityCliProfilePrepareEvidence = \$json\.antigravityCliProfilePrepareEvidence/);
+  assert.match(collector, /secondAccountLoginEntrypointEvidence = \$json\.secondAccountLoginEntrypointEvidence/);
   assert.match(collector, /antigravityCliRealSmokeEvidence = \$json\.antigravityCliRealSmokeEvidence/);
   assert.match(diagnostics, /diagnostic real-smoke summary missing antigravityCliRealSmokeEvidence/);
   assert.match(diagnostics, /diagnostic real-smoke summary accountLaneRole mismatch/);
@@ -15039,6 +15040,12 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(diagnosticsTest, /afterManualSetupChecks/);
   assert.match(diagnosticsTest, /finalLoginEntrypoint/);
   assert.match(diagnosticsTest, /finalLoginApproval/);
+  assert.match(diagnosticsTest, /Test-SecondAccountLoginEntrypointSummaryEvidence/);
+  assert.match(diagnosticsTest, /sameWindowsUserTargetBlocked/);
+  assert.match(diagnosticsTest, /sameWindowsUserTargetBlockingReason/);
+  assert.match(diagnosticsTest, /sameWindowsUserTargetStartedLogin/);
+  assert.match(diagnosticsTest, /sameWindowsUserTargetSafetyFieldsOk/);
+  assert.match(diagnosticsTest, /second-account entrypoint summary same Windows user not blocked/);
   assert.match(diagnosticsTest, /setup plan provides raw user command/);
   assert.match(diagnosticsTest, /"windows_user_account_prepare"/);
   assert.match(diagnosticsTest, /"account_isolation_status"/);

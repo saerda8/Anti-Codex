@@ -232,6 +232,7 @@ function Read-JsonSummary {
             antigravityCliProfilePrepareEvidence = $json.antigravityCliProfilePrepareEvidence
             antigravityCliWindowsUserReadinessEvidence = $json.antigravityCliWindowsUserReadinessEvidence
             windowsUserAccountPrepareEvidence = $json.windowsUserAccountPrepareEvidence
+            secondAccountLoginEntrypointEvidence = $json.secondAccountLoginEntrypointEvidence
             antigravityCliRealSmokeEvidence = $json.antigravityCliRealSmokeEvidence
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
