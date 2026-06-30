@@ -1028,6 +1028,12 @@ function Test-RealApprovalPlanSummaryEvidence {
     if ($null -eq $evidence.optionalReleaseRealTrafficActionCount) { Add-Failure "real-approval-plan summary missing optional release real-traffic action count" }
     if ($evidence.accountTargetUserMissing -ne $true) { Add-Failure "real-approval-plan summary missing target-user setup blocker" }
     if ($evidence.accountSetupBlocked -ne $true) { Add-Failure "real-approval-plan summary missing account setup blocker" }
+    if ($evidence.preLoginChecklistComplete -ne $true) { Add-Failure "real-approval-plan summary missing complete pre-login checklist" }
+    if ([int]$evidence.preLoginChecklistCount -lt 3) { Add-Failure "real-approval-plan summary pre-login checklist count too low" }
+    $preLoginIds = @(As-FlatArray $evidence.preLoginChecklistIds)
+    foreach ($requiredPreLoginId in @("windows-user-account-prepare", "account-isolation-status", "second-account-login-entrypoint-status")) {
+        if ($preLoginIds -notcontains $requiredPreLoginId) { Add-Failure "real-approval-plan summary missing pre-login checklist id $requiredPreLoginId" }
+    }
     if ([int]$evidence.orderedActionCount -lt 4) { Add-Failure "real-approval-plan summary ordered action count too low" }
     if ([int]$evidence.blockedUntilExplicitUserApprovalCount -lt 1) { Add-Failure "real-approval-plan summary missing explicit approval blockers" }
     if ([int]$evidence.requiresRealTrafficCount -lt 1) { Add-Failure "real-approval-plan summary missing real traffic actions" }

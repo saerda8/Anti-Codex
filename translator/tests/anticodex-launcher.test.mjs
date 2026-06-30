@@ -12930,6 +12930,8 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
 
   assert.match(plan, /reportName: "real-approval-plan"/);
   assert.match(plan, /requestedRealTraffic: false/);
@@ -12954,11 +12956,17 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(summarizer, /realApprovalPlanEvidence/);
   assert.match(summarizer, /requiredReleaseRealTrafficActionCount/);
   assert.match(summarizer, /optionalReleaseRealTrafficActionCount/);
+  assert.match(summarizer, /preLoginChecklistComplete/);
+  assert.match(summarizer, /preLoginChecklistIds/);
   assert.match(collector, /latest-real-approval-plan\.json/);
   assert.match(collector, /realApprovalPlanEvidence = \$json\.realApprovalPlanEvidence/);
   assert.match(diagnostics, /real-approval-plan summary missing realApprovalPlanEvidence/);
   assert.match(diagnostics, /real-approval-plan summary missing required release real-traffic actions/);
   assert.match(diagnostics, /real-approval-plan summary missing optional release real-traffic action count/);
+  assert.match(diagnostics, /real-approval-plan summary missing complete pre-login checklist/);
+  assert.match(diagnostics, /real-approval-plan summary missing pre-login checklist id/);
+  assert.match(managerBridge, /realApprovalPlan preLogin/);
+  assert.match(managerInject, /realApprovalPlan preLogin/);
   assert.match(runtimeSync, /scripts\\test-anticodex-real-approval-plan\.mjs/);
   assert.match(releaseGates, /id:\s*"realApprovalPlan"[\s\S]*?file:\s*"latest-real-approval-plan\.json"[\s\S]*?requiredForRelease:\s*true/);
   assert.match(releaseGates, /requireRealApprovalPlanSemantics:\s*true/);

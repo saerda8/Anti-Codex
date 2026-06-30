@@ -1223,6 +1223,11 @@
         lines.push(`  desktopTaskSuite: profile=${evidence.suiteProfile || "unknown"} / tasks=${evidence.selectedTaskCount ?? "unknown"} / complete=${evidence.realTaskEvidenceComplete ? "true" : "false"} / fresh=${evidence.realTaskEvidenceFresh ? "true" : "false"} / stale=${evidence.realTaskEvidenceFreshnessFailureCount ?? "unknown"}`);
         lines.push(`  desktopTaskSuite refresh: needed=${plan.needed ? "true" : "false"} / approval=${plan.requiresExplicitUserApproval ? "true" : "false"} / reason=${plan.approvalReason || "none"} / tasks=${Array.isArray(plan.refreshTaskModes) && plan.refreshTaskModes.length ? plan.refreshTaskModes.join(",") : "none"}`);
       }
+      if (item.realApprovalPlanEvidence) {
+        const evidence = item.realApprovalPlanEvidence;
+        lines.push(`  realApprovalPlan preLogin: complete=${evidence.preLoginChecklistComplete ? "true" : "false"} / checks=${evidence.preLoginChecklistCount ?? "unknown"} / next=${evidence.nextNoTrafficAction || "unknown"}`);
+        lines.push(`  realApprovalPlan preLogin checks: ${Array.isArray(evidence.preLoginChecklistIds) && evidence.preLoginChecklistIds.length ? evidence.preLoginChecklistIds.join(" -> ") : "missing"}`);
+      }
       if (item.toolBridgeEvidence) {
         const evidence = item.toolBridgeEvidence;
         lines.push(`  toolBridge: mode=${evidence.mode || "unknown"} / transport=${evidence.transport || "unknown"} / adapter=${evidence.localAdapter || "unknown"}`);
