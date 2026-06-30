@@ -2386,6 +2386,72 @@ if (args.has("--self-test")) {
       return failures;
     }
 
+    const fakeRoadmapTaskModes = [
+      "free-chat",
+      "web-search",
+      "local-project",
+      "coding-project",
+      "multi-turn-project",
+      "repo-file-edit",
+      "repo-multi-file-edit",
+      "report-site",
+      "complex-project",
+    ];
+
+    function fakeRealTaskCoverageRoadmapReport(profileOverrides = {}) {
+      const profileNames = ["core", "agentic", "extended", "all"];
+      const profiles = profileNames.map((profile) => ({
+        profile,
+        taskCount: profile === "core" ? 4 : 2,
+        artifactProofRequiredCount: 1,
+        artifactProofCompleteCount: 1,
+        missingArtifactProofTasks: [],
+        profileArtifactProofComplete: true,
+        resultProofRequiredCount: profile === "core" ? 4 : 2,
+        resultProofCompleteCount: profile === "core" ? 4 : 2,
+        missingResultProofTasks: [],
+        profileResultProofComplete: true,
+        refreshCommand: `node scripts/test-anticodex-desktop-task-suite.mjs --suite-profile ${profile} --allow-real-traffic`,
+        ...(profileOverrides[profile] || {}),
+      }));
+      return {
+        ok: true,
+        reportName: "real-task-coverage-roadmap",
+        requestedRealTraffic: false,
+        usedRealTraffic: false,
+        behaviorCovered: true,
+        coverageKind: "real-task-coverage-roadmap-report-only",
+        requiredProfiles: profileNames,
+        profiles,
+        taskModes: fakeRoadmapTaskModes,
+        uniqueRefreshTasks: ["web-search"],
+        completeProfiles: ["core", "agentic"],
+        nextProfilesNeedingRealTraffic: ["extended"],
+        taskArtifactProofs: fakeRoadmapTaskModes.slice(0, 5).map((taskMode) => ({
+          taskMode,
+          artifactProofComplete: true,
+          artifactProofCount: 1,
+          missingArtifactProofKeys: [],
+        })),
+        missingArtifactProofTasks: [],
+        missingArtifactProofTaskCount: 0,
+        taskResultProofs: fakeRoadmapTaskModes.map((taskMode) => ({
+          taskMode,
+          resultProofComplete: true,
+          resultProofCount: 1,
+          missingResultProofKeys: [],
+        })),
+        missingResultProofTasks: [],
+        missingResultProofTaskCount: 0,
+        approvalRequiredForRefresh: true,
+        minimalRefreshCommandRequiresRealTraffic: true,
+        minimalRefreshCommand: "node scripts/test-anticodex-desktop-task-suite.mjs --tasks web-search --allow-real-traffic",
+        realTrafficApprovalReason: "Some roadmap refreshes require explicit approved real traffic.",
+        recommendedNoTrafficNextStep: "Keep no-traffic gates green while waiting for approval.",
+        failures: [],
+      };
+    }
+
     writeFakeLatestReport("latest-missing-history.json", {
       ok: true,
       reportName: "missing-history",
@@ -3237,6 +3303,18 @@ if (args.has("--self-test")) {
       "model_thinking_reasoning_level",
       "model_thinking_supports_thinking",
       "model_thinking_budget",
+    ]);
+    writeFakeLatestReport("latest-real-task-coverage-roadmap.json", fakeRealTaskCoverageRoadmapReport({
+      core: {
+        resultProofRequiredCount: 4,
+        resultProofCompleteCount: 3,
+        missingResultProofTasks: ["free-chat"],
+        profileResultProofComplete: false,
+      },
+    }));
+    semanticFailures.realTaskCoverageRoadmapProfileProofs = assertSemanticFailures("realTaskCoverageRoadmap", "self-test failed: roadmap profile-level result proof rollup weakness satisfied the gate", [
+      "real_task_coverage_roadmap_core_result_profile_incomplete",
+      "real_task_coverage_roadmap_core_result_profile_missing_tasks",
     ]);
     semanticFailures.ambientSuggestions = assertSemanticFailures("ambientSuggestions", "self-test failed: semantically invalid ambient-suggestions report satisfied the gate", [
       "expected_no_real_traffic",
