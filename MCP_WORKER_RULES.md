@@ -119,6 +119,14 @@ After every failure, before another dispatch:
 - Cause classification: slow worker/no evidence on a tiny low-coupling task, not a code review result.
 - Rule change: if a one-behavior Manager text patch has no diff after two status windows, record the no-evidence result and let the main agent apply the surgical patch with direct focused tests.
 
+### 2026-07-01 - Kilo external forbidden path rejected
+
+- Job: not started by server.
+- Task: append one post-verification finding to `findings.md`.
+- Result: MCP rejected the request before launch because `forbidden_paths` contained external runtime paths outside the worker cwd.
+- Cause classification: worker dispatch parameter error.
+- Rule change: keep Kilo `forbidden_paths` inside the worker cwd; mention external runtime directories only in task prose when they must not be touched.
+
 ### 2026-06-30 - MIMO start rejected workspace-external forbidden paths
 
 - Job: no job id; `mimo_start_implementation` rejected the request before worker launch.
