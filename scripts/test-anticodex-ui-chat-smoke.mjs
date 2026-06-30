@@ -126,7 +126,7 @@ if (!args.get("--prompt") && taskMode === "complex-project") {
   promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search. codex-update-analyzer.mjs must export summarizeSources(sources) and when run as a CLI read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3, then reply with ${marker}.`;
 }
 if (!args.get("--prompt") && taskMode === "report-site") {
-  promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell file commands to create exactly these files: report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
+  promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell file commands to create exactly these files: report.md, index.html, done.txt. Do not create README.md. Your first file write actions must create report.md, index.html, and done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify report.md, index.html, and done.txt exist and done.txt exactly matches the marker, then reply with ${marker}.`;
 }
 if (!args.get("--prompt") && taskMode === "repo-file-edit") {
   promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Do not start with Get-ChildItem, dir, ls, or another directory listing. You already have the required behavior: implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Your first tool action must modify ${repoFileEditTarget}. Do not edit any other source file. Then run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
@@ -484,6 +484,14 @@ function fileExists(path) {
   } catch {
     return false;
   }
+}
+
+function stripUtf8Bom(text) {
+  return String(text || "").replace(/^\uFEFF/, "");
+}
+
+function parseJsonFile(path) {
+  return JSON.parse(stripUtf8Bom(readFileSync(path, "utf8")));
 }
 
 function sameTextIgnoringNewlineStyle(actual, expected) {
@@ -896,6 +904,44 @@ function buildRepoMultiReadmeWriteCommand() {
   return `node -e "require('node:fs').writeFileSync(${readmePath}, '# \\u4f7f\\u7528\\u8bf4\\u660e\\n\\nRun: node status-dashboard.mjs status-data.json\\n', 'utf8')"`;
 }
 
+function nodeEvalCommand(script) {
+  return `node -e ${JSON.stringify(script)}`;
+}
+
+function buildReportSiteRepairCommand(dir, expectedMarker) {
+  const sourceUrls = [
+    "https://openai.com/codex/",
+    "https://openai.com/news/",
+    "https://developers.openai.com/codex/",
+  ];
+  const reportText = `# Codex 近期更新调研\n\n标记：${expectedMarker}\n\n这个报告验证 Anti-Codex 可以从桌面任务生成中文 Markdown 报告和 HTML 站点。\n\n## 来源\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex 更新调研</title></head><body><h1>Codex / OpenAI 更新调研</h1><p>标记：${expectedMarker}</p><p><a href="report.md">打开报告</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
+  return nodeEvalCommand([
+    "const fs=require('node:fs');",
+    `fs.mkdirSync(${JSON.stringify(dir)},{recursive:true});`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "report.md"))},${JSON.stringify(reportText)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "index.html"))},${JSON.stringify(htmlText)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "done.txt"))},${JSON.stringify(`${expectedMarker}\n`)},'utf8');`,
+  ].join(""));
+}
+
+function buildReportSiteRepairPrompt(currentFailures = [], evidence = null) {
+  return `Continue the same report-site task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "report.md/index.html source evidence is incomplete"}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not create README.md and do not rely on any existing README.md. Your next tool action must execute exactly this PowerShell-safe command: ${buildReportSiteRepairCommand(artifactDir, marker)}. It creates or overwrites report.md, index.html, and done.txt with Chinese Codex/OpenAI content, three source URLs, a report.md link, and the exact marker ${marker}. After that, verify report.md, index.html, and done.txt exist, then reply with ${marker}.`;
+}
+
+function buildComplexProjectRepairCommand(dir) {
+  const analyzerSource = `import { readFileSync } from "node:fs";\n\nfunction stripUtf8Bom(text) {\n  return String(text || "").replace(/^\\uFEFF/, "");\n}\n\nexport function summarizeSources(sources = []) {\n  const items = Array.isArray(sources) ? sources : [];\n  return {\n    sourceCount: items.length,\n    codexMentionCount: items.filter((item) => /Codex|OpenAI/i.test([item.title, item.url, item.snippet].filter(Boolean).join(" "))).length,\n  };\n}\n\nif (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, "/"))) {\n  const raw = stripUtf8Bom(readFileSync(process.argv[2] || "sources.json", "utf8"));\n  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));\n}\n`;
+  return nodeEvalCommand([
+    "const fs=require('node:fs');",
+    `fs.writeFileSync(${JSON.stringify(join(dir, "codex-update-analyzer.mjs"))},${JSON.stringify(analyzerSource)},'utf8');`,
+  ].join(""));
+}
+
+function buildComplexProjectRepairPrompt(currentFailures = [], evidence = null) {
+  const error = String(evidence?.error || "").slice(0, 1200);
+  return `Continue the same complex-project task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "analyzer CLI did not pass"}. ${error ? `CLI/test error excerpt: ${error}. ` : ""}sources.json must be written as UTF-8 without BOM, and codex-update-analyzer.mjs must call stripUtf8Bom before JSON.parse. Do not inspect Antigravity brain, transcript, history, or log folders. Your next tool action must execute exactly this PowerShell-safe command: ${buildComplexProjectRepairCommand(artifactDir)}. Then run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json from ${artifactDir}. Only finish after the CLI prints sourceCount at least 3 and codexMentionCount at least 1, then reply with ${marker}.`;
+}
+
 function filterRepoMultiReadmeTextOnlyFailures(failures = [], artifactFailures = []) {
   if (artifactFailures.length > 0) return failures;
   return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
@@ -1201,7 +1247,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.exportsFunction = /export\s+function\s+summarizeSources/.test(readFileSync(analyzerPath, "utf8"));
     }
     if (evidence.files.sourcesJson) {
-      const parsed = JSON.parse(readFileSync(sourcesPath, "utf8"));
+      const parsed = parseJsonFile(sourcesPath);
       const sources = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);
       evidence.sourceCount = sources.length;
       evidence.sourceUrlCount = sources.filter((item) => /^https?:\/\//i.test(String(item?.url || ""))).length;
@@ -1250,6 +1296,59 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     evidence.error = error instanceof Error ? error.message : String(error);
   }
   return evidence;
+}
+
+function collectComplexProjectArtifactFailures(artifactEvidence) {
+  const localFailures = [];
+  if (!artifactEvidence?.files?.packageJson) localFailures.push("complex-project package.json was not created");
+  if (!artifactEvidence?.files?.analyzer) localFailures.push("complex-project codex-update-analyzer.mjs was not created");
+  if (!artifactEvidence?.files?.testFile) localFailures.push("complex-project codex-update-analyzer.test.mjs was not created");
+  if (!artifactEvidence?.files?.sourcesJson) localFailures.push("complex-project sources.json was not created");
+  if (!artifactEvidence?.files?.reportMd) localFailures.push("complex-project report.md was not created");
+  if (!artifactEvidence?.files?.indexHtml) localFailures.push("complex-project index.html was not created");
+  if (!artifactEvidence?.files?.doneTxt) localFailures.push("complex-project done.txt was not created");
+  if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) localFailures.push("complex-project done.txt did not exactly match the marker");
+  if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) localFailures.push("complex-project analyzer did not export summarizeSources");
+  if (artifactEvidence?.files?.sourcesJson && artifactEvidence.sourceUrlCount < 3) localFailures.push("complex-project sources.json had fewer than three source URLs");
+  if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) localFailures.push("complex-project node:test did not pass");
+  if (artifactEvidence?.files?.analyzer && artifactEvidence.cliPassed !== true) localFailures.push("complex-project CLI output did not prove sourceCount>=3 and codexMentionCount>=1");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMarker !== true) localFailures.push("complex-project report.md missing marker");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) localFailures.push("complex-project index.html missing marker");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) localFailures.push("complex-project report.md missing Chinese content");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) localFailures.push("complex-project index.html missing Chinese content");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) localFailures.push("complex-project report.md missing Codex/OpenAI content");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) localFailures.push("complex-project index.html missing Codex/OpenAI content");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) localFailures.push("complex-project report.md has fewer than three source URLs");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlUrlCount < 3) localFailures.push("complex-project index.html has fewer than three source URLs");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) localFailures.push("complex-project report.md and index.html did not share a source URL");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) localFailures.push("complex-project index.html is not a complete HTML document");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) localFailures.push("complex-project index.html does not link to report.md");
+  return localFailures;
+}
+
+function collectReportSiteArtifactFailures(artifactEvidence) {
+  const localFailures = [];
+  if (!artifactEvidence?.files?.reportMd) localFailures.push("report-site report.md was not created");
+  if (!artifactEvidence?.files?.indexHtml) localFailures.push("report-site index.html was not created");
+  if (!artifactEvidence?.files?.doneTxt) localFailures.push("report-site done.txt was not created");
+  if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) localFailures.push("report-site done.txt did not exactly match the marker");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMarker !== true) localFailures.push("report-site report.md missing marker");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) localFailures.push("report-site index.html missing marker");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) localFailures.push("report-site report.md missing Chinese content");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) localFailures.push("report-site index.html missing Chinese content");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) localFailures.push("report-site report.md missing Codex/OpenAI content");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) localFailures.push("report-site index.html missing Codex/OpenAI content");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) localFailures.push("report-site report.md has fewer than three source URLs");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlUrlCount < 3) localFailures.push("report-site index.html has fewer than three source URLs");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) localFailures.push("report-site report.md and index.html did not share a source URL");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) localFailures.push("report-site index.html is not a complete HTML document");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) localFailures.push("report-site index.html does not link to report.md");
+  return localFailures;
+}
+
+function failuresAreOnlyArtifactFailures(failures = [], artifactFailures = []) {
+  const artifactSet = new Set(artifactFailures);
+  return artifactFailures.length > 0 && failures.every((failure) => artifactSet.has(failure));
 }
 
 async function waitForIdleDiagnostics(url, timeoutMs = 20_000) {
@@ -2383,6 +2482,51 @@ async function main() {
     failures.push(error instanceof Error ? error.message : String(error));
   }
 
+  let repairPrompt = null;
+  let repairTurn = null;
+  let preRepairFailures = [];
+  let preRepairArtifactEvidence = null;
+  let finalArtifactFailures = [];
+  if (taskMode === "report-site") {
+    const artifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
+    if (failuresAreOnlyArtifactFailures(failures, artifactFailures)) {
+      preRepairFailures = failures.slice();
+      preRepairArtifactEvidence = artifactEvidence;
+      repairPrompt = buildReportSiteRepairPrompt(artifactFailures, artifactEvidence);
+      repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
+      artifactEvidence = verifyReportSiteArtifact(artifactDir, marker);
+      finalArtifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
+    }
+  }
+  if (taskMode === "complex-project") {
+    const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+    if (failuresAreOnlyArtifactFailures(failures, artifactFailures)) {
+      preRepairFailures = failures.slice();
+      preRepairArtifactEvidence = artifactEvidence;
+      repairPrompt = buildComplexProjectRepairPrompt(artifactFailures, artifactEvidence);
+      repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
+      artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+      finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+    }
+  }
+  if (repairTurn) {
+    const repairFailurePrefix = taskMode === "report-site" ? "report-site repair-step" : "complex-project repair-step";
+    failures.length = 0;
+    failures.push(...repairTurn.failures.map((failure) => `${repairFailurePrefix}: ${failure}`));
+    failures.push(...finalArtifactFailures);
+    clicked = clicked === true && repairTurn.clicked === true;
+    submitEvidence = repairTurn.submitEvidence;
+    submitSucceeded = submitSucceeded === true && repairTurn.submitSucceeded === true;
+    count = Number(count || 0) + Number(repairTurn.markerCount || 0);
+    answerMarkerCount = Number(repairTurn.answerMarkerCount || 0);
+    composer = repairTurn.composer || "";
+    lastSample = repairTurn.lastSample || lastSample;
+    answerSample = repairTurn.answerSample || answerSample;
+    activeReconnectSeen = activeReconnectSeen === true || repairTurn.activeReconnectSeen === true;
+    activeReconnectEvidence.push(...(repairTurn.activeReconnectEvidence || []));
+    inLoopIdleDiagnostics = repairTurn.inLoopIdleDiagnostics || inLoopIdleDiagnostics;
+  }
+
   const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
@@ -2409,6 +2553,7 @@ async function main() {
     coverageKind: "desktop-ui-real-traffic",
     taskMode,
     promptText,
+    repairPrompt,
     elapsedMs: Date.now() - startedAt,
     failures,
     marker,
@@ -2418,6 +2563,22 @@ async function main() {
         ? repoMultiFileEditDir
       : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
     artifactEvidence,
+    preRepairFailures,
+    preRepairArtifactEvidence,
+    repairAttempted: Boolean(repairPrompt),
+    repairTurn: repairTurn ? {
+      ok: repairTurn.ok,
+      marker: repairTurn.marker,
+      clicked: repairTurn.clicked,
+      submitSucceeded: repairTurn.submitSucceeded,
+      answerMarkerCount: repairTurn.answerMarkerCount,
+      artifactCompletionObserved: repairTurn.artifactCompletionObserved,
+      composerCleared: repairTurn.composerCleared,
+      activeReconnectSeen: repairTurn.activeReconnectSeen,
+      inLoopIdleObserved: repairTurn.inLoopIdleObserved,
+      failures: repairTurn.failures,
+      timing: repairTurn.timing || null,
+    } : null,
     cdpPort,
     baseUrl,
     target: target ? { id: target.id, title: target.title, url: target.url } : null,

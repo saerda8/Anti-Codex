@@ -12228,7 +12228,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /staleRecovery/);
   assert.match(verifier, /Search the web for recent Codex updates/);
   assert.match(verifier, /Use PowerShell file commands to create exactly these files/);
+  assert.match(verifier, /Do not create README\.md/);
+  assert.match(verifier, /Your first file write actions must create report\.md, index\.html, and done\.txt/);
   assert.match(verifier, /Do not inspect Antigravity brain, transcript, history, or log folders/);
+  assert.match(verifier, /function stripUtf8Bom/);
+  assert.match(verifier, /function parseJsonFile/);
+  assert.match(verifier, /JSON\.parse\(stripUtf8Bom/);
   assert.match(verifier, /taskMode === "local-project"/);
   assert.match(verifier, /function verifyLocalProjectArtifact/);
   assert.match(verifier, /function verifyCodingProjectArtifact/);
@@ -12238,6 +12243,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /node:test did not pass/);
   assert.match(verifier, /execFileSync\(process\.execPath, \["--test", testPath\]/);
   assert.match(verifier, /CLI output did not contain red=2 and blue=1/);
+  assert.match(verifier, /function buildReportSiteRepairPrompt/);
+  assert.match(verifier, /function buildComplexProjectRepairPrompt/);
+  assert.match(verifier, /report-site repair-step/);
+  assert.match(verifier, /complex-project repair-step/);
+  assert.match(verifier, /sources\.json must be written as UTF-8 without BOM/);
+  assert.match(verifier, /stripUtf8Bom before JSON\.parse/);
   assert.match(verifier, /report-site report\.md was not created/);
   assert.match(verifier, /report-site index\.html has fewer than three source URLs/);
   assert.match(verifier, /report-site report\.md missing Chinese content/);
