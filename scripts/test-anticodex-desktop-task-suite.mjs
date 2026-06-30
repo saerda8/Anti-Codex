@@ -27,6 +27,8 @@ const selectedTasks = String(args.get("--tasks") || defaultTasks.join(","))
   .map((item) => item.trim())
   .filter(Boolean);
 const keepArtifacts = args.has("--keep-artifacts");
+const maxRealEvidenceAgeHours = Math.max(1, Number(args.get("--max-real-evidence-age-hours") || 24));
+const maxRealEvidenceAgeMs = maxRealEvidenceAgeHours * 60 * 60 * 1000;
 const taskReportExpectations = {
   "exact-marker": {
     file: "latest-ui-chat-smoke.json",
@@ -95,11 +97,12 @@ function parseChildPayload(stdout) {
 
 function auditLatestRealTaskEvidence() {
   const evidence = {};
-  const failures = [];
+  const hardFailures = [];
+  const freshnessFailures = [];
   for (const taskMode of selectedTasks) {
     const expectation = taskReportExpectations[taskMode];
     if (!expectation) {
-      failures.push(`${taskMode}_latest_real_report_expectation_missing`);
+      hardFailures.push(`${taskMode}_latest_real_report_expectation_missing`);
       evidence[taskMode] = {
         taskMode,
         ok: false,
@@ -125,6 +128,9 @@ function auditLatestRealTaskEvidence() {
       markerPresent: false,
       elapsedMs: null,
       mtime: null,
+      ageMs: null,
+      maxAgeMs: maxRealEvidenceAgeMs,
+      fresh: false,
       failures: [],
     };
     if (!item.present) {
@@ -141,24 +147,35 @@ function auditLatestRealTaskEvidence() {
         item.coverageKind = String(parsed.coverageKind || "");
         item.markerPresent = typeof parsed.marker === "string" && parsed.marker.length > 0;
         item.elapsedMs = Number.isFinite(Number(parsed.elapsedMs)) ? Number(parsed.elapsedMs) : null;
-        item.mtime = statSync(reportPath).mtime.toISOString();
+        const reportStat = statSync(reportPath);
+        item.mtime = reportStat.mtime.toISOString();
+        item.ageMs = Math.max(0, Date.now() - reportStat.mtimeMs);
+        item.fresh = item.ageMs <= maxRealEvidenceAgeMs;
         if (!item.ok) item.failures.push("latest_real_report_not_ok");
         if (!item.requestedRealTraffic) item.failures.push("latest_real_report_not_requested_real_traffic");
         if (!item.usedRealTraffic) item.failures.push("latest_real_report_not_used_real_traffic");
         if (item.reportName !== expectation.expectedReportName) item.failures.push("latest_real_report_name_mismatch");
         if (item.actualTaskMode !== expectation.expectedTaskMode) item.failures.push("latest_real_report_task_mode_mismatch");
+        if (!item.fresh) item.failures.push("latest_real_report_stale");
       } catch (error) {
         item.failures.push(`latest_real_report_unparseable:${error.message}`);
       }
     }
     if (item.failures.length > 0) {
-      failures.push(...item.failures.map((failure) => `${taskMode}_${failure}`));
+      for (const failure of item.failures) {
+        const scopedFailure = `${taskMode}_${failure}`;
+        if (failure === "latest_real_report_stale") freshnessFailures.push(scopedFailure);
+        else hardFailures.push(scopedFailure);
+      }
     }
     evidence[taskMode] = item;
   }
   return {
-    complete: failures.length === 0,
-    failures,
+    complete: hardFailures.length === 0,
+    fresh: freshnessFailures.length === 0,
+    failures: [...hardFailures, ...freshnessFailures],
+    hardFailures,
+    freshnessFailures,
     evidence,
   };
 }
@@ -305,9 +322,13 @@ const payload = {
   selectedTasks,
   perTaskReports,
   tasks,
+  maxRealEvidenceAgeHours,
   latestRealTaskEvidence: realTaskAudit.evidence,
   realTaskEvidenceComplete: realTaskAudit.complete,
+  realTaskEvidenceFresh: realTaskAudit.fresh,
   realTaskEvidenceFailures: realTaskAudit.failures,
+  realTaskEvidenceHardFailures: realTaskAudit.hardFailures,
+  realTaskEvidenceFreshnessFailures: realTaskAudit.freshnessFailures,
   failures,
   elapsedMs: Date.now() - startedAt,
 };

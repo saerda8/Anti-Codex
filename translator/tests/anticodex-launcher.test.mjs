@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { join, resolve } from "node:path";
 import os from "node:os";
@@ -12456,11 +12456,16 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /perTaskReports/);
   assert.match(suite, /latestRealTaskEvidence/);
   assert.match(suite, /realTaskEvidenceComplete/);
+  assert.match(suite, /realTaskEvidenceFresh/);
+  assert.match(suite, /maxRealEvidenceAgeHours/);
   assert.match(suite, /realTaskEvidenceFailures/);
+  assert.match(suite, /latest_real_report_stale/);
   assert.match(suite, /expectedReportName/);
   assert.match(suite, /expectedTaskMode/);
   assert.match(summarizer, /desktopTaskSuiteEvidence/);
   assert.match(summarizer, /realTaskEvidenceComplete/);
+  assert.match(summarizer, /realTaskEvidenceFresh/);
+  assert.match(summarizer, /realTaskEvidenceFreshnessFailureCount/);
   assert.match(summarizer, /realTaskEvidenceTasks/);
   assert.doesNotMatch(suite, /Promise\.all/);
   assert.match(releaseGates, /scripts\/test-anticodex-desktop-task-suite\.mjs/);
@@ -12470,6 +12475,53 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(server, /latest-desktop-task-suite\.json/);
   assert.match(installedOverall, /latest-desktop-task-suite\.json/);
   assert.match(uiState, /expectedDailyActionIds[\s\S]*"secondAccountLoginStatus"/);
+});
+
+test("desktop task suite dry-run audits stale latest real task evidence without using traffic", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-desktop-suite-evidence-"));
+  const reports = {
+    "latest-ui-chat-smoke.json": ["ui-chat-smoke", "exact-marker"],
+    "latest-ui-local-project-smoke.json": ["ui-local-project-smoke", "local-project"],
+    "latest-ui-repo-file-edit-smoke.json": ["ui-repo-file-edit-smoke", "repo-file-edit"],
+    "latest-ui-repo-multi-file-edit-smoke.json": ["ui-repo-multi-file-edit-smoke", "repo-multi-file-edit"],
+  };
+  try {
+    for (const [file, [reportName, taskMode]] of Object.entries(reports)) {
+      writeFileSync(join(tempRoot, file), `${JSON.stringify({
+        ok: true,
+        reportName,
+        requestedRealTraffic: true,
+        usedRealTraffic: true,
+        taskMode,
+        coverageKind: "desktop-ui-real-traffic",
+        marker: `MARKER_${taskMode}`,
+        elapsedMs: 1000,
+        failures: [],
+      }, null, 2)}\n`, "utf8");
+    }
+    const stalePath = join(tempRoot, "latest-ui-repo-multi-file-edit-smoke.json");
+    const staleDate = new Date(Date.now() - 26 * 60 * 60 * 1000);
+    utimesSync(stalePath, staleDate, staleDate);
+
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "test-anticodex-desktop-task-suite.mjs"),
+      "--report-root",
+      tempRoot,
+      "--max-real-evidence-age-hours",
+      "24",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.requestedRealTraffic, false);
+    assert.equal(report.usedRealTraffic, false);
+    assert.equal(report.realTaskEvidenceComplete, true);
+    assert.equal(report.realTaskEvidenceFresh, false);
+    assert.ok(report.realTaskEvidenceFailures.some((failure) => failure === "repo-multi-file-edit_latest_real_report_stale"));
+    assert.equal(report.latestRealTaskEvidence["repo-multi-file-edit"].fresh, false);
+    assert.ok(report.latestRealTaskEvidence["repo-multi-file-edit"].ageMs > 24 * 60 * 60 * 1000);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("optional and special latest reports stay visible without becoming release-required", () => {
