@@ -199,6 +199,7 @@ const isReleaseGateReport = report?.reportName === "release-gates" || /latest-re
 const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-db-guard\.json$/i.test(path) || has(report, "triggerPresent") || has(report, "protected");
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
+const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1161,6 +1162,34 @@ const summary = {
       taskModeMatches: item && has(item, "expectedTaskMode") && has(item, "actualTaskMode") ? asString(item.expectedTaskMode) === asString(item.actualTaskMode) : null,
       failureCount: Array.isArray(item?.failures) ? item.failures.length : null,
     })) : [],
+  } : null,
+  goalReadinessEvidence: isGoalReadinessReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    goalComplete: boolField(report, "goalComplete"),
+    objective: asString(report.objective),
+    codexClientCopyProven: boolField(report.proven || {}, "codexClientCopy"),
+    workerMcpProven: boolField(report.proven || {}, "workerMcp"),
+    desktopAgenticTasksProven: boolField(report.proven || {}, "desktopAgenticTasks"),
+    releaseShortPathProven: boolField(report.proven || {}, "releaseShortPath"),
+    accountIsolationPreparedOnly: boolField(report.proven || {}, "accountIsolationPreparedOnly"),
+    blockerCount: Array.isArray(report.blockers) ? report.blockers.length : null,
+    blockers: Array.isArray(report.blockers) ? asStringArray(report.blockers) : [],
+    nextRequiredUserAction: asString(report.nextRequiredUserAction),
+    shortReady: boolField(report.releaseGateStatus || {}, "shortReady"),
+    releaseReady: boolField(report.releaseGateStatus || {}, "releaseReady"),
+    releaseBlockedOnlyByRequiredRealTraffic: boolField(report.releaseGateStatus || {}, "releaseBlockedOnlyByRequiredRealTraffic"),
+    requiredRealTrafficBlockedGates: report.releaseGateStatus && Array.isArray(report.releaseGateStatus.requiredRealTrafficBlockedGates)
+      ? asStringArray(report.releaseGateStatus.requiredRealTrafficBlockedGates)
+      : [],
+    workerMcpMissingServers: report.workerMcp && Array.isArray(report.workerMcp.missingServers) ? asStringArray(report.workerMcp.missingServers) : [],
+    desktopMissingAgenticTasks: report.desktopAgenticTasks && Array.isArray(report.desktopAgenticTasks.missingAgenticTasks) ? asStringArray(report.desktopAgenticTasks.missingAgenticTasks) : [],
+    accountCompletionState: asString(report.antigravityAccountIsolation?.completionState),
+    accountBlockingReason: asString(report.antigravityAccountIsolation?.blockingReason),
+    accountReleaseAcceptableProof: boolField(report.antigravityAccountIsolation || {}, "releaseAcceptableAccountProof"),
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),

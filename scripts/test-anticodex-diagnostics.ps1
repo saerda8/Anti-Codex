@@ -798,6 +798,44 @@ function Test-DesktopTaskSuiteSummaryEvidence {
     }
 }
 
+function Test-GoalReadinessSummaryEvidence {
+    param($GoalReadinessSummary)
+    if (-not $GoalReadinessSummary) {
+        Add-Failure "diagnostic reports summary missing latest-goal-readiness.json"
+        return
+    }
+
+    $evidence = $GoalReadinessSummary.goalReadinessEvidence
+    if (-not $evidence) {
+        Add-Failure "goal-readiness summary missing goalReadinessEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "goal-readiness") { Add-Failure "goal-readiness summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "goal-readiness summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "goal-readiness summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "goal-readiness summary behavior not covered" }
+    if ($evidence.coverageKind -ne "goal-readiness-report-only") { Add-Failure "goal-readiness summary coverage kind mismatch" }
+    if ($evidence.goalComplete -eq $true) { Add-Failure "goal-readiness summary unexpectedly claims goal complete" }
+    if ($evidence.codexClientCopyProven -ne $true) { Add-Failure "goal-readiness summary missing Codex client-copy proof" }
+    if ($evidence.workerMcpProven -ne $true) { Add-Failure "goal-readiness summary missing worker MCP proof" }
+    if ($evidence.desktopAgenticTasksProven -ne $true) { Add-Failure "goal-readiness summary missing desktop agentic task proof" }
+    if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
+    if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
+    if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
+    if ($evidence.releaseReady -eq $true) { Add-Failure "goal-readiness summary unexpectedly claims release ready" }
+    if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing real-traffic-only release blocker" }
+    if (@(As-FlatArray $evidence.requiredRealTrafficBlockedGates).Count -lt 1) { Add-Failure "goal-readiness summary missing required real-traffic blocked gates" }
+    if (@(As-FlatArray $evidence.workerMcpMissingServers).Count -ne 0) { Add-Failure "goal-readiness summary has missing worker MCP servers" }
+    if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
+    if ($evidence.accountReleaseAcceptableProof -ne $false) { Add-Failure "goal-readiness summary account proof unexpectedly acceptable" }
+    if (-not [string]$evidence.accountCompletionState) { Add-Failure "goal-readiness summary missing account completion state" }
+    if (-not [string]$evidence.accountBlockingReason) { Add-Failure "goal-readiness summary missing account blocking reason" }
+    if (-not [string]$evidence.nextRequiredUserAction) { Add-Failure "goal-readiness summary missing next required user action" }
+    if ([int]$evidence.blockerCount -lt 1) { Add-Failure "goal-readiness summary missing blockers" }
+    if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -814,6 +852,7 @@ function Test-ReportsSummary {
     $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
     $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
     $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
+    $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -856,6 +895,7 @@ function Test-ReportsSummary {
     }
     Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary
     Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
+    Test-GoalReadinessSummaryEvidence $goalReadinessSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
@@ -940,6 +980,12 @@ function Test-ReportsSummary {
             [pscustomobject]@{
                 ok = $desktopTaskSuiteSummary.ok
                 evidence = $desktopTaskSuiteSummary.desktopTaskSuiteEvidence
+            }
+        } else { $null }
+        goalReadiness = if ($goalReadinessSummary) {
+            [pscustomobject]@{
+                ok = $goalReadinessSummary.ok
+                evidence = $goalReadinessSummary.goalReadinessEvidence
             }
         } else { $null }
     }
@@ -1214,6 +1260,8 @@ function Test-DiagnosticBundle {
         }
         $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
         Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
+        $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
+        Test-GoalReadinessSummaryEvidence $goalReadinessSummary
         $syncReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-sync-readiness.json" } | Select-Object -First 1)[0]
         if (-not $syncReadinessSummary) {
             Add-Failure "diagnostic reports summary missing latest-sync-readiness.json"

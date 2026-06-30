@@ -12656,10 +12656,15 @@ test("optional and special latest reports stay visible without becoming release-
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
+  const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
   const optionalReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*false[^}]*\}/g), (match) => match[1]))).sort();
   const specialReports = [
     "latest-antigravity-cli-profile-prepare.json",
     "latest-diagnostics.json",
+    "latest-goal-readiness.json",
     "latest-release-gates.json",
     "latest-shortcut-repair.json",
     "latest-ui-coding-project-smoke.json",
@@ -12680,6 +12685,19 @@ test("optional and special latest reports stay visible without becoming release-
     assert.ok(server.includes(report), `${report} missing from Manager latest reports`);
     assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
   }
+  assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
+  assert.match(summarizer, /goalReadinessEvidence/);
+  assert.match(collector, /goalReadinessEvidence = \$json\.goalReadinessEvidence/);
+  assert.match(diagnostics, /goal-readiness summary missing goalReadinessEvidence/);
+  assert.match(diagnostics, /goal-readiness summary unexpectedly claims goal complete/);
+  assert.match(goalReadiness, /reportName: "goal-readiness"/);
+  assert.match(goalReadiness, /requestedRealTraffic: false/);
+  assert.match(goalReadiness, /usedRealTraffic: false/);
+  assert.match(goalReadiness, /codexClientCopy/);
+  assert.match(goalReadiness, /workerMcp/);
+  assert.match(goalReadiness, /desktopAgenticTasks/);
+  assert.match(goalReadiness, /antigravityAccountIsolation/);
+  assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });
 
 test("Anti-Codex ships a read-only tool bridge mode verifier", () => {

@@ -240,6 +240,7 @@ function Read-JsonSummary {
             syncReadinessEvidence = $json.syncReadinessEvidence
             installedOverallEvidence = $json.installedOverallEvidence
             desktopTaskSuiteEvidence = $json.desktopTaskSuiteEvidence
+            goalReadinessEvidence = $json.goalReadinessEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -392,6 +393,7 @@ $latestReports = @(
     "latest-post-verification.json",
     "latest-codex-responses.json",
     "latest-desktop-task-suite.json",
+    "latest-goal-readiness.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",
