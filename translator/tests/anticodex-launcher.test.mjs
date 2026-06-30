@@ -12502,6 +12502,9 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /realTaskEvidenceFailures/);
   assert.match(suite, /realTaskEvidenceRefreshPlan/);
   assert.match(suite, /requiresExplicitUserApproval/);
+  assert.match(suite, /commandArgs: \[\.\.\.command\]/);
+  assert.match(suite, /approvalSummary/);
+  assert.match(suite, /taskCount: refreshTaskModes\.length/);
   assert.match(suite, /realTrafficApprovalReason = "real_traffic_required"/);
   assert.match(suite, /staleTaskModes/);
   assert.match(suite, /hardFailureTaskModes/);
@@ -12605,6 +12608,10 @@ test("desktop task suite dry-run audits stale latest real task evidence without 
     assert.equal(report.realTaskEvidenceRefreshPlan.approvalReason, "real_traffic_required");
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--tasks repo-multi-file-edit"), true);
+    assert.ok(Array.isArray(report.realTaskEvidenceRefreshPlan.commandArgs));
+    assert.ok(report.realTaskEvidenceRefreshPlan.commandArgs.includes("--allow-real-traffic"));
+    assert.equal(report.realTaskEvidenceRefreshPlan.approvalSummary.taskCount, 1);
+    assert.deepEqual(report.realTaskEvidenceRefreshPlan.approvalSummary.refreshTaskModes, ["repo-multi-file-edit"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -12680,10 +12687,13 @@ test("desktop task suite can preview all task refreshes without overwriting late
   const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-desktop-suite-preview-"));
   try {
     const agenticReports = {
+      "latest-ui-chat-smoke.json": ["ui-chat-smoke", "exact-marker"],
+      "latest-ui-local-project-smoke.json": ["ui-local-project-smoke", "local-project"],
       "latest-ui-coding-project-smoke.json": ["ui-coding-project-smoke", "coding-project"],
       "latest-ui-multi-turn-project-smoke.json": ["ui-multi-turn-project-smoke", "multi-turn-project"],
       "latest-ui-report-site-smoke.json": ["ui-report-site-smoke", "report-site"],
       "latest-ui-complex-project-smoke.json": ["ui-complex-project-smoke", "complex-project"],
+      "latest-ui-repo-file-edit-smoke.json": ["ui-repo-file-edit-smoke", "repo-file-edit"],
       "latest-ui-repo-multi-file-edit-smoke.json": ["ui-repo-multi-file-edit-smoke", "repo-multi-file-edit"],
     };
     for (const [file, [reportName, taskMode]] of Object.entries(agenticReports)) {
@@ -12734,6 +12744,14 @@ test("desktop task suite can preview all task refreshes without overwriting late
     assert.ok(preview.realTaskEvidenceRefreshPlan.refreshTaskModes.includes("web-search"));
     assert.equal(preview.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
     assert.equal(preview.realTaskEvidenceRefreshPlan.commandPreview.includes("--allow-real-traffic"), true);
+    assert.ok(Array.isArray(preview.realTaskEvidenceRefreshPlan.commandArgs));
+    assert.equal(preview.realTaskEvidenceRefreshPlan.commandArgs.includes("--allow-real-traffic"), true);
+    assert.deepEqual(preview.realTaskEvidenceRefreshPlan.commandArgs.slice(-3), ["--tasks", "free-chat,web-search", "--allow-real-traffic"]);
+    assert.equal(preview.realTaskEvidenceRefreshPlan.approvalSummary.requiresExplicitUserApproval, true);
+    assert.equal(preview.realTaskEvidenceRefreshPlan.approvalSummary.approvalReason, "real_traffic_required");
+    assert.equal(preview.realTaskEvidenceRefreshPlan.approvalSummary.taskCount, 2);
+    assert.deepEqual(preview.realTaskEvidenceRefreshPlan.approvalSummary.refreshTaskModes, ["free-chat", "web-search"]);
+    assert.deepEqual(preview.realTaskEvidenceRefreshPlan.approvalSummary.hardFailureTaskModes, ["free-chat", "web-search"]);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

@@ -281,11 +281,21 @@ function buildRealTaskEvidenceRefreshPlan(realTaskAudit) {
     command.push("--tasks", refreshTaskModes.join(","));
   }
   command.push("--allow-real-traffic");
+  const requiresApproval = refreshTaskModes.length > 0;
   return {
     needed: refreshTaskModes.length > 0,
-    requiresExplicitUserApproval: refreshTaskModes.length > 0,
-    approvalReason: refreshTaskModes.length > 0 ? realTrafficApprovalReason : "",
+    requiresExplicitUserApproval: requiresApproval,
+    approvalReason: requiresApproval ? realTrafficApprovalReason : "",
     commandPreview: command.map(quoteCommandPart).join(" "),
+    commandArgs: [...command],
+    approvalSummary: {
+      requiresExplicitUserApproval: requiresApproval,
+      approvalReason: requiresApproval ? realTrafficApprovalReason : "",
+      taskCount: refreshTaskModes.length,
+      refreshTaskModes,
+      hardFailureTaskModes,
+      staleTaskModes,
+    },
     refreshTaskModes,
     hardFailureTaskModes,
     staleTaskModes,
