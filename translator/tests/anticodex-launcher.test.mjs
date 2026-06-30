@@ -14803,6 +14803,7 @@ test("Antigravity CLI profile prepare: MCP account lane owner must be the exact 
 });
 
 test("Antigravity CLI Windows-user readiness is report-only and surfaced before login", () => {
+  const secondAccountReadinessSummary = readFileSync(resolve(root, "scripts", "test-anticodex-second-account-readiness-summary.ps1"), "utf8");
   const readiness = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-windows-user-readiness.ps1"), "utf8");
   const prepare = readFileSync(resolve(root, "scripts", "test-anticodex-windows-user-account-prepare.ps1"), "utf8");
   const status = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-account-isolation-status.ps1"), "utf8");
@@ -14819,6 +14820,28 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(secondAccountReadinessSummary, /reportName\s*=\s*"second-account-readiness-summary"/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-windows-user-account-prepare\.ps1/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-windows-user-setup-guidance\.ps1/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-second-account-login-entrypoint\.ps1/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-approved-real-run-sequence\.mjs/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-goal-readiness\.mjs/);
+  assert.match(secondAccountReadinessSummary, /test-anticodex-release-gates\.mjs --compact-status/);
+  assert.match(secondAccountReadinessSummary, /latest-second-account-readiness-summary\.json/);
+  assert.match(secondAccountReadinessSummary, /readyForOperatorLogin/);
+  assert.match(secondAccountReadinessSummary, /nextOperatorAction/);
+  assert.match(secondAccountReadinessSummary, /approvedLoginCommandTemplate/);
+  assert.match(secondAccountReadinessSummary, /postLoginProofCommandTemplate/);
+  assert.match(secondAccountReadinessSummary, /requestedRealTraffic\s*=\s*\$false/);
+  assert.match(secondAccountReadinessSummary, /usedRealTraffic\s*=\s*\$false/);
+  assert.match(secondAccountReadinessSummary, /changedSystem\s*=\s*\$false/);
+  assert.match(secondAccountReadinessSummary, /createdUser\s*=\s*\$false/);
+  assert.match(secondAccountReadinessSummary, /startedLogin\s*=\s*\$false/);
+  assert.match(secondAccountReadinessSummary, /capturesPassword\s*=\s*\$false/);
+  assert.match(secondAccountReadinessSummary, /storesPassword\s*=\s*\$false/);
+  assert.doesNotMatch(secondAccountReadinessSummary, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|AllowRealTraffic|StartLoginApproval|\.env/);
 
   assert.match(readiness, /reportName\s*=\s*"antigravity-cli-windows-user-readiness"/);
   assert.match(readiness, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);
@@ -15110,6 +15133,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(syncRuntime, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(syncRuntime, /test-anticodex-windows-user-setup-guidance\.ps1/);
   assert.match(syncRuntime, /test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(syncRuntime, /test-anticodex-second-account-readiness-summary\.ps1/);
   assert.match(syncRuntime, /start-anticodex-second-antigravity-account-login\.ps1/);
   assert.match(syncRuntime, /test-anticodex-second-account-login-entrypoint\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
