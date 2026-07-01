@@ -171,6 +171,17 @@ test("Antigravity routes explicit desktop web searches through stable internal s
   assert.match(server, /if \(directSearch\) \{\s*lines\.length = 0;/);
 });
 
+test("Anti-Codex launcher defaults UI task threads to full access", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
+  assert.match(launcher, /state\["permissions-mode"\]\s*=\s*"full-access"/);
+  assert.match(launcher, /atom\["permissions-mode"\]\s*=\s*"full-access"/);
+  assert.match(launcher, /atom\["agent-mode-by-host-id"\]\.local\s*=\s*"full-access"/);
+  assert.match(launcher, /activePermissionProfile:\s*\{\s*id:\s*":danger-full-access"/);
+  assert.match(launcher, /approvalPolicy:\s*"never"/);
+  assert.match(launcher, /type:\s*"dangerFullAccess"/);
+  assert.doesNotMatch(launcher, /networkAccess:\s*false/);
+});
+
 test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
@@ -1641,6 +1652,9 @@ test("Anti-Codex default runtime config is file-auth and Flash-first", () => {
   assert.match(config, /model_reasoning_effort\s*=\s*"high"/);
   assert.match(config, /model\s*=\s*"gemini-3\.5-flash-low"/);
   assert.match(launcher, /let defaultModel = isAntigravityMode === "True" \? "gemini-3\.5-flash-low" : "gpt-5\.5"/);
+  assert.match(launcher, /\$IS_ANTIGRAVITY_MODE -or \(-not \(Test-Path -LiteralPath \$targetConfigTemplate\)\)/);
+  assert.ok(launcher.includes('if (isAntigravityMode === "True")'));
+  assert.ok(launcher.includes('text = text.replace(/^model\\s*=.*\\r?\\n?/m, "")'));
   assert.equal(slugs[0], "gemini-pro-agent");
   assert.equal(slugs[1], "gemini-3-flash-agent");
   assert.equal(slugs.some((slug) => /^gpt-/i.test(slug)), false);

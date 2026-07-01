@@ -4297,7 +4297,7 @@ test("chatToResponsesFormat repairs stale marker in outgoing local artifact comm
   assert.match(args.command, /Select-String/);
 });
 
-test("chatToResponsesFormat repairs report-site artifact commands without README fallback", () => {
+test("chatToResponsesFormat keeps model-led report-site commands without deterministic guard", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",
     choices: [{
@@ -4331,18 +4331,13 @@ test("chatToResponsesFormat repairs report-site artifact commands without README
 
   const call = fmt.output.find(item => item.type === "function_call");
   const args = JSON.parse(call.arguments);
-  const guard = args.command.slice(args.command.indexOf("Anti-Codex exact artifact marker guard"));
-  assert.match(guard, /\$__antiCodexReportSite = \$true/);
-  assert.match(guard, /report\.md/);
-  assert.match(guard, /index\.html/);
-  assert.match(guard, /UTF8Encoding/);
-  const reportSiteBranchIndex = guard.indexOf("} elseif ($__antiCodexReportSite)");
-  const fallbackReadmeIndex = guard.indexOf("Files: index.html, README.md, done.txt");
-  assert.ok(reportSiteBranchIndex > 0);
-  assert.ok(fallbackReadmeIndex < 0 || reportSiteBranchIndex < fallbackReadmeIndex);
+  assert.match(args.command, /UI_REPORT_SITE_SMOKE_20260701/);
+  assert.doesNotMatch(args.command, /DESKTOP_SMALL_PROJECT/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.doesNotMatch(args.command, /\$__antiCodexReportSite = \$true/);
 });
 
-test("report-site artifact requests start with the report-site shell guard", () => {
+test("report-site artifact requests are model-led and do not start with deterministic guard", () => {
   const request = {
     model: "gemini-pro-agent",
     input: [{
@@ -4358,13 +4353,8 @@ test("report-site artifact requests start with the report-site shell guard", () 
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.ok(completion);
-  const args = JSON.parse(completion.choices[0].message.tool_calls[0].function.arguments);
-  const reportSiteBranchIndex = args.command.indexOf("} elseif ($__antiCodexReportSite)");
-  const fallbackReadmeIndex = args.command.indexOf("Files: index.html, README.md, done.txt");
-  assert.match(args.command, /\$__antiCodexReportSite = \$true/);
-  assert.ok(reportSiteBranchIndex > 0);
-  assert.ok(fallbackReadmeIndex < 0 || reportSiteBranchIndex < fallbackReadmeIndex);
+  assert.equal(completion, null);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
 test("complex project requests do not start with the deterministic artifact guard", () => {
@@ -4694,7 +4684,7 @@ test("agentic visible step-flow rejects user prompt echo as unfinished tool work
   assert.doesNotMatch(fmt.output[0].content[0].text, /^请完成一个多阶段可见任务/);
 });
 
-test("chatToResponsesFormat repairs coding project artifact commands with runnable files", () => {
+test("chatToResponsesFormat keeps model-led coding project commands without deterministic guard", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",
     choices: [{
@@ -4730,16 +4720,12 @@ test("chatToResponsesFormat repairs coding project artifact commands with runnab
   const args = JSON.parse(call.arguments);
   assert.match(args.command, /DESKTOP_CODING_PROJECT_DONE_20260627/);
   assert.doesNotMatch(args.command, /DESKTOP_SMALL_PROJECT/);
-  assert.match(args.command, /Anti-Codex exact artifact marker guard/);
-  assert.match(args.command, /package\.json/);
-  assert.match(args.command, /word-tally\.mjs/);
-  assert.match(args.command, /word-tally\.test\.mjs/);
-  assert.match(args.command, /export function tallyWords/);
-  assert.match(args.command, /node --test/);
-  assert.match(args.command, /red blue red/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.doesNotMatch(args.command, /export function tallyWords/);
+  assert.doesNotMatch(args.command, /node --test/);
 });
 
-test("local coding project artifact requests start with a real shell tool call", () => {
+test("local coding project artifact requests are model-led and do not start with deterministic guard", () => {
   const request = {
     model: "gemini-pro-agent",
     input: [{
@@ -4755,25 +4741,11 @@ test("local coding project artifact requests start with a real shell tool call",
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.ok(completion);
-  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
-
-  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
-  const call = fmt.output.find(item => item.type === "function_call");
-  assert.ok(call);
-  assert.equal(call.name, "shell_command");
-  const args = JSON.parse(call.arguments);
-  assert.match(args.command, /Anti-Codex exact artifact marker guard/);
-  assert.match(args.command, /DESKTOP_CODING_PROJECT_DONE_20260627/);
-  assert.match(args.command, /package\.json/);
-  assert.match(args.command, /word-tally\.mjs/);
-  assert.match(args.command, /word-tally\.test\.mjs/);
-  assert.match(args.command, /export function tallyWords/);
-  assert.match(args.command, /node --test/);
-  assert.match(args.command, /red blue red/);
+  assert.equal(completion, null);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
-test("local coding project artifact path stops at Chinese prompt punctuation", () => {
+test("local coding project artifact requests with Chinese text stay model-led", () => {
   const request = {
     model: "gemini-pro-agent",
     input: [{
@@ -4789,14 +4761,11 @@ test("local coding project artifact path stops at Chinese prompt punctuation", (
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.ok(completion);
-  const args = JSON.parse(completion.choices[0].message.tool_calls[0].function.arguments);
-  assert.match(args.command, /\$__antiCodexArtifactDir = 'C:\\Temp\\coding'/);
-  assert.doesNotMatch(args.command, /C:\\Temp\\coding。/);
-  assert.doesNotMatch(args.command, /C:\\Temp\\coding銆/);
+  assert.equal(completion, null);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
-test("multi-turn local project follow-up starts with the latest artifact tool call", () => {
+test("multi-turn local project follow-up is model-led and does not start with deterministic guard", () => {
   const firstPrompt = "Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\multi. done.txt must contain UI_MULTI_TURN_PROJECT_SMOKE_20260627_FIRST.";
   const followupPrompt = "Continue the same project in C:\\Temp\\multi. Modify word-tally.mjs so it also exports uniqueWords(text). Update word-tally.test.mjs and create CHANGELOG.md plus followup.txt containing exactly UI_MULTI_TURN_PROJECT_SMOKE_20260627.";
   const request = {
@@ -4812,15 +4781,8 @@ test("multi-turn local project follow-up starts with the latest artifact tool ca
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.ok(completion);
-  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
-  const call = fmt.output.find(item => item.type === "function_call");
-  const args = JSON.parse(call.arguments);
-  assert.match(args.command, /UI_MULTI_TURN_PROJECT_SMOKE_20260627/);
-  assert.match(args.command, /\$__antiCodexMultiTurnProject = \$true/);
-  assert.match(args.command, /export function uniqueWords/);
-  assert.match(args.command, /followup\.txt/);
-  assert.match(args.command, /CHANGELOG\.md/);
+  assert.equal(completion, null);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
 test("repo file edit smoke markers do not trigger local artifact marker guard", () => {
@@ -4921,7 +4883,8 @@ test("autonomous reasoning tool calls get visible progress text before execution
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /运行测试验证/);
+  assert.match(fmt.output[0].content[0].text, /运行测试/);
+  assert.match(fmt.output[0].content[0].text, /如果失败/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -4969,9 +4932,51 @@ test("file-writing tool progress distinguishes implementation and test edits", (
     }],
   }, request, routing, { strictTools: true });
 
-  assert.match(implementation.output[0].content[0].text, /\u4e3b\u7a0b\u5e8f\u6587\u4ef6/);
-  assert.match(testFile.output[0].content[0].text, /\u6d4b\u8bd5\u6587\u4ef6/);
+  assert.match(implementation.output[0].content[0].text, /实现核心程序/);
+  assert.match(implementation.output[0].content[0].text, /codex-update-analyzer\.mjs/);
+  assert.match(testFile.output[0].content[0].text, /验收条件写成测试/);
+  assert.match(testFile.output[0].content[0].text, /codex-update-analyzer\.test\.mjs/);
   assert.notEqual(implementation.output[0].content[0].text, testFile.output[0].content[0].text);
+});
+
+test("combined local artifact command gets multi-step visible progress text", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_20260701_COMBINED_PROGRESS";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `请在 C:\\Temp\\desktop-visible-coding-project\\run 创建 package.json, word-tally.mjs, word-tally.test.mjs, done.txt。最终标记：${marker}` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_combined",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: "New-Item run; [System.IO.File]::WriteAllText('word-tally.mjs',''); [System.IO.File]::WriteAllText('word-tally.test.mjs',''); node --test word-tally.test.mjs; node word-tally.mjs \"red blue red\"; Get-Content done.txt" }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const text = fmt.output[0].content[0].text;
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(text, /本轮命令覆盖：写入项目文件和测试文件/);
+  assert.match(text, /本轮命令覆盖：运行测试和本地 CLI/);
+  assert.match(text, /本轮命令覆盖：读回完成标记/);
+  assert.equal(fmt.output[1].type, "function_call");
 });
 
 test("complex project tool calls get visible progress text before execution", () => {
@@ -5015,7 +5020,8 @@ test("complex project tool calls get visible progress text before execution", ()
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /运行测试验证/);
+  assert.match(fmt.output[0].content[0].text, /运行测试/);
+  assert.match(fmt.output[0].content[0].text, /codex-update-analyzer\.test\.mjs/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5066,7 +5072,8 @@ test("agentic step-flow tool calls also get visible progress text before executi
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /\u4ea4\u4ed8\u6587\u6863\u548c\u7ed3\u679c\u6587\u4ef6/);
+  assert.match(fmt.output[0].content[0].text, /整理交付物/);
+  assert.match(fmt.output[0].content[0].text, /done\.txt/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5124,7 +5131,8 @@ test("agentic step-flow suppresses repeated visible phase text while preserving 
   assert.equal(fmt.output.length, 2);
   assert.equal(fmt.output[0].type, "message");
   assert.doesNotMatch(fmt.output[0].content[0].text, /阶段1：准备创建文件/);
-  assert.match(fmt.output[0].content[0].text, /\u4ea4\u4ed8\u6587\u6863\u548c\u7ed3\u679c\u6587\u4ef6/);
+  assert.match(fmt.output[0].content[0].text, /整理交付物/);
+  assert.match(fmt.output[0].content[0].text, /done\.txt/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5162,8 +5170,55 @@ test("generic assistant text does not suppress visible tool progress for long ta
   assert.equal(fmt.output[0].type, "message");
   assert.equal(fmt.output[0].content[0].text, "我开始处理这个任务。");
   assert.equal(fmt.output[1].type, "message");
-  assert.match(fmt.output[1].content[0].text, /\u4e3b\u7a0b\u5e8f\u6587\u4ef6/);
+  assert.match(fmt.output[1].content[0].text, /实现核心程序/);
+  assert.match(fmt.output[1].content[0].text, /codex-update-analyzer\.mjs/);
   assert.equal(fmt.output[2].type, "function_call");
+});
+
+test("generated visible tool progress is not repeated from assistant history", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_REPEAT_PROGRESS";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\complex. done.txt must contain exactly ${marker}.` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const completion = (id) => ({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "node -e \"require('fs').writeFileSync('codex-update-analyzer.mjs','export function summarizeSources(){}')\"" }) },
+        }],
+      },
+    }],
+  });
+
+  const first = chatToResponsesFormat(completion("call_impl_1"), request, routing, { strictTools: true });
+  assert.equal(first.output[0].type, "message");
+  assert.equal(first.output[1].type, "function_call");
+
+  const continuedRequest = {
+    ...request,
+    input: [
+      ...request.input,
+      { type: "function_call_output", call_id: "call_impl_1", output: `created files for ${marker}` },
+    ],
+  };
+  const second = chatToResponsesFormat(completion("call_impl_2"), continuedRequest, routing, { strictTools: true });
+
+  assert.equal(second.output.length, 1);
+  assert.equal(second.output[0].type, "function_call");
 });
 
 test("agentic step-flow suppresses repeated phase text restored through chat messages", () => {
@@ -5220,7 +5275,8 @@ test("agentic step-flow suppresses repeated phase text restored through chat mes
   });
   assert.equal(fmt.output[0].type, "message");
   assert.doesNotMatch(fmt.output[0].content[0].text, /阶段2：准备验证文件/);
-  assert.match(fmt.output[0].content[0].text, /读取文件和结果/);
+  assert.match(fmt.output[0].content[0].text, /读回关键结果/);
+  assert.match(fmt.output[0].content[0].text, /done\.txt/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5297,7 +5353,7 @@ test("Antigravity internal web loop prefetches explicit search even without inje
   }
 });
 
-test("Antigravity web prefetch continues web-backed artifact tasks instead of stopping at a summary", async () => {
+test("Antigravity web prefetch blocks report-site completion without file evidence", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const userText = "Search the web for recent Codex updates, then create report.md, index.html and done.txt in C:\\Temp\\report-site. Use PowerShell file commands. done.txt must contain UI_REPORT_SITE_TEST_20260627.";
   globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name) => {
@@ -5313,7 +5369,7 @@ test("Antigravity web prefetch continues web-backed artifact tasks instead of st
   };
 
   try {
-    assert.equal(requestNeedsWebBackedArtifactOutput({ input: userText }), true);
+    assert.equal(requestNeedsWebBackedArtifactOutput({ input: userText }), false);
     let upstreamBody;
     await callAntigravityWithInternalTools({
       model: "gemini-pro-agent",
@@ -5329,17 +5385,15 @@ test("Antigravity web prefetch continues web-backed artifact tasks instead of st
       },
     });
 
-    assert.match(upstreamBody.messages.at(-1).content, /create the requested local files/i);
-    assert.match(upstreamBody.messages.at(-1).content, /report\.md/);
-    assert.match(upstreamBody.messages.at(-1).content, /index\.html/);
-    assert.match(upstreamBody.messages.at(-1).content, /PowerShell file commands/);
+    assert.match(upstreamBody.messages.at(-1).content, /Required exact marker: UI_REPORT_SITE_TEST_20260627/);
+    assert.match(upstreamBody.messages.at(-1).content, /Read the files back/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
   }
 });
 
-test("Antigravity web-backed artifact task writes report files when the model only promises work", async () => {
+test("Antigravity report-site task does not write files when the model only promises work", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-ui-report-site-"));
   const marker = "UI_REPORT_SITE_TEST_20260627_WRITE";
@@ -5368,23 +5422,17 @@ test("Antigravity web-backed artifact task writes report files when the model on
       }),
     });
 
-    assert.match(completion.choices[0].message.content, new RegExp(marker));
-    const report = fs.readFileSync(path.join(dir, "report.md"), "utf8");
-    const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-    const done = fs.readFileSync(path.join(dir, "done.txt"), "utf8");
-    assert.equal(done, marker);
-    assert.match(report, /https:\/\/example\.com\/codex-1/);
-    assert.match(report, /[\u4e00-\u9fff]/);
-    assert.match(html, /report\.md/);
-    assert.match(html, /https:\/\/example\.com\/codex-3/);
-    assert.match(html, /<\/html>/i);
+    assert.match(completion.choices[0].message.content, /model_omitted_web_source_urls|Anti-Codex blocked/);
+    assert.equal(fs.existsSync(path.join(dir, "report.md")), false);
+    assert.equal(fs.existsSync(path.join(dir, "index.html")), false);
+    assert.equal(fs.existsSync(path.join(dir, "done.txt")), false);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
   }
 });
 
-test("Responses web-backed artifact path deterministically writes report files before upstream", async () => {
+test("Responses report-site artifact path stays model-led instead of deterministic file writes", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-responses-report-site-"));
   const marker = "UI_REPORT_SITE_RESPONSES_20260627";
@@ -5414,10 +5462,10 @@ test("Responses web-backed artifact path deterministically writes report files b
       preferInternalWebToolChoice: true,
     });
     const response = await deterministicWebBackedArtifactResponse(parsed, chatBody);
-    assert.match(response.output[0].content[0].text, new RegExp(marker));
-    assert.equal(fs.readFileSync(path.join(dir, "done.txt"), "utf8"), marker);
-    assert.match(fs.readFileSync(path.join(dir, "report.md"), "utf8"), /https:\/\/example\.com\/r1/);
-    assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /report\.md/);
+    assert.equal(response, null);
+    assert.equal(fs.existsSync(path.join(dir, "done.txt")), false);
+    assert.equal(fs.existsSync(path.join(dir, "report.md")), false);
+    assert.equal(fs.existsSync(path.join(dir, "index.html")), false);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;

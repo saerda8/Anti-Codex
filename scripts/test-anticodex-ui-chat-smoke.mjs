@@ -154,13 +154,40 @@ if (!hasCustomPrompt && taskMode === "agentic-step-flow") {
   ].join("\n");
 }
 if (!hasCustomPrompt && taskMode === "coding-project") {
-  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}。`;
+  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}，请用 [System.IO.File]::WriteAllText 写 UTF8Encoding(false)，不能有 BOM 或换行；不要用 Set-Content 写 done.txt。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"。最后必须运行 Get-Content done.txt 并让工具输出显示完整标记 ${marker}，核对后最后回复 ${marker}。`;
 }
 if (!hasCustomPrompt && taskMode === "multi-turn-project") {
   promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。这是两轮任务的第 1 轮。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text)，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}_FIRST。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}_FIRST。`;
 }
 if (!hasCustomPrompt && taskMode === "complex-project") {
-  promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell only to run Node.js file-write commands; do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files because they can write a UTF-8 BOM. Create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search and must be written with Node fs.writeFileSync(..., "utf8"). codex-update-analyzer.mjs must export summarizeSources(sources), must define stripUtf8Bom(text), and must call stripUtf8Bom before JSON.parse when run as a CLI. The CLI must read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3 and codexMentionCount is at least 1, then reply with ${marker}.`;
+  promptText = [
+    "请完成一个真实的中文长任务：搜索最近 Codex / OpenAI Codex 更新资料，然后在本地做一个小型 Node.js 分析项目。",
+    `工作目录：${artifactDir}`,
+    `最终标记：${marker}`,
+    "",
+    "必须只创建下面 7 个文件，文件名必须完全一致：",
+    "package.json",
+    "codex-update-analyzer.mjs",
+    "codex-update-analyzer.test.mjs",
+    "sources.json",
+    "report.md",
+    "index.html",
+    "done.txt",
+    "",
+    "禁止创建 server.js、test.js、summary.json、README.md 或其他替代文件；如果已经创建了，必须删除后再结束。",
+    "请用 PowerShell 执行 Node.js 文件写入命令；JSON 和 JavaScript 文件必须用 Node fs.writeFileSync(..., \"utf8\") 写入，避免 UTF-8 BOM。",
+    "sources.json 必须至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新。",
+    "codex-update-analyzer.mjs 必须导出 summarizeSources(sources)，必须定义 stripUtf8Bom(text)，作为 CLI 运行时读取 sources.json，并打印 JSON：sourceCount 和 codexMentionCount。",
+    "codex-update-analyzer.test.mjs 必须使用 node:test，并断言 3 条 sources 会得到 sourceCount=3。",
+    "report.md 必须是中文，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
+    "index.html 必须是完整离线中文 HTML，链接 report.md，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
+    "done.txt 必须只包含最终标记。",
+    "",
+    "验证要求：运行 node --test codex-update-analyzer.test.mjs，再运行 node codex-update-analyzer.mjs sources.json；确认 sourceCount >= 3 且 codexMentionCount >= 1。最后读回目录和 done.txt，确认只有上面 7 个文件，done.txt 完全等于最终标记。",
+    `完成后最后一行只写：${marker}`,
+    "",
+    "不要查看 Antigravity brain、transcript、history 或 log 目录。不要只描述计划，必须真实创建文件并运行验证命令。",
+  ].join("\n");
 }
 if (!hasCustomPrompt && taskMode === "autonomous-reasoning") {
   promptText = [
@@ -1357,6 +1384,9 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     return "";
   };
   const stableHistoryItemKey = (value) => {
+    if (value?.type === "message" && value?.role === "assistant") {
+      return `assistant-message:${responseItemTextContent(value.content)}`;
+    }
     if (value?.id) return `${value.type}:${value.id}`;
     if (value?.call_id) return `${value.type}:${value.call_id}`;
     return `${value?.type || "item"}:${JSON.stringify(value).slice(0, 2000)}`;
@@ -1379,7 +1409,7 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
       const phaseKey = agenticPhaseKey(text);
       if (phaseKey && seenAssistantPhaseKeys.has(phaseKey)) return;
       if (phaseKey) seenAssistantPhaseKeys.add(phaseKey);
-      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /我(?:先)?(?:创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/.test(text)) {
+      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /本轮命令覆盖：/.test(text) || /我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/.test(text)) {
         evidence.assistantText += `${text}\n`;
       }
       if (/阶段1：准备创建文件/.test(text)) evidence.phase1Count += 1;
@@ -1411,7 +1441,7 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
-  const visibleProgressPattern = /阶段[12]：|我(?:先)?(?:创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/g;
+  const visibleProgressPattern = /阶段[12]：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/g;
   const visibleProgressLinePattern = new RegExp(visibleProgressPattern.source);
   evidence.visibleProgressCount = (evidence.assistantText.match(visibleProgressPattern) || []).length;
   const progressLines = evidence.assistantText
@@ -3535,6 +3565,7 @@ async function main() {
     if (responseHistory.artifactGuardUsed === true) failures.push(`${taskMode} used deterministic artifact guard instead of model-led task execution`);
     if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two visible progress updates`);
     if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two distinct visible progress updates`);
+    if ((Number(responseHistory.repeatedVisibleProgressCount) || 0) > 2) failures.push(`${taskMode} repeated visible progress text too many times`);
     if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push(`${taskMode} did not emit a task tool call`);
     if (responseHistory.taskToolOutputSeen !== true) failures.push(`${taskMode} did not observe task tool output`);
     if (responseHistory.assistantHasFinalMarker !== true) failures.push(`${taskMode} assistant final marker was not observed in response history`);

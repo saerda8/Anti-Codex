@@ -1286,8 +1286,11 @@ fs.writeFileSync(authPath, JSON.stringify({
 
 function Seed-RuntimeDefaults {
     New-Item -ItemType Directory -Path $CODEX_HOME_DIR -Force | Out-Null
-    if ((Test-Path -LiteralPath $CONFIG_TEMPLATE_PATH) -and (-not (Test-Path -LiteralPath (Join-Path $CODEX_HOME_DIR "config.adaptive-oneapi.toml")))) {
-        Copy-Item -LiteralPath $CONFIG_TEMPLATE_PATH -Destination (Join-Path $CODEX_HOME_DIR "config.adaptive-oneapi.toml")
+    if (Test-Path -LiteralPath $CONFIG_TEMPLATE_PATH) {
+        $targetConfigTemplate = Join-Path $CODEX_HOME_DIR "config.adaptive-oneapi.toml"
+        if ($IS_ANTIGRAVITY_MODE -or (-not (Test-Path -LiteralPath $targetConfigTemplate))) {
+            Copy-Item -LiteralPath $CONFIG_TEMPLATE_PATH -Destination $targetConfigTemplate -Force
+        }
     }
     if (Test-Path -LiteralPath $MODEL_CATALOG_TEMPLATE_PATH) {
         if ($IS_ANTIGRAVITY_MODE) {
@@ -1434,6 +1437,10 @@ const defaults = new Map([
   ["sandbox_mode", tomlString("workspace-write")],
   ["cli_auth_credentials_store", tomlString("file")],
 ]);
+if (isAntigravityMode === "True") {
+  text = text.replace(/^model\s*=.*\r?\n?/m, "");
+  text = text.replace(/^model_reasoning_effort\s*=.*\r?\n?/m, "");
+}
 const forced = new Map([
   ["model_catalog_json", tomlString(catalogPath)],
   ["chatgpt_base_url", tomlString(`${translatorUrl}/backend-api/`)],
@@ -1553,10 +1560,10 @@ atom["composer-permission-mode-visibility"] ||= {
 if (atom["skip-full-access-confirm"] === undefined) {
   atom["skip-full-access-confirm"] = true;
 }
+state["permissions-mode"] = "full-access";
+atom["permissions-mode"] = "full-access";
 atom["agent-mode-by-host-id"] ||= {};
-if (!atom["agent-mode-by-host-id"].local || atom["agent-mode-by-host-id"].local === "read-only") {
-  atom["agent-mode-by-host-id"].local = "auto";
-}
+atom["agent-mode-by-host-id"].local = "full-access";
 const workspace = workspaceArg.trim() ? path.resolve(workspaceArg.trim()) : "";
 if (workspace) {
   const unique = (items) => {
@@ -1593,18 +1600,14 @@ const rootHints = state["thread-workspace-root-hints"] && typeof state["thread-w
   : {};
 const permissionThreadIds = new Set([...projectlessThreadIds, ...Object.keys(rootHints)]);
 for (const threadId of permissionThreadIds) {
-  if (permissions[threadId]) continue;
-  const hintedRoot = typeof rootHints[threadId] === "string" ? rootHints[threadId] : null;
-  const writableRoots = hintedRoot ? [hintedRoot] : [];
+  const existing = permissions[threadId];
+  if (existing?.sandboxPolicy?.type === "dangerFullAccess" && existing.approvalPolicy === "never") continue;
   permissions[threadId] = {
-    approvalPolicy: "on-request",
+    activePermissionProfile: { id: ":danger-full-access", extends: null },
+    approvalPolicy: "never",
     approvalsReviewer: "user",
     sandboxPolicy: {
-      type: "workspaceWrite",
-      writableRoots,
-      excludeSlashTmp: false,
-      excludeTmpdirEnvVar: false,
-      networkAccess: false,
+      type: "dangerFullAccess",
     },
   };
 }
