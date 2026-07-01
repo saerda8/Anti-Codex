@@ -785,6 +785,7 @@ function Test-ReportEncoding {
         "latest-goal-real-run-readiness.json",
         "latest-approved-real-run-sequence.json",
         "latest-worker-mcp-server-probe.json",
+        "latest-worker-mcp-task-smoke.json",
         "latest-ui-chat-smoke.json",
         "latest-ui-web-search-smoke.json",
         "latest-ui-local-project-smoke.json",

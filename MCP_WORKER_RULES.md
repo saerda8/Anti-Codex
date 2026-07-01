@@ -57,6 +57,13 @@ After every failure, before another dispatch:
 - Cause classification: current-channel transport remains stale/dead for implementation calls; direct Kilo execution reached the worker but the free model/job did not produce a patch within the budget.
 - Rule change: distinguish three states in reports and notes: server start/list health, task-tool shape (start/wait/sync/cancel), and real implementation success. Do not count `tools/list` as task success, and do not count current-channel `Transport closed` as a worker-model failure.
 
+### 2026-07-02 - Direct MIMO worker task smoke passed
+
+- Task: prove one non-Antigravity worker can complete a real task through the direct MCP SDK path while keeping Antigravity worker out of account-isolation-sensitive testing.
+- Result: `scripts/test-anticodex-worker-mcp-task-smoke.mjs --workers mimo-claude-coworker --timeout-ms 180000` started job `dsw_mr2nuxua_2nl7w4`, kept the same MCP client alive through wait, and host-verified `worker-smoke-result.json` with marker `WORKER_MCP_TASK_SMOKE_1782945739678`, worker `mimo-claude-coworker`, and `ok:true`.
+- Cause classification: direct MCP task execution is viable for at least MIMO; current-channel `Transport closed` remains a Codex-session transport problem, not proof that all worker MCPs cannot do tasks.
+- Rule change: keep `latest-worker-mcp-task-smoke.json` separate from `latest-worker-mcp-server-probe.json`. `tools/list` proves server exposure; task smoke proves real work. Exclude `antigravity-code-worker` from this smoke until the second Antigravity account boundary is proven.
+
 ### 2026-07-02 - Direct MCP probe vs current-channel transport
 
 - Task: diagnose why current Codex-channel MCP worker calls appeared unavailable.

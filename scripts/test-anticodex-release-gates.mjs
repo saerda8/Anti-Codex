@@ -1273,6 +1273,11 @@ function summarizeGate(definition) {
       }
       if (Array.isArray(worker.incompleteToolCountServers) && worker.incompleteToolCountServers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_tool_count_incomplete");
       if (blockers.includes("worker_mcp_tool_count_incomplete")) semanticFailures.push("goal_readiness_worker_mcp_tool_count_blocker_present");
+      if (worker.taskSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_not_ok");
+      if (worker.taskSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_real_traffic_missing");
+      if (worker.taskSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_antigravity_not_excluded");
+      if (Number(worker.taskSmokePassedWorkerCount || 0) < 1) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_passed_count");
+      if (Array.isArray(worker.taskSmokeFailedWorkers) && worker.taskSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_failed_workers");
       if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (requiredReleaseComplete) {

@@ -60,6 +60,7 @@ const accountIsolation = readReport("latest-antigravity-account-isolation-status
 const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
 const secondAccountReadinessSummaryReport = readReport("latest-second-account-readiness-summary.json");
 const releaseGates = readReport("latest-release-gates.json");
+const workerMcpTaskSmokeReport = readReport("latest-worker-mcp-task-smoke.json");
 
 const sync = syncReadiness.report || {};
 const clientSyncContract = sync.clientSyncContract || {};
@@ -85,6 +86,12 @@ const workerToolCountByServer = Object.fromEntries(
   }),
 );
 const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
+const workerTaskSmoke = workerMcpTaskSmokeReport.report || {};
+const workerTaskSmokeResults = Array.isArray(workerTaskSmoke.results) ? workerTaskSmoke.results : [];
+const workerTaskSmokePassedWorkers = workerTaskSmokeResults
+  .filter((entry) => entry?.ok === true && entry?.workspaceVerification?.ok === true && String(entry?.worker || "") !== "antigravity-code-worker")
+  .map((entry) => String(entry.worker || ""))
+  .filter(Boolean);
 const workerMcp = {
   reportPresent: mcpSkills.present,
   reportOk: mcpSkills.report?.ok === true,
@@ -95,6 +102,13 @@ const workerMcp = {
   toolCountByServer: workerToolCountByServer,
   incompleteToolCountServers: incompleteWorkerToolCountServers,
   allRequiredPassed: missingWorkerMcpServers.length === 0,
+  taskSmokeReportPresent: workerMcpTaskSmokeReport.present,
+  taskSmokeReportOk: workerTaskSmoke.ok === true,
+  taskSmokeUsedRealTraffic: workerTaskSmoke.usedRealTraffic === true,
+  taskSmokeAntigravityExcluded: workerTaskSmoke.antigravityWorkerExcluded === true,
+  taskSmokePassedWorkerCount: workerTaskSmokePassedWorkers.length,
+  taskSmokePassedWorkers: workerTaskSmokePassedWorkers,
+  taskSmokeFailedWorkers: Array.isArray(workerTaskSmoke.failedWorkers) ? workerTaskSmoke.failedWorkers.map(String).filter(Boolean) : [],
 };
 
 const selectedTasks = Array.isArray(desktopSuite.report?.selectedTasks) ? desktopSuite.report.selectedTasks.map(String) : [];
@@ -371,7 +385,14 @@ const proven = {
     && codexClientCopy.nativeClientBehaviorCarriedByHostSync
     && codexClientCopy.forbidsFeatureByFeatureReimplementation
     && codexClientCopy.versionMatches,
-  workerMcp: workerMcp.reportOk && workerMcp.allRequiredPassed && workerMcp.incompleteToolCountServers.length === 0,
+  workerMcp: workerMcp.reportOk
+    && workerMcp.allRequiredPassed
+    && workerMcp.incompleteToolCountServers.length === 0
+    && workerMcp.taskSmokeReportOk
+    && workerMcp.taskSmokeUsedRealTraffic
+    && workerMcp.taskSmokeAntigravityExcluded
+    && workerMcp.taskSmokePassedWorkerCount > 0
+    && workerMcp.taskSmokeFailedWorkers.length === 0,
   desktopAgenticTasks: desktopAgenticTasks.reportOk
     && desktopAgenticTasks.suiteProfile === "agentic"
     && desktopAgenticTasks.dryRun
@@ -474,8 +495,13 @@ const proven = {
 
 const blockers = [];
 if (!proven.codexClientCopy) blockers.push("codex_client_copy_evidence_missing_or_invalid");
-if (!proven.workerMcp) blockers.push("worker_mcp_real_list_incomplete");
+if (!workerMcp.reportOk || !workerMcp.allRequiredPassed) blockers.push("worker_mcp_real_list_incomplete");
 if (workerMcp.incompleteToolCountServers.length > 0) blockers.push("worker_mcp_tool_count_incomplete");
+if (!workerMcp.taskSmokeReportOk) blockers.push("worker_mcp_task_smoke_missing_or_failed");
+if (!workerMcp.taskSmokeUsedRealTraffic) blockers.push("worker_mcp_task_smoke_real_traffic_missing");
+if (!workerMcp.taskSmokeAntigravityExcluded) blockers.push("worker_mcp_task_smoke_antigravity_not_excluded");
+if (workerMcp.taskSmokePassedWorkerCount < 1) blockers.push("worker_mcp_task_smoke_no_passed_worker");
+if (workerMcp.taskSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_task_smoke_failed_workers");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");

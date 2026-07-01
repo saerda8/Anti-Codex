@@ -12048,6 +12048,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(syncRuntime, /scripts\\test-anticodex-local-connectors\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-mcp-skills\.ps1/);
   assert.match(syncRuntime, /scripts\\probe-anticodex-worker-mcp-servers\.mjs/);
+  assert.match(syncRuntime, /scripts\\test-anticodex-worker-mcp-task-smoke\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-missing-history\.mjs/);
   assert.match(mcpProbe, /StdioClientTransport/);
   assert.match(mcpProbe, /client\.listTools\(\)/);
@@ -12903,6 +12904,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-ui-coding-project-smoke.json",
     "latest-ui-report-site-smoke.json",
     "latest-worker-mcp-server-probe.json",
+    "latest-worker-mcp-task-smoke.json",
   ];
 
   assert.deepEqual(optionalReports, [
@@ -12936,11 +12938,19 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /passedServerCount/);
   assert.match(goalReadiness, /toolCountByServer/);
   assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
+  assert.match(goalReadiness, /taskSmokeReportOk/);
+  assert.match(goalReadiness, /taskSmokePassedWorkerCount/);
+  assert.match(goalReadiness, /worker_mcp_task_smoke_missing_or_failed/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
+  assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
+  assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
+  assert.match(summarizer, /workerMcpTaskSmokeEvidence/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
   assert.match(diagnostics, /worker-mcp-server-probe summary missing workerMcpServerProbeEvidence/);
+  assert.match(diagnostics, /worker-mcp-task-smoke summary missing workerMcpTaskSmokeEvidence/);
   assert.match(diagnostics, /mimo-claude-coworker/);
   assert.match(goalReadiness, /desktopAgenticTasks/);
   assert.match(goalReadiness, /agenticCapabilityMatrix/);

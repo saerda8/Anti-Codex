@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "",
-    [int]$TimeoutSec = 20,
+    [int]$TimeoutSec = 60,
     [switch]$VerifyBundle,
     [string]$VerifyReportsSummary = ""
 )
@@ -960,6 +960,12 @@ function Test-GoalReadinessSummaryEvidence {
         }
     }
     if (@(As-FlatArray $evidence.workerMcpIncompleteToolCountServers).Count -ne 0) { Add-Failure "goal-readiness summary has incomplete worker MCP tool counts" }
+    if ($evidence.workerMcpTaskSmokeReportOk -ne $true) { Add-Failure "goal-readiness summary missing worker MCP task smoke ok evidence" }
+    if ($evidence.workerMcpTaskSmokeUsedRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing worker MCP task smoke real-traffic evidence" }
+    if ($evidence.workerMcpTaskSmokeAntigravityExcluded -ne $true) { Add-Failure "goal-readiness summary worker MCP task smoke did not exclude Antigravity" }
+    if ([int]$evidence.workerMcpTaskSmokePassedWorkerCount -lt 1) { Add-Failure "goal-readiness summary worker MCP task smoke passed worker count too low" }
+    if (@(As-FlatArray $evidence.workerMcpTaskSmokePassedWorkers).Count -lt 1) { Add-Failure "goal-readiness summary missing worker MCP task smoke passed workers" }
+    if (@(As-FlatArray $evidence.workerMcpTaskSmokeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary has failed worker MCP task smoke workers" }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
     if (@(As-FlatArray $evidence.agenticStaleCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has stale agentic capabilities" }
@@ -1674,6 +1680,42 @@ function Test-WorkerMcpServerProbeSummaryEvidence {
     }
 }
 
+function Test-WorkerMcpTaskSmokeSummaryEvidence {
+    param($WorkerMcpTaskSmokeSummary)
+    if (-not $WorkerMcpTaskSmokeSummary) {
+        Add-Failure "diagnostic reports summary missing latest-worker-mcp-task-smoke.json"
+        return
+    }
+
+    $evidence = $WorkerMcpTaskSmokeSummary.workerMcpTaskSmokeEvidence
+    if (-not $evidence) {
+        Add-Failure "worker-mcp-task-smoke summary missing workerMcpTaskSmokeEvidence"
+        return
+    }
+
+    $results = @(As-FlatArray $evidence.results)
+    if ($evidence.reportName -ne "worker-mcp-task-smoke") { Add-Failure "worker-mcp-task-smoke summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $true) { Add-Failure "worker-mcp-task-smoke summary did not request real worker traffic" }
+    if ($evidence.usedRealTraffic -ne $true) { Add-Failure "worker-mcp-task-smoke summary did not use real worker traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "worker-mcp-task-smoke summary behavior not covered" }
+    if ($evidence.coverageKind -ne "worker-mcp-real-task-smoke") { Add-Failure "worker-mcp-task-smoke summary coverage kind mismatch" }
+    if ($evidence.antigravityWorkerExcluded -ne $true) { Add-Failure "worker-mcp-task-smoke summary did not exclude Antigravity worker" }
+    if ([int]$evidence.workerCount -lt 1) { Add-Failure "worker-mcp-task-smoke summary worker count too low" }
+    if ([int]$evidence.passedWorkerCount -lt 1) { Add-Failure "worker-mcp-task-smoke summary passed worker count too low" }
+    if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "worker-mcp-task-smoke summary has failed workers" }
+    if ($results.Count -lt 1) { Add-Failure "worker-mcp-task-smoke summary missing results" }
+    foreach ($entry in $results) {
+        if ($entry.worker -eq "antigravity-code-worker") { Add-Failure "worker-mcp-task-smoke unexpectedly used Antigravity worker" }
+        if ($entry.ok -ne $true) { Add-Failure "worker-mcp-task-smoke result not ok for $($entry.worker)" }
+        if (-not [string]$entry.jobId) { Add-Failure "worker-mcp-task-smoke result missing job id for $($entry.worker)" }
+        if (-not [string]$entry.marker) { Add-Failure "worker-mcp-task-smoke result missing marker for $($entry.worker)" }
+        if ($entry.workspacePresent -ne $true) { Add-Failure "worker-mcp-task-smoke result missing workspace for $($entry.worker)" }
+        if ($entry.terminalStatus -ne "completed") { Add-Failure "worker-mcp-task-smoke terminal status not completed for $($entry.worker)" }
+        if ($entry.workspaceVerificationOk -ne $true) { Add-Failure "worker-mcp-task-smoke workspace verification failed for $($entry.worker)" }
+        if ($entry.resultPathExists -ne $true) { Add-Failure "worker-mcp-task-smoke result file missing for $($entry.worker)" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1701,6 +1743,7 @@ function Test-ReportsSummary {
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
     $approvedRealRunSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-approved-real-run-sequence.json" } | Select-Object -First 1)[0]
     $workerMcpServerProbeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-server-probe.json" } | Select-Object -First 1)[0]
+    $workerMcpTaskSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-task-smoke.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
@@ -1756,6 +1799,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $goalRealRunReadinessSummary) { Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary }
     if ($RequireReleaseReady -or $approvedRealRunSequenceSummary) { Test-ApprovedRealRunSequenceSummaryEvidence $approvedRealRunSequenceSummary }
     if ($RequireReleaseReady -or $workerMcpServerProbeSummary) { Test-WorkerMcpServerProbeSummaryEvidence $workerMcpServerProbeSummary }
+    if ($RequireReleaseReady -or $workerMcpTaskSmokeSummary) { Test-WorkerMcpTaskSmokeSummaryEvidence $workerMcpTaskSmokeSummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($localConnectorsSummary) {
