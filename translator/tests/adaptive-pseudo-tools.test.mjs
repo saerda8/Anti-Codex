@@ -385,7 +385,7 @@ test("upstream failure classifier separates transient, protocol, auth, and quota
     retryable: false,
     diagnosis: "quota_or_limit_reached",
     message: "daily usage limit reached for Antigravity account",
-    suggestedAction: "切换 Antigravity 账号，或等待额度/限额恢复后重试。",
+    suggestedAction: "切换模型，或等待该模型额度/限额恢复后重试。",
   });
   assert.equal(shouldRecordAntigravityTrafficFailure(quota), true);
 });
@@ -1432,6 +1432,77 @@ test("Antigravity SSE pipe retries fake tool claims before emitting buffered too
   assert.doesNotMatch(wire, /I will run the marker tool now/);
   assert.match(wire, /"type":"function_call"/);
   assert.match(wire, /"name":"marker_tool"/);
+  assert.match(wire, /response.completed/);
+});
+
+test("Antigravity SSE pipe uses non-streaming model call for local artifact tool tasks", async () => {
+  let streamCalls = 0;
+  let nonStreamingCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const marker = "UI_AGENTIC_STEP_FLOW_STREAM_TEST_123456";
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: `Create index.html, README.md, and done.txt in C:\\Temp\\agentic. done.txt must contain ${marker}.` }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const queue = { run: async (task) => task({}) };
+  async function* streamUpstream() {
+    streamCalls += 1;
+    yield { type: "done", completion: { choices: [{ finish_reason: "stop", message: { role: "assistant", content: "I will create the files now." } }] } };
+  }
+  async function nonStreamingUpstream(body) {
+    nonStreamingCalls += 1;
+    assert.equal(body.stream, false);
+    return {
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call_shell", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: `Write-Output ${marker}` }) } }],
+        },
+      }],
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue,
+    streamUpstream,
+    nonStreamingUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(streamCalls, 0);
+  assert.equal(nonStreamingCalls, 1);
+  assert.match(wire, /"type":"function_call"/);
+  assert.match(wire, /"name":"shell_command"/);
+  assert.match(wire, new RegExp(marker));
   assert.match(wire, /response.completed/);
 });
 
@@ -3563,6 +3634,27 @@ test("local project edit requests get a hard external-tool instruction", () => {
   assert.match(body.messages[0].content, /Local project edit requirement/);
   assert.match(body.messages[0].content, /Directory listing alone is not progress/);
   assert.match(body.messages[0].content, /file was changed and the requested test passed/);
+});
+
+test("local artifact requests include an exact shell DSML example", () => {
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create index.html, README.md, and done.txt in C:\\Temp\\agentic-step-flow. done.txt must contain UI_AGENTIC_STEP_FLOW_SMOKE_1234567890 and index.html must include 多阶段执行验证.",
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  assert.match(body.messages[0].content, /Exact local-file tool-call pattern/);
+  assert.match(body.messages[0].content, /<tool_calls><invoke name="shell_command">/);
+  assert.match(body.messages[0].content, /<parameter name="command">/);
+  assert.match(body.messages[0].content, /UI_AGENTIC_STEP_FLOW_SMOKE_1234567890/);
+  assert.match(body.messages[0].content, /Write-Output/);
 });
 
 test("background rollout analysis is answered locally without model work", () => {

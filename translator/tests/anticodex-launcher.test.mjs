@@ -1638,8 +1638,8 @@ test("Anti-Codex default runtime config is file-auth and Flash-first", () => {
 
   assert.match(config, /cli_auth_credentials_store\s*=\s*"file"/);
   assert.match(config, /model_reasoning_effort\s*=\s*"high"/);
-  assert.match(config, /model\s*=\s*"gemini-3-flash-agent"/);
-  assert.match(launcher, /let defaultModel = isAntigravityMode === "True" \? "gemini-3-flash-agent" : "gpt-5\.5"/);
+  assert.match(config, /model\s*=\s*"gemini-3\.5-flash-low"/);
+  assert.match(launcher, /let defaultModel = isAntigravityMode === "True" \? "gemini-3\.5-flash-low" : "gpt-5\.5"/);
   assert.equal(slugs[0], "gemini-pro-agent");
   assert.equal(slugs[1], "gemini-3-flash-agent");
   assert.equal(slugs.some((slug) => /^gpt-/i.test(slug)), false);

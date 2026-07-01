@@ -2306,7 +2306,22 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           } catch {}
         }
       }
-      if (!composer.includes(expectedMarker) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
+      if (taskMode === "agentic-step-flow") {
+        artifactEvidence = verifyAgenticStepFlowArtifact(options.artifactDir || artifactDir, expectedMarker);
+        const artifactFailures = collectAgenticStepFlowFailures(artifactEvidence);
+        if (artifactFailures.length === 0 && !composer.includes(prompt)) {
+          try {
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              artifactCompletionObserved = true;
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+          } catch {}
+        }
+      }
+      if (taskMode !== "agentic-step-flow" && !composer.includes(expectedMarker) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -2323,7 +2338,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     }
   }
   if (!clicked) failures.push("send button was not clicked");
-  if (!submitSucceeded && answerMarkerCount >= 1 && !composer.includes(expectedMarker)) {
+  if (taskMode !== "agentic-step-flow" && !submitSucceeded && answerMarkerCount >= 1 && !composer.includes(expectedMarker)) {
     submitSucceeded = true;
   }
   if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
@@ -2912,6 +2927,19 @@ async function main() {
       } else if (taskMode === "repo-file-edit") {
         artifactEvidence = verifyRepoFileEditFixture();
         if (!composer.includes(promptText) && artifactEvidence?.testPassed === true) {
+          try {
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+          } catch {}
+        }
+      } else if (taskMode === "agentic-step-flow") {
+        artifactEvidence = verifyAgenticStepFlowArtifact(artifactDir, marker);
+        const artifactFailures = collectAgenticStepFlowFailures(artifactEvidence);
+        if (!composer.includes(promptText) && artifactFailures.length === 0) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {

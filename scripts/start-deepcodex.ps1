@@ -1415,7 +1415,7 @@ function tomlString(value) {
   return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-let defaultModel = isAntigravityMode === "True" ? "gemini-3-flash-agent" : "gpt-5.5";
+let defaultModel = isAntigravityMode === "True" ? "gemini-3.5-flash-low" : "gpt-5.5";
 if (isAntigravityMode === "True") {
   try {
     const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8").replace(/^\uFEFF/, ""));
