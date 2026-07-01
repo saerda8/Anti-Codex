@@ -2989,6 +2989,272 @@ test("non-stream chat loop retries local fake tool promises before blocking", as
   assert.equal(msg.tool_calls[0].function.name, "marker_tool");
 });
 
+test("non-stream chat loop retries text-only local artifact completion before finalizing", async () => {
+  let upstreamCalls = 0;
+  const prompt = [
+    "Create a tiny Node.js CLI project in C:\\Temp\\anticodex-local-artifact-loop.",
+    "Use PowerShell file commands to create package.json, word-tally.mjs, word-tally.test.mjs, and done.txt.",
+    "Run node --test word-tally.test.mjs and verify done.txt.",
+  ].join(" ");
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: prompt }],
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    }],
+  }, {
+    callOnce: async (body) => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        assert.equal(body.messages.at(-1).content, prompt);
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            id: "chatcmpl_local_artifact_text_1",
+            object: "chat.completion",
+            created: 1,
+            model: "gemini-pro-agent",
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: "This needs the project files and tests, then I can verify the result." },
+              finish_reason: "stop",
+            }],
+          },
+        };
+      }
+
+      assert.match(body.messages.at(-1).content, /This is not the final answer|CODEX_TOOLS/);
+      assert.match(body.messages.at(-1).content, /shell_command/);
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_local_artifact_text_2",
+          object: "chat.completion",
+          created: 2,
+          model: "gemini-pro-agent",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_shell",
+                type: "function",
+                function: { name: "shell_command", arguments: JSON.stringify({ command: "node --test word-tally.test.mjs" }) },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 2);
+  const msg = result.json.choices[0].message;
+  assert.equal(msg.content, null);
+  assert.equal(msg.tool_calls.length, 1);
+  assert.equal(msg.tool_calls[0].function.name, "shell_command");
+});
+
+test("non-stream chat loop ignores stale tool evidence for a new marked local artifact task", async () => {
+  let upstreamCalls = 0;
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_STALE_EVIDENCE_123";
+  const prompt = [
+    "Create a tiny Node.js CLI project in C:\\Temp\\anticodex-stale-evidence-loop.",
+    "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt.",
+    `done.txt must contain ${marker}.`,
+    `Finish with ${marker}.`,
+  ].join(" ");
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "user", content: "Previous unrelated task." },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_old", type: "function", function: { name: "shell_command", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "call_old", content: "Exit code: 0\nOutput:\nOLD_TASK_MARKER" },
+      { role: "user", content: prompt },
+    ],
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    }],
+  }, {
+    callOnce: async () => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            id: "chatcmpl_stale_artifact_text_1",
+            object: "chat.completion",
+            created: 1,
+            model: "gemini-pro-agent",
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: "The project can be created with those seven files and verified locally." },
+              finish_reason: "stop",
+            }],
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_stale_artifact_text_2",
+          object: "chat.completion",
+          created: 2,
+          model: "gemini-pro-agent",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_shell_stale",
+                type: "function",
+                function: { name: "shell_command", arguments: JSON.stringify({ command: `Write-Output ${marker}` }) },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 2);
+  assert.equal(result.json.choices[0].message.tool_calls[0].function.name, "shell_command");
+});
+
+test("non-stream chat loop retries success summaries after failing local artifact output", async () => {
+  let upstreamCalls = 0;
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_FAILED_OUTPUT_123";
+  const prompt = [
+    "Create a tiny Node.js CLI project in C:\\Temp\\anticodex-failed-output-loop.",
+    "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt.",
+    `done.txt must contain ${marker}.`,
+    `Finish with ${marker}.`,
+  ].join(" ");
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "user", content: prompt },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_failed", type: "function", function: { name: "shell_command", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "call_failed", content: `Exit code: 0\nOutput:\nfail 1\nAssertionError\n${marker}` },
+    ],
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    }],
+  }, {
+    callOnce: async () => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            id: "chatcmpl_failed_artifact_text_1",
+            object: "chat.completion",
+            created: 1,
+            model: "gemini-pro-agent",
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: `The project is complete.\n\n${marker}` },
+              finish_reason: "stop",
+            }],
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_failed_artifact_text_2",
+          object: "chat.completion",
+          created: 2,
+          model: "gemini-pro-agent",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_fix_failed",
+                type: "function",
+                function: { name: "shell_command", arguments: JSON.stringify({ command: "node --test codex-update-analyzer.test.mjs" }) },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 2);
+  assert.equal(result.json.choices[0].message.tool_calls[0].function.name, "shell_command");
+});
+
+test("non-stream chat loop does not retry ordinary text when a shell tool is present", async () => {
+  let upstreamCalls = 0;
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "Reply with exactly PLAIN_CHAT_OK and nothing else." }],
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    }],
+  }, {
+    callOnce: async () => {
+      upstreamCalls += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_plain_text_1",
+          object: "chat.completion",
+          created: 1,
+          model: "gemini-pro-agent",
+          choices: [{
+            index: 0,
+            message: { role: "assistant", content: "PLAIN_CHAT_OK" },
+            finish_reason: "stop",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 1);
+  assert.equal(result.json.choices[0].message.content, "PLAIN_CHAT_OK");
+});
+
 test("internal tool execution exceptions are converted into tool failure messages", async () => {
   const originalFetch = globalThis.fetch;
   let upstreamCalls = 0;
@@ -4129,6 +4395,38 @@ test("complex project tool output closes the turn after marker tests and CLI pas
   assert.match(completion.choices[0].message.content, new RegExp(marker));
 });
 
+test("complex project chat tool output closes when Responses input has no tool output", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_CHAT_ONLY";
+  const messages = [
+    {
+      role: "user",
+      content: `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\complex. done.txt must contain exactly ${marker}. The CLI must print sourceCount and codexMentionCount.`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_complex",
+      content: [
+        `Exit code: 0`,
+        `Output:`,
+        marker,
+        `✔ summarizes three sources (1ms)`,
+        `ℹ pass 1`,
+        `ℹ fail 0`,
+        `{"sourceCount":3,"codexMentionCount":1,"urls":["https://openai.com/codex/","https://openai.com/news/","https://developers.openai.com/codex/"]}`,
+      ].join("\n"),
+    },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: messages[0].content }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, /验证：测试和本地 CLI 输出已通过/);
+  assert.match(completion.choices[0].message.content, new RegExp(marker));
+});
+
 test("complex project Responses input tool output closes even without chat tool messages", () => {
   const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_INPUT_ONLY";
   const output = [
@@ -4546,6 +4844,169 @@ test("chatToResponsesFormat does not replace fragile complex project shell comma
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
 
+test("complex project JavaScript shell commands escape raw Chinese for Windows transport", () => {
+  const fmt = chatToResponsesFormat({
+    id: "chatcmpl_complex_cjk_tool",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_cjk_tool",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "node -e \"const fs=require('fs');fs.writeFileSync('report.md','# Codex 与 OpenAI 更新资料分析报告','utf8');fs.writeFileSync('index.html','<h1>中文仪表盘</h1>','utf8')\"",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.doesNotMatch(args.command, /与|更新资料分析报告|中文仪表盘/);
+  assert.match(args.command, /\\u4e0e/);
+  assert.match(args.command, /\\u4e2d\\u6587\\u4eea\\u8868\\u76d8/);
+  assert.doesNotMatch(args.command, /Anti-Codex complex artifact safety repair/);
+});
+
+test("complex project JavaScript shell commands normalize double escaped unicode text", () => {
+  const fmt = chatToResponsesFormat({
+    id: "chatcmpl_complex_double_unicode_tool",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_double_unicode_tool",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "node -e \"const fs=require('fs');fs.writeFileSync('report.md','# Codex \\\\u4e2d\\\\u6587','utf8')\"",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /# Codex \\u4e2d\\u6587/);
+  assert.doesNotMatch(args.command, /\\\\u4e2d/);
+});
+
+test("complex project JavaScript shell commands normalize double escaped newlines", () => {
+  const fmt = chatToResponsesFormat({
+    id: "chatcmpl_complex_double_newline_tool",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_double_newline_tool",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "node -e \"const fs=require('fs');fs.writeFileSync('report.md','# Codex\\\\n\\\\n真实来源','utf8')\"",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /# Codex\\n\\n\\u771f\\u5b9e\\u6765\\u6e90/);
+  assert.doesNotMatch(args.command, /\\\\n/);
+});
+
+test("complex project JavaScript shell commands normalize escaped HTML tags", () => {
+  const fmt = chatToResponsesFormat({
+    id: "chatcmpl_complex_html_entity_tool",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_html_entity_tool",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "node -e \"const fs=require('fs');fs.writeFileSync('index.html','&lt;!DOCTYPE html&gt;&lt;html lang=\\\"zh-CN\\\"&gt;&lt;body&gt;ok&lt;/body&gt;&lt;/html&gt;','utf8')\"",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /<!DOCTYPE html>/);
+  assert.match(args.command, /<html lang=/);
+  assert.doesNotMatch(args.command, /&lt;html/);
+});
+
 test("agentic visible step-flow requests do not start with the deterministic artifact guard", () => {
   const request = {
     model: "gemini-pro-agent",
@@ -4834,6 +5295,54 @@ test("multi-turn marker-only Set-Content writes are normalized without determini
   assert.match(args.command, /WriteAllText\(\(Join-Path \$__antiCodexMarkerOnlyDir 'followup\.txt'\)/);
   assert.doesNotMatch(args.command, /Join-Path \$__antiCodexMarkerOnlyDir 'done\.txt'/);
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+});
+
+test("complex project shell commands inherit the artifact workdir when using relative paths", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_WORKDIR_123";
+  const artifactDir = "C:\\Temp\\anticodex-complex-workdir";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create a Node.js project in ${artifactDir}. Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt. done.txt must contain ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_complex_relative",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "node -e \"require('fs').writeFileSync('package.json','{}','utf8')\"",
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, artifactDir);
+  assert.match(args.command, /package\.json/);
 });
 
 test("repo file edit smoke markers do not trigger local artifact marker guard", () => {

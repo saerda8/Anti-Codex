@@ -12288,6 +12288,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /clickMethod:\s*"cdp-mouse"/);
   assert.match(verifier, /summarizeNetworkEvents/);
   assert.match(verifier, /networkEvents/);
+  assert.match(verifier, /firstPersonProgressCount/);
+  assert.match(verifier, /firstPersonProgressSamples/);
+  assert.match(verifier, /firstPersonProgressCount === 0/);
+  assert.match(verifier, /first-person visible progress updates/);
+  assert.doesNotMatch(verifier, /visibleProgressPattern = \/[^;\n]*我/);
+  assert.doesNotMatch(server, /function contentHasVisibleToolProgress[\s\S]{0,500}\|我/);
   assert.match(verifier, /send click did not submit the composer prompt/);
   assert.match(verifier, /submitSucceeded/);
   assert.match(verifier, /async function waitForComposerPromptReady/);
@@ -12369,6 +12375,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /desktop tool result did not settle into response history before the follow-up/);
   assert.match(verifier, /follow-up was not submitted because turn1 tool output was not settled/);
   assert.match(verifier, /taskMode === "complex-project"/);
+  assert.match(verifier, /const complexProjectRequiresModelLed = taskMode === "complex-project";/);
   assert.match(verifier, /taskMode === "repo-file-edit"/);
   assert.match(verifier, /Do not start with Get-ChildItem/);
   assert.match(verifier, /Your first tool action must modify/);
@@ -12387,7 +12394,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /sourceChangedFromFixture === true/);
   assert.match(verifier, /firstTurnSettle/);
   assert.match(verifier, /finalTurnSettle/);
-  assert.doesNotMatch(verifier, /if \(taskMode === "repo-multi-file-edit"\) \{[\s\S]*waitForDesktopToolTurnSettled\(ws, marker, Math\.min\(timeoutMs, 120_000\)\)/);
+  const repoMultiPostSubmitMatch = verifier.match(/if \(taskMode === "repo-multi-file-edit"\) \{\s*artifactEvidence = verifyRepoMultiFileEditFixture\(marker\);[\s\S]*?(?=\n\s*if \(taskMode === "local-project"\) \{)/);
+  assert.ok(repoMultiPostSubmitMatch);
+  const repoMultiPostSubmitBlock = repoMultiPostSubmitMatch[0];
+  assert.doesNotMatch(repoMultiPostSubmitBlock, /waitForDesktopToolTurnSettled\(ws, marker, Math\.min\(timeoutMs, 120_000\)\)/);
   assert.match(verifier, /Your first and only tool action for this step must write \$\{repoMultiFileReadme\}/);
   assert.match(verifier, /function jsSingleQuotedLiteral\(value\)/);
   assert.match(verifier, /function buildRepoMultiReadmeWriteCommand\(\)/);

@@ -113,6 +113,16 @@ function artifactPasses(value) {
   return false;
 }
 
+function firstPersonProgressCount(responseHistory = {}) {
+  const explicit = Number(responseHistory.firstPersonProgressCount || 0);
+  const textCount = String(responseHistory.assistantText || "")
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /^我(?:先|在|已|已经|执行|创建|修改|生成|写入|读取|读回|运行|调用|准备|开始|完成|把|清理|检查|核对)/.test(line))
+    .length;
+  return Math.max(Number.isFinite(explicit) ? explicit : 0, textCount);
+}
+
 const agenticEntry = readJsonReport("latest-agentic-capability-matrix.json");
 const agentic = agenticEntry.report || {};
 const agenticCapabilities = Array.isArray(agentic.capabilities) ? agentic.capabilities : [];
@@ -165,6 +175,7 @@ function taskResult(spec) {
   for (const key of spec.requiredResponseHistoryKeys || []) {
     if (!artifactPasses(responseHistory[key])) failures.push(`response_history_key_missing:${key}`);
   }
+  if (firstPersonProgressCount(responseHistory) > 0) failures.push("first_person_visible_progress_present");
   if (!capability || capability.ok !== true) failures.push("agentic_capability_missing_or_not_ok");
   if (!artifactProof || artifactProof.artifactProofComplete !== true) failures.push("roadmap_artifact_proof_missing");
   if (!resultProof || resultProof.resultProofComplete !== true) failures.push("roadmap_result_proof_missing");
@@ -192,6 +203,8 @@ function taskResult(spec) {
       visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
       distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount) || 0,
       repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount) || 0,
+      firstPersonProgressCount: firstPersonProgressCount(responseHistory),
+      firstPersonProgressSamples: Array.isArray(responseHistory.firstPersonProgressSamples) ? responseHistory.firstPersonProgressSamples.slice(0, 5) : [],
       taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
       taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
       artifactGuardUsed: responseHistory.artifactGuardUsed === true,

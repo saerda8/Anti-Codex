@@ -64,11 +64,22 @@ function bool(value, key) {
   return !!(value && value[key] === true);
 }
 
+function firstPersonProgressCount(responseHistory = {}) {
+  const explicit = Number(responseHistory.firstPersonProgressCount || 0);
+  const textCount = String(responseHistory.assistantText || "")
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /^我(?:先|在|已|已经|执行|创建|修改|生成|写入|读取|读回|运行|调用|准备|开始|完成|把|清理|检查|核对)/.test(line))
+    .length;
+  return Math.max(Number.isFinite(explicit) ? explicit : 0, textCount);
+}
+
 function requireResponseHistoryProof(responseHistory, failures) {
   if (responseHistory.assistantHasFinalMarker !== true) failures.push("response_history_final_marker_missing");
   if (responseHistory.markerToolOutputSeen !== true) failures.push("response_history_marker_tool_output_missing");
   if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push("visible_progress_too_shallow");
   if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push("visible_progress_not_distinct");
+  if (firstPersonProgressCount(responseHistory) > 0) failures.push("first_person_visible_progress_present");
   if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push("task_tool_call_missing");
   if (responseHistory.taskToolOutputSeen !== true) failures.push("task_tool_output_missing");
   if (responseHistory.artifactGuardUsed === true) failures.push("artifact_guard_used");
@@ -83,6 +94,8 @@ function responseHistoryEvidence(responseHistory) {
     visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
     distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount) || 0,
     repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount) || 0,
+    firstPersonProgressCount: firstPersonProgressCount(responseHistory),
+    firstPersonProgressSamples: Array.isArray(responseHistory.firstPersonProgressSamples) ? responseHistory.firstPersonProgressSamples.slice(0, 5) : [],
     taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
     taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
     artifactGuardUsed: responseHistory.artifactGuardUsed === true,

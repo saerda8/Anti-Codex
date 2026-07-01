@@ -59,12 +59,12 @@ const taskResultRequirements = {
   "free-chat": ["answerMarkerCount", "responseHistoryMarkerSeen", "lastSample"],
   "web-search": ["answerMarkerCount", "sourceUrlCount", "lastSample"],
   "local-project": ["artifactEvidence", "doneExact", "indexHasMarker"],
-  "coding-project": ["artifactEvidence", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
-  "multi-turn-project": ["artifactEvidence", "followupExact", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
-  "report-site": ["artifactEvidence", "reportHasChinese", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
-  "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "coding-project": ["artifactEvidence", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "multi-turn-project": ["artifactEvidence", "followupExact", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "report-site": ["artifactEvidence", "reportHasChinese", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   "repo-file-edit": ["artifactEvidence", "testPassed", "sourceHasLowercase"],
-  "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
 };
 
 const taskScenarioCatalog = {
@@ -159,6 +159,16 @@ function urlCountFromText(value) {
   return matches ? matches.length : 0;
 }
 
+function firstPersonProgressCount(responseHistory = {}) {
+  const explicit = Number(responseHistory.firstPersonProgressCount || 0);
+  const textCount = String(responseHistory.assistantText || "")
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /^我(?:先|在|已|已经|执行|创建|修改|生成|写入|读取|读回|运行|调用|准备|开始|完成|把|清理|检查|核对)/.test(line))
+    .length;
+  return Math.max(Number.isFinite(explicit) ? explicit : 0, textCount);
+}
+
 function artifactProofFor(taskMode, report) {
   const artifactEvidence = report && report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
   const artifactEvidenceKeys = Object.keys(artifactEvidence).sort();
@@ -200,6 +210,9 @@ function resultProofFor(taskMode, report) {
     visibleProgressCount: Number(responseHistory.visibleProgressCount || 0),
     distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount || 0),
     repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount || 0),
+    firstPersonProgressClean: firstPersonProgressCount(responseHistory) === 0,
+    firstPersonProgressCount: firstPersonProgressCount(responseHistory),
+    firstPersonProgressSamples: Array.isArray(responseHistory.firstPersonProgressSamples) ? responseHistory.firstPersonProgressSamples.slice(0, 5).join(" | ") : "",
     taskToolCallCount: Number(responseHistory.taskToolCallCount || 0),
     taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
     artifactGuardUsed: responseHistory.artifactGuardUsed === true,

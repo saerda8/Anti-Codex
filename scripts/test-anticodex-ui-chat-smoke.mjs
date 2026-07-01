@@ -161,7 +161,7 @@ if (!hasCustomPrompt && taskMode === "multi-turn-project") {
 }
 if (!hasCustomPrompt && taskMode === "complex-project") {
   promptText = [
-    "请完成一个真实的中文长任务：搜索最近 Codex / OpenAI Codex 更新资料，然后在本地做一个小型 Node.js 分析项目。",
+    "请完成一个真实的中文长任务：先在本地做一个小型 Node.js 分析项目，再把 Codex / OpenAI Codex 更新资料来源写进项目。",
     `工作目录：${artifactDir}`,
     `最终标记：${marker}`,
     "",
@@ -174,19 +174,23 @@ if (!hasCustomPrompt && taskMode === "complex-project") {
     "index.html",
     "done.txt",
     "",
+    "第一步必须自己发起真实工具调用，先创建目录和下面 7 个文件；不要先输出搜索摘要、资料列表或只回复计划。",
+    "可以使用你已知的公开 OpenAI/Codex URL 作为 sources.json 来源；不要求先做 web_search 才能写文件。",
     "禁止创建 server.js、test.js、summary.json、README.md 或其他替代文件；如果已经创建了，必须删除后再结束。",
-    "请用 PowerShell 执行 Node.js 文件写入命令；JSON 和 JavaScript 文件必须用 Node fs.writeFileSync(..., \"utf8\") 写入，避免 UTF-8 BOM。",
+    "请用 PowerShell 执行 Node.js 文件写入命令；JSON 和 JavaScript 文件必须用 Node fs.writeFileSync(..., \"utf8\") 写入，避免 UTF-8 BOM；do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files。",
     "sources.json 必须至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新。",
-    "codex-update-analyzer.mjs 必须导出 summarizeSources(sources)，必须定义 stripUtf8Bom(text)，作为 CLI 运行时读取 sources.json，并打印 JSON：sourceCount 和 codexMentionCount。",
+    "codex-update-analyzer.mjs 必须导出 summarizeSources(sources)，must define stripUtf8Bom(text)，must call stripUtf8Bom before JSON.parse，作为 CLI 运行时读取 sources.json，并打印 JSON：sourceCount 和 codexMentionCount。",
     "codex-update-analyzer.test.mjs 必须使用 node:test，并断言 3 条 sources 会得到 sourceCount=3。",
-    "report.md 必须是中文，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
-    "index.html 必须是完整离线中文 HTML，链接 report.md，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
+    "report.md 必须是中文，包含精确短语“真实来源”，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
+    "index.html 必须是完整离线中文 HTML，包含精确短语“真实来源”，链接 report.md，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
+    "index.html 必须写真实 HTML 标签，例如 <!doctype html> 和 <html>；不要写 &lt;html&gt; 这种 HTML entity 字面量。",
+    "report.md 和 index.html 必须直接写真实中文，不要手写 Unicode escape；文件内容必须包含真实换行，不能包含字面量 \\n。",
     "done.txt 必须只包含最终标记。",
     "",
     "验证要求：运行 node --test codex-update-analyzer.test.mjs，再运行 node codex-update-analyzer.mjs sources.json；确认 sourceCount >= 3 且 codexMentionCount >= 1。最后读回目录和 done.txt，确认只有上面 7 个文件，done.txt 完全等于最终标记。",
     `完成后最后一行只写：${marker}`,
     "",
-    "不要查看 Antigravity brain、transcript、history 或 log 目录。不要只描述计划，必须真实创建文件并运行验证命令。",
+    "不要查看 Antigravity brain、transcript、history 或 log 目录。不要只描述计划，必须从工具调用开始，真实创建文件并运行验证命令。",
   ].join("\n");
 }
 if (!hasCustomPrompt && taskMode === "autonomous-reasoning") {
@@ -1362,6 +1366,8 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     visibleProgressCount: 0,
     distinctVisibleProgressCount: 0,
     repeatedVisibleProgressCount: 0,
+    firstPersonProgressCount: 0,
+    firstPersonProgressSamples: [],
     modelLedExecution: false,
     codexLikeProcessProof: false,
     phase1Count: 0,
@@ -1409,7 +1415,15 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
       const phaseKey = agenticPhaseKey(text);
       if (phaseKey && seenAssistantPhaseKeys.has(phaseKey)) return;
       if (phaseKey) seenAssistantPhaseKeys.add(phaseKey);
-      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /(?:计划|判断|准备|验证|核对|修正|推进)：/.test(text) || /本轮命令覆盖：/.test(text) || /我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/.test(text)) {
+      const firstPersonProgressLines = text
+        .split(/\r?\n+/)
+        .map((line) => line.trim())
+        .filter((line) => /^我(?:先|在|已|已经|执行|创建|修改|生成|写入|读取|读回|运行|调用|准备|开始|完成|把|清理|检查|核对)/.test(line));
+      if (firstPersonProgressLines.length > 0) {
+        evidence.firstPersonProgressCount += firstPersonProgressLines.length;
+        evidence.firstPersonProgressSamples.push(...firstPersonProgressLines.slice(0, 3));
+      }
+      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /(?:计划|判断|准备|验证|核对|修正|推进)：/.test(text) || /本轮命令覆盖：/.test(text) || firstPersonProgressLines.length > 0) {
         evidence.assistantText += `${text}\n`;
       }
       if (/阶段1：准备创建文件/.test(text)) evidence.phase1Count += 1;
@@ -1441,7 +1455,7 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
-  const visibleProgressPattern = /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/g;
+  const visibleProgressPattern = /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：/g;
   const visibleProgressLinePattern = new RegExp(visibleProgressPattern.source);
   evidence.visibleProgressCount = (evidence.assistantText.match(visibleProgressPattern) || []).length;
   const progressLines = evidence.assistantText
@@ -1459,7 +1473,9 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     && evidence.taskToolOutputSeen === true
     && evidence.visibleProgressCount >= 2
     && evidence.distinctVisibleProgressCount >= 2
+    && evidence.firstPersonProgressCount === 0
     && evidence.artifactGuardUsed !== true;
+  evidence.firstPersonProgressSamples = [...new Set(evidence.firstPersonProgressSamples)].slice(0, 5);
   evidence.assistantText = evidence.assistantText.trim().slice(-2000);
   return evidence;
 }
@@ -1480,6 +1496,8 @@ function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
     visibleProgressCount: 0,
     distinctVisibleProgressCount: 0,
     repeatedVisibleProgressCount: 0,
+    firstPersonProgressCount: 0,
+    firstPersonProgressSamples: [],
     modelLedExecution: false,
     codexLikeProcessProof: false,
     phase1Count: 0,
@@ -1500,6 +1518,8 @@ function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
     merged.visibleProgressCount += Number(evidence.visibleProgressCount || 0);
     merged.distinctVisibleProgressCount += Number(evidence.distinctVisibleProgressCount || 0);
     merged.repeatedVisibleProgressCount += Number(evidence.repeatedVisibleProgressCount || 0);
+    merged.firstPersonProgressCount += Number(evidence.firstPersonProgressCount || 0);
+    merged.firstPersonProgressSamples.push(...(Array.isArray(evidence.firstPersonProgressSamples) ? evidence.firstPersonProgressSamples : []));
     merged.phase1Count += Number(evidence.phase1Count || 0);
     merged.phase2Count += Number(evidence.phase2Count || 0);
     merged.repeatedPhaseCount += Number(evidence.repeatedPhaseCount || 0);
@@ -1511,7 +1531,9 @@ function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
     && merged.taskToolOutputSeen === true
     && merged.visibleProgressCount >= 2
     && merged.distinctVisibleProgressCount >= 2
+    && merged.firstPersonProgressCount === 0
     && merged.artifactGuardUsed !== true;
+  merged.firstPersonProgressSamples = [...new Set(merged.firstPersonProgressSamples)].slice(0, 5);
   merged.assistantText = merged.assistantText.slice(-2000);
   return merged;
 }
@@ -1677,7 +1699,10 @@ function verifyMultiTurnProjectArtifact(dir, firstMarker, finalMarker) {
 }
 
 function uniqueUrls(text) {
-  return Array.from(new Set(String(text || "").match(/https?:\/\/[^\s"'<>),;]+/gi) || []));
+  return Array.from(new Set(
+    (String(text || "").match(/https?:\/\/[^\s"'<>),;\\]+/gi) || [])
+      .map((url) => url.replace(/[.?!。，、]+$/g, "")),
+  ));
 }
 
 function verifyReportSiteArtifact(dir, expectedMarker) {
@@ -1699,6 +1724,10 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     htmlHasChinese: false,
     reportMentionsCodex: false,
     htmlMentionsCodex: false,
+    reportHasTrustedChinesePhrase: false,
+    htmlHasTrustedChinesePhrase: false,
+    reportHasLiteralEscapedNewlines: false,
+    htmlHasLiteralEscapedNewlines: false,
     reportUrlCount: 0,
     htmlUrlCount: 0,
     sharedUrlCount: 0,
@@ -1721,6 +1750,8 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     evidence.reportHasMarker = text.includes(expectedMarker);
     evidence.reportHasChinese = /[\u4e00-\u9fff]/.test(text);
     evidence.reportMentionsCodex = /Codex|OpenAI/i.test(text);
+    evidence.reportHasTrustedChinesePhrase = /真实来源/.test(text);
+    evidence.reportHasLiteralEscapedNewlines = /\\n/.test(text);
     reportUrls = uniqueUrls(text);
     evidence.reportUrlCount = reportUrls.length;
   }
@@ -1730,6 +1761,8 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     evidence.htmlHasMarker = text.includes(expectedMarker);
     evidence.htmlHasChinese = /[\u4e00-\u9fff]/.test(text);
     evidence.htmlMentionsCodex = /Codex|OpenAI/i.test(text);
+    evidence.htmlHasTrustedChinesePhrase = /真实来源/.test(text);
+    evidence.htmlHasLiteralEscapedNewlines = /\\n/.test(text);
     htmlUrls = uniqueUrls(text);
     evidence.htmlUrlCount = htmlUrls.length;
     evidence.htmlComplete = /<html|<!doctype/i.test(text) && /<\/html>/i.test(text);
@@ -1772,6 +1805,10 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     htmlHasChinese: false,
     reportMentionsCodex: false,
     htmlMentionsCodex: false,
+    reportHasTrustedChinesePhrase: false,
+    htmlHasTrustedChinesePhrase: false,
+    reportHasLiteralEscapedNewlines: false,
+    htmlHasLiteralEscapedNewlines: false,
     reportUrlCount: 0,
     htmlUrlCount: 0,
     sharedUrlCount: 0,
@@ -1803,6 +1840,8 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.reportHasMarker = text.includes(expectedMarker);
       evidence.reportHasChinese = /[\u4e00-\u9fff]/.test(text);
       evidence.reportMentionsCodex = /Codex|OpenAI/i.test(text);
+      evidence.reportHasTrustedChinesePhrase = /真实来源/.test(text);
+      evidence.reportHasLiteralEscapedNewlines = /\\n/.test(text);
       reportUrls = uniqueUrls(text);
       evidence.reportUrlCount = reportUrls.length;
     }
@@ -1811,6 +1850,8 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.htmlHasMarker = text.includes(expectedMarker);
       evidence.htmlHasChinese = /[\u4e00-\u9fff]/.test(text);
       evidence.htmlMentionsCodex = /Codex|OpenAI/i.test(text);
+      evidence.htmlHasTrustedChinesePhrase = /真实来源/.test(text);
+      evidence.htmlHasLiteralEscapedNewlines = /\\n/.test(text);
       htmlUrls = uniqueUrls(text);
       evidence.htmlUrlCount = htmlUrls.length;
       evidence.htmlComplete = /<html|<!doctype/i.test(text) && /<\/html>/i.test(text);
@@ -1869,6 +1910,37 @@ function multiTurnProjectArtifactComplete(evidence) {
     && evidence.cliPassed === true;
 }
 
+function complexProjectArtifactComplete(evidence, { requireModelLed = false } = {}) {
+  if (evidence?.files?.packageJson !== true) return false;
+  if (evidence?.files?.analyzer !== true) return false;
+  if (evidence?.files?.testFile !== true) return false;
+  if (evidence?.files?.sourcesJson !== true) return false;
+  if (evidence?.files?.reportMd !== true) return false;
+  if (evidence?.files?.indexHtml !== true) return false;
+  if (evidence?.files?.doneTxt !== true) return false;
+  if (evidence.doneExact !== true) return false;
+  if (evidence.exportsFunction !== true) return false;
+  if (Number(evidence.sourceUrlCount || 0) < 3) return false;
+  if (evidence.testPassed !== true) return false;
+  if (evidence.cliPassed !== true) return false;
+  if (evidence.reportHasMarker !== true || evidence.htmlHasMarker !== true) return false;
+  if (evidence.reportHasChinese !== true || evidence.htmlHasChinese !== true) return false;
+  if (evidence.reportHasTrustedChinesePhrase !== true || evidence.htmlHasTrustedChinesePhrase !== true) return false;
+  if (evidence.reportHasLiteralEscapedNewlines === true || evidence.htmlHasLiteralEscapedNewlines === true) return false;
+  if (evidence.reportMentionsCodex !== true || evidence.htmlMentionsCodex !== true) return false;
+  if (Number(evidence.reportUrlCount || 0) < 3 || Number(evidence.htmlUrlCount || 0) < 3) return false;
+  if (Number(evidence.sharedUrlCount || 0) < 1) return false;
+  if (evidence.htmlComplete !== true || evidence.htmlLinksReport !== true) return false;
+  if (!requireModelLed) return true;
+  if (evidence?.responseHistory?.artifactGuardUsed === true) return false;
+  if ((Number(evidence?.responseHistory?.taskToolCallCount) || 0) < 1) return false;
+  if (evidence?.responseHistory?.taskToolOutputSeen !== true) return false;
+  if (evidence?.responseHistory?.markerToolOutputSeen !== true) return false;
+  if (evidence?.responseHistory?.assistantHasFinalMarker !== true) return false;
+  if ((Number(evidence?.responseHistory?.visibleProgressCount) || 0) < 1) return false;
+  return true;
+}
+
 function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   const localFailures = [];
   if (!artifactEvidence?.files?.packageJson) localFailures.push("complex-project package.json was not created");
@@ -1887,6 +1959,10 @@ function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) localFailures.push("complex-project index.html missing marker");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) localFailures.push("complex-project report.md missing Chinese content");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) localFailures.push("complex-project index.html missing Chinese content");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasTrustedChinesePhrase !== true) localFailures.push("complex-project report.md did not preserve required Chinese phrase");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasTrustedChinesePhrase !== true) localFailures.push("complex-project index.html did not preserve required Chinese phrase");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasLiteralEscapedNewlines === true) localFailures.push("complex-project report.md contains literal escaped newlines");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasLiteralEscapedNewlines === true) localFailures.push("complex-project index.html contains literal escaped newlines");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) localFailures.push("complex-project report.md missing Codex/OpenAI content");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) localFailures.push("complex-project index.html missing Codex/OpenAI content");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) localFailures.push("complex-project report.md has fewer than three source URLs");
@@ -1919,6 +1995,30 @@ function filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, a
     && history.taskToolOutputSeen === true;
   if (!hasCompletedResponse) return failures;
   return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
+}
+
+function collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, repairAttempted = false) {
+  if (!["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"].includes(taskMode)) return [];
+  const responseHistory = artifactEvidence?.responseHistory || {};
+  const failures = [];
+  if (repairAttempted) failures.push(`${taskMode} required verifier repair before completion`);
+  if (responseHistory.codexLikeProcessProof !== true) failures.push(`${taskMode} did not prove a Codex-like visible agent process`);
+  if (responseHistory.artifactGuardUsed === true) failures.push(`${taskMode} used deterministic artifact guard instead of model-led task execution`);
+  if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two visible progress updates`);
+  if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two distinct visible progress updates`);
+  if ((Number(responseHistory.firstPersonProgressCount) || 0) > 0) failures.push(`${taskMode} used first-person visible progress updates`);
+  if ((Number(responseHistory.repeatedVisibleProgressCount) || 0) > 2) failures.push(`${taskMode} repeated visible progress text too many times`);
+  if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push(`${taskMode} did not emit a task tool call`);
+  if (responseHistory.taskToolOutputSeen !== true) failures.push(`${taskMode} did not observe task tool output`);
+  if (responseHistory.markerToolOutputSeen !== true) failures.push(`${taskMode} did not observe marker-scoped tool output`);
+  if (responseHistory.assistantHasFinalMarker !== true) failures.push(`${taskMode} assistant final marker was not observed in response history`);
+  return failures;
+}
+
+function pushUniqueFailures(target, source) {
+  for (const failure of source || []) {
+    if (!target.includes(failure)) target.push(failure);
+  }
 }
 
 function collectReportSiteArtifactFailures(artifactEvidence) {
@@ -2739,7 +2839,7 @@ async function main() {
   let submitCompletedAt = 0;
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
-  const complexProjectRequiresModelLed = taskMode === "complex-project" && requiredModelNeedles().length > 0;
+  const complexProjectRequiresModelLed = taskMode === "complex-project";
 
   try {
     releaseUiLock = await acquireUiSmokeLock();
@@ -3414,7 +3514,15 @@ async function main() {
       if (artifactEvidence?.files?.wordTally && artifactEvidence.cliPassed !== true) failures.push("coding-project CLI output did not contain red=2 and blue=1");
     }
     if (taskMode === "complex-project" || taskMode === "autonomous-reasoning") {
-      artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+      artifactEvidence = await waitForArtifactEvidence(
+        () => verifyComplexProjectArtifact(artifactDir, marker),
+        (evidence) => complexProjectArtifactComplete(evidence, { requireModelLed: complexProjectRequiresModelLed }),
+        Math.min(timeoutMs, 240_000),
+      );
+      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) {
+        await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
+        artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+      }
       if (!artifactEvidence?.files?.packageJson) failures.push("complex-project package.json was not created");
       if (!artifactEvidence?.files?.analyzer) failures.push("complex-project codex-update-analyzer.mjs was not created");
       if (!artifactEvidence?.files?.testFile) failures.push("complex-project codex-update-analyzer.test.mjs was not created");
@@ -3431,6 +3539,10 @@ async function main() {
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) failures.push("complex-project index.html missing marker");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) failures.push("complex-project report.md missing Chinese content");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) failures.push("complex-project index.html missing Chinese content");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasTrustedChinesePhrase !== true) failures.push("complex-project report.md did not preserve required Chinese phrase");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasTrustedChinesePhrase !== true) failures.push("complex-project index.html did not preserve required Chinese phrase");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasLiteralEscapedNewlines === true) failures.push("complex-project report.md contains literal escaped newlines");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasLiteralEscapedNewlines === true) failures.push("complex-project index.html contains literal escaped newlines");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) failures.push("complex-project report.md missing Codex/OpenAI content");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) failures.push("complex-project index.html missing Codex/OpenAI content");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) failures.push("complex-project report.md has fewer than three source URLs");
@@ -3508,7 +3620,11 @@ async function main() {
       preRepairArtifactEvidence = artifactEvidence;
       repairPrompt = buildComplexProjectRepairPrompt(artifactFailures, artifactEvidence);
       repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
-      artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+      artifactEvidence = await waitForArtifactEvidence(
+        () => verifyComplexProjectArtifact(artifactDir, marker),
+        (evidence) => complexProjectArtifactComplete(evidence, { requireModelLed: complexProjectRequiresModelLed }),
+        Math.min(timeoutMs, 120_000),
+      );
       finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
     }
   }
@@ -3569,15 +3685,7 @@ async function main() {
   }
 
   if (["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"].includes(taskMode)) {
-    const responseHistory = artifactEvidence?.responseHistory || {};
-    if (responseHistory.codexLikeProcessProof !== true) failures.push(`${taskMode} did not prove a Codex-like visible agent process`);
-    if (responseHistory.artifactGuardUsed === true) failures.push(`${taskMode} used deterministic artifact guard instead of model-led task execution`);
-    if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two visible progress updates`);
-    if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two distinct visible progress updates`);
-    if ((Number(responseHistory.repeatedVisibleProgressCount) || 0) > 2) failures.push(`${taskMode} repeated visible progress text too many times`);
-    if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push(`${taskMode} did not emit a task tool call`);
-    if (responseHistory.taskToolOutputSeen !== true) failures.push(`${taskMode} did not observe task tool output`);
-    if (responseHistory.assistantHasFinalMarker !== true) failures.push(`${taskMode} assistant final marker was not observed in response history`);
+    pushUniqueFailures(failures, collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, Boolean(repairPrompt)));
     const effectiveFailures = filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, artifactEvidence);
     failures.length = 0;
     failures.push(...effectiveFailures);
@@ -3602,6 +3710,7 @@ async function main() {
   if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
   modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
   failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
+  pushUniqueFailures(failures, collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, Boolean(repairPrompt)));
   const payload = {
     ok: failures.length === 0,
     reportName,

@@ -7326,7 +7326,7 @@ function visibleToolCommandTargetSummary(command = "") {
 }
 
 function contentHasVisibleToolProgress(content = "") {
-    return /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|调用\s+.+?推进任务|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件)/.test(String(content || ""));
+    return /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：/.test(String(content || ""));
 }
 
 function assistantHistoryContainsExactText(originalRequest = {}, chatMessages = [], text = "") {
@@ -7555,6 +7555,16 @@ function chatToolEvidenceText(messages = []) {
         .join("\n");
 }
 
+function latestChatToolEvidenceText(messages = []) {
+    for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message?.role !== "tool") continue;
+        const text = textFromMessageContent(message.content);
+        if (text) return text;
+    }
+    return "";
+}
+
 function requestToolEvidenceText(originalRequest = {}) {
     const request = originalRequestFromArg(originalRequest);
     if (!Array.isArray(request?.input)) return "";
@@ -7567,6 +7577,19 @@ function requestToolEvidenceText(originalRequest = {}) {
         })
         .filter(Boolean)
         .join("\n");
+}
+
+function latestRequestToolEvidenceText(originalRequest = {}) {
+    const request = originalRequestFromArg(originalRequest);
+    if (!Array.isArray(request?.input)) return "";
+    for (let index = request.input.length - 1; index >= 0; index -= 1) {
+        const item = request.input[index];
+        if (item?.type !== "function_call_output" && item?.type !== "custom_tool_call_output") continue;
+        if (typeof item.output === "string") return item.output;
+        if (item.output === undefined || item.output === null) continue;
+        try { return JSON.stringify(item.output); } catch { return String(item.output); }
+    }
+    return "";
 }
 
 function combinedToolEvidenceText(originalRequest = {}, messages = []) {
@@ -7696,8 +7719,8 @@ function latestRequestInputIsToolOutput(originalRequest = {}) {
 }
 
 function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody = null) {
-    if (!requestIncludesToolOutput(originalRequest)) return null;
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
+    if (!requestIncludesToolOutput(originalRequest) && !messagesHaveToolEvidence(messages)) return null;
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
@@ -7711,7 +7734,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
         if (sourceCount < 3 || codexMentionCount < 1 || !testsPassed) return null;
         return makeTextCompletion(
             chatBody?.model || originalRequest?.model || "gemini-pro-agent",
-            `Files created, tested, and verified.\n\n${requirement.marker}`,
+            `验证：测试和本地 CLI 输出已通过。\n核对：完成标记已读回，交付文件已落到目标目录。\n\nFiles created, tested, and verified.\n\n${requirement.marker}`,
         );
     }
     const artifactEvidence = /Anti-Codex artifact marker verification|index\.html|README\.md|done\.txt|Get-ChildItem|Select-String|WriteAllText|Set-Content/i.test(evidenceText);
@@ -8342,6 +8365,41 @@ function normalizeArtifactPowerShellUtf8NoBom(command = "") {
     return `$__antiCodexUtf8NoBom = [System.Text.UTF8Encoding]::new($false)\n${normalized}`;
 }
 
+function escapeCjkForJavascriptShellCommand(command = "") {
+    if (typeof command !== "string" || !/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/u.test(command)) return command;
+    if (!/(?:\bnode\b|fs\.writeFileSync|require\(["'](?:node:)?fs["']\)|import\s+fs\s+from|\$code\s*=\s*@')/i.test(command)) return command;
+    return command.replace(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/gu, (char) => {
+        const code = char.charCodeAt(0).toString(16).padStart(4, "0");
+        return `\\u${code}`;
+    });
+}
+
+function normalizeJavascriptUnicodeEscapesInShellCommand(command = "") {
+    if (typeof command !== "string" || !/\\\\u[0-9a-fA-F]{4}/.test(command)) return command;
+    if (!/(?:\bnode\b|fs\.writeFileSync|require\(["'](?:node:)?fs["']\)|import\s+fs\s+from|\$code\s*=\s*@')/i.test(command)) return command;
+    return command.replace(/\\\\u([0-9a-fA-F]{4})/g, (_match, code) => `\\u${code}`);
+}
+
+function normalizeJavascriptNewlineEscapesInShellCommand(command = "") {
+    if (typeof command !== "string" || !/\\\\[rn]/.test(command)) return command;
+    if (!/(?:\bnode\b|fs\.writeFileSync|require\(["'](?:node:)?fs["']\)|import\s+fs\s+from|\$code\s*=\s*@')/i.test(command)) return command;
+    return command
+        .replace(/\\\\r\\\\n/g, "\\r\\n")
+        .replace(/\\\\n/g, "\\n")
+        .replace(/\\\\r/g, "\\r");
+}
+
+function normalizeHtmlEntitiesInJavascriptShellCommand(command = "") {
+    if (typeof command !== "string" || !/(?:&lt;|&gt;|&quot;|&#39;|&amp;)/i.test(command)) return command;
+    if (!/(?:index\.html|<!doctype|<html|fs\.writeFileSync|\bnode\b)/i.test(command)) return command;
+    return command
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '\\"')
+        .replace(/&#39;/gi, "'")
+        .replace(/&amp;/gi, "&");
+}
+
 function normalizeExactMarkerSetContentNoNewline(command = "", marker = "") {
     if (typeof command !== "string" || !marker || !/\bSet-Content\b/i.test(command)) return command;
     const markerRe = new RegExp(escapeRegExp(marker));
@@ -8375,8 +8433,15 @@ function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
     for (const fileName of uniqueTargets) {
         lines.push(`  [System.IO.File]::WriteAllText((Join-Path $__antiCodexMarkerOnlyDir ${psSingleQuoted(fileName)}), $__antiCodexMarkerOnlyText, $__antiCodexMarkerOnlyUtf8)`);
     }
+    lines.push("  Write-Output $__antiCodexMarkerOnlyText");
     lines.push("}");
     return `${command}${lines.join("\n")}`;
+}
+
+function withLocalArtifactWorkdir(args = {}, requirement = null) {
+    if (!requirement?.targetPath || !args || typeof args !== "object" || Array.isArray(args)) return args;
+    if (typeof args.workdir === "string" || typeof args.cwd === "string" || typeof args.working_directory === "string") return args;
+    return { ...args, workdir: requirement.targetPath };
 }
 
 function repairLocalArtifactToolArguments(args, codexName, originalRequest = null) {
@@ -8403,15 +8468,23 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
         command = normalizeExactMarkerSetContentNoNewline(command, requirement.marker);
         command = appendExactMarkerOnlyFileRewrite(command, requirement);
         command = normalizeArtifactPowerShellUtf8NoBom(command);
-        return JSON.stringify({ ...parsed, [key]: command });
+        if (requirement.complexProject || commandLooksComplexProject) command = escapeCjkForJavascriptShellCommand(command);
+        if (requirement.complexProject || commandLooksComplexProject) command = normalizeJavascriptUnicodeEscapesInShellCommand(command);
+        if (requirement.complexProject || commandLooksComplexProject) command = normalizeJavascriptNewlineEscapesInShellCommand(command);
+        if (requirement.complexProject || commandLooksComplexProject) command = normalizeHtmlEntitiesInJavascriptShellCommand(command);
+        return JSON.stringify(withLocalArtifactWorkdir({ ...parsed, [key]: command }, requirement));
     }
     if (requirement.complexProject || commandLooksComplexProject) {
         command = normalizeArtifactPowerShellUtf8NoBom(command);
-        return JSON.stringify({ ...parsed, [key]: command });
+        command = escapeCjkForJavascriptShellCommand(command);
+        command = normalizeJavascriptUnicodeEscapesInShellCommand(command);
+        command = normalizeJavascriptNewlineEscapesInShellCommand(command);
+        command = normalizeHtmlEntitiesInJavascriptShellCommand(command);
+        return JSON.stringify(withLocalArtifactWorkdir({ ...parsed, [key]: command }, requirement));
     }
     if (requirement.agenticStepFlow) {
         command = normalizeArtifactPowerShellUtf8NoBom(command);
-        return JSON.stringify({ ...parsed, [key]: command });
+        return JSON.stringify(withLocalArtifactWorkdir({ ...parsed, [key]: command }, requirement));
     }
     const hasCurrentArtifactGuard = command.includes("Anti-Codex exact artifact marker guard")
         && command.includes(requirement.marker)
@@ -8421,7 +8494,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
         command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject, multiTurnProject: requirement.multiTurnProject, reportSite: requirement.reportSite });
     }
     command = normalizeArtifactPowerShellUtf8NoBom(command);
-    return JSON.stringify({ ...parsed, [key]: command });
+    return JSON.stringify(withLocalArtifactWorkdir({ ...parsed, [key]: command }, requirement));
 }
 
 function scopedFixtureFirstWriteRequirementFromOriginalRequest(originalRequest = null) {
@@ -8591,6 +8664,35 @@ function userTextRequiresToolForCompletion(userText = "") {
     if (asksForEvaluationOnly && !hasExplicitToolWork) return false;
     if (artifactMarkerRequirementFromUserText(value)) return true;
     return hasExplicitToolWork;
+}
+
+function userTextRequiresLocalArtifactToolForCompletion(userText = "") {
+    const value = String(userText || "");
+    if (!value.trim()) return false;
+    if (!/[A-Za-z]:\\|\/[^ \n\r]+/.test(value)) return false;
+    const mentionsArtifact = /(?:package\.json|done\.txt|index\.html|README\.md|sources\.json|report\.md|\.test\.mjs|\.mjs|\.json|\.html|fixture directory|local project|artifact|project)/i.test(value);
+    const asksForWork = /(?:create|write|edit|modify|fix|implement|generate|run|verify|test|node --test|PowerShell file commands|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u751f\u6210|\u8fd0\u884c|\u9a8c\u8bc1|\u6d4b\u8bd5)/iu.test(value);
+    return mentionsArtifact && asksForWork;
+}
+
+function localArtifactToolEvidenceMatchesUserText(userText = "", evidenceText = "") {
+    const evidence = String(evidenceText || "");
+    if (!evidence.trim()) return false;
+    if (/(?:\bfail\s+[1-9]\b|failing tests|AssertionError|ERR_ASSERTION|Exit code:\s*[1-9]|ReferenceError|SyntaxError|TypeError|ENOENT|not found|cannot find|threw|✖)/i.test(evidence)) return false;
+    const requirement = artifactMarkerRequirementFromUserText(userText);
+    if (requirement?.marker) return evidence.includes(requirement.marker);
+    return true;
+}
+
+function shouldRelayTextOnlyLocalArtifactCompletion(text, { hasToolEvidence = false, hasToolCall = false, userText = "", evidenceText = "" } = {}) {
+    if (hasToolCall) return false;
+    if (!userTextRequiresLocalArtifactToolForCompletion(userText)) return false;
+    if (hasToolEvidence && localArtifactToolEvidenceMatchesUserText(userText, evidenceText)) return false;
+    const value = String(text || "").trim();
+    if (!value) return false;
+    if (hasPseudoToolMarkup(value)) return false;
+    if (assistantTextLooksLikeHonestNoEvidenceBlocker(value)) return false;
+    return true;
 }
 
 function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolCall = false, hasWebToolEvidence = false, isCompactionRecall = false, userText = "" } = {}) {
@@ -9082,6 +9184,12 @@ async function callUpstreamWithInternalTools(body, dependencies = {}) {
                 hasToolCall: hasExternalCalls,
                 userText: latestUserTextFromChatMessages(working.messages),
             });
+            const shouldRelayLocalArtifactText = shouldRelayTextOnlyLocalArtifactCompletion(assistantText, {
+                hasToolEvidence,
+                hasToolCall: hasExternalCalls,
+                userText: latestUserTextFromChatMessages(working.messages),
+                evidenceText: latestChatToolEvidenceText(working.messages),
+            });
             const artifactMismatch = !hasExternalCalls
                 ? artifactMarkerMismatchForChat(working.messages, assistantText)
                 : null;
@@ -9094,7 +9202,7 @@ async function callUpstreamWithInternalTools(body, dependencies = {}) {
                 }
                 return { ok: true, status: 200, json: markInternalEvidence(makeTextCompletion(working.model, artifactMarkerMismatchBlockedMessage(artifactMismatch))) };
             }
-            if (shouldRelayFakeClaim) {
+            if (shouldRelayFakeClaim || shouldRelayLocalArtifactText) {
                 if (fakeToolClaimReplays < MAX_FAKE_TOOL_CLAIM_REPLAYS) {
                     fakeToolClaimReplays += 1;
                     working.messages.push({ role: "assistant", content: assistantText || "" });
@@ -10582,11 +10690,21 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                 const assistantText = extractAssistantText(completion);
                 const hasWebToolEvidence = requestHasToolOutputFor(parsed, ["web_search", "web_fetch"]);
                 const artifactMismatch = artifactMarkerMismatchForChat(workingChatBody.messages || [], assistantText);
+                const hasAnyToolEvidence = requestHasToolEvidence(parsed)
+                    || messagesHaveToolEvidence(workingChatBody.messages || []);
+                const userText = latestUserTextFromRequest(parsed) || latestUserTextFromChatMessages(workingChatBody.messages || []);
+                const evidenceText = latestChatToolEvidenceText(workingChatBody.messages || [])
+                    || latestRequestToolEvidenceText(parsed);
                 const shouldReplay = artifactMismatch || shouldBlockAssistantToolClaim(assistantText, {
-                    hasToolEvidence: requestHasToolEvidence(parsed),
+                    hasToolEvidence: hasAnyToolEvidence,
                     hasToolCall: false,
                     hasWebToolEvidence,
-                    userText: latestUserTextFromRequest(parsed) || latestUserTextFromChatMessages(workingChatBody.messages || []),
+                    userText,
+                }) || shouldRelayTextOnlyLocalArtifactCompletion(assistantText, {
+                    hasToolEvidence: hasAnyToolEvidence,
+                    hasToolCall: false,
+                    userText,
+                    evidenceText,
                 });
                 if (!shouldReplay) break;
                 if (nonStreamingToolReplays >= MAX_FAKE_TOOL_CLAIM_REPLAYS) {
@@ -10687,12 +10805,24 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
             }
             const shouldBlockFakeClaim = toolCapable
                 && !responseOutputHasToolCall(fmt.output)
-                && shouldBlockAssistantToolClaim(assistantText, {
-                    hasToolEvidence: requestHasToolEvidence(parsed),
-                    hasToolCall: false,
-                    hasWebToolEvidence,
-                    userText: latestUserTextFromRequest(parsed) || latestUserTextFromChatMessages(workingChatBody.messages || []),
-                });
+                && (() => {
+                    const hasAnyToolEvidence = requestHasToolEvidence(parsed)
+                        || messagesHaveToolEvidence(workingChatBody.messages || []);
+                    const userText = latestUserTextFromRequest(parsed) || latestUserTextFromChatMessages(workingChatBody.messages || []);
+                    const evidenceText = latestChatToolEvidenceText(workingChatBody.messages || [])
+                        || latestRequestToolEvidenceText(parsed);
+                    return shouldBlockAssistantToolClaim(assistantText, {
+                        hasToolEvidence: hasAnyToolEvidence,
+                        hasToolCall: false,
+                        hasWebToolEvidence,
+                        userText,
+                    }) || shouldRelayTextOnlyLocalArtifactCompletion(assistantText, {
+                        hasToolEvidence: hasAnyToolEvidence,
+                        hasToolCall: false,
+                        userText,
+                        evidenceText,
+                    });
+                })();
             if (!shouldBlockFakeClaim) break;
             if (fakeToolClaimStreamReplays >= MAX_FAKE_TOOL_CLAIM_REPLAYS) {
                 fmt = chatToResponsesFormat(makeTextCompletion(
@@ -11016,12 +11146,21 @@ class ChatToResponsesStreamMapper {
         }
         if (this.textOutputIndex !== null) {
             const hasWebToolEvidence = requestHasToolOutputFor(this.original, ["web_search", "web_fetch"]);
-            const text = shouldBlockAssistantToolClaim(this.text, {
-                hasToolEvidence: requestHasToolEvidence(this.original),
+            const hasToolEvidence = requestHasToolEvidence(this.original);
+            const userText = latestUserTextFromRequest(this.original);
+            const evidenceText = latestRequestToolEvidenceText(this.original);
+            const shouldBlockText = shouldBlockAssistantToolClaim(this.text, {
+                hasToolEvidence,
                 hasToolCall: this.toolCalls.size > 0,
                 hasWebToolEvidence,
-                userText: latestUserTextFromRequest(this.original),
-            })
+                userText,
+            }) || shouldRelayTextOnlyLocalArtifactCompletion(this.text, {
+                hasToolEvidence,
+                hasToolCall: this.toolCalls.size > 0,
+                userText,
+                evidenceText,
+            });
+            const text = shouldBlockText
                 ? blockedToolClaimMessageFor(this.text, { hasWebToolEvidence })
                 : sanitizeMarkdownUrlFormatting(this.text);
             items.push([this.textOutputIndex, { type: "message", id: this.messageId, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] }]);
@@ -11058,12 +11197,21 @@ class ChatToResponsesStreamMapper {
         }
         if (this.textOutputIndex !== null) {
             const hasWebToolEvidence = requestHasToolOutputFor(this.original, ["web_search", "web_fetch"]);
-            const text = shouldBlockAssistantToolClaim(this.text, {
-                hasToolEvidence: requestHasToolEvidence(this.original),
+            const hasToolEvidence = requestHasToolEvidence(this.original);
+            const userText = latestUserTextFromRequest(this.original);
+            const evidenceText = latestRequestToolEvidenceText(this.original);
+            const shouldBlockText = shouldBlockAssistantToolClaim(this.text, {
+                hasToolEvidence,
                 hasToolCall: this.toolCalls.size > 0,
                 hasWebToolEvidence,
-                userText: latestUserTextFromRequest(this.original),
-            })
+                userText,
+            }) || shouldRelayTextOnlyLocalArtifactCompletion(this.text, {
+                hasToolEvidence,
+                hasToolCall: this.toolCalls.size > 0,
+                userText,
+                evidenceText,
+            });
+            const text = shouldBlockText
                 ? blockedToolClaimMessageFor(this.text, { hasWebToolEvidence })
                 : sanitizeMarkdownUrlFormatting(this.text);
             const item = { type: "message", id: this.messageId, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };
