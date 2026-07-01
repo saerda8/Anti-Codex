@@ -595,7 +595,7 @@ test("antigravityProfileFromCatalog exposes every dynamically discovered model",
     "claude-sonnet-4-6",
     "gpt-oss-120b-medium",
   ]);
-  assert.equal(profile.defaultModel, "gemini-pro-agent");
+  assert.equal(profile.defaultModel, "gemini-3.5-flash-low");
   assert.equal(profile.fastModel, "gemini-3.5-flash-low");
   assert.equal(profile.capabilities.vision, true);
   assert.equal(profile.capabilities.internalWebTools, true);

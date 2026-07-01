@@ -692,8 +692,9 @@
     }
     if (existing?.getAttribute("data-anticodex-traffic-signature") === signature) return;
     existing?.remove();
+    const quotaModel = String(health?.accountTrafficModel || "").trim();
     const copy = {
-      quota_or_limit_reached: ["Antigravity \u8d26\u53f7\u989d\u5ea6\u5df2\u5230", "\u5207\u6362\u8d26\u53f7\uff0c\u6216\u7b49\u5f85\u989d\u5ea6\u6062\u590d\u540e\u91cd\u8bd5\u3002"],
+      quota_or_limit_reached: [quotaModel ? `${quotaModel} \u989d\u5ea6\u5df2\u5230` : "Antigravity \u6a21\u578b\u989d\u5ea6\u5df2\u5230", quotaModel ? "\u8bf7\u5207\u6362\u5230\u4ecd\u6709\u989d\u5ea6\u7684\u6a21\u578b\uff0c\u6216\u7b49\u5f85\u8be5\u6a21\u578b\u989d\u5ea6\u6062\u590d\u3002" : "\u8bf7\u5207\u6362\u5230\u4ecd\u6709\u989d\u5ea6\u7684\u6a21\u578b\uff0c\u6216\u7b49\u5f85\u989d\u5ea6\u6062\u590d\u540e\u91cd\u8bd5\u3002"],
       account_verification_required: ["Antigravity \u9700\u8981\u8d26\u53f7\u9a8c\u8bc1", "\u8bf7\u5728 Antigravity \u684c\u9762\u7aef\u5b8c\u6210\u9a8c\u8bc1\u3002"],
       account_verification_with_missing_token: ["Antigravity \u9a8c\u8bc1\u5c1a\u672a\u751f\u6548", "\u5b8c\u6210\u9a8c\u8bc1\u540e\uff0c\u8bf7\u7a0d\u7b49\u6216\u91cd\u65b0\u6253\u5f00 Antigravity\u3002"],
       antigravity_account_unavailable: ["Antigravity \u8d26\u53f7\u4e0d\u53ef\u7528", "\u8bf7\u68c0\u67e5 Antigravity \u662f\u5426\u5df2\u767b\u5f55\u3002"],
@@ -2002,6 +2003,7 @@
             [usingThirdParty ? "\u63a5\u53e3\u72b6\u6001" : "Antigravity", usingThirdParty ? "\u5df2\u914d\u7f6e" : (health?.accountReady ? "\u5df2\u5c31\u7eea" : health?.accountState)],
             ...(usingThirdParty ? [["\u80fd\u529b\u8bc1\u636e", upstreamCapabilitySummary(upstreamProfile, health)]] : []),
             ["\u6d41\u91cf", usingThirdParty ? "\u7b2c\u4e09\u65b9 API" : (health?.accountTrafficReady === true ? "\u5df2\u5c31\u7eea" : (health?.accountTrafficReady === false ? trafficDiagnosis(health) : "\u672a\u68c0\u67e5"))],
+            ...(usingThirdParty ? [] : [["\u53d7\u9650\u6a21\u578b", health?.accountTrafficModel || "\u65e0"]]),
             ["\u5efa\u8bae", usingThirdParty ? "\u63a5\u53e3\u5931\u8d25\u65f6\u4e0d\u4f1a\u81ea\u52a8\u5207\u56de Antigravity" : (health?.accountTrafficSuggestedAction || "\u6682\u65e0")],
             ["\u6a21\u578b\u6570", modelList.length],
             ["\u91cd\u8fde", "\u672a\u68c0\u51fa"],

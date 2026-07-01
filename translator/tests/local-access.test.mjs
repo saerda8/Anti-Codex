@@ -337,6 +337,7 @@ test("Antigravity aborted upstream failures are exposed as retryable transient t
 test("Antigravity quota and usage limit failures are exposed as account limit traffic", () => {
   const quotaError = Object.assign(new Error("Antigravity model quota exceeded for this account."), {
     statusCode: 429,
+    model: "claude-opus-4-6-thinking",
   });
   const failure = antigravityFailureDetails(quotaError);
 
@@ -346,7 +347,7 @@ test("Antigravity quota and usage limit failures are exposed as account limit tr
     retryable: false,
     diagnosis: "quota_or_limit_reached",
     message: "Antigravity model quota exceeded for this account.",
-    suggestedAction: "切换 Antigravity 账号，或等待额度/限额恢复后重试。",
+    suggestedAction: "切换模型，或等待该模型额度/限额恢复后重试。",
   });
   assert.equal(shouldRecordAntigravityTrafficFailure(quotaError), true);
 
@@ -388,8 +389,9 @@ test("Antigravity quota and usage limit failures are exposed as account limit tr
   assert.equal(payload.accountTrafficDiagnosis, "quota_or_limit_reached");
   assert.equal(payload.accountTrafficStatus, 429);
   assert.equal(payload.accountTrafficRetryable, false);
+  assert.equal(payload.accountTrafficModel, "claude-opus-4-6-thinking");
   assert.match(payload.accountTrafficMessage, /quota exceeded/);
-  assert.equal(payload.accountTrafficSuggestedAction, "切换 Antigravity 账号，或等待额度/限额恢复后重试。");
+  assert.equal(payload.accountTrafficSuggestedAction, "模型 claude-opus-4-6-thinking 额度/限额已到；请切换到仍有额度的模型，或等待该模型额度恢复后重试。");
 });
 
 test("Antigravity traffic status is not cleared by an older queued success", () => {
@@ -1432,7 +1434,7 @@ test("Antigravity model refresh rebuilds a live profile from the desktop payload
 
   assert.deepEqual(refresh.models, ["gemini-3.5-flash-low", "gemini-pro-agent"]);
   assert.equal(refresh.profile.provider, "antigravity");
-  assert.equal(refresh.profile.defaultModel, "gemini-pro-agent");
+  assert.equal(refresh.profile.defaultModel, "gemini-3.5-flash-low");
   assert.equal(refresh.profile.fastModel, "gemini-3.5-flash-low");
   assert.equal(refresh.catalog.models.length, 2);
   assert.equal(refresh.catalog.models[0].slug, "gemini-3.5-flash-low");

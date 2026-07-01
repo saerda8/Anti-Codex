@@ -183,6 +183,7 @@ const ANTIGRAVITY_TRAFFIC_STATUS = {
     diagnosis: null,
     status: null,
     retryable: null,
+    model: null,
     message: "",
     suggestedAction: "",
     lastFailureAt: null,
@@ -451,7 +452,7 @@ function antigravityFailureDetails(error) {
             retryable: false,
             diagnosis: "quota_or_limit_reached",
             message,
-            suggestedAction: "切换 Antigravity 账号，或等待额度/限额恢复后重试。",
+            suggestedAction: "切换模型，或等待该模型额度/限额恢复后重试。",
         };
     }
     if (isAntigravityAccountVerificationRequired(error)) {
@@ -497,6 +498,7 @@ function antigravityTrafficSnapshot(status = ANTIGRAVITY_TRAFFIC_STATUS) {
         accountTrafficDiagnosis: status?.diagnosis || null,
         accountTrafficStatus: Number.isFinite(status?.status) ? status.status : null,
         accountTrafficRetryable: typeof status?.retryable === "boolean" ? status.retryable : null,
+        accountTrafficModel: status?.model || null,
         accountTrafficMessage: status?.message || "",
         accountTrafficSuggestedAction: status?.suggestedAction || "",
         accountTrafficLastFailureAt: status?.lastFailureAt || null,
@@ -528,6 +530,7 @@ function applyAntigravityTrafficSuccess(status, { startedAtMs = Date.now(), comp
     status.diagnosis = null;
     status.status = 200;
     status.retryable = false;
+    status.model = null;
     status.message = "";
     status.suggestedAction = "";
     status.lastSuccessAt = new Date(completedAtMs).toISOString();
@@ -535,15 +538,19 @@ function applyAntigravityTrafficSuccess(status, { startedAtMs = Date.now(), comp
     return true;
 }
 
-function applyAntigravityTrafficFailure(status, error, { occurredAtMs = Date.now() } = {}) {
+function applyAntigravityTrafficFailure(status, error, { occurredAtMs = Date.now(), model = "" } = {}) {
     const failure = antigravityFailureDetails(error);
+    const failureModel = String(error?.model || error?.requestedModel || model || "").trim();
     status.state = failure.diagnosis || failure.type || "antigravity_error";
     status.type = failure.type || null;
     status.diagnosis = failure.diagnosis || null;
     status.status = Number.isFinite(failure.status) ? failure.status : null;
     status.retryable = Boolean(failure.retryable);
+    status.model = failureModel || null;
     status.message = clipForLog(failure.message || "", 500);
-    status.suggestedAction = failure.suggestedAction || "";
+    status.suggestedAction = failure.diagnosis === "quota_or_limit_reached" && failureModel
+        ? `模型 ${failureModel} 额度/限额已到；请切换到仍有额度的模型，或等待该模型额度恢复后重试。`
+        : (failure.suggestedAction || "");
     status.lastFailureAt = new Date(occurredAtMs).toISOString();
     status.lastFailureAtMs = occurredAtMs;
     return failure;
@@ -2103,10 +2110,12 @@ function loadAntigravityCatalog() {
 function antigravityProfileFromCatalog(catalog) {
     const catalogModels = Array.isArray(catalog?.models) ? catalog.models : [];
     const models = catalogModels.map((model) => model?.slug).filter(Boolean);
-    const defaultModel = models.includes("gemini-pro-agent") ? "gemini-pro-agent" : (models[0] || "gemini-pro-agent");
     const fastModel = models.includes("gemini-3.5-flash-low")
         ? "gemini-3.5-flash-low"
-        : (models.find((model) => /flash/i.test(model)) || defaultModel);
+        : (models.find((model) => /flash/i.test(model)) || models[0] || "gemini-pro-agent");
+    const defaultModel = models.includes(fastModel)
+        ? fastModel
+        : (models[0] || fastModel || "gemini-pro-agent");
     return {
         provider: "antigravity",
         defaultModel,
@@ -4994,7 +5003,7 @@ async function load(){
     getJson("/anticodex/local-connectors/allowlist"),
   ]);
   kv("health",[["网关",badge(health.ok)],["上游",health.upstream||"未知"],["模型传输",health.modelTextTransport||"未知"],["模型发现",health.modelDiscoverySource||"未知"],["模型数",health.modelCount??0],["熔断",badge(health.antigravityCircuitState)],["启动状态",diagnosis(diag.lifecycle?.type||"未知")],["最近启动",diag.lifecycle?.at||"未知"],["进程",diag.process?("#"+diag.process.pid+" / "+diag.process.uptimeSec+" 秒"):"未知"]]);
-  kv("account",[["账号",badge(health.accountReady)],["流量",badge(health.accountTrafficReady)],["状态",diagnosis(health.accountTrafficDiagnosis||health.accountTrafficState||health.accountState)],["建议",health.accountTrafficSuggestedAction||"暂无"],["套餐",((account.planName||"未知")+" / "+(account.tierName||"未知"))],["代理边界","Anti-Codex 到 Antigravity 本机通信不走代理"]]);
+  kv("account",[["账号",badge(health.accountReady)],["流量",badge(health.accountTrafficReady)],["状态",diagnosis(health.accountTrafficDiagnosis||health.accountTrafficState||health.accountState)],["受限模型",health.accountTrafficModel||"无"],["建议",health.accountTrafficSuggestedAction||"暂无"],["套餐",((account.planName||"未知")+" / "+(account.tierName||"未知"))],["代理边界","Anti-Codex 到 Antigravity 本机通信不走代理"]]);
   const q=diag.antigravityQueue||{};
   const lf=diag.localFeatures||{};
   renderSnapshotAlert(lf);
@@ -7092,7 +7101,15 @@ function assistantTextLooksLikeUnsupportedToolClaim(text) {
     const zhDone = /(?:已|已经|刚才|我(?:已经)?|这里|现在).{0,36}(?:读完|读取|读了|查看|看了|检查|搜到|搜索到|查到|找到|运行|执行|安装|启动|生成|创建|写入|修改|补丁|打上|渲染|导出|移动|复制|删除|下载|打开|跑起来|跑完)/i;
     const zhDoneVerbFirst = /(?:搜到|搜索到|查到|找到|看了|读了|跑完|装好|写好|改好|生成好).{0,80}(?:结果|案例|资料|文件|页面|仓库|showcase|GitHub|官方|内容|数据)/i;
     const enClaim = /\b(?:I\s+(?:have\s+)?(?:installed|started|ran|read|generated|moved|copied|searched|fetched|opened|wrote|patched|downloaded|rendered)|(?:installed|started|ran|read|generated|moved|copied|searched|fetched|opened|wrote|patched|downloaded|rendered)\b)/i;
-    return assistantTextLooksLikeFutureToolPromise(compact) || zhDone.test(compact) || zhDoneVerbFirst.test(compact) || enClaim.test(compact);
+    return assistantTextLooksLikeBareToolStub(compact) || assistantTextLooksLikeFutureToolPromise(compact) || zhDone.test(compact) || zhDoneVerbFirst.test(compact) || enClaim.test(compact);
+}
+
+function assistantTextLooksLikeBareToolStub(text) {
+    const value = String(text || "").trim();
+    if (!value || value.length > 120) return false;
+    if (/<(?:tool_calls|tool_call|invoke)\b/i.test(value)) return false;
+    return /^(?:write_to_file|read_file|write_file|edit_file|apply_patch|shell_command|exec_command|run_command|list_dir|grep_search|web_search|web_fetch)(?:\s*\([^)]*\))?$/i.test(value)
+        || /^(?:工具|tool)\s*[:：]\s*(?:write_to_file|read_file|write_file|edit_file|apply_patch|shell_command|exec_command|run_command|list_dir|grep_search|web_search|web_fetch)$/i.test(value);
 }
 
 function assistantTextLooksLikeFutureToolPromise(text) {
@@ -7273,7 +7290,8 @@ function artifactMarkerRequirementFromUserText(userText = "") {
     const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
     const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
     const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
-    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject };
+    const agenticStepFlow = /(?:desktop-visible-agentic-step-flow|多阶段可见任务|阶段1：准备创建文件|阶段2：准备验证文件)/i.test(userText);
+    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject, agenticStepFlow };
 }
 
 function artifactMarkerRequirementFromChat(messages = []) {
@@ -7366,6 +7384,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
+    if (requirement.agenticStepFlow) return null;
     const evidenceText = chatToolEvidenceText(messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     const artifactEvidence = /Anti-Codex artifact marker verification|index\.html|README\.md|done\.txt|Get-ChildItem|Select-String|WriteAllText|Set-Content/i.test(evidenceText);
@@ -7391,6 +7410,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
+    if (requirement.agenticStepFlow) return null;
     const command = artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, {
         codingProject: requirement.codingProject,
         complexProject: requirement.complexProject,
@@ -7871,6 +7891,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     }
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return args;
+    if (requirement.agenticStepFlow) return args;
     if (!/(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) return args;
     let parsed = null;
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
@@ -8064,6 +8085,7 @@ function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolC
     if (/(?:requires a complete freeform patch\/tool body|Regenerate a valid patch body|Do not bypass this by writing ordinary source files)/i.test(String(text || ""))) return false;
     if (isCompactionRecall) return false;
     if (!hasToolEvidence && !hasWebToolEvidence && !userTextRequiresToolForCompletion(userText)) return false;
+    if (assistantTextLooksLikeUserPromptEcho(text, userText)) return true;
     if (!assistantTextLooksLikeWebToolUnavailableClaim(text) && assistantTextLooksLikeHonestNoEvidenceBlocker(text)) return false;
     if (assistantTextLooksLikeWebToolUnavailableClaim(text) && !hasWebToolEvidence) return true;
     if (!assistantTextLooksLikeUnsupportedToolClaim(text)) return false;
@@ -8083,6 +8105,18 @@ function assistantTextLooksLikeHonestNoEvidenceBlocker(text) {
         || /(?:shell|命令|exec_command).{0,24}(?:网络|联网|访问外网).{0,24}(?:失败|不可用|不通)/i.test(value);
 }
 
+function assistantTextLooksLikeUserPromptEcho(text, userText = "") {
+    const normalize = (value) => String(value || "")
+        .replace(/[\s`"'“”‘’.,，。:：;；!?！？()[\]{}<>《》|\\\/_-]+/g, "")
+        .toLowerCase();
+    const assistant = normalize(text);
+    const user = normalize(userText);
+    if (assistant.length < 18 || user.length < 32) return false;
+    const prefix = user.slice(0, Math.min(60, Math.max(24, Math.floor(user.length * 0.18))));
+    if (!prefix || !assistant.startsWith(prefix)) return false;
+    return assistant.length <= Math.max(160, prefix.length * 4);
+}
+
 function assistantTextLooksLikeMissingToolDetour(text) {
     const value = String(text || "").replace(/\s+/g, " ").trim();
     if (!value) return false;
@@ -8099,12 +8133,13 @@ function blockedToolClaimMessageFor(text, context = {}) {
 
 function localProjectEditToolInstructionForBody(body) {
     const userText = latestUserTextFromChatMessages(Array.isArray(body?.messages) ? body.messages : []);
-    if (!/(?:edit only this file|local project|fixture directory|acceptance-target|status-dashboard|README\.md|\.test\.mjs|node --test|modify|fix|implement)/i.test(userText)) return "";
+    if (!/(?:edit only this file|local project|fixture directory|acceptance-target|status-dashboard|README\.md|done\.txt|index\.html|package\.json|\.test\.mjs|node --test|modify|fix|implement|desktop-visible-agentic-step-flow|多阶段可见任务|创建|新建|写入|生成|验证|运行)/i.test(userText)) return "";
     if (!/[A-Za-z]:\\|\/[^ \n\r]+/.test(userText)) return "";
     return [
         "",
         "Local project edit requirement:",
         "- This is a real file-edit task. Directory listing alone is not progress.",
+        "- For Chinese multi-step file tasks, call the exposed shell/command tool with PowerShell file commands; do not output bare tool names such as write_to_file.",
         "- If the user already provided the target file and required behavior, do not start with a directory listing; modify the target file first.",
         "- If the user explicitly asks to create a named file first, the first tool action must write that named file. Do not list or read the directory before that write.",
         "- If the user forbids reading, listing, or inspecting files, respect that constraint and write only the requested file from the provided prompt details.",
@@ -9711,7 +9746,7 @@ async function callQueuedAntigravityUpstream(chatBody, dependencies = {}) {
         return completion;
     } catch (error) {
         if (error?.name !== "AbortError" && error?.name !== "AntigravityCircuitOpenError" && error?.type !== "antigravity_queue_full") circuit.recordFailure(error);
-        if (shouldRecordAntigravityTrafficFailure(error)) recordAntigravityTrafficFailure(error);
+        if (shouldRecordAntigravityTrafficFailure(error)) recordAntigravityTrafficFailure(error, { model: chatBody?.model || "" });
         throw error;
     } finally {
         endBusy();
@@ -9756,7 +9791,7 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
             sse("response.cancelled", { type: "response.cancelled", response: cancelled });
         } else {
             const failure = shouldRecordAntigravityTrafficFailure(error)
-                ? recordAntigravityTrafficFailure(error)
+                ? recordAntigravityTrafficFailure(error, { model: chatBody?.model || model || "" })
                 : antigravityFailureDetails(error);
             const failed = {
                 ...responseShell(parsed, { id, created, model, status: "failed", output: [] }),
@@ -10064,7 +10099,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
         } else {
             if (error?.name !== "AntigravityCircuitOpenError" && error?.type !== "antigravity_queue_full") circuit.recordFailure(error);
             const failure = shouldRecordAntigravityTrafficFailure(error)
-                ? recordAntigravityTrafficFailure(error)
+                ? recordAntigravityTrafficFailure(error, { model: chatBody?.model || model || "" })
                 : antigravityFailureDetails(error);
             const failed = {
                 ...responseShell(parsed, { id, created, model, status: "failed", output: [] }),
@@ -11218,7 +11253,7 @@ const server = http.createServer(async (req, res) => {
             if (isAntigravityUpstreamMode(UPSTREAM_MODE)) {
                 const readinessFailure = antigravityReadinessFailure(ANTIGRAVITY_READINESS?.getSnapshot());
                 if (readinessFailure) {
-                    recordAntigravityTrafficFailure(readinessFailure);
+                    recordAntigravityTrafficFailure(readinessFailure, { model: parsed?.model || "" });
                     return failWithDetails(res, readinessFailure.status, readinessFailure);
                 }
                 const chatBody = requestNeedsInternalWebTools(parsed)

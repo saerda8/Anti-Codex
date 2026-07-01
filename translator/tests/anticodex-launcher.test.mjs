@@ -2521,6 +2521,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /\$status\.ScrollBars = "Vertical"/);
   assert.match(manager, /accountTrafficReady/);
   assert.match(manager, /accountTrafficDiagnosis/);
+  assert.match(manager, /accountTrafficModel/);
   assert.match(manager, /accountTrafficSuggestedAction/);
   assert.match(manager, /\$trafficDiagnosis/);
   assert.match(manager, /quota_or_limit_reached/);
@@ -2734,6 +2735,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /Skill/);
   assert.match(server, /MCP/);
   assert.match(server, /quota_or_limit_reached/);
+  assert.match(server, /accountTrafficModel/);
   assert.match(server, /accountTrafficSuggestedAction/);
   assert.match(server, /id="plugins"/);
   assert.match(server, /function syncVersion/);
@@ -13480,7 +13482,9 @@ test("Anti-Codex ships a full model routing verifier", () => {
   assert.match(routing, /providerModel/);
   assert.match(routing, /toolBridge/);
   assert.match(routing, /internalModel/);
+  assert.match(routing, /\$route\.transport\s+-ne\s+"cli"\s+-and\s+-not\s+\[string\]\$route\.internalModel/);
   assert.match(routing, /cascadeId/);
+  assert.match(routing, /route status is not success/);
   assert.match(routing, /latest-\$Name\.json/);
   assert.match(routing, /model-routing/);
   assert.match(routing, /Proxy\s*=\s*\$null/);

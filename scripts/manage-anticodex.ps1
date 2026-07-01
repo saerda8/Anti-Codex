@@ -291,8 +291,8 @@ function Convert-DiagnosisText {
         "^account_verification_with_missing_token$" { return "需要完成 Antigravity 账号验证，后台令牌尚未刷新" }
         "^antigravity_account_unavailable$" { return "Antigravity 账号不可用" }
         "^antigravity_temporarily_unavailable$" { return "Antigravity 或代理暂时不可用" }
-        "^quota_or_limit_reached$" { return "Antigravity 账号额度/限额已到" }
-        "^antigravity_quota_exceeded$" { return "Antigravity 账号额度/限额已到" }
+        "^quota_or_limit_reached$" { return "Antigravity 模型额度/限额已到" }
+        "^antigravity_quota_exceeded$" { return "Antigravity 模型额度/限额已到" }
         "^proxy|network|oauth" { return "代理或网络异常" }
         "^unknown$" { return "未知" }
         default { return $Value }
@@ -830,7 +830,14 @@ function Get-ManagerStatus {
     $trafficState = [string]$health.accountTrafficState
     $trafficType = [string]$health.accountTrafficType
     $trafficAction = if ($trafficDiagnosis -eq "quota_or_limit_reached" -or $trafficType -eq "antigravity_quota_exceeded") {
-        $suggestion = if ($health.accountTrafficSuggestedAction) { [string]$health.accountTrafficSuggestedAction } else { "切换 Antigravity 账号，或等待额度/限额恢复后重试。" }
+        $limitedModel = if ($health.accountTrafficModel) { [string]$health.accountTrafficModel } else { "" }
+        $suggestion = if ($health.accountTrafficSuggestedAction) {
+            [string]$health.accountTrafficSuggestedAction
+        } elseif ($limitedModel) {
+            "模型 $limitedModel 额度/限额已到；请切换到仍有额度的模型，或等待该模型额度恢复后重试。"
+        } else {
+            "请切换到仍有额度的模型，或等待额度恢复后重试。"
+        }
         "`r`n操作：$suggestion Anti-Codex 不会切到 ChatGPT 登录。"
     } elseif ($trafficDiagnosis -eq "account_verification_with_missing_token") {
         "`r`n操作：请在 Antigravity 桌面端重新登录或完成账号验证，等后台令牌刷新后再重试。"

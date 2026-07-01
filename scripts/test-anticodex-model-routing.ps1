@@ -395,13 +395,17 @@ foreach ($model in $models) {
                 $checks.Add("third-party provider protocol mismatch: $($route.providerProtocol)") | Out-Null
             }
         } else {
-            if (-not [string]$route.internalModel) {
+            if ([string]$route.transport -ne "cli" -and -not [string]$route.internalModel) {
                 $ok = $false
                 $checks.Add("missing internal model") | Out-Null
             }
             if (-not [string]$route.cascadeId) {
                 $ok = $false
                 $checks.Add("missing cascade id") | Out-Null
+            }
+            if ([string]$route.status -ne "success") {
+                $ok = $false
+                $checks.Add("route status is not success: $($route.status)") | Out-Null
             }
             $expectedReasoningLabel = Get-ExpectedReasoningLabel $model
             if ($expectedReasoningLabel -and [string]$route.displayName -notmatch "\($([regex]::Escape($expectedReasoningLabel))\)$") {

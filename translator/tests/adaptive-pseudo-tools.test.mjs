@@ -3958,6 +3958,90 @@ test("report-site artifact requests start with the report-site shell guard", () 
   assert.ok(fallbackReadmeIndex < 0 || reportSiteBranchIndex < fallbackReadmeIndex);
 });
 
+test("agentic visible step-flow requests do not start with the deterministic artifact guard", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+          "2. 然后用工具创建 index.html、README.md、done.txt。",
+          "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
+          "done.txt 必须只包含 UI_AGENTIC_STEP_FLOW_SMOKE_20260701。",
+        ].join("\n"),
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+
+  assert.equal(deterministicArtifactToolCallCompletion(request, chatBody), null);
+});
+
+test("agentic visible step-flow rejects bare tool-name text as unfinished tool work", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "然后用工具创建 index.html、README.md、done.txt。",
+          "done.txt 必须只包含 UI_AGENTIC_STEP_FLOW_SMOKE_20260701。",
+        ].join("\n"),
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: { role: "assistant", content: "write_to_file" },
+      finish_reason: "stop",
+    }],
+  }, request, null, { strictTools: true });
+
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(fmt.output[0].content[0].text, /Anti-Codex 已拦截/);
+  assert.notEqual(fmt.output[0].content[0].text.trim(), "write_to_file");
+});
+
+test("agentic visible step-flow rejects user prompt echo as unfinished tool work", () => {
+  const prompt = [
+    "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+    "然后用工具创建 index.html、README.md、done.txt。",
+    "done.txt 必须只包含 UI_AGENTIC_STEP_FLOW_SMOKE_20260701。",
+  ].join("\n");
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: prompt }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: { role: "assistant", content: "请完成一个多阶段可见任务工作目录是 C:Tempagentic-step-flow" },
+      finish_reason: "stop",
+    }],
+  }, request, null, { strictTools: true });
+
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(fmt.output[0].content[0].text, /Anti-Codex 已拦截/);
+  assert.doesNotMatch(fmt.output[0].content[0].text, /^请完成一个多阶段可见任务/);
+});
+
 test("chatToResponsesFormat repairs coding project artifact commands with runnable files", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",

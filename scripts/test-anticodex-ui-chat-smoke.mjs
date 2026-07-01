@@ -44,6 +44,8 @@ const reportName = taskMode === "web-search"
       ? "ui-repo-file-edit-smoke"
     : taskMode === "repo-multi-file-edit"
       ? "ui-repo-multi-file-edit-smoke"
+    : taskMode === "agentic-step-flow"
+      ? "ui-agentic-step-flow-smoke"
     : taskMode === "local-project"
       ? "ui-local-project-smoke"
   : "ui-chat-smoke";
@@ -57,6 +59,7 @@ const projectTaskModes = new Set([
   "report-site",
   "repo-file-edit",
   "repo-multi-file-edit",
+  "agentic-step-flow",
 ]);
 const requiresProjectChat = projectTaskModes.has(taskMode);
 const projectChatLabel = String(args.get("--project-label") || "Anti-Codex");
@@ -74,6 +77,8 @@ const markerPrefix = taskMode === "web-search"
     ? "UI_REPO_FILE_EDIT_SMOKE"
   : taskMode === "repo-multi-file-edit"
     ? "UI_REPO_MULTI_FILE_EDIT_SMOKE"
+  : taskMode === "agentic-step-flow"
+    ? "UI_AGENTIC_STEP_FLOW_SMOKE"
   : taskMode === "local-project"
     ? "UI_LOCAL_PROJECT_SMOKE"
     : "UI_CHAT_SMOKE";
@@ -91,6 +96,8 @@ const artifactDir = args.get("--artifact-dir")
         ? "desktop-visible-complex-project"
       : taskMode === "report-site"
         ? "desktop-visible-report-site"
+      : taskMode === "agentic-step-flow"
+        ? "desktop-visible-agentic-step-flow"
         : "desktop-visible-small-project",
     marker.toLowerCase().replace(/[^a-z0-9_-]+/g, "-"),
   );
@@ -122,6 +129,20 @@ if (!hasCustomPrompt && taskMode === "free-chat") {
 }
 if (!hasCustomPrompt && taskMode === "local-project") {
   promptText = `Create a very small local HTML report in ${artifactDir}. Use PowerShell file commands to create exactly these files: index.html, README.md, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. index.html must be a simple offline page with one heading, one status paragraph, and the exact marker ${marker}. README.md must describe the files. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
+}
+if (!hasCustomPrompt && taskMode === "agentic-step-flow") {
+  promptText = [
+    `请完成一个多阶段可见任务，工作目录是 ${artifactDir}。`,
+    "",
+    "你必须像 Codex 一样分阶段工作：",
+    "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+    `2. 然后用工具创建 index.html、README.md、done.txt 三个文件。index.html 要包含中文标题“多阶段执行验证”和标记 ${marker}；README.md 要说明三个文件；done.txt 必须只包含 ${marker}。`,
+    "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
+    `4. 然后用工具验证 done.txt 内容完全等于 ${marker}，并检查 index.html 包含“多阶段执行验证”。`,
+    `5. 验证后，在最后一行只写：${marker}`,
+    "",
+    "不要查看 Antigravity brain、transcript、history 或 log 目录。不要创建其他文件。",
+  ].join("\n");
 }
 if (!hasCustomPrompt && taskMode === "coding-project") {
   promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}。`;
@@ -929,6 +950,13 @@ function artifactProgressEvidenceForWait(evidence, options = {}) {
       || evidence?.files?.html === true
       || evidence?.sourceChangedFromFixture === true;
   }
+  if (taskMode === "agentic-step-flow") {
+    return evidence?.files?.indexHtml === true
+      || evidence?.files?.readmeMd === true
+      || evidence?.files?.doneTxt === true
+      || evidence?.responseHistory?.markerToolCallCount > 0
+      || evidence?.responseHistory?.assistantHasFinalMarker === true;
+  }
   return evidence?.files?.readme === true
     || evidence?.files?.source === true
     || evidence?.files?.target === true
@@ -1076,6 +1104,97 @@ function verifyLocalProjectArtifact(dir, expectedMarker) {
     const text = readFileSync(readmePath, "utf8");
     evidence.readmeLength = text.length;
     evidence.readmeNonEmpty = text.trim().length > 0;
+  }
+  return evidence;
+}
+
+function responseItemTextContent(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (typeof part === "string") return part;
+      if (!part || typeof part !== "object") return "";
+      if (typeof part.text === "string") return part.text;
+      if (typeof part.output_text === "string") return part.output_text;
+      if (typeof part.input_text === "string") return part.input_text;
+      return "";
+    }).join("\n");
+  }
+  if (content && typeof content === "object") {
+    if (typeof content.text === "string") return content.text;
+    if (typeof content.output_text === "string") return content.output_text;
+    if (typeof content.input_text === "string") return content.input_text;
+  }
+  return "";
+}
+
+function collectResponseHistoryAgenticEvidence(expectedMarker) {
+  const evidence = {
+    assistantText: "",
+    assistantHasPhase1: false,
+    assistantHasPhase2: false,
+    assistantHasFinalMarker: false,
+    markerToolCallCount: 0,
+    markerToolOutputSeen: false,
+    artifactGuardUsed: false,
+  };
+  if (!expectedMarker) return evidence;
+  let history = null;
+  try {
+    history = JSON.parse(readFileSync(responseHistoryPath, "utf8"));
+  } catch {
+    return evidence;
+  }
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (value.type === "message" && value.role === "assistant") {
+      const text = responseItemTextContent(value.content);
+      if (text.includes(expectedMarker) || /阶段[12]：/.test(text)) {
+        evidence.assistantText += `${text}\n`;
+      }
+    }
+    if ((value.type === "function_call" || value.type === "custom_tool_call") && JSON.stringify(value).includes(expectedMarker)) {
+      evidence.markerToolCallCount += 1;
+      if (/Anti-Codex exact artifact marker guard/.test(JSON.stringify(value))) evidence.artifactGuardUsed = true;
+    }
+    if ((value.type === "function_call_output" || value.type === "custom_tool_call_output") && JSON.stringify(value).includes(expectedMarker)) {
+      evidence.markerToolOutputSeen = true;
+      if (/Anti-Codex artifact marker verification/.test(JSON.stringify(value))) evidence.artifactGuardUsed = true;
+    }
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(history);
+  evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
+  evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
+  evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
+  evidence.assistantText = evidence.assistantText.trim().slice(-2000);
+  return evidence;
+}
+
+function verifyAgenticStepFlowArtifact(dir, expectedMarker) {
+  const evidence = verifyLocalProjectArtifact(dir, expectedMarker) || {};
+  const indexPath = join(dir, "index.html");
+  const readmePath = join(dir, "README.md");
+  const donePath = join(dir, "done.txt");
+  evidence.indexHasChineseTitle = false;
+  evidence.readmeMentionsFiles = false;
+  evidence.doneHasNoBom = false;
+  evidence.responseHistory = collectResponseHistoryAgenticEvidence(expectedMarker);
+  if (evidence.files?.indexHtml) {
+    const text = readFileSync(indexPath, "utf8").replace(/^\uFEFF/, "");
+    evidence.indexHasChineseTitle = text.includes("多阶段执行验证");
+  }
+  if (evidence.files?.readmeMd) {
+    const text = readFileSync(readmePath, "utf8").replace(/^\uFEFF/, "");
+    evidence.readmeMentionsFiles = /index\.html/i.test(text) && /README\.md/i.test(text) && /done\.txt/i.test(text);
+  }
+  if (evidence.files?.doneTxt) {
+    const raw = readFileSync(donePath, "utf8");
+    evidence.doneHasNoBom = !raw.startsWith("\uFEFF");
   }
   return evidence;
 }
@@ -1450,6 +1569,24 @@ function collectReportSiteArtifactFailures(artifactEvidence) {
   return localFailures;
 }
 
+function collectAgenticStepFlowFailures(artifactEvidence) {
+  const localFailures = [];
+  if (!artifactEvidence?.files?.indexHtml) localFailures.push("agentic-step-flow index.html was not created");
+  if (!artifactEvidence?.files?.readmeMd) localFailures.push("agentic-step-flow README.md was not created");
+  if (!artifactEvidence?.files?.doneTxt) localFailures.push("agentic-step-flow done.txt was not created");
+  if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) localFailures.push("agentic-step-flow done.txt did not exactly match the marker");
+  if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneHasNoBom !== true) localFailures.push("agentic-step-flow done.txt contained a UTF-8 BOM");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.indexHasMarker !== true) localFailures.push("agentic-step-flow index.html did not contain the marker");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.indexHasChineseTitle !== true) localFailures.push("agentic-step-flow index.html missing 多阶段执行验证");
+  if (artifactEvidence?.files?.readmeMd && artifactEvidence.readmeMentionsFiles !== true) localFailures.push("agentic-step-flow README.md did not describe all required files");
+  if (artifactEvidence?.responseHistory?.assistantHasPhase1 !== true) localFailures.push("agentic-step-flow assistant did not visibly say 阶段1：准备创建文件");
+  if (artifactEvidence?.responseHistory?.assistantHasPhase2 !== true) localFailures.push("agentic-step-flow assistant did not visibly say 阶段2：准备验证文件");
+  if (artifactEvidence?.responseHistory?.markerToolCallCount < 1) localFailures.push("agentic-step-flow did not record a marker-scoped tool call");
+  if (artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) localFailures.push("agentic-step-flow did not record marker-scoped tool output");
+  if (artifactEvidence?.responseHistory?.artifactGuardUsed === true) localFailures.push("agentic-step-flow used the deterministic artifact guard instead of model-led step execution");
+  return localFailures;
+}
+
 function failuresAreOnlyArtifactFailures(failures = [], artifactFailures = []) {
   const artifactSet = new Set(artifactFailures);
   return artifactFailures.length > 0 && failures.every((failure) => artifactSet.has(failure));
@@ -1512,7 +1649,7 @@ function recoverStaleComposerExpression() {
     const clicked = [];
     const bodyText = document.body.innerText || '';
     const isTestResidue = bodyText.includes(${safeMarkerPrefix})
-      || /desktop-visible-|ui_local_after_role_fix_|UI_(WEB_SEARCH|LOCAL_PROJECT|CODING_PROJECT|COMPLEX_PROJECT|REPORT_SITE|CHAT)_SMOKE/i.test(bodyText);
+      || /desktop-visible-|ui_local_after_role_fix_|UI_(WEB_SEARCH|LOCAL_PROJECT|CODING_PROJECT|COMPLEX_PROJECT|REPORT_SITE|AGENTIC_STEP_FLOW|CHAT)_SMOKE/i.test(bodyText);
     if (!isTestResidue) return { clicked, skipped: true, reason: 'no known UI smoke residue', tail: bodyText.slice(-500) };
     const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
     const composerRect = composer?.getBoundingClientRect();
@@ -2549,13 +2686,33 @@ async function main() {
       if (artifactEvidence?.files?.readme && artifactEvidence.readmeMentionsCommand !== true) failures.push("repo-multi-file-edit README missing CLI command");
     }
     if (taskMode === "local-project") {
-      artifactEvidence = verifyLocalProjectArtifact(artifactDir, marker);
+      artifactEvidence = await waitForArtifactEvidence(
+        () => verifyLocalProjectArtifact(artifactDir, marker),
+        (evidence) => evidence?.files?.indexHtml === true
+          && evidence?.files?.readmeMd === true
+          && evidence?.files?.doneTxt === true
+          && evidence.doneExact === true
+          && evidence.indexHasMarker === true
+          && evidence.readmeNonEmpty === true,
+        Math.min(timeoutMs, 90_000),
+      );
       if (!artifactEvidence?.files?.indexHtml) failures.push("local-project index.html was not created");
       if (!artifactEvidence?.files?.readmeMd) failures.push("local-project README.md was not created");
       if (!artifactEvidence?.files?.doneTxt) failures.push("local-project done.txt was not created");
       if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) failures.push("local-project done.txt did not exactly match the marker");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.indexHasMarker !== true) failures.push("local-project index.html did not contain the marker");
       if (artifactEvidence?.files?.readmeMd && artifactEvidence.readmeNonEmpty !== true) failures.push("local-project README.md was empty");
+    }
+    if (taskMode === "agentic-step-flow") {
+      artifactEvidence = await waitForArtifactEvidence(
+        () => verifyAgenticStepFlowArtifact(artifactDir, marker),
+        (evidence) => evidence?.files?.indexHtml === true
+          && evidence?.files?.readmeMd === true
+          && evidence?.files?.doneTxt === true
+          && evidence?.responseHistory?.markerToolOutputSeen === true,
+        Math.min(timeoutMs, 120_000),
+      );
+      failures.push(...collectAgenticStepFlowFailures(artifactEvidence));
     }
     if (taskMode === "coding-project") {
       artifactEvidence = verifyCodingProjectArtifact(artifactDir, marker);
@@ -2661,7 +2818,7 @@ async function main() {
     inLoopIdleDiagnostics = repairTurn.inLoopIdleDiagnostics || inLoopIdleDiagnostics;
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
+  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
     : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
@@ -2699,7 +2856,7 @@ async function main() {
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"
         ? repoMultiFileEditDir
-      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
     artifactEvidence,
     preRepairFailures,
     preRepairArtifactEvidence,
@@ -2781,7 +2938,7 @@ main().catch((error) => {
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"
         ? repoMultiFileEditDir
-      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" ? artifactDir : null,
+      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
     timing: null,
   };
   writeReport(payload);
