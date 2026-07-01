@@ -2375,6 +2375,9 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(realWork, /realMcp\s*=\s*\$mcpExecution/);
   assert.match(realWork, /MCP_OK/);
   assert.match(realSmallProject, /\[switch\]\$AllowRealTraffic/);
+  assert.match(realSmallProject, /\[string\]\$Model/);
+  assert.match(realSmallProject, /ANTICODEX_TEST_MODEL/);
+  assert.match(realSmallProject, /claude-sonnet-4-6/);
   assert.match(realSmallProject, /if \(-not \$AllowRealTraffic\)/);
   assert.match(realSmallProject, /name\s*=\s*"write_small_project"/);
   assert.match(realSmallProject, /tool_choice\s*=\s*"required"/);
@@ -12231,6 +12234,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /function visibleMainPaneText\(\)/);
   assert.match(verifier, /rect\.left < 300/);
   assert.match(verifier, /diagnosticsUrl = `\$\{baseUrl\}\/anticodex\/diagnostics\?fast=1`/);
+  assert.match(verifier, /modelRoutesUrl = `\$\{baseUrl\}\/anticodex\/model-routes`/);
+  assert.match(verifier, /async function collectModelRouteEvidence\(before\)/);
+  assert.match(verifier, /modelRouteEvidence = await collectModelRouteEvidence\(modelRoutesBefore\)/);
+  assert.match(verifier, /modelRouteEvidence/);
   assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
   assert.match(server, /reason: "fast_diagnostics"/);
   assert.match(verifier, /project task did not open a deepcodex project chat before submit/);
@@ -12254,7 +12261,13 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /Search the web for recent Codex updates/);
   assert.match(verifier, /Use PowerShell file commands to create exactly these files/);
   assert.match(verifier, /Do not create README\.md/);
-  assert.match(verifier, /Your first file write actions must create report\.md, index\.html, and done\.txt/);
+  assert.match(verifier, /Create exactly these files and no others: report\.md, index\.html, done\.txt/);
+  assert.match(verifier, /Use PowerShell only to run Node\.js file-write commands/);
+  assert.match(verifier, /Do not create README\.md; README\.md is explicitly wrong for this task/);
+  assert.match(verifier, /Your first file write action must create report\.md, not README\.md/);
+  assert.match(verifier, /do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files/);
+  assert.match(verifier, /must define stripUtf8Bom\(text\)/);
+  assert.match(verifier, /must call stripUtf8Bom before JSON\.parse/);
   assert.match(verifier, /Do not inspect Antigravity brain, transcript, history, or log folders/);
   assert.match(verifier, /function stripUtf8Bom/);
   assert.match(verifier, /function parseJsonFile/);

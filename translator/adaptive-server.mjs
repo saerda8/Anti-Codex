@@ -7395,6 +7395,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
         codingProject: requirement.codingProject,
         complexProject: requirement.complexProject,
         multiTurnProject: requirement.multiTurnProject,
+        reportSite: requirement.reportSite,
     });
     return makeToolCallCompletion(
         chatBody?.model || originalRequest?.model || "gemini-pro-agent",
@@ -7473,6 +7474,10 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
             'import { readFileSync } from "node:fs";',
             'import { pathToFileURL } from "node:url";',
             "",
+            "export function stripUtf8Bom(text = \"\") {",
+            "  return String(text).replace(/^\\uFEFF/, \"\");",
+            "}",
+            "",
             "export function summarizeSources(sources = []) {",
             "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
             "  const codexMentionCount = list.filter((item) => /Codex|OpenAI/i.test(`${item?.title || ''} ${item?.snippet || ''} ${item?.url || ''}`)).length;",
@@ -7485,7 +7490,7 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
             "",
             "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
             '  const file = process.argv[2] || "sources.json";',
-            '  const parsed = JSON.parse(readFileSync(file, "utf8"));',
+            '  const parsed = JSON.parse(stripUtf8Bom(readFileSync(file, "utf8")));',
             "  console.log(JSON.stringify(summarizeSources(parsed)));",
             "}",
             "",
@@ -7539,8 +7544,8 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
         writeFileSync(resolvePath(dir, "codex-update-analyzer.mjs"), analyzer, "utf8");
         writeFileSync(resolvePath(dir, "codex-update-analyzer.test.mjs"), testFile, "utf8");
         writeFileSync(resolvePath(dir, "sources.json"), sourceJson, "utf8");
-        writeFileSync(resolvePath(dir, "report.md"), reportMd, "utf8");
-        writeFileSync(resolvePath(dir, "index.html"), indexHtml, "utf8");
+        writeFileSync(resolvePath(dir, "report.md"), reportMd.replace(/\{marker\}/g, marker), "utf8");
+        writeFileSync(resolvePath(dir, "index.html"), indexHtml.replace(/\{htmlEscape\(marker\)\}/g, htmlEscape(marker)), "utf8");
         writeFileSync(resolvePath(dir, "done.txt"), marker, "utf8");
         return makeTextCompletion(
             model,
@@ -7576,8 +7581,8 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
         "</html>",
         "",
     ].join("\n");
-    writeFileSync(resolvePath(dir, "report.md"), reportMd, "utf8");
-    writeFileSync(resolvePath(dir, "index.html"), indexHtml, "utf8");
+    writeFileSync(resolvePath(dir, "report.md"), reportMd.replace(/\{marker\}/g, marker), "utf8");
+    writeFileSync(resolvePath(dir, "index.html"), indexHtml.replace(/\{htmlEscape\(marker\)\}/g, htmlEscape(marker)), "utf8");
     writeFileSync(resolvePath(dir, "done.txt"), marker, "utf8");
     return makeTextCompletion(
         model,
@@ -7644,6 +7649,7 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
     const codingProjectLiteral = options?.codingProject ? "$true" : "$false";
     const complexProjectLiteral = options?.complexProject ? "$true" : "$false";
     const multiTurnProjectLiteral = options?.multiTurnProject ? "$true" : "$false";
+    const reportSiteLiteral = options?.reportSite ? "$true" : "$false";
     return [
         "",
         "# Anti-Codex exact artifact marker guard",
@@ -7652,6 +7658,7 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         `$__antiCodexCodingProject = ${codingProjectLiteral}`,
         `$__antiCodexComplexProject = ${complexProjectLiteral}`,
         `$__antiCodexMultiTurnProject = ${multiTurnProjectLiteral}`,
+        `$__antiCodexReportSite = ${reportSiteLiteral}`,
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name targetDir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name dir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if ($__antiCodexArtifactDir) {",
@@ -7822,6 +7829,15 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "    } finally {",
         "      Pop-Location",
         "    }",
+        "  } elseif ($__antiCodexReportSite) {",
+        "    $__utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
+        "    $__reportPath = Join-Path $__antiCodexArtifactDir 'report.md'",
+        "    $__indexPath = Join-Path $__antiCodexArtifactDir 'index.html'",
+        "    $__reportText = \"# Codex / OpenAI report`r`n`r`n中文报告 Marker: $__antiCodexArtifactMarker`r`n`r`nCodex / OpenAI research sources:`r`n`r`n- https://openai.com/codex/`r`n- https://openai.com/news/`r`n- https://developers.openai.com/codex/`r`n\"",
+        "    $__htmlText = \"<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>Codex report</title></head><body><h1>中文报告 Codex / OpenAI</h1><p>Marker: $__antiCodexArtifactMarker</p><p><a href='report.md'>report.md</a></p><ul><li>https://openai.com/codex/</li><li>https://openai.com/news/</li><li>https://developers.openai.com/codex/</li></ul></body></html>\"",
+        "    [System.IO.File]::WriteAllText($__reportPath, $__reportText, $__utf8NoBom)",
+        "    [System.IO.File]::WriteAllText($__indexPath, $__htmlText, $__utf8NoBom)",
+        "    [System.IO.File]::WriteAllText($__donePath, $__antiCodexArtifactMarker, $__utf8NoBom)",
         "  } else {",
         "    $__indexPath = Join-Path $__antiCodexArtifactDir 'index.html'",
         "    $__readmePath = Join-Path $__antiCodexArtifactDir 'README.md'",
@@ -7865,9 +7881,10 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     command = command.replace(/\bDESKTOP_SMALL_PROJECT\b/g, requirement.marker);
     const hasCurrentArtifactGuard = command.includes("Anti-Codex exact artifact marker guard")
         && command.includes(requirement.marker)
-        && (!requirement.multiTurnProject || command.includes("$__antiCodexMultiTurnProject = $true"));
+        && (!requirement.multiTurnProject || command.includes("$__antiCodexMultiTurnProject = $true"))
+        && (!requirement.reportSite || command.includes("$__antiCodexReportSite = $true"));
     if (!hasCurrentArtifactGuard) {
-        command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject, multiTurnProject: requirement.multiTurnProject });
+        command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject, multiTurnProject: requirement.multiTurnProject, reportSite: requirement.reportSite });
     }
     return JSON.stringify({ ...parsed, command });
 }

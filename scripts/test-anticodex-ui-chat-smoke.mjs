@@ -22,6 +22,7 @@ const sourceRoot = resolve(scriptRoot, "..");
 let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT || 0);
 const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const diagnosticsUrl = `${baseUrl}/anticodex/diagnostics?fast=1`;
+const modelRoutesUrl = `${baseUrl}/anticodex/model-routes`;
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "response-history.json");
@@ -125,10 +126,10 @@ if (!args.get("--prompt") && taskMode === "multi-turn-project") {
   promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export tallyWords(text) and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}_FIRST. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}_FIRST.`;
 }
 if (!args.get("--prompt") && taskMode === "complex-project") {
-  promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search. codex-update-analyzer.mjs must export summarizeSources(sources) and when run as a CLI read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3, then reply with ${marker}.`;
+  promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell only to run Node.js file-write commands; do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files because they can write a UTF-8 BOM. Create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search and must be written with Node fs.writeFileSync(..., "utf8"). codex-update-analyzer.mjs must export summarizeSources(sources), must define stripUtf8Bom(text), and must call stripUtf8Bom before JSON.parse when run as a CLI. The CLI must read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3 and codexMentionCount is at least 1, then reply with ${marker}.`;
 }
 if (!args.get("--prompt") && taskMode === "report-site") {
-  promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell file commands to create exactly these files: report.md, index.html, done.txt. Do not create README.md. Your first file write actions must create report.md, index.html, and done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify report.md, index.html, and done.txt exist and done.txt exactly matches the marker, then reply with ${marker}.`;
+  promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell only to run Node.js file-write commands. Create exactly these files and no others: report.md, index.html, done.txt. Do not create README.md; README.md is explicitly wrong for this task. Your first file write action must create report.md, not README.md. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify report.md, index.html, and done.txt exist and done.txt exactly matches the marker, then reply with ${marker}.`;
 }
 if (!args.get("--prompt") && taskMode === "repo-file-edit") {
   promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Do not start with Get-ChildItem, dir, ls, or another directory listing. You already have the required behavior: implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Your first tool action must modify ${repoFileEditTarget}. Do not edit any other source file. Then run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
@@ -251,6 +252,71 @@ function httpJsonPost(url, body, headers = {}) {
     req.on("error", reject);
     req.end(payload);
   });
+}
+
+function routeKey(route) {
+  if (!route || typeof route !== "object") return "";
+  return [
+    route.at,
+    route.requestId,
+    route.cascadeId,
+    route.requestedModel,
+    route.resolvedModel,
+    route.status,
+  ].map((item) => String(item || "")).join("|");
+}
+
+function compactRoute(route) {
+  if (!route || typeof route !== "object") return null;
+  return {
+    at: route.at || null,
+    requestId: route.requestId || null,
+    transport: route.transport || null,
+    requestedModel: route.requestedModel || null,
+    resolvedModel: route.resolvedModel || null,
+    displayName: route.displayName || null,
+    internalModel: route.internalModel || null,
+    cascadeId: route.cascadeId || null,
+    status: route.status || null,
+  };
+}
+
+async function readModelRoutesEvidence() {
+  try {
+    const payload = await httpJson(modelRoutesUrl);
+    return {
+      ok: payload?.ok === true,
+      count: Number(payload?.count || 0),
+      latest: compactRoute(payload?.latest),
+      entries: (Array.isArray(payload?.entries) ? payload.entries : []).map(compactRoute).filter(Boolean),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      count: 0,
+      latest: null,
+      entries: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function collectModelRouteEvidence(before) {
+  const after = await readModelRoutesEvidence();
+  const beforeKeys = new Set((Array.isArray(before?.entries) ? before.entries : []).map(routeKey).filter(Boolean));
+  if (before?.latest) beforeKeys.add(routeKey(before.latest));
+  const newRoutes = after.entries.filter((route) => !beforeKeys.has(routeKey(route)));
+  return {
+    url: modelRoutesUrl,
+    beforeOk: before?.ok === true,
+    afterOk: after.ok === true,
+    beforeCount: Number(before?.count || 0),
+    afterCount: Number(after.count || 0),
+    newRouteCount: newRoutes.length,
+    latest: compactRoute(newRoutes[0] || after.latest),
+    routes: newRoutes.slice(0, 8).map(compactRoute).filter(Boolean),
+    error: after.error || before?.error || null,
+  };
 }
 
 async function resetBackendSessionLock(url) {
@@ -1920,6 +1986,8 @@ async function main() {
   let newChatEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
+  let modelRoutesBefore = null;
+  let modelRouteEvidence = null;
   let submitCompletedAt = 0;
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
@@ -1954,6 +2022,7 @@ async function main() {
       backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
     initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
+    modelRoutesBefore = await readModelRoutesEvidence();
     if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
       try {
         backendResetBeforeSubmit = {
@@ -2078,6 +2147,7 @@ async function main() {
       if (Number(sessionLock?.queued || 0) > 0) failures.push("desktop task left queued Antigravity sessions");
       if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
+      modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
       const payload = {
         ok: failures.length === 0,
         reportName,
@@ -2131,6 +2201,7 @@ async function main() {
         antigravitySessionLock: sessionLock,
         activeAntigravityRequests: activeRequests,
         antigravityQueue: queue,
+        modelRouteEvidence,
         responsesWebSocket: diagnostics?.responsesWebSocket || null,
         networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
         timing: {
@@ -2203,6 +2274,7 @@ async function main() {
       if (Number(sessionLock?.queued || 0) > 0) failures.push("desktop task left queued Antigravity sessions");
       if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
+      modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
       const payload = {
         ok: failures.length === 0,
         reportName,
@@ -2258,6 +2330,7 @@ async function main() {
         antigravitySessionLock: sessionLock,
         activeAntigravityRequests: activeRequests,
         antigravityQueue: queue,
+        modelRouteEvidence,
         responsesWebSocket: diagnostics?.responsesWebSocket || null,
         networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
         timing: {
@@ -2594,6 +2667,7 @@ async function main() {
   if (Number(sessionLock?.queued || 0) > 0) failures.push("desktop task left queued Antigravity sessions");
   if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
   if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
+  modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
   const payload = {
     ok: failures.length === 0,
     reportName,
@@ -2653,6 +2727,7 @@ async function main() {
     antigravitySessionLock: sessionLock,
     activeAntigravityRequests: activeRequests,
     antigravityQueue: queue,
+    modelRouteEvidence,
     responsesWebSocket: diagnostics?.responsesWebSocket || null,
     networkEvents: ws ? summarizeNetworkEvents(ws.events || []) : [],
     timing: {

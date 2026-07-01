@@ -3888,6 +3888,76 @@ test("chatToResponsesFormat repairs stale marker in outgoing local artifact comm
   assert.match(args.command, /Select-String/);
 });
 
+test("chatToResponsesFormat repairs report-site artifact commands without README fallback", () => {
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_report_artifact",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "$targetDir = \"C:\\Temp\\report-site\"\nSet-Content -Path \"$targetDir\\README.md\" -Value \"wrong\"\nSet-Content -Path \"$targetDir\\done.txt\" -Value \"DESKTOP_SMALL_PROJECT\"",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Search the web for recent Codex updates, then create report.md, index.html and done.txt in C:\\Temp\\report-site. Do not create README.md. report.md must include source URLs and done.txt must contain UI_REPORT_SITE_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  const guard = args.command.slice(args.command.indexOf("Anti-Codex exact artifact marker guard"));
+  assert.match(guard, /\$__antiCodexReportSite = \$true/);
+  assert.match(guard, /report\.md/);
+  assert.match(guard, /index\.html/);
+  assert.match(guard, /UTF8Encoding/);
+  const reportSiteBranchIndex = guard.indexOf("} elseif ($__antiCodexReportSite)");
+  const fallbackReadmeIndex = guard.indexOf("Files: index.html, README.md, done.txt");
+  assert.ok(reportSiteBranchIndex > 0);
+  assert.ok(fallbackReadmeIndex < 0 || reportSiteBranchIndex < fallbackReadmeIndex);
+});
+
+test("report-site artifact requests start with the report-site shell guard", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Search the web for recent Codex updates, then create report.md, index.html and done.txt in C:\\Temp\\report-site. report.md must include source URLs and done.txt must contain UI_REPORT_SITE_SMOKE_20260702.",
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+
+  const completion = deterministicArtifactToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  const args = JSON.parse(completion.choices[0].message.tool_calls[0].function.arguments);
+  const reportSiteBranchIndex = args.command.indexOf("} elseif ($__antiCodexReportSite)");
+  const fallbackReadmeIndex = args.command.indexOf("Files: index.html, README.md, done.txt");
+  assert.match(args.command, /\$__antiCodexReportSite = \$true/);
+  assert.ok(reportSiteBranchIndex > 0);
+  assert.ok(fallbackReadmeIndex < 0 || reportSiteBranchIndex < fallbackReadmeIndex);
+});
+
 test("chatToResponsesFormat repairs coding project artifact commands with runnable files", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",

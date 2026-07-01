@@ -2,6 +2,7 @@
 param(
     [string]$BaseUrl = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [string]$Model = $(if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "claude-sonnet-4-6" }),
     [int]$TimeoutSec = 180,
     [switch]$AllowRealTraffic
 )
@@ -238,7 +239,7 @@ try {
     ) -join "`n"
 
     $first = Invoke-ResponsesJson @{
-        model = "gemini-3.5-flash-low"
+        model = $Model
         stream = $false
         store = $true
         tool_choice = "required"
@@ -279,7 +280,7 @@ try {
     $finalText = ""
     if ($failures.Count -eq 0) {
         $final = Invoke-ResponsesJson @{
-            model = "gemini-3.5-flash-low"
+            model = $Model
             stream = $false
             store = $true
             previous_response_id = [string]$first.id
@@ -315,7 +316,7 @@ try {
         behaviorCovered = ($failures.Count -eq 0)
         coverageKind = "real-traffic-small-project"
         failures = @($failures)
-        model = "gemini-3.5-flash-low"
+        model = $Model
         baseUrl = $script:ResolvedBaseUrl
         elapsedMs = [int]((Get-Date) - $started).TotalMilliseconds
         first_response_id = if ($first) { [string]$first.id } else { "" }
