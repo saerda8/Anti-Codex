@@ -4125,6 +4125,64 @@ test("report-site artifact requests start with the report-site shell guard", () 
   assert.ok(fallbackReadmeIndex < 0 || reportSiteBranchIndex < fallbackReadmeIndex);
 });
 
+test("complex project requests do not start with the deterministic artifact guard", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. sources.json must contain sourceCount evidence and done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const completion = deterministicArtifactToolCallCompletion(request, chatBody);
+  assert.equal(completion, null);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
+});
+
+test("chatToResponsesFormat does not append deterministic guard to complex project tool calls", () => {
+  const fmt = chatToResponsesFormat({
+    id: "chatcmpl_complex_tool",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_tool",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "$dir = \"C:\\Temp\\desktop-visible-complex-project\\run\"\nnode --version",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+});
+
 test("agentic visible step-flow requests do not start with the deterministic artifact guard", () => {
   const request = {
     model: "gemini-pro-agent",

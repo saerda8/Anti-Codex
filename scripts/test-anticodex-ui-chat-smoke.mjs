@@ -367,8 +367,8 @@ function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
     if (!route) return;
     actualValues.push(route.requestedModel, route.resolvedModel, route.displayName, route.internalModel);
   };
-  addRoute(modelRouteEvidence?.latest);
-  for (const route of Array.isArray(modelRouteEvidence?.routes) ? modelRouteEvidence.routes : []) addRoute(route);
+  const currentRoutes = Array.isArray(modelRouteEvidence?.routes) ? modelRouteEvidence.routes : [];
+  for (const route of currentRoutes) addRoute(route);
   actualValues.push(
     diagnostics?.responsesWebSocket?.lastClientPayload?.model,
     diagnostics?.responsesWebSocket?.lastClientPayload?.metadata?.model,
@@ -1628,7 +1628,7 @@ function multiTurnProjectArtifactComplete(evidence) {
     && evidence.cliPassed === true;
 }
 
-function collectComplexProjectArtifactFailures(artifactEvidence) {
+function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   const localFailures = [];
   if (!artifactEvidence?.files?.packageJson) localFailures.push("complex-project package.json was not created");
   if (!artifactEvidence?.files?.analyzer) localFailures.push("complex-project codex-update-analyzer.mjs was not created");
@@ -1653,6 +1653,15 @@ function collectComplexProjectArtifactFailures(artifactEvidence) {
   if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) localFailures.push("complex-project report.md and index.html did not share a source URL");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) localFailures.push("complex-project index.html is not a complete HTML document");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) localFailures.push("complex-project index.html does not link to report.md");
+  if (options.requireModelLed === true && artifactEvidence?.responseHistory?.artifactGuardUsed === true) {
+    localFailures.push("complex-project used deterministic artifact guard instead of model-led task execution");
+  }
+  if (options.requireModelLed === true && (artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) {
+    localFailures.push("complex-project did not emit a task tool call");
+  }
+  if (options.requireModelLed === true && artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) {
+    localFailures.push("complex-project did not observe task tool output");
+  }
   return localFailures;
 }
 
@@ -2477,6 +2486,7 @@ async function main() {
   let submitCompletedAt = 0;
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
+  const complexProjectRequiresModelLed = taskMode === "complex-project" && requiredModelNeedles().length > 0;
 
   try {
     releaseUiLock = await acquireUiSmokeLock();
@@ -3175,6 +3185,15 @@ async function main() {
       if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) failures.push("complex-project report.md and index.html did not share a source URL");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) failures.push("complex-project index.html is not a complete HTML document");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) failures.push("complex-project index.html does not link to report.md");
+      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.artifactGuardUsed === true) {
+        failures.push("complex-project used deterministic artifact guard instead of model-led task execution");
+      }
+      if (complexProjectRequiresModelLed && (artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) {
+        failures.push("complex-project did not emit a task tool call");
+      }
+      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) {
+        failures.push("complex-project did not observe task tool output");
+      }
       if (taskMode === "autonomous-reasoning") {
         if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) failures.push("autonomous-reasoning did not emit a task tool call");
         if (artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) failures.push("autonomous-reasoning did not observe task tool output");
@@ -3221,14 +3240,14 @@ async function main() {
     }
   }
   if (taskMode === "complex-project") {
-    const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+    const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
     if (failuresAreOnlyArtifactFailures(failures, artifactFailures)) {
       preRepairFailures = failures.slice();
       preRepairArtifactEvidence = artifactEvidence;
       repairPrompt = buildComplexProjectRepairPrompt(artifactFailures, artifactEvidence);
       repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
       artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
-      finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+      finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
     }
   }
   if (taskMode === "autonomous-reasoning") {

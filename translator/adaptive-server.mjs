@@ -7408,7 +7408,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning || requirement.complexProject) return null;
     const evidenceText = chatToolEvidenceText(messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     const artifactEvidence = /Anti-Codex artifact marker verification|index\.html|README\.md|done\.txt|Get-ChildItem|Select-String|WriteAllText|Set-Content/i.test(evidenceText);
@@ -7442,7 +7442,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning || requirement.complexProject) return null;
     const command = artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, {
         codingProject: requirement.codingProject,
         complexProject: requirement.complexProject,
@@ -7509,7 +7509,7 @@ function webSourcesFromEvidence(evidence = "") {
 
 function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-agent") {
     if (!requirement?.marker || !requirement?.targetPath || (!requirement.reportSite && !requirement.complexProject)) return null;
-    if (requirement.autonomousReasoning) return null;
+    if (requirement.autonomousReasoning || requirement.complexProject) return null;
     if (sources.length < 3) return null;
 
     const dir = requirement.targetPath;
@@ -7716,6 +7716,7 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "if (-not $__antiCodexArtifactDir) { $__v = Get-Variable -Name dir -Scope Local -ErrorAction SilentlyContinue; if ($__v) { $__antiCodexArtifactDir = [string]$__v.Value } }",
         "if ($__antiCodexArtifactDir) {",
         "  New-Item -ItemType Directory -Path $__antiCodexArtifactDir -Force | Out-Null",
+        "  $__utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
         "  $__donePath = Join-Path $__antiCodexArtifactDir 'done.txt'",
         "  if ($__antiCodexComplexProject) {",
         "    $__packagePath = Join-Path $__antiCodexArtifactDir 'package.json'",
@@ -7724,17 +7725,21 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "    $__sourcesPath = Join-Path $__antiCodexArtifactDir 'sources.json'",
         "    $__reportPath = Join-Path $__antiCodexArtifactDir 'report.md'",
         "    $__indexPath = Join-Path $__antiCodexArtifactDir 'index.html'",
-        "    [System.IO.File]::WriteAllText($__packagePath, '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test codex-update-analyzer.test.mjs\"}}', [System.Text.Encoding]::UTF8)",
+        "    [System.IO.File]::WriteAllText($__packagePath, '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test codex-update-analyzer.test.mjs\"}}', $__utf8NoBom)",
         "    [System.IO.File]::WriteAllText($__sourcesPath, @'",
         "[",
         "  {\"title\":\"OpenAI Codex\",\"url\":\"https://openai.com/codex/\",\"snippet\":\"Codex and OpenAI development updates\"},",
         "  {\"title\":\"OpenAI News\",\"url\":\"https://openai.com/news/\",\"snippet\":\"OpenAI release notes and product news\"},",
         "  {\"title\":\"OpenAI Developers Codex\",\"url\":\"https://developers.openai.com/codex/\",\"snippet\":\"Codex developer documentation\"}",
         "]",
-        "'@, [System.Text.Encoding]::UTF8)",
+        "'@, $__utf8NoBom)",
         "    [System.IO.File]::WriteAllText($__sourcePath, @'",
         "import { readFileSync } from \"node:fs\";",
         "import { pathToFileURL } from \"node:url\";",
+        "",
+        "export function stripUtf8Bom(text = \"\") {",
+        "  return String(text || \"\").replace(/^\\uFEFF/, \"\");",
+        "}",
         "",
         "export function summarizeSources(sources = []) {",
         "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
@@ -7743,10 +7748,10 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "}",
         "",
         "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
-        "  const parsed = JSON.parse(readFileSync(process.argv[2] || \"sources.json\", \"utf8\"));",
+        "  const parsed = JSON.parse(stripUtf8Bom(readFileSync(process.argv[2] || \"sources.json\", \"utf8\")));",
         "  console.log(JSON.stringify(summarizeSources(parsed)));",
         "}",
-        "'@, [System.Text.Encoding]::UTF8)",
+        "'@, $__utf8NoBom)",
         "    [System.IO.File]::WriteAllText($__testPath, @'",
         "import test from \"node:test\";",
         "import assert from \"node:assert/strict\";",
@@ -7757,7 +7762,7 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "  assert.equal(summary.sourceCount, 3);",
         "  assert.ok(summary.codexMentionCount >= 1);",
         "});",
-        "'@, [System.Text.Encoding]::UTF8)",
+        "'@, $__utf8NoBom)",
         "    [System.IO.File]::WriteAllText($__reportPath, (\"# Codex 近期更新调研`r`n`r`n标记：$__antiCodexArtifactMarker`r`n`r`n这个报告验证 Anti-Codex 桌面端可以调研、生成本地 Node.js 小工具、写报告并跑测试。`r`n`r`n- https://openai.com/codex/`r`n- https://openai.com/news/`r`n- https://developers.openai.com/codex/`r`n\"), [System.Text.Encoding]::UTF8)",
         "    [System.IO.File]::WriteAllText($__indexPath, (\"<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>Codex 更新调研</title></head><body><h1>Codex / OpenAI 更新调研</h1><p>标记：$__antiCodexArtifactMarker</p><p><a href='report.md'>打开报告</a></p><ul><li>https://openai.com/codex/</li><li>https://openai.com/news/</li><li>https://developers.openai.com/codex/</li></ul></body></html>\"), [System.Text.Encoding]::UTF8)",
         "    [System.IO.File]::WriteAllText($__donePath, $__antiCodexArtifactMarker, [System.Text.Encoding]::UTF8)",
@@ -7924,7 +7929,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     }
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return args;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return args;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning || requirement.complexProject) return args;
     if (!/(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) return args;
     let parsed = null;
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
@@ -9387,6 +9392,7 @@ function requestNeedsWebBackedArtifactOutput(request) {
     const text = String(latest || recentUserTextForInternalWeb(request) || "").trim();
     if (!text) return false;
     if (/(?:desktop-visible-autonomous-reasoning|UI_AUTONOMOUS_REASONING_SMOKE|autonomous-reasoning)/i.test(text)) return false;
+    if (/(?:desktop-visible-complex-project|UI_COMPLEX_PROJECT_SMOKE|codex-update-analyzer|sources\.json|summarizeSources)/i.test(text)) return false;
     if (!shouldUseInternalWebSearchIntent(text)) return false;
     return LOCAL_ARTIFACT_INTENT_RE.test(text)
         || /(?:report\.md|index\.html|done\.txt|PowerShell file commands|local research report site|artifactDir|create.{0,80}files)/i.test(text);
