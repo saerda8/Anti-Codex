@@ -156,6 +156,49 @@ function Test-SecondAccountLoginEntrypointSummaryEvidence {
     if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account entrypoint summary claims release account proof" }
 }
 
+function Test-SecondAccountReadinessSummaryEvidence {
+    param($SecondAccountReadinessSummary)
+
+    if (-not $SecondAccountReadinessSummary) {
+        Add-Failure "diagnostic reports summary missing latest-second-account-readiness-summary.json"
+        return
+    }
+
+    $evidence = $SecondAccountReadinessSummary.secondAccountReadinessSummaryEvidence
+    if (-not $evidence) {
+        Add-Failure "second-account readiness summary missing secondAccountReadinessSummaryEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "second-account-readiness-summary") { Add-Failure "second-account readiness summary reportName mismatch" }
+    if ($evidence.noTraffic -ne $true) { Add-Failure "second-account readiness summary not no-traffic" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "second-account readiness summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "second-account readiness summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "second-account readiness summary behavior not covered" }
+    if ($evidence.coverageKind -ne "second-account-readiness-summary-no-traffic") { Add-Failure "second-account readiness summary coverage kind mismatch" }
+    if ($evidence.changedSystem -ne $false) { Add-Failure "second-account readiness summary changed system" }
+    if ($evidence.createdUser -ne $false) { Add-Failure "second-account readiness summary created user" }
+    if ($evidence.startedLogin -ne $false) { Add-Failure "second-account readiness summary started login" }
+    if ($evidence.capturesPassword -ne $false) { Add-Failure "second-account readiness summary captures password" }
+    if ($evidence.storesPassword -ne $false) { Add-Failure "second-account readiness summary stores password" }
+    if ($evidence.readyForOperatorLogin -ne $false) { Add-Failure "second-account readiness summary ready too early" }
+    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account readiness summary claims account proof" }
+    if ($evidence.goalComplete -ne $false) { Add-Failure "second-account readiness summary claims goal complete" }
+    if (-not [string]$evidence.nextOperatorAction) { Add-Failure "second-account readiness summary missing next operator action" }
+    if (-not ([string]$evidence.approvedLoginCommandTemplate).Contains("start-anticodex-second-antigravity-account-login.ps1") -or -not ([string]$evidence.approvedLoginCommandTemplate).Contains("-StartLoginApproval start-separate-windows-user-login")) {
+        Add-Failure "second-account readiness summary login command incomplete"
+    }
+    if (-not ([string]$evidence.nextNoTrafficStatusCommand).Contains("test-anticodex-antigravity-account-isolation-status.ps1")) {
+        Add-Failure "second-account readiness summary status command incomplete"
+    }
+    if (-not ([string]$evidence.postLoginProofCommandTemplate).Contains("test-anticodex-antigravity-cli-real-smoke.ps1") -or -not ([string]$evidence.postLoginProofCommandTemplate).Contains("-AllowSeparateAccountProof") -or -not ([string]$evidence.postLoginProofCommandTemplate).Contains("SeparateAccountProofApprovalId")) {
+        Add-Failure "second-account readiness summary proof command incomplete"
+    }
+    if ([int]$evidence.stepCount -lt 7) { Add-Failure "second-account readiness summary step count too low" }
+    if ([int]$evidence.failedStepCount -ne 0) { Add-Failure "second-account readiness summary has failed steps" }
+    if ([int]$evidence.failureCount -ne 0) { Add-Failure "second-account readiness summary has failures" }
+}
+
 function Get-NonNegativeIntProperty {
     param(
         $Value,
@@ -1565,6 +1608,7 @@ function Test-ReportsSummary {
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
     $approvedRealRunSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-approved-real-run-sequence.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
+    $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -1618,6 +1662,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $goalRealRunReadinessSummary) { Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary }
     if ($RequireReleaseReady -or $approvedRealRunSequenceSummary) { Test-ApprovedRealRunSequenceSummaryEvidence $approvedRealRunSequenceSummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
+    if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

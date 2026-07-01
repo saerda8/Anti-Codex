@@ -240,6 +240,7 @@ const isWindowsUserAccountPrepareReport = report?.reportName === "windows-user-a
 const isWindowsUserSetupGuidanceReport = report?.reportName === "windows-user-setup-guidance" || /latest-windows-user-setup-guidance\.json$/i.test(path);
 const isAntigravityAccountIsolationStatusReport = report?.reportName === "antigravity-account-isolation-status" || /latest-antigravity-account-isolation-status\.json$/i.test(path);
 const isSecondAccountLoginEntrypointReport = report?.reportName === "second-antigravity-account-login-entrypoint" || /latest-second-antigravity-account-login-entrypoint\.json$/i.test(path);
+const isSecondAccountReadinessSummaryReport = report?.reportName === "second-account-readiness-summary" || /latest-second-account-readiness-summary\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -1038,6 +1039,37 @@ const summary = {
     separateAccountVerified: boolField(report, "separateAccountVerified"),
     loginVerified: boolField(report, "loginVerified"),
     releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+  } : null,
+  secondAccountReadinessSummaryEvidence: isSecondAccountReadinessSummaryReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
+    startedLogin: boolField(report, "startedLogin"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
+    targetUserExists: boolField(report, "targetUserExists"),
+    readyForOperatorLogin: boolField(report, "readyForOperatorLogin"),
+    safeToAskUserForSecondAccountLogin: boolField(report, "safeToAskUserForSecondAccountLogin"),
+    canProceedToInteractiveLogin: boolField(report, "canProceedToInteractiveLogin"),
+    releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+    goalComplete: boolField(report, "goalComplete"),
+    completionState: has(report, "completionState") ? asString(report.completionState) : null,
+    readinessBlockingReason: has(report, "readinessBlockingReason") ? asString(report.readinessBlockingReason) : null,
+    operatorBlockingStage: has(report, "operatorBlockingStage") ? asString(report.operatorBlockingStage) : null,
+    operatorNextStep: has(report, "operatorNextStep") ? asString(report.operatorNextStep) : null,
+    nextOperatorAction: has(report, "nextOperatorAction") ? asString(report.nextOperatorAction) : null,
+    approvedLoginCommandTemplate: has(report, "approvedLoginCommandTemplate") ? asString(report.approvedLoginCommandTemplate) : null,
+    nextNoTrafficStatusCommand: has(report, "nextNoTrafficStatusCommand") ? asString(report.nextNoTrafficStatusCommand) : null,
+    postLoginProofCommandTemplate: has(report, "postLoginProofCommandTemplate") ? asString(report.postLoginProofCommandTemplate) : null,
+    releaseGateCompactStatusCommand: has(report, "releaseGateCompactStatusCommand") ? asString(report.releaseGateCompactStatusCommand) : null,
+    stepCount: Array.isArray(report.steps) ? report.steps.length : null,
+    failedStepCount: Array.isArray(report.steps) ? report.steps.filter((item) => item?.ok !== true).length : null,
+    failureCount: Array.isArray(report.failures) ? report.failures.length : null,
   } : null,
   antigravityCliRealSmokeEvidence: isAntigravityCliRealSmokeReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,

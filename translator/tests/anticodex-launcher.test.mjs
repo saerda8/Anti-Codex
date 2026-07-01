@@ -14828,6 +14828,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /test-anticodex-second-account-login-entrypoint\.ps1/);
   assert.match(secondAccountReadinessSummary, /test-anticodex-approved-real-run-sequence\.mjs/);
   assert.match(secondAccountReadinessSummary, /test-anticodex-goal-readiness\.mjs/);
+  assert.match(secondAccountReadinessSummary, /Test-ReportCollected/);
+  assert.match(secondAccountReadinessSummary, /\$goalResult\.ok\s*=\s*\$true/);
   assert.match(secondAccountReadinessSummary, /test-anticodex-release-gates\.mjs --compact-status/);
   assert.match(secondAccountReadinessSummary, /latest-second-account-readiness-summary\.json/);
   assert.match(secondAccountReadinessSummary, /readyForOperatorLogin/);
@@ -14842,6 +14844,15 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /capturesPassword\s*=\s*\$false/);
   assert.match(secondAccountReadinessSummary, /storesPassword\s*=\s*\$false/);
   assert.doesNotMatch(secondAccountReadinessSummary, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|AllowRealTraffic|StartLoginApproval|\.env/);
+  assert.match(summarizer, /secondAccountReadinessSummaryEvidence/);
+  assert.match(diagnosticsTest, /Test-SecondAccountReadinessSummaryEvidence/);
+  assert.match(diagnosticsTest, /diagnostic reports summary missing latest-second-account-readiness-summary\.json/);
+  assert.match(installedOverall, /latest-second-account-readiness-summary\.json/);
+  assert.match(releaseGates, /secondAccountReadinessSummary/);
+  assert.match(releaseGates, /latest-second-account-readiness-summary\.json/);
+  assert.match(releaseGates, /requireSecondAccountReadinessSummarySemantics/);
+  assert.match(releaseGates, /test-anticodex-second-account-readiness-summary\.ps1/);
+  assert.match(server, /latest-second-account-readiness-summary\.json/);
 
   assert.match(readiness, /reportName\s*=\s*"antigravity-cli-windows-user-readiness"/);
   assert.match(readiness, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);

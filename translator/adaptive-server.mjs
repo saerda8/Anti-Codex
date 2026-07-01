@@ -3607,6 +3607,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Windows 隔离用户指引", "latest-windows-user-setup-guidance.json"),
         latestManagerReportItem("Antigravity 账号隔离状态", "latest-antigravity-account-isolation-status.json"),
         latestManagerReportItem("Antigravity 第二账号登录入口", "latest-second-antigravity-account-login-entrypoint.json"),
+        latestManagerReportItem("Antigravity 第二账号总状态", "latest-second-account-readiness-summary.json"),
         latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
     ];
     return {

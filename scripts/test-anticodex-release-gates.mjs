@@ -159,6 +159,7 @@ const gateDefinitions = [
   { id: "windowsUserSetupGuidance", group: "no-traffic", file: "latest-windows-user-setup-guidance.json", requiredForRelease: true, requireWindowsUserSetupGuidanceSemantics: true },
   { id: "antigravityAccountIsolationStatus", group: "no-traffic", file: "latest-antigravity-account-isolation-status.json", requiredForRelease: true, requireAntigravityAccountIsolationStatusSemantics: true },
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
+  { id: "secondAccountReadinessSummary", group: "no-traffic", file: "latest-second-account-readiness-summary.json", requiredForRelease: true, requireSecondAccountReadinessSummarySemantics: true },
   { id: "cliTransportBoundary", group: "no-traffic", file: "latest-cli-transport-boundary.json", requiredForRelease: true, requireCliTransportBoundarySemantics: true },
   { id: "longTaskLandingMatrix", group: "no-traffic", file: "latest-long-task-landing-matrix.json", requiredForRelease: true, requireLongTaskLandingMatrixSemantics: true },
   { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
@@ -2040,6 +2041,37 @@ function summarizeGate(definition) {
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("second_account_entrypoint_release_proof_claimed");
       if (!report.accountIsolationCaveat) semanticFailures.push("second_account_entrypoint_caveat_missing");
     }
+    if (definition.requireSecondAccountReadinessSummarySemantics) {
+      const steps = Array.isArray(report.steps) ? report.steps : [];
+      const stepIds = steps.map((item) => String(item?.id || ""));
+      if (report.reportName !== "second-account-readiness-summary") semanticFailures.push("second_account_readiness_summary_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("second_account_readiness_summary_no_traffic");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("second_account_readiness_summary_requested_real_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("second_account_readiness_summary_used_real_traffic");
+      if (report.behaviorCovered !== true) semanticFailures.push("second_account_readiness_summary_behavior_not_covered");
+      if (report.coverageKind !== "second-account-readiness-summary-no-traffic") semanticFailures.push("second_account_readiness_summary_coverage_kind");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("second_account_readiness_summary_failures");
+      if (report.changedSystem !== false) semanticFailures.push("second_account_readiness_summary_changed_system");
+      if (report.createdUser !== false) semanticFailures.push("second_account_readiness_summary_created_user");
+      if (report.startedLogin !== false) semanticFailures.push("second_account_readiness_summary_started_login");
+      if (report.capturesPassword !== false) semanticFailures.push("second_account_readiness_summary_captures_password");
+      if (report.storesPassword !== false) semanticFailures.push("second_account_readiness_summary_stores_password");
+      if (report.readyForOperatorLogin !== false) semanticFailures.push("second_account_readiness_summary_ready_too_early");
+      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("second_account_readiness_summary_release_proof_claimed");
+      if (report.goalComplete !== false) semanticFailures.push("second_account_readiness_summary_goal_complete_claimed");
+      if (!String(report.nextOperatorAction || "")) semanticFailures.push("second_account_readiness_summary_next_action_missing");
+      if (!String(report.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1")
+        || !String(report.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("second_account_readiness_summary_login_command_missing");
+      if (!String(report.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("second_account_readiness_summary_status_command_missing");
+      if (!String(report.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
+        || !String(report.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof")
+        || !String(report.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("second_account_readiness_summary_proof_command_missing");
+      for (const requiredStep of ["windowsUserAccountPrepare", "windowsUserSetupGuidance", "accountIsolationStatus", "secondAccountLoginEntrypoint", "approvedRealRunSequence", "goalReadiness", "releaseGates"]) {
+        if (!stepIds.includes(requiredStep)) semanticFailures.push(`second_account_readiness_summary_missing_step:${requiredStep}`);
+      }
+      if (steps.some((item) => item?.ok !== true)) semanticFailures.push("second_account_readiness_summary_step_not_ok");
+      if (!report.accountIsolationCaveat) semanticFailures.push("second_account_readiness_summary_caveat_missing");
+    }
     if (definition.requireModelRoutingSemantics) {
       const results = Array.isArray(report.results) ? report.results : [];
       if (report.skipRequests !== true) semanticFailures.push("model_routing_skip_requests_not_true");
@@ -2508,6 +2540,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["windowsUserSetupGuidance", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-setup-guidance.ps1"],
   ["antigravityAccountIsolationStatus", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1"],
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
+  ["secondAccountReadinessSummary", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1"],
   ["cliTransportBoundary", "no-traffic-gateway", "node scripts\\test-anticodex-cli-transport-boundary.mjs", { requiresGatewayStart: true }],
   ["longTaskLandingMatrix", "no-traffic-local", "node scripts\\test-anticodex-long-task-landing-matrix.mjs"],
   ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],

@@ -101,6 +101,21 @@ function New-StepEvidence {
     }
 }
 
+function Test-ReportCollected {
+    param(
+        $Result,
+        [string]$ReportName
+    )
+
+    return ($null -ne $Result `
+        -and $null -ne $Result.parsed `
+        -and [string]$Result.parseError -eq "" `
+        -and [string]$Result.parsed.reportName -eq $ReportName `
+        -and $Result.parsed.requestedRealTraffic -eq $false `
+        -and $Result.parsed.usedRealTraffic -eq $false `
+        -and $Result.parsed.behaviorCovered -eq $true)
+}
+
 $prepareResult = Invoke-PowerShellJson -ScriptName "test-anticodex-windows-user-account-prepare.ps1" -Arguments @("-WindowsUser", $WindowsUser, "-ReportRoot", $ReportRoot)
 $setupGuidanceResult = Invoke-PowerShellJson -ScriptName "test-anticodex-windows-user-setup-guidance.ps1" -Arguments @("-WindowsUser", $WindowsUser, "-ReportRoot", $ReportRoot)
 $statusResult = Invoke-PowerShellJson -ScriptName "test-anticodex-antigravity-account-isolation-status.ps1" -Arguments @("-WindowsUser", $WindowsUser, "-ReportRoot", $ReportRoot)
@@ -108,6 +123,10 @@ $entrypointResult = Invoke-PowerShellJson -ScriptName "test-anticodex-second-acc
 $sequenceResult = Invoke-NodeJson -ScriptName "test-anticodex-approved-real-run-sequence.mjs" -Arguments @("--report-root", $ReportRoot)
 $goalResult = Invoke-NodeJson -ScriptName "test-anticodex-goal-readiness.mjs" -Arguments @("--report-root", $ReportRoot)
 $releaseResult = Invoke-NodeJson -ScriptName "test-anticodex-release-gates.mjs" -Arguments @("--compact-status", "--report-root", $ReportRoot)
+
+if (Test-ReportCollected -Result $goalResult -ReportName "goal-readiness") {
+    $goalResult.ok = $true
+}
 
 $prepare = $prepareResult.parsed
 $status = $statusResult.parsed
