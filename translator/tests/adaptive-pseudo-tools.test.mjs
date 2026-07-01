@@ -1506,6 +1506,81 @@ test("Antigravity SSE pipe uses non-streaming model call for local artifact tool
   assert.match(wire, /response.completed/);
 });
 
+test("Antigravity non-streaming local artifact path replays fake completions until a tool call", async () => {
+  let nonStreamingCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_TEST_123456";
+  const targetPath = "C:\\Temp\\autonomous-reasoning";
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请自主完成长任务，在 ${targetPath} 创建 package.json, codex-update-analyzer.mjs, sources.json, report.md, index.html, done.txt。done.txt must contain ${marker}. 可以创建文件和运行命令。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const queue = { run: async (task) => task({}) };
+  async function nonStreamingUpstream(body) {
+    nonStreamingCalls += 1;
+    assert.equal(body.stream, false);
+    if (nonStreamingCalls === 1) {
+      return {
+        choices: [{ finish_reason: "stop", message: { role: "assistant", content: `Files created and verified.\n\n${marker}` } }],
+      };
+    }
+    assert.match(body.messages.at(-1).content, /Anti-Codex blocked|Required exact marker|CODEX_TOOLS/);
+    return {
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call_shell", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: `Write-Output ${marker}` }) } }],
+        },
+      }],
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue,
+    nonStreamingUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(nonStreamingCalls, 2);
+  assert.doesNotMatch(wire, /Files created and verified/);
+  assert.match(wire, /"type":"function_call"/);
+  assert.match(wire, /"name":"shell_command"/);
+  assert.match(wire, new RegExp(marker));
+  assert.match(wire, /response.completed/);
+});
+
 test("Antigravity SSE pipe blocks fake tool claims after replay exhaustion", async () => {
   let streamCalls = 0;
   const chunks = [];
@@ -4300,6 +4375,70 @@ test("repo file edit smoke markers do not trigger local artifact marker guard", 
   assert.match(args.command, /status-dashboard\.mjs/);
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
   assert.doesNotMatch(args.command, /UI_REPO_MULTI_FILE_EDIT_SMOKE_20260627/);
+});
+
+test("autonomous reasoning smoke does not use deterministic artifact or web-backed guards", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260701";
+  const prompt = `请作为 Codex 风格开发代理，自主完成任务。工作目录：C:\\Temp\\desktop-visible-autonomous-reasoning\\run。最终标记：${marker}。创建 package.json, codex-update-analyzer.mjs, sources.json, report.md, index.html, done.txt。`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: prompt }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+
+  assert.equal(deterministicArtifactToolCallCompletion(request, chatBody), null);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
+});
+
+test("autonomous reasoning tool calls get visible progress text before execution", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260701";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请自主完成任务。工作目录：C:\\Temp\\desktop-visible-autonomous-reasoning\\run。最终标记：${marker}。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_test",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: "node --test codex-update-analyzer.test.mjs" }),
+          },
+        }],
+      },
+    }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+
+  const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(fmt.output[0].content[0].text, /运行测试验证/);
+  assert.equal(fmt.output[1].type, "function_call");
+  assert.equal(fmt.output[1].name, "shell_command");
 });
 
 test("Antigravity internal web loop prefetches search evidence before asking the model to summarize", async () => {

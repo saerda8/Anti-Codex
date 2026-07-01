@@ -40,6 +40,8 @@ const reportName = taskMode === "web-search"
       ? "ui-multi-turn-project-smoke"
     : taskMode === "complex-project"
       ? "ui-complex-project-smoke"
+    : taskMode === "autonomous-reasoning"
+      ? "ui-autonomous-reasoning-smoke"
     : taskMode === "report-site"
       ? "ui-report-site-smoke"
     : taskMode === "repo-file-edit"
@@ -58,6 +60,7 @@ const projectTaskModes = new Set([
   "coding-project",
   "multi-turn-project",
   "complex-project",
+  "autonomous-reasoning",
   "report-site",
   "repo-file-edit",
   "repo-multi-file-edit",
@@ -73,6 +76,8 @@ const markerPrefix = taskMode === "web-search"
     ? "UI_MULTI_TURN_PROJECT_SMOKE"
   : taskMode === "complex-project"
     ? "UI_COMPLEX_PROJECT_SMOKE"
+  : taskMode === "autonomous-reasoning"
+    ? "UI_AUTONOMOUS_REASONING_SMOKE"
   : taskMode === "report-site"
     ? "UI_REPORT_SITE_SMOKE"
   : taskMode === "repo-file-edit"
@@ -96,6 +101,8 @@ const artifactDir = args.get("--artifact-dir")
         ? "desktop-visible-multi-turn-project"
       : taskMode === "complex-project"
         ? "desktop-visible-complex-project"
+      : taskMode === "autonomous-reasoning"
+        ? "desktop-visible-autonomous-reasoning"
       : taskMode === "report-site"
         ? "desktop-visible-report-site"
       : taskMode === "agentic-step-flow"
@@ -154,6 +161,26 @@ if (!hasCustomPrompt && taskMode === "multi-turn-project") {
 }
 if (!hasCustomPrompt && taskMode === "complex-project") {
   promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell only to run Node.js file-write commands; do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files because they can write a UTF-8 BOM. Create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search and must be written with Node fs.writeFileSync(..., "utf8"). codex-update-analyzer.mjs must export summarizeSources(sources), must define stripUtf8Bom(text), and must call stripUtf8Bom before JSON.parse when run as a CLI. The CLI must read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3 and codexMentionCount is at least 1, then reply with ${marker}.`;
+}
+if (!hasCustomPrompt && taskMode === "autonomous-reasoning") {
+  promptText = [
+    "请作为一个真正的 Codex 风格开发代理，自主完成一个小型研究+代码+报告任务。",
+    `工作目录：${artifactDir}`,
+    `最终标记：${marker}`,
+    "",
+    "目标：做一个离线可运行的 Codex 更新资料分析器。你需要自己决定合理步骤、文件内容和验证顺序，不要只复述计划。",
+    "必须产出的结果：",
+    "- 文件名必须完全使用 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。",
+    "- analyzer.js、test.js、summary.json 或其他替代文件名都不算完成，即使内容正确也必须改成上面的确切文件名。",
+    "- 一个可运行的 Node.js 分析器，能读取 sources.json 并输出 JSON 摘要。",
+    "- 一个 node:test 测试文件，证明分析器至少能统计 3 条来源。",
+    "- sources.json 至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新；可以使用你已知的公开 URL。",
+    "- 一份中文 report.md，说明你的结论，并包含真实来源 URL 和最终标记。",
+    "- 一个离线 index.html，中文展示分析结果，链接 report.md，包含真实来源 URL 和最终标记。",
+    "- done.txt 只能包含最终标记。",
+    "",
+    "约束：不要查看 Antigravity brain、transcript、history 或 log 目录。可以创建文件、运行测试和命令。你要自己规划并执行，遇到失败要自行修正。最后只在最后一行输出最终标记。",
+  ].join("\n");
 }
 if (!hasCustomPrompt && taskMode === "report-site") {
   promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell only to run Node.js file-write commands. Create exactly these files and no others: report.md, index.html, done.txt. Do not create README.md; README.md is explicitly wrong for this task. Your first file write action must create report.md, not README.md. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify report.md, index.html, and done.txt exist and done.txt exactly matches the marker, then reply with ${marker}.`;
@@ -1089,6 +1116,29 @@ function buildComplexProjectRepairPrompt(currentFailures = [], evidence = null) 
   return `Continue the same complex-project task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "analyzer CLI did not pass"}. ${error ? `CLI/test error excerpt: ${error}. ` : ""}sources.json must be written as UTF-8 without BOM, and codex-update-analyzer.mjs must call stripUtf8Bom before JSON.parse. Do not inspect Antigravity brain, transcript, history, or log folders. Your next tool action must execute exactly this PowerShell-safe command: ${buildComplexProjectRepairCommand(artifactDir)}. Then run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json from ${artifactDir}. Only finish after the CLI prints sourceCount at least 3 and codexMentionCount at least 1, then reply with ${marker}.`;
 }
 
+function buildAutonomousReasoningContinuationPrompt(currentFailures = [], evidence = null) {
+  const existingFiles = Object.entries(evidence?.files || {})
+    .filter(([, exists]) => exists === true)
+    .map(([name]) => name)
+    .join(", ") || "none";
+  const error = String(evidence?.error || evidence?.testOutput || evidence?.cliOutput || "").slice(0, 1600);
+  return [
+    `继续同一个自主长任务，工作目录仍然是 ${artifactDir}。`,
+    `最终标记仍然是 ${marker}。`,
+    `当前已经看到的产物键：${existingFiles}。`,
+    `当前验收失败：${currentFailures.join("; ") || "还没有满足完整验收"}。`,
+    error ? `最近测试/命令输出摘要：${error}` : "",
+    "不要查看 Antigravity brain、transcript、history 或 log 目录。",
+    "不要只解释计划。请继续自己判断下一步，并通过真实工具调用完成缺失产物。",
+    "必须使用这些确切文件名：package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。",
+    "analyzer.js、test.js、summary.json 或其他替代文件名不合格；如果已经创建了这些文件，请把内容迁移到上面的确切文件名，并保留/验证确切文件名。",
+    "codex-update-analyzer.mjs 必须导出 summarizeSources，读取 sources.json 时要能处理 UTF-8 BOM。",
+    "sources.json 至少 3 条真实 Codex/OpenAI 相关 URL；report.md 和 index.html 必须是中文、包含这些 URL 和最终标记；index.html 必须链接 report.md；done.txt 只能包含最终标记。",
+    "请运行 node --test codex-update-analyzer.test.mjs，并运行 node codex-update-analyzer.mjs sources.json；如果失败，继续修正。",
+    `只有在文件、测试、CLI 输出都满足后，最后一行才输出 ${marker}。`,
+  ].filter(Boolean).join("\n");
+}
+
 function filterRepoMultiReadmeTextOnlyFailures(failures = [], artifactFailures = []) {
   if (artifactFailures.length > 0) return failures;
   return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
@@ -1176,9 +1226,12 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     assistantHasPhase1: false,
     assistantHasPhase2: false,
     assistantHasFinalMarker: false,
+    taskToolCallCount: 0,
+    taskToolOutputSeen: false,
     markerToolCallCount: 0,
     markerToolOutputSeen: false,
     artifactGuardUsed: false,
+    visibleProgressCount: 0,
   };
   if (!expectedMarker) return evidence;
   let history = null;
@@ -1199,20 +1252,31 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
         evidence.assistantText += `${text}\n`;
       }
     }
-    if ((value.type === "function_call" || value.type === "custom_tool_call") && JSON.stringify(value).includes(expectedMarker)) {
-      evidence.markerToolCallCount += 1;
-      if (/Anti-Codex exact artifact marker guard/.test(JSON.stringify(value))) evidence.artifactGuardUsed = true;
+    if (value.type === "function_call" || value.type === "custom_tool_call") {
+      evidence.taskToolCallCount += 1;
+      const serialized = JSON.stringify(value);
+      if (serialized.includes(expectedMarker)) evidence.markerToolCallCount += 1;
+      if (/Anti-Codex exact artifact marker guard/.test(serialized)) evidence.artifactGuardUsed = true;
     }
-    if ((value.type === "function_call_output" || value.type === "custom_tool_call_output") && JSON.stringify(value).includes(expectedMarker)) {
-      evidence.markerToolOutputSeen = true;
-      if (/Anti-Codex artifact marker verification/.test(JSON.stringify(value))) evidence.artifactGuardUsed = true;
+    if (value.type === "function_call_output" || value.type === "custom_tool_call_output") {
+      evidence.taskToolOutputSeen = true;
+      const serialized = JSON.stringify(value);
+      if (serialized.includes(expectedMarker)) evidence.markerToolOutputSeen = true;
+      if (/Anti-Codex artifact marker verification/.test(serialized)) evidence.artifactGuardUsed = true;
     }
     for (const child of Object.values(value)) visit(child);
   };
-  visit(history);
+  const entries = Array.isArray(history?.entries) ? history.entries : [history];
+  for (const entry of entries) {
+    const serialized = JSON.stringify(entry);
+    if (!serialized.includes(expectedMarker)) continue;
+    if (/Generate a concise UI title|provide a short title for a task/i.test(serialized)) continue;
+    visit(entry);
+  }
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
+  evidence.visibleProgressCount = (evidence.assistantText.match(/我(?:先)?(?:创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/g) || []).length;
   evidence.assistantText = evidence.assistantText.trim().slice(-2000);
   return evidence;
 }
@@ -1475,6 +1539,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     testOutput: "",
     cliOutput: "",
     error: "",
+    responseHistory: collectResponseHistoryAgenticEvidence(expectedMarker),
   };
   try {
     if (evidence.files.doneTxt) {
@@ -1482,7 +1547,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.doneExact = text === expectedMarker;
     }
     if (evidence.files.analyzer) {
-      evidence.exportsFunction = /export\s+function\s+summarizeSources/.test(readFileSync(analyzerPath, "utf8"));
+      evidence.exportsFunction = /(?:export\s+(?:async\s+)?function\s+summarizeSources\b|export\s*\{[^}]*\bsummarizeSources\b[^}]*\})/.test(readFileSync(analyzerPath, "utf8"));
     }
     if (evidence.files.sourcesJson) {
       const parsed = parseJsonFile(sourcesPath);
@@ -1589,6 +1654,12 @@ function collectComplexProjectArtifactFailures(artifactEvidence) {
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) localFailures.push("complex-project index.html is not a complete HTML document");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) localFailures.push("complex-project index.html does not link to report.md");
   return localFailures;
+}
+
+function filterUiMarkerFailuresWhenHistoryConfirmsCompletion(failures, artifactFailures, artifactEvidence) {
+  if (artifactFailures.length > 0) return failures;
+  if (artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) return failures;
+  return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
 }
 
 function collectReportSiteArtifactFailures(artifactEvidence) {
@@ -2512,7 +2583,7 @@ async function main() {
             ? repoFileEditDir
             : taskMode === "repo-multi-file-edit"
               ? repoMultiFileEditDir
-            : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
+            : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
           cdpPort,
           baseUrl,
           target: target ? { id: target.id, title: target.title, url: target.url } : null,
@@ -2891,6 +2962,7 @@ async function main() {
     }
     if (clicked && submitSucceeded) {
     const deadline = Date.now() + timeoutMs;
+    const waitStartedAt = Date.now();
     while (Date.now() < deadline) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
       const stateAfter = await ws.send("Runtime.evaluate", {
@@ -2949,6 +3021,27 @@ async function main() {
             }
           } catch {}
         }
+      } else if (taskMode === "autonomous-reasoning") {
+        artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+        const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+        const hasToolEvidence = (artifactEvidence?.responseHistory?.taskToolCallCount || 0) >= 1
+          && artifactEvidence?.responseHistory?.taskToolOutputSeen === true
+          && artifactEvidence?.responseHistory?.artifactGuardUsed !== true;
+        try {
+          const loopDiagnostics = await httpJson(diagnosticsUrl);
+          if (diagnosticsAreIdle(loopDiagnostics)) {
+            if (!composer.includes(promptText) && artifactFailures.length === 0 && hasToolEvidence) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+            if (Date.now() - waitStartedAt >= 45_000) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+          }
+        } catch {}
       } else if (answerMarkerCount >= 1 && !composer.includes(marker)) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
@@ -3057,7 +3150,7 @@ async function main() {
       if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) failures.push("coding-project node:test did not pass");
       if (artifactEvidence?.files?.wordTally && artifactEvidence.cliPassed !== true) failures.push("coding-project CLI output did not contain red=2 and blue=1");
     }
-    if (taskMode === "complex-project") {
+    if (taskMode === "complex-project" || taskMode === "autonomous-reasoning") {
       artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
       if (!artifactEvidence?.files?.packageJson) failures.push("complex-project package.json was not created");
       if (!artifactEvidence?.files?.analyzer) failures.push("complex-project codex-update-analyzer.mjs was not created");
@@ -3082,6 +3175,12 @@ async function main() {
       if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) failures.push("complex-project report.md and index.html did not share a source URL");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) failures.push("complex-project index.html is not a complete HTML document");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) failures.push("complex-project index.html does not link to report.md");
+      if (taskMode === "autonomous-reasoning") {
+        if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) failures.push("autonomous-reasoning did not emit a task tool call");
+        if (artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) failures.push("autonomous-reasoning did not observe task tool output");
+        if (artifactEvidence?.responseHistory?.artifactGuardUsed === true) failures.push("autonomous-reasoning used deterministic artifact guard");
+        if ((artifactEvidence?.responseHistory?.visibleProgressCount || 0) < 1) failures.push("autonomous-reasoning did not show visible progress text");
+      }
     }
     if (taskMode === "report-site") {
       artifactEvidence = verifyReportSiteArtifact(artifactDir, marker);
@@ -3132,10 +3231,48 @@ async function main() {
       finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
     }
   }
+  if (taskMode === "autonomous-reasoning") {
+    for (let continuationIndex = 0; continuationIndex < 2; continuationIndex += 1) {
+      const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+      const toolFailures = failures.filter((failure) => /autonomous-reasoning did not|assistant reply marker was not observed/i.test(String(failure || "")));
+      const currentFailures = [...artifactFailures, ...toolFailures];
+      const canContinue = currentFailures.length > 0
+        && failures.every((failure) => artifactFailures.includes(failure) || toolFailures.includes(failure));
+      if (!canContinue) break;
+      if (preRepairFailures.length === 0) {
+        preRepairFailures = failures.slice();
+        preRepairArtifactEvidence = artifactEvidence;
+      }
+      repairPrompt = buildAutonomousReasoningContinuationPrompt(currentFailures, artifactEvidence);
+      repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
+      artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
+      finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
+      if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) finalArtifactFailures.push("autonomous-reasoning did not emit a task tool call");
+      if (artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) finalArtifactFailures.push("autonomous-reasoning did not observe task tool output");
+      if (artifactEvidence?.responseHistory?.artifactGuardUsed === true) finalArtifactFailures.push("autonomous-reasoning used deterministic artifact guard");
+      if ((artifactEvidence?.responseHistory?.visibleProgressCount || 0) < 1) finalArtifactFailures.push("autonomous-reasoning did not show visible progress text");
+      const effectiveRepairFailures = filterUiMarkerFailuresWhenHistoryConfirmsCompletion(
+        repairTurn.failures,
+        finalArtifactFailures,
+        artifactEvidence,
+      );
+      failures.length = 0;
+      failures.push(...effectiveRepairFailures);
+      failures.push(...finalArtifactFailures);
+      if (failures.length === 0) break;
+    }
+  }
   if (repairTurn) {
-    const repairFailurePrefix = taskMode === "report-site" ? "report-site repair-step" : "complex-project repair-step";
+    const repairFailurePrefix = taskMode === "report-site"
+      ? "report-site repair-step"
+      : taskMode === "autonomous-reasoning"
+        ? "autonomous-reasoning continuation-step"
+        : "complex-project repair-step";
+    const effectiveRepairFailures = taskMode === "autonomous-reasoning"
+      ? filterUiMarkerFailuresWhenHistoryConfirmsCompletion(repairTurn.failures, finalArtifactFailures, artifactEvidence)
+      : repairTurn.failures;
     failures.length = 0;
-    failures.push(...repairTurn.failures.map((failure) => `${repairFailurePrefix}: ${failure}`));
+    failures.push(...effectiveRepairFailures.map((failure) => `${repairFailurePrefix}: ${failure}`));
     failures.push(...finalArtifactFailures);
     clicked = clicked === true && repairTurn.clicked === true;
     submitEvidence = repairTurn.submitEvidence;
@@ -3150,7 +3287,7 @@ async function main() {
     inLoopIdleDiagnostics = repairTurn.inLoopIdleDiagnostics || inLoopIdleDiagnostics;
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
+  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
     : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
@@ -3191,7 +3328,7 @@ async function main() {
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"
         ? repoMultiFileEditDir
-      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
+      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
     artifactEvidence,
     preRepairFailures,
     preRepairArtifactEvidence,
@@ -3276,7 +3413,7 @@ main().catch((error) => {
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"
         ? repoMultiFileEditDir
-      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
+      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
     timing: null,
   };
   writeReport(payload);

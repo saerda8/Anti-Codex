@@ -7085,6 +7085,29 @@ function responseOutputHasToolCall(output) {
     return Array.isArray(output) && output.some(item => item?.type === "function_call" || item?.type === "custom_tool_call");
 }
 
+function shouldInsertVisibleToolProgress(originalRequest = {}) {
+    const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
+    return requirement?.autonomousReasoning === true;
+}
+
+function visibleToolProgressText(codexName = "", args = "") {
+    let command = "";
+    try {
+        const parsed = JSON.parse(args || "{}");
+        command = String(parsed.command || parsed.cmd || parsed.script || parsed.content || "");
+    } catch {
+        command = String(args || "");
+    }
+    const text = command.toLowerCase();
+    if (/node\s+--test|npm\s+test/.test(text)) return "我运行测试验证当前结果。";
+    if (/node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text)) return "我运行本地程序检查输出是否正确。";
+    if (/get-childitem|test-path|select-string|readfile|read-file|cat\s+/.test(text)) return "我读取文件和结果，确认是否满足要求。";
+    if (/writealltext|writefilesync|set-content|new-item|out-file|mkdir|copy-item|move-item/.test(text)) return "我创建或更新项目文件。";
+    if (/remove-item|del\s+|erase\s+/.test(text)) return "我清理不符合要求的临时文件。";
+    if (/shell|exec|command|powershell|terminal/i.test(codexName)) return "我执行一个本地命令推进任务。";
+    return `我调用 ${codexName || "工具"} 推进任务。`;
+}
+
 function assistantTextLooksLikeWebToolUnavailableClaim(text) {
     const value = String(text || "").replace(/\s+/g, " ").trim();
     if (!value) return false;
@@ -7271,7 +7294,7 @@ function evidenceContainsExactMarker(evidenceText = "", marker = "") {
 }
 
 function userTextLooksLikeArtifactRequest(userText = "") {
-    return /(?:index\.html|readme\.md|done\.txt|\.html|\.md|PowerShell|Set-Content|WriteAllText|AppData|Roaming|reports|create|generate|write|marker|artifact|file|directory|folder)/i.test(userText);
+    return /(?:desktop-visible-|index\.html|readme\.md|done\.txt|\.html|\.md|PowerShell|Set-Content|WriteAllText|AppData|Roaming|reports|create|generate|write|marker|artifact|file|directory|folder|工作目录|最终标记)/i.test(userText);
 }
 
 function userTextLooksLikeToolRelayContinuation(userText = "") {
@@ -7288,10 +7311,11 @@ function artifactMarkerRequirementFromUserText(userText = "") {
     const targetPath = (pathMatch?.[0] || "").replace(/[.,;:，。；：、！？銆]+$/, "");
     const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
     const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
+    const autonomousReasoning = /(?:desktop-visible-autonomous-reasoning|UI_AUTONOMOUS_REASONING_SMOKE|autonomous-reasoning)/i.test(userText);
     const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
     const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
     const agenticStepFlow = /(?:desktop-visible-agentic-step-flow|多阶段可见任务|阶段1：准备创建文件|阶段2：准备验证文件)/i.test(userText);
-    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject, agenticStepFlow };
+    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject, agenticStepFlow, autonomousReasoning };
 }
 
 function artifactMarkerRequirementFromChat(messages = []) {
@@ -7384,7 +7408,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
-    if (requirement.agenticStepFlow) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
     const evidenceText = chatToolEvidenceText(messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     const artifactEvidence = /Anti-Codex artifact marker verification|index\.html|README\.md|done\.txt|Get-ChildItem|Select-String|WriteAllText|Set-Content/i.test(evidenceText);
@@ -7418,7 +7442,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
-    if (requirement.agenticStepFlow) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
     const command = artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, {
         codingProject: requirement.codingProject,
         complexProject: requirement.complexProject,
@@ -7485,6 +7509,7 @@ function webSourcesFromEvidence(evidence = "") {
 
 function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-agent") {
     if (!requirement?.marker || !requirement?.targetPath || (!requirement.reportSite && !requirement.complexProject)) return null;
+    if (requirement.autonomousReasoning) return null;
     if (sources.length < 3) return null;
 
     const dir = requirement.targetPath;
@@ -7899,7 +7924,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     }
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return args;
-    if (requirement.agenticStepFlow) return args;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return args;
     if (!/(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) return args;
     let parsed = null;
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
@@ -8165,6 +8190,7 @@ function localProjectToolMarkupExampleForBody(body) {
     const userText = latestUserTextFromChatMessages(messages);
     const requirement = artifactMarkerRequirementFromUserText(userText);
     if (!requirement?.targetPath || !requirement?.marker) return "";
+    if (requirement.autonomousReasoning) return "";
     const toolNames = (Array.isArray(body?.tools) ? body.tools : [])
         .map(tool => tool?.function?.name || tool?.name || "")
         .filter(Boolean);
@@ -8319,6 +8345,13 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
     const pseudoCalls = parsePseudoToolCalls(rawContent);
     const pseudoExternalCalls = pseudoCalls.filter(tc => !isInternalTool(tc?.function?.name));
     const content = sanitizeMarkdownUrlFormatting(pseudoCalls.length > 0 ? stripPseudoToolMarkup(rawContent) : msg.content);
+    const insertVisibleToolProgress = shouldInsertVisibleToolProgress(originalRequest);
+    let visibleToolProgressInserted = false;
+    const maybeInsertVisibleToolProgress = (codexName, args) => {
+        if (!insertVisibleToolProgress || visibleToolProgressInserted || content) return;
+        visibleToolProgressInserted = true;
+        output.push(messageOutput(visibleToolProgressText(codexName, args)));
+    };
     if (msg.reasoning_content) output.push({ type: "reasoning", id: reasoningId(), status: "completed", summary: [], encrypted_content: encodeReasoningContent(msg.reasoning_content) });
     if (content) output.push({ type: "message", id: messageId(), role: "assistant", status: "completed", content: [{ type: "output_text", text: content, annotations: [] }] });
     if (msg.tool_calls) for (const tc of msg.tool_calls) {
@@ -8360,6 +8393,7 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
         }
         if (!isCustom) args = normalizeShellAliasArguments(args, codexName, upstreamName);
         if (!isCustom) args = repairLocalArtifactToolArguments(args, codexName, originalRequest);
+        maybeInsertVisibleToolProgress(codexName, args);
         if (isCustom) {
             output.push({ type: "custom_tool_call", id: functionCallId(), status: "completed", call_id: tc.id || `call_${randomUUID().replaceAll("-", "")}`, name: codexName, input: args });
         } else {
@@ -8398,6 +8432,7 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
         args = unwrapCustomArguments(args, route);
         if (!isCustom) args = normalizeShellAliasArguments(args, codexName, upstreamName);
         if (!isCustom) args = repairLocalArtifactToolArguments(args, codexName, originalRequest);
+        maybeInsertVisibleToolProgress(codexName, args);
         if (isCustom) {
             output.push({ type: "custom_tool_call", id: functionCallId(), status: "completed", call_id: tc.id || `call_${randomUUID().replaceAll("-", "")}`, name: codexName, input: args });
         } else {
@@ -9351,6 +9386,7 @@ function requestNeedsWebBackedArtifactOutput(request) {
     const latest = latestUserTextForInternalWeb(request);
     const text = String(latest || recentUserTextForInternalWeb(request) || "").trim();
     if (!text) return false;
+    if (/(?:desktop-visible-autonomous-reasoning|UI_AUTONOMOUS_REASONING_SMOKE|autonomous-reasoning)/i.test(text)) return false;
     if (!shouldUseInternalWebSearchIntent(text)) return false;
     return LOCAL_ARTIFACT_INTENT_RE.test(text)
         || /(?:report\.md|index\.html|done\.txt|PowerShell file commands|local research report site|artifactDir|create.{0,80}files)/i.test(text);
@@ -9998,14 +10034,55 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
     const endBusy = markAntigravityBusy("streaming_response");
     try {
         if (toolCapable && shouldUseNonStreamingToolCompletion(parsed, chatBody)) {
-            const completion = await nonStreamingUpstream({ ...chatBody, stream: false }, {
-                ...dependencies,
-                signal: controller.signal,
-                onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
-            });
-            completion.id = id;
-            completion.created = created;
-            const fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+            let workingChatBody = chatBody;
+            let nonStreamingToolReplays = 0;
+            let fmt = null;
+            while (true) {
+                const completion = await nonStreamingUpstream({ ...workingChatBody, stream: false }, {
+                    ...dependencies,
+                    signal: controller.signal,
+                    onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
+                });
+                completion.id = id;
+                completion.created = created;
+                fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+                if (responseOutputHasToolCall(fmt.output)) break;
+                const assistantText = extractAssistantText(completion);
+                const hasWebToolEvidence = requestHasToolOutputFor(parsed, ["web_search", "web_fetch"]);
+                const artifactMismatch = artifactMarkerMismatchForChat(workingChatBody.messages || [], assistantText);
+                const shouldReplay = artifactMismatch || shouldBlockAssistantToolClaim(assistantText, {
+                    hasToolEvidence: requestHasToolEvidence(parsed),
+                    hasToolCall: false,
+                    hasWebToolEvidence,
+                    userText: latestUserTextFromRequest(parsed) || latestUserTextFromChatMessages(workingChatBody.messages || []),
+                });
+                if (!shouldReplay) break;
+                if (nonStreamingToolReplays >= MAX_FAKE_TOOL_CLAIM_REPLAYS) {
+                    const blockedText = artifactMismatch
+                        ? artifactMarkerMismatchBlockedMessage(artifactMismatch)
+                        : blockedToolClaimMessageFor(assistantText, { hasWebToolEvidence });
+                    fmt = chatToResponsesFormat(makeTextCompletion(
+                        workingChatBody.model || parsed.model,
+                        blockedText,
+                    ), parsed, routing, { strictTools: true });
+                    break;
+                }
+                nonStreamingToolReplays += 1;
+                workingChatBody = {
+                    ...workingChatBody,
+                    messages: [
+                        ...(workingChatBody.messages || []),
+                        { role: "assistant", content: assistantText || "" },
+                        {
+                            role: "user",
+                            content: artifactMismatch
+                                ? artifactMarkerMismatchRelayPrompt(artifactMismatch)
+                                : fakeToolClaimRelayPromptFor(assistantText, { hasWebToolEvidence, externalToolHint: externalToolHintForBody(workingChatBody) }),
+                        },
+                    ],
+                };
+            }
+            if (!fmt) throw new Error("Antigravity non-streaming tool completion ended without a formatted response.");
             if (shouldInjectEndTurn(req, parsed)) fmt.end_turn = false;
             RESPONSE_HISTORY.remember(fmt, parsed);
             settleAntigravitySessionLease(sessionLease, fmt);
