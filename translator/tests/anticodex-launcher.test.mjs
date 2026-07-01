@@ -12251,6 +12251,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /async function collectModelRouteEvidence\(before\)/);
   assert.match(verifier, /modelRouteEvidence = await collectModelRouteEvidence\(modelRoutesBefore\)/);
   assert.match(verifier, /modelRouteEvidence/);
+  assert.match(verifier, /args\.get\("--model"\)/);
+  assert.match(verifier, /args\.get\("--model-label"\)/);
+  assert.match(verifier, /function collectRequiredModelFailures/);
+  assert.match(verifier, /desktop UI did not select required model/);
+  assert.match(verifier, /usedRealTraffic:\s*false/);
+  assert.match(verifier, /modelSelectionEvidence/);
   assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
   assert.match(server, /reason: "fast_diagnostics"/);
   assert.match(verifier, /const projectChatLabel = String\(args\.get\("--project-label"\) \|\| "Anti-Codex"\)/);
@@ -12332,7 +12338,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /idleWaitMs/);
   assert.match(verifier, /function diagnosticsAreIdle/);
   assert.match(verifier, /async function waitForIdleDiagnostics/);
-  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "report-site" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
+  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "report-site" \|\| taskMode === "agentic-step-flow" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
   assert.match(verifier, /desktop task did not become idle after the assistant reply/);
   assert.match(verifier, /antigravitySessionLock/);
   assert.match(verifier, /activeAntigravityRequests/);

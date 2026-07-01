@@ -27,6 +27,8 @@ const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "response-history.json");
 const taskMode = String(args.get("--task-mode") || "exact-marker");
+const requiredModel = String(args.get("--model") || args.get("--required-model") || process.env.ANTICODEX_TEST_MODEL || "").trim();
+const requiredModelLabel = String(args.get("--model-label") || args.get("--required-model-label") || "").trim();
 const isolateChat = args.has("--same-chat") ? false : true;
 const reportName = taskMode === "web-search"
   ? "ui-web-search-smoke"
@@ -307,6 +309,46 @@ function compactRoute(route) {
     cascadeId: route.cascadeId || null,
     status: route.status || null,
   };
+}
+
+function normalizeModelNeedle(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function modelValueMatches(value, expectedValues = []) {
+  const normalized = normalizeModelNeedle(value);
+  if (!normalized) return false;
+  return expectedValues
+    .map(normalizeModelNeedle)
+    .filter(Boolean)
+    .some((expected) => normalized === expected || normalized.includes(expected) || expected.includes(normalized));
+}
+
+function requiredModelNeedles() {
+  return [requiredModel, requiredModelLabel].filter(Boolean);
+}
+
+function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
+  const expected = requiredModelNeedles();
+  if (expected.length === 0) return [];
+  const actualValues = [];
+  const addRoute = (route) => {
+    if (!route) return;
+    actualValues.push(route.requestedModel, route.resolvedModel, route.displayName, route.internalModel);
+  };
+  addRoute(modelRouteEvidence?.latest);
+  for (const route of Array.isArray(modelRouteEvidence?.routes) ? modelRouteEvidence.routes : []) addRoute(route);
+  actualValues.push(
+    diagnostics?.responsesWebSocket?.lastClientPayload?.model,
+    diagnostics?.responsesWebSocket?.lastClientPayload?.metadata?.model,
+  );
+  if (actualValues.some((value) => modelValueMatches(value, expected))) return [];
+  const compactActual = actualValues.filter(Boolean).map(String).slice(0, 8).join(", ") || "none";
+  return [`desktop task did not route through required model ${expected.join(" / ")}; observed ${compactActual}`];
 }
 
 async function readModelRoutesEvidence() {
@@ -1769,6 +1811,219 @@ async function waitForComposerPromptReady(ws, prompt, timeoutMs = 5_000) {
   return latest;
 }
 
+function currentModelProbeExpression(requiredValues = []) {
+  const valuesJson = JSON.stringify(requiredValues.filter(Boolean));
+  return `(() => {
+    const requiredValues = ${valuesJson};
+    const normalize = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\\s+/g, ' ');
+    const expected = requiredValues.map(normalize).filter(Boolean);
+    const matches = (value) => {
+      const text = normalize(value);
+      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle) || needle.includes(text));
+    };
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const labelFor = (element) => String(element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('data-testid') || element.textContent || '').trim();
+    const summarize = (element, index = 0, score = 0) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        index,
+        label: labelFor(element),
+        role: element.getAttribute('role') || '',
+        aria: element.getAttribute('aria-label') || '',
+        tag: element.tagName,
+        score,
+        rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
+      };
+    };
+    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|model/i.test(label);
+    const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+    const composerRect = composer?.getBoundingClientRect();
+    const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
+      .filter(visible)
+      .map((element, index) => {
+        const label = labelFor(element);
+        const rect = element.getBoundingClientRect();
+        const nearComposer = composerRect
+          ? Math.max(0, 180 - Math.round(Math.hypot((rect.left + rect.width / 2) - (composerRect.left + composerRect.width / 2), (rect.top + rect.height / 2) - (composerRect.top + composerRect.height / 2)) / 3))
+          : 0;
+        const score = (matches(label) ? 400 : 0)
+          + (modelish(label) ? 140 : 0)
+          + nearComposer
+          - Math.min(label.length, 100);
+        return { element, index, label, score };
+      })
+      .filter((item) => modelish(item.label) || matches(item.label))
+      .sort((a, b) => b.score - a.score);
+    const selected = candidates[0] || null;
+    return {
+      matched: Boolean(selected && matches(selected.label)),
+      selected: selected ? summarize(selected.element, selected.index, selected.score) : null,
+      candidates: candidates.slice(0, 8).map((item) => summarize(item.element, item.index, item.score)),
+    };
+  })()`;
+}
+
+function modelOptionProbeExpression(requiredValues = []) {
+  const valuesJson = JSON.stringify(requiredValues.filter(Boolean));
+  return `(() => {
+    const requiredValues = ${valuesJson};
+    const normalize = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\\s+/g, ' ');
+    const expected = requiredValues.map(normalize).filter(Boolean);
+    const matches = (value) => {
+      const text = normalize(value);
+      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle) || needle.includes(text));
+    };
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const labelFor = (element) => String(element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('data-testid') || element.textContent || '').trim();
+    const summarize = (element, index = 0, score = 0) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        index,
+        label: labelFor(element),
+        role: element.getAttribute('role') || '',
+        aria: element.getAttribute('aria-label') || '',
+        tag: element.tagName,
+        score,
+        rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
+      };
+    };
+    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|model/i.test(label);
+    const candidates = Array.from(document.querySelectorAll('button,[role="button"],[role="option"],[role="menuitem"],[cmdk-item],li,div'))
+      .filter(visible)
+      .map((element, index) => {
+        const label = labelFor(element);
+        const rect = element.getBoundingClientRect();
+        const giantContainerPenalty = rect.width > 500 || rect.height > 220 ? 300 : 0;
+        const score = (matches(label) ? 500 : 0)
+          + (/option|menuitem/i.test(element.getAttribute('role') || '') ? 80 : 0)
+          + (modelish(label) ? 30 : 0)
+          - Math.min(label.length, 180)
+          - giantContainerPenalty;
+        return { element, index, label, score };
+      })
+      .filter((item) => matches(item.label) || modelish(item.label))
+      .sort((a, b) => b.score - a.score);
+    const selected = candidates.find((item) => matches(item.label)) || null;
+    return {
+      matched: Boolean(selected),
+      selected: selected ? summarize(selected.element, selected.index, selected.score) : null,
+      candidates: candidates.slice(0, 12).map((item) => summarize(item.element, item.index, item.score)),
+    };
+  })()`;
+}
+
+async function selectRequiredModel(ws, timeoutMs = 8_000) {
+  const requiredValues = requiredModelNeedles();
+  if (requiredValues.length === 0) return null;
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  const clickRectCenter = async (rect) => {
+    const x = rect.x + rect.w / 2;
+    const y = rect.y + rect.h / 2;
+    await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+    await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  };
+  while (Date.now() < deadline) {
+    const current = await ws.send("Runtime.evaluate", {
+      expression: currentModelProbeExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest = {
+      ok: false,
+      matched: false,
+      requiredValues,
+      before: current.result?.result?.value?.selected || null,
+      current: current.result?.result?.value || null,
+      option: null,
+      after: null,
+      candidates: current.result?.result?.value?.candidates || [],
+    };
+    if (latest.current?.matched === true) {
+      return { ...latest, ok: true, matched: true, alreadySelected: true, after: latest.current.selected };
+    }
+    const rect = latest.before?.rect;
+    if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
+      latest.error = "model selector button was not found";
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
+      continue;
+    }
+    await clickRectCenter(rect);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
+    let optionProbe = null;
+    const optionDeadline = Math.min(deadline, Date.now() + 5_000);
+    while (Date.now() < optionDeadline) {
+      const optionResult = await ws.send("Runtime.evaluate", {
+        expression: modelOptionProbeExpression(requiredValues),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      optionProbe = optionResult.result?.result?.value || null;
+      if (optionProbe?.matched === true && optionProbe?.selected?.rect) break;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
+    }
+    if (!(optionProbe?.matched === true && optionProbe?.selected?.rect)) {
+      const modelSubmenu = (Array.isArray(optionProbe?.candidates) ? optionProbe.candidates : [])
+        .find((candidate) => /menuitem/i.test(candidate?.role || "") && /gemini|claude|opus|sonnet|flash|gpt/i.test(candidate?.label || "") && candidate?.rect);
+      if (modelSubmenu?.rect) {
+        latest.submenu = modelSubmenu;
+        await clickRectCenter(modelSubmenu.rect);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
+        const submenuDeadline = Math.min(deadline, Date.now() + 5_000);
+        while (Date.now() < submenuDeadline) {
+          const optionResult = await ws.send("Runtime.evaluate", {
+            expression: modelOptionProbeExpression(requiredValues),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          optionProbe = optionResult.result?.result?.value || null;
+          if (optionProbe?.matched === true && optionProbe?.selected?.rect) break;
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
+        }
+      }
+    }
+    latest.optionProbe = optionProbe;
+    latest.option = optionProbe?.selected || null;
+    if (!latest.option?.rect) {
+      latest.error = "required model option was not found after opening selector";
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
+      continue;
+    }
+    await clickRectCenter(latest.option.rect);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+    const afterResult = await ws.send("Runtime.evaluate", {
+      expression: currentModelProbeExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    const after = afterResult.result?.result?.value || null;
+    latest.after = after?.selected || null;
+    latest.afterProbe = after;
+    if (after?.matched === true) return { ...latest, ok: true, matched: true };
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
+  }
+  return latest;
+}
+
 async function waitForComposerSubmitted(ws, prompt, marker, timeoutMs = 4_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -2128,6 +2383,7 @@ async function main() {
   let staleRecovery = null;
   let backendResetBeforeSubmit = null;
   let newChatEvidence = null;
+  let modelSelectionEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
   let modelRoutesBefore = null;
@@ -2216,6 +2472,46 @@ async function main() {
       }
       newChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
     }
+    if (requiredModelNeedles().length > 0) {
+      modelSelectionEvidence = await selectRequiredModel(ws, 8_000);
+      if (modelSelectionEvidence?.matched !== true) {
+        failures.push(`desktop UI did not select required model ${requiredModelNeedles().join(" / ")}`);
+        releaseUiLock?.();
+        releaseUiLock = null;
+        const payload = {
+          ok: false,
+          reportName,
+          requestedRealTraffic: true,
+          usedRealTraffic: false,
+          behaviorCovered: false,
+          coverageKind: "desktop-ui-preflight",
+          taskMode,
+          requiredModel: requiredModel || null,
+          requiredModelLabel: requiredModelLabel || null,
+          promptText,
+          promptLanguage,
+          elapsedMs: Date.now() - startedAt,
+          failures,
+          marker,
+          artifactDir: taskMode === "repo-file-edit"
+            ? repoFileEditDir
+            : taskMode === "repo-multi-file-edit"
+              ? repoMultiFileEditDir
+            : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
+          cdpPort,
+          baseUrl,
+          target: target ? { id: target.id, title: target.title, url: target.url } : null,
+          staleRecovery,
+          backendResetBeforeSubmit,
+          newChatEvidence,
+          modelSelectionEvidence,
+          initialIdleObserved: Boolean(initialIdle?.diagnostics),
+        };
+        writeReport(payload);
+        console.log(JSON.stringify(payload));
+        process.exit(1);
+      }
+    }
 
     if (taskMode === "multi-turn-project") {
       const firstMarker = `${marker}_FIRST`;
@@ -2293,6 +2589,7 @@ async function main() {
       if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
       modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
+      failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
       const payload = {
         ok: failures.length === 0,
         reportName,
@@ -2305,6 +2602,8 @@ async function main() {
         promptLanguage,
         followupPromptText,
         followupPromptLanguage,
+        requiredModel: requiredModel || null,
+        requiredModelLabel: requiredModelLabel || null,
         turnPrompts: [promptText, followupPromptText],
         elapsedMs: Date.now() - startedAt,
         failures,
@@ -2336,6 +2635,7 @@ async function main() {
         staleRecovery,
         backendResetBeforeSubmit,
         newChatEvidence,
+        modelSelectionEvidence,
         initialIdleObserved: Boolean(initialIdle?.diagnostics),
         clicked,
         markerCount: count,
@@ -2423,6 +2723,7 @@ async function main() {
       if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
       modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
+      failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
       const payload = {
         ok: failures.length === 0,
         reportName,
@@ -2432,6 +2733,8 @@ async function main() {
         coverageKind: "desktop-ui-real-traffic",
         taskMode,
         promptText,
+        requiredModel: requiredModel || null,
+        requiredModelLabel: requiredModelLabel || null,
         implementationAttempted: Boolean(implementationPrompt),
         turnPrompts: implementationPrompt ? [promptText, implementationPrompt] : [promptText],
         elapsedMs: Date.now() - startedAt,
@@ -2465,6 +2768,7 @@ async function main() {
         staleRecovery,
         backendResetBeforeSubmit,
         newChatEvidence,
+        modelSelectionEvidence,
         initialIdleObserved: Boolean(initialIdle?.diagnostics),
         clicked,
         markerCount: count,
@@ -2836,6 +3140,7 @@ async function main() {
   if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
   if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
   modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
+  failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
   const payload = {
     ok: failures.length === 0,
     reportName,
@@ -2848,6 +3153,8 @@ async function main() {
     promptLanguage,
     followupPromptText,
     followupPromptLanguage,
+    requiredModel: requiredModel || null,
+    requiredModelLabel: requiredModelLabel || null,
     repairPrompt,
     elapsedMs: Date.now() - startedAt,
     failures,
@@ -2883,6 +3190,7 @@ async function main() {
     staleRecovery,
     backendResetBeforeSubmit,
     newChatEvidence,
+    modelSelectionEvidence,
     initialIdleObserved: Boolean(initialIdle?.diagnostics),
     clicked,
     markerCount: count,
@@ -2931,6 +3239,8 @@ main().catch((error) => {
     promptLanguage,
     followupPromptText,
     followupPromptLanguage,
+    requiredModel: requiredModel || null,
+    requiredModelLabel: requiredModelLabel || null,
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
