@@ -22,38 +22,23 @@ $scriptRoot = Split-Path -Parent $PSCommandPath
 $reportIo = Join-Path $scriptRoot "anticodex-report-io.ps1"
 $statusScript = Join-Path $scriptRoot "test-anticodex-antigravity-account-isolation-status.ps1"
 $realSmokeScript = Join-Path $scriptRoot "test-anticodex-antigravity-cli-real-smoke.ps1"
+$jsonInvoke = Join-Path $scriptRoot "anticodex-powershell-json-invoke.ps1"
 
-foreach ($required in @($reportIo, $statusScript, $realSmokeScript)) {
+foreach ($required in @($reportIo, $statusScript, $realSmokeScript, $jsonInvoke)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "missing second-account post-login proof dependency: $required"
     }
 }
 . $reportIo
+. $jsonInvoke
 
 function Invoke-JsonScript {
     param(
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [string[]]$Arguments = @()
     )
-    $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = ($raw | Out-String).Trim()
-    $parsed = $null
-    $parseError = ""
-    if ($text) {
-        try {
-            $parsed = $text | ConvertFrom-Json
-        } catch {
-            $parseError = $_.Exception.Message
-        }
-    }
-    return [ordered]@{
-        exitCode = $exitCode
-        ok = ($exitCode -eq 0 -and $null -ne $parsed -and $parseError -eq "")
-        parsed = $parsed
-        parseError = $parseError
-        stdoutTail = if ($text.Length -gt 800) { $text.Substring($text.Length - 800) } else { $text }
-    }
+
+    return Invoke-AntiCodexPowerShellJsonScript -ScriptPath $ScriptPath -Arguments $Arguments
 }
 
 function Save-PostLoginProofReport {

@@ -15,38 +15,22 @@ $reportIo = Join-Path $scriptRoot "anticodex-report-io.ps1"
 $dualLanesScript = Join-Path $scriptRoot "test-anticodex-antigravity-cli-dual-account-lanes.ps1"
 $readinessScript = Join-Path $scriptRoot "test-anticodex-antigravity-cli-windows-user-readiness.ps1"
 $prepareScript = Join-Path $scriptRoot "test-anticodex-windows-user-account-prepare.ps1"
+$jsonInvoke = Join-Path $scriptRoot "anticodex-powershell-json-invoke.ps1"
 
-foreach ($required in @($reportIo, $dualLanesScript, $readinessScript, $prepareScript)) {
+foreach ($required in @($reportIo, $dualLanesScript, $readinessScript, $prepareScript, $jsonInvoke)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "missing required account-isolation dependency: $required"
     }
 }
 . $reportIo
+. $jsonInvoke
 
 function Invoke-JsonScript {
     param(
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [string[]]$Arguments = @()
     )
-    $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = ($raw | Out-String).Trim()
-    $parsed = $null
-    $parseError = ""
-    if ($text) {
-        try {
-            $parsed = $text | ConvertFrom-Json
-        } catch {
-            $parseError = $_.Exception.Message
-        }
-    }
-    return [ordered]@{
-        exitCode = $exitCode
-        ok = ($exitCode -eq 0 -and $null -ne $parsed -and $parseError -eq "")
-        parsed = $parsed
-        parseError = $parseError
-        stdoutTail = if ($text.Length -gt 600) { $text.Substring($text.Length - 600) } else { $text }
-    }
+    return Invoke-AntiCodexPowerShellJsonScript -ScriptPath $ScriptPath -Arguments $Arguments -TailLength 600
 }
 
 function Save-AccountIsolationStatusReport {

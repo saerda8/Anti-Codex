@@ -12,6 +12,7 @@ $startedAt = [DateTime]::UtcNow
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $loginScript = Join-Path $scriptRoot "start-anticodex-antigravity-cli-login-windows-user.ps1"
 $reportIo = Join-Path $scriptRoot "anticodex-report-io.ps1"
+$jsonInvoke = Join-Path $scriptRoot "anticodex-powershell-json-invoke.ps1"
 
 if (-not (Test-Path -LiteralPath $loginScript -PathType Leaf)) {
     throw "missing Windows-user login launcher: $loginScript"
@@ -19,7 +20,11 @@ if (-not (Test-Path -LiteralPath $loginScript -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $reportIo -PathType Leaf)) {
     throw "missing report writer: $reportIo"
 }
+if (-not (Test-Path -LiteralPath $jsonInvoke -PathType Leaf)) {
+    throw "missing PowerShell JSON invoker: $jsonInvoke"
+}
 . $reportIo
+. $jsonInvoke
 
 function Get-RecommendedOperatorAction {
     param(
@@ -59,11 +64,11 @@ $dryRun = $null
 $dryRunError = ""
 
 try {
-    $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $loginScript -WindowsUser $WindowsUser -DryRun 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw (($raw | Out-String).Trim())
+    $dryRunResult = Invoke-AntiCodexPowerShellJsonScript -ScriptPath $loginScript -Arguments @("-WindowsUser", $WindowsUser, "-DryRun")
+    if (-not $dryRunResult.ok) {
+        throw $dryRunResult.stdoutTail
     }
-    $dryRun = (($raw | Out-String).Trim() | ConvertFrom-Json)
+    $dryRun = $dryRunResult.parsed
 } catch {
     $dryRunError = $_.Exception.Message
     $failures += "windows_user_login_dry_run_failed"

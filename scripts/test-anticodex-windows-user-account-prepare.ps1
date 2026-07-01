@@ -12,6 +12,7 @@ $startedAt = [DateTime]::UtcNow
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $readinessScript = Join-Path $scriptRoot "test-anticodex-antigravity-cli-windows-user-readiness.ps1"
 $reportIo = Join-Path $scriptRoot "anticodex-report-io.ps1"
+$jsonInvoke = Join-Path $scriptRoot "anticodex-powershell-json-invoke.ps1"
 
 if (-not (Test-Path -LiteralPath $readinessScript -PathType Leaf)) {
     throw "missing Windows-user readiness report script: $readinessScript"
@@ -19,7 +20,11 @@ if (-not (Test-Path -LiteralPath $readinessScript -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $reportIo -PathType Leaf)) {
     throw "missing report writer: $reportIo"
 }
+if (-not (Test-Path -LiteralPath $jsonInvoke -PathType Leaf)) {
+    throw "missing PowerShell JSON invoker: $jsonInvoke"
+}
 . $reportIo
+. $jsonInvoke
 
 function Test-IsCurrentProcessElevated {
     try {
@@ -84,11 +89,11 @@ $readiness = $null
 $readinessError = ""
 
 try {
-    $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $readinessScript -WindowsUser $WindowsUser -ReportRoot $ReportRoot 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw (($raw | Out-String).Trim())
+    $readinessResult = Invoke-AntiCodexPowerShellJsonScript -ScriptPath $readinessScript -Arguments @("-WindowsUser", $WindowsUser, "-ReportRoot", $ReportRoot)
+    if (-not $readinessResult.ok) {
+        throw $readinessResult.stdoutTail
     }
-    $readiness = (($raw | Out-String).Trim() | ConvertFrom-Json)
+    $readiness = $readinessResult.parsed
 } catch {
     $readinessError = $_.Exception.Message
     $failures += "windows_user_readiness_report_failed"

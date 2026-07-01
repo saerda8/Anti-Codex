@@ -10,6 +10,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 . (Join-Path $scriptRoot "anticodex-report-io.ps1")
+. (Join-Path $scriptRoot "anticodex-powershell-json-invoke.ps1")
 
 $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
@@ -63,7 +64,7 @@ function Invoke-PowerShellJson {
             stdoutTail = ""
         }
     }
-    return Invoke-JsonProcess -FilePath "powershell.exe" -Arguments (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath) + $Arguments)
+    return Invoke-AntiCodexPowerShellJsonScript -ScriptPath $scriptPath -Arguments $Arguments
 }
 
 function Invoke-NodeJson {

@@ -12,13 +12,15 @@ $startedAt = [DateTime]::UtcNow
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $prepareScript = Join-Path $scriptRoot "test-anticodex-windows-user-account-prepare.ps1"
 $reportIo = Join-Path $scriptRoot "anticodex-report-io.ps1"
+$jsonInvoke = Join-Path $scriptRoot "anticodex-powershell-json-invoke.ps1"
 
-foreach ($required in @($prepareScript, $reportIo)) {
+foreach ($required in @($prepareScript, $reportIo, $jsonInvoke)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "missing Windows-user setup guidance dependency: $required"
     }
 }
 . $reportIo
+. $jsonInvoke
 
 function Save-SetupGuidanceReport {
     param($Report)
@@ -41,11 +43,11 @@ $prepare = $null
 $prepareError = ""
 
 try {
-    $raw = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $prepareScript -WindowsUser $WindowsUser -ReportRoot $ReportRoot 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw (($raw | Out-String).Trim())
+    $prepareResult = Invoke-AntiCodexPowerShellJsonScript -ScriptPath $prepareScript -Arguments @("-WindowsUser", $WindowsUser, "-ReportRoot", $ReportRoot)
+    if (-not $prepareResult.ok) {
+        throw $prepareResult.stdoutTail
     }
-    $prepare = (($raw | Out-String).Trim() | ConvertFrom-Json)
+    $prepare = $prepareResult.parsed
 } catch {
     $prepareError = $_.Exception.Message
     $failures.Add("windows_user_account_prepare_failed") | Out-Null

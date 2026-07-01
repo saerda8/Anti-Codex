@@ -15015,7 +15015,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   const dryRunLauncher = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login-windows-user.ps1"), "utf8");
   const secondAccountLogin = readFileSync(resolve(root, "scripts", "start-anticodex-second-antigravity-account-login.ps1"), "utf8");
   const secondAccountLoginReport = readFileSync(resolve(root, "scripts", "test-anticodex-second-account-login-entrypoint.ps1"), "utf8");
+  const secondAccountPostLoginProof = readFileSync(resolve(root, "scripts", "test-anticodex-second-account-post-login-proof.ps1"), "utf8");
   const setupGuidance = readFileSync(resolve(root, "scripts", "test-anticodex-windows-user-setup-guidance.ps1"), "utf8");
+  const jsonInvoker = readFileSync(resolve(root, "scripts", "anticodex-powershell-json-invoke.ps1"), "utf8");
   const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   const diagnostics = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const diagnosticsTest = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
@@ -15027,6 +15029,22 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
+
+  assert.match(jsonInvoker, /Invoke-AntiCodexPowerShellJsonScript/);
+  for (const [name, src] of [
+    ["secondAccountReadinessSummary", secondAccountReadinessSummary],
+    ["readiness", readiness],
+    ["prepare", prepare],
+    ["setupGuidance", setupGuidance],
+    ["status", status],
+    ["secondAccountLogin", secondAccountLogin],
+    ["secondAccountLoginReport", secondAccountLoginReport],
+    ["secondAccountPostLoginProof", secondAccountPostLoginProof],
+  ]) {
+    assert.match(src, /anticodex-powershell-json-invoke\.ps1/, `${name} must use the shared in-process PowerShell JSON invoker`);
+    assert.match(src, /Invoke-AntiCodexPowerShellJsonScript/, `${name} must invoke PowerShell JSON subreports in-process`);
+    assert.doesNotMatch(src, /&\s+powershell\.exe\s+-NoProfile\s+-ExecutionPolicy\s+Bypass\s+-File/, `${name} must not spawn nested powershell.exe for subreports`);
+  }
 
   assert.match(antigravityCliRealSmoke, /\[string\]\$WindowsUser/);
 
@@ -15369,6 +15387,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(syncRuntime, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(syncRuntime, /test-anticodex-windows-user-setup-guidance\.ps1/);
   assert.match(syncRuntime, /test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(syncRuntime, /scripts\\anticodex-powershell-json-invoke\.ps1/);
   assert.match(syncRuntime, /test-anticodex-second-account-readiness-summary\.ps1/);
   assert.match(syncRuntime, /start-anticodex-second-antigravity-account-login\.ps1/);
   assert.match(syncRuntime, /test-anticodex-second-account-login-entrypoint\.ps1/);
