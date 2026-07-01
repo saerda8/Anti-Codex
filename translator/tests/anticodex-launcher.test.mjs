@@ -15235,6 +15235,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerBridge, /secondAccountLoginEntrypoint/);
   assert.match(managerBridge, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(managerBridge, /secondAccountLoginEntrypoint proofCommand/);
+  assert.match(managerBridge, /secondAccountReadinessSummary/);
+  assert.match(managerBridge, /secondAccountReadinessSummary next/);
+  assert.match(managerBridge, /secondAccountReadinessSummary caveat/);
   assert.match(managerInject, /antigravityCliWindowsUserReadiness/);
   assert.match(managerInject, /windowsUserAccountPrepare/);
   assert.match(managerInject, /safeToAskLogin/);
@@ -15247,6 +15250,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerInject, /secondAccountLoginEntrypoint/);
   assert.match(managerInject, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(managerInject, /secondAccountLoginEntrypoint proofCommand/);
+  assert.match(managerInject, /secondAccountReadinessSummary/);
+  assert.match(managerInject, /secondAccountReadinessSummary next/);
+  assert.match(managerInject, /secondAccountReadinessSummary caveat/);
   assert.match(server, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.match(server, /antigravityCliWindowsUserReadiness/);
   assert.match(server, /runasWorkingDirectory/);
@@ -15263,6 +15269,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /secondAccountLoginEntrypointEvidence/);
   assert.match(server, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(server, /secondAccountLoginEntrypoint proofCommand/);
+  assert.match(server, /secondAccountReadinessSummaryEvidence/);
+  assert.match(server, /secondAccountReadinessSummary next/);
+  assert.match(server, /secondAccountReadinessSummary caveat/);
   assert.match(server, /windowsUserSetupGuidance/);
   assert.match(server, /windowsUserSetupGuidanceEvidence/);
   assert.match(server, /readinessCheckSequence/);

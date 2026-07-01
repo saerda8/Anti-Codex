@@ -1191,6 +1191,15 @@
         if (evidence.approvedLoginCommandTemplate) lines.push(`  secondAccountLoginEntrypoint loginCommand: ${evidence.approvedLoginCommandTemplate}`);
         if (evidence.postLoginProofCommandTemplate) lines.push(`  secondAccountLoginEntrypoint proofCommand: ${evidence.postLoginProofCommandTemplate}`);
       }
+      if (item.secondAccountReadinessSummaryEvidence) {
+        const evidence = item.secondAccountReadinessSummaryEvidence;
+        lines.push(`  secondAccountReadinessSummary: userExists=${evidence.targetUserExists ? "true" : "false"} / readyForLogin=${evidence.readyForOperatorLogin ? "true" : "false"} / safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / releaseProof=${evidence.releaseAcceptableAccountProof ? "true" : "false"} / goalComplete=${evidence.goalComplete ? "true" : "false"}`);
+        lines.push(`  secondAccountReadinessSummary guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
+        lines.push(`  secondAccountReadinessSummary next: action=${evidence.nextOperatorAction || "unknown"} / stage=${evidence.operatorBlockingStage || "unknown"} / reason=${evidence.readinessBlockingReason || "none"}`);
+        if (evidence.approvedLoginCommandTemplate) lines.push(`  secondAccountReadinessSummary loginCommand: ${evidence.approvedLoginCommandTemplate}`);
+        if (evidence.postLoginProofCommandTemplate) lines.push(`  secondAccountReadinessSummary proofCommand: ${evidence.postLoginProofCommandTemplate}`);
+        if (evidence.accountIsolationCaveat) lines.push(`  secondAccountReadinessSummary caveat: ${evidence.accountIsolationCaveat}`);
+      }
       if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
         const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
         lines.push(`  managerButtons: ${actions.join(" | ")}`);

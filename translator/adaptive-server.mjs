@@ -3150,6 +3150,30 @@ function latestManagerReportItem(label, fileName) {
             loginVerified: report.loginVerified === true,
             releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
         } : null,
+        secondAccountReadinessSummaryEvidence: report?.reportName === "second-account-readiness-summary" ? {
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            changedSystem: report.changedSystem === true,
+            createdUser: report.createdUser === true,
+            startedLogin: report.startedLogin === true,
+            capturesPassword: report.capturesPassword === true,
+            storesPassword: report.storesPassword === true,
+            targetUserExists: report.targetUserExists === true,
+            readyForOperatorLogin: report.readyForOperatorLogin === true,
+            safeToAskUserForSecondAccountLogin: report.safeToAskUserForSecondAccountLogin === true,
+            canProceedToInteractiveLogin: report.canProceedToInteractiveLogin === true,
+            releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
+            goalComplete: report.goalComplete === true,
+            completionState: shortSafeText(report.completionState || "", ""),
+            readinessBlockingReason: shortSafeText(report.readinessBlockingReason || "", ""),
+            operatorBlockingStage: shortSafeText(report.operatorBlockingStage || "", ""),
+            operatorNextStep: shortSafeText(report.operatorNextStep || "", ""),
+            nextOperatorAction: shortSafeText(report.nextOperatorAction || "", ""),
+            approvedLoginCommandTemplate: shortSafeText(report.approvedLoginCommandTemplate || "", ""),
+            nextNoTrafficStatusCommand: shortSafeText(report.nextNoTrafficStatusCommand || "", ""),
+            postLoginProofCommandTemplate: shortSafeText(report.postLoginProofCommandTemplate || "", ""),
+            accountIsolationCaveat: shortSafeText(report.accountIsolationCaveat || "", ""),
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -4388,6 +4412,15 @@ function latestReportsSummary(result){
       lines.push("  secondAccountLoginEntrypoint next: stage="+(evidence.operatorBlockingStage||"unknown")+" / reason="+(evidence.readinessBlockingReason||"none")+" / approval="+(evidence.requiredStartLoginApproval||"unknown")+" / canRunPostLoginProof="+(evidence.canRunPostLoginProof?"true":"false"));
       if(evidence.approvedLoginCommandTemplate) lines.push("  secondAccountLoginEntrypoint loginCommand: "+evidence.approvedLoginCommandTemplate);
       if(evidence.postLoginProofCommandTemplate) lines.push("  secondAccountLoginEntrypoint proofCommand: "+evidence.postLoginProofCommandTemplate);
+    }
+    if(item.secondAccountReadinessSummaryEvidence){
+      const evidence=item.secondAccountReadinessSummaryEvidence;
+      lines.push("  secondAccountReadinessSummary: userExists="+(evidence.targetUserExists?"true":"false")+" / readyForLogin="+(evidence.readyForOperatorLogin?"true":"false")+" / safeToAskLogin="+(evidence.safeToAskUserForSecondAccountLogin?"true":"false")+" / releaseProof="+(evidence.releaseAcceptableAccountProof?"true":"false")+" / goalComplete="+(evidence.goalComplete?"true":"false"));
+      lines.push("  secondAccountReadinessSummary guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
+      lines.push("  secondAccountReadinessSummary next: action="+(evidence.nextOperatorAction||"unknown")+" / stage="+(evidence.operatorBlockingStage||"unknown")+" / reason="+(evidence.readinessBlockingReason||"none"));
+      if(evidence.approvedLoginCommandTemplate) lines.push("  secondAccountReadinessSummary loginCommand: "+evidence.approvedLoginCommandTemplate);
+      if(evidence.postLoginProofCommandTemplate) lines.push("  secondAccountReadinessSummary proofCommand: "+evidence.postLoginProofCommandTemplate);
+      if(evidence.accountIsolationCaveat) lines.push("  secondAccountReadinessSummary caveat: "+evidence.accountIsolationCaveat);
     }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;
