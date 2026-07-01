@@ -11617,6 +11617,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const syncRuntime = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const mcpProbe = readFileSync(resolve(root, "scripts", "probe-anticodex-worker-mcp-servers.mjs"), "utf8");
   const sourcePreflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const mjsVerifierPowerShellWrapper = /powershell(?:\.exe)?[\s\S]{0,240}(?:-File|-Command)[\s\S]{0,240}(?:test-anticodex-release-gates|summarize-anticodex-report)\.mjs/i;
@@ -12022,6 +12023,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /scripts\/test-anticodex-antigravity-cli-dual-account-lanes\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-local-connectors\.mjs/);
   assert.match(releaseGates, /scripts\/test-anticodex-mcp-skills\.ps1/);
+  assert.match(releaseGates, /scripts\/probe-anticodex-worker-mcp-servers\.mjs/);
   assert.match(releaseGates, /scripts\/test-anticodex-missing-history\.mjs/);
   assert.match(releaseGates, /scripts\/test-anticodex-model-routing\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-model-thinking\.ps1/);
@@ -12045,7 +12047,13 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(syncRuntime, /scripts\\summarize-anticodex-report\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-local-connectors\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-mcp-skills\.ps1/);
+  assert.match(syncRuntime, /scripts\\probe-anticodex-worker-mcp-servers\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-missing-history\.mjs/);
+  assert.match(mcpProbe, /StdioClientTransport/);
+  assert.match(mcpProbe, /client\.listTools\(\)/);
+  assert.match(mcpProbe, /mimocode-worker/);
+  assert.match(mcpProbe, /antigravity-code-worker/);
+  assert.doesNotMatch(mcpProbe, /start_implementation|implement_in_workspace|callTool/);
   assert.match(syncRuntime, /scripts\\test-anticodex-model-routing\.ps1/);
   assert.match(syncRuntime, /scripts\\test-anticodex-model-thinking\.ps1/);
   assert.match(syncRuntime, /scripts\\test-anticodex-plugin-capabilities\.ps1/);

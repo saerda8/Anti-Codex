@@ -78,6 +78,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-manager-button.mjs",
   "scripts/test-anticodex-manager-real-buttons.ps1",
   "scripts/test-anticodex-mcp-skills.ps1",
+  "scripts/probe-anticodex-worker-mcp-servers.mjs",
   "scripts/test-anticodex-mcp-tool-loop.ps1",
   "scripts/test-anticodex-missing-history.mjs",
   "scripts/test-anticodex-model-routing.ps1",
