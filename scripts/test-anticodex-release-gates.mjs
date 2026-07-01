@@ -1238,6 +1238,7 @@ function summarizeGate(definition) {
       const approval = report.realApprovalPlan && typeof report.realApprovalPlan === "object" ? report.realApprovalPlan : {};
       const account = report.antigravityAccountIsolation && typeof report.antigravityAccountIsolation === "object" ? report.antigravityAccountIsolation : {};
       const entrypoint = report.secondAccountLoginEntrypoint && typeof report.secondAccountLoginEntrypoint === "object" ? report.secondAccountLoginEntrypoint : {};
+      const secondSummary = report.secondAccountReadinessSummary && typeof report.secondAccountReadinessSummary === "object" ? report.secondAccountReadinessSummary : {};
       const requiredWorkerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
       const blockedGates = Array.isArray(releaseGateStatus.requiredRealTrafficBlockedGates) ? releaseGateStatus.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const blockers = Array.isArray(report.blockers) ? report.blockers.map((item) => String(item || "")) : [];
@@ -1249,7 +1250,7 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push("goal_readiness_behavior_not_covered");
       if (report.coverageKind !== "goal-readiness-report-only") semanticFailures.push("goal_readiness_coverage_kind");
       if (report.goalComplete === true) semanticFailures.push("goal_readiness_goal_unexpectedly_complete");
-      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "accountIsolationPreparedOnly"]) {
+      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "secondAccountReadinessSummary", "accountIsolationPreparedOnly"]) {
         if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
       }
       if (Number(worker.passedServerCount || 0) < requiredWorkerServers.length) semanticFailures.push("goal_readiness_worker_mcp_passed_count");
@@ -1313,6 +1314,23 @@ function summarizeGate(definition) {
       if (entrypoint.nextNoTrafficStatusCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_command_missing");
       if (entrypoint.postLoginProofCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_command_missing");
       if (entrypoint.postLoginProofPlanValid !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_plan_invalid");
+      if (secondSummary.reportName !== "second-account-readiness-summary") semanticFailures.push("goal_readiness_second_account_readiness_summary_missing_or_invalid");
+      if (secondSummary.noTraffic !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_not_no_traffic");
+      if (secondSummary.usedRealTraffic !== false) semanticFailures.push("goal_readiness_second_account_readiness_summary_used_real_traffic");
+      if (secondSummary.coverageKind !== "second-account-readiness-summary-no-traffic") semanticFailures.push("goal_readiness_second_account_readiness_summary_coverage_kind");
+      if (secondSummary.releaseAcceptableAccountProof !== false) semanticFailures.push("goal_readiness_second_account_readiness_summary_release_proof_claimed");
+      if (secondSummary.goalComplete !== false) semanticFailures.push("goal_readiness_second_account_readiness_summary_goal_complete_claimed");
+      if (!String(secondSummary.nextOperatorAction || "")) semanticFailures.push("goal_readiness_second_account_readiness_summary_next_action_missing");
+      if (!String(secondSummary.accountIsolationCaveat || "")) semanticFailures.push("goal_readiness_second_account_readiness_summary_caveat_missing");
+      if (!String(secondSummary.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1") || !String(secondSummary.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("goal_readiness_second_account_readiness_summary_login_template_incomplete");
+      if (!String(secondSummary.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("goal_readiness_second_account_readiness_summary_status_template_incomplete");
+      if (!String(secondSummary.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("goal_readiness_second_account_readiness_summary_proof_template_incomplete");
+      if (secondSummary.approvedLoginCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_login_command_missing");
+      if (secondSummary.nextNoTrafficStatusCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_status_command_missing");
+      if (secondSummary.postLoginProofCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_proof_command_missing");
+      if (Number(secondSummary.stepCount || 0) < 7) semanticFailures.push("goal_readiness_second_account_readiness_summary_step_count");
+      if (Number(secondSummary.failedStepCount || 0) !== 0) semanticFailures.push("goal_readiness_second_account_readiness_summary_failed_steps");
+      if (Number(secondSummary.failureCount || 0) !== 0) semanticFailures.push("goal_readiness_second_account_readiness_summary_failures");
       if (typeof report.nextRequiredUserAction !== "string" || !report.nextRequiredUserAction) semanticFailures.push("goal_readiness_next_user_action_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_readiness_failures");
     }

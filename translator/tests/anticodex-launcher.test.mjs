@@ -12886,13 +12886,25 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /postLoginProofCommandTemplate/);
   assert.match(goalReadiness, /postLoginProofPlanValid/);
   assert.match(goalReadiness, /second_account_login_entrypoint_missing_or_invalid/);
+  assert.match(goalReadiness, /latest-second-account-readiness-summary\.json/);
+  assert.match(goalReadiness, /secondAccountReadinessSummary/);
+  assert.match(goalReadiness, /readyForOperatorLogin/);
+  assert.match(goalReadiness, /nextOperatorAction/);
+  assert.match(goalReadiness, /accountIsolationCaveat/);
+  assert.match(goalReadiness, /second_account_readiness_summary_missing_or_invalid/);
   assert.match(releaseGates, /goal_readiness_second_account_entrypoint_proof_plan_invalid/);
   assert.match(releaseGates, /goal_readiness_second_account_entrypoint_login_template_incomplete/);
+  assert.match(releaseGates, /goal_readiness_second_account_readiness_summary_missing_or_invalid/);
   assert.match(summarizer, /secondAccountLoginEntrypointProven/);
   assert.match(summarizer, /secondAccountLoginEntrypointApprovedLoginCommandPresent/);
   assert.match(summarizer, /secondAccountLoginEntrypointApprovedLoginCommandTemplate/);
+  assert.match(summarizer, /secondAccountReadinessSummaryProven/);
+  assert.match(summarizer, /secondAccountReadinessSummaryNextOperatorAction/);
+  assert.match(summarizer, /secondAccountReadinessSummaryAccountIsolationCaveat/);
   assert.match(diagnostics, /goal-readiness summary missing second-account login entrypoint proof/);
   assert.match(diagnostics, /goal-readiness summary second-account entrypoint proof plan invalid/);
+  assert.match(diagnostics, /goal-readiness summary missing second-account readiness summary proof/);
+  assert.match(diagnostics, /goal-readiness summary second-account readiness summary caveat missing/);
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });
 

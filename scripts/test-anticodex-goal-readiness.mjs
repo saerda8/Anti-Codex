@@ -58,6 +58,7 @@ const realTaskCoverageRoadmapReport = readReport("latest-real-task-coverage-road
 const realApprovalPlanReport = readReport("latest-real-approval-plan.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
 const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
+const secondAccountReadinessSummaryReport = readReport("latest-second-account-readiness-summary.json");
 const releaseGates = readReport("latest-release-gates.json");
 
 const sync = syncReadiness.report || {};
@@ -270,6 +271,53 @@ const secondAccountLoginEntrypoint = {
   releaseAcceptableAccountProof: entrypoint.releaseAcceptableAccountProof === true,
 };
 
+const secondSummary = secondAccountReadinessSummaryReport.report || {};
+const secondSummarySteps = Array.isArray(secondSummary.steps) ? secondSummary.steps : [];
+const secondSummaryFailures = Array.isArray(secondSummary.failures) ? secondSummary.failures : [];
+const secondSummaryLoginCommand = String(secondSummary.approvedLoginCommandTemplate || "");
+const secondSummaryStatusCommand = String(secondSummary.nextNoTrafficStatusCommand || "");
+const secondSummaryProofCommand = String(secondSummary.postLoginProofCommandTemplate || "");
+const secondAccountReadinessSummary = {
+  reportPresent: secondAccountReadinessSummaryReport.present,
+  reportOk: secondSummary.ok === true,
+  reportName: String(secondSummary.reportName || ""),
+  noTraffic: secondSummary.noTraffic === true,
+  requestedRealTraffic: secondSummary.requestedRealTraffic === true,
+  usedRealTraffic: secondSummary.usedRealTraffic === true,
+  behaviorCovered: secondSummary.behaviorCovered === true,
+  coverageKind: String(secondSummary.coverageKind || ""),
+  changedSystem: secondSummary.changedSystem === true,
+  createdUser: secondSummary.createdUser === true,
+  startedLogin: secondSummary.startedLogin === true,
+  capturesPassword: secondSummary.capturesPassword === true,
+  storesPassword: secondSummary.storesPassword === true,
+  targetUserExists: secondSummary.targetUserExists === true,
+  readyForOperatorLogin: secondSummary.readyForOperatorLogin === true,
+  safeToAskUserForSecondAccountLogin: secondSummary.safeToAskUserForSecondAccountLogin === true,
+  canProceedToInteractiveLogin: secondSummary.canProceedToInteractiveLogin === true,
+  releaseAcceptableAccountProof: secondSummary.releaseAcceptableAccountProof === true,
+  goalComplete: secondSummary.goalComplete === true,
+  releaseReady: secondSummary.releaseReady === true,
+  completionState: String(secondSummary.completionState || ""),
+  readinessBlockingReason: String(secondSummary.readinessBlockingReason || ""),
+  operatorBlockingStage: String(secondSummary.operatorBlockingStage || ""),
+  operatorNextStep: String(secondSummary.operatorNextStep || ""),
+  nextOperatorAction: String(secondSummary.nextOperatorAction || ""),
+  accountIsolationCaveat: String(secondSummary.accountIsolationCaveat || ""),
+  approvedLoginCommandTemplate: secondSummaryLoginCommand,
+  nextNoTrafficStatusCommand: secondSummaryStatusCommand,
+  postLoginProofCommandTemplate: secondSummaryProofCommand,
+  approvedLoginCommandPresent: secondSummaryLoginCommand.includes("scripts\\start-anticodex-second-antigravity-account-login.ps1")
+    && secondSummaryLoginCommand.includes("-StartLoginApproval start-separate-windows-user-login"),
+  nextNoTrafficStatusCommandPresent: secondSummaryStatusCommand.includes("scripts\\test-anticodex-antigravity-account-isolation-status.ps1"),
+  postLoginProofCommandPresent: secondSummaryProofCommand.includes("scripts\\test-anticodex-antigravity-cli-real-smoke.ps1")
+    && secondSummaryProofCommand.includes("-AllowSeparateAccountProof")
+    && secondSummaryProofCommand.includes("SeparateAccountProofApprovalId"),
+  stepCount: secondSummarySteps.length,
+  failedStepCount: secondSummarySteps.filter((item) => item?.ok !== true).length,
+  failureCount: secondSummaryFailures.length,
+};
+
 const gates = releaseGates.report || {};
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
@@ -359,6 +407,28 @@ const proven = {
     && secondAccountLoginEntrypoint.postLoginProofPlanValid
     && secondAccountLoginEntrypoint.separateAccountVerified === false
     && secondAccountLoginEntrypoint.releaseAcceptableAccountProof === false,
+  secondAccountReadinessSummary: secondAccountReadinessSummary.reportOk
+    && secondAccountReadinessSummary.reportName === "second-account-readiness-summary"
+    && secondAccountReadinessSummary.noTraffic
+    && secondAccountReadinessSummary.requestedRealTraffic === false
+    && secondAccountReadinessSummary.usedRealTraffic === false
+    && secondAccountReadinessSummary.behaviorCovered
+    && secondAccountReadinessSummary.coverageKind === "second-account-readiness-summary-no-traffic"
+    && secondAccountReadinessSummary.changedSystem === false
+    && secondAccountReadinessSummary.createdUser === false
+    && secondAccountReadinessSummary.startedLogin === false
+    && secondAccountReadinessSummary.capturesPassword === false
+    && secondAccountReadinessSummary.storesPassword === false
+    && secondAccountReadinessSummary.releaseAcceptableAccountProof === false
+    && secondAccountReadinessSummary.goalComplete === false
+    && secondAccountReadinessSummary.nextOperatorAction.length > 0
+    && secondAccountReadinessSummary.accountIsolationCaveat.length > 0
+    && secondAccountReadinessSummary.approvedLoginCommandPresent
+    && secondAccountReadinessSummary.nextNoTrafficStatusCommandPresent
+    && secondAccountReadinessSummary.postLoginProofCommandPresent
+    && secondAccountReadinessSummary.stepCount >= 7
+    && secondAccountReadinessSummary.failedStepCount === 0
+    && secondAccountReadinessSummary.failureCount === 0,
   accountIsolationPreparedOnly: antigravityAccountIsolation.reportOk
     && antigravityAccountIsolation.completionState === "blocked_before_interactive_login"
     && antigravityAccountIsolation.safeToAskUserForSecondAccountLogin === false
@@ -381,6 +451,7 @@ if (!proven.realApprovalPlan) blockers.push("real_approval_plan_missing_or_inval
 for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) blockers.push(`real_task_coverage_refresh_required:${profile}`);
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
 if (!proven.secondAccountLoginEntrypoint) blockers.push("second_account_login_entrypoint_missing_or_invalid");
+if (!proven.secondAccountReadinessSummary) blockers.push("second_account_readiness_summary_missing_or_invalid");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
 const goalComplete = proven.codexClientCopy
@@ -390,12 +461,13 @@ const goalComplete = proven.codexClientCopy
   && proven.realTaskCoverageRoadmap
   && proven.realApprovalPlan
   && proven.secondAccountLoginEntrypoint
+  && proven.secondAccountReadinessSummary
   && realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic.length === 0
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -414,10 +486,12 @@ const payload = {
   realApprovalPlan,
   antigravityAccountIsolation,
   secondAccountLoginEntrypoint,
+  secondAccountReadinessSummary,
   releaseGateStatus,
-  nextRequiredUserAction: antigravityAccountIsolation.safeToAskUserForSecondAccountLogin
+  nextRequiredUserAction: secondAccountReadinessSummary.nextOperatorAction
+    || (antigravityAccountIsolation.safeToAskUserForSecondAccountLogin
     ? "login_second_antigravity_account_with_explicit_approval"
-    : "create_or_verify_separate_windows_user_then_rerun_account_prepare",
+    : "create_or_verify_separate_windows_user_then_rerun_account_prepare"),
   elapsedMs: Date.now() - startedAt,
 };
 

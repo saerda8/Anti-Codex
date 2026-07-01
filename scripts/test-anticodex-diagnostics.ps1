@@ -931,6 +931,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.realApprovalPlanProven -ne $true) { Add-Failure "goal-readiness summary missing real-approval plan proof" }
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
     if ($evidence.secondAccountLoginEntrypointProven -ne $true) { Add-Failure "goal-readiness summary missing second-account login entrypoint proof" }
+    if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
     $requiredBlockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
@@ -1005,6 +1006,29 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountLoginEntrypointPostLoginProofCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof command missing" }
     if ($evidence.secondAccountLoginEntrypointPostLoginProofPlanPresent -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof plan missing" }
     if ($evidence.secondAccountLoginEntrypointPostLoginProofPlanValid -ne $true) { Add-Failure "goal-readiness summary second-account entrypoint proof plan invalid" }
+    if ($evidence.secondAccountReadinessSummaryReportName -ne "second-account-readiness-summary") { Add-Failure "goal-readiness summary second-account readiness summary report name mismatch" }
+    if ($evidence.secondAccountReadinessSummaryNoTraffic -ne $true) { Add-Failure "goal-readiness summary second-account readiness summary not no-traffic" }
+    if ($evidence.secondAccountReadinessSummaryUsedRealTraffic -ne $false) { Add-Failure "goal-readiness summary second-account readiness summary used real traffic" }
+    if ($evidence.secondAccountReadinessSummaryCoverageKind -ne "second-account-readiness-summary-no-traffic") { Add-Failure "goal-readiness summary second-account readiness summary coverage kind mismatch" }
+    if ($evidence.secondAccountReadinessSummaryReleaseAcceptableAccountProof -ne $false) { Add-Failure "goal-readiness summary second-account readiness summary claims account proof" }
+    if ($evidence.secondAccountReadinessSummaryGoalComplete -ne $false) { Add-Failure "goal-readiness summary second-account readiness summary claims goal complete" }
+    if (-not [string]$evidence.secondAccountReadinessSummaryNextOperatorAction) { Add-Failure "goal-readiness summary second-account readiness summary next action missing" }
+    if (-not [string]$evidence.secondAccountReadinessSummaryAccountIsolationCaveat) { Add-Failure "goal-readiness summary second-account readiness summary caveat missing" }
+    if (-not ([string]$evidence.secondAccountReadinessSummaryApprovedLoginCommandTemplate).Contains("start-anticodex-second-antigravity-account-login.ps1") -or -not ([string]$evidence.secondAccountReadinessSummaryApprovedLoginCommandTemplate).Contains("-StartLoginApproval start-separate-windows-user-login")) {
+        Add-Failure "goal-readiness summary second-account readiness summary login command incomplete"
+    }
+    if (-not ([string]$evidence.secondAccountReadinessSummaryNextNoTrafficStatusCommand).Contains("test-anticodex-antigravity-account-isolation-status.ps1")) {
+        Add-Failure "goal-readiness summary second-account readiness summary status command incomplete"
+    }
+    if (-not ([string]$evidence.secondAccountReadinessSummaryPostLoginProofCommandTemplate).Contains("test-anticodex-antigravity-cli-real-smoke.ps1") -or -not ([string]$evidence.secondAccountReadinessSummaryPostLoginProofCommandTemplate).Contains("-AllowSeparateAccountProof") -or -not ([string]$evidence.secondAccountReadinessSummaryPostLoginProofCommandTemplate).Contains("SeparateAccountProofApprovalId")) {
+        Add-Failure "goal-readiness summary second-account readiness summary proof command incomplete"
+    }
+    if ($evidence.secondAccountReadinessSummaryApprovedLoginCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account readiness summary login command missing" }
+    if ($evidence.secondAccountReadinessSummaryNextNoTrafficStatusCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account readiness summary status command missing" }
+    if ($evidence.secondAccountReadinessSummaryPostLoginProofCommandPresent -ne $true) { Add-Failure "goal-readiness summary second-account readiness summary proof command missing" }
+    if ([int]$evidence.secondAccountReadinessSummaryStepCount -lt 7) { Add-Failure "goal-readiness summary second-account readiness summary step count too low" }
+    if ([int]$evidence.secondAccountReadinessSummaryFailedStepCount -ne 0) { Add-Failure "goal-readiness summary second-account readiness summary has failed steps" }
+    if ([int]$evidence.secondAccountReadinessSummaryFailureCount -ne 0) { Add-Failure "goal-readiness summary second-account readiness summary has failures" }
     if (-not [string]$evidence.nextRequiredUserAction) { Add-Failure "goal-readiness summary missing next required user action" }
     if ([int]$evidence.blockerCount -lt 1) { Add-Failure "goal-readiness summary missing blockers" }
     if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }
