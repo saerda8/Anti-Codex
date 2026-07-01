@@ -12054,6 +12054,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(mcpProbe, /client\.listTools\(\)/);
   assert.match(mcpProbe, /reportName: "worker-mcp-server-probe"/);
   assert.match(mcpProbe, /latest-worker-mcp-server-probe\.json/);
+  assert.match(mcpProbe, /codexSessionTransportStatus/);
+  assert.match(mcpProbe, /operatorRecoveryAction/);
+  assert.match(mcpProbe, /postReloadVerification/);
   assert.match(mcpProbe, /mimo-claude-coworker/);
   assert.match(mcpProbe, /mimocode-worker/);
   assert.match(mcpProbe, /antigravity-code-worker/);
@@ -12948,6 +12951,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
   assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
+  assert.match(summarizer, /codexSessionTransportStatus/);
+  assert.match(summarizer, /operatorRecoveryAction/);
+  assert.match(summarizer, /postReloadVerification/);
   assert.match(summarizer, /workerMcpTaskSmokeEvidence/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);

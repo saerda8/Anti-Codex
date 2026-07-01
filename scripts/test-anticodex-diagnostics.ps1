@@ -1652,6 +1652,9 @@ function Test-WorkerMcpServerProbeSummaryEvidence {
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "worker-mcp-server-probe summary behavior not covered" }
     if ($evidence.coverageKind -ne "worker-mcp-server-probe-list-tools-only") { Add-Failure "worker-mcp-server-probe summary coverage kind mismatch" }
     if ($evidence.configPathPresent -ne $true) { Add-Failure "worker-mcp-server-probe summary missing config path" }
+    if ($evidence.codexSessionTransportStatus -ne "not-tested-by-direct-probe") { Add-Failure "worker-mcp-server-probe summary missing direct-probe transport caveat" }
+    if (-not $evidence.operatorRecoveryAction) { Add-Failure "worker-mcp-server-probe summary missing operator recovery action" }
+    if (-not $evidence.postReloadVerification) { Add-Failure "worker-mcp-server-probe summary missing post-reload verification" }
     if ([int]$evidence.passedServerCount -lt $required.Count) { Add-Failure "worker-mcp-server-probe summary passed server count too low" }
     if ([int]$evidence.serverCount -lt $required.Count -or $servers.Count -lt $required.Count) { Add-Failure "worker-mcp-server-probe summary server count too low" }
     if (@(As-FlatArray $evidence.missingServers).Count -ne 0) { Add-Failure "worker-mcp-server-probe summary has missing servers" }
