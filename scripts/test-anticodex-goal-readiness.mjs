@@ -23,6 +23,7 @@ const requiredWorkerMcpServers = [
   "mimocode-worker",
   "opencode-worker",
 ];
+const minTaskSmokePassedWorkers = 2;
 const requiredAgenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
 
 function readReport(fileName) {
@@ -391,7 +392,7 @@ const proven = {
     && workerMcp.taskSmokeReportOk
     && workerMcp.taskSmokeUsedRealTraffic
     && workerMcp.taskSmokeAntigravityExcluded
-    && workerMcp.taskSmokePassedWorkerCount > 0
+    && workerMcp.taskSmokePassedWorkerCount >= minTaskSmokePassedWorkers
     && workerMcp.taskSmokeFailedWorkers.length === 0,
   desktopAgenticTasks: desktopAgenticTasks.reportOk
     && desktopAgenticTasks.suiteProfile === "agentic"
@@ -501,6 +502,7 @@ if (!workerMcp.taskSmokeReportOk) blockers.push("worker_mcp_task_smoke_missing_o
 if (!workerMcp.taskSmokeUsedRealTraffic) blockers.push("worker_mcp_task_smoke_real_traffic_missing");
 if (!workerMcp.taskSmokeAntigravityExcluded) blockers.push("worker_mcp_task_smoke_antigravity_not_excluded");
 if (workerMcp.taskSmokePassedWorkerCount < 1) blockers.push("worker_mcp_task_smoke_no_passed_worker");
+if (workerMcp.taskSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_task_smoke_insufficient_worker_diversity");
 if (workerMcp.taskSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_task_smoke_failed_workers");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
