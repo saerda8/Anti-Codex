@@ -240,6 +240,7 @@ function Read-JsonSummary {
             windowsUserSetupGuidanceEvidence = $json.windowsUserSetupGuidanceEvidence
             secondAccountLoginEntrypointEvidence = $json.secondAccountLoginEntrypointEvidence
             secondAccountReadinessSummaryEvidence = $json.secondAccountReadinessSummaryEvidence
+            secondAccountPostLoginProofEvidence = $json.secondAccountPostLoginProofEvidence
             antigravityCliRealSmokeEvidence = $json.antigravityCliRealSmokeEvidence
             skipRequests = $json.skipRequests
             modelRoutingEvidence = $json.modelRoutingEvidence
@@ -482,6 +483,7 @@ $latestReports = @(
     "latest-antigravity-account-isolation-status.json",
     "latest-second-antigravity-account-login-entrypoint.json",
     "latest-second-account-readiness-summary.json",
+    "latest-second-account-post-login-proof.json",
     "latest-antigravity-cli-real-smoke.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",

@@ -14213,6 +14213,10 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(secondAccountPostLoginProof, /<provided-mcp-account-id>/);
   assert.match(secondAccountPostLoginProof, /second-account-post-login-proof-dry-run/);
   assert.match(secondAccountPostLoginProof, /second-account-post-login-proof-real-traffic/);
+  assert.match(secondAccountPostLoginProof, /targetUserExists/);
+  assert.match(secondAccountPostLoginProof, /safeToAskUserForSecondAccountLogin/);
+  assert.match(secondAccountPostLoginProof, /readinessBlockingReason/);
+  assert.match(secondAccountPostLoginProof, /operatorNextStep/);
   assert.match(secondAccountPostLoginProof, /releaseAcceptableAccountProof/);
   assert.match(secondAccountPostLoginProof, /Dry-run only\. This does not start login, use real traffic, capture passwords, or prove distinct Antigravity account identity\./);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
@@ -15383,6 +15387,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /releaseAcceptableAccountProof/);
   assert.match(summarizer, /finalProofPlan/);
   assert.match(summarizer, /postLoginProofPlan/);
+  assert.match(summarizer, /secondAccountPostLoginProofEvidence/);
+  assert.match(summarizer, /isSecondAccountPostLoginProofReport/);
   assert.match(summarizer, /proofScript/);
   assert.match(summarizer, /commandTemplate/);
   assert.match(summarizer, /requiredAccountIdentityInputs/);

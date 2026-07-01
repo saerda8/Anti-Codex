@@ -819,6 +819,7 @@ function Test-ReportEncoding {
         "latest-antigravity-account-isolation-status.json",
         "latest-second-antigravity-account-login-entrypoint.json",
         "latest-second-account-readiness-summary.json",
+        "latest-second-account-post-login-proof.json",
         "latest-antigravity-cli-real-smoke.json",
         "latest-third-party-provider.json",
         "latest-missing-history.json",

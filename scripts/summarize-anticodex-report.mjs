@@ -243,6 +243,7 @@ const isWindowsUserSetupGuidanceReport = report?.reportName === "windows-user-se
 const isAntigravityAccountIsolationStatusReport = report?.reportName === "antigravity-account-isolation-status" || /latest-antigravity-account-isolation-status\.json$/i.test(path);
 const isSecondAccountLoginEntrypointReport = report?.reportName === "second-antigravity-account-login-entrypoint" || /latest-second-antigravity-account-login-entrypoint\.json$/i.test(path);
 const isSecondAccountReadinessSummaryReport = report?.reportName === "second-account-readiness-summary" || /latest-second-account-readiness-summary\.json$/i.test(path);
+const isSecondAccountPostLoginProofReport = report?.reportName === "second-account-post-login-proof" || /latest-second-account-post-login-proof\.json$/i.test(path);
 const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-real-smoke" || /latest-antigravity-cli-real-smoke\.json$/i.test(path);
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
@@ -1083,6 +1084,35 @@ const summary = {
     stepCount: Array.isArray(report.steps) ? report.steps.length : null,
     failedStepCount: Array.isArray(report.steps) ? report.steps.filter((item) => item?.ok !== true).length : null,
     failureCount: Array.isArray(report.failures) ? report.failures.length : null,
+  } : null,
+  secondAccountPostLoginProofEvidence: isSecondAccountPostLoginProofReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    windowsUser: has(report, "windowsUser") ? asString(report.windowsUser) : null,
+    targetUserExists: boolField(report, "targetUserExists"),
+    safeToAskUserForSecondAccountLogin: boolField(report, "safeToAskUserForSecondAccountLogin"),
+    statusCompletionState: has(report, "statusCompletionState") ? asString(report.statusCompletionState) : null,
+    readinessBlockingReason: has(report, "readinessBlockingReason") ? asString(report.readinessBlockingReason) : null,
+    operatorBlockingStage: has(report, "operatorBlockingStage") ? asString(report.operatorBlockingStage) : null,
+    operatorNextStep: has(report, "operatorNextStep") ? asString(report.operatorNextStep) : null,
+    canRunAfterInteractiveLogin: boolField(report, "canRunAfterInteractiveLogin"),
+    willRunRealSmoke: boolField(report, "willRunRealSmoke"),
+    loginVerified: boolField(report, "loginVerified"),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+    accountIdentityComparisonPresent: boolField(report, "accountIdentityComparisonPresent"),
+    accountIsolationBoundary: has(report, "accountIsolationBoundary") ? asString(report.accountIsolationBoundary) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
+    failureCount: Array.isArray(report.failures) ? report.failures.length : null,
+    warningCount: Array.isArray(report.warnings) ? report.warnings.length : null,
   } : null,
   antigravityCliRealSmokeEvidence: isAntigravityCliRealSmokeReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,

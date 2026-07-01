@@ -158,6 +158,11 @@ $payload = [ordered]@{
         accountIdsDiffer = [bool]$accountIdsDiffer
     }
     statusCompletionState = if ($status) { [string]$status.completionState } else { "status_unavailable" }
+    targetUserExists = if ($status) { [bool]$status.targetUserExists } else { $false }
+    safeToAskUserForSecondAccountLogin = if ($status) { [bool]$status.safeToAskUserForSecondAccountLogin } else { $false }
+    readinessBlockingReason = if ($status) { [string]$status.readinessBlockingReason } else { "status_unavailable" }
+    operatorBlockingStage = if ($status) { [string]$status.operatorBlockingStage } else { "status_unavailable" }
+    operatorNextStep = if ($status) { [string]$status.operatorNextStep } else { "rerun_account_isolation_status" }
     canRunAfterInteractiveLogin = if ($status -and $status.postLoginProofPlan) { [bool]$status.postLoginProofPlan.canRunAfterInteractiveLogin } else { $false }
     postLoginProofPlan = if ($status) { $status.postLoginProofPlan } else { $null }
     willRunRealSmoke = [bool]$willRunRealSmoke
