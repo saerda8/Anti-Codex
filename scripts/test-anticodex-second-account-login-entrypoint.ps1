@@ -155,6 +155,7 @@ $report = [ordered]@{
     approvedLoginCommandTemplate = if ($statusOnly) { [string]$statusOnly.approvedLoginCommandTemplate } else { "" }
     nextNoTrafficStatusCommand = if ($statusOnly) { [string]$statusOnly.nextNoTrafficStatusCommand } else { "" }
     postLoginProofCommandTemplate = if ($statusOnly) { [string]$statusOnly.postLoginProofCommandTemplate } else { "" }
+    postLoginProofCommandTemplateHasWindowsUser = if ($statusOnly) { [string]$statusOnly.postLoginProofCommandTemplate -match "-WindowsUser" } else { $false }
     canRunPostLoginProof = if ($statusOnly -and ($statusOnly.PSObject.Properties.Name -contains "canRunPostLoginProof")) { [bool]$statusOnly.canRunPostLoginProof } else { $false }
     postLoginProofPlan = if ($statusOnly -and ($statusOnly.PSObject.Properties.Name -contains "postLoginProofPlan")) { $statusOnly.postLoginProofPlan } else { $null }
     completionState = if ($statusOnly) { [string]$statusOnly.completionState } else { "status_unavailable" }

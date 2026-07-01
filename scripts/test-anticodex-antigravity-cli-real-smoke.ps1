@@ -5,6 +5,7 @@ param(
     [string]$StateRoot = "",
     [string]$ReportRoot = "",
     [string]$ProfileRoot = "",
+    [string]$WindowsUser = ".\AntiCodexModel",
     [switch]$StrictWindowsAppDataIsolation,
     [switch]$AllowSeparateAccountProof,
     [string]$AntiCodexAccountId = "",
@@ -137,6 +138,15 @@ function Test-IsDefaultAntigravityProfilePath {
     return $profileFull.StartsWith($defaultFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Get-WindowsUserLeafName {
+    param([string]$Value)
+    $text = ([string]$Value).Trim()
+    if (-not $text) { return "" }
+    if ($text.StartsWith(".\")) { $text = $text.Substring(2) }
+    if ($text.Contains("\")) { return ($text -split "\\")[-1] }
+    return $text
+}
+
 function New-AccountIdentityComparison {
     param(
         [Parameter(Mandatory = $true)][string]$AntiCodexId,
@@ -158,6 +168,11 @@ function New-AccountIdentityComparison {
 
 $stateRootFull = Resolve-StateRoot
 $reportRootFull = Resolve-ReportRoot
+$currentWindowsUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$targetWindowsUser = ([string]$WindowsUser).Trim()
+$currentWindowsUserLeaf = Get-WindowsUserLeafName -Value $currentWindowsUser
+$targetWindowsUserLeaf = Get-WindowsUserLeafName -Value $targetWindowsUser
+$runningAsTargetWindowsUser = ($targetWindowsUserLeaf -and $currentWindowsUserLeaf -and $currentWindowsUserLeaf.Equals($targetWindowsUserLeaf, [StringComparison]::OrdinalIgnoreCase))
 $marker = "ANTICODEX_CLI_REAL_SMOKE_{0}" -f ([Guid]::NewGuid().ToString("N"))
 $effectivePrompt = if ([string]::IsNullOrWhiteSpace($Prompt)) {
     "Reply with exactly this marker and no other content: $marker"
@@ -176,6 +191,9 @@ try {
             reason = "real Antigravity CLI traffic is opt-in; rerun only after the Anti-Codex lane uses a separate Windows user or official independent Antigravity credential store"
             coveredBy = "test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-profile> -AccountIsolationBoundary <separate-windows-user|official-independent-credential-store>"
             usedRealTraffic = $false
+            windowsUser = $targetWindowsUser
+            currentWindowsUser = $currentWindowsUser
+            runningAsTargetWindowsUser = $runningAsTargetWindowsUser
             loginVerified = $false
             separateAccountVerified = $false
             accountIsolationBoundary = $AccountIsolationBoundary
@@ -273,6 +291,8 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         if (-not $mcpAccountIdTrimmed) { Add-Failure "MCP Antigravity account identity is required before separate-account proof can be recorded" }
         if (-not $separateAccountProofApprovalIdTrimmed) { Add-Failure "explicit separate-account proof approval id is required before separate-account proof can be recorded" }
         if ($AccountIsolationBoundary -eq "profile-and-appdata-only") { Add-Failure "same Windows user profile/AppData isolation is not credential isolation; use a separate Windows user or official independent credential store before separate-account proof" }
+        if ($AccountIsolationBoundary -eq "separate-windows-user" -and -not $targetWindowsUserLeaf) { Add-Failure "target Windows user is required before separate-Windows-user proof can be recorded" }
+        if ($AccountIsolationBoundary -eq "separate-windows-user" -and $targetWindowsUserLeaf -and -not $runningAsTargetWindowsUser) { Add-Failure "separate-Windows-user proof must run under the target Windows user before account proof can be recorded" }
         if ($antiCodexAccountIdTrimmed -and $mcpAccountIdTrimmed -and $antiCodexAccountIdTrimmed -eq $mcpAccountIdTrimmed) {
             Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
         }
@@ -298,6 +318,9 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         model = $Model
         profileRoot = $profileRootFull
         profileSource = $profileSource
+        windowsUser = $targetWindowsUser
+        currentWindowsUser = $currentWindowsUser
+        runningAsTargetWindowsUser = $runningAsTargetWindowsUser
         strictWindowsAppDataIsolation = $strictIsolation
         preparationReport = $preparationEvidence
         loginVerifiedMethod = if ($failures.Count -eq 0) { "marker-match" } else { "" }
@@ -324,6 +347,9 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
         skipped = (-not $AllowRealTraffic)
         requestedRealTraffic = [bool]$AllowRealTraffic
         usedRealTraffic = $attemptedRealTraffic
+        windowsUser = $targetWindowsUser
+        currentWindowsUser = $currentWindowsUser
+        runningAsTargetWindowsUser = $runningAsTargetWindowsUser
         loginVerified = $false
         separateAccountVerified = $false
         accountIsolationBoundary = $AccountIsolationBoundary

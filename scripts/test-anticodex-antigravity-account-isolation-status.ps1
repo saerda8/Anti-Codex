@@ -132,9 +132,11 @@ $finalProofPlan = [ordered]@{
 }
 $postLoginProofPlan = [ordered]@{
     proofScript = "test-anticodex-antigravity-cli-real-smoke.ps1"
-    commandTemplate = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary separate-windows-user -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>"
+    commandTemplate = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -WindowsUser <target-windows-user> -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary separate-windows-user -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>"
     accountIsolationBoundary = "separate-windows-user"
+    targetWindowsUser = $WindowsUser
     requiresInteractiveLoginComplete = $true
+    requiresProofRunAsTargetWindowsUser = $true
     requiresApprovedRealTraffic = $true
     requiresSeparateAccountProofApproval = $true
     requiresDistinctAccountIdentityComparison = $true

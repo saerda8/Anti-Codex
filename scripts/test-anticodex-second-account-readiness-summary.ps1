@@ -219,6 +219,7 @@ $payload = [ordered]@{
     approvedLoginCommandTemplate = if ($entrypoint) { [string]$entrypoint.approvedLoginCommandTemplate } else { "" }
     nextNoTrafficStatusCommand = if ($entrypoint) { [string]$entrypoint.nextNoTrafficStatusCommand } else { "" }
     postLoginProofCommandTemplate = if ($entrypoint) { [string]$entrypoint.postLoginProofCommandTemplate } else { "" }
+    postLoginProofCommandTemplateHasWindowsUser = if ($entrypoint) { [string]$entrypoint.postLoginProofCommandTemplate -match "-WindowsUser" } else { $false }
     releaseGateCompactStatusCommand = $releaseGateCompactStatusCommand
     steps = @(
         (New-StepEvidence -Id "windowsUserAccountPrepare" -Result $prepareResult),

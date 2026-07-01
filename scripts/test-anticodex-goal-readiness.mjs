@@ -253,11 +253,15 @@ const secondAccountLoginEntrypoint = {
   nextNoTrafficStatusCommandPresent: entrypointStatusCommand.includes("scripts\\test-anticodex-antigravity-account-isolation-status.ps1"),
   postLoginProofCommandPresent: entrypointProofCommand.includes("scripts\\test-anticodex-antigravity-cli-real-smoke.ps1")
     && entrypointProofCommand.includes("-AllowSeparateAccountProof")
+    && entrypointProofCommand.includes("-WindowsUser")
     && entrypointProofCommand.includes("-AccountIsolationBoundary separate-windows-user"),
+  postLoginProofCommandTemplateHasWindowsUser: entrypoint.postLoginProofCommandTemplateHasWindowsUser === true,
   postLoginProofPlanPresent: !!entrypoint.postLoginProofPlan,
   postLoginProofPlanValid: String(entrypointProofPlan.proofScript || "") === "test-anticodex-antigravity-cli-real-smoke.ps1"
     && String(entrypointProofPlan.accountIsolationBoundary || "") === "separate-windows-user"
+    && String(entrypointProofPlan.targetWindowsUser || "").length > 0
     && entrypointProofPlan.requiresInteractiveLoginComplete === true
+    && entrypointProofPlan.requiresProofRunAsTargetWindowsUser === true
     && entrypointProofPlan.requiresApprovedRealTraffic === true
     && entrypointProofPlan.requiresSeparateAccountProofApproval === true
     && entrypointProofPlan.requiresDistinctAccountIdentityComparison === true
@@ -325,7 +329,9 @@ const secondAccountReadinessSummary = {
   nextNoTrafficStatusCommandPresent: secondSummaryStatusCommand.includes("scripts\\test-anticodex-antigravity-account-isolation-status.ps1"),
   postLoginProofCommandPresent: secondSummaryProofCommand.includes("scripts\\test-anticodex-antigravity-cli-real-smoke.ps1")
     && secondSummaryProofCommand.includes("-AllowSeparateAccountProof")
+    && secondSummaryProofCommand.includes("-WindowsUser")
     && secondSummaryProofCommand.includes("SeparateAccountProofApprovalId"),
+  postLoginProofCommandTemplateHasWindowsUser: secondSummary.postLoginProofCommandTemplateHasWindowsUser === true,
   stepCount: secondSummarySteps.length,
   failedStepCount: secondSummarySteps.filter((item) => item?.ok !== true).length,
   failureCount: secondSummaryFailures.length,
@@ -416,6 +422,7 @@ const proven = {
     && secondAccountLoginEntrypoint.approvedLoginCommandPresent
     && secondAccountLoginEntrypoint.nextNoTrafficStatusCommandPresent
     && secondAccountLoginEntrypoint.postLoginProofCommandPresent
+    && secondAccountLoginEntrypoint.postLoginProofCommandTemplateHasWindowsUser
     && secondAccountLoginEntrypoint.postLoginProofPlanPresent
     && secondAccountLoginEntrypoint.postLoginProofPlanValid
     && secondAccountLoginEntrypoint.separateAccountVerified === false
@@ -443,6 +450,7 @@ const proven = {
     && secondAccountReadinessSummary.approvedLoginCommandPresent
     && secondAccountReadinessSummary.nextNoTrafficStatusCommandPresent
     && secondAccountReadinessSummary.postLoginProofCommandPresent
+    && secondAccountReadinessSummary.postLoginProofCommandTemplateHasWindowsUser
     && secondAccountReadinessSummary.stepCount >= 7
     && secondAccountReadinessSummary.failedStepCount === 0
     && secondAccountReadinessSummary.failureCount === 0,

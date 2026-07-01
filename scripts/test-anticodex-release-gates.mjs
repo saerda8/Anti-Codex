@@ -1036,7 +1036,7 @@ function summarizeGate(definition) {
       if (loginStages.some((item) => item?.requiresExplicitUserApproval !== true || item?.requiresRealTraffic === true)) semanticFailures.push("approved_real_run_sequence_login_stage_contract");
       if (loginStages.some((item) => !String(item?.command || "").includes("-WindowsUser") || !String(item?.command || "").includes("-StartLoginApproval start-separate-windows-user-login"))) semanticFailures.push("approved_real_run_sequence_login_command_not_isolated");
       if (accountProofStages.length !== 1) semanticFailures.push("approved_real_run_sequence_account_proof_stage_count");
-      if (accountProofStages.some((item) => !String(item?.command || "").includes("-AllowSeparateAccountProof") || !String(item?.command || "").includes("SeparateAccountProofApprovalId"))) semanticFailures.push("approved_real_run_sequence_account_proof_command_incomplete");
+      if (accountProofStages.some((item) => !String(item?.command || "").includes("-AllowSeparateAccountProof") || !String(item?.command || "").includes("SeparateAccountProofApprovalId") || !String(item?.command || "").includes("-WindowsUser"))) semanticFailures.push("approved_real_run_sequence_account_proof_command_incomplete");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("approved_real_run_sequence_failures");
     }
     if (definition.requireNativeCodexParityTaskMatrixSemantics) {
@@ -1228,6 +1228,7 @@ function summarizeGate(definition) {
       const proofAction = orderedActions.find((item) => String(item?.id || "") === "second-account-identity-real-smoke");
       if (!proofAction || !String(proofAction.command || "").includes("-AllowSeparateAccountProof")) semanticFailures.push("real_approval_plan_proof_action_missing_separate_account_flag");
       if (!proofAction || !String(proofAction.command || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("real_approval_plan_proof_action_missing_approval_id");
+      if (!proofAction || !String(proofAction.command || "").includes("-WindowsUser")) semanticFailures.push("real_approval_plan_proof_action_missing_windows_user");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("real_approval_plan_failures");
     }
     if (definition.requireGoalReadinessSemantics) {
@@ -1309,10 +1310,11 @@ function summarizeGate(definition) {
       if (entrypoint.sameWindowsUserTargetBlocked !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_same_user_not_blocked");
       if (!String(entrypoint.approvedLoginCommandTemplate || "").includes("-WindowsUser") || !String(entrypoint.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("goal_readiness_second_account_entrypoint_login_template_incomplete");
       if (!String(entrypoint.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1") || !String(entrypoint.nextNoTrafficStatusCommand || "").includes("-WindowsUser")) semanticFailures.push("goal_readiness_second_account_entrypoint_status_template_incomplete");
-      if (!String(entrypoint.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof") || !String(entrypoint.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_template_incomplete");
+      if (!String(entrypoint.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof") || !String(entrypoint.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId") || !String(entrypoint.postLoginProofCommandTemplate || "").includes("-WindowsUser")) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_template_incomplete");
       if (entrypoint.approvedLoginCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_login_command_missing");
       if (entrypoint.nextNoTrafficStatusCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_status_command_missing");
       if (entrypoint.postLoginProofCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_command_missing");
+      if (entrypoint.postLoginProofCommandTemplateHasWindowsUser !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_command_windows_user_missing");
       if (entrypoint.postLoginProofPlanValid !== true) semanticFailures.push("goal_readiness_second_account_entrypoint_proof_plan_invalid");
       if (secondSummary.reportName !== "second-account-readiness-summary") semanticFailures.push("goal_readiness_second_account_readiness_summary_missing_or_invalid");
       if (secondSummary.noTraffic !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_not_no_traffic");
@@ -1330,10 +1332,11 @@ function summarizeGate(definition) {
       if (!String(secondSummary.accountIsolationCaveat || "")) semanticFailures.push("goal_readiness_second_account_readiness_summary_caveat_missing");
       if (!String(secondSummary.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1") || !String(secondSummary.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("goal_readiness_second_account_readiness_summary_login_template_incomplete");
       if (!String(secondSummary.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("goal_readiness_second_account_readiness_summary_status_template_incomplete");
-      if (!String(secondSummary.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("goal_readiness_second_account_readiness_summary_proof_template_incomplete");
+      if (!String(secondSummary.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId") || !String(secondSummary.postLoginProofCommandTemplate || "").includes("-WindowsUser")) semanticFailures.push("goal_readiness_second_account_readiness_summary_proof_template_incomplete");
       if (secondSummary.approvedLoginCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_login_command_missing");
       if (secondSummary.nextNoTrafficStatusCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_status_command_missing");
       if (secondSummary.postLoginProofCommandPresent !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_proof_command_missing");
+      if (secondSummary.postLoginProofCommandTemplateHasWindowsUser !== true) semanticFailures.push("goal_readiness_second_account_readiness_summary_proof_command_windows_user_missing");
       if (Number(secondSummary.stepCount || 0) < 7) semanticFailures.push("goal_readiness_second_account_readiness_summary_step_count");
       if (Number(secondSummary.failedStepCount || 0) !== 0) semanticFailures.push("goal_readiness_second_account_readiness_summary_failed_steps");
       if (Number(secondSummary.failureCount || 0) !== 0) semanticFailures.push("goal_readiness_second_account_readiness_summary_failures");
@@ -2004,10 +2007,13 @@ function summarizeGate(definition) {
       if (!postLoginProofPlan) semanticFailures.push("account_isolation_status_post_login_proof_plan_missing");
       if (!postLoginProofPlan || postLoginProofPlan.proofScript !== "test-anticodex-antigravity-cli-real-smoke.ps1") semanticFailures.push("account_isolation_status_post_login_proof_script");
       if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")) semanticFailures.push("account_isolation_status_post_login_proof_command_missing");
+      if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("-WindowsUser <target-windows-user>")) semanticFailures.push("account_isolation_status_post_login_proof_command_windows_user");
       if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("-AllowSeparateAccountProof")) semanticFailures.push("account_isolation_status_post_login_proof_approval_switch_missing");
       if (!postLoginProofPlan || !String(postLoginProofPlan.commandTemplate || "").includes("-SeparateAccountProofApprovalId <explicit-user-approval-id>")) semanticFailures.push("account_isolation_status_post_login_proof_approval_id_missing");
       if (!postLoginProofPlan || postLoginProofPlan.accountIsolationBoundary !== "separate-windows-user") semanticFailures.push("account_isolation_status_post_login_proof_wrong_boundary");
+      if (!postLoginProofPlan || !String(postLoginProofPlan.targetWindowsUser || "")) semanticFailures.push("account_isolation_status_post_login_proof_target_windows_user");
       if (!postLoginProofPlan || postLoginProofPlan.requiresInteractiveLoginComplete !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_login");
+      if (!postLoginProofPlan || postLoginProofPlan.requiresProofRunAsTargetWindowsUser !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_target_user");
       if (!postLoginProofPlan || postLoginProofPlan.requiresApprovedRealTraffic !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_real_traffic");
       if (!postLoginProofPlan || postLoginProofPlan.requiresSeparateAccountProofApproval !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_approval");
       if (!postLoginProofPlan || postLoginProofPlan.requiresDistinctAccountIdentityComparison !== true) semanticFailures.push("account_isolation_status_post_login_proof_requires_identity");
@@ -2048,11 +2054,15 @@ function summarizeGate(definition) {
       if (!String(report.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("second_account_entrypoint_status_command_missing");
       if (!String(report.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
         || !String(report.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof")
+        || !String(report.postLoginProofCommandTemplate || "").includes("-WindowsUser")
         || !String(report.postLoginProofCommandTemplate || "").includes("-AccountIsolationBoundary separate-windows-user")) semanticFailures.push("second_account_entrypoint_post_login_proof_command_missing");
+      if (report.postLoginProofCommandTemplateHasWindowsUser !== true) semanticFailures.push("second_account_entrypoint_post_login_proof_command_windows_user");
       if (typeof report.canRunPostLoginProof !== "boolean") semanticFailures.push("second_account_entrypoint_post_login_flag_missing");
       const postLoginProofPlan = report.postLoginProofPlan || {};
       if (postLoginProofPlan.proofScript !== "test-anticodex-antigravity-cli-real-smoke.ps1"
         || postLoginProofPlan.accountIsolationBoundary !== "separate-windows-user"
+        || !String(postLoginProofPlan.targetWindowsUser || "")
+        || postLoginProofPlan.requiresProofRunAsTargetWindowsUser !== true
         || postLoginProofPlan.requiresApprovedRealTraffic !== true
         || postLoginProofPlan.requiresDistinctAccountIdentityComparison !== true
         || postLoginProofPlan.accountIdsMustDiffer !== true
@@ -2089,7 +2099,9 @@ function summarizeGate(definition) {
       if (!String(report.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("second_account_readiness_summary_status_command_missing");
       if (!String(report.postLoginProofCommandTemplate || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
         || !String(report.postLoginProofCommandTemplate || "").includes("-AllowSeparateAccountProof")
+        || !String(report.postLoginProofCommandTemplate || "").includes("-WindowsUser")
         || !String(report.postLoginProofCommandTemplate || "").includes("SeparateAccountProofApprovalId")) semanticFailures.push("second_account_readiness_summary_proof_command_missing");
+      if (report.postLoginProofCommandTemplateHasWindowsUser !== true) semanticFailures.push("second_account_readiness_summary_proof_command_windows_user");
       for (const requiredStep of ["windowsUserAccountPrepare", "windowsUserSetupGuidance", "accountIsolationStatus", "secondAccountLoginEntrypoint", "approvedRealRunSequence", "goalReadiness", "releaseGates"]) {
         if (!stepIds.includes(requiredStep)) semanticFailures.push(`second_account_readiness_summary_missing_step:${requiredStep}`);
       }
@@ -2530,7 +2542,7 @@ const realTrafficRefreshOrder = [
 const optionalEvidenceRefreshOrder = [
   ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
   ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
-  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>", { requiresRealTraffic: true, highImpact: true }],
+  ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -WindowsUser <target-windows-user> -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>", { requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];

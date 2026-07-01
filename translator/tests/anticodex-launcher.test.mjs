@@ -11684,7 +11684,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /optional_antigravity_cli_real_smoke_credential_boundary_insufficient/);
   assert.match(releaseGates, /same-Windows-user profile\/AppData isolation is insufficient/);
   assert.match(releaseGates, /separate Windows user or official independent credential store/);
-  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user\|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>/);
+  assert.match(releaseGates, /test-anticodex-antigravity-cli-real-smoke\.ps1 -AllowRealTraffic -WindowsUser <target-windows-user> -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user\|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>/);
   assert.match(releaseGates, /model-text lane/);
   assert.match(releaseGates, /MCP/);
   assert.match(releaseGates, /externally managed/);
@@ -12884,6 +12884,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /approvedLoginCommandTemplate/);
   assert.match(goalReadiness, /nextNoTrafficStatusCommand/);
   assert.match(goalReadiness, /postLoginProofCommandTemplate/);
+  assert.match(goalReadiness, /postLoginProofCommandTemplateHasWindowsUser/);
   assert.match(goalReadiness, /postLoginProofPlanValid/);
   assert.match(goalReadiness, /second_account_login_entrypoint_missing_or_invalid/);
   assert.match(goalReadiness, /latest-second-account-readiness-summary\.json/);
@@ -14053,6 +14054,9 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /latest-antigravity-cli-profile-prepare\.json/);
   assert.match(antigravityCliRealSmoke, /profileMatched/);
   assert.match(antigravityCliRealSmoke, /\[switch\]\$AllowSeparateAccountProof/);
+  assert.match(antigravityCliRealSmoke, /\[string\]\$WindowsUser = "\.\\AntiCodexModel"/);
+  assert.match(antigravityCliRealSmoke, /currentWindowsUser = \[Security\.Principal\.WindowsIdentity\]::GetCurrent\(\)\.Name/);
+  assert.match(antigravityCliRealSmoke, /runningAsTargetWindowsUser/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$AntiCodexAccountId/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$McpAccountId/);
   assert.match(antigravityCliRealSmoke, /\[string\]\$SeparateAccountProofApprovalId/);
@@ -14061,6 +14065,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /account identity inputs require -AllowSeparateAccountProof/);
   assert.match(antigravityCliRealSmoke, /explicit separate-account proof approval id is required/);
   assert.match(antigravityCliRealSmoke, /same Windows user profile\/AppData isolation is not credential isolation/);
+  assert.match(antigravityCliRealSmoke, /separate-Windows-user proof must run under the target Windows user/);
   assert.match(antigravityCliRealSmoke, /Anti-Codex and MCP Antigravity account identities match/);
   assert.match(antigravityCliRealSmoke, /\$report\.accountIdentityComparison = \$accountIdentityComparison/);
   assert.match(antigravityCliRealSmoke, /antiCodexSource = "anticodex-cli-real-smoke"/);
@@ -14838,6 +14843,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
+  const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
+
+  assert.match(antigravityCliRealSmoke, /\[string\]\$WindowsUser/);
 
   assert.match(secondAccountReadinessSummary, /reportName\s*=\s*"second-account-readiness-summary"/);
   assert.match(secondAccountReadinessSummary, /test-anticodex-windows-user-account-prepare\.ps1/);
@@ -14858,6 +14867,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /manualSetupCommandHint/);
   assert.match(secondAccountReadinessSummary, /approvedLoginCommandTemplate/);
   assert.match(secondAccountReadinessSummary, /postLoginProofCommandTemplate/);
+  assert.match(secondAccountReadinessSummary, /postLoginProofCommandTemplate[\s\S]*-WindowsUser/);
+  assert.match(secondAccountReadinessSummary, /postLoginProofCommandTemplateHasWindowsUser/);
   assert.match(secondAccountReadinessSummary, /requestedRealTraffic\s*=\s*\$false/);
   assert.match(secondAccountReadinessSummary, /usedRealTraffic\s*=\s*\$false/);
   assert.match(secondAccountReadinessSummary, /changedSystem\s*=\s*\$false/);
@@ -14947,6 +14958,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(status, /commandTemplate/);
   assert.match(status, /-AllowSeparateAccountProof/);
   assert.match(status, /-SeparateAccountProofApprovalId <explicit-user-approval-id>/);
+  assert.match(status, /commandTemplate[\s\S]*?-WindowsUser <target-windows-user>/);
   assert.match(status, /requiresSeparateWindowsUserCredentialBoundary/);
   assert.match(status, /requiresInteractiveLogin/);
   assert.match(status, /requiresApprovedRealTraffic/);
@@ -14984,6 +14996,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLogin, /approvedLoginCommandTemplate/);
   assert.match(secondAccountLogin, /nextNoTrafficStatusCommand/);
   assert.match(secondAccountLogin, /postLoginProofCommandTemplate/);
+  assert.match(secondAccountLogin, /postLoginProofCommandTemplate[\s\S]*-WindowsUser/);
+  assert.match(secondAccountLogin, /postLoginProofCommandTemplateHasWindowsUser/);
   assert.match(secondAccountLogin, /canRunPostLoginProof/);
   assert.match(secondAccountLogin, /postLoginProofPlan/);
   assert.match(secondAccountLogin, /explicit_start_login_approval_missing/);
@@ -15037,6 +15051,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountLoginReport, /approvedLoginCommandTemplate/);
   assert.match(secondAccountLoginReport, /nextNoTrafficStatusCommand/);
   assert.match(secondAccountLoginReport, /postLoginProofCommandTemplate/);
+  assert.match(secondAccountLoginReport, /postLoginProofCommandTemplate[\s\S]*-WindowsUser/);
+  assert.match(secondAccountLoginReport, /postLoginProofCommandTemplateHasWindowsUser/);
   assert.match(secondAccountLoginReport, /canRunPostLoginProof/);
   assert.match(secondAccountLoginReport, /postLoginProofPlan/);
   assert.match(secondAccountLoginReport, /releaseAcceptableAccountProof = \$false/);
@@ -15234,6 +15250,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /second_account_entrypoint_captures_password/);
   assert.match(releaseGates, /second_account_entrypoint_stores_password/);
   assert.match(releaseGates, /second_account_entrypoint_release_proof_claimed/);
+  assert.match(releaseGates, /post_login_proof_command_windows_user/);
+  assert.match(goalReadiness, /postLoginProofCommandTemplate[\s\S]*-WindowsUser/);
   assert.match(managerBridge, /antigravityCliWindowsUserReadiness/);
   assert.match(managerBridge, /runasWorkdir/);
   assert.match(managerBridge, /bootstrapKeepsShell/);

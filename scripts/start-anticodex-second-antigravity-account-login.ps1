@@ -79,6 +79,7 @@ $result = [ordered]@{
     approvedLoginCommandTemplate = $approvedLoginCommandTemplate
     nextNoTrafficStatusCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser $WindowsUser"
     postLoginProofCommandTemplate = $postLoginProofCommandTemplate
+    postLoginProofCommandTemplateHasWindowsUser = $postLoginProofCommandTemplate.Contains("-WindowsUser")
     canRunPostLoginProof = $canRunPostLoginProof
     postLoginProofPlan = $postLoginProofPlan
     completionState = if ($status) { [string]$status.completionState } else { "status_unavailable" }
