@@ -64,12 +64,12 @@ After every failure, before another dispatch:
 - Cause classification: direct MCP task execution is viable for at least MIMO; current-channel `Transport closed` remains a Codex-session transport problem, not proof that all worker MCPs cannot do tasks.
 - Rule change: keep `latest-worker-mcp-task-smoke.json` separate from `latest-worker-mcp-server-probe.json`. `tools/list` proves server exposure; task smoke proves real work. Exclude `antigravity-code-worker` from this smoke until the second Antigravity account boundary is proven.
 
-### 2026-07-02 - Two non-Antigravity worker task smoke passed
+### 2026-07-02 - Three non-Antigravity worker task smoke passed
 
 - Task: strengthen worker proof from one successful task worker to multiple independent worker lanes.
-- Result: formal `latest-worker-mcp-task-smoke.json` now requires two passed non-Antigravity workers. Latest run passed with MIMO job `dsw_mr2ohs39_9xae8m` and DeepSeek job `dsw_mr2oi14h_o5k3bm`, both host-verified via `worker-smoke-result.json` in isolated runtime workspaces.
-- Cause classification: MIMO and DeepSeek direct MCP task execution are both viable. OpenCode/Kilo free-pool timeout evidence remains useful failure classification, not proof that worker MCP as a class cannot do tasks.
-- Rule change: goal-readiness, diagnostics, and release gates reject worker task-smoke evidence with fewer than two passed non-Antigravity workers.
+- Result: formal `latest-worker-mcp-task-smoke.json` now requires three passed non-Antigravity workers. Latest run passed with MIMO job `dsw_mr2osdo4_dvgwi8`, DeepSeek job `dsw_mr2osl2m_rs01yo`, and MiMoCode job `mcw_mr2osvjl_xrlrg2`, all host-verified via `worker-smoke-result.json` in isolated runtime workspaces.
+- Cause classification: MIMO, DeepSeek, and MiMoCode direct MCP task execution are viable. OpenCode/Kilo free-pool timeout evidence remains useful failure classification, not proof that worker MCP as a class cannot do tasks.
+- Rule change: goal-readiness, diagnostics, and release gates reject worker task-smoke evidence with fewer than three passed non-Antigravity workers.
 
 ### 2026-07-02 - Direct MCP probe vs current-channel transport
 

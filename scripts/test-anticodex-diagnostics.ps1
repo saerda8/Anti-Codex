@@ -1700,8 +1700,8 @@ function Test-WorkerMcpTaskSmokeSummaryEvidence {
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "worker-mcp-task-smoke summary behavior not covered" }
     if ($evidence.coverageKind -ne "worker-mcp-real-task-smoke") { Add-Failure "worker-mcp-task-smoke summary coverage kind mismatch" }
     if ($evidence.antigravityWorkerExcluded -ne $true) { Add-Failure "worker-mcp-task-smoke summary did not exclude Antigravity worker" }
-    if ([int]$evidence.workerCount -lt 2) { Add-Failure "worker-mcp-task-smoke summary worker count too low" }
-    if ([int]$evidence.passedWorkerCount -lt 2) { Add-Failure "worker-mcp-task-smoke summary passed worker count too low" }
+    if ([int]$evidence.workerCount -lt 3) { Add-Failure "worker-mcp-task-smoke summary worker count too low" }
+    if ([int]$evidence.passedWorkerCount -lt 3) { Add-Failure "worker-mcp-task-smoke summary passed worker count too low" }
     if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "worker-mcp-task-smoke summary has failed workers" }
     if ($results.Count -lt 1) { Add-Failure "worker-mcp-task-smoke summary missing results" }
     foreach ($entry in $results) {

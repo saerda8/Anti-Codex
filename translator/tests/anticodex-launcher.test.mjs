@@ -12939,7 +12939,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /toolCountByServer/);
   assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
   assert.match(goalReadiness, /taskSmokeReportOk/);
-  assert.match(goalReadiness, /minTaskSmokePassedWorkers = 2/);
+  assert.match(goalReadiness, /minTaskSmokePassedWorkers = 3/);
   assert.match(goalReadiness, /taskSmokePassedWorkerCount/);
   assert.match(goalReadiness, /worker_mcp_task_smoke_insufficient_worker_diversity/);
   assert.match(goalReadiness, /worker_mcp_task_smoke_missing_or_failed/);
