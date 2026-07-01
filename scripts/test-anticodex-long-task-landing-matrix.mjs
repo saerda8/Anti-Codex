@@ -56,6 +56,7 @@ const requiredLongTasks = [
     requiredArtifactKeys: ["doneExact", "exportsFunction", "testPassed", "cliPassed", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
     requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"],
     minSharedUrlCount: 3,
+    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "taskToolCallCount", "taskToolOutputSeen"],
   },
   {
     taskMode: "repo-multi-file-edit",
@@ -118,6 +119,7 @@ function taskResult(spec) {
   const entry = readJsonReport(spec.file);
   const report = entry.report || {};
   const artifact = report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
+  const responseHistory = artifact.responseHistory && typeof artifact.responseHistory === "object" ? artifact.responseHistory : {};
   const files = artifact.files && typeof artifact.files === "object" ? artifact.files : {};
   const turnEvidence = Array.isArray(report.turnEvidence) ? report.turnEvidence : [];
   const capability = agenticCapabilities.find((item) => String(item?.id || "") === spec.capabilityId);
@@ -148,6 +150,9 @@ function taskResult(spec) {
     const sharedUrlCount = Number(artifact.sharedUrlCount || artifact.sourceCount || 0);
     if (sharedUrlCount < spec.minSharedUrlCount) failures.push("source_url_count_too_low");
   }
+  for (const key of spec.requiredResponseHistoryKeys || []) {
+    if (!artifactPasses(responseHistory[key])) failures.push(`response_history_key_missing:${key}`);
+  }
   if (!capability || capability.ok !== true) failures.push("agentic_capability_missing_or_not_ok");
   if (!artifactProof || artifactProof.artifactProofComplete !== true) failures.push("roadmap_artifact_proof_missing");
   if (!resultProof || resultProof.resultProofComplete !== true) failures.push("roadmap_result_proof_missing");
@@ -168,6 +173,14 @@ function taskResult(spec) {
     fileEvidenceKeys: Object.keys(files).filter((key) => files[key] === true).sort(),
     requiredArtifactKeys: spec.requiredArtifactKeys,
     requiredFiles: spec.requiredFiles,
+    requiredResponseHistoryKeys: spec.requiredResponseHistoryKeys || [],
+    responseHistoryEvidence: {
+      assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
+      markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
+      visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
+      taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
+      taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
+    },
     turnCount: turnEvidence.length,
     sharedUrlCount: Number(artifact.sharedUrlCount || artifact.sourceCount || 0),
     capabilityOk: capability?.ok === true,

@@ -159,6 +159,7 @@ const capabilities = [
   }),
   capability("complex_research_code_site", "complex-project", reportFiles.complexProject, "ui-complex-project-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
     const files = artifact.files || {};
     for (const key of ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"]) {
       if (files[key] !== true) failures.push(`missing_file:${key}`);
@@ -168,6 +169,11 @@ const capabilities = [
     }
     if ((Number(artifact.sourceCount) || 0) < 3) failures.push("source_count_too_low");
     if ((Number(artifact.sharedUrlCount) || 0) < 3) failures.push("shared_url_count_too_low");
+    if (responseHistory.assistantHasFinalMarker !== true) failures.push("response_history_final_marker_missing");
+    if (responseHistory.markerToolOutputSeen !== true) failures.push("response_history_marker_tool_output_missing");
+    if ((Number(responseHistory.visibleProgressCount) || 0) < 1) failures.push("visible_progress_missing");
+    if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push("task_tool_call_missing");
+    if (responseHistory.taskToolOutputSeen !== true) failures.push("task_tool_output_missing");
     return {
       files,
       sourceCount: Number(artifact.sourceCount) || 0,
@@ -176,6 +182,11 @@ const capabilities = [
       cliPassed: bool(artifact, "cliPassed"),
       htmlComplete: bool(artifact, "htmlComplete"),
       htmlLinksReport: bool(artifact, "htmlLinksReport"),
+      assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
+      markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
+      visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
+      taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
+      taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
     };
   }),
   capability("repo_multi_file_edit", "repo-multi-file-edit", reportFiles.repoMultiFileEdit, "ui-repo-multi-file-edit-smoke", (report, failures) => {

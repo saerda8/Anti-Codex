@@ -62,7 +62,7 @@ const taskResultRequirements = {
   "coding-project": ["artifactEvidence", "testPassed", "cliPassed"],
   "multi-turn-project": ["artifactEvidence", "followupExact", "testPassed", "cliPassed"],
   "report-site": ["artifactEvidence", "reportHasChinese", "htmlComplete"],
-  "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete"],
+  "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "taskToolCallCount", "taskToolOutputSeen"],
   "repo-file-edit": ["artifactEvidence", "testPassed", "sourceHasLowercase"],
   "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete"],
 };
@@ -178,6 +178,7 @@ function artifactProofFor(taskMode, report) {
 
 function resultProofFor(taskMode, report) {
   const artifactEvidence = report && report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
+  const responseHistory = artifactEvidence.responseHistory && typeof artifactEvidence.responseHistory === "object" ? artifactEvidence.responseHistory : {};
   const resultEvidence = {
     answerMarkerCount: Number(report?.answerMarkerCount || 0),
     markerCount: Number(report?.markerCount || 0),
@@ -194,6 +195,11 @@ function resultProofFor(taskMode, report) {
     sourceHasLowercase: artifactEvidence.sourceHasLowercase === true,
     testPassed: artifactEvidence.testPassed === true,
     cliPassed: artifactEvidence.cliPassed === true,
+    assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
+    markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
+    visibleProgressCount: Number(responseHistory.visibleProgressCount || 0),
+    taskToolCallCount: Number(responseHistory.taskToolCallCount || 0),
+    taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
   };
   const resultEvidenceKeys = Object.keys(resultEvidence).filter((key) => artifactValuePasses(resultEvidence[key])).sort();
   const requiredResultProofKeys = taskResultRequirements[taskMode] || [];

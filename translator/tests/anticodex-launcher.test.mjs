@@ -12634,6 +12634,12 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(agenticCapabilityMatrix, /repo_multi_file_edit/);
   assert.match(agenticCapabilityMatrix, /requestedRealTraffic: false/);
   assert.match(agenticCapabilityMatrix, /usedRealTraffic: false/);
+  assert.match(agenticCapabilityMatrix, /responseHistory/);
+  assert.match(agenticCapabilityMatrix, /assistantHasFinalMarker/);
+  assert.match(agenticCapabilityMatrix, /markerToolOutputSeen/);
+  assert.match(agenticCapabilityMatrix, /visible_progress_missing/);
+  assert.match(agenticCapabilityMatrix, /task_tool_call_missing/);
+  assert.match(agenticCapabilityMatrix, /task_tool_output_missing/);
   assert.match(uiState, /expectedDailyActionIds[\s\S]*"secondAccountLoginStatus"/);
 });
 
@@ -12991,6 +12997,11 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /artifactProofCount/);
   assert.match(roadmap, /missingArtifactProofKeys/);
   assert.match(roadmap, /taskResultRequirements/);
+  assert.match(roadmap, /assistantHasFinalMarker/);
+  assert.match(roadmap, /markerToolOutputSeen/);
+  assert.match(roadmap, /visibleProgressCount/);
+  assert.match(roadmap, /taskToolCallCount/);
+  assert.match(roadmap, /taskToolOutputSeen/);
   assert.match(roadmap, /resultEvidenceKeys/);
   assert.match(roadmap, /resultProofCount/);
   assert.match(roadmap, /missingResultProofKeys/);
@@ -13213,6 +13224,13 @@ test("Anti-Codex ships a no-traffic long task landing matrix verifier", () => {
   assert.match(matrix, /report-site/);
   assert.match(matrix, /complex-project/);
   assert.match(matrix, /repo-multi-file-edit/);
+  assert.match(matrix, /requiredResponseHistoryKeys/);
+  assert.match(matrix, /responseHistoryEvidence/);
+  assert.match(matrix, /assistantHasFinalMarker/);
+  assert.match(matrix, /markerToolOutputSeen/);
+  assert.match(matrix, /visibleProgressCount/);
+  assert.match(matrix, /taskToolCallCount/);
+  assert.match(matrix, /taskToolOutputSeen/);
   assert.match(matrix, /agenticCapabilityMatrix/);
   assert.match(matrix, /realTaskCoverageRoadmap/);
   assert.match(matrix, /longTaskLandingComplete/);
