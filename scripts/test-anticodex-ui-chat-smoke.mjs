@@ -1073,13 +1073,19 @@ function jsSingleQuotedLiteral(value) {
   return `'${String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r/g, "\\r").replace(/\n/g, "\\n")}'`;
 }
 
+function asciiJsonStringLiteral(value) {
+  return JSON.stringify(String(value)).replace(/[^\x20-\x7e]/g, (ch) => {
+    return `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`;
+  });
+}
+
 function buildRepoMultiReadmeWriteCommand() {
   const readmePath = jsSingleQuotedLiteral(repoMultiFileReadme);
   return `node -e "require('node:fs').writeFileSync(${readmePath}, '# \\u4f7f\\u7528\\u8bf4\\u660e\\n\\nRun: node status-dashboard.mjs status-data.json\\n', 'utf8')"`;
 }
 
 function nodeEvalCommand(script) {
-  return `node -e ${JSON.stringify(script)}`;
+  return `node -e ${asciiJsonStringLiteral(script)}`;
 }
 
 function buildReportSiteRepairCommand(dir, expectedMarker) {
@@ -1103,17 +1109,27 @@ function buildReportSiteRepairPrompt(currentFailures = [], evidence = null) {
   return `Continue the same report-site task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "report.md/index.html source evidence is incomplete"}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not create README.md and do not rely on any existing README.md. Your next tool action must execute exactly this PowerShell-safe command: ${buildReportSiteRepairCommand(artifactDir, marker)}. It creates or overwrites report.md, index.html, and done.txt with Chinese Codex/OpenAI content, three source URLs, a report.md link, and the exact marker ${marker}. After that, verify report.md, index.html, and done.txt exist, then reply with ${marker}.`;
 }
 
-function buildComplexProjectRepairCommand(dir) {
+function buildComplexProjectRepairCommand(dir, expectedMarker = marker) {
+  const sourceUrls = [
+    "https://openai.com/codex/",
+    "https://openai.com/news/",
+    "https://developers.openai.com/codex/",
+  ];
   const analyzerSource = `import { readFileSync } from "node:fs";\n\nfunction stripUtf8Bom(text) {\n  return String(text || "").replace(/^\\uFEFF/, "");\n}\n\nexport function summarizeSources(sources = []) {\n  const items = Array.isArray(sources) ? sources : [];\n  return {\n    sourceCount: items.length,\n    codexMentionCount: items.filter((item) => /Codex|OpenAI/i.test([item.title, item.url, item.snippet].filter(Boolean).join(" "))).length,\n  };\n}\n\nif (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, "/"))) {\n  const raw = stripUtf8Bom(readFileSync(process.argv[2] || "sources.json", "utf8"));\n  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));\n}\n`;
+  const reportText = `# Codex 近期更新调研\n\n标记：${expectedMarker}\n\n这个报告验证 Anti-Codex 可以完成网页资料整理、Node.js 分析器、测试和中文报告生成。\n\n## 来源\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex 更新仪表盘</title></head><body><h1>Codex / OpenAI 更新仪表盘</h1><p>标记：${expectedMarker}</p><p><a href="report.md">打开中文报告</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
   return nodeEvalCommand([
     "const fs=require('node:fs');",
     `fs.writeFileSync(${JSON.stringify(join(dir, "codex-update-analyzer.mjs"))},${JSON.stringify(analyzerSource)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "report.md"))},${JSON.stringify(reportText)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "index.html"))},${JSON.stringify(htmlText)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "done.txt"))},${JSON.stringify(expectedMarker)},'utf8');`,
   ].join(""));
 }
 
 function buildComplexProjectRepairPrompt(currentFailures = [], evidence = null) {
   const error = String(evidence?.error || "").slice(0, 1200);
-  return `Continue the same complex-project task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "analyzer CLI did not pass"}. ${error ? `CLI/test error excerpt: ${error}. ` : ""}sources.json must be written as UTF-8 without BOM, and codex-update-analyzer.mjs must call stripUtf8Bom before JSON.parse. Do not inspect Antigravity brain, transcript, history, or log folders. Your next tool action must execute exactly this PowerShell-safe command: ${buildComplexProjectRepairCommand(artifactDir)}. Then run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json from ${artifactDir}. Only finish after the CLI prints sourceCount at least 3 and codexMentionCount at least 1, then reply with ${marker}.`;
+  return `Continue the same complex-project task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "analyzer CLI or Chinese artifacts did not pass"}. ${error ? `CLI/test error excerpt: ${error}. ` : ""}sources.json must be written as UTF-8 without BOM, codex-update-analyzer.mjs must call stripUtf8Bom before JSON.parse, and report.md/index.html must contain real Chinese text. Do not inspect Antigravity brain, transcript, history, or log folders. Your next tool action must execute exactly this PowerShell-safe ASCII command: ${buildComplexProjectRepairCommand(artifactDir, marker)}. It uses JavaScript Unicode escapes internally so Chinese text does not pass through the Windows console. Then run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json from ${artifactDir}. Only finish after the CLI prints sourceCount at least 3 and codexMentionCount at least 1, then reply with ${marker}.`;
 }
 
 function buildAutonomousReasoningContinuationPrompt(currentFailures = [], evidence = null) {
