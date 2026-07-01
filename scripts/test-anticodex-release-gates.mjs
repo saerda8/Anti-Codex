@@ -1321,6 +1321,12 @@ function summarizeGate(definition) {
       if (secondSummary.releaseAcceptableAccountProof !== false) semanticFailures.push("goal_readiness_second_account_readiness_summary_release_proof_claimed");
       if (secondSummary.goalComplete !== false) semanticFailures.push("goal_readiness_second_account_readiness_summary_goal_complete_claimed");
       if (!String(secondSummary.nextOperatorAction || "")) semanticFailures.push("goal_readiness_second_account_readiness_summary_next_action_missing");
+      const secondSummaryChecklistStages = Array.isArray(secondSummary.operatorChecklistStages) ? secondSummary.operatorChecklistStages.map(String) : [];
+      const expectedSecondSummaryChecklistStages = ["create_target_windows_user", "windows_user_account_prepare", "account_isolation_status", "second_account_login_entrypoint_with_explicit_approval"];
+      if (!String(secondSummary.manualSetupCommandHint || "")) semanticFailures.push("goal_readiness_second_account_readiness_summary_manual_hint_missing");
+      if (secondSummaryChecklistStages.join("|") !== expectedSecondSummaryChecklistStages.join("|")) semanticFailures.push("goal_readiness_second_account_readiness_summary_checklist_order");
+      if (Number(secondSummary.operatorChecklistStartsLoginCount || 0) !== 1) semanticFailures.push("goal_readiness_second_account_readiness_summary_checklist_login_count");
+      if (Number(secondSummary.operatorChecklistUsesRealTrafficCount || 0) !== 0) semanticFailures.push("goal_readiness_second_account_readiness_summary_checklist_real_traffic_count");
       if (!String(secondSummary.accountIsolationCaveat || "")) semanticFailures.push("goal_readiness_second_account_readiness_summary_caveat_missing");
       if (!String(secondSummary.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1") || !String(secondSummary.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("goal_readiness_second_account_readiness_summary_login_template_incomplete");
       if (!String(secondSummary.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("goal_readiness_second_account_readiness_summary_status_template_incomplete");

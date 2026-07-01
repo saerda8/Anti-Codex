@@ -129,12 +129,28 @@ if (Test-ReportCollected -Result $goalResult -ReportName "goal-readiness") {
 }
 
 $prepare = $prepareResult.parsed
+$setupGuidance = $setupGuidanceResult.parsed
 $status = $statusResult.parsed
 $entrypoint = $entrypointResult.parsed
 $sequence = $sequenceResult.parsed
 $goal = $goalResult.parsed
 $release = $releaseResult.parsed
 $releaseGateCompactStatusCommand = "node scripts\test-anticodex-release-gates.mjs --compact-status"
+$operatorChecklistStages = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "operatorChecklist") -and $setupGuidance.operatorChecklist) {
+    @($setupGuidance.operatorChecklist | ForEach-Object { [string]$_.stage } | Where-Object { $_ })
+} else {
+    @()
+}
+$operatorChecklistStartsLoginCount = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "operatorChecklist") -and $setupGuidance.operatorChecklist) {
+    @($setupGuidance.operatorChecklist | Where-Object { $_.startsLogin -eq $true }).Count
+} else {
+    0
+}
+$operatorChecklistUsesRealTrafficCount = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "operatorChecklist") -and $setupGuidance.operatorChecklist) {
+    @($setupGuidance.operatorChecklist | Where-Object { $_.usesRealTraffic -eq $true }).Count
+} else {
+    0
+}
 
 foreach ($step in @(
     @{ id = "windowsUserAccountPrepare"; result = $prepareResult },
@@ -195,6 +211,11 @@ $payload = [ordered]@{
     operatorBlockingStage = if ($status) { [string]$status.operatorBlockingStage } else { "status_unavailable" }
     operatorNextStep = if ($status) { [string]$status.operatorNextStep } else { "run_account_isolation_status" }
     nextOperatorAction = $nextOperatorAction
+    manualSetupCommandHint = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "manualSetupCommandHint")) { [string]$setupGuidance.manualSetupCommandHint } else { "" }
+    readinessCheckSequence = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "readinessCheckSequence")) { @($setupGuidance.readinessCheckSequence) } else { @() }
+    operatorChecklistStages = @($operatorChecklistStages)
+    operatorChecklistStartsLoginCount = [int]$operatorChecklistStartsLoginCount
+    operatorChecklistUsesRealTrafficCount = [int]$operatorChecklistUsesRealTrafficCount
     approvedLoginCommandTemplate = if ($entrypoint) { [string]$entrypoint.approvedLoginCommandTemplate } else { "" }
     nextNoTrafficStatusCommand = if ($entrypoint) { [string]$entrypoint.nextNoTrafficStatusCommand } else { "" }
     postLoginProofCommandTemplate = if ($entrypoint) { [string]$entrypoint.postLoginProofCommandTemplate } else { "" }

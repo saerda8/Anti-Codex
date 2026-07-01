@@ -3169,6 +3169,11 @@ function latestManagerReportItem(label, fileName) {
             operatorBlockingStage: shortSafeText(report.operatorBlockingStage || "", ""),
             operatorNextStep: shortSafeText(report.operatorNextStep || "", ""),
             nextOperatorAction: shortSafeText(report.nextOperatorAction || "", ""),
+            manualSetupCommandHint: shortSafeText(report.manualSetupCommandHint || "", ""),
+            readinessCheckSequence: Array.isArray(report.readinessCheckSequence) ? report.readinessCheckSequence.map((entry) => shortSafeText(entry || "", "")).filter(Boolean) : [],
+            operatorChecklistStages: Array.isArray(report.operatorChecklistStages) ? report.operatorChecklistStages.map((entry) => shortSafeText(entry || "", "")).filter(Boolean) : [],
+            operatorChecklistStartsLoginCount: Number.isFinite(Number(report.operatorChecklistStartsLoginCount)) ? Number(report.operatorChecklistStartsLoginCount) : null,
+            operatorChecklistUsesRealTrafficCount: Number.isFinite(Number(report.operatorChecklistUsesRealTrafficCount)) ? Number(report.operatorChecklistUsesRealTrafficCount) : null,
             approvedLoginCommandTemplate: shortSafeText(report.approvedLoginCommandTemplate || "", ""),
             nextNoTrafficStatusCommand: shortSafeText(report.nextNoTrafficStatusCommand || "", ""),
             postLoginProofCommandTemplate: shortSafeText(report.postLoginProofCommandTemplate || "", ""),
@@ -4418,6 +4423,8 @@ function latestReportsSummary(result){
       lines.push("  secondAccountReadinessSummary: userExists="+(evidence.targetUserExists?"true":"false")+" / readyForLogin="+(evidence.readyForOperatorLogin?"true":"false")+" / safeToAskLogin="+(evidence.safeToAskUserForSecondAccountLogin?"true":"false")+" / releaseProof="+(evidence.releaseAcceptableAccountProof?"true":"false")+" / goalComplete="+(evidence.goalComplete?"true":"false"));
       lines.push("  secondAccountReadinessSummary guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
       lines.push("  secondAccountReadinessSummary next: action="+(evidence.nextOperatorAction||"unknown")+" / stage="+(evidence.operatorBlockingStage||"unknown")+" / reason="+(evidence.readinessBlockingReason||"none"));
+      lines.push("  secondAccountReadinessSummary checklist: stages="+(Array.isArray(evidence.operatorChecklistStages)&&evidence.operatorChecklistStages.length?evidence.operatorChecklistStages.join(" -> "):"missing")+" / loginSteps="+(evidence.operatorChecklistStartsLoginCount??0)+" / realTrafficSteps="+(evidence.operatorChecklistUsesRealTrafficCount??0));
+      if(evidence.manualSetupCommandHint) lines.push("  secondAccountReadinessSummary hint: "+evidence.manualSetupCommandHint);
       if(evidence.approvedLoginCommandTemplate) lines.push("  secondAccountReadinessSummary loginCommand: "+evidence.approvedLoginCommandTemplate);
       if(evidence.postLoginProofCommandTemplate) lines.push("  secondAccountReadinessSummary proofCommand: "+evidence.postLoginProofCommandTemplate);
       if(evidence.accountIsolationCaveat) lines.push("  secondAccountReadinessSummary caveat: "+evidence.accountIsolationCaveat);

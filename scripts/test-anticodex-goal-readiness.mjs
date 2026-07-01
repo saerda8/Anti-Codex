@@ -277,6 +277,13 @@ const secondSummaryFailures = Array.isArray(secondSummary.failures) ? secondSumm
 const secondSummaryLoginCommand = String(secondSummary.approvedLoginCommandTemplate || "");
 const secondSummaryStatusCommand = String(secondSummary.nextNoTrafficStatusCommand || "");
 const secondSummaryProofCommand = String(secondSummary.postLoginProofCommandTemplate || "");
+const secondSummaryChecklistStages = Array.isArray(secondSummary.operatorChecklistStages) ? secondSummary.operatorChecklistStages.map(String) : [];
+const expectedSecondAccountChecklistStages = [
+  "create_target_windows_user",
+  "windows_user_account_prepare",
+  "account_isolation_status",
+  "second_account_login_entrypoint_with_explicit_approval",
+];
 const secondAccountReadinessSummary = {
   reportPresent: secondAccountReadinessSummaryReport.present,
   reportOk: secondSummary.ok === true,
@@ -303,6 +310,12 @@ const secondAccountReadinessSummary = {
   operatorBlockingStage: String(secondSummary.operatorBlockingStage || ""),
   operatorNextStep: String(secondSummary.operatorNextStep || ""),
   nextOperatorAction: String(secondSummary.nextOperatorAction || ""),
+  manualSetupCommandHint: String(secondSummary.manualSetupCommandHint || ""),
+  readinessCheckSequence: Array.isArray(secondSummary.readinessCheckSequence) ? secondSummary.readinessCheckSequence.map(String) : [],
+  operatorChecklistStages: secondSummaryChecklistStages,
+  operatorChecklistStartsLoginCount: Number(secondSummary.operatorChecklistStartsLoginCount || 0),
+  operatorChecklistUsesRealTrafficCount: Number(secondSummary.operatorChecklistUsesRealTrafficCount || 0),
+  operatorChecklistOrderOk: secondSummaryChecklistStages.join("|") === expectedSecondAccountChecklistStages.join("|"),
   accountIsolationCaveat: String(secondSummary.accountIsolationCaveat || ""),
   approvedLoginCommandTemplate: secondSummaryLoginCommand,
   nextNoTrafficStatusCommand: secondSummaryStatusCommand,
@@ -422,6 +435,10 @@ const proven = {
     && secondAccountReadinessSummary.releaseAcceptableAccountProof === false
     && secondAccountReadinessSummary.goalComplete === false
     && secondAccountReadinessSummary.nextOperatorAction.length > 0
+    && secondAccountReadinessSummary.manualSetupCommandHint.length > 0
+    && secondAccountReadinessSummary.operatorChecklistOrderOk
+    && secondAccountReadinessSummary.operatorChecklistStartsLoginCount === 1
+    && secondAccountReadinessSummary.operatorChecklistUsesRealTrafficCount === 0
     && secondAccountReadinessSummary.accountIsolationCaveat.length > 0
     && secondAccountReadinessSummary.approvedLoginCommandPresent
     && secondAccountReadinessSummary.nextNoTrafficStatusCommandPresent
