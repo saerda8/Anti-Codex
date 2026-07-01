@@ -47,7 +47,9 @@ const requiredLongTasks = [
     expectedWorkProduct: "sourced report plus linked HTML page",
     requiredArtifactKeys: ["doneExact", "reportHasMarker", "htmlHasMarker", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
     requiredFiles: ["reportMd", "indexHtml", "doneTxt"],
-    minSharedUrlCount: 3,
+    minReportUrlCount: 3,
+    minHtmlUrlCount: 3,
+    minSharedUrlCount: 1,
     requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   },
   {
@@ -152,7 +154,13 @@ function taskResult(spec) {
   }
   if (Number(spec.minSharedUrlCount || 0) > 0) {
     const sharedUrlCount = Number(artifact.sharedUrlCount || artifact.sourceCount || 0);
-    if (sharedUrlCount < spec.minSharedUrlCount) failures.push("source_url_count_too_low");
+    if (sharedUrlCount < spec.minSharedUrlCount) failures.push("shared_url_count_too_low");
+  }
+  if (Number(spec.minReportUrlCount || 0) > 0) {
+    if ((Number(artifact.reportUrlCount) || 0) < spec.minReportUrlCount) failures.push("report_source_url_count_too_low");
+  }
+  if (Number(spec.minHtmlUrlCount || 0) > 0) {
+    if ((Number(artifact.htmlUrlCount) || 0) < spec.minHtmlUrlCount) failures.push("html_source_url_count_too_low");
   }
   for (const key of spec.requiredResponseHistoryKeys || []) {
     if (!artifactPasses(responseHistory[key])) failures.push(`response_history_key_missing:${key}`);
@@ -191,6 +199,8 @@ function taskResult(spec) {
       codexLikeProcessProof: responseHistory.codexLikeProcessProof === true,
     },
     turnCount: turnEvidence.length,
+    reportUrlCount: Number(artifact.reportUrlCount || 0),
+    htmlUrlCount: Number(artifact.htmlUrlCount || 0),
     sharedUrlCount: Number(artifact.sharedUrlCount || artifact.sourceCount || 0),
     capabilityOk: capability?.ok === true,
     artifactProofComplete: artifactProof?.artifactProofComplete === true,

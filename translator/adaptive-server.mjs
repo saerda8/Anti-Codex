@@ -7208,7 +7208,9 @@ function shouldInsertVisibleToolProgress(originalRequest = {}) {
         || requirement?.agenticStepFlow === true
         || requirement?.complexProject === true
         || requirement?.codingProject === true
-        || requirement?.multiTurnProject === true;
+        || requirement?.multiTurnProject === true
+        || requirement?.reportSite === true
+        || Boolean(repoMultiFileEditRequirementFromOriginalRequest(originalRequest));
 }
 
 function agenticStepFlowPhaseKey(text = "") {
@@ -7269,28 +7271,28 @@ function visibleToolProgressText(codexName = "", args = "") {
     const readsBack = /get-content|readfile|read-file|cat\s+/.test(text);
     if (writesFiles && (runsTests || runsCli) && readsBack) {
         return [
-            `本轮命令覆盖：写入项目文件和测试文件${targetSuffix}。`,
-            "本轮命令覆盖：运行测试和本地 CLI，核对真实输出。",
-            "本轮命令覆盖：读回完成标记，确认结果不是只停在口头描述。",
+            `计划：这条命令同时落地项目文件和测试文件${targetSuffix}。`,
+            "验证：随后运行测试和本地 CLI，核对真实输出。",
+            "核对：最后读回完成标记，确认结果不是只停在口头描述。",
         ].join("\n");
     }
     if (/word-tally\.test|codex-update-analyzer\.test|\.test\.mjs|node:test|assert/.test(text) && /writealltext|writefilesync|set-content|new-item|out-file/.test(text)) {
-        return `我先把验收条件写成测试${targetSuffix}，避免只靠口头判断完成。`;
+        return `判断：先把验收条件写成可运行测试${targetSuffix}，后面用测试结果反推实现问题。`;
     }
     if (/package\.json|word-tally\.mjs|codex-update-analyzer\.mjs|status-dashboard\.mjs/.test(text) && !/\.test\.mjs|node:test|assert/.test(text) && /writealltext|writefilesync|set-content|new-item|out-file/.test(text)) {
-        return `我在实现核心程序${targetSuffix}，让后面的测试能验证真实行为。`;
+        return `判断：核心程序是本轮风险点${targetSuffix}，先实现可测试入口再验证行为。`;
     }
     if (/report\.md|index\.html|readme\.md|done\.txt|sources\.json|status-dashboard\.html/.test(text) && /writealltext|writefilesync|set-content|new-item|out-file/.test(text)) {
-        return `我在整理交付物${targetSuffix}，重点核对报告、页面、数据和完成标记是否一致。`;
+        return `判断：交付物需要互相校验${targetSuffix}，报告、页面、数据和完成标记必须一致。`;
     }
-    if (/mkdir|copy-item|move-item/.test(text)) return `我先准备干净的工作目录${targetSuffix}，避免旧文件影响验收。`;
-    if (/writealltext|writefilesync|set-content|new-item|out-file/.test(text)) return `我在写入任务文件${targetSuffix}，下一步会读回或运行验证。`;
-    if (/node\s+--test|npm\s+test/.test(text)) return `我运行测试${targetSuffix}；如果失败，就按报错回到实现修正。`;
-    if (/node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text)) return `我运行本地程序${targetSuffix}核对实际输出，不只看文件是否存在。`;
-    if (/get-childitem|get-content|test-path|select-string|readfile|read-file|cat\s+/.test(text)) return `我读回关键结果${targetSuffix}，核对文件清单、标记和验证输出。`;
-    if (/remove-item|del\s+|erase\s+/.test(text)) return `我清理偏离要求的文件${targetSuffix}，保持交付目录只剩验收目标。`;
-    if (/shell|exec|command|powershell|terminal/i.test(codexName)) return `我执行本地命令${targetSuffix}获取下一步证据。`;
-    return `我调用 ${codexName || "工具"}${targetSuffix}推进任务。`;
+    if (/mkdir|copy-item|move-item/.test(text)) return `准备：先整理干净的工作目录${targetSuffix}，避免旧文件影响验收。`;
+    if (/writealltext|writefilesync|set-content|new-item|out-file/.test(text)) return `判断：文件内容已进入实现阶段${targetSuffix}，下一步需要读回或运行验证。`;
+    if (/node\s+--test|npm\s+test/.test(text)) return `验证：运行测试${targetSuffix}；如果失败，就按报错回到实现修正。`;
+    if (/node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text)) return `验证：运行本地程序${targetSuffix}核对实际输出，不只看文件是否存在。`;
+    if (/get-childitem|get-content|test-path|select-string|readfile|read-file|cat\s+/.test(text)) return `核对：读回关键结果${targetSuffix}，确认文件清单、标记和验证输出一致。`;
+    if (/remove-item|del\s+|erase\s+/.test(text)) return `修正：清理偏离要求的文件${targetSuffix}，保持交付目录只剩验收目标。`;
+    if (/shell|exec|command|powershell|terminal/i.test(codexName)) return `推进：执行本地命令${targetSuffix}获取下一步证据。`;
+    return `推进：调用 ${codexName || "工具"}${targetSuffix}获取下一步证据。`;
 }
 
 function visibleToolCommandTargetSummary(command = "") {
@@ -7308,6 +7310,8 @@ function visibleToolCommandTargetSummary(command = "") {
         "index.html",
         "README.md",
         "done.txt",
+        "followup.txt",
+        "CHANGELOG.md",
     ];
     const found = [];
     for (const name of known) {
@@ -7322,7 +7326,7 @@ function visibleToolCommandTargetSummary(command = "") {
 }
 
 function contentHasVisibleToolProgress(content = "") {
-    return /阶段[12]：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|调用\s+.+?推进任务|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件)/.test(String(content || ""));
+    return /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|调用\s+.+?推进任务|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件)/.test(String(content || ""));
 }
 
 function assistantHistoryContainsExactText(originalRequest = {}, chatMessages = [], text = "") {
@@ -8338,6 +8342,43 @@ function normalizeArtifactPowerShellUtf8NoBom(command = "") {
     return `$__antiCodexUtf8NoBom = [System.Text.UTF8Encoding]::new($false)\n${normalized}`;
 }
 
+function normalizeExactMarkerSetContentNoNewline(command = "", marker = "") {
+    if (typeof command !== "string" || !marker || !/\bSet-Content\b/i.test(command)) return command;
+    const markerRe = new RegExp(escapeRegExp(marker));
+    return command.split(/\r?\n/).map(line => {
+        if (!/\bSet-Content\b/i.test(line)) return line;
+        if (!/(?:done|followup)\.txt/i.test(line)) return line;
+        if (!markerRe.test(line)) return line;
+        if (/\s-NoNewline\b/i.test(line)) return line;
+        return `${line} -NoNewline`;
+    }).join("\n");
+}
+
+function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
+    if (typeof command !== "string" || !requirement?.marker || !requirement?.targetPath) return command;
+    const targets = [];
+    const shouldRewriteDone = !requirement.multiTurnProject || /_FIRST\b/.test(requirement.marker);
+    if (shouldRewriteDone && /(?:done\.txt|Set-Content|WriteAllText)/i.test(command)) targets.push("done.txt");
+    if (requirement.multiTurnProject && /followup\.txt/i.test(command)) targets.push("followup.txt");
+    const uniqueTargets = Array.from(new Set(targets));
+    if (!uniqueTargets.length) return command;
+    const markerLiteral = psSingleQuoted(requirement.marker);
+    const pathLiteral = psSingleQuoted(requirement.targetPath);
+    const lines = [
+        "",
+        "# Anti-Codex exact marker-only write normalization",
+        `$__antiCodexMarkerOnlyDir = ${pathLiteral}`,
+        `$__antiCodexMarkerOnlyText = ${markerLiteral}`,
+        "$__antiCodexMarkerOnlyUtf8 = [System.Text.UTF8Encoding]::new($false)",
+        "if ($__antiCodexMarkerOnlyDir -and (Test-Path -LiteralPath $__antiCodexMarkerOnlyDir)) {",
+    ];
+    for (const fileName of uniqueTargets) {
+        lines.push(`  [System.IO.File]::WriteAllText((Join-Path $__antiCodexMarkerOnlyDir ${psSingleQuoted(fileName)}), $__antiCodexMarkerOnlyText, $__antiCodexMarkerOnlyUtf8)`);
+    }
+    lines.push("}");
+    return `${command}${lines.join("\n")}`;
+}
+
 function repairLocalArtifactToolArguments(args, codexName, originalRequest = null) {
     const scopedFixture = scopedFixtureFirstWriteRequirementFromOriginalRequest(originalRequest);
     if (scopedFixture && /(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) {
@@ -8359,6 +8400,8 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     const commandLooksComplexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(command);
     command = command.replace(/\bDESKTOP_SMALL_PROJECT\b/g, requirement.marker);
     if (requestNeedsModelLedLocalArtifactWork(originalRequest)) {
+        command = normalizeExactMarkerSetContentNoNewline(command, requirement.marker);
+        command = appendExactMarkerOnlyFileRewrite(command, requirement);
         command = normalizeArtifactPowerShellUtf8NoBom(command);
         return JSON.stringify({ ...parsed, [key]: command });
     }

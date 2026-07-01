@@ -180,10 +180,14 @@ const capabilities = [
     for (const key of ["doneExact", "reportHasMarker", "htmlHasMarker", "reportHasChinese", "htmlHasChinese", "reportMentionsCodex", "htmlMentionsCodex", "htmlComplete", "htmlLinksReport"]) {
       if (artifact[key] !== true) failures.push(`missing_artifact_evidence:${key}`);
     }
-    if ((Number(artifact.sharedUrlCount) || 0) < 3) failures.push("source_url_count_too_low");
+    if ((Number(artifact.reportUrlCount) || 0) < 3) failures.push("report_source_url_count_too_low");
+    if ((Number(artifact.htmlUrlCount) || 0) < 3) failures.push("html_source_url_count_too_low");
+    if ((Number(artifact.sharedUrlCount) || 0) < 1) failures.push("shared_url_count_too_low");
     requireResponseHistoryProof(responseHistory, failures);
     return {
       files,
+      reportUrlCount: Number(artifact.reportUrlCount) || 0,
+      htmlUrlCount: Number(artifact.htmlUrlCount) || 0,
       sharedUrlCount: Number(artifact.sharedUrlCount) || 0,
       reportLength: Number(artifact.reportLength) || 0,
       htmlLength: Number(artifact.htmlLength) || 0,

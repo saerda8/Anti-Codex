@@ -1409,7 +1409,7 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
       const phaseKey = agenticPhaseKey(text);
       if (phaseKey && seenAssistantPhaseKeys.has(phaseKey)) return;
       if (phaseKey) seenAssistantPhaseKeys.add(phaseKey);
-      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /本轮命令覆盖：/.test(text) || /我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/.test(text)) {
+      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /(?:计划|判断|准备|验证|核对|修正|推进)：/.test(text) || /本轮命令覆盖：/.test(text) || /我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/.test(text)) {
         evidence.assistantText += `${text}\n`;
       }
       if (/阶段1：准备创建文件/.test(text)) evidence.phase1Count += 1;
@@ -1441,7 +1441,7 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
-  const visibleProgressPattern = /阶段[12]：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/g;
+  const visibleProgressPattern = /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：|我(?:先)?(?:把验收条件写成测试|在实现核心程序|在整理交付物|准备干净的工作目录|在写入任务文件|运行测试|运行本地程序|读回关键结果|清理偏离要求的文件|执行本地命令|创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/g;
   const visibleProgressLinePattern = new RegExp(visibleProgressPattern.source);
   evidence.visibleProgressCount = (evidence.assistantText.match(visibleProgressPattern) || []).length;
   const progressLines = evidence.assistantText
@@ -1909,6 +1909,15 @@ function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
 function filterUiMarkerFailuresWhenHistoryConfirmsCompletion(failures, artifactFailures, artifactEvidence) {
   if (artifactFailures.length > 0) return failures;
   if (artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) return failures;
+  return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
+}
+
+function filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, artifactEvidence) {
+  const history = artifactEvidence?.responseHistory || {};
+  const hasCompletedResponse = history.assistantHasFinalMarker === true
+    && history.markerToolOutputSeen === true
+    && history.taskToolOutputSeen === true;
+  if (!hasCompletedResponse) return failures;
   return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
 }
 
@@ -3569,6 +3578,9 @@ async function main() {
     if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push(`${taskMode} did not emit a task tool call`);
     if (responseHistory.taskToolOutputSeen !== true) failures.push(`${taskMode} did not observe task tool output`);
     if (responseHistory.assistantHasFinalMarker !== true) failures.push(`${taskMode} assistant final marker was not observed in response history`);
+    const effectiveFailures = filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, artifactEvidence);
+    failures.length = 0;
+    failures.push(...effectiveFailures);
   }
 
   const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;

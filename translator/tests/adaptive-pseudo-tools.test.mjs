@@ -4785,6 +4785,57 @@ test("multi-turn local project follow-up is model-led and does not start with de
   assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
+test("multi-turn marker-only Set-Content writes are normalized without deterministic guard", () => {
+  const marker = "UI_MULTI_TURN_PROJECT_SMOKE_20260701002";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Continue the same project in C:\\Temp\\multi. Modify word-tally.mjs so it also exports uniqueWords(text). Update word-tally.test.mjs and create CHANGELOG.md plus followup.txt containing exactly ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_followup",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: `Set-Content -Path (Join-Path $dir "followup.txt") -Value '${marker}' -Encoding utf8`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /\bfollowup\.txt\b/);
+  assert.match(args.command, /\s-NoNewline\b/);
+  assert.match(args.command, /exact marker-only write normalization/);
+  assert.match(args.command, /WriteAllText\(\(Join-Path \$__antiCodexMarkerOnlyDir 'followup\.txt'\)/);
+  assert.doesNotMatch(args.command, /Join-Path \$__antiCodexMarkerOnlyDir 'done\.txt'/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+});
+
 test("repo file edit smoke markers do not trigger local artifact marker guard", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",
@@ -4883,8 +4934,9 @@ test("autonomous reasoning tool calls get visible progress text before execution
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /运行测试/);
+  assert.match(fmt.output[0].content[0].text, /验证：运行测试/);
   assert.match(fmt.output[0].content[0].text, /如果失败/);
+  assert.doesNotMatch(fmt.output[0].content[0].text, /^我/m);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -4932,10 +4984,12 @@ test("file-writing tool progress distinguishes implementation and test edits", (
     }],
   }, request, routing, { strictTools: true });
 
-  assert.match(implementation.output[0].content[0].text, /实现核心程序/);
+  assert.match(implementation.output[0].content[0].text, /判断：核心程序是本轮风险点/);
   assert.match(implementation.output[0].content[0].text, /codex-update-analyzer\.mjs/);
-  assert.match(testFile.output[0].content[0].text, /验收条件写成测试/);
+  assert.match(testFile.output[0].content[0].text, /判断：先把验收条件写成可运行测试/);
   assert.match(testFile.output[0].content[0].text, /codex-update-analyzer\.test\.mjs/);
+  assert.doesNotMatch(implementation.output[0].content[0].text, /^我/m);
+  assert.doesNotMatch(testFile.output[0].content[0].text, /^我/m);
   assert.notEqual(implementation.output[0].content[0].text, testFile.output[0].content[0].text);
 });
 
@@ -4973,9 +5027,10 @@ test("combined local artifact command gets multi-step visible progress text", ()
 
   const text = fmt.output[0].content[0].text;
   assert.equal(fmt.output[0].type, "message");
-  assert.match(text, /本轮命令覆盖：写入项目文件和测试文件/);
-  assert.match(text, /本轮命令覆盖：运行测试和本地 CLI/);
-  assert.match(text, /本轮命令覆盖：读回完成标记/);
+  assert.match(text, /计划：这条命令同时落地项目文件和测试文件/);
+  assert.match(text, /验证：随后运行测试和本地 CLI/);
+  assert.match(text, /核对：最后读回完成标记/);
+  assert.doesNotMatch(text, /^我/m);
   assert.equal(fmt.output[1].type, "function_call");
 });
 
@@ -5020,8 +5075,9 @@ test("complex project tool calls get visible progress text before execution", ()
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /运行测试/);
+  assert.match(fmt.output[0].content[0].text, /验证：运行测试/);
   assert.match(fmt.output[0].content[0].text, /codex-update-analyzer\.test\.mjs/);
+  assert.doesNotMatch(fmt.output[0].content[0].text, /^我/m);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5072,8 +5128,9 @@ test("agentic step-flow tool calls also get visible progress text before executi
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /整理交付物/);
+  assert.match(fmt.output[0].content[0].text, /判断：交付物需要互相校验/);
   assert.match(fmt.output[0].content[0].text, /done\.txt/);
+  assert.doesNotMatch(fmt.output[0].content[0].text, /^我/m);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5131,8 +5188,9 @@ test("agentic step-flow suppresses repeated visible phase text while preserving 
   assert.equal(fmt.output.length, 2);
   assert.equal(fmt.output[0].type, "message");
   assert.doesNotMatch(fmt.output[0].content[0].text, /阶段1：准备创建文件/);
-  assert.match(fmt.output[0].content[0].text, /整理交付物/);
+  assert.match(fmt.output[0].content[0].text, /判断：交付物需要互相校验/);
   assert.match(fmt.output[0].content[0].text, /done\.txt/);
+  assert.doesNotMatch(fmt.output[0].content[0].text, /^我/m);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5170,9 +5228,84 @@ test("generic assistant text does not suppress visible tool progress for long ta
   assert.equal(fmt.output[0].type, "message");
   assert.equal(fmt.output[0].content[0].text, "我开始处理这个任务。");
   assert.equal(fmt.output[1].type, "message");
-  assert.match(fmt.output[1].content[0].text, /实现核心程序/);
+  assert.match(fmt.output[1].content[0].text, /判断：核心程序是本轮风险点/);
   assert.match(fmt.output[1].content[0].text, /codex-update-analyzer\.mjs/);
+  assert.doesNotMatch(fmt.output[1].content[0].text, /^我/m);
   assert.equal(fmt.output[2].type, "function_call");
+});
+
+test("report-site tool calls get visible progress text before execution", () => {
+  const marker = "UI_REPORT_SITE_SMOKE_20260701_PROGRESS";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `Search the web, then create report.md, index.html, and done.txt in C:\\Temp\\desktop-visible-report-site\\run. done.txt must contain ${marker}.` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "Files created and verified.",
+        tool_calls: [{
+          id: "call_report",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "node -e \"require('fs').writeFileSync('report.md','中文 https://openai.com')\"" }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  assert.equal(fmt.output[0].type, "message");
+  assert.equal(fmt.output[0].content[0].text, "Files created and verified.");
+  assert.equal(fmt.output[1].type, "message");
+  assert.match(fmt.output[1].content[0].text, /判断：交付物需要互相校验/);
+  assert.match(fmt.output[1].content[0].text, /report\.md/);
+  assert.doesNotMatch(fmt.output[1].content[0].text, /^我/m);
+  assert.equal(fmt.output[2].type, "function_call");
+});
+
+test("repo multi-file tool calls get visible progress text before execution", () => {
+  const marker = "UI_REPO_MULTI_FILE_EDIT_SMOKE_20260701001";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `Work only in this fixture directory: C:\\Temp\\desktop-coworker-project. Write C:\\Temp\\desktop-coworker-project\\README.md. Do not edit C:\\Temp\\desktop-coworker-project\\status-dashboard.mjs, C:\\Temp\\desktop-coworker-project\\status-dashboard.test.mjs, or C:\\Temp\\desktop-coworker-project\\status-data.json. Reply ${marker}.` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_repo_multi",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "node -e \"require('fs').writeFileSync('README.md','# 使用说明')\"" }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(fmt.output[0].content[0].text, /判断：交付物需要互相校验/);
+  assert.match(fmt.output[0].content[0].text, /README\.md/);
+  assert.doesNotMatch(fmt.output[0].content[0].text, /^我/m);
+  assert.equal(fmt.output[1].type, "function_call");
 });
 
 test("generated visible tool progress is not repeated from assistant history", () => {
