@@ -8718,11 +8718,16 @@ async function callAntigravityWithInternalTools(chatBody, dependencies = {}) {
         }
         if (preparedBody?._internalWebEvidence) {
             const assistantText = extractAssistantText(result.json);
-            const missingSourceUrl = webEvidenceHasSourceUrls(preparedBody._internalWebEvidence) && !/https?:\/\//i.test(assistantText);
-            if (shouldBlockAssistantToolClaim(assistantText, { hasToolEvidence: false, hasWebToolEvidence: false, userText: preparedBody._internalWebUserText || latestUserTextForInternalWeb(preparedBody) })
+            const message = result.json?.choices?.[0]?.message || {};
+            const hasExternalToolCall = Array.isArray(message.tool_calls)
+                && message.tool_calls.some((toolCall) => !isInternalTool(toolCall?.function?.name));
+            const missingSourceUrl = !hasExternalToolCall
+                && webEvidenceHasSourceUrls(preparedBody._internalWebEvidence)
+                && !/https?:\/\//i.test(assistantText);
+            if (!hasExternalToolCall && (shouldBlockAssistantToolClaim(assistantText, { hasToolEvidence: false, hasWebToolEvidence: false, userText: preparedBody._internalWebUserText || latestUserTextForInternalWeb(preparedBody) })
                 || assistantTextLooksLikeHonestNoEvidenceBlocker(assistantText)
                 || assistantTextLooksLikeMissingToolDetour(assistantText)
-                || missingSourceUrl) {
+                || missingSourceUrl)) {
                 const fallback = makeTextCompletion(
                     preparedBody.model,
                     webEvidenceFallbackText(
@@ -8940,6 +8945,9 @@ async function seedExplicitInternalWebSearch(chatBody) {
 
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const webBackedArtifact = requestNeedsWebBackedArtifactOutput(chatBody);
+    const modelLedLocalArtifact = requestNeedsModelLedLocalArtifactWork(chatBody);
+    const externalTools = (Array.isArray(chatBody?.tools) ? chatBody.tools : [])
+        .filter((tool) => !isInternalTool(tool?.function?.name || tool?.name));
     const callId = `call_${randomUUID().replaceAll("-", "")}`;
     let result;
     try {
@@ -8960,8 +8968,8 @@ async function seedExplicitInternalWebSearch(chatBody) {
         ...(chatBodyHasWebDetourPollution(chatBody)
             ? { _internalWebDeterministicAnswer: webEvidenceFallbackText(result, text, "translator_direct_web_search_after_polluted_history") }
             : {}),
-        tools: undefined,
-        tool_choice: "none",
+        tools: modelLedLocalArtifact && externalTools.length ? externalTools : undefined,
+        tool_choice: modelLedLocalArtifact && externalTools.length ? "auto" : "none",
         messages: [
             ...messages,
             {
@@ -8974,6 +8982,8 @@ async function seedExplicitInternalWebSearch(chatBody) {
                 role: "user",
                 content: webBackedArtifact
                     ? "The requested web_search call is complete. Continue the original artifact task now using the tool result above: create the requested local files with PowerShell file commands, including report.md, index.html, and done.txt when requested. Include source URLs from the web_search result in the generated files. Do not stop with only a search summary, do not call web_search again, and do not describe a future tool action."
+                    : modelLedLocalArtifact
+                        ? "The requested web_search call is complete. Continue the original local project task now by calling the exposed external Codex tool to create the requested files, run the requested tests/CLI checks, and only then provide the final marker. Include source URLs from the web_search result in the generated files. Do not stop with only a search summary, do not call web_search again, and do not describe a future tool action."
                     : "The requested web_search call is complete. Answer the original user request now using the tool result above. Do not call web_search again and do not describe a future tool action. Include source URLs when they are present in the tool result.",
             },
         ],
@@ -9392,10 +9402,17 @@ function requestNeedsWebBackedArtifactOutput(request) {
     const text = String(latest || recentUserTextForInternalWeb(request) || "").trim();
     if (!text) return false;
     if (/(?:desktop-visible-autonomous-reasoning|UI_AUTONOMOUS_REASONING_SMOKE|autonomous-reasoning)/i.test(text)) return false;
-    if (/(?:desktop-visible-complex-project|UI_COMPLEX_PROJECT_SMOKE|codex-update-analyzer|sources\.json|summarizeSources)/i.test(text)) return false;
+    if (requestNeedsModelLedLocalArtifactWork(request)) return false;
     if (!shouldUseInternalWebSearchIntent(text)) return false;
     return LOCAL_ARTIFACT_INTENT_RE.test(text)
         || /(?:report\.md|index\.html|done\.txt|PowerShell file commands|local research report site|artifactDir|create.{0,80}files)/i.test(text);
+}
+
+function requestNeedsModelLedLocalArtifactWork(request) {
+    const latest = latestUserTextForInternalWeb(request);
+    const text = String(latest || recentUserTextForInternalWeb(request) || "").trim();
+    if (!text) return false;
+    return /(?:desktop-visible-complex-project|UI_COMPLEX_PROJECT_SMOKE|codex-update-analyzer|sources\.json|summarizeSources)/i.test(text);
 }
 
 function recentUserTextForInternalWeb(request) {
@@ -9476,6 +9493,13 @@ function chatBodyWithInternalTools(body, options = {}) {
 
 function requestNeedsInternalWebTools(request) {
     return Boolean(preferredInternalWebToolName(request));
+}
+
+function shouldUseDeterministicInternalWebSearchResponse(request) {
+    return requestNeedsInternalWebTools(request)
+        && preferredInternalWebToolName(request) === "web_search"
+        && !requestNeedsWebBackedArtifactOutput(request)
+        && !requestNeedsModelLedLocalArtifactWork(request);
 }
 
 const PLAIN_CHAT_TOOL_INTENT_RE = /(?:\b(?:create|write|generate|run|execute|search|fetch|browse|open|read|inspect|verify|continue|resume|fix|modify|edit|debug|build|test|report|script|command)\b|PowerShell|package\.json|index\.html|README\.md|done\.txt|word-tally|https?:\/\/|[A-Za-z]:\\|\/tmp\/|AppData|Roaming|directory|folder|file|artifact|tool|web_search|web_fetch|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u751f\u6210|\u8fd0\u884c|\u6267\u884c|\u641c\u7d22|\u68c0\u7d22|\u8054\u7f51|\u4e0a\u7f51|\u6253\u5f00|\u8bfb\u53d6|\u67e5\u770b|\u68c0\u67e5|\u9a8c\u8bc1|\u7ee7\u7eed|\u6062\u590d|\u76ee\u5f55|\u6587\u4ef6|\u5de5\u5177|\u7f51\u9875|\u62a5\u544a|\u9879\u76ee|\u4fee\u6539|\u4fee\u590d|\u4ee3\u7801|\u811a\u672c|\u547d\u4ee4|\u8c03\u8bd5|\u6784\u5efa|\u6d4b\u8bd5)/i;
@@ -11413,7 +11437,7 @@ const server = http.createServer(async (req, res) => {
                     : parsed;
                 const exactReply = deterministicExactReplyCompletion(parsed, chatBody);
                 if (exactReply) return jsonResponse(res, 200, exactReply);
-                if (requestNeedsInternalWebTools(parsed) && preferredInternalWebToolName(parsed) === "web_search" && !requestNeedsWebBackedArtifactOutput(parsed)) {
+                if (shouldUseDeterministicInternalWebSearchResponse(parsed)) {
                     return jsonResponse(res, 200, await deterministicInternalWebSearchChatCompletion(parsed, chatBody));
                 }
                 const startedAtMs = Date.now();
@@ -11567,7 +11591,7 @@ const server = http.createServer(async (req, res) => {
                         return parsed.stream === false ? jsonResponse(res, 200, fmt) : pipeSSE(res, fmt);
                     }
                 }
-                if (internalWebNeeded && preferredInternalWebToolName(parsed) === "web_search" && !requestNeedsWebBackedArtifactOutput(parsed)) {
+                if (shouldUseDeterministicInternalWebSearchResponse(parsed)) {
                     const fmt = await deterministicInternalWebSearchResponse(parsed, chatBody, routing);
                     applyResponsesEndTurnHint(fmt, req, parsed, { allowEndTurnFalse: false });
                     RESPONSE_HISTORY.remember(fmt, parsed);
@@ -11791,4 +11815,4 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
     });
 }
 
-export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicArtifactToolCallCompletion, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicRepoMultiFileEditCompletionResponse, deterministicRepoMultiFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, MAX_TOOL_LOOPS };
+export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicArtifactToolCallCompletion, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicRepoMultiFileEditCompletionResponse, deterministicRepoMultiFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, shouldUseDeterministicInternalWebSearchResponse, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, MAX_TOOL_LOOPS };

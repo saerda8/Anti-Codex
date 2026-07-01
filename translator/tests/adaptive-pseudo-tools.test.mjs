@@ -44,6 +44,7 @@ const {
   requestNeedsWebBackedArtifactOutput,
   requestLooksLikePlainChatNoTools,
   sanitizeMarkdownUrlFormatting,
+  shouldUseDeterministicInternalWebSearchResponse,
   shouldRecordAntigravityTrafficFailure,
   stripPseudoToolMarkup,
   unknownInputItemText,
@@ -4142,6 +4143,94 @@ test("complex project requests do not start with the deterministic artifact guar
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
   assert.equal(completion, null);
   assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
+});
+
+test("complex project web searches do not short-circuit to deterministic summaries", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Search the web for recent Codex updates, then create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+    tool_choice: { type: "function", function: { name: "web_search" } },
+    tools: [
+      { type: "function", function: { name: "web_search", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+  };
+
+  assert.equal(requestNeedsInternalWebTools(request), true);
+  assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
+  assert.equal(shouldUseDeterministicInternalWebSearchResponse(request), false);
+});
+
+test("plain web searches can still use deterministic internal web summaries", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Search the web for recent Codex release notes and summarize the result." }],
+    }],
+    tool_choice: { type: "function", function: { name: "web_search" } },
+    tools: [{ type: "function", function: { name: "web_search", parameters: { type: "object" } } }],
+  };
+
+  assert.equal(requestNeedsInternalWebTools(request), true);
+  assert.equal(shouldUseDeterministicInternalWebSearchResponse(request), true);
+});
+
+test("complex project web prefetch keeps external Codex tools for model-led work", async () => {
+  const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+  const userText = "Search the web for recent Codex updates, then create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.";
+  globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name) => {
+    assert.equal(name, "web_search");
+    return JSON.stringify({ ok: true, results: [{ title: "Codex update", url: "https://example.com/codex", snippet: "Codex update" }] });
+  };
+
+  try {
+    let upstreamBody;
+    const completion = await callAntigravityWithInternalTools({
+      model: "gemini-pro-agent",
+      messages: [{ role: "user", content: userText }],
+      tools: [
+        { type: "function", function: { name: "web_search", parameters: { type: "object" } } },
+        { type: "function", function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } },
+      ],
+      tool_choice: { type: "function", function: { name: "web_search" } },
+    }, {
+      callQueued: async (body) => {
+        upstreamBody = structuredClone(body);
+        return {
+          choices: [{
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_complex_project_shell",
+                type: "function",
+                function: { name: "shell_command", arguments: JSON.stringify({ command: "echo complex-ok" }) },
+              }],
+            },
+            finish_reason: "stop",
+          }],
+        };
+      },
+    });
+
+    assert.deepEqual(upstreamBody.tools.map(tool => tool.function.name), ["shell_command"]);
+    assert.equal(upstreamBody.tool_choice, "auto");
+    assert.match(upstreamBody.messages.at(-1).content, /calling the exposed external Codex tool/);
+    assert.doesNotMatch(upstreamBody.messages.at(-1).content, /Answer the original user request now/);
+    assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
+  } finally {
+    if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
+    else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
+  }
 });
 
 test("chatToResponsesFormat does not append deterministic guard to complex project tool calls", () => {
