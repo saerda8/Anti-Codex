@@ -3168,6 +3168,11 @@ function latestManagerReportItem(label, fileName) {
             capturesPassword: report.capturesPassword === true,
             storesPassword: report.storesPassword === true,
             targetUserExists: report.targetUserExists === true,
+            currentWindowsUserSidPresent: typeof report.currentWindowsUserSid === "string" && report.currentWindowsUserSid.trim().length > 0,
+            targetWindowsUserSidPresent: typeof report.targetWindowsUserSid === "string" && report.targetWindowsUserSid.trim().length > 0,
+            targetUserSidMatchesCurrentUser: report.targetUserSidMatchesCurrentUser === true,
+            targetUserIdentityBoundaryOk: report.targetUserIdentityBoundaryOk === true,
+            targetUserIsCurrentUser: report.targetUserIsCurrentUser === true,
             readyForOperatorLogin: report.readyForOperatorLogin === true,
             safeToAskUserForSecondAccountLogin: report.safeToAskUserForSecondAccountLogin === true,
             canProceedToInteractiveLogin: report.canProceedToInteractiveLogin === true,
@@ -4430,6 +4435,7 @@ function latestReportsSummary(result){
     if(item.secondAccountReadinessSummaryEvidence){
       const evidence=item.secondAccountReadinessSummaryEvidence;
       lines.push("  secondAccountReadinessSummary: userExists="+(evidence.targetUserExists?"true":"false")+" / readyForLogin="+(evidence.readyForOperatorLogin?"true":"false")+" / safeToAskLogin="+(evidence.safeToAskUserForSecondAccountLogin?"true":"false")+" / releaseProof="+(evidence.releaseAcceptableAccountProof?"true":"false")+" / goalComplete="+(evidence.goalComplete?"true":"false"));
+      lines.push("  secondAccountReadinessSummary identity: currentSid="+(evidence.currentWindowsUserSidPresent?"present":"missing")+" / targetSid="+(evidence.targetWindowsUserSidPresent?"present":"missing")+" / targetMatchesCurrent="+(evidence.targetUserSidMatchesCurrentUser?"true":"false")+" / boundaryOk="+(evidence.targetUserIdentityBoundaryOk?"true":"false"));
       lines.push("  secondAccountReadinessSummary guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
       lines.push("  secondAccountReadinessSummary next: action="+(evidence.nextOperatorAction||"unknown")+" / stage="+(evidence.operatorBlockingStage||"unknown")+" / reason="+(evidence.readinessBlockingReason||"none"));
       lines.push("  secondAccountReadinessSummary checklist: stages="+(Array.isArray(evidence.operatorChecklistStages)&&evidence.operatorChecklistStages.length?evidence.operatorChecklistStages.join(" -> "):"missing")+" / loginSteps="+(evidence.operatorChecklistStartsLoginCount??0)+" / realTrafficSteps="+(evidence.operatorChecklistUsesRealTrafficCount??0));

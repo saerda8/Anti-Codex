@@ -2106,6 +2106,13 @@ function summarizeGate(definition) {
       if (report.readyForOperatorLogin !== false) semanticFailures.push("second_account_readiness_summary_ready_too_early");
       if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("second_account_readiness_summary_release_proof_claimed");
       if (report.goalComplete !== false) semanticFailures.push("second_account_readiness_summary_goal_complete_claimed");
+      if (typeof report.currentWindowsUserSid !== "string" || !report.currentWindowsUserSid.trim()) semanticFailures.push("second_account_readiness_summary_current_sid_missing");
+      if (report.targetUserSidMatchesCurrentUser !== false) semanticFailures.push("second_account_readiness_summary_target_sid_matches_current");
+      if (report.targetUserIsCurrentUser !== false) semanticFailures.push("second_account_readiness_summary_target_is_current_user");
+      if ((report.targetUserExists === true || report.readyForOperatorLogin === true || report.safeToAskUserForSecondAccountLogin === true)
+        && (typeof report.targetWindowsUserSid !== "string" || !report.targetWindowsUserSid.trim())) semanticFailures.push("second_account_readiness_summary_target_sid_missing_when_ready");
+      if ((report.readyForOperatorLogin === true || report.safeToAskUserForSecondAccountLogin === true)
+        && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("second_account_readiness_summary_identity_boundary_unverified");
       if (!String(report.nextOperatorAction || "")) semanticFailures.push("second_account_readiness_summary_next_action_missing");
       if (!String(report.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1")
         || !String(report.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("second_account_readiness_summary_login_command_missing");

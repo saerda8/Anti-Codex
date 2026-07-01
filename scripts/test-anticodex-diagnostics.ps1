@@ -181,6 +181,15 @@ function Test-SecondAccountReadinessSummaryEvidence {
     if ($evidence.startedLogin -ne $false) { Add-Failure "second-account readiness summary started login" }
     if ($evidence.capturesPassword -ne $false) { Add-Failure "second-account readiness summary captures password" }
     if ($evidence.storesPassword -ne $false) { Add-Failure "second-account readiness summary stores password" }
+    if (-not [string]$evidence.currentWindowsUserSidPresent -and -not [string]$evidence.currentWindowsUserSid) { Add-Failure "second-account readiness summary current SID missing" }
+    if ($evidence.targetUserSidMatchesCurrentUser -ne $false) { Add-Failure "second-account readiness summary target SID matches current user" }
+    if ($evidence.targetUserIsCurrentUser -ne $false) { Add-Failure "second-account readiness summary target is current user" }
+    if (($evidence.targetUserExists -eq $true -or $evidence.readyForOperatorLogin -eq $true -or $evidence.safeToAskUserForSecondAccountLogin -eq $true) -and $evidence.targetWindowsUserSidPresent -ne $true) {
+        Add-Failure "second-account readiness summary target SID missing when user exists"
+    }
+    if (($evidence.readyForOperatorLogin -eq $true -or $evidence.safeToAskUserForSecondAccountLogin -eq $true) -and $evidence.targetUserIdentityBoundaryOk -ne $true) {
+        Add-Failure "second-account readiness summary identity boundary unverified"
+    }
     if ($evidence.readyForOperatorLogin -ne $false) { Add-Failure "second-account readiness summary ready too early" }
     if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account readiness summary claims account proof" }
     if ($evidence.goalComplete -ne $false) { Add-Failure "second-account readiness summary claims goal complete" }

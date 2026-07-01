@@ -166,6 +166,11 @@ foreach ($step in @(
 }
 
 $targetUserExists = ($status -and $status.targetUserExists -eq $true) -or ($prepare -and $prepare.targetUserExists -eq $true)
+$currentWindowsUserSid = if ($status -and ($status.PSObject.Properties.Name -contains "currentWindowsUserSid")) { [string]$status.currentWindowsUserSid } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "currentWindowsUserSid")) { [string]$prepare.currentWindowsUserSid } else { "" }
+$targetWindowsUserSid = if ($status -and ($status.PSObject.Properties.Name -contains "targetWindowsUserSid")) { [string]$status.targetWindowsUserSid } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetWindowsUserSid")) { [string]$prepare.targetWindowsUserSid } else { "" }
+$targetUserSidMatchesCurrentUser = if ($status -and ($status.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$status.targetUserSidMatchesCurrentUser } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$prepare.targetUserSidMatchesCurrentUser } else { $false }
+$targetUserIdentityBoundaryOk = if ($status -and ($status.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$status.targetUserIdentityBoundaryOk } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$prepare.targetUserIdentityBoundaryOk } else { $false }
+$targetUserIsCurrentUser = if ($status -and ($status.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$status.targetUserIsCurrentUser } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$prepare.targetUserIsCurrentUser } else { $false }
 $readyForOperatorLogin = ($status -and $status.safeToAskUserForSecondAccountLogin -eq $true -and $status.canProceedToInteractiveLogin -eq $true -and $entrypoint -and $entrypoint.safeToStartLogin -eq $true)
 $releaseAcceptableAccountProof = ($status -and $status.releaseAcceptableAccountProof -eq $true)
 $goalComplete = ($goal -and $goal.goalComplete -eq $true)
@@ -201,6 +206,11 @@ $payload = [ordered]@{
     coverageKind = "second-account-readiness-summary-no-traffic"
     windowsUser = $WindowsUser
     targetUserExists = [bool]$targetUserExists
+    currentWindowsUserSid = $currentWindowsUserSid
+    targetWindowsUserSid = $targetWindowsUserSid
+    targetUserSidMatchesCurrentUser = [bool]$targetUserSidMatchesCurrentUser
+    targetUserIdentityBoundaryOk = [bool]$targetUserIdentityBoundaryOk
+    targetUserIsCurrentUser = [bool]$targetUserIsCurrentUser
     readyForOperatorLogin = [bool]$readyForOperatorLogin
     safeToAskUserForSecondAccountLogin = ($status -and $status.safeToAskUserForSecondAccountLogin -eq $true)
     canProceedToInteractiveLogin = ($status -and $status.canProceedToInteractiveLogin -eq $true)

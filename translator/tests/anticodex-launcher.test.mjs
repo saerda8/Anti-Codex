@@ -14254,10 +14254,10 @@ test("task plan current status distinguishes release readiness from second-accou
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
   assert.match(currentStatus, /shortReady:true/);
-  assert.match(currentStatus, /releaseReady:false|not complete/);
-  assert.match(currentStatus, /complex-project parity as unsolved|complex-project.*red|complex.*remains red/);
+  assert.match(currentStatus, /releaseReady:true/);
+  assert.match(currentStatus, /active goal still lacks separate Antigravity account proof|second Antigravity account proof still requires/);
   assert.match(currentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
-  assert.match(currentStatus, /UI_AGENTIC_STEP_FLOW_SMOKE_1782915124978/);
+  assert.match(currentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782942452664/);
   assert.match(currentStatus, /quota-exhausted|quota exhaustion/);
   assert.match(currentStatus, /claude-sonnet-4-6/);
   assert.match(currentStatus, /compactionResume/);
@@ -14265,10 +14265,10 @@ test("task plan current status distinguishes release readiness from second-accou
   assert.match(currentStatus, /separateAccountVerified:false/);
   assert.match(currentStatus, /releaseAcceptableAccountProof:false/);
   assert.match(handoffCurrentStatus, /shortReady:true/);
-  assert.match(handoffCurrentStatus, /releaseReady:false|not complete/);
-  assert.match(handoffCurrentStatus, /complex-project parity as unsolved|complex-project.*red|complex.*remains red/);
+  assert.match(handoffCurrentStatus, /releaseReady:true/);
+  assert.match(handoffCurrentStatus, /Full active-goal completion is still blocked|active goal still needs separate Antigravity account proof/);
   assert.match(handoffCurrentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
-  assert.match(handoffCurrentStatus, /UI_AGENTIC_STEP_FLOW_SMOKE_1782915124978/);
+  assert.match(handoffCurrentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782942452664/);
   assert.match(handoffCurrentStatus, /claude-sonnet-4-6/);
   assert.match(handoffCurrentStatus, /separateAccountVerified:false/);
   assert.match(handoffCurrentStatus, /releaseAcceptableAccountProof:false/);
@@ -15070,6 +15070,11 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /test-anticodex-release-gates\.mjs --compact-status/);
   assert.match(secondAccountReadinessSummary, /latest-second-account-readiness-summary\.json/);
   assert.match(secondAccountReadinessSummary, /readyForOperatorLogin/);
+  assert.match(secondAccountReadinessSummary, /currentWindowsUserSid/);
+  assert.match(secondAccountReadinessSummary, /targetWindowsUserSid/);
+  assert.match(secondAccountReadinessSummary, /targetUserSidMatchesCurrentUser/);
+  assert.match(secondAccountReadinessSummary, /targetUserIdentityBoundaryOk/);
+  assert.match(secondAccountReadinessSummary, /targetUserIsCurrentUser/);
   assert.match(secondAccountReadinessSummary, /nextOperatorAction/);
   assert.match(secondAccountReadinessSummary, /operatorChecklistStages/);
   assert.match(secondAccountReadinessSummary, /operatorChecklistStartsLoginCount/);
@@ -15090,6 +15095,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(diagnosticsTest, /second-account readiness summary caveat missing/);
   assert.doesNotMatch(secondAccountReadinessSummary, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|AllowRealTraffic|StartLoginApproval|\.env/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence/);
+  assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*targetUserIdentityBoundaryOk/);
+  assert.match(diagnosticsTest, /second-account readiness summary identity boundary unverified/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*operatorChecklistStages/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*operatorChecklistStartsLoginCount/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*manualSetupCommandHint/);
@@ -15099,8 +15106,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /secondAccountReadinessSummary/);
   assert.match(releaseGates, /latest-second-account-readiness-summary\.json/);
   assert.match(releaseGates, /requireSecondAccountReadinessSummarySemantics/);
+  assert.match(releaseGates, /second_account_readiness_summary_identity_boundary_unverified/);
   assert.match(releaseGates, /test-anticodex-second-account-readiness-summary\.ps1/);
   assert.match(server, /latest-second-account-readiness-summary\.json/);
+  assert.match(server, /secondAccountReadinessSummary identity/);
 
   assert.match(readiness, /reportName\s*=\s*"antigravity-cli-windows-user-readiness"/);
   assert.match(readiness, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);

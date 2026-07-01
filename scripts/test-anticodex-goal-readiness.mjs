@@ -303,6 +303,11 @@ const secondAccountReadinessSummary = {
   capturesPassword: secondSummary.capturesPassword === true,
   storesPassword: secondSummary.storesPassword === true,
   targetUserExists: secondSummary.targetUserExists === true,
+  currentWindowsUserSid: String(secondSummary.currentWindowsUserSid || ""),
+  targetWindowsUserSid: String(secondSummary.targetWindowsUserSid || ""),
+  targetUserSidMatchesCurrentUser: secondSummary.targetUserSidMatchesCurrentUser === true,
+  targetUserIdentityBoundaryOk: secondSummary.targetUserIdentityBoundaryOk === true,
+  targetUserIsCurrentUser: secondSummary.targetUserIsCurrentUser === true,
   readyForOperatorLogin: secondSummary.readyForOperatorLogin === true,
   safeToAskUserForSecondAccountLogin: secondSummary.safeToAskUserForSecondAccountLogin === true,
   canProceedToInteractiveLogin: secondSummary.canProceedToInteractiveLogin === true,
@@ -441,6 +446,10 @@ const proven = {
     && secondAccountReadinessSummary.storesPassword === false
     && secondAccountReadinessSummary.releaseAcceptableAccountProof === false
     && secondAccountReadinessSummary.goalComplete === false
+    && secondAccountReadinessSummary.currentWindowsUserSid.length > 0
+    && secondAccountReadinessSummary.targetUserSidMatchesCurrentUser === false
+    && secondAccountReadinessSummary.targetUserIsCurrentUser === false
+    && (secondAccountReadinessSummary.targetUserExists === false || (secondAccountReadinessSummary.targetWindowsUserSid.length > 0 && secondAccountReadinessSummary.targetUserIdentityBoundaryOk === true))
     && secondAccountReadinessSummary.nextOperatorAction.length > 0
     && secondAccountReadinessSummary.manualSetupCommandHint.length > 0
     && secondAccountReadinessSummary.operatorChecklistOrderOk
