@@ -8,6 +8,7 @@ import {
   antigravityAccountSnapshot,
   antigravityCliArgs,
   antigravityCliIsolationEnv,
+  antigravityCliQuotaErrorFromText,
   antigravityNativeToolCapabilitySummary,
   antigravityModelOnlyToolConfig,
   createDesktopConnectionCache,
@@ -31,6 +32,18 @@ import {
   runAntigravityNativeTurnStreamed,
   windowsAntigravityCliInvocation,
 } from "../antigravity-agentapi.mjs";
+
+test("Antigravity CLI quota logs are converted to typed quota errors", () => {
+  const error = antigravityCliQuotaErrorFromText(
+    "RESOURCE_EXHAUSTED (code 429): Individual quota reached. Please upgrade your subscription.",
+  );
+
+  assert.equal(error.type, "antigravity_quota_exceeded");
+  assert.equal(error.statusCode, 429);
+  assert.equal(error.retryable, false);
+  assert.equal(error.diagnosis, "quota_or_limit_reached");
+  assert.match(error.message, /Individual quota reached/);
+});
 
 test("antigravity account snapshot exposes a stable fingerprint without account PII", () => {
   const snapshot = antigravityAccountSnapshot({
@@ -584,6 +597,19 @@ test("extractCliAssistantText reads the assistant response from protobuf strings
     "中文回复正常",
   ]);
   assert.equal(extractCliAssistantText(payload), "中文回复正常");
+});
+
+test("extractCliAssistantText keeps uppercase marker responses from Claude CLI payloads", () => {
+  const payload = Buffer.concat([
+    protobufString("sessionID"),
+    protobufString("req_vrtx_011CcaVJdwKseJtPMapSEA4rX"),
+    protobufString("bot-76dffda8-afc1-4fbd-ad89-9724fb6024e3"),
+    protobufString("ACCOUNT_PROXY_READY_24882"),
+    protobufString("The user wants me to reply with exactly the marker text and no extra words."),
+    protobufString("ACCOUNT_PROXY_READY_24882"),
+  ]);
+
+  assert.equal(extractCliAssistantText(payload), "ACCOUNT_PROXY_READY_24882");
 });
 
 test("runAntigravityNativeTurn calls onCascadeStarted with cascadeId and connection", async () => {

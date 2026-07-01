@@ -512,6 +512,24 @@ export function extractCliAssistantText(payload) {
     .sort((a, b) => b.count - a.count || b.value.length - a.value.length || b.index - a.index)[0].value;
 }
 
+export function antigravityCliQuotaErrorFromText(value) {
+  const text = String(value ?? "");
+  if (!/(?:RESOURCE_EXHAUSTED|Individual\s+quota\s+reached|quota\s+(?:reached|exceeded)|usage\s+limit\s+reached|limit\s+reached)/i.test(text)) {
+    return null;
+  }
+  const line = text
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => /(?:RESOURCE_EXHAUSTED|Individual\s+quota\s+reached|quota\s+(?:reached|exceeded)|usage\s+limit\s+reached|limit\s+reached)/i.test(item));
+  const message = line || "Antigravity quota or usage limit reached.";
+  const error = new Error(message);
+  error.type = "antigravity_quota_exceeded";
+  error.statusCode = 429;
+  error.retryable = false;
+  error.diagnosis = "quota_or_limit_reached";
+  return error;
+}
+
 export function antigravityCliArgs({ model, prompt, timeoutMs, logPath }) {
   return [
     "--log-file", logPath,
@@ -743,14 +761,17 @@ export async function runAntigravityTextTurn(prompt, options = {}) {
     captureStdout: false,
   });
   try {
+    const logText = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+    const quotaError = antigravityCliQuotaErrorFromText(`${result.stderr || ""}\n${result.stdout || ""}\n${logText}`);
     if (!result.ok) {
+      if (quotaError) throw quotaError;
       const detail = result.timedOut ? `Antigravity timed out after ${timeoutMs}ms.` : "";
       throw new Error(result.stderr || result.stdout || detail || "Antigravity CLI request failed.");
     }
     const stdout = result.stdout.trim();
-    const logText = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
     const conversationId = extractCreatedConversationId(logText);
     if (stdout) return { conversationId, text: stdout, trajectory: null };
+    if (quotaError) throw quotaError;
     if (!conversationId) throw new Error("Antigravity CLI completed without a conversation id.");
     const text = await readCliConversationText(conversationId, {
       ...process.env,
@@ -1044,6 +1065,7 @@ function isAssistantTextCandidate(value) {
   if (!value || value === "sessionID") return false;
   if (/^(?:req_|bot-)/i.test(value)) return false;
   if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value)) return false;
+  if (/^[A-Z][A-Z0-9_]{6,120}$/.test(value) && value.includes("_")) return true;
   if (/^[A-Za-z0-9_-]{20,32}$/.test(value) && !/\s/.test(value)) return false;
   if (/^-?\d+$/.test(value)) return false;
   if (value.length > 80 && /^[A-Za-z0-9+/=]+$/.test(value)) return false;

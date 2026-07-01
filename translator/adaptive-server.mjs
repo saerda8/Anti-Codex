@@ -419,7 +419,7 @@ function isAntigravityQuotaOrLimitFailure(error) {
     const status = Number(error?.statusCode ?? error?.status ?? 0);
     if (type === "antigravity_quota_exceeded" || code === "quota_or_limit_reached") return true;
     if (status === 402) return true;
-    if (/quota|usage\s+limit|daily\s+limit|rate\s+limit|too\s+many\s+requests|billing|payment|required\s+balance|limit\s+reached|limit\s+exceeded/i.test(message)) return true;
+    if (/RESOURCE_EXHAUSTED|Individual\s+quota\s+reached|quota|usage\s+limit|daily\s+limit|rate\s+limit|too\s+many\s+requests|billing|payment|required\s+balance|limit\s+reached|limit\s+exceeded/i.test(message)) return true;
     return false;
 }
 

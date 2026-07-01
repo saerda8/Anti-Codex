@@ -14,7 +14,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
 
 const startedAt = Date.now();
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
-const REQUIRED_RELEASE_GATES = ["accountProxyReadiness", "postVerification"];
+const BASE_REQUIRED_RELEASE_GATES = ["accountProxyReadiness", "postVerification"];
 
 function readReport(fileName) {
   const path = resolve(reportRoot, fileName);
@@ -60,7 +60,7 @@ const goal = goalReport.report || {};
 const release = releaseReport.report || {};
 const account = accountReport.report || {};
 const secondAccountLoginEntrypoint = secondAccountLoginEntrypointReport.report || {};
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 
 const uniqueRefreshTasks = asArray(roadmap.uniqueRefreshTasks);
 const pendingRealTaskScenarios = asObjectArray(roadmap.pendingRealTaskScenarios)
@@ -74,6 +74,7 @@ const pendingRealTaskScenarios = asObjectArray(roadmap.pendingRealTaskScenarios)
   .filter((item) => item.taskMode);
 const requiredRealTrafficBlockedGates = asArray(release.requiredRealTrafficBlockedGates);
 const effectiveMissingRequired = asArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
+const currentRequiredReleaseGateIds = [...new Set([...BASE_REQUIRED_RELEASE_GATES, ...requiredRealTrafficBlockedGates])];
 const effectiveReleaseBlockedOnlyByRequiredRealTraffic = release.releaseBlockedOnlyByRequiredRealTraffic === true
   || (effectiveMissingRequired.length > 0
     && effectiveMissingRequired.length === requiredRealTrafficBlockedGates.length
@@ -140,8 +141,8 @@ const realTaskRefresh = {
 const releaseRealTrafficGates = {
   needed: requiredRealTrafficBlockedGates.length > 0,
   gateIds: requiredRealTrafficBlockedGates,
-  requiredGateIds: REQUIRED_RELEASE_GATES,
-  completedGateIds: effectiveReleaseReady && requiredRealTrafficBlockedGates.length === 0 ? REQUIRED_RELEASE_GATES : [],
+  requiredGateIds: currentRequiredReleaseGateIds,
+  completedGateIds: currentRequiredReleaseGateIds.filter((gateId) => !requiredRealTrafficBlockedGates.includes(gateId) && !effectiveMissingRequired.includes(gateId)),
   requiredReleaseComplete: effectiveReleaseReady && requiredRealTrafficBlockedGates.length === 0,
   actions: requiredReleaseRealTrafficActions,
   requiredActions: requiredReleaseRealTrafficActions,

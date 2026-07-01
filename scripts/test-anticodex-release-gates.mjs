@@ -893,6 +893,8 @@ function summarizeGate(definition) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_gate_missing`);
         if (requiredReleaseComplete) {
           if (!completedRequiredGateIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_completed_gate_missing`);
+        } else if (completedRequiredGateIds.includes(gateId)) {
+          // Already completed gates stay in completedRequiredGateIds, not pending actions.
         } else {
           if (!requiredActionIds.includes(gateId)) semanticFailures.push(`required_real_traffic_sequence_${gateId}_action_missing`);
         }
@@ -951,6 +953,8 @@ function summarizeGate(definition) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_gate_missing`);
         if (requiredReleaseComplete) {
           if (!completedRequiredGateIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_completed_gate_missing`);
+        } else if (completedRequiredGateIds.includes(gateId)) {
+          // Already completed gates stay in completedRequiredGateIds, not pending actions.
         } else {
           if (!requiredActionIds.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_action_missing`);
           if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_real_run_readiness_${gateId}_blocked_gate_missing`);
@@ -1017,6 +1021,8 @@ function summarizeGate(definition) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_gate_missing`);
         if (requiredReleaseComplete) {
           if (!completedRequiredGateIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_completed_gate_missing`);
+        } else if (completedRequiredGateIds.includes(gateId)) {
+          // Already completed gates stay in completedRequiredGateIds, not pending stages.
         } else {
           if (!requiredActionIds.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_action_missing`);
           if (!blockedGates.includes(gateId)) semanticFailures.push(`approved_real_run_sequence_${gateId}_blocked_gate_missing`);
@@ -1189,6 +1195,8 @@ function summarizeGate(definition) {
         if (!requiredGateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_required_gate_missing`);
         if (requiredReleaseComplete) {
           if (!completedGateIds.includes(gateId)) semanticFailures.push(`real_approval_plan_${gateId}_completed_gate_missing`);
+        } else if (completedGateIds.includes(gateId)) {
+          // Partially completed release gates should not be required as pending gates.
         } else if (!gateIds.includes(gateId)) {
           semanticFailures.push(`real_approval_plan_${gateId}_gate_missing`);
         }
@@ -1265,6 +1273,8 @@ function summarizeGate(definition) {
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (requiredReleaseComplete) {
           if (!completedApprovalGates.includes(gateId)) semanticFailures.push(`goal_readiness_${gateId}_completed_gate_missing`);
+        } else if (completedApprovalGates.includes(gateId)) {
+          // Already completed gates do not need a pending blocker entry.
         } else {
           if (!blockedGates.includes(gateId)) semanticFailures.push(`goal_readiness_${gateId}_blocked_gate_missing`);
           if (!blockers.includes(`required_real_traffic_gate_blocked:${gateId}`)) semanticFailures.push(`goal_readiness_${gateId}_blocker_missing`);

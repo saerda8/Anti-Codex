@@ -13378,6 +13378,8 @@ test("Anti-Codex ships an account and proxy readiness verifier", () => {
   assert.match(readiness, /diagnosisDetail/);
   assert.match(readiness, /detail = \$diagnosisDetail/);
   assert.match(readiness, /phaseSummary/);
+  assert.match(readiness, /quota_or_limit_reached/);
+  assert.match(readiness, /RESOURCE_EXHAUSTED\|Individual\\s\+quota\\s\+reached/);
   assert.match(readiness, /realRequestAttempted/);
   assert.match(readiness, /realRequestMode/);
   assert.match(readiness, /streamingFallbackAttempted/);
@@ -14144,15 +14146,20 @@ test("task plan current status distinguishes release readiness from second-accou
   const currentStatus = taskPlan.split("## Goal")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  assert.match(currentStatus, /releaseReady:true/);
-  assert.match(currentStatus, /missingRequired:\[\]/);
-  assert.match(currentStatus, /requiredRealTrafficBlockedGates:\[\]/);
+  assert.match(currentStatus, /shortReady:true/);
+  assert.match(currentStatus, /releaseReady:false/);
+  assert.match(currentStatus, /quota-exhausted|quota exhaustion/);
+  assert.match(currentStatus, /quota_or_limit_reached|antigravity_quota_exceeded/);
+  assert.match(currentStatus, /claude-sonnet-4-6/);
+  assert.match(currentStatus, /ACCOUNT_PROXY_READY_48033/);
   assert.match(currentStatus, /goalComplete:false/);
   assert.match(currentStatus, /separateAccountVerified:false/);
   assert.match(currentStatus, /releaseAcceptableAccountProof:false/);
-  assert.match(handoffCurrentStatus, /releaseReady:true/);
-  assert.match(handoffCurrentStatus, /missingRequired:\[\]/);
-  assert.match(handoffCurrentStatus, /requiredRealTrafficBlockedGates:\[\]/);
+  assert.match(handoffCurrentStatus, /shortReady:true/);
+  assert.match(handoffCurrentStatus, /releaseReady:false/);
+  assert.match(handoffCurrentStatus, /quota-exhausted|quota exhaustion/);
+  assert.match(handoffCurrentStatus, /RESOURCE_EXHAUSTED|Individual quota reached/);
+  assert.match(handoffCurrentStatus, /claude-sonnet-4-6/);
   assert.match(handoffCurrentStatus, /separateAccountVerified:false/);
   assert.match(handoffCurrentStatus, /releaseAcceptableAccountProof:false/);
 });

@@ -64,7 +64,7 @@ const completedRequiredGateIds = asStringArray(sequence.completedRequiredGateIds
 const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const requiredCommands = asStringArray(sequence.commands);
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const requiredRealTrafficBlockedGates = asStringArray(release.requiredRealTrafficBlockedGates);
 const effectiveReleaseReady = release.releaseReady === true
@@ -96,8 +96,11 @@ for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
 }
 if (missingTaskScenarios.length > 0) failures.push(`missing_pending_task_scenarios:${missingTaskScenarios.join(",")}`);
 if (pendingRealTaskScenarios.some((item) => item.realTrafficRequired !== true || item.acceptanceEvidence.length < 1 || item.expectedResultPresent !== true)) failures.push("incomplete_pending_task_scenarios");
-for (const requiredGate of ["accountProxyReadiness", "postVerification"]) {
+for (const requiredGate of (requiredReleaseGateIds.length > 0 ? requiredReleaseGateIds : ["accountProxyReadiness", "postVerification"])) {
   if (!requiredReleaseGateIds.includes(requiredGate)) failures.push(`missing_required_gate:${requiredGate}`);
+  if (completedRequiredGateIds.includes(requiredGate)) {
+    continue;
+  }
   if (requiredReleaseComplete) {
     if (!completedRequiredGateIds.includes(requiredGate)) failures.push(`missing_completed_required_gate:${requiredGate}`);
   } else if (!requiredActionIds.includes(requiredGate)) {

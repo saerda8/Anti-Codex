@@ -15,7 +15,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
 const startedAt = Date.now();
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const EXPECTED_REAL_TASK_MODES = ["web-search", "free-chat"];
-const REQUIRED_RELEASE_GATES = ["accountProxyReadiness", "postVerification"];
+const BASE_REQUIRED_RELEASE_GATES = ["accountProxyReadiness", "postVerification"];
 
 function readReport(fileName) {
   const path = resolve(reportRoot, fileName);
@@ -80,11 +80,22 @@ const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const optionalActionIds = asStringArray(sequence.optionalActionIds);
 const requiredGateIds = asStringArray(sequence.requiredGateIds);
 const requiredBlockedGates = asStringArray(readiness.requiredRealTrafficBlockedGates);
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const effectiveReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const effectiveReleaseReady = release.releaseReady === true
   || (release.shortReady === true && effectiveReleaseMissing.length === 0 && requiredBlockedGates.length === 0);
 const realTaskCommand = String(approval.realTaskRefresh?.command || "");
+const requiredReleaseActionStages = asObjectArray(approval.releaseRealTrafficGates?.requiredActions)
+  .map((item) => stage(String(item.id || "required-release-real-traffic"), String(item.phase || "required-release-real-traffic"), String(item.command || ""), {
+    requiresRealTraffic: true,
+    requiresExplicitUserApproval: true,
+    requiresGatewayStart: item.requiresGatewayStart === true,
+    highImpact: item.highImpact === true,
+    failFastIfNotReady: true,
+    expectedReport: item.id ? `latest-${String(item.id).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}.json` : "",
+    evidence: [String(item.id || "requiredReleaseGate"), "usedRealTraffic"],
+  }))
+  .filter((item) => item.id && item.command);
 const accountProofPlan = account.postLoginProofPlan && typeof account.postLoginProofPlan === "object" ? account.postLoginProofPlan : {};
 const accountProofCommand = String(secondAccountLoginEntrypoint.postLoginProofCommandTemplate || accountProofPlan.commandTemplate || "");
 const loginCommand = String(secondAccountLoginEntrypoint.approvedLoginCommandTemplate || "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\\AntiCodexModel -StartLogin -StartLoginApproval start-separate-windows-user-login");
@@ -146,23 +157,25 @@ const approvedRealRunSequence = [
       evidence: ["web-search", "free-chat", "usedRealTraffic"],
     }),
   ] : []),
-  stage("accountProxyReadiness", "required-release-real-traffic", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-account-proxy-readiness.ps1 -TimeoutSec 120", {
-    requiresRealTraffic: true,
-    requiresExplicitUserApproval: true,
-    requiresGatewayStart: true,
-    failFastIfNotReady: true,
-    expectedReport: "latest-account-proxy-readiness.json",
-    evidence: ["accountReady", "refreshOk", "realRequestOk"],
-  }),
-  stage("postVerification", "required-release-real-traffic", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10", {
-    requiresRealTraffic: true,
-    requiresExplicitUserApproval: true,
-    requiresGatewayStart: true,
-    highImpact: true,
-    failFastIfNotReady: true,
-    expectedReport: "latest-post-verification.json",
-    evidence: ["overallOk", "releaseReady", "usedRealTraffic"],
-  }),
+  ...(requiredReleaseActionStages.length > 0 ? requiredReleaseActionStages : [
+    stage("accountProxyReadiness", "required-release-real-traffic", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-account-proxy-readiness.ps1 -TimeoutSec 120", {
+      requiresRealTraffic: true,
+      requiresExplicitUserApproval: true,
+      requiresGatewayStart: true,
+      failFastIfNotReady: true,
+      expectedReport: "latest-account-proxy-readiness.json",
+      evidence: ["accountReady", "refreshOk", "realRequestOk"],
+    }),
+    stage("postVerification", "required-release-real-traffic", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-post-verification.ps1 -TimeoutMinutes 10", {
+      requiresRealTraffic: true,
+      requiresExplicitUserApproval: true,
+      requiresGatewayStart: true,
+      highImpact: true,
+      failFastIfNotReady: true,
+      expectedReport: "latest-post-verification.json",
+      evidence: ["overallOk", "releaseReady", "usedRealTraffic"],
+    }),
+  ]),
 ];
 
 const optionalActionsSeparated = optionalActionIds.length > 0 && optionalActionIds.every((id) => !requiredActionIds.includes(id));
@@ -185,8 +198,11 @@ for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
   if (!scenario) failures.push(`missing_real_task_scenario:${taskMode}`);
   else if (scenario.realTrafficRequired !== true || scenario.acceptanceEvidence.length < 1 || scenario.expectedResultPresent !== true) failures.push(`incomplete_real_task_scenario:${taskMode}`);
 }
-for (const gateId of REQUIRED_RELEASE_GATES) {
+for (const gateId of (requiredGateIds.length > 0 ? requiredGateIds : BASE_REQUIRED_RELEASE_GATES)) {
   if (!requiredGateIds.includes(gateId)) failures.push(`missing_required_gate:${gateId}`);
+  if (completedRequiredGateIds.includes(gateId)) {
+    continue;
+  }
   if (requiredReleaseComplete) {
     if (!completedRequiredGateIds.includes(gateId)) failures.push(`missing_completed_required_gate:${gateId}`);
   } else {
@@ -230,7 +246,7 @@ const payload = {
   startsLoginStageCount: approvedRealRunSequence.filter((item) => item.startsLogin).length,
   requiredRealTaskModes: realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : [],
   pendingRealTaskScenarios,
-  requiredReleaseGateIds: REQUIRED_RELEASE_GATES,
+  requiredReleaseGateIds: requiredGateIds.length > 0 ? requiredGateIds : BASE_REQUIRED_RELEASE_GATES,
   requiredActionIds,
   completedRequiredGateIds,
   requiredReleaseComplete,

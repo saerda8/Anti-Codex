@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 import {
   antigravityPromptLimits,
@@ -1884,6 +1887,23 @@ test("streamAntigravityUpstream forwards user text after a native tool result in
   })) {}
 
   assert.equal(followUpPrompt, "Confirm X and RECORDED.");
+});
+
+test("adaptive-server Antigravity quota classifier must recognise RESOURCE_EXHAUSTED / Individual quota reached", () => {
+  const srcPath = join(dirname(fileURLToPath(import.meta.url)), "..", "adaptive-server.mjs");
+  const src = readFileSync(srcPath, "utf-8");
+
+  // Static source assertion: the quota-or-limit classification path inside
+  // adaptive-server.mjs must explicitly handle the gRPC RESOURCE_EXHAUSTED code
+  // or the "Individual quota reached" text so that Antigravity CLI quota exhaustion
+  // is classified as quota_or_limit_reached rather than falling through to
+  // temporarily_unavailable or generic oauth/network error handling.
+  const hasResourceExhausted = /RESOURCE_EXHAUSTED/i.test(src);
+  const hasIndividualQuotaReached = /Individual\s+quota\s+reached/i.test(src);
+  assert.ok(
+    hasResourceExhausted || hasIndividualQuotaReached,
+    "adaptive-server.mjs must include RESOURCE_EXHAUSTED or 'Individual quota reached' handling in the Antigravity traffic failure classification path",
+  );
 });
 
 async function delay(ms) {

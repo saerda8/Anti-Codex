@@ -194,6 +194,25 @@ function New-MessageInput {
 function Get-AntiCodexResponseText {
     param($Response)
 
+    if ($Response -is [string]) {
+        $streamParts = New-Object System.Collections.Generic.List[string]
+        foreach ($line in ($Response -split "`r?`n")) {
+            if ($line -notmatch '^data:\s*(.+)$') { continue }
+            $rawJson = $Matches[1]
+            try {
+                $event = $rawJson | ConvertFrom-Json
+                if ($event.type -eq "response.output_text.delta" -and $event.delta) {
+                    $streamParts.Add([string]$event.delta) | Out-Null
+                } elseif ($event.type -eq "response.output_text.done" -and $event.text -and $streamParts.Count -eq 0) {
+                    $streamParts.Add([string]$event.text) | Out-Null
+                }
+            } catch {
+                continue
+            }
+        }
+        return (($streamParts.ToArray()) -join "").Trim()
+    }
+
     $parts = foreach ($item in @($Response.output)) {
         if ($item.type -ne "message") { continue }
         foreach ($content in @($item.content)) {
@@ -258,8 +277,18 @@ function Get-Diagnosis {
         param([string]$Message)
         return [string]$Message -match "aborted|timed out|timeout|unexpected EOF|connectex|connection.*failed|connection.*closed|underlying connection was closed|kept alive|network|fetch failed"
     }
+    function Test-QuotaOrLimitError {
+        param($ErrorValue)
+        if (-not $ErrorValue) { return $false }
+        return $ErrorValue.type -eq "antigravity_quota_exceeded" -or
+            $ErrorValue.diagnosis -eq "quota_or_limit_reached" -or
+            [string]$ErrorValue.message -match "RESOURCE_EXHAUSTED|Individual\s+quota\s+reached|quota|usage\s+limit|daily\s+limit|limit\s+reached|limit\s+exceeded"
+    }
 
     if (-not $Health) { return "local_gateway_offline" }
+    if ((Test-QuotaOrLimitError $RequestError) -or (Test-QuotaOrLimitError $RefreshError)) {
+        return "quota_or_limit_reached"
+    }
     if (($RequestError -and (($RequestError.diagnosis -eq "account_verification_required") -or ($RequestError.message -match "Verify your account to continue|PERMISSION_DENIED|account verification"))) -or
         ($RefreshError -and (($RefreshError.diagnosis -eq "account_verification_required") -or ($RefreshError.message -match "Verify your account to continue|PERMISSION_DENIED|account verification")))) {
         return "account_verification_required"
@@ -280,6 +309,7 @@ function Get-Diagnosis {
     if ($RequestError -or $RefreshError) { return "proxy_or_network_unavailable" }
     if ($Health -and $Health.accountTrafficReady -eq $false) {
         if ($Health.accountTrafficDiagnosis -eq "account_verification_required") { return "account_verification_required" }
+        if ($Health.accountTrafficDiagnosis -eq "quota_or_limit_reached" -or $Health.accountTrafficType -eq "antigravity_quota_exceeded") { return "quota_or_limit_reached" }
         if ($Health.accountTrafficType -eq "antigravity_account_unavailable") { return "account_signed_out_or_no_models" }
         return "proxy_or_network_unavailable"
     }
@@ -314,6 +344,7 @@ function Get-SuggestedAction {
         "local_gateway_offline" { return "Open Anti-Codex to start the local gateway, then retry." }
         "account_verification_required" { return "Open Antigravity Desktop, complete the account verification prompt, then retry Anti-Codex." }
         "account_signed_out_or_no_models" { return "Open Antigravity Desktop, sign in, then run Refresh Anti-Codex Models." }
+        "quota_or_limit_reached" { return "Switch the Antigravity account used by Anti-Codex, or wait for the model quota to reset before retrying." }
         "proxy_or_network_circuit_open" { return "Confirm Antigravity Desktop can reach Google through your proxy, wait for the retry window, then retry." }
         "proxy_or_network_unavailable" { return "Check the proxy used by Antigravity Desktop, then retry; Anti-Codex local traffic is already bypassing proxy." }
         "proxy_or_network_transient" { return "Keep Anti-Codex open and retry after the transient Antigravity/proxy error clears." }
