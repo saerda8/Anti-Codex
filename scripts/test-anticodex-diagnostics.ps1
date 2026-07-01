@@ -1615,6 +1615,57 @@ function Test-ApprovedRealRunSequenceSummaryEvidence {
     if ([int]$evidence.failureCount -ne 0) { Add-Failure "approved-real-run-sequence summary has failures" }
 }
 
+function Test-WorkerMcpServerProbeSummaryEvidence {
+    param($WorkerMcpServerProbeSummary)
+    if (-not $WorkerMcpServerProbeSummary) {
+        Add-Failure "diagnostic reports summary missing latest-worker-mcp-server-probe.json"
+        return
+    }
+
+    $evidence = $WorkerMcpServerProbeSummary.workerMcpServerProbeEvidence
+    if (-not $evidence) {
+        Add-Failure "worker-mcp-server-probe summary missing workerMcpServerProbeEvidence"
+        return
+    }
+
+    $required = @(
+        "antigravity-code-worker",
+        "deepseek-code-worker",
+        "deveco-code-worker",
+        "kilo-worker",
+        "mimo-claude-coworker",
+        "mimocode-worker",
+        "opencode-worker"
+    )
+    $requiredWorkers = @(As-FlatArray $evidence.requiredWorkers | ForEach-Object { [string]$_ })
+    $servers = @(As-FlatArray $evidence.servers)
+
+    if ($evidence.reportName -ne "worker-mcp-server-probe") { Add-Failure "worker-mcp-server-probe summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "worker-mcp-server-probe summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "worker-mcp-server-probe summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "worker-mcp-server-probe summary behavior not covered" }
+    if ($evidence.coverageKind -ne "worker-mcp-server-probe-list-tools-only") { Add-Failure "worker-mcp-server-probe summary coverage kind mismatch" }
+    if ($evidence.configPathPresent -ne $true) { Add-Failure "worker-mcp-server-probe summary missing config path" }
+    if ([int]$evidence.passedServerCount -lt $required.Count) { Add-Failure "worker-mcp-server-probe summary passed server count too low" }
+    if ([int]$evidence.serverCount -lt $required.Count -or $servers.Count -lt $required.Count) { Add-Failure "worker-mcp-server-probe summary server count too low" }
+    if (@(As-FlatArray $evidence.missingServers).Count -ne 0) { Add-Failure "worker-mcp-server-probe summary has missing servers" }
+    if (@(As-FlatArray $evidence.incompleteToolCountServers).Count -ne 0) { Add-Failure "worker-mcp-server-probe summary has incomplete tool counts" }
+    foreach ($serverName in $required) {
+        if ($requiredWorkers -notcontains $serverName) {
+            Add-Failure "worker-mcp-server-probe summary missing required worker $serverName"
+        }
+        $entry = @($servers | Where-Object { [string]$_.name -eq $serverName } | Select-Object -First 1)[0]
+        if (-not $entry) {
+            Add-Failure "worker-mcp-server-probe summary missing server entry $serverName"
+            continue
+        }
+        if ($entry.ok -ne $true) { Add-Failure "worker-mcp-server-probe summary server $serverName not ok" }
+        if ([int]$entry.toolCount -lt 1) { Add-Failure "worker-mcp-server-probe summary server $serverName has no tools" }
+        if (@(As-FlatArray $entry.toolNames).Count -lt 1) { Add-Failure "worker-mcp-server-probe summary server $serverName missing tool names" }
+        if ($entry.errorPresent -eq $true) { Add-Failure "worker-mcp-server-probe summary server $serverName has error" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1641,6 +1692,7 @@ function Test-ReportsSummary {
     $requiredRealTrafficSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-required-real-traffic-sequence.json" } | Select-Object -First 1)[0]
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
     $approvedRealRunSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-approved-real-run-sequence.json" } | Select-Object -First 1)[0]
+    $workerMcpServerProbeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-server-probe.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
@@ -1695,6 +1747,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $requiredRealTrafficSequenceSummary) { Test-RequiredRealTrafficSequenceSummaryEvidence $requiredRealTrafficSequenceSummary }
     if ($RequireReleaseReady -or $goalRealRunReadinessSummary) { Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary }
     if ($RequireReleaseReady -or $approvedRealRunSequenceSummary) { Test-ApprovedRealRunSequenceSummaryEvidence $approvedRealRunSequenceSummary }
+    if ($RequireReleaseReady -or $workerMcpServerProbeSummary) { Test-WorkerMcpServerProbeSummaryEvidence $workerMcpServerProbeSummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($localConnectorsSummary) {

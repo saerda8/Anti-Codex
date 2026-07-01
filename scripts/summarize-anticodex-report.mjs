@@ -223,6 +223,7 @@ const isRealApprovalPlanReport = report?.reportName === "real-approval-plan" || 
 const isRequiredRealTrafficSequenceReport = report?.reportName === "required-real-traffic-sequence" || /latest-required-real-traffic-sequence\.json$/i.test(path);
 const isGoalRealRunReadinessReport = report?.reportName === "goal-real-run-readiness" || /latest-goal-real-run-readiness\.json$/i.test(path);
 const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-run-sequence" || /latest-approved-real-run-sequence\.json$/i.test(path);
+const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-probe" || /latest-worker-mcp-server-probe\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1697,6 +1698,27 @@ const summary = {
     noTrafficPrechecks: asApprovedRealRunStages(report.noTrafficPrechecks),
     approvedRealRunSequence: asApprovedRealRunStages(report.approvedRealRunSequence),
     failureCount: Array.isArray(report.failures) ? report.failures.length : null,
+  } : null,
+  workerMcpServerProbeEvidence: isWorkerMcpServerProbeReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    configPathPresent: typeof report.configPath === "string" && report.configPath.trim().length > 0,
+    requiredWorkers: Array.isArray(report.requiredWorkers) ? asStringArray(report.requiredWorkers) : [],
+    passedServerCount: has(report, "passedServerCount") ? report.passedServerCount : null,
+    missingServers: Array.isArray(report.missingServers) ? asStringArray(report.missingServers) : [],
+    incompleteToolCountServers: Array.isArray(report.incompleteToolCountServers) ? asStringArray(report.incompleteToolCountServers) : [],
+    serverCount: Array.isArray(report.servers) ? report.servers.length : null,
+    servers: Array.isArray(report.servers) ? report.servers.map((server) => ({
+      name: asString(server?.name),
+      ok: boolField(server || {}, "ok"),
+      toolCount: has(server || {}, "toolCount") ? server.toolCount : null,
+      toolNames: Array.isArray(server?.toolNames) ? asStringArray(server.toolNames).slice(0, 12) : [],
+      errorPresent: typeof server?.error === "string" && server.error.trim().length > 0,
+    })).filter((server) => server.name) : [],
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),

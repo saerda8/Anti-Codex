@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import { resolve } from "node:path";
 import { Client } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StdioClientTransport } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
 
 const DEFAULT_CONFIG_PATH = "C:/Users/XD/.codex/config.toml";
 const DEFAULT_WORKERS = [
+  "mimo-claude-coworker",
   "mimocode-worker",
   "kilo-worker",
   "opencode-worker",
@@ -16,6 +20,10 @@ const DEFAULT_WORKERS = [
 function argValue(name, fallback = "") {
   const index = process.argv.indexOf(name);
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
+}
+
+function hasArg(name) {
+  return process.argv.includes(name);
 }
 
 function parseTomlValue(raw) {
@@ -115,8 +123,32 @@ async function probeWorker(config) {
   }
 }
 
+function writeReport(payload, reportRoot) {
+  if (!reportRoot || hasArg("--no-write-report")) return null;
+  mkdirSync(reportRoot, { recursive: true });
+  const latest = resolve(reportRoot, "latest-worker-mcp-server-probe.json");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
+  const history = resolve(reportRoot, `${stamp}-worker-mcp-server-probe.json`);
+  const json = `${JSON.stringify({ ...payload, report: { latest, history } }, null, 2)}\n`;
+  for (const file of [latest, history]) {
+    const temp = `${file}.${process.pid}.tmp`;
+    writeFileSync(temp, json, "utf8");
+    renameSync(temp, file);
+    writeFileSync(`${file}.sha256`, `sha256:${createHash("sha256").update(json).digest("hex")}`, "ascii");
+  }
+  return { latest, history };
+}
+
+function finish(payload, reportRoot) {
+  const report = writeReport(payload, reportRoot);
+  const output = report ? { ...payload, report } : payload;
+  console.log(JSON.stringify(output));
+  if (!payload.ok) process.exitCode = 1;
+}
+
 async function main() {
   const configPath = argValue("--config", DEFAULT_CONFIG_PATH);
+  const reportRoot = resolve(argValue("--report-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`));
   const workerArg = argValue("--workers", "");
   const workers = workerArg
     ? workerArg.split(",").map((item) => item.trim()).filter(Boolean)
@@ -128,22 +160,39 @@ async function main() {
   }
 
   const payload = {
+    reportName: "worker-mcp-server-probe",
     ok: servers.length > 0 && servers.every((server) => server.ok),
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    behaviorCovered: true,
+    coverageKind: "worker-mcp-server-probe-list-tools-only",
     checkedAt: new Date().toISOString(),
     configPath,
+    requiredWorkers: workers,
+    passedServerCount: servers.filter((server) => server.ok).length,
+    missingServers: workers.filter((worker) => !servers.some((server) => server.name === worker && server.ok)),
+    incompleteToolCountServers: servers.filter((server) => Number(server.toolCount || 0) < 1).map((server) => server.name),
     servers,
   };
-  console.log(JSON.stringify(payload));
-  if (!payload.ok) process.exitCode = 1;
+  finish(payload, reportRoot);
 }
 
 main().catch((error) => {
-  console.log(JSON.stringify({
+  const reportRoot = resolve(argValue("--report-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`));
+  finish({
+    reportName: "worker-mcp-server-probe",
     ok: false,
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    behaviorCovered: true,
+    coverageKind: "worker-mcp-server-probe-list-tools-only",
     checkedAt: new Date().toISOString(),
     configPath: argValue("--config", DEFAULT_CONFIG_PATH),
+    requiredWorkers: [],
+    passedServerCount: 0,
+    missingServers: [],
+    incompleteToolCountServers: [],
     servers: [],
     error: error?.message || String(error),
-  }));
-  process.exitCode = 1;
+  }, reportRoot);
 });

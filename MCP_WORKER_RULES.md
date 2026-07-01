@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-02 - Direct MCP probe vs current-channel transport
+
+- Task: diagnose why current Codex-channel MCP worker calls appeared unavailable.
+- Result: current-channel calls could return `Transport closed`, but direct SDK `tools/list` probes started all seven configured worker servers and each listed 6 tools. The signed `latest-worker-mcp-server-probe.json` is now part of diagnostics.
+- Cause classification: stale/dead Codex MCP session transport, not broken worker scripts/config.
+- Rule change: before declaring worker MCP unavailable, run/read the direct no-traffic probe and distinguish local server health from current-channel tool exposure. Do not start implementation jobs from a short-lived standalone MCP client unless the client stays alive through wait/get; closing stdin cancels async jobs.
+
 ### 2026-06-20 - Antigravity empty failure
 
 - Job: `ag-66bdafcf-2ffc-41f9-b638-902f5f2c6469`

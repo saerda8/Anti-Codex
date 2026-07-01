@@ -258,6 +258,7 @@ function Read-JsonSummary {
             requiredRealTrafficSequenceEvidence = $json.requiredRealTrafficSequenceEvidence
             goalRealRunReadinessEvidence = $json.goalRealRunReadinessEvidence
             approvedRealRunSequenceEvidence = $json.approvedRealRunSequenceEvidence
+            workerMcpServerProbeEvidence = $json.workerMcpServerProbeEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -367,6 +368,26 @@ function Update-NoTrafficModelRoutingReport {
     }
 }
 
+function Update-WorkerMcpServerProbeReport {
+    $scriptPath = Join-Path $scriptRoot "probe-anticodex-worker-mcp-servers.mjs"
+    if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+        return [pscustomobject]@{
+            ok = $false
+            error = "Missing probe-anticodex-worker-mcp-servers.mjs"
+        }
+    }
+    try {
+        $nodePath = Resolve-NodeForJsonSummary
+        $result = & $nodePath $scriptPath --report-root $reportsRoot 2>&1 | ConvertFrom-Json
+        return $result
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            error = $_.Exception.Message
+        }
+    }
+}
+
 New-Item -ItemType Directory -Path $bundleRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $bundleRoot "logs") -Force | Out-Null
 
@@ -381,6 +402,7 @@ if ($diagnosticsSnapshot -and ($diagnosticsSnapshot.PSObject.Properties.Name -co
 Write-JsonFile (Join-Path $bundleRoot "account.json") (Try-InvokeJson "/anticodex/account")
 Write-JsonFile (Join-Path $bundleRoot "models.json") (Try-InvokeJson "/models")
 Write-JsonFile (Join-Path $bundleRoot "model-routing-refresh.json") (Update-NoTrafficModelRoutingReport)
+Write-JsonFile (Join-Path $bundleRoot "worker-mcp-server-probe.json") (Update-WorkerMcpServerProbeReport) -AllowSafeSummaryFields
 
 $updateStatus = try {
     & (Join-Path $scriptRoot "check-anticodex-update.ps1") -InstallRoot $installRoot -NoPersist | ConvertFrom-Json
@@ -420,6 +442,7 @@ $latestReports = @(
     "latest-required-real-traffic-sequence.json",
     "latest-goal-real-run-readiness.json",
     "latest-approved-real-run-sequence.json",
+    "latest-worker-mcp-server-probe.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

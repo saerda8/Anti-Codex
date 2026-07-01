@@ -12051,6 +12051,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(syncRuntime, /scripts\\test-anticodex-missing-history\.mjs/);
   assert.match(mcpProbe, /StdioClientTransport/);
   assert.match(mcpProbe, /client\.listTools\(\)/);
+  assert.match(mcpProbe, /reportName: "worker-mcp-server-probe"/);
+  assert.match(mcpProbe, /latest-worker-mcp-server-probe\.json/);
+  assert.match(mcpProbe, /mimo-claude-coworker/);
   assert.match(mcpProbe, /mimocode-worker/);
   assert.match(mcpProbe, /antigravity-code-worker/);
   assert.doesNotMatch(mcpProbe, /start_implementation|implement_in_workspace|callTool/);
@@ -12899,6 +12902,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-shortcut-repair.json",
     "latest-ui-coding-project-smoke.json",
     "latest-ui-report-site-smoke.json",
+    "latest-worker-mcp-server-probe.json",
   ];
 
   assert.deepEqual(optionalReports, [
@@ -12932,6 +12936,12 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /passedServerCount/);
   assert.match(goalReadiness, /toolCountByServer/);
   assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
+  assert.match(collector, /worker-mcp-server-probe\.json/);
+  assert.match(collector, /latest-worker-mcp-server-probe\.json/);
+  assert.match(summarizer, /workerMcpServerProbeEvidence/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
+  assert.match(diagnostics, /worker-mcp-server-probe summary missing workerMcpServerProbeEvidence/);
+  assert.match(diagnostics, /mimo-claude-coworker/);
   assert.match(goalReadiness, /desktopAgenticTasks/);
   assert.match(goalReadiness, /agenticCapabilityMatrix/);
   assert.match(goalReadiness, /realTaskCoverageRoadmap/);
