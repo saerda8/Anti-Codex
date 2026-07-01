@@ -7087,7 +7087,48 @@ function responseOutputHasToolCall(output) {
 
 function shouldInsertVisibleToolProgress(originalRequest = {}) {
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
-    return requirement?.autonomousReasoning === true;
+    return requirement?.autonomousReasoning === true || requirement?.agenticStepFlow === true;
+}
+
+function agenticStepFlowPhaseKey(text = "") {
+    const value = String(text || "").replace(/\s+/g, "").replace(/[。.!！]+$/g, "");
+    if (value === "阶段1：准备创建文件") return "phase1";
+    if (value === "阶段2：准备验证文件") return "phase2";
+    return "";
+}
+
+function requestHasAssistantAgenticPhase(originalRequest = {}, phaseKey = "", chatMessages = []) {
+    if (!phaseKey) return false;
+    const input = Array.isArray(originalRequest?.input) ? originalRequest.input : [];
+    const responseInputHasPhase = input.some(item => {
+        if (item?.type !== "message" || item.role !== "assistant") return false;
+        return agenticStepFlowPhaseKey(textFromMessageContent(item.content)) === phaseKey;
+    });
+    if (responseInputHasPhase) return true;
+    const requestMessages = Array.isArray(originalRequest?.messages) ? originalRequest.messages : [];
+    return [...requestMessages, ...(Array.isArray(chatMessages) ? chatMessages : [])].some(message => {
+        if (message?.role !== "assistant") return false;
+        return agenticStepFlowPhaseKey(textFromMessageContent(message.content)) === phaseKey;
+    });
+}
+
+function suppressRepeatedAgenticStepFlowContent(content = "", originalRequest = {}, chatMessages = []) {
+    const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
+    if (requirement?.agenticStepFlow !== true || typeof content !== "string" || !content.trim()) return content;
+    const seenInThisMessage = new Set();
+    const kept = [];
+    let changed = false;
+    for (const line of content.split(/\r?\n/)) {
+        const phaseKey = agenticStepFlowPhaseKey(line);
+        if (phaseKey && (seenInThisMessage.has(phaseKey) || requestHasAssistantAgenticPhase(originalRequest, phaseKey, chatMessages))) {
+            changed = true;
+            continue;
+        }
+        if (phaseKey) seenInThisMessage.add(phaseKey);
+        kept.push(line);
+    }
+    if (!changed) return content;
+    return kept.join("\n").trim();
 }
 
 function visibleToolProgressText(codexName = "", args = "") {
@@ -7099,10 +7140,10 @@ function visibleToolProgressText(codexName = "", args = "") {
         command = String(args || "");
     }
     const text = command.toLowerCase();
+    if (/writealltext|writefilesync|set-content|new-item|out-file|mkdir|copy-item|move-item/.test(text)) return "我创建或更新项目文件。";
     if (/node\s+--test|npm\s+test/.test(text)) return "我运行测试验证当前结果。";
     if (/node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text)) return "我运行本地程序检查输出是否正确。";
-    if (/get-childitem|test-path|select-string|readfile|read-file|cat\s+/.test(text)) return "我读取文件和结果，确认是否满足要求。";
-    if (/writealltext|writefilesync|set-content|new-item|out-file|mkdir|copy-item|move-item/.test(text)) return "我创建或更新项目文件。";
+    if (/get-childitem|get-content|test-path|select-string|readfile|read-file|cat\s+/.test(text)) return "我读取文件和结果，确认是否满足要求。";
     if (/remove-item|del\s+|erase\s+/.test(text)) return "我清理不符合要求的临时文件。";
     if (/shell|exec|command|powershell|terminal/i.test(codexName)) return "我执行一个本地命令推进任务。";
     return `我调用 ${codexName || "工具"} 推进任务。`;
@@ -7921,6 +7962,18 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
     ].join("\n");
 }
 
+function normalizeArtifactPowerShellUtf8NoBom(command = "") {
+    if (typeof command !== "string" || !/(?:WriteAllText|AppendAllText)/i.test(command)) return command;
+    const alreadyDefinesAntiCodexUtf8NoBom = /\$__antiCodexUtf8NoBom\b/.test(command);
+    let normalized = command.replace(
+        /,\s*\[(?:System\.)?Text\.Encoding\]::UTF8\s*\)/g,
+        ", $__antiCodexUtf8NoBom)"
+    );
+    if (normalized === command) return command;
+    if (alreadyDefinesAntiCodexUtf8NoBom) return normalized;
+    return `$__antiCodexUtf8NoBom = [System.Text.UTF8Encoding]::new($false)\n${normalized}`;
+}
+
 function repairLocalArtifactToolArguments(args, codexName, originalRequest = null) {
     const scopedFixture = scopedFixtureFirstWriteRequirementFromOriginalRequest(originalRequest);
     if (scopedFixture && /(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) {
@@ -7929,7 +7982,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     }
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return args;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning || requirement.complexProject) return args;
+    if (requirement.autonomousReasoning || requirement.complexProject) return args;
     if (!/(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) return args;
     let parsed = null;
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
@@ -7938,6 +7991,10 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     const touchesArtifact = /(?:done\.txt|index\.html|README\.md|package\.json|word-tally|uniqueWords|followup\.txt|CHANGELOG\.md|codex-update-analyzer|sources\.json|report\.md|Set-Content|WriteAllText|AppData|Roaming|desktop-visible-small-project|desktop-visible-coding-project|desktop-visible-multi-turn-project|desktop-visible-complex-project)/i.test(command);
     if (!touchesArtifact) return args;
     command = command.replace(/\bDESKTOP_SMALL_PROJECT\b/g, requirement.marker);
+    if (requirement.agenticStepFlow) {
+        command = normalizeArtifactPowerShellUtf8NoBom(command);
+        return JSON.stringify({ ...parsed, command });
+    }
     const hasCurrentArtifactGuard = command.includes("Anti-Codex exact artifact marker guard")
         && command.includes(requirement.marker)
         && (!requirement.multiTurnProject || command.includes("$__antiCodexMultiTurnProject = $true"))
@@ -7945,6 +8002,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     if (!hasCurrentArtifactGuard) {
         command += artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, { codingProject: requirement.codingProject, complexProject: requirement.complexProject, multiTurnProject: requirement.multiTurnProject, reportSite: requirement.reportSite });
     }
+    command = normalizeArtifactPowerShellUtf8NoBom(command);
     return JSON.stringify({ ...parsed, command });
 }
 
@@ -8208,10 +8266,11 @@ function localProjectToolMarkupExampleForBody(body) {
         `$dir = ${JSON.stringify(path)}`,
         "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
         `$marker = ${JSON.stringify(marker)}`,
+        "$utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
         "$html = '<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>多阶段执行验证</title></head><body><h1>多阶段执行验证</h1><p>' + $marker + '</p></body></html>'",
-        "[System.IO.File]::WriteAllText((Join-Path $dir 'index.html'), $html, [System.Text.Encoding]::UTF8)",
-        "[System.IO.File]::WriteAllText((Join-Path $dir 'README.md'), \"# 多阶段执行验证`n`nFiles: index.html, README.md, done.txt`n\", [System.Text.Encoding]::UTF8)",
-        "[System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, [System.Text.Encoding]::UTF8)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'index.html'), $html, $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'README.md'), \"# 多阶段执行验证`n`nFiles: index.html, README.md, done.txt`n\", $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, $utf8NoBom)",
         "$done = [System.IO.File]::ReadAllText((Join-Path $dir 'done.txt'), [System.Text.Encoding]::UTF8)",
         "$index = [System.IO.File]::ReadAllText((Join-Path $dir 'index.html'), [System.Text.Encoding]::UTF8)",
         "if ($done -ne $marker) { throw 'done.txt marker mismatch' }",
@@ -8343,13 +8402,18 @@ function guardCompletionStatusDetours(output) {
 
 function chatToResponsesFormat(json, original, routing = null, options = {}) {
     const originalRequest = originalRequestFromArg(original);
+    const chatMessages = Array.isArray(options.chatMessages) ? options.chatMessages : [];
     const choice = json.choices?.[0] || {};
     const msg = choice.message || {};
     const output = [];
     const rawContent = typeof msg.content === "string" ? msg.content : "";
     const pseudoCalls = parsePseudoToolCalls(rawContent);
     const pseudoExternalCalls = pseudoCalls.filter(tc => !isInternalTool(tc?.function?.name));
-    const content = sanitizeMarkdownUrlFormatting(pseudoCalls.length > 0 ? stripPseudoToolMarkup(rawContent) : msg.content);
+    const content = suppressRepeatedAgenticStepFlowContent(
+        sanitizeMarkdownUrlFormatting(pseudoCalls.length > 0 ? stripPseudoToolMarkup(rawContent) : msg.content),
+        originalRequest,
+        chatMessages
+    );
     const insertVisibleToolProgress = shouldInsertVisibleToolProgress(originalRequest);
     let visibleToolProgressInserted = false;
     const maybeInsertVisibleToolProgress = (codexName, args) => {
@@ -9895,7 +9959,7 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
         });
         completion.id = id;
         completion.created = created;
-        const fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+        const fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true, chatMessages: chatBody.messages || [] });
         if (shouldInjectEndTurn(req, parsed)) fmt.end_turn = false;
         RESPONSE_HISTORY.remember(fmt, parsed);
         settleAntigravitySessionLease(sessionLease, fmt);
@@ -10075,7 +10139,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                 });
                 completion.id = id;
                 completion.created = created;
-                fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+                fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true, chatMessages: workingChatBody.messages || [] });
                 if (responseOutputHasToolCall(fmt.output)) break;
                 const assistantText = extractAssistantText(completion);
                 const hasWebToolEvidence = requestHasToolOutputFor(parsed, ["web_search", "web_fetch"]);
@@ -10094,7 +10158,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                     fmt = chatToResponsesFormat(makeTextCompletion(
                         workingChatBody.model || parsed.model,
                         blockedText,
-                    ), parsed, routing, { strictTools: true });
+                    ), parsed, routing, { strictTools: true, chatMessages: workingChatBody.messages || [] });
                     break;
                 }
                 nonStreamingToolReplays += 1;
@@ -10163,7 +10227,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
             if (!completion) throw new Error("Antigravity stream ended without a completed response.");
             completion.id = id;
             completion.created = created;
-            fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+            fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true, chatMessages: workingChatBody.messages || [] });
             const assistantText = extractAssistantText(completion);
             const hasWebToolEvidence = requestHasToolOutputFor(parsed, ["web_search", "web_fetch"]);
             const artifactMismatch = artifactMarkerMismatchForChat(workingChatBody.messages || [], assistantText);
@@ -10180,7 +10244,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                     };
                     continue;
                 }
-                fmt = chatToResponsesFormat(makeTextCompletion(workingChatBody.model || parsed.model, artifactMarkerMismatchBlockedMessage(artifactMismatch)), parsed, routing, { strictTools: true });
+                fmt = chatToResponsesFormat(makeTextCompletion(workingChatBody.model || parsed.model, artifactMarkerMismatchBlockedMessage(artifactMismatch)), parsed, routing, { strictTools: true, chatMessages: workingChatBody.messages || [] });
                 break;
             }
             const shouldBlockFakeClaim = toolCapable
@@ -10196,7 +10260,7 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
                 fmt = chatToResponsesFormat(makeTextCompletion(
                     workingChatBody.model || parsed.model,
                     blockedToolClaimMessageFor(assistantText, { hasWebToolEvidence }),
-                ), parsed, routing, { strictTools: true });
+                ), parsed, routing, { strictTools: true, chatMessages: workingChatBody.messages || [] });
                 break;
             }
             fakeToolClaimStreamReplays += 1;
@@ -11657,7 +11721,7 @@ const server = http.createServer(async (req, res) => {
                 try {
                     const startedAtMs = Date.now();
                     const completion = await callAntigravityWithInternalTools(chatBody);
-                    const fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+                    const fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true, chatMessages: chatBody.messages || [] });
                     applyResponsesEndTurnHint(fmt, req, parsed);
                     RESPONSE_HISTORY.remember(fmt, parsed);
                     settleAntigravitySessionLease(sessionLease, fmt);
@@ -11686,7 +11750,7 @@ const server = http.createServer(async (req, res) => {
             const upstreamResp = await callUpstreamWithInternalTools(chatBody);
             if (!upstreamResp.ok) return failWithDetails(res, upstreamResp.status, classifyUpstreamFailure(upstreamResp.status, upstreamResp.text, upstreamResp.json));
 
-            const fmt = chatToResponsesFormat(upstreamResp.json, parsed, routing);
+            const fmt = chatToResponsesFormat(upstreamResp.json, parsed, routing, { chatMessages: chatBody.messages || [] });
             applyResponsesEndTurnHint(fmt, req, parsed);
             RESPONSE_HISTORY.remember(fmt, parsed);
 

@@ -3730,6 +3730,8 @@ test("local artifact requests include an exact shell DSML example", () => {
   assert.match(body.messages[0].content, /<tool_calls><invoke name="shell_command">/);
   assert.match(body.messages[0].content, /<parameter name="command">/);
   assert.match(body.messages[0].content, /UI_AGENTIC_STEP_FLOW_SMOKE_1234567890/);
+  assert.match(body.messages[0].content, /\$utf8NoBom = \[System\.Text\.UTF8Encoding\]::new\(\$false\)/);
+  assert.match(body.messages[0].content, /WriteAllText\(\(Join-Path \$dir 'done\.txt'\), \$marker, \$utf8NoBom\)/);
   assert.match(body.messages[0].content, /Write-Output/);
 });
 
@@ -4327,6 +4329,60 @@ test("agentic visible step-flow rejects bare tool-name text as unfinished tool w
   assert.notEqual(fmt.output[0].content[0].text.trim(), "write_to_file");
 });
 
+test("agentic visible step-flow shell writes are normalized to UTF-8 without BOM", () => {
+  const marker = "UI_AGENTIC_STEP_FLOW_SMOKE_20260701";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+          "2. 然后用工具创建 index.html、README.md、done.txt。",
+          "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
+          `done.txt 必须只包含 ${marker}。`,
+        ].join("\n"),
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const completion = {
+    id: "chatcmpl_agentic_old_encoding",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      index: 0,
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "阶段1：准备创建文件。",
+        tool_calls: [{
+          id: "call_agentic_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: `[System.IO.File]::WriteAllText("C:\\Temp\\agentic-step-flow\\done.txt", "${marker}", [System.Text.Encoding]::UTF8)`,
+            }),
+          },
+        }],
+      },
+    }],
+  };
+
+  const fmt = chatToResponsesFormat(completion, request, chatBody._routing, { strictTools: true });
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /\$__antiCodexUtf8NoBom = \[System\.Text\.UTF8Encoding\]::new\(\$false\)/);
+  assert.match(args.command, /WriteAllText\("C:\\Temp\\agentic-step-flow\\done\.txt", "UI_AGENTIC_STEP_FLOW_SMOKE_20260701", \$__antiCodexUtf8NoBom\)/);
+  assert.doesNotMatch(args.command, /WriteAllText\([^)]*\[System\.Text\.Encoding\]::UTF8\)/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+});
+
 test("agentic visible step-flow rejects user prompt echo as unfinished tool work", () => {
   const prompt = [
     "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
@@ -4584,6 +4640,174 @@ test("autonomous reasoning tool calls get visible progress text before execution
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
   assert.match(fmt.output[0].content[0].text, /运行测试验证/);
+  assert.equal(fmt.output[1].type, "function_call");
+  assert.equal(fmt.output[1].name, "shell_command");
+});
+
+test("agentic step-flow tool calls also get visible progress text before execution", () => {
+  const marker = "UI_AGENTIC_STEP_FLOW_SMOKE_20260701";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+          "2. 然后用工具创建 index.html、README.md、done.txt。",
+          `done.txt 必须只包含 ${marker}。`,
+        ].join("\n"),
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: `[System.IO.File]::WriteAllText("C:\\Temp\\agentic-step-flow\\done.txt", "${marker}")` }),
+          },
+        }],
+      },
+    }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+
+  const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(fmt.output[0].content[0].text, /创建或更新项目文件/);
+  assert.equal(fmt.output[1].type, "function_call");
+  assert.equal(fmt.output[1].name, "shell_command");
+});
+
+test("agentic step-flow suppresses repeated visible phase text while preserving tool calls", () => {
+  const marker = "UI_AGENTIC_STEP_FLOW_SMOKE_20260701";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+          "2. 然后用工具创建 index.html、README.md、done.txt。",
+          "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
+          `done.txt 必须只包含 ${marker}。`,
+        ].join("\n"),
+      }],
+    }, {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "阶段1：准备创建文件。" }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "阶段1：准备创建文件。",
+        tool_calls: [{
+          id: "call_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: `[System.IO.File]::WriteAllText("C:\\Temp\\agentic-step-flow\\done.txt", "${marker}")` }),
+          },
+        }],
+      },
+    }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+
+  const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
+  assert.equal(fmt.output.length, 2);
+  assert.equal(fmt.output[0].type, "message");
+  assert.doesNotMatch(fmt.output[0].content[0].text, /阶段1：准备创建文件/);
+  assert.match(fmt.output[0].content[0].text, /创建或更新项目文件/);
+  assert.equal(fmt.output[1].type, "function_call");
+  assert.equal(fmt.output[1].name, "shell_command");
+});
+
+test("agentic step-flow suppresses repeated phase text restored through chat messages", () => {
+  const marker = "UI_AGENTIC_STEP_FLOW_SMOKE_20260701";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+          "2. 然后用工具创建 index.html、README.md、done.txt。",
+          "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
+          `done.txt 必须只包含 ${marker}。`,
+        ].join("\n"),
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "阶段2：准备验证文件。",
+        tool_calls: [{
+          id: "call_verify",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: `Get-Content "C:\\Temp\\agentic-step-flow\\done.txt"` }),
+          },
+        }],
+      },
+    }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+
+  const fmt = chatToResponsesFormat(completion, request, routing, {
+    strictTools: true,
+    chatMessages: [
+      { role: "assistant", content: "阶段1：准备创建文件。" },
+      { role: "assistant", content: "阶段2：准备验证文件。" },
+    ],
+  });
+  assert.equal(fmt.output[0].type, "message");
+  assert.doesNotMatch(fmt.output[0].content[0].text, /阶段2：准备验证文件/);
+  assert.match(fmt.output[0].content[0].text, /读取文件和结果/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });

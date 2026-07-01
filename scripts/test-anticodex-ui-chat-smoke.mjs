@@ -1232,6 +1232,9 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     markerToolOutputSeen: false,
     artifactGuardUsed: false,
     visibleProgressCount: 0,
+    phase1Count: 0,
+    phase2Count: 0,
+    repeatedPhaseCount: 0,
   };
   if (!expectedMarker) return evidence;
   let history = null;
@@ -1240,6 +1243,25 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
   } catch {
     return evidence;
   }
+  const seenHistoryItems = new Set();
+  const seenAssistantPhaseKeys = new Set();
+  const agenticPhaseKey = (text = "") => {
+    const value = String(text || "").replace(/\s+/g, "").replace(/[。.!！]+$/g, "");
+    if (value === "阶段1：准备创建文件") return "phase1";
+    if (value === "阶段2：准备验证文件") return "phase2";
+    return "";
+  };
+  const stableHistoryItemKey = (value) => {
+    if (value?.id) return `${value.type}:${value.id}`;
+    if (value?.call_id) return `${value.type}:${value.call_id}`;
+    return `${value?.type || "item"}:${JSON.stringify(value).slice(0, 2000)}`;
+  };
+  const markSeenHistoryItem = (value) => {
+    const key = stableHistoryItemKey(value);
+    if (seenHistoryItems.has(key)) return true;
+    seenHistoryItems.add(key);
+    return false;
+  };
   const visit = (value) => {
     if (!value || typeof value !== "object") return;
     if (Array.isArray(value)) {
@@ -1247,18 +1269,26 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
       return;
     }
     if (value.type === "message" && value.role === "assistant") {
+      if (markSeenHistoryItem(value)) return;
       const text = responseItemTextContent(value.content);
-      if (text.includes(expectedMarker) || /阶段[12]：/.test(text)) {
+      const phaseKey = agenticPhaseKey(text);
+      if (phaseKey && seenAssistantPhaseKeys.has(phaseKey)) return;
+      if (phaseKey) seenAssistantPhaseKeys.add(phaseKey);
+      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /我(?:先)?(?:创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/.test(text)) {
         evidence.assistantText += `${text}\n`;
       }
+      if (/阶段1：准备创建文件/.test(text)) evidence.phase1Count += 1;
+      if (/阶段2：准备验证文件/.test(text)) evidence.phase2Count += 1;
     }
     if (value.type === "function_call" || value.type === "custom_tool_call") {
+      if (markSeenHistoryItem(value)) return;
       evidence.taskToolCallCount += 1;
       const serialized = JSON.stringify(value);
       if (serialized.includes(expectedMarker)) evidence.markerToolCallCount += 1;
       if (/Anti-Codex exact artifact marker guard/.test(serialized)) evidence.artifactGuardUsed = true;
     }
     if (value.type === "function_call_output" || value.type === "custom_tool_call_output") {
+      if (markSeenHistoryItem(value)) return;
       evidence.taskToolOutputSeen = true;
       const serialized = JSON.stringify(value);
       if (serialized.includes(expectedMarker)) evidence.markerToolOutputSeen = true;
@@ -1276,7 +1306,8 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
-  evidence.visibleProgressCount = (evidence.assistantText.match(/我(?:先)?(?:创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/g) || []).length;
+  evidence.visibleProgressCount = (evidence.assistantText.match(/阶段[12]：|我(?:先)?(?:创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/g) || []).length;
+  evidence.repeatedPhaseCount = Math.max(0, evidence.phase1Count - 2) + Math.max(0, evidence.phase2Count - 2);
   evidence.assistantText = evidence.assistantText.trim().slice(-2000);
   return evidence;
 }
@@ -1703,6 +1734,9 @@ function collectAgenticStepFlowFailures(artifactEvidence) {
   if (artifactEvidence?.files?.readmeMd && artifactEvidence.readmeMentionsFiles !== true) localFailures.push("agentic-step-flow README.md did not describe all required files");
   if (artifactEvidence?.responseHistory?.assistantHasPhase1 !== true) localFailures.push("agentic-step-flow assistant did not visibly say 阶段1：准备创建文件");
   if (artifactEvidence?.responseHistory?.assistantHasPhase2 !== true) localFailures.push("agentic-step-flow assistant did not visibly say 阶段2：准备验证文件");
+  if ((artifactEvidence?.responseHistory?.visibleProgressCount || 0) < 2) localFailures.push("agentic-step-flow did not show at least two visible progress updates");
+  if ((artifactEvidence?.responseHistory?.repeatedPhaseCount || 0) > 0) localFailures.push("agentic-step-flow repeated visible phase text too many times");
+  if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) > 12) localFailures.push("agentic-step-flow used too many task tool calls for a small staged task");
   if (artifactEvidence?.responseHistory?.markerToolCallCount < 1) localFailures.push("agentic-step-flow did not record a marker-scoped tool call");
   if (artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) localFailures.push("agentic-step-flow did not record marker-scoped tool output");
   if (artifactEvidence?.responseHistory?.artifactGuardUsed === true) localFailures.push("agentic-step-flow used the deterministic artifact guard instead of model-led step execution");
