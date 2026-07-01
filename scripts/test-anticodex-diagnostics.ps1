@@ -197,6 +197,7 @@ function Test-SecondAccountReadinessSummaryEvidence {
     if ([int]$evidence.stepCount -lt 7) { Add-Failure "second-account readiness summary step count too low" }
     if ([int]$evidence.failedStepCount -ne 0) { Add-Failure "second-account readiness summary has failed steps" }
     if ([int]$evidence.failureCount -ne 0) { Add-Failure "second-account readiness summary has failures" }
+    if (-not [string]$evidence.accountIsolationCaveat) { Add-Failure "second-account readiness summary caveat missing" }
 }
 
 function Get-NonNegativeIntProperty {

@@ -14843,6 +14843,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /startedLogin\s*=\s*\$false/);
   assert.match(secondAccountReadinessSummary, /capturesPassword\s*=\s*\$false/);
   assert.match(secondAccountReadinessSummary, /storesPassword\s*=\s*\$false/);
+  assert.match(summarizer, /accountIsolationCaveat:\s*has\(report, "accountIsolationCaveat"\)/);
+  assert.match(diagnosticsTest, /second-account readiness summary caveat missing/);
   assert.doesNotMatch(secondAccountReadinessSummary, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|AllowRealTraffic|StartLoginApproval|\.env/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence/);
   assert.match(diagnosticsTest, /Test-SecondAccountReadinessSummaryEvidence/);

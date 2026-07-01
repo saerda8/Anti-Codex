@@ -1067,6 +1067,7 @@ const summary = {
     nextNoTrafficStatusCommand: has(report, "nextNoTrafficStatusCommand") ? asString(report.nextNoTrafficStatusCommand) : null,
     postLoginProofCommandTemplate: has(report, "postLoginProofCommandTemplate") ? asString(report.postLoginProofCommandTemplate) : null,
     releaseGateCompactStatusCommand: has(report, "releaseGateCompactStatusCommand") ? asString(report.releaseGateCompactStatusCommand) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
     stepCount: Array.isArray(report.steps) ? report.steps.length : null,
     failedStepCount: Array.isArray(report.steps) ? report.steps.filter((item) => item?.ok !== true).length : null,
     failureCount: Array.isArray(report.failures) ? report.failures.length : null,
