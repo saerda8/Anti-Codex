@@ -23,7 +23,7 @@ const requiredWorkerMcpServers = [
   "mimocode-worker",
   "opencode-worker",
 ];
-const minTaskSmokePassedWorkers = 3;
+const minTaskSmokePassedWorkers = 4;
 const requiredAgenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
 
 function readReport(fileName) {
