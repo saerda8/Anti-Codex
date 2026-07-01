@@ -1752,6 +1752,51 @@ test("stream mapper converts Chat tool_call deltas to Responses function_call ev
   assert.equal(completed.response.output[0].arguments, "{\"cmd\":\"pwd\"}");
 });
 
+test("stream mapper normalizes shell_command command arg when Codex schema requires cmd", () => {
+  const routing = {
+    shell_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const mapper = new ChatToResponsesStreamMapper({ model: "gpt-5.5", input: "pwd" }, "gpt-5.5", routing);
+  const first = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: {
+        tool_calls: [{
+          index: 0,
+          id: "call_shell_cmd_stream",
+          type: "function",
+          function: { name: "shell_command", arguments: "{\"command\"" },
+        }],
+      },
+      finish_reason: null,
+    }],
+  });
+  assert.ok(first.some(([event, data]) => event === "response.output_item.added" && data.item.type === "function_call"));
+  assert.ok(!first.some(([event]) => event === "response.function_call_arguments.delta"));
+
+  const done = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: { tool_calls: [{ index: 0, function: { arguments: ":\"pwd\"}" } }] },
+      finish_reason: "tool_calls",
+    }],
+  });
+  const argsDone = done.find(([event]) => event === "response.function_call_arguments.done")?.[1];
+  assert.equal(argsDone.arguments, "{\"cmd\":\"pwd\"}");
+  const completed = done.find(([event]) => event === "response.completed")?.[1];
+  assert.equal(completed.response.output[0].name, "shell_command");
+  assert.deepEqual(JSON.parse(completed.response.output[0].arguments), { cmd: "pwd" });
+});
+
 test("stream mapper converts Chat custom tool calls to custom_tool_call items", () => {
   const mapper = new ChatToResponsesStreamMapper({ model: "gpt-5.5", input: "patch" }, "gpt-5.5", {
     apply_patch: { codexName: "apply_patch", type: "custom" },
@@ -3272,6 +3317,43 @@ test("strict shell_command routing accepts command arg when Codex schema require
   assert.deepEqual(JSON.parse(pseudoFormatted.output[0].arguments), { cmd: "pwd" });
 });
 
+test("strict shell routing coerces command to cmd at final schema validation", () => {
+  const routing = {
+    run_shell: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_final_shell_cmd_schema",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_final_shell_cmd_schema",
+          type: "function",
+          function: { name: "run_shell", arguments: JSON.stringify({ command: "pwd" }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, { model: "antigravity", input: "list files" }, routing, { strictTools: true });
+
+  assert.equal(formatted.output[0].type, "function_call");
+  assert.equal(formatted.output[0].name, "shell_command");
+  assert.deepEqual(JSON.parse(formatted.output[0].arguments), { cmd: "pwd" });
+});
+
 test("strict pseudo tool routing rejects calls missing required schema parameters", () => {
   const formatted = chatToResponsesFormat({
     id: "chatcmpl_strict_missing_required",
@@ -4431,7 +4513,7 @@ test("chatToResponsesFormat does not append deterministic guard to complex proje
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
 
-test("chatToResponsesFormat replaces fragile complex project shell commands with a safety repair", () => {
+test("chatToResponsesFormat does not replace fragile complex project shell commands with a safety repair", () => {
   const fmt = chatToResponsesFormat({
     id: "chatcmpl_complex_fragile_tool",
     created: 1,
@@ -4467,17 +4549,10 @@ test("chatToResponsesFormat replaces fragile complex project shell commands with
 
   const call = fmt.output.find(item => item.type === "function_call");
   const args = JSON.parse(call.arguments);
-  const encodedScript = args.command.match(/Buffer\.from\('([^']+)','base64'\)/)?.[1] || "";
-  const decodedScript = Buffer.from(encodedScript, "base64").toString("utf8");
-  assert.match(args.command, /Anti-Codex complex artifact safety repair/);
-  assert.match(args.command, /node -e/);
-  assert.match(args.command, /Buffer\.from\('[A-Za-z0-9+/=]+','base64'\)/);
-  assert.match(decodedScript, /codex-update-analyzer\.mjs/);
-  assert.match(decodedScript, /UI_COMPLEX_PROJECT_SMOKE_20260701/);
-  assert.match(decodedScript, /complex artifact verification passed/);
-  assert.match(decodedScript, /console\.log\(marker\)/);
-  assert.doesNotMatch(args.command, /\$env:HTML/);
-  assert.doesNotMatch(args.command, /\\"node:fs\\"/);
+  assert.doesNotMatch(args.command, /Anti-Codex complex artifact safety repair/);
+  assert.doesNotMatch(args.command, /Buffer\.from\('[A-Za-z0-9+/=]+','base64'\)/);
+  assert.match(args.command, /\$env:HTML/);
+  assert.match(args.command, /WriteAllText/);
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
 
@@ -4851,6 +4926,54 @@ test("autonomous reasoning tool calls get visible progress text before execution
   assert.equal(fmt.output[1].name, "shell_command");
 });
 
+test("file-writing tool progress distinguishes implementation and test edits", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_PROGRESS";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `请在 C:\\Temp\\desktop-visible-complex-project\\run 创建 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。最终标记：${marker}` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const implementation = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_impl",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "node -e \"require('fs').writeFileSync('codex-update-analyzer.mjs','export function summarizeSources(){}')\"" }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+  const testFile = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_test_file",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "node -e \"require('fs').writeFileSync('codex-update-analyzer.test.mjs','import test from node:test')\"" }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  assert.match(implementation.output[0].content[0].text, /\u4e3b\u7a0b\u5e8f\u6587\u4ef6/);
+  assert.match(testFile.output[0].content[0].text, /\u6d4b\u8bd5\u6587\u4ef6/);
+  assert.notEqual(implementation.output[0].content[0].text, testFile.output[0].content[0].text);
+});
+
 test("complex project tool calls get visible progress text before execution", () => {
   const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_VISIBLE";
   const request = {
@@ -4943,7 +5066,7 @@ test("agentic step-flow tool calls also get visible progress text before executi
 
   const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
   assert.equal(fmt.output[0].type, "message");
-  assert.match(fmt.output[0].content[0].text, /创建或更新项目文件/);
+  assert.match(fmt.output[0].content[0].text, /\u4ea4\u4ed8\u6587\u6863\u548c\u7ed3\u679c\u6587\u4ef6/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
 });
@@ -5001,9 +5124,46 @@ test("agentic step-flow suppresses repeated visible phase text while preserving 
   assert.equal(fmt.output.length, 2);
   assert.equal(fmt.output[0].type, "message");
   assert.doesNotMatch(fmt.output[0].content[0].text, /阶段1：准备创建文件/);
-  assert.match(fmt.output[0].content[0].text, /创建或更新项目文件/);
+  assert.match(fmt.output[0].content[0].text, /\u4ea4\u4ed8\u6587\u6863\u548c\u7ed3\u679c\u6587\u4ef6/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
+});
+
+test("generic assistant text does not suppress visible tool progress for long tasks", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_GENERIC_PROGRESS";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `请在 C:\\Temp\\desktop-visible-complex-project\\run 创建 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。最终标记：${marker}` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "我开始处理这个任务。",
+        tool_calls: [{
+          id: "call_impl",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "node -e \"require('fs').writeFileSync('codex-update-analyzer.mjs','export function summarizeSources(){}')\"" }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  assert.equal(fmt.output.length, 3);
+  assert.equal(fmt.output[0].type, "message");
+  assert.equal(fmt.output[0].content[0].text, "我开始处理这个任务。");
+  assert.equal(fmt.output[1].type, "message");
+  assert.match(fmt.output[1].content[0].text, /\u4e3b\u7a0b\u5e8f\u6587\u4ef6/);
+  assert.equal(fmt.output[2].type, "function_call");
 });
 
 test("agentic step-flow suppresses repeated phase text restored through chat messages", () => {

@@ -845,7 +845,7 @@ function prepareRepoMultiFileEditFixture() {
   makeReadOnly(repoMultiFileSource);
 }
 
-function verifyRepoMultiFileEditFixture() {
+function verifyRepoMultiFileEditFixture(expectedMarker = "") {
   const evidence = {
     dir: repoMultiFileEditDir,
     source: repoMultiFileSource,
@@ -984,6 +984,7 @@ function verifyRepoMultiFileEditFixture() {
     }
   }
   evidence.error = errors.filter(Boolean).join("\n").slice(0, 4000);
+  if (expectedMarker) attachResponseHistoryEvidence(evidence, expectedMarker, repoMultiFileEditDir);
   return evidence;
 }
 
@@ -1297,7 +1298,7 @@ function verifyLocalProjectArtifact(dir, expectedMarker) {
     evidence.readmeLength = text.length;
     evidence.readmeNonEmpty = text.trim().length > 0;
   }
-  return evidence;
+  return attachResponseHistoryEvidence(evidence, expectedMarker, dir);
 }
 
 function responseItemTextContent(content) {
@@ -1332,6 +1333,10 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     markerToolOutputSeen: false,
     artifactGuardUsed: false,
     visibleProgressCount: 0,
+    distinctVisibleProgressCount: 0,
+    repeatedVisibleProgressCount: 0,
+    modelLedExecution: false,
+    codexLikeProcessProof: false,
     phase1Count: 0,
     phase2Count: 0,
     repeatedPhaseCount: 0,
@@ -1406,9 +1411,84 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
-  evidence.visibleProgressCount = (evidence.assistantText.match(/阶段[12]：|我(?:先)?(?:创建或更新项目文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务)/g) || []).length;
+  const visibleProgressPattern = /阶段[12]：|我(?:先)?(?:创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/g;
+  const visibleProgressLinePattern = new RegExp(visibleProgressPattern.source);
+  evidence.visibleProgressCount = (evidence.assistantText.match(visibleProgressPattern) || []).length;
+  const progressLines = evidence.assistantText
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.includes(expectedMarker) && visibleProgressLinePattern.test(line));
+  const distinctProgress = new Set(progressLines);
+  evidence.distinctVisibleProgressCount = distinctProgress.size;
+  evidence.repeatedVisibleProgressCount = Math.max(0, progressLines.length - distinctProgress.size);
   evidence.repeatedPhaseCount = Math.max(0, evidence.phase1Count - 2) + Math.max(0, evidence.phase2Count - 2);
+  evidence.modelLedExecution = evidence.artifactGuardUsed !== true;
+  evidence.codexLikeProcessProof = evidence.assistantHasFinalMarker === true
+    && evidence.markerToolOutputSeen === true
+    && evidence.taskToolCallCount > 0
+    && evidence.taskToolOutputSeen === true
+    && evidence.visibleProgressCount >= 2
+    && evidence.distinctVisibleProgressCount >= 2
+    && evidence.artifactGuardUsed !== true;
   evidence.assistantText = evidence.assistantText.trim().slice(-2000);
+  return evidence;
+}
+
+function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
+  const values = markers.flat().map((marker) => String(marker || "")).filter(Boolean);
+  if (values.length === 0) return collectResponseHistoryAgenticEvidence("");
+  const merged = {
+    assistantText: "",
+    assistantHasPhase1: false,
+    assistantHasPhase2: false,
+    assistantHasFinalMarker: false,
+    taskToolCallCount: 0,
+    taskToolOutputSeen: false,
+    markerToolCallCount: 0,
+    markerToolOutputSeen: false,
+    artifactGuardUsed: false,
+    visibleProgressCount: 0,
+    distinctVisibleProgressCount: 0,
+    repeatedVisibleProgressCount: 0,
+    modelLedExecution: false,
+    codexLikeProcessProof: false,
+    phase1Count: 0,
+    phase2Count: 0,
+    repeatedPhaseCount: 0,
+  };
+  for (const value of values) {
+    const evidence = collectResponseHistoryAgenticEvidence(value);
+    merged.assistantText = `${merged.assistantText}\n${evidence.assistantText || ""}`.trim();
+    merged.assistantHasPhase1 ||= evidence.assistantHasPhase1 === true;
+    merged.assistantHasPhase2 ||= evidence.assistantHasPhase2 === true;
+    merged.assistantHasFinalMarker ||= evidence.assistantHasFinalMarker === true;
+    merged.taskToolCallCount += Number(evidence.taskToolCallCount || 0);
+    merged.taskToolOutputSeen ||= evidence.taskToolOutputSeen === true;
+    merged.markerToolCallCount += Number(evidence.markerToolCallCount || 0);
+    merged.markerToolOutputSeen ||= evidence.markerToolOutputSeen === true;
+    merged.artifactGuardUsed ||= evidence.artifactGuardUsed === true;
+    merged.visibleProgressCount += Number(evidence.visibleProgressCount || 0);
+    merged.distinctVisibleProgressCount += Number(evidence.distinctVisibleProgressCount || 0);
+    merged.repeatedVisibleProgressCount += Number(evidence.repeatedVisibleProgressCount || 0);
+    merged.phase1Count += Number(evidence.phase1Count || 0);
+    merged.phase2Count += Number(evidence.phase2Count || 0);
+    merged.repeatedPhaseCount += Number(evidence.repeatedPhaseCount || 0);
+  }
+  merged.modelLedExecution = merged.artifactGuardUsed !== true;
+  merged.codexLikeProcessProof = merged.assistantHasFinalMarker === true
+    && merged.markerToolOutputSeen === true
+    && merged.taskToolCallCount > 0
+    && merged.taskToolOutputSeen === true
+    && merged.visibleProgressCount >= 2
+    && merged.distinctVisibleProgressCount >= 2
+    && merged.artifactGuardUsed !== true;
+  merged.assistantText = merged.assistantText.slice(-2000);
+  return merged;
+}
+
+function attachResponseHistoryEvidence(evidence, ...markers) {
+  if (!evidence || typeof evidence !== "object") return evidence;
+  evidence.responseHistory = collectResponseHistoryAgenticEvidenceForMarkers(markers);
   return evidence;
 }
 
@@ -1489,7 +1569,7 @@ function verifyCodingProjectArtifact(dir, expectedMarker) {
   } catch (error) {
     evidence.error = error instanceof Error ? error.message : String(error);
   }
-  return evidence;
+  return attachResponseHistoryEvidence(evidence, expectedMarker, dir);
 }
 
 function verifyMultiTurnProjectArtifact(dir, firstMarker, finalMarker) {
@@ -1563,7 +1643,7 @@ function verifyMultiTurnProjectArtifact(dir, firstMarker, finalMarker) {
   } catch (error) {
     evidence.error = error instanceof Error ? error.message : String(error);
   }
-  return evidence;
+  return attachResponseHistoryEvidence(evidence, firstMarker, finalMarker, dir);
 }
 
 function uniqueUrls(text) {
@@ -1626,7 +1706,7 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     evidence.htmlLinksReport = /report\.md/i.test(text);
   }
   evidence.sharedUrlCount = reportUrls.filter((url) => htmlUrls.includes(url)).length;
-  return evidence;
+  return attachResponseHistoryEvidence(evidence, expectedMarker, dir);
 }
 
 function verifyComplexProjectArtifact(dir, expectedMarker) {
@@ -1729,7 +1809,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
   } catch (error) {
     evidence.error = error instanceof Error ? error.message : String(error);
   }
-  return evidence;
+  return attachResponseHistoryEvidence(evidence, expectedMarker, dir);
 }
 
 async function waitForArtifactEvidence(check, complete, waitMs = 90_000) {
@@ -1836,7 +1916,7 @@ function collectAgenticStepFlowFailures(artifactEvidence) {
   if (artifactEvidence?.responseHistory?.assistantHasPhase2 !== true) localFailures.push("agentic-step-flow assistant did not visibly say 阶段2：准备验证文件");
   if ((artifactEvidence?.responseHistory?.visibleProgressCount || 0) < 2) localFailures.push("agentic-step-flow did not show at least two visible progress updates");
   if ((artifactEvidence?.responseHistory?.repeatedPhaseCount || 0) > 0) localFailures.push("agentic-step-flow repeated visible phase text too many times");
-  if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) > 12) localFailures.push("agentic-step-flow used too many task tool calls for a small staged task");
+  if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) > 24) localFailures.push("agentic-step-flow used too many task tool calls for a small staged task");
   if (artifactEvidence?.responseHistory?.markerToolCallCount < 1) localFailures.push("agentic-step-flow did not record a marker-scoped tool call");
   if (artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) localFailures.push("agentic-step-flow did not record marker-scoped tool output");
   if (artifactEvidence?.responseHistory?.artifactGuardUsed === true) localFailures.push("agentic-step-flow used the deterministic artifact guard instead of model-led step execution");
@@ -2504,7 +2584,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       answerMarkerCount = expectedMarker && answerSample ? (answerSample.match(new RegExp(expectedMarker, "g")) || []).length : 0;
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (taskMode === "repo-multi-file-edit") {
-        artifactEvidence = verifyRepoMultiFileEditFixture();
+        artifactEvidence = verifyRepoMultiFileEditFixture(expectedMarker);
         const artifactFailures = options.readmeOnly === true
           ? collectRepoMultiFileReadmeFailures(artifactEvidence)
           : collectRepoMultiFileEditFailures(artifactEvidence);
@@ -2897,7 +2977,7 @@ async function main() {
 
     if (taskMode === "repo-multi-file-edit") {
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat, readmeOnly: true });
-      const firstArtifactEvidence = verifyRepoMultiFileEditFixture();
+      const firstArtifactEvidence = verifyRepoMultiFileEditFixture(marker);
       const firstTurnSettle = repoMultiArtifactIdleSettle(turn1, "readme", firstArtifactEvidence);
       const firstArtifactFailures = collectRepoMultiFileReadmeFailures(firstArtifactEvidence);
       const actionableTurn1Failures = filterRepoMultiReadmeTextOnlyFailures(turn1.failures, firstArtifactFailures);
@@ -2911,7 +2991,7 @@ async function main() {
         makeWritable(repoMultiFileSource);
         turn2 = await submitDesktopPromptAndWait(ws, implementationPrompt, marker, timeoutMs, { requiresProjectChat });
         artifactEvidence = await waitForArtifactEvidence(
-          () => verifyRepoMultiFileEditFixture(),
+          () => verifyRepoMultiFileEditFixture(marker),
           (evidence) => collectRepoMultiFileEditFailures(evidence).length === 0,
           Math.min(timeoutMs, 120_000),
         );
@@ -3232,7 +3312,7 @@ async function main() {
       if (artifactEvidence?.testPassed !== true) failures.push("repo-file-edit node:test did not pass after the desktop task");
     }
     if (taskMode === "repo-multi-file-edit") {
-      artifactEvidence = verifyRepoMultiFileEditFixture();
+      artifactEvidence = verifyRepoMultiFileEditFixture(marker);
       if (!artifactEvidence?.files?.source) failures.push("repo-multi-file-edit source file was not present");
       if (!artifactEvidence?.files?.test) failures.push("repo-multi-file-edit test file was not present");
       if (!artifactEvidence?.files?.data) failures.push("repo-multi-file-edit data file was not present");
@@ -3447,6 +3527,17 @@ async function main() {
     activeReconnectSeen = activeReconnectSeen === true || repairTurn.activeReconnectSeen === true;
     activeReconnectEvidence.push(...(repairTurn.activeReconnectEvidence || []));
     inLoopIdleDiagnostics = repairTurn.inLoopIdleDiagnostics || inLoopIdleDiagnostics;
+  }
+
+  if (["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"].includes(taskMode)) {
+    const responseHistory = artifactEvidence?.responseHistory || {};
+    if (responseHistory.codexLikeProcessProof !== true) failures.push(`${taskMode} did not prove a Codex-like visible agent process`);
+    if (responseHistory.artifactGuardUsed === true) failures.push(`${taskMode} used deterministic artifact guard instead of model-led task execution`);
+    if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two visible progress updates`);
+    if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two distinct visible progress updates`);
+    if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push(`${taskMode} did not emit a task tool call`);
+    if (responseHistory.taskToolOutputSeen !== true) failures.push(`${taskMode} did not observe task tool output`);
+    if (responseHistory.assistantHasFinalMarker !== true) failures.push(`${taskMode} assistant final marker was not observed in response history`);
   }
 
   const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;

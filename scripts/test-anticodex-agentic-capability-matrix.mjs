@@ -64,6 +64,33 @@ function bool(value, key) {
   return !!(value && value[key] === true);
 }
 
+function requireResponseHistoryProof(responseHistory, failures) {
+  if (responseHistory.assistantHasFinalMarker !== true) failures.push("response_history_final_marker_missing");
+  if (responseHistory.markerToolOutputSeen !== true) failures.push("response_history_marker_tool_output_missing");
+  if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push("visible_progress_too_shallow");
+  if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push("visible_progress_not_distinct");
+  if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push("task_tool_call_missing");
+  if (responseHistory.taskToolOutputSeen !== true) failures.push("task_tool_output_missing");
+  if (responseHistory.artifactGuardUsed === true) failures.push("artifact_guard_used");
+  if (responseHistory.modelLedExecution !== true) failures.push("model_led_execution_missing");
+  if (responseHistory.codexLikeProcessProof !== true) failures.push("codex_like_process_proof_missing");
+}
+
+function responseHistoryEvidence(responseHistory) {
+  return {
+    assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
+    markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
+    visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
+    distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount) || 0,
+    repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount) || 0,
+    taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
+    taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
+    artifactGuardUsed: responseHistory.artifactGuardUsed === true,
+    modelLedExecution: responseHistory.modelLedExecution === true,
+    codexLikeProcessProof: responseHistory.codexLikeProcessProof === true,
+  };
+}
+
 function baseTaskChecks(entry, expectedReportName, expectedTaskMode) {
   const failures = [...entry.failures];
   const report = entry.report || {};
@@ -102,6 +129,7 @@ function capability(id, taskMode, file, expectedReportName, checks) {
 const capabilities = [
   capability("coding_project_files_tests_cli", "coding-project", reportFiles.codingProject, "ui-coding-project-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
     const files = artifact.files || {};
     for (const key of ["packageJson", "wordTally", "testFile", "doneTxt"]) {
       if (files[key] !== true) failures.push(`missing_file:${key}`);
@@ -109,6 +137,7 @@ const capabilities = [
     for (const key of ["doneExact", "exportsFunction", "testPassed", "cliPassed"]) {
       if (artifact[key] !== true) failures.push(`missing_artifact_evidence:${key}`);
     }
+    requireResponseHistoryProof(responseHistory, failures);
     return {
       files,
       doneExact: bool(artifact, "doneExact"),
@@ -116,16 +145,19 @@ const capabilities = [
       testPassed: bool(artifact, "testPassed"),
       cliPassed: bool(artifact, "cliPassed"),
       cliJson: has(artifact, "cliJson") ? artifact.cliJson : null,
+      ...responseHistoryEvidence(responseHistory),
     };
   }),
   capability("multi_turn_continuation", "multi-turn-project", reportFiles.multiTurnProject, "ui-multi-turn-project-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
     const turns = Array.isArray(report.turnEvidence) ? report.turnEvidence : [];
     for (const key of ["firstDoneExact", "followupExact", "changelogHasFinalMarker", "exportsTallyWords", "exportsUniqueWords", "testPassed", "cliPassed"]) {
       if (artifact[key] !== true) failures.push(`missing_artifact_evidence:${key}`);
     }
     if (turns.length < 2) failures.push("turn_evidence_count_too_low");
     if (turns.some((turn) => !turn || turn.ok !== true)) failures.push("turn_evidence_not_ok");
+    requireResponseHistoryProof(responseHistory, failures);
     return {
       turnCount: turns.length,
       okTurnCount: turns.filter((turn) => turn && turn.ok === true).length,
@@ -135,10 +167,12 @@ const capabilities = [
       exportsUniqueWords: bool(artifact, "exportsUniqueWords"),
       testPassed: bool(artifact, "testPassed"),
       cliPassed: bool(artifact, "cliPassed"),
+      ...responseHistoryEvidence(responseHistory),
     };
   }),
   capability("research_report_with_sources", "report-site", reportFiles.reportSite, "ui-report-site-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
     const files = artifact.files || {};
     for (const key of ["reportMd", "indexHtml", "doneTxt"]) {
       if (files[key] !== true) failures.push(`missing_file:${key}`);
@@ -147,6 +181,7 @@ const capabilities = [
       if (artifact[key] !== true) failures.push(`missing_artifact_evidence:${key}`);
     }
     if ((Number(artifact.sharedUrlCount) || 0) < 3) failures.push("source_url_count_too_low");
+    requireResponseHistoryProof(responseHistory, failures);
     return {
       files,
       sharedUrlCount: Number(artifact.sharedUrlCount) || 0,
@@ -155,6 +190,7 @@ const capabilities = [
       reportHasChinese: bool(artifact, "reportHasChinese"),
       htmlComplete: bool(artifact, "htmlComplete"),
       htmlLinksReport: bool(artifact, "htmlLinksReport"),
+      ...responseHistoryEvidence(responseHistory),
     };
   }),
   capability("complex_research_code_site", "complex-project", reportFiles.complexProject, "ui-complex-project-smoke", (report, failures) => {
@@ -169,11 +205,7 @@ const capabilities = [
     }
     if ((Number(artifact.sourceCount) || 0) < 3) failures.push("source_count_too_low");
     if ((Number(artifact.sharedUrlCount) || 0) < 3) failures.push("shared_url_count_too_low");
-    if (responseHistory.assistantHasFinalMarker !== true) failures.push("response_history_final_marker_missing");
-    if (responseHistory.markerToolOutputSeen !== true) failures.push("response_history_marker_tool_output_missing");
-    if ((Number(responseHistory.visibleProgressCount) || 0) < 1) failures.push("visible_progress_missing");
-    if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push("task_tool_call_missing");
-    if (responseHistory.taskToolOutputSeen !== true) failures.push("task_tool_output_missing");
+    requireResponseHistoryProof(responseHistory, failures);
     return {
       files,
       sourceCount: Number(artifact.sourceCount) || 0,
@@ -182,15 +214,12 @@ const capabilities = [
       cliPassed: bool(artifact, "cliPassed"),
       htmlComplete: bool(artifact, "htmlComplete"),
       htmlLinksReport: bool(artifact, "htmlLinksReport"),
-      assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
-      markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
-      visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
-      taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
-      taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
+      ...responseHistoryEvidence(responseHistory),
     };
   }),
   capability("repo_multi_file_edit", "repo-multi-file-edit", reportFiles.repoMultiFileEdit, "ui-repo-multi-file-edit-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
     const files = artifact.files || {};
     const turns = Array.isArray(report.turnEvidence) ? report.turnEvidence : [];
     for (const key of ["source", "test", "data", "readme", "html"]) {
@@ -201,6 +230,7 @@ const capabilities = [
     }
     if (turns.length < 2) failures.push("turn_evidence_count_too_low");
     if (turns.some((turn) => !turn || turn.ok !== true)) failures.push("turn_evidence_not_ok");
+    requireResponseHistoryProof(responseHistory, failures);
     return {
       files,
       turnCount: turns.length,
@@ -212,6 +242,7 @@ const capabilities = [
       cliPassed: bool(artifact, "cliPassed"),
       htmlComplete: bool(artifact, "htmlComplete"),
       readmeHasChinese: bool(artifact, "readmeHasChinese"),
+      ...responseHistoryEvidence(responseHistory),
     };
   }),
 ];

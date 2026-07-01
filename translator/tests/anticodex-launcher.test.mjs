@@ -163,7 +163,8 @@ test("Antigravity system prompt requires local artifact verification before comp
 test("Antigravity routes explicit desktop web searches through stable internal search", () => {
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
-  assert.match(server, /preferredInternalWebToolName\(parsed\) === "web_search"/);
+  assert.match(server, /shouldUseDeterministicInternalWebSearchResponse\(parsed\)/);
+  assert.match(server, /preferredInternalWebToolName\(request\) === "web_search"/);
   assert.match(server, /deterministicInternalWebSearchResponse\(parsed,\s*chatBody,\s*routing\)/);
   assert.match(server, /deterministicInternalWebSearchChatCompletion\(parsed,\s*chatBody\)/);
   assert.match(server, /已完成联网搜索。下面是基于搜索结果整理的简要回答/);
@@ -12338,7 +12339,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /idleWaitMs/);
   assert.match(verifier, /function diagnosticsAreIdle/);
   assert.match(verifier, /async function waitForIdleDiagnostics/);
-  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "report-site" \|\| taskMode === "agentic-step-flow" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
+  assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "autonomous-reasoning" \|\| taskMode === "report-site" \|\| taskMode === "agentic-step-flow" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
   assert.match(verifier, /desktop task did not become idle after the assistant reply/);
   assert.match(verifier, /antigravitySessionLock/);
   assert.match(verifier, /activeAntigravityRequests/);
@@ -12637,7 +12638,10 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(agenticCapabilityMatrix, /responseHistory/);
   assert.match(agenticCapabilityMatrix, /assistantHasFinalMarker/);
   assert.match(agenticCapabilityMatrix, /markerToolOutputSeen/);
-  assert.match(agenticCapabilityMatrix, /visible_progress_missing/);
+  assert.match(agenticCapabilityMatrix, /visible_progress_too_shallow/);
+  assert.match(agenticCapabilityMatrix, /visible_progress_not_distinct/);
+  assert.match(agenticCapabilityMatrix, /artifact_guard_used/);
+  assert.match(agenticCapabilityMatrix, /codex_like_process_proof_missing/);
   assert.match(agenticCapabilityMatrix, /task_tool_call_missing/);
   assert.match(agenticCapabilityMatrix, /task_tool_output_missing/);
   assert.match(uiState, /expectedDailyActionIds[\s\S]*"secondAccountLoginStatus"/);
@@ -14226,9 +14230,10 @@ test("task plan current status distinguishes release readiness from second-accou
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
   assert.match(currentStatus, /shortReady:true/);
-  assert.match(currentStatus, /releaseReady:true/);
-  assert.match(currentStatus, /missingRequired:\[\]/);
-  assert.match(currentStatus, /requiredRealTrafficBlockedGates:\[\]/);
+  assert.match(currentStatus, /releaseReady:false|not complete/);
+  assert.match(currentStatus, /complex-project parity as unsolved|complex-project.*red|complex.*remains red/);
+  assert.match(currentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
+  assert.match(currentStatus, /UI_AGENTIC_STEP_FLOW_SMOKE_1782915124978/);
   assert.match(currentStatus, /quota-exhausted|quota exhaustion/);
   assert.match(currentStatus, /claude-sonnet-4-6/);
   assert.match(currentStatus, /compactionResume/);
@@ -14236,11 +14241,10 @@ test("task plan current status distinguishes release readiness from second-accou
   assert.match(currentStatus, /separateAccountVerified:false/);
   assert.match(currentStatus, /releaseAcceptableAccountProof:false/);
   assert.match(handoffCurrentStatus, /shortReady:true/);
-  assert.match(handoffCurrentStatus, /releaseReady:true/);
-  assert.match(handoffCurrentStatus, /missingRequired:\[\]/);
-  assert.match(handoffCurrentStatus, /requiredRealTrafficBlockedGates:\[\]/);
-  assert.match(handoffCurrentStatus, /quota-exhausted|quota exhaustion/);
-  assert.match(handoffCurrentStatus, /RESOURCE_EXHAUSTED|Individual quota reached/);
+  assert.match(handoffCurrentStatus, /releaseReady:false|not complete/);
+  assert.match(handoffCurrentStatus, /complex-project parity as unsolved|complex-project.*red|complex.*remains red/);
+  assert.match(handoffCurrentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
+  assert.match(handoffCurrentStatus, /UI_AGENTIC_STEP_FLOW_SMOKE_1782915124978/);
   assert.match(handoffCurrentStatus, /claude-sonnet-4-6/);
   assert.match(handoffCurrentStatus, /separateAccountVerified:false/);
   assert.match(handoffCurrentStatus, /releaseAcceptableAccountProof:false/);

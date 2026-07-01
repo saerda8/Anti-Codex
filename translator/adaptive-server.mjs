@@ -5830,19 +5830,29 @@ function coercePseudoArgumentsForRoute(args, route) {
     if (!schema || typeof schema !== "object") return { ok: true, args };
     const properties = schema.properties && typeof schema.properties === "object" ? schema.properties : {};
     const required = Array.isArray(schema.required) ? schema.required : [];
+    const normalizedArgs = args && typeof args === "object" && !Array.isArray(args) ? { ...args } : args;
+    if (normalizedArgs && typeof normalizedArgs === "object" && !Array.isArray(normalizedArgs)) {
+        if (required.includes("cmd")
+            && !Object.prototype.hasOwnProperty.call(normalizedArgs, "cmd")
+            && typeof normalizedArgs.command === "string"
+            && Object.prototype.hasOwnProperty.call(properties, "cmd")) {
+            normalizedArgs.cmd = normalizedArgs.command;
+            if (schema.additionalProperties === false) delete normalizedArgs.command;
+        }
+    }
     for (const name of required) {
-        if (!Object.prototype.hasOwnProperty.call(args, name)) {
+        if (!Object.prototype.hasOwnProperty.call(normalizedArgs, name)) {
             return { ok: false, error: `missing required parameter "${name}"` };
         }
     }
     if (schema.additionalProperties === false) {
-        for (const name of Object.keys(args)) {
+        for (const name of Object.keys(normalizedArgs)) {
             if (!Object.prototype.hasOwnProperty.call(properties, name)) {
                 return { ok: false, error: `unexpected parameter "${name}"` };
             }
         }
     }
-    const coerced = { ...args };
+    const coerced = { ...normalizedArgs };
     for (const [name, propSchema] of Object.entries(properties)) {
         if (!Object.prototype.hasOwnProperty.call(coerced, name)) continue;
         const result = coercePseudoArgumentValue(coerced[name], propSchema);
@@ -5897,6 +5907,11 @@ function normalizeShellArgumentsBeforeValidation(args, codexName, upstreamName, 
     const next = { ...parsed, cmd: parsed.command };
     delete next.command;
     return JSON.stringify(next);
+}
+
+function shouldBufferShellArgumentsForNormalization(codexName, upstreamName, route = null) {
+    if (codexName !== "shell_command" || upstreamName !== "shell_command") return false;
+    return shellCommandParameterNameForRoute(codexName, route) === "cmd";
 }
 
 function messageOutput(text) {
@@ -7246,13 +7261,21 @@ function visibleToolProgressText(codexName = "", args = "") {
         command = String(args || "");
     }
     const text = command.toLowerCase();
-    if (/writealltext|writefilesync|set-content|new-item|out-file|mkdir|copy-item|move-item/.test(text)) return "我创建或更新项目文件。";
+    if (/word-tally\.test|codex-update-analyzer\.test|\.test\.mjs|node:test|assert/.test(text) && /writealltext|writefilesync|set-content|new-item|out-file/.test(text)) return "\u6211\u5199\u5165\u6216\u66f4\u65b0\u9a8c\u8bc1\u7528\u7684\u6d4b\u8bd5\u6587\u4ef6\u3002";
+    if (/package\.json|word-tally\.mjs|codex-update-analyzer\.mjs|status-dashboard\.mjs/.test(text) && !/\.test\.mjs|node:test|assert/.test(text) && /writealltext|writefilesync|set-content|new-item|out-file/.test(text)) return "\u6211\u521b\u5efa\u6216\u4fee\u6539\u9879\u76ee\u4e3b\u7a0b\u5e8f\u6587\u4ef6\u3002";
+    if (/report\.md|index\.html|readme\.md|done\.txt|sources\.json|status-dashboard\.html/.test(text) && /writealltext|writefilesync|set-content|new-item|out-file/.test(text)) return "\u6211\u751f\u6210\u6216\u66f4\u65b0\u4ea4\u4ed8\u6587\u6863\u548c\u7ed3\u679c\u6587\u4ef6\u3002";
+    if (/mkdir|copy-item|move-item/.test(text)) return "\u6211\u51c6\u5907\u6216\u6574\u7406\u4efb\u52a1\u9700\u8981\u7684\u5de5\u4f5c\u76ee\u5f55\u3002";
+    if (/writealltext|writefilesync|set-content|new-item|out-file/.test(text)) return "\u6211\u5199\u5165\u4e00\u4e2a\u4efb\u52a1\u9700\u8981\u7684\u6587\u4ef6\u3002";
     if (/node\s+--test|npm\s+test/.test(text)) return "我运行测试验证当前结果。";
     if (/node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text)) return "我运行本地程序检查输出是否正确。";
     if (/get-childitem|get-content|test-path|select-string|readfile|read-file|cat\s+/.test(text)) return "我读取文件和结果，确认是否满足要求。";
     if (/remove-item|del\s+|erase\s+/.test(text)) return "我清理不符合要求的临时文件。";
     if (/shell|exec|command|powershell|terminal/i.test(codexName)) return "我执行一个本地命令推进任务。";
     return `我调用 ${codexName || "工具"} 推进任务。`;
+}
+
+function contentHasVisibleToolProgress(content = "") {
+    return /阶段[12]：|我(?:先)?(?:创建或更新项目文件|写入或更新验证用的测试文件|创建或修改项目主程序文件|生成或更新交付文档和结果文件|准备或整理任务需要的工作目录|写入一个任务需要的文件|运行测试验证当前结果|运行本地程序检查输出是否正确|读取文件和结果，确认是否满足要求|执行一个本地命令推进任务|清理不符合要求的临时文件|调用\s+.+?推进任务)/.test(String(content || ""));
 }
 
 function assistantTextLooksLikeWebToolUnavailableClaim(text) {
@@ -8233,10 +8256,9 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     let command = parsed[key];
     const touchesArtifact = /(?:done\.txt|index\.html|README\.md|package\.json|word-tally|uniqueWords|followup\.txt|CHANGELOG\.md|codex-update-analyzer|sources\.json|report\.md|Set-Content|WriteAllText|AppData|Roaming|desktop-visible-small-project|desktop-visible-coding-project|desktop-visible-multi-turn-project|desktop-visible-complex-project)/i.test(command);
     if (!touchesArtifact) return args;
+    const commandLooksComplexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(command);
     command = command.replace(/\bDESKTOP_SMALL_PROJECT\b/g, requirement.marker);
-    if (requirement.complexProject) {
-        const repair = complexProjectArtifactSafetyPowerShell(requirement.marker, requirement.targetPath);
-        command = complexProjectCommandLooksParserFragile(command) ? repair : `${command}${repair}`;
+    if (requirement.complexProject || commandLooksComplexProject) {
         command = normalizeArtifactPowerShellUtf8NoBom(command);
         return JSON.stringify({ ...parsed, [key]: command });
     }
@@ -8669,7 +8691,7 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
     const insertVisibleToolProgress = shouldInsertVisibleToolProgress(originalRequest);
     let visibleToolProgressInserted = false;
     const maybeInsertVisibleToolProgress = (codexName, args) => {
-        if (!insertVisibleToolProgress || visibleToolProgressInserted || content) return;
+        if (!insertVisibleToolProgress || visibleToolProgressInserted || contentHasVisibleToolProgress(content)) return;
         visibleToolProgressInserted = true;
         output.push(messageOutput(visibleToolProgressText(codexName, args)));
     };
@@ -10795,6 +10817,7 @@ class ChatToResponsesStreamMapper {
             tc.upstreamName = fn.name;
             tc.route = this.routing?.[fn.name] || null;
             tc.name = translatedToolParts({ id: tc.callId, function: { name: fn.name, arguments: "" } }, this.routing).name;
+            tc.bufferArguments = this.bufferToolArguments || shouldBufferShellArgumentsForNormalization(tc.name, tc.upstreamName || tc.name, tc.route);
         }
         if (typeof fn.arguments === "string") tc.arguments += fn.arguments;
 
@@ -10809,7 +10832,7 @@ class ChatToResponsesStreamMapper {
                 item,
             }]);
         }
-        if (tc.route?.type !== "custom" && tc.opened && !this.bufferToolArguments && tc.emitted < tc.arguments.length) {
+        if (tc.route?.type !== "custom" && tc.opened && !tc.bufferArguments && tc.emitted < tc.arguments.length) {
             const argDelta = tc.arguments.slice(tc.emitted);
             tc.emitted = tc.arguments.length;
             events.push(["response.function_call_arguments.delta", {
@@ -10848,6 +10871,7 @@ class ChatToResponsesStreamMapper {
                 continue;
             }
             let args = unwrapCustomArguments(tc.arguments, tc.route);
+            if (tc.route?.type !== "custom") args = normalizeShellArgumentsBeforeValidation(args, tc.name, tc.upstreamName || tc.name, tc.route);
             if (tc.route?.type !== "custom") args = normalizeShellAliasArguments(args, tc.name, tc.upstreamName || tc.name, tc.route);
             if (tc.route?.type !== "custom") args = repairLocalArtifactToolArguments(args, tc.name, this.original);
             const item = tc.route?.type === "custom"
@@ -10902,6 +10926,7 @@ class ChatToResponsesStreamMapper {
             }
             let args = unwrapCustomArguments(tc.arguments, tc.route);
             const isCustom = tc.route?.type === "custom";
+            if (!isCustom) args = normalizeShellArgumentsBeforeValidation(args, tc.name, tc.upstreamName || tc.name, tc.route);
             if (!isCustom) args = normalizeShellAliasArguments(args, tc.name, tc.upstreamName || tc.name, tc.route);
             if (!isCustom) args = repairLocalArtifactToolArguments(args, tc.name, this.original);
             const item = isCustom

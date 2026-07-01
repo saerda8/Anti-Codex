@@ -26,6 +26,7 @@ const requiredLongTasks = [
     expectedWorkProduct: "tested Node CLI project",
     requiredArtifactKeys: ["doneExact", "exportsFunction", "testPassed", "cliPassed"],
     requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"],
+    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   },
   {
     taskMode: "multi-turn-project",
@@ -36,6 +37,7 @@ const requiredLongTasks = [
     requiredArtifactKeys: ["firstDoneExact", "followupExact", "changelogHasFinalMarker", "testPassed", "cliPassed"],
     requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt", "followupTxt", "changelogMd"],
     minTurnCount: 2,
+    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   },
   {
     taskMode: "report-site",
@@ -46,6 +48,7 @@ const requiredLongTasks = [
     requiredArtifactKeys: ["doneExact", "reportHasMarker", "htmlHasMarker", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
     requiredFiles: ["reportMd", "indexHtml", "doneTxt"],
     minSharedUrlCount: 3,
+    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   },
   {
     taskMode: "complex-project",
@@ -56,7 +59,7 @@ const requiredLongTasks = [
     requiredArtifactKeys: ["doneExact", "exportsFunction", "testPassed", "cliPassed", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
     requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"],
     minSharedUrlCount: 3,
-    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "taskToolCallCount", "taskToolOutputSeen"],
+    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   },
   {
     taskMode: "repo-multi-file-edit",
@@ -67,6 +70,7 @@ const requiredLongTasks = [
     requiredArtifactKeys: ["exportsNormalizeStatus", "exportsSummarizeRecords", "exportsRenderSummaryHtml", "sourceChangedFromFixture", "testUnchanged", "dataUnchanged", "testPassed", "cliPassed", "htmlComplete", "htmlHasChinese", "readmeHasChinese"],
     requiredFiles: ["source", "test", "data", "readme", "html"],
     minTurnCount: 2,
+    requiredResponseHistoryKeys: ["assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   },
 ];
 
@@ -178,8 +182,13 @@ function taskResult(spec) {
       assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
       markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
       visibleProgressCount: Number(responseHistory.visibleProgressCount) || 0,
+      distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount) || 0,
+      repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount) || 0,
       taskToolCallCount: Number(responseHistory.taskToolCallCount) || 0,
       taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
+      artifactGuardUsed: responseHistory.artifactGuardUsed === true,
+      modelLedExecution: responseHistory.modelLedExecution === true,
+      codexLikeProcessProof: responseHistory.codexLikeProcessProof === true,
     },
     turnCount: turnEvidence.length,
     sharedUrlCount: Number(artifact.sharedUrlCount || artifact.sourceCount || 0),

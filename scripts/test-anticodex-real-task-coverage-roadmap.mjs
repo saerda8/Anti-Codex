@@ -59,12 +59,12 @@ const taskResultRequirements = {
   "free-chat": ["answerMarkerCount", "responseHistoryMarkerSeen", "lastSample"],
   "web-search": ["answerMarkerCount", "sourceUrlCount", "lastSample"],
   "local-project": ["artifactEvidence", "doneExact", "indexHasMarker"],
-  "coding-project": ["artifactEvidence", "testPassed", "cliPassed"],
-  "multi-turn-project": ["artifactEvidence", "followupExact", "testPassed", "cliPassed"],
-  "report-site": ["artifactEvidence", "reportHasChinese", "htmlComplete"],
-  "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "taskToolCallCount", "taskToolOutputSeen"],
+  "coding-project": ["artifactEvidence", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "multi-turn-project": ["artifactEvidence", "followupExact", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "report-site": ["artifactEvidence", "reportHasChinese", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   "repo-file-edit": ["artifactEvidence", "testPassed", "sourceHasLowercase"],
-  "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete"],
+  "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
 };
 
 const taskScenarioCatalog = {
@@ -198,8 +198,13 @@ function resultProofFor(taskMode, report) {
     assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
     markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
     visibleProgressCount: Number(responseHistory.visibleProgressCount || 0),
+    distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount || 0),
+    repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount || 0),
     taskToolCallCount: Number(responseHistory.taskToolCallCount || 0),
     taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
+    artifactGuardUsed: responseHistory.artifactGuardUsed === true,
+    modelLedExecution: responseHistory.modelLedExecution === true,
+    codexLikeProcessProof: responseHistory.codexLikeProcessProof === true,
   };
   const resultEvidenceKeys = Object.keys(resultEvidence).filter((key) => artifactValuePasses(resultEvidence[key])).sort();
   const requiredResultProofKeys = taskResultRequirements[taskMode] || [];
