@@ -7701,7 +7701,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning || (requirement.reportSite && !requirement.complexProject)) return null;
     const evidenceText = combinedToolEvidenceText(originalRequest, messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     if (requirement.complexProject) {
@@ -9362,7 +9362,7 @@ function webEvidenceFallbackText(evidence, userText, reason = "model_detour") {
             const title = String(result?.title || "Untitled").trim();
             const url = String(result?.url || "").trim();
             const snippet = String(result?.snippet || result?.excerpt || "").replace(/\s+/g, " ").trim().slice(0, 500);
-            lines.push(`- ${title}${url ? `：${url}` : ""}`);
+            lines.push(`- ${title}${url ? `: ${url}` : ""}`);
             if (snippet) lines.push(`  ${snippet}`);
         }
     } else {
@@ -9443,6 +9443,11 @@ async function seedExplicitInternalWebSearch(chatBody) {
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const webBackedArtifact = requestNeedsWebBackedArtifactOutput(chatBody);
     const modelLedLocalArtifact = requestNeedsModelLedLocalArtifactWork(chatBody);
+    const plainWebAnswer = !webBackedArtifact && !modelLedLocalArtifact;
+    const requiredMarker = markerFromUserText(text);
+    const markerInstruction = requiredMarker
+        ? ` Required exact marker: ${requiredMarker}. Read the files back before the final reply.`
+        : "";
     const externalTools = (Array.isArray(chatBody?.tools) ? chatBody.tools : [])
         .filter((tool) => !isInternalTool(tool?.function?.name || tool?.name));
     const callId = `call_${randomUUID().replaceAll("-", "")}`;
@@ -9462,8 +9467,8 @@ async function seedExplicitInternalWebSearch(chatBody) {
         ...chatBody,
         _internalWebEvidence: result,
         _internalWebUserText: text,
-        ...(chatBodyHasWebDetourPollution(chatBody)
-            ? { _internalWebDeterministicAnswer: webEvidenceFallbackText(result, text, "translator_direct_web_search_after_polluted_history") }
+        ...((plainWebAnswer || chatBodyHasWebDetourPollution(chatBody))
+            ? { _internalWebDeterministicAnswer: webEvidenceFallbackText(result, text, plainWebAnswer ? "translator_direct_web_search_before_model" : "translator_direct_web_search_after_polluted_history") }
             : {}),
         tools: modelLedLocalArtifact && externalTools.length ? externalTools : undefined,
         tool_choice: modelLedLocalArtifact && externalTools.length ? "auto" : "none",
@@ -9480,7 +9485,7 @@ async function seedExplicitInternalWebSearch(chatBody) {
                 content: webBackedArtifact
                     ? "The requested web_search call is complete. Continue the original artifact task now using the tool result above: create the requested local files with PowerShell file commands, including report.md, index.html, and done.txt when requested. Include source URLs from the web_search result in the generated files. Do not stop with only a search summary, do not call web_search again, and do not describe a future tool action."
                     : modelLedLocalArtifact
-                        ? "The requested web_search call is complete. Continue the original local project task now by calling the exposed external Codex tool to create the requested files, run the requested tests/CLI checks, and only then provide the final marker. Include source URLs from the web_search result in the generated files. Do not stop with only a search summary, do not call web_search again, and do not describe a future tool action."
+                        ? `The requested web_search call is complete. Continue the original local project task now by calling the exposed external Codex tool to create the requested files, run the requested tests/CLI checks, and only then provide the final marker. Include source URLs from the web_search result in the generated files. Do not stop with only a search summary, do not call web_search again, and do not describe a future tool action.${markerInstruction}`
                     : "The requested web_search call is complete. Answer the original user request now using the tool result above. Do not call web_search again and do not describe a future tool action. Include source URLs when they are present in the tool result.",
             },
         ],
@@ -9909,7 +9914,7 @@ function requestNeedsModelLedLocalArtifactWork(request) {
     const latest = latestUserTextForInternalWeb(request);
     const text = String(latest || recentUserTextForInternalWeb(request) || "").trim();
     if (!text) return false;
-    return /(?:desktop-visible-coding-project|UI_CODING_PROJECT_SMOKE|word-tally|tallyWords|node:test|desktop-visible-multi-turn-project|UI_MULTI_TURN_PROJECT_SMOKE|uniqueWords|followup\.txt|CHANGELOG\.md|desktop-visible-report-site|UI_REPORT_SITE_SMOKE|report\.md|source URLs?|desktop-visible-complex-project|UI_COMPLEX_PROJECT_SMOKE|codex-update-analyzer|sources\.json|summarizeSources)/i.test(text);
+    return /(?:desktop-visible-coding-project|UI_CODING_PROJECT_SMOKE|word-tally|tallyWords|node:test|desktop-visible-multi-turn-project|UI_MULTI_TURN_PROJECT_SMOKE|uniqueWords|followup\.txt|CHANGELOG\.md|desktop-visible-report-site|UI_REPORT_SITE_SMOKE|report\.md|desktop-visible-complex-project|UI_COMPLEX_PROJECT_SMOKE|codex-update-analyzer|sources\.json|summarizeSources)/i.test(text);
 }
 
 function recentUserTextForInternalWeb(request) {

@@ -5414,7 +5414,7 @@ test("agentic step-flow suppresses repeated phase text restored through chat mes
   assert.equal(fmt.output[1].name, "shell_command");
 });
 
-test("Antigravity internal web loop prefetches search evidence before asking the model to summarize", async () => {
+test("Antigravity internal web loop returns plain search evidence directly", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const upstreamBodies = [];
   globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
@@ -5432,26 +5432,20 @@ test("Antigravity internal web loop prefetches search evidence before asking the
     }, {
       callQueued: async (body) => {
         upstreamBodies.push(structuredClone(body));
-        assert.equal(body.tool_choice, "none");
-        assert.equal(body.tools, undefined);
-        assert.equal(body.messages.at(-3).tool_calls[0].function.name, "web_search");
-        assert.match(body.messages.at(-2).content, /LOCAL_WEB_RESULT/);
-        assert.match(body.messages.at(-1).content, /web_search call is complete/);
-        return {
-          choices: [{ message: { role: "assistant", content: "WEB_LOOP_OK" }, finish_reason: "stop" }],
-        };
+        throw new Error("plain web search should not ask the model to summarize already fetched web evidence");
       },
     });
 
-    assert.equal(upstreamBodies.length, 1);
-    assert.equal(completion.choices[0].message.content, "WEB_LOOP_OK");
+    assert.equal(upstreamBodies.length, 0);
+    assert.equal(completion._internalWebEvidence, true);
+    assert.match(completion.choices[0].message.content, /LOCAL_WEB_RESULT/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
   }
 });
 
-test("Antigravity internal web loop prefetches explicit search even without injected tools", async () => {
+test("Antigravity plain web search returns deterministic evidence without model summarization", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const upstreamBodies = [];
   globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = async (name, args) => {
@@ -5467,19 +5461,14 @@ test("Antigravity internal web loop prefetches explicit search even without inje
     }, {
       callQueued: async (body) => {
         upstreamBodies.push(structuredClone(body));
-        assert.equal(body.tool_choice, "none");
-        assert.equal(body.tools, undefined);
-        assert.equal(body.messages.at(-3).tool_calls[0].function.name, "web_search");
-        assert.match(body.messages.at(-2).content, /https:\/\/example\.com\/codex/);
-        return {
-          choices: [{ message: { role: "assistant", content: "Codex update summary: https://example.com/codex" }, finish_reason: "stop" }],
-        };
+        throw new Error("plain web search should not ask the model to summarize already fetched web evidence");
       },
     });
 
-    assert.equal(upstreamBodies.length, 1);
+    assert.equal(upstreamBodies.length, 0);
     assert.equal(completion._internalWebEvidence, true);
     assert.match(completion.choices[0].message.content, /https:\/\/example\.com\/codex/);
+    assert.match(completion.choices[0].message.content, /Codex update/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
@@ -5751,20 +5740,16 @@ test("Antigravity treats explicit web_search token as internal web intent", asyn
   };
 
   try {
-    let upstreamBody;
     const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
       model: "gemini-pro-agent",
       messages: [{ role: "user", content: "Use web_search to research recent OpenAI Codex updates." }],
     }), {
       callQueued: async (body) => {
-        upstreamBody = structuredClone(body);
-        return { choices: [{ message: { role: "assistant", content: "Codex evidence: https://example.com/codex-updates" }, finish_reason: "stop" }] };
+        throw new Error("plain explicit web_search should not ask the model to summarize already fetched web evidence");
       },
     });
     assert.equal(sawSearch, true);
-    assert.equal(upstreamBody.tools, undefined);
-    assert.equal(upstreamBody.tool_choice, "none");
-    assert.match(upstreamBody.messages.at(-2).content, /https:\/\/example\.com\/codex-updates/);
+    assert.equal(completion._internalWebEvidence, true);
     assert.match(completion.choices[0].message.content, /https:\/\/example\.com\/codex-updates/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
@@ -5790,19 +5775,17 @@ test("Antigravity treats Chinese release-date questions as internal web intent",
   };
 
   try {
-    let upstreamBody;
-    await callAntigravityWithInternalTools(chatBodyWithInternalTools({
+    const completion = await callAntigravityWithInternalTools(chatBodyWithInternalTools({
       model: "gemini-pro-agent",
       messages: [{ role: "user", content: "GBT5.6什么时候发布啊" }],
     }), {
       callQueued: async (body) => {
-        upstreamBody = structuredClone(body);
-        return { choices: [{ message: { role: "assistant", content: "证据：https://example.com/release-date" }, finish_reason: "stop" }] };
+        throw new Error("plain release-date search should not ask the model to summarize already fetched web evidence");
       },
     });
     assert.equal(sawSearch, true);
-    assert.equal(upstreamBody.tools, undefined);
-    assert.equal(upstreamBody.tool_choice, "none");
+    assert.equal(completion._internalWebEvidence, true);
+    assert.match(completion.choices[0].message.content, /https:\/\/example\.com\/release-date/);
   } finally {
     if (originalTool === undefined) delete globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
     else globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__ = originalTool;
