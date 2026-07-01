@@ -1650,6 +1650,9 @@ function Test-WorkerMcpServerProbeSummaryEvidence {
     if ([int]$evidence.serverCount -lt $required.Count -or $servers.Count -lt $required.Count) { Add-Failure "worker-mcp-server-probe summary server count too low" }
     if (@(As-FlatArray $evidence.missingServers).Count -ne 0) { Add-Failure "worker-mcp-server-probe summary has missing servers" }
     if (@(As-FlatArray $evidence.incompleteToolCountServers).Count -ne 0) { Add-Failure "worker-mcp-server-probe summary has incomplete tool counts" }
+    if ($evidence.PSObject.Properties.Name -notcontains "missingStartToolServers") { Add-Failure "worker-mcp-server-probe summary missing start-tool diagnostic field" }
+    if ($evidence.PSObject.Properties.Name -notcontains "missingWaitToolServers") { Add-Failure "worker-mcp-server-probe summary missing wait-tool diagnostic field" }
+    if (@(As-FlatArray $evidence.missingStartToolServers).Count -ne 0) { Add-Failure "worker-mcp-server-probe summary has missing start tools" }
     foreach ($serverName in $required) {
         if ($requiredWorkers -notcontains $serverName) {
             Add-Failure "worker-mcp-server-probe summary missing required worker $serverName"
@@ -1662,6 +1665,11 @@ function Test-WorkerMcpServerProbeSummaryEvidence {
         if ($entry.ok -ne $true) { Add-Failure "worker-mcp-server-probe summary server $serverName not ok" }
         if ([int]$entry.toolCount -lt 1) { Add-Failure "worker-mcp-server-probe summary server $serverName has no tools" }
         if (@(As-FlatArray $entry.toolNames).Count -lt 1) { Add-Failure "worker-mcp-server-probe summary server $serverName missing tool names" }
+        if ($entry.hasStartTool -ne $true) { Add-Failure "worker-mcp-server-probe summary server $serverName missing start tool classification" }
+        if ($entry.PSObject.Properties.Name -notcontains "hasWaitTool") { Add-Failure "worker-mcp-server-probe summary server $serverName missing wait tool classification" }
+        if ($entry.PSObject.Properties.Name -notcontains "hasSyncTool") { Add-Failure "worker-mcp-server-probe summary server $serverName missing sync tool classification" }
+        if ($entry.PSObject.Properties.Name -notcontains "hasCancelTool") { Add-Failure "worker-mcp-server-probe summary server $serverName missing cancel tool classification" }
+        if (@(As-FlatArray $entry.startToolNames).Count -lt 1) { Add-Failure "worker-mcp-server-probe summary server $serverName missing start tool names" }
         if ($entry.errorPresent -eq $true) { Add-Failure "worker-mcp-server-probe summary server $serverName has error" }
     }
 }

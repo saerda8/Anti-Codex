@@ -99,11 +99,14 @@ async function probeWorker(config) {
     await withTimeout(client.connect(transport), config.startupTimeoutMs, `${config.name} connect`);
     const listed = await withTimeout(client.listTools(), config.startupTimeoutMs, `${config.name} tools/list`);
     const tools = Array.isArray(listed?.tools) ? listed.tools : [];
+    const toolNames = tools.map((tool) => String(tool.name || "")).filter(Boolean);
+    const taskTools = classifyTaskTools(toolNames);
     return {
       name: config.name,
       ok: true,
       toolCount: tools.length,
-      toolNames: tools.map((tool) => String(tool.name || "")).filter(Boolean),
+      toolNames,
+      ...taskTools,
       error: "",
     };
   } catch (error) {
@@ -121,6 +124,23 @@ async function probeWorker(config) {
       // Closing a failed stdio transport is best-effort.
     }
   }
+}
+
+function classifyTaskTools(toolNames) {
+  const startToolNames = toolNames.filter((name) => name.includes("_start_") || name.endsWith("_start_implementation"));
+  const waitToolNames = toolNames.filter((name) => name.includes("_wait_") || name.endsWith("_wait_for_job"));
+  const syncToolNames = toolNames.filter((name) => name.endsWith("_implement_in_workspace"));
+  const cancelToolNames = toolNames.filter((name) => name.includes("_cancel_") || name.endsWith("_cancel_job"));
+  return {
+    startToolNames,
+    waitToolNames,
+    syncToolNames,
+    cancelToolNames,
+    hasStartTool: startToolNames.length > 0,
+    hasWaitTool: waitToolNames.length > 0,
+    hasSyncTool: syncToolNames.length > 0,
+    hasCancelTool: cancelToolNames.length > 0,
+  };
 }
 
 function writeReport(payload, reportRoot) {
@@ -172,6 +192,8 @@ async function main() {
     passedServerCount: servers.filter((server) => server.ok).length,
     missingServers: workers.filter((worker) => !servers.some((server) => server.name === worker && server.ok)),
     incompleteToolCountServers: servers.filter((server) => Number(server.toolCount || 0) < 1).map((server) => server.name),
+    missingStartToolServers: servers.filter((server) => server.ok && server.hasStartTool !== true).map((server) => server.name),
+    missingWaitToolServers: servers.filter((server) => server.ok && server.hasWaitTool !== true).map((server) => server.name),
     servers,
   };
   finish(payload, reportRoot);
@@ -192,6 +214,8 @@ main().catch((error) => {
     passedServerCount: 0,
     missingServers: [],
     incompleteToolCountServers: [],
+    missingStartToolServers: [],
+    missingWaitToolServers: [],
     servers: [],
     error: error?.message || String(error),
   }, reportRoot);

@@ -50,10 +50,17 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-02 - Current-channel implementation calls vs direct Kilo task
+
+- Task: prove whether worker MCP can start a real task after direct `tools/list` succeeded.
+- Result: current-channel `kilo_implement_in_workspace` and narrowed `mimo_implement_in_workspace` both failed immediately with `Transport closed`. Direct MCP `kilo_start_implementation` plus `kilo_wait_for_job` through the same client produced job `klw_mr2ncj9r_s99eko`, proving start/wait mechanics work, but Kilo timed out after about 182s with `caller_timeout_no_valid_changes` and zero changed files.
+- Cause classification: current-channel transport remains stale/dead for implementation calls; direct Kilo execution reached the worker but the free model/job did not produce a patch within the budget.
+- Rule change: distinguish three states in reports and notes: server start/list health, task-tool shape (start/wait/sync/cancel), and real implementation success. Do not count `tools/list` as task success, and do not count current-channel `Transport closed` as a worker-model failure.
+
 ### 2026-07-02 - Direct MCP probe vs current-channel transport
 
 - Task: diagnose why current Codex-channel MCP worker calls appeared unavailable.
-- Result: current-channel calls could return `Transport closed`, but direct SDK `tools/list` probes started all seven configured worker servers and each listed 6 tools. The signed `latest-worker-mcp-server-probe.json` is now part of diagnostics.
+- Result: current-channel calls could return `Transport closed`, but direct SDK `tools/list` probes started all seven configured worker servers and each listed 6 tools. The signed `latest-worker-mcp-server-probe.json` is now part of diagnostics and classifies start/wait/sync/cancel task tools.
 - Cause classification: stale/dead Codex MCP session transport, not broken worker scripts/config.
 - Rule change: before declaring worker MCP unavailable, run/read the direct no-traffic probe and distinguish local server health from current-channel tool exposure. Do not start implementation jobs from a short-lived standalone MCP client unless the client stays alive through wait/get; closing stdin cancels async jobs.
 
