@@ -12214,6 +12214,14 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /"ui-repo-file-edit-smoke"/);
   assert.match(verifier, /"ui-repo-multi-file-edit-smoke"/);
   assert.match(verifier, /"ui-report-site-smoke"/);
+  assert.match(verifier, /请在 \$\{artifactDir\} 里创建一个很小的 Node\.js CLI 项目/);
+  assert.match(verifier, /这是两轮任务的第 1 轮/);
+  assert.match(verifier, /继续同一个项目：\$\{artifactDir\}/);
+  assert.match(verifier, /const promptLanguage = \/\[\\u3400-\\u9fff\]\/u\.test\(promptText\) \? "zh" : "en"/);
+  assert.match(verifier, /followupPromptLanguage = \/\[\\u3400-\\u9fff\]\/u\.test\(followupPromptText\) \? "zh" : "en"/);
+  assert.match(verifier, /promptLanguage/);
+  assert.match(verifier, /followupPromptText/);
+  assert.match(verifier, /followupPromptLanguage/);
   assert.match(verifier, /let cdpPort = Number\(args\.get\("--cdp-port"\) \|\| process\.env\.DEEPCODEX_CDP_PORT \|\| 0\)/);
   assert.match(verifier, /async function resolveCdpTargets/);
   assert.match(verifier, /function discoverAntiCodexCdpPorts\(\)/);
@@ -12485,6 +12493,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.ok(requiredReports.includes("latest-ui-local-project-smoke.json"), "desktop local-project evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-coding-project-smoke.json"), "desktop coding-project evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-multi-turn-project-smoke.json"), "desktop multi-turn project evidence must be release-required");
+  assert.match(releaseGates, /ui-coding-project-smoke[\s\S]*?requirePromptLanguage:\s*"zh"/);
+  assert.match(releaseGates, /ui-multi-turn-project-smoke[\s\S]*?requirePromptLanguage:\s*"zh"[\s\S]*?requireFollowupPromptLanguage:\s*"zh"/);
+  assert.match(releaseGates, /_prompt_language/);
+  assert.match(releaseGates, /_followup_prompt_language/);
   assert.ok(requiredReports.includes("latest-ui-repo-file-edit-smoke.json"), "desktop repo-file-edit evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-repo-multi-file-edit-smoke.json"), "desktop repo multi-file edit evidence must be release-required");
   assert.ok(requiredReports.includes("latest-ui-complex-project-smoke.json"), "desktop complex-project evidence must be release-required");
@@ -14011,6 +14023,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   const antigravityCliDualLanes = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-dual-account-lanes.ps1"), "utf8");
   const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
+  const secondAccountPostLoginProof = readFileSync(resolve(root, "scripts", "test-anticodex-second-account-post-login-proof.ps1"), "utf8");
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
 
   assert.match(preflight, /test-anticodex-upstream-profile\.ps1/);
@@ -14090,6 +14103,11 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /same Windows user profile\/AppData isolation is not credential isolation/);
   assert.match(antigravityCliRealSmoke, /separate-Windows-user proof must run under the target Windows user/);
   assert.match(antigravityCliRealSmoke, /Anti-Codex and MCP Antigravity account identities match/);
+  assert.ok(
+    antigravityCliRealSmoke.indexOf("separate-Windows-user proof must run under the target Windows user") <
+      antigravityCliRealSmoke.indexOf("runAntigravityTextTurn"),
+    "separate-account proof preconditions must run before real traffic",
+  );
   assert.match(antigravityCliRealSmoke, /\$report\.accountIdentityComparison = \$accountIdentityComparison/);
   assert.match(antigravityCliRealSmoke, /antiCodexSource = "anticodex-cli-real-smoke"/);
   assert.match(antigravityCliRealSmoke, /mcpSource = "external-mcp-antigravity-account"/);
@@ -14099,6 +14117,18 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /approvalSource = "explicit-user-approval"/);
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /Windows credential-store/);
+  assert.match(secondAccountPostLoginProof, /reportName = "second-account-post-login-proof"/);
+  assert.match(secondAccountPostLoginProof, /test-anticodex-antigravity-account-isolation-status\.ps1/);
+  assert.match(secondAccountPostLoginProof, /test-anticodex-antigravity-cli-real-smoke\.ps1/);
+  assert.match(secondAccountPostLoginProof, /\[switch\]\$ConfirmInteractiveLoginComplete/);
+  assert.match(secondAccountPostLoginProof, /interactive_login_confirmation_required/);
+  assert.match(secondAccountPostLoginProof, /proofCommandPreview/);
+  assert.match(secondAccountPostLoginProof, /<provided-anticodex-account-id>/);
+  assert.match(secondAccountPostLoginProof, /<provided-mcp-account-id>/);
+  assert.match(secondAccountPostLoginProof, /second-account-post-login-proof-dry-run/);
+  assert.match(secondAccountPostLoginProof, /second-account-post-login-proof-real-traffic/);
+  assert.match(secondAccountPostLoginProof, /releaseAcceptableAccountProof/);
+  assert.match(secondAccountPostLoginProof, /Dry-run only\. This does not start login, use real traffic, capture passwords, or prove distinct Antigravity account identity\./);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(preflight, /function Test-AntigravityCliProfilePrepare/);
   assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Test-AntigravityCliProfilePrepare/);
@@ -14520,6 +14550,81 @@ test("Antigravity CLI real-smoke skip path ignores account proof inputs without 
     assert.equal(report.usedRealTraffic, false);
     assert.equal(report.separateAccountVerified, false);
     assert.equal(Object.prototype.hasOwnProperty.call(report, "accountIdentityComparison"), false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Antigravity CLI real-smoke rejects wrong Windows user before real traffic", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-real-smoke-preflight-"));
+  try {
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"),
+      "-AllowRealTraffic",
+      "-ReportRoot",
+      tempRoot,
+      "-ProfileRoot",
+      join(tempRoot, "profile"),
+      "-StrictWindowsAppDataIsolation",
+      "-AccountIsolationBoundary",
+      "separate-windows-user",
+      "-WindowsUser",
+      ".\\AntiCodexModel",
+      "-AllowSeparateAccountProof",
+      "-AntiCodexAccountId",
+      "anticodex-private-test-id",
+      "-McpAccountId",
+      "mcp-private-test-id",
+      "-SeparateAccountProofApprovalId",
+      "approval-private-test-id",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout.trim());
+    assert.equal(report.requestedRealTraffic, true);
+    assert.equal(report.usedRealTraffic, false);
+    assert.equal(report.separateAccountVerified, false);
+    assert.ok(report.failures.includes("separate-Windows-user proof must run under the target Windows user before account proof can be recorded"));
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("second account post-login proof dry-run resolves command without leaking account ids", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-post-login-proof-"));
+  try {
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      resolve(root, "scripts", "test-anticodex-second-account-post-login-proof.ps1"),
+      "-ReportRoot",
+      tempRoot,
+      "-AntiCodexAccountId",
+      "anticodex-private-test-id",
+      "-McpAccountId",
+      "mcp-private-test-id",
+      "-SeparateAccountProofApprovalId",
+      "approval-private-test-id",
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stdout, /anticodex-private-test-id|mcp-private-test-id|approval-private-test-id/);
+    const report = JSON.parse(result.stdout.trim());
+    assert.equal(report.reportName, "second-account-post-login-proof");
+    assert.equal(report.noTraffic, true);
+    assert.equal(report.requestedRealTraffic, false);
+    assert.equal(report.usedRealTraffic, false);
+    assert.equal(report.releaseAcceptableAccountProof, false);
+    assert.equal(report.proofInputs.antiCodexAccountIdPresent, true);
+    assert.equal(report.proofInputs.mcpAccountIdPresent, true);
+    assert.equal(report.proofInputs.separateAccountProofApprovalIdPresent, true);
+    assert.match(report.proofCommandPreview, /<provided-anticodex-account-id>/);
+    assert.match(report.proofCommandPreview, /<provided-mcp-account-id>/);
+    assert.match(report.proofCommandPreview, /<provided-explicit-user-approval-id>/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

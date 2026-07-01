@@ -179,6 +179,12 @@ $effectivePrompt = if ([string]::IsNullOrWhiteSpace($Prompt)) {
 } else {
     $Prompt
 }
+$antiCodexAccountIdTrimmed = ([string]$AntiCodexAccountId).Trim()
+$mcpAccountIdTrimmed = ([string]$McpAccountId).Trim()
+$separateAccountProofApprovalIdTrimmed = ([string]$SeparateAccountProofApprovalId).Trim()
+$accountIdentityComparison = $null
+$separateAccountVerified = $false
+$separateAccountVerificationReason = "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account"
 
 try {
     if (-not $AllowRealTraffic) {
@@ -243,6 +249,20 @@ try {
         Add-Failure "strict Windows AppData isolation is required before real CLI smoke"
     }
 
+    if ($AllowSeparateAccountProof.IsPresent) {
+        if (-not $antiCodexAccountIdTrimmed) { Add-Failure "Anti-Codex account identity is required before separate-account proof can be recorded" }
+        if (-not $mcpAccountIdTrimmed) { Add-Failure "MCP Antigravity account identity is required before separate-account proof can be recorded" }
+        if (-not $separateAccountProofApprovalIdTrimmed) { Add-Failure "explicit separate-account proof approval id is required before separate-account proof can be recorded" }
+        if ($AccountIsolationBoundary -eq "profile-and-appdata-only") { Add-Failure "same Windows user profile/AppData isolation is not credential isolation; use a separate Windows user or official independent credential store before separate-account proof" }
+        if ($AccountIsolationBoundary -eq "separate-windows-user" -and -not $targetWindowsUserLeaf) { Add-Failure "target Windows user is required before separate-Windows-user proof can be recorded" }
+        if ($AccountIsolationBoundary -eq "separate-windows-user" -and $targetWindowsUserLeaf -and -not $runningAsTargetWindowsUser) { Add-Failure "separate-Windows-user proof must run under the target Windows user before account proof can be recorded" }
+        if ($antiCodexAccountIdTrimmed -and $mcpAccountIdTrimmed -and $antiCodexAccountIdTrimmed -eq $mcpAccountIdTrimmed) {
+            Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
+        }
+    } elseif ($antiCodexAccountIdTrimmed -or $mcpAccountIdTrimmed) {
+        Add-Failure "account identity inputs require -AllowSeparateAccountProof; refusing to record ambiguous identity evidence"
+    }
+
     if ($failures.Count -eq 0) {
         New-Item -ItemType Directory -Path $profileRootFull -Force | Out-Null
         $node = (Get-Command "node" -ErrorAction Stop).Source
@@ -280,29 +300,10 @@ console.log(JSON.stringify({ result, derivedEnv: antigravityCliIsolationEnv(env)
     }
 
     $elapsedMs = [int](([DateTime]::UtcNow - $startedAt).TotalMilliseconds)
-    $antiCodexAccountIdTrimmed = ([string]$AntiCodexAccountId).Trim()
-    $mcpAccountIdTrimmed = ([string]$McpAccountId).Trim()
-    $separateAccountProofApprovalIdTrimmed = ([string]$SeparateAccountProofApprovalId).Trim()
-    $accountIdentityComparison = $null
-    $separateAccountVerified = $false
-    $separateAccountVerificationReason = "marker match proves Antigravity CLI model access for this profile path; it does not prove a different Windows credential-store account"
-    if ($AllowSeparateAccountProof.IsPresent) {
-        if (-not $antiCodexAccountIdTrimmed) { Add-Failure "Anti-Codex account identity is required before separate-account proof can be recorded" }
-        if (-not $mcpAccountIdTrimmed) { Add-Failure "MCP Antigravity account identity is required before separate-account proof can be recorded" }
-        if (-not $separateAccountProofApprovalIdTrimmed) { Add-Failure "explicit separate-account proof approval id is required before separate-account proof can be recorded" }
-        if ($AccountIsolationBoundary -eq "profile-and-appdata-only") { Add-Failure "same Windows user profile/AppData isolation is not credential isolation; use a separate Windows user or official independent credential store before separate-account proof" }
-        if ($AccountIsolationBoundary -eq "separate-windows-user" -and -not $targetWindowsUserLeaf) { Add-Failure "target Windows user is required before separate-Windows-user proof can be recorded" }
-        if ($AccountIsolationBoundary -eq "separate-windows-user" -and $targetWindowsUserLeaf -and -not $runningAsTargetWindowsUser) { Add-Failure "separate-Windows-user proof must run under the target Windows user before account proof can be recorded" }
-        if ($antiCodexAccountIdTrimmed -and $mcpAccountIdTrimmed -and $antiCodexAccountIdTrimmed -eq $mcpAccountIdTrimmed) {
-            Add-Failure "Anti-Codex and MCP Antigravity account identities match; separate-account proof rejected"
-        }
-        if ($failures.Count -eq 0) {
-            $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed -CapturedAt ([DateTime]::UtcNow.ToString("o")) -ApprovalId $separateAccountProofApprovalIdTrimmed
-            $separateAccountVerified = $true
-            $separateAccountVerificationReason = "explicitly approved real CLI smoke under $AccountIsolationBoundary plus external MCP account identity comparison showed distinct account identities"
-        }
-    } elseif ($antiCodexAccountIdTrimmed -or $mcpAccountIdTrimmed) {
-        Add-Failure "account identity inputs require -AllowSeparateAccountProof; refusing to record ambiguous identity evidence"
+    if ($AllowSeparateAccountProof.IsPresent -and $failures.Count -eq 0) {
+        $accountIdentityComparison = New-AccountIdentityComparison -AntiCodexId $antiCodexAccountIdTrimmed -McpId $mcpAccountIdTrimmed -CapturedAt ([DateTime]::UtcNow.ToString("o")) -ApprovalId $separateAccountProofApprovalIdTrimmed
+        $separateAccountVerified = $true
+        $separateAccountVerificationReason = "explicitly approved real CLI smoke under $AccountIsolationBoundary plus external MCP account identity comparison showed distinct account identities"
     }
 
     $report = [ordered]@{

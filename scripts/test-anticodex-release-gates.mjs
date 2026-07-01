@@ -176,8 +176,8 @@ const gateDefinitions = [
   { id: "uiChatSmoke", group: "real-traffic", file: "latest-ui-chat-smoke.json", requiredForRelease: true, requireUiChatSmokeSemantics: true },
   { id: "uiWebSearchSmoke", group: "real-traffic", file: "latest-ui-web-search-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-web-search-smoke", taskMode: "web-search", prefix: "ui_web_search_smoke", requireSourceUrls: true } },
   { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
-  { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requireCodingProject: true } },
-  { id: "uiMultiTurnProjectSmoke", group: "real-traffic", file: "latest-ui-multi-turn-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-multi-turn-project-smoke", taskMode: "multi-turn-project", prefix: "ui_multi_turn_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt", "followupTxt", "changelogMd"], requireMultiTurnProject: true } },
+  { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requirePromptLanguage: "zh", requireCodingProject: true } },
+  { id: "uiMultiTurnProjectSmoke", group: "real-traffic", file: "latest-ui-multi-turn-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-multi-turn-project-smoke", taskMode: "multi-turn-project", prefix: "ui_multi_turn_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt", "followupTxt", "changelogMd"], requirePromptLanguage: "zh", requireFollowupPromptLanguage: "zh", requireMultiTurnProject: true } },
   { id: "uiRepoFileEditSmoke", group: "real-traffic", file: "latest-ui-repo-file-edit-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-repo-file-edit-smoke", taskMode: "repo-file-edit", prefix: "ui_repo_file_edit_smoke", requiredFiles: ["target", "test"], markerOptional: true, requireRepoFileEdit: true } },
   { id: "uiRepoMultiFileEditSmoke", group: "real-traffic", file: "latest-ui-repo-multi-file-edit-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-repo-multi-file-edit-smoke", taskMode: "repo-multi-file-edit", prefix: "ui_repo_multi_file_edit_smoke", requiredFiles: ["source", "test", "data", "readme", "html"], markerOptional: true, requireRepoMultiFileEdit: true } },
   { id: "uiComplexProjectSmoke", group: "real-traffic", file: "latest-ui-complex-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-complex-project-smoke", taskMode: "complex-project", prefix: "ui_complex_project_smoke", requiredFiles: ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"], requireSourceJsonUrls: 3, requireCodingProject: true, requireReportSite: true } },
@@ -613,6 +613,8 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push(`${prefix}_behavior_not_covered`);
       if (report.coverageKind !== "desktop-ui-real-traffic") semanticFailures.push(`${prefix}_coverage_kind`);
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push(`${prefix}_failures`);
+      if (spec.requirePromptLanguage && report.promptLanguage !== spec.requirePromptLanguage) semanticFailures.push(`${prefix}_prompt_language`);
+      if (spec.requireFollowupPromptLanguage && report.followupPromptLanguage !== spec.requireFollowupPromptLanguage) semanticFailures.push(`${prefix}_followup_prompt_language`);
       if (!spec.markerOptional && (!marker || Number(report.answerMarkerCount || 0) < 1)) semanticFailures.push(`${prefix}_marker_missing`);
       if (report.clicked !== true) semanticFailures.push(`${prefix}_not_sent`);
       if (report.composerCleared !== true) semanticFailures.push(`${prefix}_composer_not_cleared`);
@@ -4446,6 +4448,7 @@ if (args.has("--self-test")) {
       "ui_coding_project_smoke_behavior_not_covered",
       "ui_coding_project_smoke_coverage_kind",
       "ui_coding_project_smoke_failures",
+      "ui_coding_project_smoke_prompt_language",
       "ui_coding_project_smoke_marker_missing",
       "ui_coding_project_smoke_not_sent",
       "ui_coding_project_smoke_composer_not_cleared",
@@ -4468,6 +4471,8 @@ if (args.has("--self-test")) {
       "ui_multi_turn_project_smoke_behavior_not_covered",
       "ui_multi_turn_project_smoke_coverage_kind",
       "ui_multi_turn_project_smoke_failures",
+      "ui_multi_turn_project_smoke_prompt_language",
+      "ui_multi_turn_project_smoke_followup_prompt_language",
       "ui_multi_turn_project_smoke_marker_missing",
       "ui_multi_turn_project_smoke_not_sent",
       "ui_multi_turn_project_smoke_composer_not_cleared",

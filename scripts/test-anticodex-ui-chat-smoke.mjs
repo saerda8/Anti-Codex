@@ -124,10 +124,10 @@ if (!hasCustomPrompt && taskMode === "local-project") {
   promptText = `Create a very small local HTML report in ${artifactDir}. Use PowerShell file commands to create exactly these files: index.html, README.md, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. index.html must be a simple offline page with one heading, one status paragraph, and the exact marker ${marker}. README.md must describe the files. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
 }
 if (!hasCustomPrompt && taskMode === "coding-project") {
-  promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export a tallyWords(text) function and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}.`;
+  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}。`;
 }
 if (!hasCustomPrompt && taskMode === "multi-turn-project") {
-  promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export tallyWords(text) and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}_FIRST. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}_FIRST.`;
+  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。这是两轮任务的第 1 轮。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text)，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}_FIRST。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}_FIRST。`;
 }
 if (!hasCustomPrompt && taskMode === "complex-project") {
   promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell only to run Node.js file-write commands; do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files because they can write a UTF-8 BOM. Create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search and must be written with Node fs.writeFileSync(..., "utf8"). codex-update-analyzer.mjs must export summarizeSources(sources), must define stripUtf8Bom(text), and must call stripUtf8Bom before JSON.parse when run as a CLI. The CLI must read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3 and codexMentionCount is at least 1, then reply with ${marker}.`;
@@ -145,6 +145,9 @@ if (hasCustomPrompt && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
   if (promptMarker) marker = promptMarker;
 }
+const promptLanguage = /[\u3400-\u9fff]/u.test(promptText) ? "zh" : "en";
+let followupPromptText = "";
+let followupPromptLanguage = "";
 const startedAt = Date.now();
 const uiLockDir = join(reportRoot, "ui-chat-smoke.lock");
 
@@ -2079,7 +2082,8 @@ async function main() {
 
     if (taskMode === "multi-turn-project") {
       const firstMarker = `${marker}_FIRST`;
-      const followupPrompt = `Continue the same project in ${artifactDir}. Do not start over and do not inspect Antigravity brain, transcript, history, or log folders. Modify word-tally.mjs so it also exports uniqueWords(text), returning sorted unique words. Update word-tally.test.mjs to keep the original tallyWords assertion and add a node:test assertion that uniqueWords("red blue red") returns ["blue","red"]. Create CHANGELOG.md mentioning the new uniqueWords follow-up and the exact marker ${marker}. Create followup.txt containing exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red green", verify red=2 blue=1 green=1, then reply with ${marker}.`;
+      followupPromptText = `继续同一个项目：${artifactDir}。不要重建项目，也不要查看 Antigravity brain、transcript、history 或 log 目录。修改 word-tally.mjs，让它额外导出 uniqueWords(text)，返回排序后的唯一单词数组。更新 word-tally.test.mjs：保留原来的 tallyWords 断言，再增加一个 node:test 断言，要求 uniqueWords("red blue red") 返回 ["blue","red"]。创建 CHANGELOG.md，里面要提到这次 uniqueWords 追加任务和准确标记 ${marker}。创建 followup.txt，内容必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red green"，确认 red=2、blue=1、green=1 后，最后回复 ${marker}。`;
+      followupPromptLanguage = /[\u3400-\u9fff]/u.test(followupPromptText) ? "zh" : "en";
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs, { requiresProjectChat });
       failures.push(...turn1.failures.map((failure) => `turn1: ${failure}`));
       const turn1Settled = await waitForDesktopToolTurnSettled(ws, firstMarker, Math.min(timeoutMs, 120_000));
@@ -2088,7 +2092,7 @@ async function main() {
       }
       const firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
       const turn2 = turn1Settled.ok === true
-        ? await submitDesktopPromptAndWait(ws, followupPrompt, marker, timeoutMs, { requiresProjectChat })
+        ? await submitDesktopPromptAndWait(ws, followupPromptText, marker, timeoutMs, { requiresProjectChat })
         : {
           ok: false,
           failures: ["follow-up was not submitted because turn1 tool output was not settled"],
@@ -2161,7 +2165,10 @@ async function main() {
         coverageKind: "desktop-ui-real-traffic",
         taskMode,
         promptText,
-        turnPrompts: [promptText, followupPrompt],
+        promptLanguage,
+        followupPromptText,
+        followupPromptLanguage,
+        turnPrompts: [promptText, followupPromptText],
         elapsedMs: Date.now() - startedAt,
         failures,
         marker,
@@ -2681,6 +2688,9 @@ async function main() {
     coverageKind: "desktop-ui-real-traffic",
     taskMode,
     promptText,
+    promptLanguage,
+    followupPromptText,
+    followupPromptLanguage,
     repairPrompt,
     elapsedMs: Date.now() - startedAt,
     failures,
@@ -2761,6 +2771,9 @@ main().catch((error) => {
     coverageKind: "desktop-ui-real-traffic",
     taskMode,
     promptText,
+    promptLanguage,
+    followupPromptText,
+    followupPromptLanguage,
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
