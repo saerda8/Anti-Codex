@@ -59,6 +59,7 @@ const projectTaskModes = new Set([
   "repo-multi-file-edit",
 ]);
 const requiresProjectChat = projectTaskModes.has(taskMode);
+const projectChatLabel = String(args.get("--project-label") || "Anti-Codex");
 const markerPrefix = taskMode === "web-search"
   ? "UI_WEB_SEARCH_SMOKE"
   : taskMode === "coding-project"
@@ -105,39 +106,42 @@ const repoMultiFileHtml = resolve(repoMultiFileEditDir, "status-dashboard.html")
 let repoMultiFileBaselineSource = "";
 let repoMultiFileExpectedTest = "";
 let repoMultiFileExpectedData = "";
-let promptText = String(args.get("--prompt") || (taskMode === "web-search"
+const promptFile = args.get("--prompt-file") ? resolve(String(args.get("--prompt-file"))) : "";
+const promptFromFile = promptFile ? readFileSync(promptFile, "utf8") : "";
+const hasCustomPrompt = Boolean(promptFromFile || args.get("--prompt"));
+let promptText = String(promptFromFile || args.get("--prompt") || (taskMode === "web-search"
   ? `最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 ${marker}。`
   : taskMode === "local-project"
     ? `Create a very small local HTML report in ${artifactDir}. Create exactly these files: index.html, README.md, done.txt. index.html must be a simple offline page with one heading, one status paragraph, and the exact marker ${marker}. README.md must describe the files. done.txt must contain exactly ${marker}. Verify the files, then reply with ${marker}.`
     : `Reply with exactly ${marker} and nothing else.`));
-if (!args.get("--prompt") && taskMode === "web-search") {
+if (!hasCustomPrompt && taskMode === "web-search") {
   promptText = `Search the web for recent Codex updates, answer briefly in Chinese with source URLs, and put ${marker} on its own final line.`;
 }
-if (!args.get("--prompt") && taskMode === "free-chat") {
+if (!hasCustomPrompt && taskMode === "free-chat") {
   promptText = `用中文简短回答：如果 Anti-Codex 是 Codex 客户端接入另一个模型，正常小任务应该怎么判断是否跑通？最后单独一行写 ${marker}。`;
 }
-if (!args.get("--prompt") && taskMode === "local-project") {
+if (!hasCustomPrompt && taskMode === "local-project") {
   promptText = `Create a very small local HTML report in ${artifactDir}. Use PowerShell file commands to create exactly these files: index.html, README.md, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. index.html must be a simple offline page with one heading, one status paragraph, and the exact marker ${marker}. README.md must describe the files. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
 }
-if (!args.get("--prompt") && taskMode === "coding-project") {
+if (!hasCustomPrompt && taskMode === "coding-project") {
   promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export a tallyWords(text) function and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}.`;
 }
-if (!args.get("--prompt") && taskMode === "multi-turn-project") {
+if (!hasCustomPrompt && taskMode === "multi-turn-project") {
   promptText = `Create a tiny Node.js CLI project in ${artifactDir}. Use PowerShell file commands to create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. word-tally.mjs must export tallyWords(text) and when run as a CLI print JSON word counts. word-tally.test.mjs must use node:test and assert that "red blue red" returns red=2 and blue=1. done.txt must contain exactly ${marker}_FIRST. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red", verify the outputs, then reply with ${marker}_FIRST.`;
 }
-if (!args.get("--prompt") && taskMode === "complex-project") {
+if (!hasCustomPrompt && taskMode === "complex-project") {
   promptText = `Search the web for recent Codex updates, then create a small local research-backed Node.js dashboard project in ${artifactDir}. Use PowerShell only to run Node.js file-write commands; do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files because they can write a UTF-8 BOM. Create exactly these files: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. sources.json must contain at least three real source URL records from the web search and must be written with Node fs.writeFileSync(..., "utf8"). codex-update-analyzer.mjs must export summarizeSources(sources), must define stripUtf8Bom(text), and must call stripUtf8Bom before JSON.parse when run as a CLI. The CLI must read sources.json and print JSON with sourceCount and codexMentionCount. codex-update-analyzer.test.mjs must use node:test and assert that three sources produce sourceCount=3. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone Chinese HTML dashboard that links to report.md, mentions Codex or OpenAI, includes at least three source URLs, and includes the exact marker ${marker}. done.txt must contain exactly ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json, verify sourceCount is at least 3 and codexMentionCount is at least 1, then reply with ${marker}.`;
 }
-if (!args.get("--prompt") && taskMode === "report-site") {
+if (!hasCustomPrompt && taskMode === "report-site") {
   promptText = `Search the web for recent Codex updates, then create a small local research report site in ${artifactDir}. Use PowerShell only to run Node.js file-write commands. Create exactly these files and no others: report.md, index.html, done.txt. Do not create README.md; README.md is explicitly wrong for this task. Your first file write action must create report.md, not README.md. Do not inspect Antigravity brain, transcript, history, or log folders. report.md must be Chinese, mention Codex or OpenAI, include at least three real source URLs, and include the exact marker ${marker}. index.html must be a complete standalone HTML document with Chinese visible content, at least three source URLs, a link to report.md, and the exact marker ${marker}. done.txt must contain exactly ${marker}. Verify report.md, index.html, and done.txt exist and done.txt exactly matches the marker, then reply with ${marker}.`;
 }
-if (!args.get("--prompt") && taskMode === "repo-file-edit") {
+if (!hasCustomPrompt && taskMode === "repo-file-edit") {
   promptText = `In the local project ${sourceRoot}, edit only this file: ${repoFileEditTarget}. The test file already exists at ${repoFileEditTest} and currently fails. Do not start with Get-ChildItem, dir, ls, or another directory listing. You already have the required behavior: implement normalizeStatus(input) so it trims, lowercases, replaces any run of spaces or underscores with one hyphen, removes characters other than lowercase letters, digits, and hyphen, collapses repeated hyphens, and trims leading/trailing hyphens. Your first tool action must modify ${repoFileEditTarget}. Do not edit any other source file. Then run: node --test ${repoFileEditTest}. Only finish after the test passes. Put exactly ${marker} on the final line.`;
 }
-if (!args.get("--prompt") && taskMode === "repo-multi-file-edit") {
+if (!hasCustomPrompt && taskMode === "repo-multi-file-edit") {
   promptText = `Work only in this fixture directory: ${repoMultiFileEditDir}. This is step 1 of 2. Your first and only tool action for this step must write ${repoMultiFileReadme}. Execute exactly this PowerShell-safe Node command before any other command: ${buildRepoMultiReadmeWriteCommand()}. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. Do not inspect the directory first. Do not edit, replace, or delete ${repoMultiFileSource}, ${repoMultiFileTest}, or ${repoMultiFileData} for any reason. Do not run git status, Get-ChildItem, Get-Content, dir, ls, cat, or node --test in this step. After README.md exists, reply with exactly ${marker} on the final line and stop.`;
 }
-if (args.get("--prompt") && !args.get("--marker")) {
+if (hasCustomPrompt && !args.get("--marker")) {
   const promptMarker = String(promptText).match(/\bUI_[A-Z0-9_]{8,}\b/g)?.at(-1);
   if (promptMarker) marker = promptMarker;
 }
@@ -2055,13 +2059,13 @@ async function main() {
     }
     if (isolateChat) {
       const clickedNewChat = await ws.send("Runtime.evaluate", {
-        expression: newChatClickExpression(requiresProjectChat ? "deepcodex" : ""),
+        expression: newChatClickExpression(requiresProjectChat ? projectChatLabel : ""),
         returnByValue: true,
         awaitPromise: true,
       });
       newChatEvidence = clickedNewChat.result?.result?.value || null;
       if (requiresProjectChat && newChatEvidence?.projectMatched !== true) {
-        failures.push("project task did not open a deepcodex project chat before submit");
+        failures.push(`project task did not open a ${projectChatLabel} project chat before submit`);
       }
       if (newChatEvidence?.clicked !== true) {
         await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });

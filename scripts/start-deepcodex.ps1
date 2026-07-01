@@ -1576,7 +1576,10 @@ if (workspace) {
   const labels = state["electron-workspace-root-labels"] && typeof state["electron-workspace-root-labels"] === "object"
     ? { ...state["electron-workspace-root-labels"] }
     : {};
-  labels[workspace] ||= path.basename(workspace) || workspace;
+  const workspaceLabel = (path.basename(workspace) || workspace).toLowerCase() === "deepcodex" ? "Anti-Codex" : (path.basename(workspace) || workspace);
+  if (!labels[workspace] || String(labels[workspace]).toLowerCase() === "deepcodex") {
+    labels[workspace] = workspaceLabel;
+  }
   state["electron-workspace-root-labels"] = labels;
   state["project-order"] = unique([workspace, ...(Array.isArray(state["project-order"]) ? state["project-order"] : [])]);
 }

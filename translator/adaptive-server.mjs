@@ -7267,8 +7267,8 @@ function artifactMarkerRequirementFromUserText(userText = "") {
     const marker = markers.at(-1);
     if (!marker) return null;
     if (/^UI_REPO_(?:FILE|MULTI_FILE)_EDIT_SMOKE_/i.test(marker)) return null;
-    const pathMatch = userText.match(/[A-Z]:\\[^\s"'`]+/);
-    const targetPath = (pathMatch?.[0] || "").replace(/[.,;:]+$/, "");
+    const pathMatch = userText.match(/[A-Z]:\\[^\s"'`<>|*?，。；：、！？銆]+/);
+    const targetPath = (pathMatch?.[0] || "").replace(/[.,;:，。；：、！？銆]+$/, "");
     const multiTurnProject = /(?:desktop-visible-multi-turn-project|uniqueWords|followup\.txt|CHANGELOG\.md|same project)/i.test(userText);
     const complexProject = /(?:desktop-visible-complex-project|codex-update-analyzer|sources\.json|summarizeSources|sourceCount)/i.test(userText);
     const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);

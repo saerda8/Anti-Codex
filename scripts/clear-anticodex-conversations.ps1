@@ -225,8 +225,13 @@ if ($workspaceRootFull -and (Test-Path -LiteralPath $workspaceRootFull -PathType
     $savedWorkspaceRoots = @($savedWorkspaceRoots + $workspaceRootFull | Where-Object { $_ } | Select-Object -Unique)
     $activeWorkspaceRoots = @($activeWorkspaceRoots + $workspaceRootFull | Where-Object { $_ } | Select-Object -Unique)
     $projectOrder = @($projectOrder + $workspaceRootFull | Where-Object { $_ } | Select-Object -Unique)
-    if (-not ($workspaceRootLabels.PSObject.Properties.Name -contains $workspaceRootFull)) {
-        Add-JsonProperty -Object $workspaceRootLabels -Name $workspaceRootFull -Value "deepcodex"
+    $workspaceLabel = "Anti-Codex"
+    if ($workspaceRootLabels.PSObject.Properties.Name -contains $workspaceRootFull) {
+        if ([string]$workspaceRootLabels.$workspaceRootFull -ieq "deepcodex") {
+            $workspaceRootLabels.$workspaceRootFull = $workspaceLabel
+        }
+    } else {
+        Add-JsonProperty -Object $workspaceRootLabels -Name $workspaceRootFull -Value $workspaceLabel
     }
 }
 

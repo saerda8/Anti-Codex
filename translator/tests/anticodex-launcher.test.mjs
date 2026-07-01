@@ -269,7 +269,8 @@ test("Anti-Codex conversation cleanup preserves project roots and native Codex i
   assert.match(cleanup, /prompt-history/);
   assert.match(cleanup, /composer-drafts/);
   assert.match(cleanup, /G:\\Trae-Project\\Anti-Codex\\deepcodex/);
-  assert.match(cleanup, /deepcodex/);
+  assert.match(cleanup, /\$workspaceLabel = "Anti-Codex"/);
+  assert.match(cleanup, /\[string\]\$workspaceRootLabels\.\$workspaceRootFull -ieq "deepcodex"/);
   assert.match(cleanup, /Stop-Process/);
   assert.match(cleanup, /Get-AntiCodexProcesses/);
   assert.match(cleanup, /wouldStopProcessCount/);
@@ -1653,6 +1654,8 @@ test("Anti-Codex startup registers an explicit workspace as the active desktop p
   assert.match(launcher, /electron-workspace-root-labels/);
   assert.match(launcher, /project-order/);
   assert.match(launcher, /state\["active-workspace-roots"\]\s*=\s*\[workspace\]/);
+  assert.match(launcher, /workspaceLabel[\s\S]*"Anti-Codex"/);
+  assert.match(launcher, /String\(labels\[workspace\]\)\.toLowerCase\(\) === "deepcodex"/);
 });
 
 test("Anti-Codex installer creates an isolated copied Codex host", () => {
@@ -12240,7 +12243,12 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /modelRouteEvidence/);
   assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
   assert.match(server, /reason: "fast_diagnostics"/);
-  assert.match(verifier, /project task did not open a deepcodex project chat before submit/);
+  assert.match(verifier, /const projectChatLabel = String\(args\.get\("--project-label"\) \|\| "Anti-Codex"\)/);
+  assert.match(verifier, /newChatClickExpression\(requiresProjectChat \? projectChatLabel : ""\)/);
+  assert.match(verifier, /project task did not open a \$\{projectChatLabel\} project chat before submit/);
+  assert.match(verifier, /const promptFile = args\.get\("--prompt-file"\) \? resolve\(String\(args\.get\("--prompt-file"\)\)\) : ""/);
+  assert.match(verifier, /readFileSync\(promptFile, "utf8"\)/);
+  assert.match(verifier, /const hasCustomPrompt = Boolean\(promptFromFile \|\| args\.get\("--prompt"\)\)/);
   assert.match(verifier, /project task composer was still projectless before clicking send/);
   assert.match(verifier, /composer did not contain exactly the submitted prompt before clicking send/);
   assert.match(verifier, /send button was not found in the composer controls/);
