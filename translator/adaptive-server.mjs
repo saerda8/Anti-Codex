@@ -6146,6 +6146,23 @@ function compactFallbackTextFromRequest(original) {
     return text.length > 6000 ? `...[earlier compact input omitted]\n${text.slice(-6000)}` : text;
 }
 
+function compactSummaryMissingFallbackFacts(summaryText, fallbackText) {
+    const summary = String(summaryText || "");
+    const fallback = String(fallbackText || "");
+    if (!summary || !fallback) return false;
+    const markers = fallback.match(/\bCOMPACT_SEED_[A-Z0-9_:-]+\b/gi) || [];
+    if (markers.some(marker => !summary.includes(marker))) return true;
+    const nextAction = fallback.match(/(?:Next action|下一步|What remains to be done)\s*[:：]\s*([^\n]+)/i)?.[1] || "";
+    if (nextAction) {
+        const terms = nextAction
+            .split(/[^A-Za-z0-9_\u4e00-\u9fff-]+/)
+            .map(term => term.trim())
+            .filter(term => term.length >= 4);
+        if (terms.length > 0 && terms.some(term => !summary.toLowerCase().includes(term.toLowerCase()))) return true;
+    }
+    return false;
+}
+
 function normalizeCompactSummary(text, fallbackText = "") {
     let summary = String(text || "").trim();
     const fence = summary.match(/^```(?:json|markdown|text)?\s*([\s\S]*?)\s*```$/i);
@@ -6171,6 +6188,14 @@ function normalizeCompactSummary(text, fallbackText = "") {
             "Compact summary unavailable: the upstream model returned an acknowledgement or an underspecified summary.",
             "Continue using the remaining thread context and local workspace state; do not assume omitted details were intentionally discarded.",
         ].join("\n");
+    }
+    if (compactSummaryMissingFallbackFacts(summary, fallbackText)) {
+        return [
+            summary,
+            "",
+            "Recovered compact input facts:",
+            String(fallbackText || "").trim(),
+        ].join("\n").trim();
     }
     return summary;
 }

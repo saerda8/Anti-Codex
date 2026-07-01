@@ -166,6 +166,24 @@ test("compact fallback preserves active task when upstream summary is weak", () 
   assert.match(summary, /news-pipeline\/pipeline\.js demo-001/);
 });
 
+test("compact fallback appends missing next action when upstream only preserves marker", () => {
+  const formatted = chatToCompactResponseFormat({
+    id: "chatcmpl_compact_marker_only",
+    choices: [{ message: { role: "assistant", content: "COMPACT_SEED_29163_20260701" } }],
+  }, "claude-sonnet-4-6", {
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Active task marker: COMPACT_SEED_29163_20260701. Completed: installed routing validation. Next action: verify installed compaction resume. Preserve the exact marker and next action for the next turn." }],
+    }],
+  });
+
+  const summary = formatted.output[0].summary;
+  assert.match(summary, /COMPACT_SEED_29163_20260701/);
+  assert.match(summary, /Recovered compact input facts/);
+  assert.match(summary, /Next action: verify installed compaction resume/);
+});
+
 test("compact summary normalizer unwraps json and fences", () => {
   assert.equal(normalizeCompactSummary('```json\n{"summary":"具体进展：已完成 translator compact 包装测试。"}\n```'), "具体进展：已完成 translator compact 包装测试。");
 });
