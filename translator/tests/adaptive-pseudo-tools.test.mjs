@@ -2390,6 +2390,44 @@ test("restored history drops stale completion detours and paired status probes",
   assert.match(joined, /直接总结/);
 });
 
+test("restored history drops local artifact tool commands with stale smoke markers", () => {
+  const oldMarker = "UI_COMPLEX_PROJECT_SMOKE_111111";
+  const newMarker = "UI_COMPLEX_PROJECT_SMOKE_222222";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `Create package.json, codex-update-analyzer.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\old. done.txt must contain ${oldMarker}.` }],
+      },
+      {
+        type: "function_call",
+        call_id: "call_old_complex",
+        name: "shell_command",
+        arguments: JSON.stringify({
+          command: `# Anti-Codex complex artifact safety repair\nnode -e "require('node:fs').writeFileSync('C:\\\\Temp\\\\old\\\\done.txt','${oldMarker}','utf8')"`,
+        }),
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_old_complex",
+        output: `Exit code: 0\n${oldMarker}`,
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `Continue the same complex-project task in C:\\Temp\\new. Create package.json, codex-update-analyzer.mjs, sources.json, report.md, index.html, done.txt. done.txt must contain ${newMarker}.` }],
+      },
+    ],
+  }, { allowTools: true, injectInternalTools: false });
+
+  const forwarded = JSON.stringify(body.messages);
+  assert.match(forwarded, new RegExp(newMarker));
+  assert.doesNotMatch(forwarded, new RegExp(oldMarker));
+  assert.doesNotMatch(forwarded, /Anti-Codex complex artifact safety repair/);
+});
+
 test("restored history ledger preserves workspace and tool-state facts", () => {
   const input = [
     { type: "context_compaction", summary: "压缩摘要：继续找 qwen 项目。" },
@@ -3179,6 +3217,61 @@ test("strict chat tool routing accepts shell_command alias for exec_command", ()
   assert.deepEqual(JSON.parse(formatted.output[0].arguments), { cmd: "pwd" });
 });
 
+test("strict shell_command routing accepts command arg when Codex schema requires cmd", () => {
+  const routing = {
+    shell_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const chatFormatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_shell_command_cmd_schema",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_shell_cmd_schema",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "pwd" }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, { model: "antigravity", input: "list files" }, routing, { strictTools: true });
+
+  assert.equal(chatFormatted.output[0].type, "function_call");
+  assert.equal(chatFormatted.output[0].name, "shell_command");
+  assert.deepEqual(JSON.parse(chatFormatted.output[0].arguments), { cmd: "pwd" });
+
+  const pseudoFormatted = chatToResponsesFormat({
+    id: "chatcmpl_strict_shell_command_cmd_schema_pseudo",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="shell_command"><parameter name="command">pwd</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "list files" }, routing, { strictTools: true });
+
+  assert.equal(pseudoFormatted.output[0].type, "function_call");
+  assert.equal(pseudoFormatted.output[0].name, "shell_command");
+  assert.deepEqual(JSON.parse(pseudoFormatted.output[0].arguments), { cmd: "pwd" });
+});
+
 test("strict pseudo tool routing rejects calls missing required schema parameters", () => {
   const formatted = chatToResponsesFormat({
     id: "chatcmpl_strict_missing_required",
@@ -3922,6 +4015,70 @@ test("artifact completion does not reuse stale marker for a newer project edit t
   assert.equal(completion, null);
 });
 
+test("complex project tool output closes the turn after marker tests and CLI pass", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701";
+  const messages = [
+    {
+      role: "user",
+      content: `Search the web for recent Codex updates, then create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\complex. done.txt must contain exactly ${marker}. The CLI must print sourceCount and codexMentionCount.`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_complex",
+      content: [
+        `Exit code: 0`,
+        `Output:`,
+        `UI_COMPLEX_PROJECT_SMOKE_20260701`,
+        `✔ summarizes three sources (1ms)`,
+        `ℹ pass 1`,
+        `ℹ fail 0`,
+        `{"sourceCount":3,"codexMentionCount":3,"urls":["https://openai.com/codex/","https://openai.com/news/","https://developers.openai.com/codex/"]}`,
+      ].join("\n"),
+    },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_complex", output: messages.at(-1).content }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, /Files created, tested, and verified/);
+  assert.match(completion.choices[0].message.content, new RegExp(marker));
+});
+
+test("complex project Responses input tool output closes even without chat tool messages", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_INPUT_ONLY";
+  const output = [
+    `Exit code: 0`,
+    `Output:`,
+    marker,
+    `✔ summarizes three sources (1ms)`,
+    `ℹ pass 1`,
+    `ℹ fail 0`,
+    `{"sourceCount":3,"codexMentionCount":3,"urls":["https://openai.com/codex/","https://openai.com/news/","https://developers.openai.com/codex/"]}`,
+  ].join("\n");
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\complex. done.txt must contain exactly ${marker}. The CLI must print sourceCount and codexMentionCount.`,
+        }],
+      },
+      { type: "function_call_output", call_id: "call_complex", output },
+    ],
+  }, { model: "gemini-pro-agent", messages: [] });
+
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, /Files created, tested, and verified/);
+  assert.match(completion.choices[0].message.content, new RegExp(marker));
+});
+
 test("local artifact marker guard catches wrong marker in read-back evidence", () => {
   const messages = [
     {
@@ -4274,6 +4431,56 @@ test("chatToResponsesFormat does not append deterministic guard to complex proje
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
 
+test("chatToResponsesFormat replaces fragile complex project shell commands with a safety repair", () => {
+  const fmt = chatToResponsesFormat({
+    id: "chatcmpl_complex_fragile_tool",
+    created: 1,
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_fragile_tool",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: "$env:HTML = ''<!DOCTYPE html><html><body>broken</body></html>''\n[System.IO.File]::WriteAllText('C:\\Temp\\desktop-visible-complex-project\\run\\index.html', $env:HTML)",
+            }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  const encodedScript = args.command.match(/Buffer\.from\('([^']+)','base64'\)/)?.[1] || "";
+  const decodedScript = Buffer.from(encodedScript, "base64").toString("utf8");
+  assert.match(args.command, /Anti-Codex complex artifact safety repair/);
+  assert.match(args.command, /node -e/);
+  assert.match(args.command, /Buffer\.from\('[A-Za-z0-9+/=]+','base64'\)/);
+  assert.match(decodedScript, /codex-update-analyzer\.mjs/);
+  assert.match(decodedScript, /UI_COMPLEX_PROJECT_SMOKE_20260701/);
+  assert.match(decodedScript, /complex artifact verification passed/);
+  assert.match(decodedScript, /console\.log\(marker\)/);
+  assert.doesNotMatch(args.command, /\$env:HTML/);
+  assert.doesNotMatch(args.command, /\\"node:fs\\"/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+});
+
 test("agentic visible step-flow requests do not start with the deterministic artifact guard", () => {
   const request = {
     model: "gemini-pro-agent",
@@ -4620,6 +4827,52 @@ test("autonomous reasoning tool calls get visible progress text before execution
         content: null,
         tool_calls: [{
           id: "call_test",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: "node --test codex-update-analyzer.test.mjs" }),
+          },
+        }],
+      },
+    }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+
+  const fmt = chatToResponsesFormat(completion, request, routing, { strictTools: true });
+  assert.equal(fmt.output[0].type, "message");
+  assert.match(fmt.output[0].content[0].text, /运行测试验证/);
+  assert.equal(fmt.output[1].type, "function_call");
+  assert.equal(fmt.output[1].name, "shell_command");
+});
+
+test("complex project tool calls get visible progress text before execution", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_20260701_VISIBLE";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请在 C:\\Temp\\desktop-visible-complex-project\\run 创建 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。最终标记：${marker}。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_complex_visible",
           type: "function",
           function: {
             name: "shell_command",

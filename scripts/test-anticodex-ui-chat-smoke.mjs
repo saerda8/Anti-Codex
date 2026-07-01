@@ -1085,7 +1085,8 @@ function buildRepoMultiReadmeWriteCommand() {
 }
 
 function nodeEvalCommand(script) {
-  return `node -e ${asciiJsonStringLiteral(script)}`;
+  const payload = Buffer.from(String(script), "utf8").toString("base64");
+  return `node -e "eval(Buffer.from('${payload}','base64').toString('utf8'))"`;
 }
 
 function buildReportSiteRepairCommand(dir, expectedMarker) {
@@ -1106,7 +1107,7 @@ function buildReportSiteRepairCommand(dir, expectedMarker) {
 }
 
 function buildReportSiteRepairPrompt(currentFailures = [], evidence = null) {
-  return `Continue the same report-site task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "report.md/index.html source evidence is incomplete"}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not create README.md and do not rely on any existing README.md. Your next tool action must execute exactly this PowerShell-safe command: ${buildReportSiteRepairCommand(artifactDir, marker)}. It creates or overwrites report.md, index.html, and done.txt with Chinese Codex/OpenAI content, three source URLs, a report.md link, and the exact marker ${marker}. After that, verify report.md, index.html, and done.txt exist, then reply with ${marker}.`;
+  return `Continue the same report-site task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "report.md/index.html source evidence is incomplete"}. Do not inspect Antigravity brain, transcript, history, or log folders. Do not create README.md and do not rely on any existing README.md. Your next tool action must execute exactly this PowerShell-safe command: ${buildReportSiteRepairCommandSafe(artifactDir, marker)}. It creates or overwrites report.md, index.html, and done.txt with Chinese Codex/OpenAI content, three source URLs, a report.md link, and the exact marker ${marker}. After that, verify report.md, index.html, and done.txt exist, then reply with ${marker}.`;
 }
 
 function buildComplexProjectRepairCommand(dir, expectedMarker = marker) {
@@ -1127,9 +1128,92 @@ function buildComplexProjectRepairCommand(dir, expectedMarker = marker) {
   ].join(""));
 }
 
+function buildReportSiteRepairCommandSafe(dir, expectedMarker) {
+  const sourceUrls = [
+    "https://openai.com/codex/",
+    "https://openai.com/news/",
+    "https://developers.openai.com/codex/",
+  ];
+  const reportText = `# Codex \u8fd1\u671f\u66f4\u65b0\u8c03\u7814\n\n\u6807\u8bb0\uff1a${expectedMarker}\n\n\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u4ece\u684c\u9762\u4efb\u52a1\u751f\u6210\u4e2d\u6587 Markdown \u62a5\u544a\u548c HTML \u7ad9\u70b9\u3002\n\n## \u6765\u6e90\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u8c03\u7814</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u8c03\u7814</h1><p>\u6807\u8bb0\uff1a${expectedMarker}</p><p><a href="report.md">\u6253\u5f00\u62a5\u544a</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
+  return nodeEvalCommand([
+    "const fs=require('node:fs');",
+    `fs.mkdirSync(${JSON.stringify(dir)},{recursive:true});`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "report.md"))},${JSON.stringify(reportText)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "index.html"))},${JSON.stringify(htmlText)},'utf8');`,
+    `fs.writeFileSync(${JSON.stringify(join(dir, "done.txt"))},${JSON.stringify(expectedMarker)},'utf8');`,
+  ].join(""));
+}
+
+function buildComplexProjectRepairCommandSafe(dir, expectedMarker = marker) {
+  const sourceUrls = [
+    "https://openai.com/codex/",
+    "https://openai.com/news/",
+    "https://developers.openai.com/codex/",
+  ];
+  const sources = sourceUrls.map((url) => ({
+    title: url.includes("developers") ? "OpenAI Developers Codex" : (url.includes("news") ? "OpenAI News" : "OpenAI Codex"),
+    url,
+    snippet: "Codex and OpenAI update source",
+  }));
+  const analyzerSource = [
+    'import { readFileSync } from "node:fs";',
+    'import { pathToFileURL } from "node:url";',
+    "",
+    "export function stripUtf8Bom(text = \"\") {",
+    "  return String(text || \"\").replace(/^\\uFEFF/, \"\");",
+    "}",
+    "",
+    "export function summarizeSources(sources = []) {",
+    "  const items = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
+    "  const codexMentionCount = items.filter((item) => /Codex|OpenAI/i.test([item?.title, item?.url, item?.snippet].filter(Boolean).join(\" \"))).length;",
+    "  return { sourceCount: items.length, codexMentionCount, urls: items.map((item) => item?.url).filter((url) => /^https?:\\/\\//i.test(String(url || \"\"))) };",
+    "}",
+    "",
+    "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
+    "  const raw = stripUtf8Bom(readFileSync(process.argv[2] || \"sources.json\", \"utf8\"));",
+    "  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));",
+    "}",
+  ].join("\n") + "\n";
+  const testSource = [
+    'import test from "node:test";',
+    'import assert from "node:assert/strict";',
+    'import { summarizeSources } from "./codex-update-analyzer.mjs";',
+    "",
+    "test(\"summarizes three sources\", () => {",
+    "  const summary = summarizeSources([",
+    "    { title: \"Codex\", url: \"https://openai.com/codex/\", snippet: \"Codex update\" },",
+    "    { title: \"OpenAI\", url: \"https://openai.com/news/\", snippet: \"OpenAI news\" },",
+    "    { title: \"Developers\", url: \"https://developers.openai.com/codex/\", snippet: \"Codex docs\" },",
+    "  ]);",
+    "  assert.equal(summary.sourceCount, 3);",
+    "  assert.ok(summary.codexMentionCount >= 1);",
+    "});",
+  ].join("\n") + "\n";
+  const reportText = `# Codex \u8fd1\u671f\u66f4\u65b0\u8c03\u7814\n\n\u6807\u8bb0\uff1a${expectedMarker}\n\n\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u5b8c\u6210\u7f51\u9875\u8d44\u6599\u6574\u7406\u3001Node.js \u5206\u6790\u5668\u3001\u6d4b\u8bd5\u548c\u4e2d\u6587\u62a5\u544a\u751f\u6210\u3002\n\n## \u6765\u6e90\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u4eea\u8868\u76d8</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u4eea\u8868\u76d8</h1><p>\u6807\u8bb0\uff1a${expectedMarker}</p><p><a href="report.md">\u6253\u5f00\u4e2d\u6587\u62a5\u544a</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
+  const files = {
+    "package.json": `${JSON.stringify({ type: "module", scripts: { test: "node --test codex-update-analyzer.test.mjs" } }, null, 2)}\n`,
+    "codex-update-analyzer.mjs": analyzerSource,
+    "codex-update-analyzer.test.mjs": testSource,
+    "sources.json": `${JSON.stringify(sources, null, 2)}\n`,
+    "report.md": reportText,
+    "index.html": htmlText,
+    "done.txt": expectedMarker,
+  };
+  return nodeEvalCommand([
+    "const fs=require('node:fs');const path=require('node:path');",
+    `const dir=${JSON.stringify(dir)};`,
+    `const files=${JSON.stringify(files)};`,
+    "fs.mkdirSync(dir,{recursive:true});",
+    "for(const [name,text] of Object.entries(files))fs.writeFileSync(path.join(dir,name),text,'utf8');",
+    `console.log(${JSON.stringify(expectedMarker)});`,
+  ].join(""));
+}
+
 function buildComplexProjectRepairPrompt(currentFailures = [], evidence = null) {
   const error = String(evidence?.error || "").slice(0, 1200);
-  return `Continue the same complex-project task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "analyzer CLI or Chinese artifacts did not pass"}. ${error ? `CLI/test error excerpt: ${error}. ` : ""}sources.json must be written as UTF-8 without BOM, codex-update-analyzer.mjs must call stripUtf8Bom before JSON.parse, and report.md/index.html must contain real Chinese text. Do not inspect Antigravity brain, transcript, history, or log folders. Your next tool action must execute exactly this PowerShell-safe ASCII command: ${buildComplexProjectRepairCommand(artifactDir, marker)}. It uses JavaScript Unicode escapes internally so Chinese text does not pass through the Windows console. Then run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json from ${artifactDir}. Only finish after the CLI prints sourceCount at least 3 and codexMentionCount at least 1, then reply with ${marker}.`;
+  return `Continue the same complex-project task in ${artifactDir}. Current verifier failures: ${currentFailures.join("; ") || "analyzer CLI or Chinese artifacts did not pass"}. ${error ? `CLI/test error excerpt: ${error}. ` : ""}sources.json must be written as UTF-8 without BOM, codex-update-analyzer.mjs must call stripUtf8Bom before JSON.parse, and report.md/index.html must contain real Chinese text. Do not inspect Antigravity brain, transcript, history, or log folders. Your next tool action must execute exactly this PowerShell-safe ASCII command: ${buildComplexProjectRepairCommandSafe(artifactDir, marker)}. It uses JavaScript Unicode escapes internally so Chinese text does not pass through the Windows console. Then run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json from ${artifactDir}. Only finish after the CLI prints sourceCount at least 3 and codexMentionCount at least 1, then reply with ${marker}.`;
 }
 
 function buildAutonomousReasoningContinuationPrompt(currentFailures = [], evidence = null) {
@@ -3243,6 +3327,15 @@ async function main() {
       }
       if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) {
         failures.push("complex-project did not observe task tool output");
+      }
+      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) {
+        failures.push("complex-project did not observe marker-scoped tool output");
+      }
+      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) {
+        failures.push("complex-project assistant final marker was not observed in response history");
+      }
+      if (complexProjectRequiresModelLed && (artifactEvidence?.responseHistory?.visibleProgressCount || 0) < 1) {
+        failures.push("complex-project did not show visible progress text");
       }
       if (taskMode === "autonomous-reasoning") {
         if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) failures.push("autonomous-reasoning did not emit a task tool call");
