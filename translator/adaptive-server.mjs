@@ -8849,6 +8849,7 @@ function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolC
     if (assistantTextLooksLikeLongContextMarkerEcho(text)) return false;
     if (/(?:requires a complete freeform patch\/tool body|Regenerate a valid patch body|Do not bypass this by writing ordinary source files)/i.test(String(text || ""))) return false;
     if (isCompactionRecall) return false;
+    if (assistantTextContainsPlainToolResultTranscript(text)) return true;
     if (!hasToolEvidence && !hasWebToolEvidence && assistantTextLooksLikeEvaluationAdvice(text, userText)) return false;
     const explicitAssistantToolClaim = assistantTextLooksLikeUserPromptEcho(text, userText)
         || assistantTextLooksLikeWebToolUnavailableClaim(text)
@@ -8866,6 +8867,12 @@ function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolC
     if (hasWebToolEvidence && !assistantTextLooksLikeFutureToolPromise(text)) return false;
     if (hasToolEvidence && !assistantTextLooksLikeFutureToolPromise(text)) return false;
     return true;
+}
+
+function assistantTextContainsPlainToolResultTranscript(text) {
+    const value = String(text || "");
+    if (!value.trim()) return false;
+    return /(?:^|\n)\s*(?:\*\*)?\[TOOL_RESULT\](?:\*\*)?(?:\s|:|$)/i.test(value);
 }
 
 function assistantTextLooksLikeEvaluationAdvice(text, userText = "") {

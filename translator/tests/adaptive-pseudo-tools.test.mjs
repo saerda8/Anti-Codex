@@ -497,6 +497,39 @@ test("chat response trusts current internal tool evidence", () => {
   assert.doesNotMatch(formatted.output[0].content[0].text, /拦截|DeepCodex/);
 });
 
+test("chat response blocks plain TOOL_RESULT transcript text even with prior tool evidence", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_999001";
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: `[TOOL_RESULT] shell_command: {"stdout":"${marker}"}\nI created package.json, word-tally.mjs, word-tally.test.mjs, and done.txt.`,
+      },
+    }],
+  }, {
+    model: "claude-sonnet-4-6",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: `Create a tiny Node.js CLI project in C:\\Temp\\desktop-visible-coding-project\\fake. Write package.json, word-tally.mjs, word-tally.test.mjs, and done.txt. Final marker ${marker}.`,
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_old_probe",
+        output: "old unrelated output",
+      },
+    ],
+  });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /Anti-Codex/);
+  assert.match(formatted.output[0].content[0].text, /没有实际 tool call|娌℃湁瀹為檯 tool call/);
+  assert.doesNotMatch(formatted.output[0].content[0].text, /\[TOOL_RESULT\] shell_command/);
+});
+
 test("chat response blocks Chinese fake search-result narration without tool calls", () => {
   const formatted = chatToResponsesFormat({
     choices: [{
