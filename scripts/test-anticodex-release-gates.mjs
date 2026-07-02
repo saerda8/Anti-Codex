@@ -34,6 +34,8 @@ const REQUIRED_WORKER_MCP_SERVERS = [
   "opencode-worker",
 ];
 const REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS = 5;
+const REPORT_READ_RETRY_COUNT = 4;
+const REPORT_READ_RETRY_DELAY_MS = 75;
 function currentSourceRoot() {
   return resolve(args.get("--source-root") || join(dirname(fileURLToPath(import.meta.url)), ".."));
 }
@@ -219,15 +221,48 @@ function integrityFor(filePath) {
   return { signed: true, valid: actual === expected, hash: actual, expected, error: actual === expected ? "" : "hash_mismatch" };
 }
 
+function sleepSync(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  const buffer = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(buffer), 0, 0, ms);
+}
+
+function readSignedJsonWithRetry(filePath, options = {}) {
+  const retryCount = Number.isFinite(Number(options.retryCount)) ? Math.max(1, Number(options.retryCount)) : REPORT_READ_RETRY_COUNT;
+  const retryDelayMs = Number.isFinite(Number(options.retryDelayMs)) ? Math.max(0, Number(options.retryDelayMs)) : REPORT_READ_RETRY_DELAY_MS;
+  let lastResult = {
+    report: null,
+    parseable: false,
+    integrity: { signed: false, valid: null, error: "missing_report" },
+    retryCount: 0,
+    error: "missing_report",
+  };
+  for (let attempt = 0; attempt < retryCount; attempt += 1) {
+    const integrity = integrityFor(filePath);
+    let parseError = "";
+    if (integrity.signed === true && integrity.valid === true) {
+      try {
+        const report = JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
+        return { report, parseable: true, integrity, retryCount: attempt, error: "" };
+      } catch (error) {
+        parseError = error instanceof Error ? error.message : "parse_error";
+      }
+    }
+    lastResult = {
+      report: null,
+      parseable: false,
+      integrity,
+      retryCount: attempt,
+      error: parseError || integrity.error || "unreadable_report",
+    };
+    if (attempt + 1 < retryCount) sleepSync(retryDelayMs);
+  }
+  return lastResult;
+}
+
 function loadSignedJson(filePath) {
   if (!existsSync(filePath)) return null;
-  const integrity = integrityFor(filePath);
-  if (integrity.signed !== true || integrity.valid !== true) return null;
-  try {
-    return JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
-  } catch {
-    return null;
-  }
+  return readSignedJsonWithRetry(filePath).report;
 }
 
 function syncReadinessFullEnough(report) {
@@ -456,6 +491,7 @@ function summarizeGate(definition) {
     historySourceMismatch: selection.historySourceMismatch === true,
     selectedFile: filePath.split(/[\\/]/).pop(),
     reportFailureSamples: [],
+    reportReadRetryCount: 0,
   };
   if (!present) return gate;
 
@@ -464,13 +500,18 @@ function summarizeGate(definition) {
   const ageHours = (Date.now() - stat.mtimeMs) / 3_600_000;
   gate.ageHours = Math.max(0, Number(ageHours.toFixed(3)));
   gate.fresh = Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? ageHours <= maxAgeHours : true;
-  const integrity = integrityFor(filePath);
+  const readResult = readSignedJsonWithRetry(filePath);
+  const integrity = readResult.integrity || {};
   gate.signed = integrity.signed === true;
   gate.hashValid = integrity.valid;
+  gate.reportReadRetryCount = readResult.retryCount || 0;
   if (integrity.error) gate.error = integrity.error;
+  if (readResult.error) gate.error = readResult.error;
+
+  const report = readResult.report;
+  if (!readResult.parseable || !report) return gate;
 
   try {
-    const report = JSON.parse(readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
     gate.parseable = true;
     gate.okField = report.ok === true;
     gate.reportName = typeof report.reportName === "string" ? report.reportName : "";

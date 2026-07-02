@@ -11859,6 +11859,9 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /missingShort/);
   assert.match(releaseGates, /missingOptional/);
   assert.match(releaseGates, /damagedReports/);
+  assert.match(releaseGates, /readSignedJsonWithRetry/);
+  assert.match(releaseGates, /REPORT_READ_RETRY_COUNT/);
+  assert.match(releaseGates, /reportReadRetryCount/);
   assert.match(releaseGates, /selectedKind/);
   assert.match(releaseGates, /releaseGateSelectedReports/);
   assert.match(releaseGates, /selectedMtime/);
