@@ -12942,6 +12942,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-ui-report-site-smoke.json",
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-task-smoke.json",
+    "latest-worker-mcp-project-smoke.json",
   ];
 
   assert.deepEqual(optionalReports, [
@@ -12991,10 +12992,16 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /worker_mcp_task_smoke_insufficient_worker_diversity/);
   assert.match(goalReadiness, /worker_mcp_task_smoke_missing_required_worker/);
   assert.match(goalReadiness, /worker_mcp_task_smoke_missing_or_failed/);
+  assert.match(goalReadiness, /projectSmokeReportOk/);
+  assert.match(goalReadiness, /projectSmokeScenario/);
+  assert.match(goalReadiness, /projectSmokePassedWorkerCount/);
+  assert.match(goalReadiness, /worker_mcp_project_smoke_insufficient_worker_diversity/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
+  assert.match(collector, /latest-worker-mcp-project-smoke\.json/);
   assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
+  assert.match(collector, /workerMcpProjectSmokeEvidence = \$json\.workerMcpProjectSmokeEvidence/);
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
   assert.match(summarizer, /codexSessionTransportStatus/);
   assert.match(summarizer, /operatorRecoveryAction/);
@@ -13002,12 +13009,21 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerMcpTaskSmokeEvidence/);
   assert.match(summarizer, /workerMcpTaskSmokeRequiredWorkers/);
   assert.match(summarizer, /workerMcpTaskSmokeMissingRequiredWorkers/);
+  assert.match(summarizer, /workerMcpProjectSmokeEvidence/);
+  assert.match(summarizer, /workerMcpProjectSmokeScenario/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-project-smoke\.json/);
   assert.match(diagnostics, /worker-mcp-server-probe summary missing workerMcpServerProbeEvidence/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing workerMcpTaskSmokeEvidence/);
+  assert.match(diagnostics, /worker-mcp-project-smoke summary missing workerMcpProjectSmokeEvidence/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP task smoke worker/);
+  assert.match(diagnostics, /goal-readiness summary missing required worker MCP project smoke worker/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing required worker/);
+  assert.match(diagnostics, /worker-mcp-project-smoke summary missing required worker/);
+  assert.match(diagnostics, /worker-mcp-project-smoke CLI red count mismatch/);
+  assert.match(releaseGates, /goal_readiness_worker_mcp_project_smoke_not_ok/);
+  assert.match(releaseGates, /goal_readiness_worker_mcp_project_smoke_passed_count/);
   assert.match(diagnostics, /mimo-claude-coworker/);
   assert.match(diagnostics, /opencode-worker/);
   assert.match(goalReadiness, /desktopAgenticTasks/);

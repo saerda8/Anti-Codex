@@ -261,6 +261,7 @@ function Read-JsonSummary {
             approvedRealRunSequenceEvidence = $json.approvedRealRunSequenceEvidence
             workerMcpServerProbeEvidence = $json.workerMcpServerProbeEvidence
             workerMcpTaskSmokeEvidence = $json.workerMcpTaskSmokeEvidence
+            workerMcpProjectSmokeEvidence = $json.workerMcpProjectSmokeEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -446,6 +447,7 @@ $latestReports = @(
     "latest-approved-real-run-sequence.json",
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-task-smoke.json",
+    "latest-worker-mcp-project-smoke.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

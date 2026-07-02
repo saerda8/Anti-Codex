@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { resolve } from "node:path";
@@ -119,11 +120,16 @@ function utcStamp() {
   return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
 }
 
+function reportFileNameForScenario(scenario) {
+  return scenario === "project" ? "worker-mcp-project-smoke" : "worker-mcp-task-smoke";
+}
+
 function writeSignedReport(payload, reportRoot) {
   if (!reportRoot || hasArg("--no-write-report")) return null;
   mkdirSync(reportRoot, { recursive: true });
-  const latest = resolve(reportRoot, "latest-worker-mcp-task-smoke.json");
-  const history = resolve(reportRoot, `${utcStamp()}-worker-mcp-task-smoke.json`);
+  const reportFileName = reportFileNameForScenario(payload.scenario);
+  const latest = resolve(reportRoot, `latest-${reportFileName}.json`);
+  const history = resolve(reportRoot, `${utcStamp()}-${reportFileName}.json`);
   const json = `${JSON.stringify({ ...payload, report: { latest, history } }, null, 2)}\n`;
   for (const file of [latest, history]) {
     const temp = `${file}.${process.pid}.tmp`;
@@ -141,7 +147,20 @@ function makeWorkspace(workerName, workspaceRoot) {
   return root;
 }
 
-function buildTask(workerName, marker) {
+function buildTask(workerName, marker, scenario) {
+  if (scenario === "project") {
+    return [
+      "Work only in the current workspace directory.",
+      "Create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt.",
+      "word-tally.mjs must export function tallyWords(text). It must split words by whitespace, lowercase them, ignore empty words, and return a plain object of word counts.",
+      "When run as a CLI, word-tally.mjs must print JSON word counts for the remaining command line text.",
+      "word-tally.test.mjs must use node:test and assert that tallyWords('red blue red') returns red=2 and blue=1.",
+      "package.json must set type module and a test script that runs node --test word-tally.test.mjs.",
+      `done.txt must contain exactly ${marker}.`,
+      "After writing files, run npm test and node word-tally.mjs red blue red before finishing.",
+      "Do not edit files outside this workspace.",
+    ].join(" ");
+  }
   return [
     "Work only in the current workspace directory.",
     "Create exactly one file: worker-smoke-result.json.",
@@ -152,14 +171,26 @@ function buildTask(workerName, marker) {
   ].join(" ");
 }
 
-function buildValidationCommand(workerName, marker) {
+function buildValidationCommand(workerName, marker, scenario) {
   const expectedMarker = JSON.stringify(marker);
   const expectedWorker = JSON.stringify(workerName);
-  const validationScript = [
-    'const fs=require("fs");',
-    'const data=JSON.parse(fs.readFileSync("worker-smoke-result.json","utf8"));',
-    `if(data.marker!==${expectedMarker}||data.worker!==${expectedWorker}||data.ok!==true) process.exit(2);`,
-  ].join("");
+  const validationScript = scenario === "project"
+    ? [
+        'const fs=require("fs");',
+        'const cp=require("child_process");',
+        `if(fs.readFileSync("done.txt","utf8").trim()!==${expectedMarker}) process.exit(2);`,
+        'const t=cp.spawnSync(process.execPath,["--test","word-tally.test.mjs"],{encoding:"utf8"});',
+        'if(t.status!==0) process.exit(3);',
+        'const c=cp.spawnSync(process.execPath,["word-tally.mjs","red","blue","red"],{encoding:"utf8"});',
+        'if(c.status!==0) process.exit(4);',
+        'const data=JSON.parse(c.stdout);',
+        'if(data.red!==2||data.blue!==1) process.exit(5);',
+      ].join("")
+    : [
+        'const fs=require("fs");',
+        'const data=JSON.parse(fs.readFileSync("worker-smoke-result.json","utf8"));',
+        `if(data.marker!==${expectedMarker}||data.worker!==${expectedWorker}||data.ok!==true) process.exit(2);`,
+      ].join("");
   const encoded = Buffer.from(validationScript, "utf8").toString("base64");
   return [
     "node",
@@ -168,8 +199,8 @@ function buildValidationCommand(workerName, marker) {
   ].join(" ");
 }
 
-function buildWorkerArgs(workerName, workspace, marker, timeoutMs) {
-  const validation = buildValidationCommand(workerName, marker);
+function buildWorkerArgs(workerName, workspace, marker, timeoutMs, scenario) {
+  const validation = buildValidationCommand(workerName, marker, scenario);
   const args = {
     cwd: workspace,
     allowed_dirs: [workspace],
@@ -181,7 +212,7 @@ function buildWorkerArgs(workerName, workspace, marker, timeoutMs) {
     worker_profile: "scoped_patch",
     timeout_ms: timeoutMs,
     check_timeout_ms: 45000,
-    task: buildTask(workerName, marker),
+    task: buildTask(workerName, marker, scenario),
   };
   if (hasArg("--worker-checks")) args.checks = [validation];
   if (workerName === "deepseek-code-worker") {
@@ -198,7 +229,7 @@ function buildWorkerArgs(workerName, workspace, marker, timeoutMs) {
 }
 
 function selfTestWorkerChecksCommand() {
-  const command = buildValidationCommand("opencode-worker", "SELF_TEST_MARKER");
+  const command = buildValidationCommand("opencode-worker", "SELF_TEST_MARKER", "json");
   const failures = [];
   if (!command.includes('node -e "eval(Buffer.from(')) failures.push("validation command does not quote node -e script");
   if (!command.includes("base64")) failures.push("validation command does not use shell-safe base64 script transport");
@@ -228,6 +259,30 @@ function verifyWorkspace(workspace, workerName, marker) {
   }
 }
 
+function verifyProjectWorkspace(workspace, marker) {
+  const requiredFiles = ["package.json", "word-tally.mjs", "word-tally.test.mjs", "done.txt"];
+  const missingFiles = requiredFiles.filter((file) => !existsSync(resolve(workspace, file)));
+  if (missingFiles.length > 0) return { ok: false, missingFiles };
+  const doneText = readFileSync(resolve(workspace, "done.txt"), "utf8").trim();
+  const test = spawnSync(process.execPath, ["--test", "word-tally.test.mjs"], { cwd: workspace, encoding: "utf8", timeout: 45000 });
+  const cli = spawnSync(process.execPath, ["word-tally.mjs", "red", "blue", "red"], { cwd: workspace, encoding: "utf8", timeout: 45000 });
+  let cliJson = null;
+  try {
+    cliJson = JSON.parse(String(cli.stdout || "").trim());
+  } catch {
+    cliJson = null;
+  }
+  const ok = doneText === marker && test.status === 0 && cli.status === 0 && cliJson?.red === 2 && cliJson?.blue === 1;
+  return {
+    ok,
+    missingFiles,
+    doneTextMatches: doneText === marker,
+    testExitCode: test.status,
+    cliExitCode: cli.status,
+    cliJson,
+  };
+}
+
 async function runWorker(workerName, options) {
   const def = WORKERS[workerName];
   if (!def) throw new Error(`Unsupported worker for task smoke: ${workerName}`);
@@ -237,7 +292,7 @@ async function runWorker(workerName, options) {
   const marker = `WORKER_MCP_TASK_SMOKE_${Date.now()}`;
   const workspace = makeWorkspace(workerName, options.workspaceRoot);
   const timeoutMs = Number(options.timeoutMs || def.timeoutMs);
-  const workerArgs = buildWorkerArgs(workerName, workspace, marker, timeoutMs);
+  const workerArgs = buildWorkerArgs(workerName, workspace, marker, timeoutMs, options.scenario);
   const transport = new StdioClientTransport({
     command: config.command,
     args: config.args,
@@ -302,7 +357,9 @@ async function runWorker(workerName, options) {
     }
   }
 
-  const workspaceVerification = verifyWorkspace(workspace, workerName, marker);
+  const workspaceVerification = options.scenario === "project"
+    ? verifyProjectWorkspace(workspace, marker)
+    : verifyWorkspace(workspace, workerName, marker);
   const terminalStatus = String(terminal?.status || terminal?.result?.status || terminal?.progress?.status || "").toLowerCase();
   const ok = isSuccessStatus(terminalStatus) && workspaceVerification.ok;
   return {
@@ -329,6 +386,8 @@ async function main() {
   const reportRoot = resolve(argValue("--report-root", DEFAULT_REPORT_ROOT));
   const workspaceRoot = resolve(argValue("--workspace-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/worker-task-smoke`));
   const timeoutMs = Number(argValue("--timeout-ms", "0")) || null;
+  const scenario = argValue("--scenario", "json");
+  if (!["json", "project"].includes(scenario)) throw new Error(`Unsupported scenario: ${scenario}`);
   const workers = argValue("--workers", DEFAULT_WORKER).split(",").map((item) => item.trim()).filter(Boolean);
   const unsupported = workers.filter((worker) => !WORKERS[worker]);
   if (unsupported.length) throw new Error(`Unsupported workers: ${unsupported.join(", ")}`);
@@ -344,16 +403,17 @@ async function main() {
 
   const results = [];
   for (const worker of workers) {
-    results.push(await runWorker(worker, { configPath, workspaceRoot, timeoutMs }));
+    results.push(await runWorker(worker, { configPath, workspaceRoot, timeoutMs, scenario }));
   }
 
   const payload = {
-    reportName: "worker-mcp-task-smoke",
+    reportName: scenario === "project" ? "worker-mcp-project-smoke" : "worker-mcp-task-smoke",
     ok: results.length > 0 && results.every((result) => result.ok),
     requestedRealTraffic: true,
     usedRealTraffic: true,
     behaviorCovered: true,
     coverageKind: "worker-mcp-real-task-smoke",
+    scenario,
     checkedAt: new Date().toISOString(),
     configPath,
     antigravityWorkerExcluded: true,
@@ -369,14 +429,16 @@ async function main() {
 }
 
 main().catch((error) => {
+  const scenario = argValue("--scenario", "json");
   const reportRoot = resolve(argValue("--report-root", DEFAULT_REPORT_ROOT));
   const payload = {
-    reportName: "worker-mcp-task-smoke",
+    reportName: reportFileNameForScenario(scenario),
     ok: false,
     requestedRealTraffic: true,
     usedRealTraffic: false,
     behaviorCovered: true,
     coverageKind: "worker-mcp-real-task-smoke",
+    scenario,
     checkedAt: new Date().toISOString(),
     configPath: argValue("--config", DEFAULT_CONFIG_PATH),
     antigravityWorkerExcluded: true,

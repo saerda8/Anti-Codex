@@ -78,6 +78,13 @@ After every failure, before another dispatch:
 - Cause classification: the failed `checks_failed` runs were command-construction failures, not worker model failures, because every failed run still produced host-verified correct output.
 - Rule change: when adding worker-side validation commands, avoid raw quoted `node -e` snippets; use shell-neutral transport or a checked helper, then host-verify the output file before classifying the worker. Goal-readiness, diagnostics, and release gates now require the five specific passed non-Antigravity worker task-smoke lanes: DeepSeek, Kilo, MIMO Claude Coworker, MiMoCode, and OpenCode.
 
+### 2026-07-02 - Five non-Antigravity worker project smoke passed
+
+- Task: prove direct worker MCP lanes can complete a small multi-file coding project, not only a single JSON artifact.
+- Result: `scripts/test-anticodex-worker-mcp-task-smoke.mjs --scenario project --workers mimo-claude-coworker,deepseek-code-worker,mimocode-worker,kilo-worker,opencode-worker --timeout-ms 300000 --worker-checks` wrote `latest-worker-mcp-project-smoke.json` and passed all five non-Antigravity workers: MIMO `dsw_mr34g20g_dm7q1t`, DeepSeek `dsw_mr34hor0_gso948`, MiMoCode `mcw_mr34ii2y_71c7qw`, Kilo `klw_mr34n5js_y7gshe`, and OpenCode `ocw_mr34okpe_q6qk3k`. Each worker created a Node word-tally project with `package.json`, `word-tally.mjs`, `word-tally.test.mjs`, and `done.txt`; host verification reran `node --test` and the CLI JSON check with `red=2`, `blue=1`.
+- Cause classification: direct non-Antigravity worker MCP project execution is viable. Current-channel `Transport closed` remains a Codex-session transport problem, and Antigravity worker remains excluded until the second account boundary is proven.
+- Rule change: goal-readiness, diagnostics, and release gates now require both the existing five-worker task smoke and this five-worker project smoke before counting worker MCP task capability as proven.
+
 ### 2026-07-02 - Direct MCP probe vs current-channel transport
 
 - Task: diagnose why current Codex-channel MCP worker calls appeared unavailable.

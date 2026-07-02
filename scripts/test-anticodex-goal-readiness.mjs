@@ -70,6 +70,7 @@ const secondAccountReadinessSummaryReport = readReport("latest-second-account-re
 const releaseGates = readReport("latest-release-gates.json");
 const workerMcpServerProbeReport = readReport("latest-worker-mcp-server-probe.json");
 const workerMcpTaskSmokeReport = readReport("latest-worker-mcp-task-smoke.json");
+const workerMcpProjectSmokeReport = readReport("latest-worker-mcp-project-smoke.json");
 
 const sync = syncReadiness.report || {};
 const clientSyncContract = sync.clientSyncContract || {};
@@ -104,6 +105,21 @@ const workerTaskSmokePassedWorkers = workerTaskSmokeResults
   .filter(Boolean);
 const workerTaskSmokePassedWorkerSet = new Set(workerTaskSmokePassedWorkers);
 const workerTaskSmokeMissingRequiredWorkers = requiredWorkerMcpTaskSmokeWorkers.filter((worker) => !workerTaskSmokePassedWorkerSet.has(worker));
+const workerProjectSmoke = workerMcpProjectSmokeReport.report || {};
+const workerProjectSmokeResults = Array.isArray(workerProjectSmoke.results) ? workerProjectSmoke.results : [];
+const workerProjectSmokePassedWorkers = workerProjectSmokeResults
+  .filter((entry) => entry?.ok === true
+    && entry?.workspaceVerification?.ok === true
+    && entry.workspaceVerification?.doneTextMatches === true
+    && Number(entry.workspaceVerification?.testExitCode) === 0
+    && Number(entry.workspaceVerification?.cliExitCode) === 0
+    && Number(entry.workspaceVerification?.cliJson?.red) === 2
+    && Number(entry.workspaceVerification?.cliJson?.blue) === 1
+    && String(entry?.worker || "") !== "antigravity-code-worker")
+  .map((entry) => String(entry.worker || ""))
+  .filter(Boolean);
+const workerProjectSmokePassedWorkerSet = new Set(workerProjectSmokePassedWorkers);
+const workerProjectSmokeMissingRequiredWorkers = requiredWorkerMcpTaskSmokeWorkers.filter((worker) => !workerProjectSmokePassedWorkerSet.has(worker));
 const workerMcp = {
   reportPresent: mcpSkills.present,
   reportOk: mcpSkills.report?.ok === true,
@@ -134,6 +150,15 @@ const workerMcp = {
   taskSmokePassedWorkers: workerTaskSmokePassedWorkers,
   taskSmokeMissingRequiredWorkers: workerTaskSmokeMissingRequiredWorkers,
   taskSmokeFailedWorkers: Array.isArray(workerTaskSmoke.failedWorkers) ? workerTaskSmoke.failedWorkers.map(String).filter(Boolean) : [],
+  projectSmokeReportPresent: workerMcpProjectSmokeReport.present,
+  projectSmokeReportOk: workerProjectSmoke.ok === true,
+  projectSmokeScenario: String(workerProjectSmoke.scenario || ""),
+  projectSmokeUsedRealTraffic: workerProjectSmoke.usedRealTraffic === true,
+  projectSmokeAntigravityExcluded: workerProjectSmoke.antigravityWorkerExcluded === true,
+  projectSmokePassedWorkerCount: workerProjectSmokePassedWorkers.length,
+  projectSmokePassedWorkers: workerProjectSmokePassedWorkers,
+  projectSmokeMissingRequiredWorkers: workerProjectSmokeMissingRequiredWorkers,
+  projectSmokeFailedWorkers: Array.isArray(workerProjectSmoke.failedWorkers) ? workerProjectSmoke.failedWorkers.map(String).filter(Boolean) : [],
 };
 
 const selectedTasks = Array.isArray(desktopSuite.report?.selectedTasks) ? desktopSuite.report.selectedTasks.map(String) : [];
@@ -418,7 +443,14 @@ const proven = {
     && workerMcp.taskSmokeAntigravityExcluded
     && workerMcp.taskSmokePassedWorkerCount >= minTaskSmokePassedWorkers
     && workerMcp.taskSmokeMissingRequiredWorkers.length === 0
-    && workerMcp.taskSmokeFailedWorkers.length === 0,
+    && workerMcp.taskSmokeFailedWorkers.length === 0
+    && workerMcp.projectSmokeReportOk
+    && workerMcp.projectSmokeScenario === "project"
+    && workerMcp.projectSmokeUsedRealTraffic
+    && workerMcp.projectSmokeAntigravityExcluded
+    && workerMcp.projectSmokePassedWorkerCount >= minTaskSmokePassedWorkers
+    && workerMcp.projectSmokeMissingRequiredWorkers.length === 0
+    && workerMcp.projectSmokeFailedWorkers.length === 0,
   desktopAgenticTasks: desktopAgenticTasks.reportOk
     && desktopAgenticTasks.suiteProfile === "agentic"
     && desktopAgenticTasks.dryRun
@@ -530,6 +562,13 @@ if (workerMcp.taskSmokePassedWorkerCount < 1) blockers.push("worker_mcp_task_smo
 if (workerMcp.taskSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_task_smoke_insufficient_worker_diversity");
 if (workerMcp.taskSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_task_smoke_missing_required_worker");
 if (workerMcp.taskSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_task_smoke_failed_workers");
+if (!workerMcp.projectSmokeReportOk) blockers.push("worker_mcp_project_smoke_missing_or_failed");
+if (workerMcp.projectSmokeScenario !== "project") blockers.push("worker_mcp_project_smoke_wrong_scenario");
+if (!workerMcp.projectSmokeUsedRealTraffic) blockers.push("worker_mcp_project_smoke_real_traffic_missing");
+if (!workerMcp.projectSmokeAntigravityExcluded) blockers.push("worker_mcp_project_smoke_antigravity_not_excluded");
+if (workerMcp.projectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_project_smoke_insufficient_worker_diversity");
+if (workerMcp.projectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_project_smoke_missing_required_worker");
+if (workerMcp.projectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_project_smoke_failed_workers");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");

@@ -225,6 +225,7 @@ const isGoalRealRunReadinessReport = report?.reportName === "goal-real-run-readi
 const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-run-sequence" || /latest-approved-real-run-sequence\.json$/i.test(path);
 const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-probe" || /latest-worker-mcp-server-probe\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
+const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1324,6 +1325,14 @@ const summary = {
     workerMcpTaskSmokePassedWorkers: report.workerMcp && Array.isArray(report.workerMcp.taskSmokePassedWorkers) ? asStringArray(report.workerMcp.taskSmokePassedWorkers) : [],
     workerMcpTaskSmokeMissingRequiredWorkers: report.workerMcp && Array.isArray(report.workerMcp.taskSmokeMissingRequiredWorkers) ? asStringArray(report.workerMcp.taskSmokeMissingRequiredWorkers) : [],
     workerMcpTaskSmokeFailedWorkers: report.workerMcp && Array.isArray(report.workerMcp.taskSmokeFailedWorkers) ? asStringArray(report.workerMcp.taskSmokeFailedWorkers) : [],
+    workerMcpProjectSmokeReportOk: report.workerMcp ? boolField(report.workerMcp, "projectSmokeReportOk") : null,
+    workerMcpProjectSmokeScenario: report.workerMcp && has(report.workerMcp, "projectSmokeScenario") ? asString(report.workerMcp.projectSmokeScenario) : "",
+    workerMcpProjectSmokeUsedRealTraffic: report.workerMcp ? boolField(report.workerMcp, "projectSmokeUsedRealTraffic") : null,
+    workerMcpProjectSmokeAntigravityExcluded: report.workerMcp ? boolField(report.workerMcp, "projectSmokeAntigravityExcluded") : null,
+    workerMcpProjectSmokePassedWorkerCount: report.workerMcp && has(report.workerMcp, "projectSmokePassedWorkerCount") ? report.workerMcp.projectSmokePassedWorkerCount : null,
+    workerMcpProjectSmokePassedWorkers: report.workerMcp && Array.isArray(report.workerMcp.projectSmokePassedWorkers) ? asStringArray(report.workerMcp.projectSmokePassedWorkers) : [],
+    workerMcpProjectSmokeMissingRequiredWorkers: report.workerMcp && Array.isArray(report.workerMcp.projectSmokeMissingRequiredWorkers) ? asStringArray(report.workerMcp.projectSmokeMissingRequiredWorkers) : [],
+    workerMcpProjectSmokeFailedWorkers: report.workerMcp && Array.isArray(report.workerMcp.projectSmokeFailedWorkers) ? asStringArray(report.workerMcp.projectSmokeFailedWorkers) : [],
     desktopMissingAgenticTasks: report.desktopAgenticTasks && Array.isArray(report.desktopAgenticTasks.missingAgenticTasks) ? asStringArray(report.desktopAgenticTasks.missingAgenticTasks) : [],
     agenticMissingCapabilities: report.agenticCapabilityMatrix && Array.isArray(report.agenticCapabilityMatrix.missingCapabilities) ? asStringArray(report.agenticCapabilityMatrix.missingCapabilities) : [],
     agenticStaleCapabilities: report.agenticCapabilityMatrix && Array.isArray(report.agenticCapabilityMatrix.staleCapabilities) ? asStringArray(report.agenticCapabilityMatrix.staleCapabilities) : [],
@@ -1796,6 +1805,35 @@ const summary = {
       terminalFailureReason: asString(result?.terminalFailureReason),
       workspaceVerificationOk: boolField(result?.workspaceVerification || {}, "ok"),
       resultPathExists: boolField(result?.workspaceVerification || {}, "resultPathExists"),
+    })).filter((result) => result.worker) : [],
+  } : null,
+  workerMcpProjectSmokeEvidence: isWorkerMcpProjectSmokeReport ? {
+    reportName: asString(report.reportName),
+    scenario: asString(report.scenario),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    antigravityWorkerExcluded: boolField(report, "antigravityWorkerExcluded"),
+    workerCount: has(report, "workerCount") ? report.workerCount : null,
+    passedWorkerCount: has(report, "passedWorkerCount") ? report.passedWorkerCount : null,
+    failedWorkers: Array.isArray(report.failedWorkers) ? asStringArray(report.failedWorkers) : [],
+    results: Array.isArray(report.results) ? report.results.map((result) => ({
+      worker: asString(result?.worker),
+      ok: boolField(result || {}, "ok"),
+      jobId: asString(result?.jobId),
+      marker: asString(result?.marker),
+      workspacePresent: typeof result?.workspace === "string" && result.workspace.trim().length > 0,
+      elapsedMs: has(result || {}, "elapsedMs") ? result.elapsedMs : null,
+      terminalStatus: asString(result?.terminalStatus),
+      terminalFailureReason: asString(result?.terminalFailureReason),
+      workspaceVerificationOk: boolField(result?.workspaceVerification || {}, "ok"),
+      missingFiles: Array.isArray(result?.workspaceVerification?.missingFiles) ? asStringArray(result.workspaceVerification.missingFiles) : [],
+      doneTextMatches: boolField(result?.workspaceVerification || {}, "doneTextMatches"),
+      testExitCode: has(result?.workspaceVerification || {}, "testExitCode") ? result.workspaceVerification.testExitCode : null,
+      cliExitCode: has(result?.workspaceVerification || {}, "cliExitCode") ? result.workspaceVerification.cliExitCode : null,
+      cliJson: result?.workspaceVerification?.cliJson && typeof result.workspaceVerification.cliJson === "object" ? result.workspaceVerification.cliJson : null,
     })).filter((result) => result.worker) : [],
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
