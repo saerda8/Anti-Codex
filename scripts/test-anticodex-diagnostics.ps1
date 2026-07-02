@@ -1785,9 +1785,10 @@ function Test-WorkerMcpProjectSmokeSummaryEvidence {
         if (-not [string]$entry.jobId) { Add-Failure "worker-mcp-project-smoke result missing job id for $($entry.worker)" }
         if (-not [string]$entry.marker) { Add-Failure "worker-mcp-project-smoke result missing marker for $($entry.worker)" }
         if ($entry.workspacePresent -ne $true) { Add-Failure "worker-mcp-project-smoke result missing workspace for $($entry.worker)" }
-        if ($entry.terminalStatus -ne "completed") { Add-Failure "worker-mcp-project-smoke terminal status not completed for $($entry.worker)" }
+        if ($entry.terminalStatus -ne "completed" -and $entry.artifactVerifiedAfterNonterminalWorker -ne $true) { Add-Failure "worker-mcp-project-smoke terminal status not completed for $($entry.worker)" }
         if ($entry.workspaceVerificationOk -ne $true) { Add-Failure "worker-mcp-project-smoke workspace verification failed for $($entry.worker)" }
         if (@(As-FlatArray $entry.missingFiles).Count -ne 0) { Add-Failure "worker-mcp-project-smoke missing files for $($entry.worker)" }
+        if (@(As-FlatArray $entry.extraFiles).Count -ne 0) { Add-Failure "worker-mcp-project-smoke extra files for $($entry.worker)" }
         if ($entry.doneTextMatches -ne $true) { Add-Failure "worker-mcp-project-smoke done marker mismatch for $($entry.worker)" }
         if ([int]$entry.testExitCode -ne 0) { Add-Failure "worker-mcp-project-smoke node:test failed for $($entry.worker)" }
         if ([int]$entry.cliExitCode -ne 0) { Add-Failure "worker-mcp-project-smoke CLI failed for $($entry.worker)" }

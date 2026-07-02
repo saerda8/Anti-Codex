@@ -13065,6 +13065,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /projectSmokeScenario/);
   assert.match(goalReadiness, /projectSmokePassedWorkerCount/);
   assert.match(goalReadiness, /worker_mcp_project_smoke_insufficient_worker_diversity/);
+  assert.match(goalReadiness, /workspaceVerification\.extraFiles\.length === 0/);
   assert.match(workerTaskSmoke, /--merge-latest/);
   assert.match(workerTaskSmoke, /function mergeLatestResults/);
   assert.match(workerTaskSmoke, /mergedFromLatest/);
@@ -13073,6 +13074,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerTaskSmoke, /Do not build a file URL by string concatenation/);
   assert.match(workerTaskSmoke, /--help, -h\s+Show this help message without starting workers/);
   assert.match(workerTaskSmoke, /if \(hasArg\("--help"\) \|\| hasArg\("-h"\)\)/);
+  assert.match(workerTaskSmoke, /scenario !== "project"[\s\S]*README\.md/);
+  assert.match(workerTaskSmoke, /extraFiles = readdirSync\(workspace/);
+  assert.match(workerTaskSmoke, /extraFiles\.length === 0/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
@@ -13090,6 +13094,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerMcpTaskSmokeMissingRequiredWorkers/);
   assert.match(summarizer, /workerMcpProjectSmokeEvidence/);
   assert.match(summarizer, /workerMcpProjectSmokeScenario/);
+  assert.match(summarizer, /artifactVerifiedAfterNonterminalWorker/);
+  assert.match(summarizer, /extraFiles/);
   assert.match(summarizer, /currentChannelWorkerTransportEvidence/);
   assert.match(summarizer, /splitObserved/);
   assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
@@ -13111,6 +13117,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing required worker/);
   assert.match(diagnostics, /worker-mcp-project-smoke summary missing required worker/);
   assert.match(diagnostics, /worker-mcp-project-smoke CLI red count mismatch/);
+  assert.match(diagnostics, /worker-mcp-project-smoke extra files/);
   assert.match(releaseGates, /goal_readiness_worker_mcp_project_smoke_not_ok/);
   assert.match(releaseGates, /goal_readiness_worker_mcp_project_smoke_passed_count/);
   assert.match(diagnostics, /mimo-claude-coworker/);

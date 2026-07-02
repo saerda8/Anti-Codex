@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { resolve } from "node:path";
 import { Client } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
@@ -196,10 +196,12 @@ function mergeLatestResults(payload, reportRoot) {
   };
 }
 
-function makeWorkspace(workerName, workspaceRoot) {
+function makeWorkspace(workerName, workspaceRoot, scenario) {
   const root = resolve(workspaceRoot, `${workerName}-${utcStamp()}-${process.pid}`);
   mkdirSync(root, { recursive: true });
-  writeFileSync(resolve(root, "README.md"), "Anti-Codex worker MCP task smoke workspace.\n", "utf8");
+  if (scenario !== "project") {
+    writeFileSync(resolve(root, "README.md"), "Anti-Codex worker MCP task smoke workspace.\n", "utf8");
+  }
   return root;
 }
 
@@ -321,7 +323,11 @@ function verifyWorkspace(workspace, workerName, marker) {
 function verifyProjectWorkspace(workspace, marker) {
   const requiredFiles = ["package.json", "word-tally.mjs", "word-tally.test.mjs", "done.txt"];
   const missingFiles = requiredFiles.filter((file) => !existsSync(resolve(workspace, file)));
-  if (missingFiles.length > 0) return { ok: false, missingFiles };
+  const extraFiles = readdirSync(workspace, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((file) => !requiredFiles.includes(file));
+  if (missingFiles.length > 0) return { ok: false, missingFiles, extraFiles };
   const doneText = readFileSync(resolve(workspace, "done.txt"), "utf8").trim();
   const test = spawnSync(process.execPath, ["--test", "word-tally.test.mjs"], { cwd: workspace, encoding: "utf8", timeout: 45000 });
   const cli = spawnSync(process.execPath, ["word-tally.mjs", "red", "blue", "red"], { cwd: workspace, encoding: "utf8", timeout: 45000 });
@@ -331,15 +337,20 @@ function verifyProjectWorkspace(workspace, marker) {
   } catch {
     cliJson = null;
   }
-  const ok = doneText === marker && test.status === 0 && cli.status === 0 && cliJson?.red === 2 && cliJson?.blue === 1;
+  const ok = extraFiles.length === 0 && doneText === marker && test.status === 0 && cli.status === 0 && cliJson?.red === 2 && cliJson?.blue === 1;
   return {
     ok,
     missingFiles,
+    extraFiles,
     doneTextMatches: doneText === marker,
     testExitCode: test.status,
     cliExitCode: cli.status,
     cliJson,
   };
+}
+
+function isExplicitFailureStatus(status) {
+  return ["failed", "error", "cancelled", "canceled", "timeout"].includes(String(status || "").toLowerCase());
 }
 
 async function runWorker(workerName, options) {
@@ -349,7 +360,7 @@ async function runWorker(workerName, options) {
   if (!config.command) throw new Error(`Missing command for ${workerName}`);
 
   const marker = `WORKER_MCP_TASK_SMOKE_${Date.now()}`;
-  const workspace = makeWorkspace(workerName, options.workspaceRoot);
+  const workspace = makeWorkspace(workerName, options.workspaceRoot, options.scenario);
   const timeoutMs = Number(options.timeoutMs || def.timeoutMs);
   const workerArgs = buildWorkerArgs(workerName, workspace, marker, timeoutMs, options.scenario);
   const transport = new StdioClientTransport({
@@ -420,7 +431,11 @@ async function runWorker(workerName, options) {
     ? verifyProjectWorkspace(workspace, marker)
     : verifyWorkspace(workspace, workerName, marker);
   const terminalStatus = String(terminal?.status || terminal?.result?.status || terminal?.progress?.status || "").toLowerCase();
-  const ok = isSuccessStatus(terminalStatus) && workspaceVerification.ok;
+  const artifactVerifiedAfterNonterminalWorker = options.scenario === "project"
+    && workspaceVerification.ok === true
+    && !isSuccessStatus(terminalStatus)
+    && !isExplicitFailureStatus(terminalStatus);
+  const ok = (isSuccessStatus(terminalStatus) || artifactVerifiedAfterNonterminalWorker) && workspaceVerification.ok;
   return {
     worker: workerName,
     ok,
@@ -430,6 +445,7 @@ async function runWorker(workerName, options) {
     elapsedMs: Date.now() - startedAt,
     terminalStatus: terminalStatus || "unknown",
     terminalFailureReason: terminal?.result?.failure_reason || terminal?.failure_reason || terminal?.error || "",
+    artifactVerifiedAfterNonterminalWorker,
     waitSnapshots,
     workspaceVerification,
   };

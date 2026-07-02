@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Five-worker project smoke exact-file refresh
+
+- Task: rerun the direct MCP `project` smoke for MIMO, DeepSeek, MiMoCode, Kilo, and OpenCode to prove real multi-file Node CLI/test project landing without Antigravity worker.
+- Result: first run exceeded the host timeout while waiting on MiMoCode, even though its workspace files passed host `node:test` and CLI JSON; the parent smoke process was stopped after confirming it was the only remaining spawned process. The smoke script now does not pre-create `README.md` for project workspaces, rejects extra files, preserves `artifactVerifiedAfterNonterminalWorker`, and surfaces exact-file evidence. The formal rerun passed all five workers with exact files and host verification: MIMO `dsw_mr3wn5f0_kiniqh`, DeepSeek `dsw_mr3wqqbw_l3huc0`, MiMoCode `mcw_mr3wr6bu_ns6x36`, Kilo `klw_mr3wublc_s55ypi`, and OpenCode `ocw_mr3x0m41_c5km6z`.
+- Cause classification: direct worker MCP project execution remains viable. The earlier timeout was a smoke harness/worker-tail latency issue, not a missing worker capability; exact-file verification needed to be stricter because the harness itself had seeded `README.md`.
+- Rule change: project smokes must prove no extra files in the worker workspace. If a worker lands valid artifacts but the terminal state is nonterminal, reports may only count it through explicit `artifactVerifiedAfterNonterminalWorker` evidence, not by pretending the worker completed normally.
+
 ### 2026-07-03 - Current-channel read-only Kilo still transport-closed
 
 - Task: after tool discovery exposed worker namespaces again, recheck a completed Kilo job with read-only `kilo_get_job` and refresh worker transport evidence.

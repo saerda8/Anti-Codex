@@ -113,6 +113,8 @@ const workerProjectSmokePassedWorkers = workerProjectSmokeResults
   .filter((entry) => entry?.ok === true
     && entry?.workspaceVerification?.ok === true
     && entry.workspaceVerification?.doneTextMatches === true
+    && Array.isArray(entry.workspaceVerification?.extraFiles)
+    && entry.workspaceVerification.extraFiles.length === 0
     && Number(entry.workspaceVerification?.testExitCode) === 0
     && Number(entry.workspaceVerification?.cliExitCode) === 0
     && Number(entry.workspaceVerification?.cliJson?.red) === 2
