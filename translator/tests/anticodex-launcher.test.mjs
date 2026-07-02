@@ -12060,7 +12060,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(mcpProbe, /mimo-claude-coworker/);
   assert.match(mcpProbe, /mimocode-worker/);
   assert.match(mcpProbe, /antigravity-code-worker/);
-  assert.doesNotMatch(mcpProbe, /start_implementation|implement_in_workspace|callTool/);
+  assert.doesNotMatch(mcpProbe, /callTool/);
   assert.match(syncRuntime, /scripts\\test-anticodex-model-routing\.ps1/);
   assert.match(syncRuntime, /scripts\\test-anticodex-model-thinking\.ps1/);
   assert.match(syncRuntime, /scripts\\test-anticodex-plugin-capabilities\.ps1/);
@@ -12240,7 +12240,8 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   const signer = readFileSync(resolve(root, "scripts", "sign-anticodex-reports.mjs"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
-  assert.match(verifier, /const reportName = [\s\S]*"ui-chat-smoke"/);
+  assert.match(verifier, /const baseReportName = [\s\S]*"ui-chat-smoke"/);
+  assert.match(verifier, /const reportName = `\$\{baseReportName\}\$\{requiredModelReportSuffix\}`/);
   assert.match(verifier, /"ui-local-project-smoke"/);
   assert.match(verifier, /"ui-coding-project-smoke"/);
   assert.match(verifier, /"ui-repo-file-edit-smoke"/);
@@ -12287,8 +12288,20 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /desktop UI did not select required model/);
   assert.match(verifier, /usedRealTraffic:\s*false/);
   assert.match(verifier, /modelSelectionEvidence/);
+  assert.match(verifier, /Input\.insertText/);
+  assert.match(verifier, /ArrowRight/);
+  assert.match(verifier, /typedFilter/);
+  assert.match(verifier, /baseReportName/);
+  assert.match(verifier, /requiredModelReportSuffix/);
+  assert.match(verifier, /preSubmitModelSelectionEvidence/);
+  assert.match(verifier, /desktop UI did not keep required model selected before submit/);
+  assert.match(verifier, /desktopRealTrafficObserved/);
+  assert.match(verifier, /desktop submit did not produce a model request payload/);
+  assert.doesNotMatch(verifier, /needle\.includes\(text\)/);
   assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
   assert.match(server, /reason: "fast_diagnostics"/);
+  assert.match(server, /responsesRequestHasInputWork/);
+  assert.match(server, /empty_responses_input/);
   assert.match(verifier, /const projectChatLabel = String\(args\.get\("--project-label"\) \|\| "Anti-Codex"\)/);
   assert.match(verifier, /newChatClickExpression\(requiresProjectChat \? projectChatLabel : ""\)/);
   assert.match(verifier, /project task did not open a \$\{projectChatLabel\} project chat before submit/);

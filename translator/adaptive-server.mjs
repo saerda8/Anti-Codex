@@ -6151,6 +6151,15 @@ function responsesToChatBody(parsed, options = {}) {
     return body;
 }
 
+function responsesRequestHasInputWork(parsed, chatBody) {
+    if (typeof parsed?.input === "string" && parsed.input.trim()) return true;
+    if (Array.isArray(parsed?.input) && parsed.input.length > 0) return true;
+    if (Array.isArray(parsed?.messages) && parsed.messages.length > 0) return true;
+    const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
+    return messages.some((message) => ["user", "assistant", "tool"].includes(message?.role)
+        && String(message?.content || "").trim());
+}
+
 function prepareCompactChatBody(chatBody) {
     return {
         ...chatBody,
@@ -12223,6 +12232,10 @@ const server = http.createServer(async (req, res) => {
             // Extract routing metadata from chatBody (must not be sent upstream)
             const routing = chatBody._routing || null;
             delete chatBody._routing;
+
+            if (!compact && antigravityMode && !responsesRequestHasInputWork(parsed, chatBody)) {
+                return fail(res, 400, "empty_responses_input");
+            }
 
             if (antigravityMode) {
                 const taskTitle = deterministicTaskTitleCompletion(parsed, chatBody);

@@ -30,7 +30,7 @@ const taskMode = String(args.get("--task-mode") || "exact-marker");
 const requiredModel = String(args.get("--model") || args.get("--required-model") || process.env.ANTICODEX_TEST_MODEL || "").trim();
 const requiredModelLabel = String(args.get("--model-label") || args.get("--required-model-label") || "").trim();
 const isolateChat = args.has("--same-chat") ? false : true;
-const reportName = taskMode === "web-search"
+const baseReportName = taskMode === "web-search"
   ? "ui-web-search-smoke"
   : taskMode === "free-chat"
     ? "ui-free-chat-smoke"
@@ -53,6 +53,10 @@ const reportName = taskMode === "web-search"
     : taskMode === "local-project"
       ? "ui-local-project-smoke"
   : "ui-chat-smoke";
+const requiredModelReportSuffix = requiredModel
+  ? `-model-${requiredModel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80)}`
+  : "";
+const reportName = `${baseReportName}${requiredModelReportSuffix}`;
 const projectTaskModes = new Set([
   "exact-marker",
   "web-search",
@@ -407,6 +411,14 @@ function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
   if (actualValues.some((value) => modelValueMatches(value, expected))) return [];
   const compactActual = actualValues.filter(Boolean).map(String).slice(0, 8).join(", ") || "none";
   return [`desktop task did not route through required model ${expected.join(" / ")}; observed ${compactActual}`];
+}
+
+function desktopRealTrafficObserved(modelRouteEvidence, diagnostics) {
+  if (Number(modelRouteEvidence?.newRouteCount || 0) > 0) return true;
+  const ws = diagnostics?.responsesWebSocket || null;
+  if (Number(ws?.clientPayloads || 0) > 0) return true;
+  if (Number(ws?.relayAttempts || 0) > 0) return true;
+  return false;
 }
 
 async function readModelRoutesEvidence() {
@@ -2256,7 +2268,7 @@ function currentModelProbeExpression(requiredValues = []) {
     const expected = requiredValues.map(normalize).filter(Boolean);
     const matches = (value) => {
       const text = normalize(value);
-      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle) || needle.includes(text));
+      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle));
     };
     const visible = (element) => {
       if (!(element instanceof HTMLElement)) return false;
@@ -2317,7 +2329,7 @@ function modelOptionProbeExpression(requiredValues = []) {
     const expected = requiredValues.map(normalize).filter(Boolean);
     const matches = (value) => {
       const text = normalize(value);
-      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle) || needle.includes(text));
+      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle));
     };
     const visible = (element) => {
       if (!(element instanceof HTMLElement)) return false;
@@ -2375,6 +2387,13 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
     await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
     await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
   };
+  const typeModelFilter = async () => {
+    const text = String(requiredModelLabel || requiredModel || requiredValues[0] || "").replace(/[^\p{L}\p{N} ._-]+/gu, " ").trim();
+    if (!text) return "";
+    await ws.send("Input.insertText", { text });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 650));
+    return text;
+  };
   while (Date.now() < deadline) {
     const current = await ws.send("Runtime.evaluate", {
       expression: currentModelProbeExpression(requiredValues),
@@ -2392,6 +2411,8 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
       candidates: current.result?.result?.value?.candidates || [],
     };
     if (latest.current?.matched === true) {
+      await pressEscapeKey(ws);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
       return { ...latest, ok: true, matched: true, alreadySelected: true, after: latest.current.selected };
     }
     const rect = latest.before?.rect;
@@ -2403,14 +2424,17 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
     await clickRectCenter(rect);
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
     let optionProbe = null;
-    const optionDeadline = Math.min(deadline, Date.now() + 5_000);
-    while (Date.now() < optionDeadline) {
+    const probeModelOptions = async () => {
       const optionResult = await ws.send("Runtime.evaluate", {
         expression: modelOptionProbeExpression(requiredValues),
         returnByValue: true,
         awaitPromise: true,
       });
-      optionProbe = optionResult.result?.result?.value || null;
+      return optionResult.result?.result?.value || null;
+    };
+    const optionDeadline = Math.min(deadline, Date.now() + 5_000);
+    while (Date.now() < optionDeadline) {
+      optionProbe = await probeModelOptions();
       if (optionProbe?.matched === true && optionProbe?.selected?.rect) break;
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
     }
@@ -2419,19 +2443,36 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
         .find((candidate) => /menuitem/i.test(candidate?.role || "") && /gemini|claude|opus|sonnet|flash|gpt/i.test(candidate?.label || "") && candidate?.rect);
       if (modelSubmenu?.rect) {
         latest.submenu = modelSubmenu;
-        await clickRectCenter(modelSubmenu.rect);
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
+        const x = modelSubmenu.rect.x + modelSubmenu.rect.w / 2;
+        const y = modelSubmenu.rect.y + modelSubmenu.rect.h / 2;
+        await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+        optionProbe = await probeModelOptions();
+        if (!(optionProbe?.matched === true && optionProbe?.selected?.rect)) {
+          await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+          await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+          optionProbe = await probeModelOptions();
+        }
+        if (!(optionProbe?.matched === true && optionProbe?.selected?.rect)) {
+          await clickRectCenter(modelSubmenu.rect);
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
+        }
         const submenuDeadline = Math.min(deadline, Date.now() + 5_000);
         while (Date.now() < submenuDeadline) {
-          const optionResult = await ws.send("Runtime.evaluate", {
-            expression: modelOptionProbeExpression(requiredValues),
-            returnByValue: true,
-            awaitPromise: true,
-          });
-          optionProbe = optionResult.result?.result?.value || null;
+          optionProbe = await probeModelOptions();
           if (optionProbe?.matched === true && optionProbe?.selected?.rect) break;
           await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
         }
+      }
+    }
+    if (!(optionProbe?.matched === true && optionProbe?.selected?.rect)) {
+      latest.typedFilter = await typeModelFilter();
+      const filterDeadline = Math.min(deadline, Date.now() + 5_000);
+      while (Date.now() < filterDeadline) {
+        optionProbe = await probeModelOptions();
+        if (optionProbe?.matched === true && optionProbe?.selected?.rect) break;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
       }
     }
     latest.optionProbe = optionProbe;
@@ -2451,7 +2492,11 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
     const after = afterResult.result?.result?.value || null;
     latest.after = after?.selected || null;
     latest.afterProbe = after;
-    if (after?.matched === true) return { ...latest, ok: true, matched: true };
+    if (after?.matched === true) {
+      await pressEscapeKey(ws);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+      return { ...latest, ok: true, matched: true };
+    }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
   }
   return latest;
@@ -2477,6 +2522,11 @@ async function waitForComposerSubmitted(ws, prompt, marker, timeoutMs = 4_000) {
 async function pressComposerEnter(ws) {
   await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+}
+
+async function pressEscapeKey(ws) {
+  await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
 }
 
 function newChatClickExpression(projectName = "") {
@@ -2832,6 +2882,7 @@ async function main() {
   let backendResetBeforeSubmit = null;
   let newChatEvidence = null;
   let modelSelectionEvidence = null;
+  let preSubmitModelSelectionEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
   let modelRoutesBefore = null;
@@ -3287,6 +3338,16 @@ async function main() {
     } else if (prep?.hasSendButton !== true) {
       failures.push("send button was not found in the composer controls");
     } else {
+      if (requiredModelNeedles().length > 0) {
+        preSubmitModelSelectionEvidence = await selectRequiredModel(ws, 8_000);
+        if (preSubmitModelSelectionEvidence?.matched !== true) {
+          failures.push(`desktop UI did not keep required model selected before submit ${requiredModelNeedles().join(" / ")}`);
+        }
+        prep = await waitForComposerPromptReady(ws, promptText, 5_000);
+        if (prep?.composerMatches !== true) {
+          failures.push("composer changed while confirming the required model before submit");
+        }
+      }
       const rect = prep?.selected?.rect || null;
       if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
         failures.push("send button coordinates were not available");
@@ -3711,13 +3772,15 @@ async function main() {
   modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
   failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
   pushUniqueFailures(failures, collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, Boolean(repairPrompt)));
+  const observedRealTraffic = desktopRealTrafficObserved(modelRouteEvidence, diagnostics);
+  if (!observedRealTraffic) failures.push("desktop submit did not produce a model request payload");
   const payload = {
     ok: failures.length === 0,
     reportName,
     requestedRealTraffic: true,
-    usedRealTraffic: true,
+    usedRealTraffic: observedRealTraffic,
     behaviorCovered: true,
-    coverageKind: "desktop-ui-real-traffic",
+    coverageKind: observedRealTraffic ? "desktop-ui-real-traffic" : "desktop-ui-submit-without-request",
     taskMode,
     promptText,
     promptLanguage,
@@ -3760,8 +3823,9 @@ async function main() {
     staleRecovery,
     backendResetBeforeSubmit,
     newChatEvidence,
-    modelSelectionEvidence,
-    initialIdleObserved: Boolean(initialIdle?.diagnostics),
+      modelSelectionEvidence,
+      preSubmitModelSelectionEvidence,
+      initialIdleObserved: Boolean(initialIdle?.diagnostics),
     clicked,
     markerCount: count,
     answerMarkerCount,
