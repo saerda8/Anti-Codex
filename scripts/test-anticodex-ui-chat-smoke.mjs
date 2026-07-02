@@ -17,6 +17,23 @@ for (let i = 2; i < process.argv.length; i += 1) {
   }
 }
 
+if (args.has("--help") || args.has("-h")) {
+  console.log(`Usage: node scripts/test-anticodex-ui-chat-smoke.mjs [options]
+
+Options:
+  --task-mode <mode>       Task mode, for example autonomous-reasoning or agentic-step-flow.
+  --model <id>             Required model id for the real UI route.
+  --model-label <label>    Required visible model label.
+  --timeout-ms <ms>        Overall verifier timeout.
+  --marker <text>          Expected final marker.
+  --project-label <text>   Expected project label (default: Anti-Codex).
+  --artifact-dir <path>    Directory for task artifacts.
+  --prompt-file <path>     UTF-8 prompt file.
+  --same-chat              Reuse the current chat instead of opening an isolated chat.
+  --help, -h               Show this help message without starting UI work.`);
+  process.exit(0);
+}
+
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = resolve(scriptRoot, "..");
 let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT || 0);

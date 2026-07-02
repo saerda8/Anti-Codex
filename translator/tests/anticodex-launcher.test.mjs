@@ -12273,6 +12273,8 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
 
   assert.match(verifier, /const baseReportName = [\s\S]*"ui-chat-smoke"/);
   assert.match(verifier, /const reportName = `\$\{baseReportName\}\$\{requiredModelReportSuffix\}`/);
+  assert.match(verifier, /if \(args\.has\("--help"\) \|\| args\.has\("-h"\)\)/);
+  assert.match(verifier, /Show this help message without starting UI work/);
   assert.match(verifier, /"ui-local-project-smoke"/);
   assert.match(verifier, /"ui-coding-project-smoke"/);
   assert.match(verifier, /"ui-repo-file-edit-smoke"/);
