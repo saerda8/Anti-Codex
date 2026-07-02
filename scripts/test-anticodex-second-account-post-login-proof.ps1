@@ -83,6 +83,93 @@ function New-ProofCommandPreview {
     return "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -WindowsUser $WindowsUser -ProfileRoot $ResolvedProfileRoot -StrictWindowsAppDataIsolation -AccountIsolationBoundary separate-windows-user -AllowSeparateAccountProof -AntiCodexAccountId $antiCodexId -McpAccountId $mcpId -SeparateAccountProofApprovalId $approvalId"
 }
 
+function New-PostLoginProofOperatorActionCard {
+    param(
+        [bool]$TargetUserExists,
+        [bool]$SafeToAskUserForSecondAccountLogin,
+        [bool]$CanRunAfterInteractiveLogin,
+        [bool]$ConfirmLogin,
+        [bool]$RealTrafficAllowed,
+        [bool]$SeparateAccountProofAllowed,
+        [bool]$AntiCodexIdPresent,
+        [bool]$McpIdPresent,
+        [bool]$AccountIdsDiffer,
+        [bool]$ApprovalIdPresent,
+        [bool]$WillRunProofNow,
+        [bool]$ProofAccepted,
+        [string]$ReadinessBlocker,
+        [string]$ProofCommand
+    )
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    if (-not $TargetUserExists) { $missing.Add("separate_windows_user_missing") | Out-Null }
+    if ($TargetUserExists -and (-not $SafeToAskUserForSecondAccountLogin -or -not $CanRunAfterInteractiveLogin)) { $missing.Add("account_isolation_status_not_ready") | Out-Null }
+    if (-not $ConfirmLogin) { $missing.Add("interactive_login_not_confirmed") | Out-Null }
+    if (-not $RealTrafficAllowed) { $missing.Add("approved_real_traffic_not_requested") | Out-Null }
+    if (-not $SeparateAccountProofAllowed) { $missing.Add("separate_account_proof_switch_missing") | Out-Null }
+    if (-not $AntiCodexIdPresent -or -not $McpIdPresent) { $missing.Add("account_identity_inputs_missing") | Out-Null }
+    if ($AntiCodexIdPresent -and $McpIdPresent -and -not $AccountIdsDiffer) { $missing.Add("account_ids_match") | Out-Null }
+    if (-not $ApprovalIdPresent) { $missing.Add("separate_account_proof_approval_missing") | Out-Null }
+
+    $status = if ($ProofAccepted) {
+        "proof_accepted"
+    } elseif (-not $TargetUserExists -or -not $SafeToAskUserForSecondAccountLogin -or -not $CanRunAfterInteractiveLogin) {
+        "blocked_before_login"
+    } elseif (-not $ConfirmLogin) {
+        "needs_interactive_login_confirmation"
+    } elseif ($missing.Count -gt 0) {
+        "needs_account_identity_inputs"
+    } elseif ($WillRunProofNow) {
+        "post_login_proof_running"
+    } else {
+        "ready_for_post_login_proof"
+    }
+
+    $nextAction = if ($ProofAccepted) {
+        "rerun_goal_readiness_after_account_proof"
+    } elseif (-not $TargetUserExists) {
+        "create_or_verify_target_windows_user_then_rerun_post_login_proof"
+    } elseif (-not $SafeToAskUserForSecondAccountLogin -or -not $CanRunAfterInteractiveLogin) {
+        "rerun_account_prepare_and_status_until_login_safe"
+    } elseif (-not $ConfirmLogin) {
+        "confirm_interactive_second_account_login_then_rerun_post_login_proof"
+    } elseif ($missing.Count -gt 0) {
+        "provide_distinct_account_ids_and_explicit_proof_approval"
+    } else {
+        "run_post_login_proof_command"
+    }
+
+    $userStep = if ($ProofAccepted) {
+        "Rerun goal readiness."
+    } elseif (-not $TargetUserExists) {
+        "Create or verify the separate Windows user, then rerun this proof summary."
+    } elseif (-not $SafeToAskUserForSecondAccountLogin -or -not $CanRunAfterInteractiveLogin) {
+        "Rerun the no-traffic account prepare and isolation checks until login is marked safe."
+    } elseif (-not $ConfirmLogin) {
+        "After the separate Windows-user Antigravity login is complete, rerun this proof command with the confirmation flag."
+    } elseif ($missing.Count -gt 0) {
+        "Provide the distinct Anti-Codex and MCP account identifiers plus the explicit proof approval id."
+    } else {
+        "Run the post-login proof command."
+    }
+
+    return [ordered]@{
+        status = $status
+        windowsUser = $WindowsUser
+        canRunPostLoginProofNow = [bool]($WillRunProofNow -and -not $ProofAccepted)
+        targetUserExists = [bool]$TargetUserExists
+        canAskUserToLoginNow = [bool]($TargetUserExists -and $SafeToAskUserForSecondAccountLogin)
+        confirmInteractiveLoginComplete = [bool]$ConfirmLogin
+        missingRequirement = if ($missing.Count -gt 0) { [string]$missing[0] } else { "" }
+        missingRequirements = @($missing)
+        readinessBlockingReason = $ReadinessBlocker
+        nextOperatorAction = $nextAction
+        userVisibleNextStep = $userStep
+        noTrafficStatusCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-second-account-post-login-proof.ps1 -WindowsUser $WindowsUser"
+        proofCommandPreview = $ProofCommand
+    }
+}
+
 $failures = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
 $statusResult = Invoke-JsonScript -ScriptPath $statusScript -Arguments @("-WindowsUser", $WindowsUser, "-ReportRoot", $ReportRoot)
@@ -134,6 +221,26 @@ if ($willRunRealSmoke) {
 $loginVerified = ($realSmoke -and $realSmoke.loginVerified -eq $true)
 $separateAccountVerified = ($realSmoke -and $realSmoke.separateAccountVerified -eq $true)
 $releaseAcceptableAccountProof = ($loginVerified -and $separateAccountVerified -and $realSmoke.accountIsolationBoundary -eq "separate-windows-user" -and $realSmoke.usedRealTraffic -eq $true)
+$targetUserExists = if ($status) { [bool]$status.targetUserExists } else { $false }
+$safeToAskUserForSecondAccountLogin = if ($status) { [bool]$status.safeToAskUserForSecondAccountLogin } else { $false }
+$readinessBlockingReason = if ($status) { [string]$status.readinessBlockingReason } else { "status_unavailable" }
+$canRunAfterInteractiveLogin = if ($status -and $status.postLoginProofPlan) { [bool]$status.postLoginProofPlan.canRunAfterInteractiveLogin } else { $false }
+$proofCommandPreview = New-ProofCommandPreview -ResolvedProfileRoot $resolvedProfileRoot -HasAntiCodexId ([bool]$antiCodexAccountIdTrimmed) -HasMcpId ([bool]$mcpAccountIdTrimmed) -HasApproval ([bool]$approvalIdTrimmed)
+$operatorActionCard = New-PostLoginProofOperatorActionCard `
+    -TargetUserExists $targetUserExists `
+    -SafeToAskUserForSecondAccountLogin $safeToAskUserForSecondAccountLogin `
+    -CanRunAfterInteractiveLogin $canRunAfterInteractiveLogin `
+    -ConfirmLogin ([bool]$ConfirmInteractiveLoginComplete) `
+    -RealTrafficAllowed ([bool]$AllowRealTraffic) `
+    -SeparateAccountProofAllowed ([bool]$AllowSeparateAccountProof) `
+    -AntiCodexIdPresent ([bool]$antiCodexAccountIdTrimmed) `
+    -McpIdPresent ([bool]$mcpAccountIdTrimmed) `
+    -AccountIdsDiffer ([bool]$accountIdsDiffer) `
+    -ApprovalIdPresent ([bool]$approvalIdTrimmed) `
+    -WillRunProofNow ([bool]$willRunRealSmoke) `
+    -ProofAccepted ([bool]$releaseAcceptableAccountProof) `
+    -ReadinessBlocker $readinessBlockingReason `
+    -ProofCommand $proofCommandPreview
 $payload = [ordered]@{
     ok = if ($AllowRealTraffic) { ($failures.Count -eq 0 -and $releaseAcceptableAccountProof) } else { ($failures.Count -eq 0) }
     reportName = "second-account-post-login-proof"
@@ -150,7 +257,8 @@ $payload = [ordered]@{
     profileRoot = $resolvedProfileRoot
     allowSeparateAccountProof = [bool]$AllowSeparateAccountProof
     confirmInteractiveLoginComplete = [bool]$ConfirmInteractiveLoginComplete
-    proofCommandPreview = New-ProofCommandPreview -ResolvedProfileRoot $resolvedProfileRoot -HasAntiCodexId ([bool]$antiCodexAccountIdTrimmed) -HasMcpId ([bool]$mcpAccountIdTrimmed) -HasApproval ([bool]$approvalIdTrimmed)
+    proofCommandPreview = $proofCommandPreview
+    operatorActionCard = $operatorActionCard
     proofInputs = [ordered]@{
         antiCodexAccountIdPresent = [bool]$antiCodexAccountIdTrimmed
         mcpAccountIdPresent = [bool]$mcpAccountIdTrimmed
@@ -158,12 +266,12 @@ $payload = [ordered]@{
         accountIdsDiffer = [bool]$accountIdsDiffer
     }
     statusCompletionState = if ($status) { [string]$status.completionState } else { "status_unavailable" }
-    targetUserExists = if ($status) { [bool]$status.targetUserExists } else { $false }
-    safeToAskUserForSecondAccountLogin = if ($status) { [bool]$status.safeToAskUserForSecondAccountLogin } else { $false }
-    readinessBlockingReason = if ($status) { [string]$status.readinessBlockingReason } else { "status_unavailable" }
+    targetUserExists = $targetUserExists
+    safeToAskUserForSecondAccountLogin = $safeToAskUserForSecondAccountLogin
+    readinessBlockingReason = $readinessBlockingReason
     operatorBlockingStage = if ($status) { [string]$status.operatorBlockingStage } else { "status_unavailable" }
     operatorNextStep = if ($status) { [string]$status.operatorNextStep } else { "rerun_account_isolation_status" }
-    canRunAfterInteractiveLogin = if ($status -and $status.postLoginProofPlan) { [bool]$status.postLoginProofPlan.canRunAfterInteractiveLogin } else { $false }
+    canRunAfterInteractiveLogin = $canRunAfterInteractiveLogin
     postLoginProofPlan = if ($status) { $status.postLoginProofPlan } else { $null }
     willRunRealSmoke = [bool]$willRunRealSmoke
     realSmokeExitCode = if ($realSmokeResult) { [int]$realSmokeResult.exitCode } else { $null }

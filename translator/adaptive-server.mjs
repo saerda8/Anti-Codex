@@ -3254,6 +3254,36 @@ function latestManagerReportItem(label, fileName) {
             postLoginProofCommandTemplate: shortSafeText(report.postLoginProofCommandTemplate || "", ""),
             accountIsolationCaveat: shortSafeText(report.accountIsolationCaveat || "", ""),
         } : null,
+        secondAccountPostLoginProofEvidence: report?.reportName === "second-account-post-login-proof" ? {
+            noTraffic: report.noTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            changedSystem: report.changedSystem === true,
+            createdUser: report.createdUser === true,
+            capturesPassword: report.capturesPassword === true,
+            storesPassword: report.storesPassword === true,
+            targetUserExists: report.targetUserExists === true,
+            safeToAskUserForSecondAccountLogin: report.safeToAskUserForSecondAccountLogin === true,
+            canRunAfterInteractiveLogin: report.canRunAfterInteractiveLogin === true,
+            willRunRealSmoke: report.willRunRealSmoke === true,
+            loginVerified: report.loginVerified === true,
+            separateAccountVerified: report.separateAccountVerified === true,
+            releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
+            readinessBlockingReason: shortSafeText(report.readinessBlockingReason || "", ""),
+            operatorActionCard: report.operatorActionCard && typeof report.operatorActionCard === "object" ? {
+                status: shortSafeText(report.operatorActionCard.status || "", ""),
+                canRunPostLoginProofNow: report.operatorActionCard.canRunPostLoginProofNow === true,
+                targetUserExists: report.operatorActionCard.targetUserExists === true,
+                canAskUserToLoginNow: report.operatorActionCard.canAskUserToLoginNow === true,
+                missingRequirement: shortSafeText(report.operatorActionCard.missingRequirement || "", ""),
+                missingRequirements: Array.isArray(report.operatorActionCard.missingRequirements) ? report.operatorActionCard.missingRequirements.map((entry) => shortSafeText(entry || "", "")).filter(Boolean) : [],
+                nextOperatorAction: shortSafeText(report.operatorActionCard.nextOperatorAction || "", ""),
+                userVisibleNextStep: shortSafeText(report.operatorActionCard.userVisibleNextStep || "", ""),
+                noTrafficStatusCommand: shortSafeText(report.operatorActionCard.noTrafficStatusCommand || "", ""),
+                proofCommandPreview: shortSafeText(report.operatorActionCard.proofCommandPreview || "", ""),
+            } : null,
+            accountIsolationBoundary: shortSafeText(report.accountIsolationBoundary || "", ""),
+            accountIsolationCaveat: shortSafeText(report.accountIsolationCaveat || "", ""),
+        } : null,
         publicDocumentationOk: fileName === "latest-source-preflight.json" && !invalid && publicDocumentation ? publicDocumentation.ok === true : null,
         sourcePreflightEvidence: fileName === "latest-source-preflight.json" && !invalid && checks ? {
             javascriptSyntaxOk: checks.javascriptSyntax?.ok === true,
@@ -3717,6 +3747,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Antigravity 账号隔离状态", "latest-antigravity-account-isolation-status.json"),
         latestManagerReportItem("Antigravity 第二账号登录入口", "latest-second-antigravity-account-login-entrypoint.json"),
         latestManagerReportItem("Antigravity 第二账号总状态", "latest-second-account-readiness-summary.json"),
+        latestManagerReportItem("Antigravity 第二账号登录后证明", "latest-second-account-post-login-proof.json"),
         latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
     ];
     return {
@@ -4509,6 +4540,16 @@ function latestReportsSummary(result){
       if(evidence.approvedLoginCommandTemplate) lines.push("  secondAccountReadinessSummary loginCommand: "+evidence.approvedLoginCommandTemplate);
       if(evidence.postLoginProofCommandTemplate) lines.push("  secondAccountReadinessSummary proofCommand: "+evidence.postLoginProofCommandTemplate);
       if(evidence.accountIsolationCaveat) lines.push("  secondAccountReadinessSummary caveat: "+evidence.accountIsolationCaveat);
+    }
+    if(item.secondAccountPostLoginProofEvidence){
+      const evidence=item.secondAccountPostLoginProofEvidence;
+      const card=evidence.operatorActionCard||{};
+      lines.push("  secondAccountPostLoginProof: userExists="+(evidence.targetUserExists?"true":"false")+" / canRun="+(evidence.canRunAfterInteractiveLogin?"true":"false")+" / willRunSmoke="+(evidence.willRunRealSmoke?"true":"false")+" / releaseProof="+(evidence.releaseAcceptableAccountProof?"true":"false"));
+      lines.push("  secondAccountPostLoginProof guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false"));
+      lines.push("  secondAccountPostLoginProof card: status="+(card.status||"unknown")+" / canRunNow="+(card.canRunPostLoginProofNow?"true":"false")+" / missing="+(card.missingRequirement||"none")+" / next="+(card.nextOperatorAction||"unknown"));
+      if(card.noTrafficStatusCommand) lines.push("  secondAccountPostLoginProof statusCommand: "+card.noTrafficStatusCommand);
+      if(card.proofCommandPreview) lines.push("  secondAccountPostLoginProof proofCommand: "+card.proofCommandPreview);
+      if(evidence.accountIsolationCaveat) lines.push("  secondAccountPostLoginProof caveat: "+evidence.accountIsolationCaveat);
     }
     if(item.uiChatSmokeEvidence){
       const evidence=item.uiChatSmokeEvidence;

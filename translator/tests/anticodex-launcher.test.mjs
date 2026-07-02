@@ -14468,6 +14468,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /Windows credential-store/);
   assert.match(secondAccountPostLoginProof, /reportName = "second-account-post-login-proof"/);
+  assert.match(secondAccountPostLoginProof, /latest-second-account-post-login-proof\.json/);
   assert.match(secondAccountPostLoginProof, /test-anticodex-antigravity-account-isolation-status\.ps1/);
   assert.match(secondAccountPostLoginProof, /test-anticodex-antigravity-cli-real-smoke\.ps1/);
   assert.match(secondAccountPostLoginProof, /\[switch\]\$ConfirmInteractiveLoginComplete/);
@@ -14477,6 +14478,11 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(secondAccountPostLoginProof, /<provided-mcp-account-id>/);
   assert.match(secondAccountPostLoginProof, /second-account-post-login-proof-dry-run/);
   assert.match(secondAccountPostLoginProof, /second-account-post-login-proof-real-traffic/);
+  assert.match(secondAccountPostLoginProof, /operatorActionCard/);
+  assert.match(secondAccountPostLoginProof, /missingRequirements/);
+  assert.match(secondAccountPostLoginProof, /canRunPostLoginProofNow/);
+  assert.match(secondAccountPostLoginProof, /separate_windows_user_missing/);
+  assert.match(secondAccountPostLoginProof, /test-anticodex-second-account-post-login-proof\.ps1/);
   assert.match(secondAccountPostLoginProof, /targetUserExists/);
   assert.match(secondAccountPostLoginProof, /safeToAskUserForSecondAccountLogin/);
   assert.match(secondAccountPostLoginProof, /readinessBlockingReason/);
@@ -14975,6 +14981,14 @@ test("second account post-login proof dry-run resolves command without leaking a
     assert.equal(report.requestedRealTraffic, false);
     assert.equal(report.usedRealTraffic, false);
     assert.equal(report.releaseAcceptableAccountProof, false);
+    assert.equal(report.operatorActionCard.status, "blocked_before_login");
+    assert.equal(report.operatorActionCard.canRunPostLoginProofNow, false);
+    assert.equal(report.operatorActionCard.targetUserExists, false);
+    assert.equal(report.operatorActionCard.canAskUserToLoginNow, false);
+    assert.equal(report.operatorActionCard.missingRequirement, "separate_windows_user_missing");
+    assert.ok(report.operatorActionCard.missingRequirements.includes("separate_windows_user_missing"));
+    assert.match(report.operatorActionCard.noTrafficStatusCommand, /test-anticodex-second-account-post-login-proof\.ps1/);
+    assert.match(report.operatorActionCard.proofCommandPreview, /test-anticodex-antigravity-cli-real-smoke\.ps1/);
     assert.equal(report.proofInputs.antiCodexAccountIdPresent, true);
     assert.equal(report.proofInputs.mcpAccountIdPresent, true);
     assert.equal(report.proofInputs.separateAccountProofApprovalIdPresent, true);

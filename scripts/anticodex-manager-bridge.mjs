@@ -579,6 +579,16 @@ function latestReportsSummary(result) {
       if (evidence.postLoginProofCommandTemplate) lines.push(`  secondAccountReadinessSummary proofCommand: ${evidence.postLoginProofCommandTemplate}`);
       if (evidence.accountIsolationCaveat) lines.push(`  secondAccountReadinessSummary caveat: ${evidence.accountIsolationCaveat}`);
     }
+    if (item.secondAccountPostLoginProofEvidence) {
+      const evidence = item.secondAccountPostLoginProofEvidence;
+      const card = evidence.operatorActionCard || {};
+      lines.push(`  secondAccountPostLoginProof: userExists=${evidence.targetUserExists ? "true" : "false"} / canRun=${evidence.canRunAfterInteractiveLogin ? "true" : "false"} / willRunSmoke=${evidence.willRunRealSmoke ? "true" : "false"} / releaseProof=${evidence.releaseAcceptableAccountProof ? "true" : "false"}`);
+      lines.push(`  secondAccountPostLoginProof guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
+      lines.push(`  secondAccountPostLoginProof card: status=${card.status || "unknown"} / canRunNow=${card.canRunPostLoginProofNow ? "true" : "false"} / missing=${card.missingRequirement || "none"} / next=${card.nextOperatorAction || "unknown"}`);
+      if (card.noTrafficStatusCommand) lines.push(`  secondAccountPostLoginProof statusCommand: ${card.noTrafficStatusCommand}`);
+      if (card.proofCommandPreview) lines.push(`  secondAccountPostLoginProof proofCommand: ${card.proofCommandPreview}`);
+      if (evidence.accountIsolationCaveat) lines.push(`  secondAccountPostLoginProof caveat: ${evidence.accountIsolationCaveat}`);
+    }
     if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
       const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
       lines.push(`  managerButtons: ${actions.join(" | ")}`);

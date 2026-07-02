@@ -249,6 +249,57 @@ function Test-SecondAccountReadinessSummaryEvidence {
     if (-not [string]$evidence.accountIsolationCaveat) { Add-Failure "second-account readiness summary caveat missing" }
 }
 
+function Test-SecondAccountPostLoginProofEvidence {
+    param($SecondAccountPostLoginProofSummary)
+
+    if (-not $SecondAccountPostLoginProofSummary) {
+        Add-Failure "diagnostic reports summary missing latest-second-account-post-login-proof.json"
+        return
+    }
+
+    $evidence = $SecondAccountPostLoginProofSummary.secondAccountPostLoginProofEvidence
+    if (-not $evidence) {
+        Add-Failure "second-account post-login proof missing secondAccountPostLoginProofEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "second-account-post-login-proof") { Add-Failure "second-account post-login proof reportName mismatch" }
+    if ($evidence.noTraffic -ne $true) { Add-Failure "second-account post-login proof not no-traffic" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "second-account post-login proof requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "second-account post-login proof used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "second-account post-login proof behavior not covered" }
+    if ($evidence.coverageKind -ne "second-account-post-login-proof-dry-run") { Add-Failure "second-account post-login proof coverage kind mismatch" }
+    if ($evidence.changedSystem -ne $false) { Add-Failure "second-account post-login proof changed system" }
+    if ($evidence.createdUser -ne $false) { Add-Failure "second-account post-login proof created user" }
+    if ($evidence.capturesPassword -ne $false) { Add-Failure "second-account post-login proof captures password" }
+    if ($evidence.storesPassword -ne $false) { Add-Failure "second-account post-login proof stores password" }
+    if ($evidence.targetUserExists -ne $false) { Add-Failure "second-account post-login proof target user unexpectedly exists in current dry-run" }
+    if ($evidence.safeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "second-account post-login proof allows login too early" }
+    if ($evidence.canRunAfterInteractiveLogin -ne $false) { Add-Failure "second-account post-login proof can run too early" }
+    if ($evidence.willRunRealSmoke -ne $false) { Add-Failure "second-account post-login proof will run real smoke too early" }
+    if ($evidence.loginVerified -ne $false) { Add-Failure "second-account post-login proof claims login verified" }
+    if ($evidence.separateAccountVerified -ne $false) { Add-Failure "second-account post-login proof claims separate account verified" }
+    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account post-login proof claims release account proof" }
+    if ([string]$evidence.accountIsolationBoundary -ne "separate-windows-user") { Add-Failure "second-account post-login proof boundary mismatch" }
+    $operatorActionCard = $evidence.operatorActionCard
+    if (-not $operatorActionCard) { Add-Failure "second-account post-login proof operator action card missing" }
+    else {
+        $missingRequirements = @($operatorActionCard.missingRequirements | ForEach-Object { [string]$_ } | Where-Object { $_ })
+        if (-not [string]$operatorActionCard.status) { Add-Failure "second-account post-login proof operator action card status missing" }
+        if (-not [string]$operatorActionCard.windowsUser) { Add-Failure "second-account post-login proof operator action card Windows user missing" }
+        if ($operatorActionCard.canRunPostLoginProofNow -ne $false) { Add-Failure "second-account post-login proof operator action card runs too early" }
+        if ($operatorActionCard.targetUserExists -ne $false) { Add-Failure "second-account post-login proof operator action card target user mismatch" }
+        if ($operatorActionCard.canAskUserToLoginNow -ne $false) { Add-Failure "second-account post-login proof operator action card allows login too early" }
+        if ([string]$operatorActionCard.missingRequirement -ne "separate_windows_user_missing") { Add-Failure "second-account post-login proof operator action card missing requirement mismatch" }
+        if ($missingRequirements -notcontains "separate_windows_user_missing") { Add-Failure "second-account post-login proof operator action card missing requirements mismatch" }
+        if (-not [string]$operatorActionCard.nextOperatorAction) { Add-Failure "second-account post-login proof operator action card next action missing" }
+        if (-not [string]$operatorActionCard.userVisibleNextStep) { Add-Failure "second-account post-login proof operator action card user step missing" }
+        if (-not ([string]$operatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "second-account post-login proof operator action card status command missing" }
+        if (-not ([string]$operatorActionCard.proofCommandPreview).Contains("test-anticodex-antigravity-cli-real-smoke.ps1")) { Add-Failure "second-account post-login proof operator action card proof command missing" }
+    }
+    if (-not [string]$evidence.accountIsolationCaveat) { Add-Failure "second-account post-login proof caveat missing" }
+}
+
 function Get-NonNegativeIntProperty {
     param(
         $Value,
@@ -1967,6 +2018,7 @@ function Test-ReportsSummary {
     $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
+    $secondAccountPostLoginProofSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-post-login-proof.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -2025,6 +2077,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
+    if ($RequireReleaseReady -or $secondAccountPostLoginProofSummary) { Test-SecondAccountPostLoginProofEvidence $secondAccountPostLoginProofSummary }
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }
