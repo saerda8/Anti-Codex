@@ -29,6 +29,25 @@ function hasArg(name) {
   return process.argv.includes(name);
 }
 
+function printUsage() {
+  console.log([
+    "Usage: node scripts/test-anticodex-worker-mcp-task-smoke.mjs [options]",
+    "",
+    "Options:",
+    "  --scenario json|project       Smoke scenario to run (default: json)",
+    "  --workers <list>              Comma-separated worker names (default: opencode-worker)",
+    "  --worker-checks               Ask workers to run their own validation command",
+    "  --merge-latest                Merge this run into the existing latest report",
+    "  --timeout-ms <ms>             Override per-worker timeout",
+    "  --config <path>               Codex config containing worker MCP servers",
+    "  --report-root <path>          Directory for latest/history reports",
+    "  --workspace-root <path>       Directory for generated worker smoke workspaces",
+    "  --clean-workspace-root        Clean generated smoke workspaces before running",
+    "  --self-test-worker-checks     Validate encoded worker-check command locally",
+    "  --help, -h                    Show this help message without starting workers",
+  ].join("\n"));
+}
+
 function parseTomlValue(raw) {
   const value = String(raw || "").trim();
   if (value.startsWith("[") && value.endsWith("]")) {
@@ -417,6 +436,10 @@ async function runWorker(workerName, options) {
 }
 
 async function main() {
+  if (hasArg("--help") || hasArg("-h")) {
+    printUsage();
+    return;
+  }
   if (hasArg("--self-test-worker-checks")) {
     const result = selfTestWorkerChecksCommand();
     console.log(JSON.stringify(result, null, 2));

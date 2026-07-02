@@ -13062,6 +13062,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerTaskSmoke, /payload\.failedWorkers = payload\.results\.filter/);
   assert.match(workerTaskSmoke, /pathToFileURL\(process\.argv\[1\]\)\.href/);
   assert.match(workerTaskSmoke, /Do not build a file URL by string concatenation/);
+  assert.match(workerTaskSmoke, /--help, -h\s+Show this help message without starting workers/);
+  assert.match(workerTaskSmoke, /if \(hasArg\("--help"\) \|\| hasArg\("-h"\)\)/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
