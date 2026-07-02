@@ -23,7 +23,7 @@ const requiredWorkerMcpServers = [
   "mimocode-worker",
   "opencode-worker",
 ];
-const minTaskSmokePassedWorkers = 4;
+const minTaskSmokePassedWorkers = 5;
 const requiredAgenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
 
 function readReport(fileName) {
@@ -119,6 +119,7 @@ const workerMcp = {
   taskSmokeReportOk: workerTaskSmoke.ok === true,
   taskSmokeUsedRealTraffic: workerTaskSmoke.usedRealTraffic === true,
   taskSmokeAntigravityExcluded: workerTaskSmoke.antigravityWorkerExcluded === true,
+  taskSmokeRequiredPassedWorkerCount: minTaskSmokePassedWorkers,
   taskSmokePassedWorkerCount: workerTaskSmokePassedWorkers.length,
   taskSmokePassedWorkers: workerTaskSmokePassedWorkers,
   taskSmokeFailedWorkers: Array.isArray(workerTaskSmoke.failedWorkers) ? workerTaskSmoke.failedWorkers.map(String).filter(Boolean) : [],

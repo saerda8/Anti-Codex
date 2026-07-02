@@ -76,7 +76,7 @@ After every failure, before another dispatch:
 - Task: extend direct worker MCP real-task proof to OpenCode and verify worker-side checks.
 - Result: `--worker-checks` first failed because the generated `node -e` check was shell-fragile; host verification still showed correct JSON output files. The smoke script now transports the check script as base64 and has `--self-test-worker-checks`. Latest formal run passed five non-Antigravity workers with worker-side checks: MIMO `dsw_mr33vf4x_rohhbn`, DeepSeek `dsw_mr33vspq_82jopv`, MiMoCode `mcw_mr33w9cq_mihl0j`, Kilo `klw_mr33yvmw_w9av2v`, and OpenCode `ocw_mr3407d9_fqq951`.
 - Cause classification: the failed `checks_failed` runs were command-construction failures, not worker model failures, because every failed run still produced host-verified correct output.
-- Rule change: when adding worker-side validation commands, avoid raw quoted `node -e` snippets; use shell-neutral transport or a checked helper, then host-verify the output file before classifying the worker.
+- Rule change: when adding worker-side validation commands, avoid raw quoted `node -e` snippets; use shell-neutral transport or a checked helper, then host-verify the output file before classifying the worker. Goal-readiness, diagnostics, and release gates now require at least five passed non-Antigravity worker task-smoke lanes.
 
 ### 2026-07-02 - Direct MCP probe vs current-channel transport
 

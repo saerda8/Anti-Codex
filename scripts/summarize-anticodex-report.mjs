@@ -1318,6 +1318,7 @@ const summary = {
     workerMcpTaskSmokeReportOk: report.workerMcp ? boolField(report.workerMcp, "taskSmokeReportOk") : null,
     workerMcpTaskSmokeUsedRealTraffic: report.workerMcp ? boolField(report.workerMcp, "taskSmokeUsedRealTraffic") : null,
     workerMcpTaskSmokeAntigravityExcluded: report.workerMcp ? boolField(report.workerMcp, "taskSmokeAntigravityExcluded") : null,
+    workerMcpTaskSmokeRequiredPassedWorkerCount: report.workerMcp && has(report.workerMcp, "taskSmokeRequiredPassedWorkerCount") ? report.workerMcp.taskSmokeRequiredPassedWorkerCount : null,
     workerMcpTaskSmokePassedWorkerCount: report.workerMcp && has(report.workerMcp, "taskSmokePassedWorkerCount") ? report.workerMcp.taskSmokePassedWorkerCount : null,
     workerMcpTaskSmokePassedWorkers: report.workerMcp && Array.isArray(report.workerMcp.taskSmokePassedWorkers) ? asStringArray(report.workerMcp.taskSmokePassedWorkers) : [],
     workerMcpTaskSmokeFailedWorkers: report.workerMcp && Array.isArray(report.workerMcp.taskSmokeFailedWorkers) ? asStringArray(report.workerMcp.taskSmokeFailedWorkers) : [],
