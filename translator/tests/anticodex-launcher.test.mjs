@@ -12985,6 +12985,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /directProbeMissingWaitToolServers/);
   assert.match(goalReadiness, /codexSessionTransportStatus/);
   assert.match(goalReadiness, /currentChannelTransportProven/);
+  assert.match(goalReadiness, /latest-current-channel-worker-transport\.json/);
+  assert.match(goalReadiness, /currentChannelWorkerTransportReportOk/);
+  assert.match(goalReadiness, /currentChannelSplitObserved/);
   assert.match(goalReadiness, /operatorRecoveryAction/);
   assert.match(goalReadiness, /postReloadVerification/);
   assert.match(goalReadiness, /taskSmokeReportOk/);

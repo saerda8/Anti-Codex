@@ -71,6 +71,7 @@ const releaseGates = readReport("latest-release-gates.json");
 const workerMcpServerProbeReport = readReport("latest-worker-mcp-server-probe.json");
 const workerMcpTaskSmokeReport = readReport("latest-worker-mcp-task-smoke.json");
 const workerMcpProjectSmokeReport = readReport("latest-worker-mcp-project-smoke.json");
+const currentChannelWorkerTransportReport = readReport("latest-current-channel-worker-transport.json");
 
 const sync = syncReadiness.report || {};
 const clientSyncContract = sync.clientSyncContract || {};
@@ -97,6 +98,7 @@ const workerToolCountByServer = Object.fromEntries(
 );
 const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
 const workerServerProbe = workerMcpServerProbeReport.report || {};
+const currentChannelWorkerTransport = currentChannelWorkerTransportReport.report || {};
 const workerTaskSmoke = workerMcpTaskSmokeReport.report || {};
 const workerTaskSmokeResults = Array.isArray(workerTaskSmoke.results) ? workerTaskSmoke.results : [];
 const workerTaskSmokePassedWorkers = workerTaskSmokeResults
@@ -138,6 +140,19 @@ const workerMcp = {
   directProbeMissingWaitToolServers: Array.isArray(workerServerProbe.missingWaitToolServers) ? workerServerProbe.missingWaitToolServers.map(String).filter(Boolean) : [],
   codexSessionTransportStatus: String(workerServerProbe.codexSessionTransportStatus || "unknown"),
   currentChannelTransportProven: workerServerProbe.codexSessionTransportStatus === "verified-by-current-channel",
+  currentChannelWorkerTransportReportPresent: currentChannelWorkerTransportReport.present,
+  currentChannelWorkerTransportReportOk: currentChannelWorkerTransport.ok === true,
+  currentChannelWorkerTool: String(currentChannelWorkerTransport.workerTool || ""),
+  currentChannelWorkerStatus: String(currentChannelWorkerTransport.workerStatus || ""),
+  currentChannelWorkerTransportOk: currentChannelWorkerTransport.workerTransportOk === true,
+  currentChannelWorkerTransportFailed: currentChannelWorkerTransport.workerTransportFailed === true,
+  currentChannelGenericMcpTool: String(currentChannelWorkerTransport.genericMcpTool || ""),
+  currentChannelGenericMcpStatus: String(currentChannelWorkerTransport.genericMcpStatus || ""),
+  currentChannelGenericMcpControlOk: currentChannelWorkerTransport.genericMcpControlOk === true,
+  currentChannelDirectProbeOk: currentChannelWorkerTransport.directProbeReport?.ok === true,
+  currentChannelDirectProbePassedServerCount: Number(currentChannelWorkerTransport.directProbeReport?.passedServerCount || 0),
+  currentChannelSplitObserved: currentChannelWorkerTransport.splitObserved === true,
+  currentChannelCheckedAt: String(currentChannelWorkerTransport.checkedAt || ""),
   operatorRecoveryAction: String(workerServerProbe.operatorRecoveryAction || ""),
   postReloadVerification: String(workerServerProbe.postReloadVerification || ""),
   taskSmokeReportPresent: workerMcpTaskSmokeReport.present,
