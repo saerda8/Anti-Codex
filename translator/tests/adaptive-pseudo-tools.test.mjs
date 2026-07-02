@@ -5393,8 +5393,45 @@ test("agentic visible step-flow requests do not start with the deterministic art
     tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
   };
   const chatBody = responsesToChatBody(request, { allowTools: true });
+  const promptText = JSON.stringify(chatBody);
 
+  assert.match(promptText, /Exact local-file tool-call pattern for this agentic step-flow task/);
+  assert.match(promptText, /After the tool returns, the next step must be 阶段2：准备验证文件/);
+  assert.match(promptText, /Do not inspect parent directories/);
   assert.equal(deterministicArtifactToolCallCompletion(request, chatBody), null);
+});
+
+test("agentic visible step-flow follow-up prompt asks for phase2 verification only", () => {
+  const marker = "UI_AGENTIC_STEP_FLOW_SMOKE_20260701";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个多阶段可见任务，工作目录是 C:\\Temp\\agentic-step-flow。",
+          "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
+          "2. 然后用工具创建 index.html、README.md、done.txt。",
+          "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
+          `done.txt 必须只包含 ${marker}。`,
+        ].join("\n"),
+      }],
+    }, {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "阶段1：准备创建文件" }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const promptText = JSON.stringify(chatBody);
+
+  assert.match(promptText, /Agentic step-flow second phase/);
+  assert.match(promptText, /阶段2：准备验证文件/);
+  assert.match(promptText, /verify only the exact target directory/);
+  assert.doesNotMatch(promptText, /valid first assistant response shape/);
 });
 
 test("agentic visible step-flow rejects bare tool-name text as unfinished tool work", () => {
@@ -5844,6 +5881,55 @@ test("artifact directory creation commands run from the existing parent director
             name: "shell_command",
             arguments: JSON.stringify({
               command: `[System.IO.Directory]::CreateDirectory('${artifactDir}') | Out-Null; [System.IO.File]::WriteAllText('${artifactDir}\\done.txt','${marker}')`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, path.dirname(artifactDir));
+});
+
+test("explicit missing artifact workdir is repaired to the parent directory", () => {
+  const marker = "UI_AGENTIC_STEP_FLOW_SMOKE_WORKDIR_123";
+  const artifactDir = path.join(os.tmpdir(), `anticodex-missing-explicit-workdir-${Date.now()}`);
+  fs.rmSync(artifactDir, { recursive: true, force: true });
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请完成一个多阶段可见任务，工作目录是 ${artifactDir}。创建 index.html、README.md、done.txt。done.txt 必须只包含 ${marker}。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_bad_workdir",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: `New-Item -ItemType Directory -Force -Path "${artifactDir}"; Set-Content -Path "${path.join(artifactDir, "done.txt")}" -Value "${marker}"`,
+              workdir: artifactDir,
             }),
           },
         }],

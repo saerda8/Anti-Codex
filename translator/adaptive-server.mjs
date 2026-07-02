@@ -8574,7 +8574,14 @@ function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
 
 function withLocalArtifactWorkdir(args = {}, requirement = null) {
     if (!requirement?.targetPath || !args || typeof args !== "object" || Array.isArray(args)) return args;
-    if (typeof args.workdir === "string" || typeof args.cwd === "string" || typeof args.working_directory === "string") return args;
+    const explicitWorkdirKey = ["workdir", "cwd", "working_directory"].find(key => typeof args[key] === "string");
+    if (explicitWorkdirKey) {
+        const explicitWorkdir = args[explicitWorkdirKey];
+        if (explicitWorkdir && !existsSync(explicitWorkdir) && explicitWorkdir.toLowerCase() === requirement.targetPath.toLowerCase()) {
+            return { ...args, [explicitWorkdirKey]: dirname(requirement.targetPath) };
+        }
+        return args;
+    }
     const command = typeof args.command === "string" ? args.command : (typeof args.cmd === "string" ? args.cmd : "");
     const createsTargetDir = command && command.includes(requirement.targetPath) && /(?:CreateDirectory|New-Item\s+-ItemType\s+Directory|\bmkdir\b|\bmd\b)/i.test(command);
     const workdir = createsTargetDir && !existsSync(requirement.targetPath)
@@ -8964,6 +8971,67 @@ function localProjectToolMarkupExampleForBody(body) {
     const paramName = shellCommandParameterNameForRoute(shellName, shellRoute);
     const path = requirement.targetPath;
     const marker = requirement.marker;
+    if (requirement.agenticStepFlow) {
+        const phaseText = messages
+            .filter(message => String(message?.role || "").toLowerCase() === "assistant")
+            .map(message => textFromMessageContent(message?.content))
+            .join("\n");
+        const phase1Seen = /阶段1：准备创建文件/.test(phaseText);
+        const phase2Seen = /阶段2：准备验证文件/.test(phaseText);
+        const createCommand = [
+            `$dir = ${JSON.stringify(path)}`,
+            "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+            `$marker = ${JSON.stringify(marker)}`,
+            "$utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
+            "$html = '<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>多阶段执行验证</title></head><body><h1>多阶段执行验证</h1><p>' + $marker + '</p></body></html>'",
+            "[System.IO.File]::WriteAllText((Join-Path $dir 'index.html'), $html, $utf8NoBom)",
+            "[System.IO.File]::WriteAllText((Join-Path $dir 'README.md'), (\"# 多阶段执行验证`n`nFiles: index.html, README.md, done.txt`nMarker: $marker`n\"), $utf8NoBom)",
+            "[System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, $utf8NoBom)",
+            "Write-Output ('Anti-Codex agentic step-flow files created ' + $marker)",
+        ].join("\n");
+        const verifyCommand = [
+            `$dir = ${JSON.stringify(path)}`,
+            `$marker = ${JSON.stringify(marker)}`,
+            "$done = [System.IO.File]::ReadAllText((Join-Path $dir 'done.txt'), [System.Text.Encoding]::UTF8)",
+            "$index = [System.IO.File]::ReadAllText((Join-Path $dir 'index.html'), [System.Text.Encoding]::UTF8)",
+            "$readme = [System.IO.File]::ReadAllText((Join-Path $dir 'README.md'), [System.Text.Encoding]::UTF8)",
+            "if ($done -ne $marker) { throw 'done.txt marker mismatch' }",
+            "if ($index -notlike '*多阶段执行验证*') { throw 'index.html title missing' }",
+            "if ($readme -notlike '*index.html*' -or $readme -notlike '*README.md*' -or $readme -notlike '*done.txt*') { throw 'README.md file list missing' }",
+            "Write-Output ('Anti-Codex agentic step-flow verified ' + $marker)",
+        ].join("\n");
+        if (phase1Seen && phase2Seen) {
+            return [
+                "",
+                "Agentic step-flow completion rule:",
+                "- If the previous verification tool output contains the marker, stop using tools and make the final answer's last line exactly the marker.",
+                "- Do not list parent directories, inspect reports roots, inspect environment variables, or search unrelated paths.",
+                "- If verification is still needed, emit only the exact verification command below against the target directory.",
+                `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${verifyCommand}</parameter></invoke></tool_calls>`,
+            ].join("\n");
+        }
+        if (phase1Seen) {
+            return [
+                "",
+                "Agentic step-flow second phase:",
+                "- The creation tool has already run or was requested. Do not list parent directories.",
+                "- Emit the required visible line, then verify only the exact target directory and print the marker.",
+                "- A valid next assistant response shape is:",
+                "阶段2：准备验证文件",
+                `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${verifyCommand}</parameter></invoke></tool_calls>`,
+                "- After this verification tool returns the marker, final answer last line must be exactly the marker.",
+            ].join("\n");
+        }
+        return [
+            "",
+            "Exact local-file tool-call pattern for this agentic step-flow task:",
+            "- Do not list directories before writing the requested files.",
+            "- A valid first assistant response shape is:",
+            "阶段1：准备创建文件",
+            `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${createCommand}</parameter></invoke></tool_calls>`,
+            "- After the tool returns, the next step must be 阶段2：准备验证文件 plus the exact target-directory verification. Do not inspect parent directories.",
+        ].join("\n");
+    }
     const command = requirement.complexProject
         ? complexProjectArtifactSafetyPowerShell(marker, path, { heading: "Anti-Codex complex project tool example" })
         : requirement.reportSite
