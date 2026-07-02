@@ -38,6 +38,7 @@ const approvalReport = readReport("latest-real-approval-plan.json");
 const goalReport = readReport("latest-goal-readiness.json");
 const roadmapReport = readReport("latest-real-task-coverage-roadmap.json");
 const sequenceReport = readReport("latest-required-real-traffic-sequence.json");
+const approvedSequenceReport = readReport("latest-approved-real-run-sequence.json");
 const releaseReport = readReport("latest-release-gates.json");
 const accountReport = readReport("latest-antigravity-account-isolation-status.json");
 
@@ -45,6 +46,7 @@ const approval = approvalReport.report || {};
 const goal = goalReport.report || {};
 const roadmap = roadmapReport.report || {};
 const sequence = sequenceReport.report || {};
+const approvedSequence = approvedSequenceReport.report || {};
 const release = releaseReport.report || {};
 const account = accountReport.report || {};
 
@@ -64,6 +66,15 @@ const completedRequiredGateIds = asStringArray(sequence.completedRequiredGateIds
 const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const requiredCommands = asStringArray(sequence.commands);
+const readyToRequestSecondAccountLoginApproval = approvedSequence.readyToRequestSecondAccountLoginApproval === true;
+const readyToRequestPostLoginProofApproval = approvedSequence.readyToRequestPostLoginProofApproval === true;
+const readyToRequestUserApproval = approvedSequence.readyToRequestUserApproval === true;
+const approvedSequenceAccountReadinessBlockingReason = String(approvedSequence.accountReadinessBlockingReason || "");
+const approvedSequenceOperatorNextAction = String(approvedSequence.operatorNextAction || "");
+const approvedSequenceBlockingStages = asStringArray(approvedSequence.blockingStages);
+if (approvedSequenceBlockingStages.length === 0 && approvedSequenceAccountReadinessBlockingReason) {
+  approvedSequenceBlockingStages.push(approvedSequenceAccountReadinessBlockingReason);
+}
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const requiredRealTrafficBlockedGates = asStringArray(release.requiredRealTrafficBlockedGates);
@@ -82,7 +93,7 @@ if (requiredRealTrafficBlockedGates.length > 0) blockingStages.push("release_gat
 if (effectiveReleaseReady !== true) blockingStages.push("release_not_ready");
 
 const failures = [];
-for (const source of [approvalReport, goalReport, roadmapReport, sequenceReport, releaseReport, accountReport]) {
+for (const source of [approvalReport, goalReport, roadmapReport, sequenceReport, approvedSequenceReport, releaseReport, accountReport]) {
   if (!source.present) failures.push(`missing_${source.fileName}`);
   else if (!source.parseable) failures.push(`unparseable_${source.fileName}`);
 }
@@ -90,6 +101,7 @@ if (approval.requestedRealTraffic !== false || approval.usedRealTraffic !== fals
 if (goal.requestedRealTraffic !== false || goal.usedRealTraffic !== false) failures.push("goal_readiness_not_no_traffic");
 if (roadmap.requestedRealTraffic !== false || roadmap.usedRealTraffic !== false) failures.push("roadmap_not_no_traffic");
 if (sequence.requestedRealTraffic !== false || sequence.usedRealTraffic !== false) failures.push("required_sequence_not_no_traffic");
+if (approvedSequence.requestedRealTraffic !== false || approvedSequence.usedRealTraffic !== false) failures.push("approved_sequence_not_no_traffic");
 if (realTaskRefreshNeeded && uniqueRefreshTasks.length < 1) failures.push("missing_real_task_refresh_tasks");
 for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
   if (!uniqueRefreshTasks.includes(taskMode)) failures.push(`missing_expected_real_task:${taskMode}`);
@@ -125,6 +137,7 @@ const payload = {
     goalReadiness: { present: goalReport.present, parseable: goalReport.parseable },
     realTaskCoverageRoadmap: { present: roadmapReport.present, parseable: roadmapReport.parseable },
     requiredRealTrafficSequence: { present: sequenceReport.present, parseable: sequenceReport.parseable },
+    approvedRealRunSequence: { present: approvedSequenceReport.present, parseable: approvedSequenceReport.parseable },
     releaseGates: { present: releaseReport.present, parseable: releaseReport.parseable },
     accountIsolation: { present: accountReport.present, parseable: accountReport.parseable },
   },
@@ -134,6 +147,13 @@ const payload = {
   accountReadinessBlockingReason: String(account.readinessBlockingReason || ""),
   separateAccountVerified: account.separateAccountVerified === true,
   releaseAcceptableAccountProof: account.releaseAcceptableAccountProof === true,
+  readyToRequestUserApproval,
+  readyToRequestSecondAccountLoginApproval,
+  readyToRequestPostLoginProofApproval,
+  approvedSequenceOperatorNextAction,
+  approvedSequenceNextAction: approvedSequenceOperatorNextAction,
+  approvedSequenceBlockingStages,
+  approvedSequenceAccountReadinessBlockingReason,
   realTaskRefreshNeeded,
   uniqueRefreshTasks,
   pendingRealTaskScenarios,

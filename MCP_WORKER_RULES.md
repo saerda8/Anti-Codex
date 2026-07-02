@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel Kilo start still transport-closed
+
+- Task: single-file patch for `scripts/test-anticodex-goal-real-run-readiness.mjs` to surface approved-real-run second-account readiness fields.
+- Result: current-channel `kilo_start_implementation` failed immediately with `Transport closed`; no job id, no stdout, no diff, and no checks.
+- Cause classification: current Codex-channel worker MCP transport remains stale/dead for implementation calls even though tool discovery exposes the worker namespace.
+- Rule change: when a current-channel worker start returns `Transport closed` before a job id, do not retry the same start shape in that channel. Use direct worker probes/smokes for evidence or reload the Codex MCP/session before dispatching real work.
+
 ### 2026-07-02 - Current-channel implementation calls vs direct Kilo task
 
 - Task: prove whether worker MCP can start a real task after direct `tools/list` succeeded.

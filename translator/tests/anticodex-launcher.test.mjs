@@ -13523,6 +13523,14 @@ test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
   assert.match(readiness, /usedRealTraffic: false/);
   assert.match(readiness, /coverageKind: "goal-real-run-readiness-report-only"/);
   assert.match(readiness, /readyForUserApprovedRealRun: false/);
+  assert.match(readiness, /latest-approved-real-run-sequence\.json/);
+  assert.match(readiness, /approvedRealRunSequence: \{ present: approvedSequenceReport\.present, parseable: approvedSequenceReport\.parseable \}/);
+  assert.match(readiness, /readyToRequestSecondAccountLoginApproval/);
+  assert.match(readiness, /readyToRequestPostLoginProofApproval/);
+  assert.match(readiness, /readyToRequestUserApproval/);
+  assert.match(readiness, /approvedSequenceNextAction/);
+  assert.match(readiness, /approvedSequenceBlockingStages/);
+  assert.match(readiness, /approvedSequenceAccountReadinessBlockingReason/);
   assert.match(readiness, /pendingRealTaskScenarios/);
   assert.match(readiness, /uniqueRefreshTasks/);
   assert.match(readiness, /web-search/);
