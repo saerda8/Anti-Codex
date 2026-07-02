@@ -13057,6 +13057,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /currentChannelReadOnlyProbeRequiredBeforeDispatch/);
   assert.match(goalReadiness, /currentChannelOperatorRecoveryAction/);
   assert.match(goalReadiness, /currentChannelPostReloadVerification/);
+  assert.match(goalReadiness, /workerTransportRecoveryReadiness/);
+  assert.match(goalReadiness, /requiresCodexMcpReload/);
+  assert.match(goalReadiness, /currentChannelReadOnlyProbeInstruction/);
+  assert.match(goalReadiness, /currentChannelRecoveryRecordCommand/);
   assert.match(goalReadiness, /operatorRecoveryAction/);
   assert.match(goalReadiness, /postReloadVerification/);
   assert.match(goalReadiness, /taskSmokeReportOk/);

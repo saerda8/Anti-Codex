@@ -32,6 +32,9 @@ const requiredWorkerMcpTaskSmokeWorkers = [
 ];
 const minTaskSmokePassedWorkers = 5;
 const requiredAgenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
+const directWorkerProbeCommand = "node scripts\\probe-anticodex-worker-mcp-servers.mjs";
+const currentChannelReadOnlyProbeInstruction = "from a freshly reloaded Codex channel, run one worker read-only get_job/wait/status tool call, then record it with record-anticodex-current-channel-worker-transport.mjs";
+const currentChannelRecoveryRecordCommand = "node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool <worker_read_tool> --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok";
 
 function readReport(fileName) {
   const path = resolve(reportRoot, fileName);
@@ -192,6 +195,41 @@ const workerMcp = {
   projectSmokePassedWorkers: workerProjectSmokePassedWorkers,
   projectSmokeMissingRequiredWorkers: workerProjectSmokeMissingRequiredWorkers,
   projectSmokeFailedWorkers: Array.isArray(workerProjectSmoke.failedWorkers) ? workerProjectSmoke.failedWorkers.map(String).filter(Boolean) : [],
+};
+
+const currentChannelWorkerCanDispatch = workerMcp.currentChannelWorkerDispatchUsable
+  && workerMcp.currentChannelWorkerTransportFresh
+  && workerMcp.currentChannelWorkerTransportOk;
+const workerTransportRecoveryReadiness = {
+  ok: currentChannelWorkerCanDispatch,
+  canDispatchCurrentChannelWorkers: currentChannelWorkerCanDispatch,
+  requiresCodexMcpReload: !currentChannelWorkerCanDispatch,
+  requiresFreshReadOnlyProbe: !currentChannelWorkerCanDispatch,
+  currentChannelReadOnlyProbeInstruction,
+  directWorkerProbeCommand,
+  currentChannelRecoveryRecordCommand,
+  blockingReason: currentChannelWorkerCanDispatch
+    ? ""
+    : workerMcp.currentChannelWorkerTransportFresh
+      ? "current_channel_worker_transport_not_recovered"
+      : "current_channel_worker_transport_probe_stale",
+  safeToDispatchRule: "only dispatch worker implementation jobs after a fresh current-channel read-only worker status call succeeds",
+  currentChannelWorkerStatus: workerMcp.currentChannelWorkerStatus,
+  currentChannelGenericMcpStatus: workerMcp.currentChannelGenericMcpStatus,
+  currentChannelSplitObserved: workerMcp.currentChannelSplitObserved,
+  directProbeOk: workerMcp.currentChannelDirectProbeOk || workerMcp.serverProbeReportOk,
+  directProbePassedServerCount: Math.max(workerMcp.currentChannelDirectProbePassedServerCount, workerMcp.directProbePassedServerCount),
+  operatorRecoveryAction: workerMcp.currentChannelOperatorRecoveryAction || workerMcp.operatorRecoveryAction,
+  postReloadVerification: workerMcp.currentChannelPostReloadVerification || workerMcp.postReloadVerification,
+  nextActions: currentChannelWorkerCanDispatch
+    ? [
+      "dispatch only a narrow worker task after normal scope checks",
+    ]
+    : [
+      "reload Codex MCP/session or open a fresh channel",
+      directWorkerProbeCommand,
+      currentChannelReadOnlyProbeInstruction,
+    ],
 };
 
 const selectedTasks = Array.isArray(desktopSuite.report?.selectedTasks) ? desktopSuite.report.selectedTasks.map(String) : [];
@@ -668,6 +706,7 @@ const payload = {
   blockers,
   codexClientCopy,
   workerMcp,
+  workerTransportRecoveryReadiness,
   desktopAgenticTasks,
   agenticCapabilityMatrix,
   realTaskCoverageRoadmap,
