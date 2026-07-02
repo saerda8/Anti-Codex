@@ -187,7 +187,10 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
 
   assert.match(launcher, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
-  assert.match(launcher, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']cli["']/i);
+  assert.match(launcher, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']desktop-cascade["']/i);
+  assert.match(launcher, /function Normalize-AntiCodexAntigravityTransport/);
+  assert.match(launcher, /ANTICODEX_ALLOW_CLI_MODEL_TRANSPORT/);
+  assert.match(launcher, /\$current\.ToLowerInvariant\(\) -eq "cli" -and -not \$allowCli/);
   assert.match(launcher, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.match(launcher, /antigravity-cli-profile/);
   assert.match(launcher, /Set-AntiCodexAntigravityCliEnvironment/);
@@ -212,11 +215,15 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(launcher, /Test-AntiCodexTranslatorHealth \$translatorLoopbackUrl/);
   assert.match(launcher, /profile\.transport/);
   assert.match(launcher, /function Test-AntiCodexRequiresAntigravityDesktop/);
-  assert.match(launcher, /Antigravity CLI model text transport; Antigravity Desktop is not required/);
+  assert.match(launcher, /Checking if Antigravity Desktop is running/);
   assert.match(server, /modelTextTransport/);
-  assert.match(server, /process\.env\.ANTICODEX_ANTIGRAVITY_TRANSPORT \|\| "cli"/);
+  assert.match(server, /function effectiveAntigravityModelTextTransport/);
+  assert.match(server, /ANTICODEX_ALLOW_CLI_MODEL_TRANSPORT/);
+  assert.match(server, /process\.env\.ANTICODEX_ANTIGRAVITY_TRANSPORT = "desktop-cascade"/);
+  assert.match(server, /modelTextTransport[\s\S]*effectiveAntigravityModelTextTransport\(\)/);
+  assert.doesNotMatch(server, /process\.env\.ANTICODEX_ANTIGRAVITY_TRANSPORT \|\| "cli"/);
   assert.match(server, /function antigravityModelDiscoverySource/);
-  assert.match(server, /antigravity-cli-catalog/);
+  assert.match(server, /antigravity-desktop-catalog/);
   assert.match(server, /modelDiscoverySource:\s*antigravityMode \? antigravityModelDiscoverySource\(modelTextTransport\) : "upstream-profile"/);
   assert.match(server, /antigravityCoworkerDefault:\s*false/);
   assert.match(server, /模型传输/);
@@ -476,7 +483,7 @@ test("shared launcher only restores Antigravity Desktop when transport requires 
   assert.match(launcher, /antigravity-desktop\.ps1/);
   assert.match(launcher, /Test-AntiCodexRequiresAntigravityDesktop \$antiCodexUsesAntigravity/);
   assert.match(launcher, /Resolve-AntigravityDesktopPath/);
-  assert.match(launcher, /Antigravity CLI model text transport; Antigravity Desktop is not required/);
+  assert.match(launcher, /Checking if Antigravity Desktop is running/);
   assert.match(desktopHelper, /function Resolve-AntigravityDesktopPath/);
   assert.match(desktopHelper, /function Get-AntigravityMainProcess/);
   assert.match(desktopHelper, /DisplayIcon/);
@@ -4089,7 +4096,7 @@ test("report summarizer surfaces installed overall no-traffic evidence", () => {
       coverageKind: "installed-no-traffic",
       elapsedMs: 1234,
       health: {
-        modelTextTransport: "cli",
+        modelTextTransport: "desktop-cascade",
         modelDiscoverySource: "antigravity-desktop-catalog",
         antigravityCoworkerDefault: false,
       },
@@ -4115,7 +4122,7 @@ test("report summarizer surfaces installed overall no-traffic evidence", () => {
     assert.equal(summary.installedOverallEvidence.managerVerifierBusyCheckCount, 0);
     assert.deepEqual(summary.installedOverallEvidence.managerVerifierBusyChecks, []);
     assert.deepEqual(summary.installedOverallEvidence.realTrafficSkippedChecks, ["realMiniTool", "realWork"]);
-    assert.equal(summary.installedOverallEvidence.modelTextTransport, "cli");
+    assert.equal(summary.installedOverallEvidence.modelTextTransport, "desktop-cascade");
     assert.equal(summary.installedOverallEvidence.modelDiscoverySource, "antigravity-desktop-catalog");
     assert.equal(summary.installedOverallEvidence.antigravityCoworkerDefault, false);
   } finally {
@@ -4136,7 +4143,7 @@ test("report summarizer surfaces Manager verifier busy lock evidence", () => {
       behaviorCovered: true,
       coverageKind: "installed-no-traffic",
       health: {
-        modelTextTransport: "cli",
+        modelTextTransport: "desktop-cascade",
         modelDiscoverySource: "antigravity-desktop-catalog",
         antigravityCoworkerDefault: false,
       },
@@ -6611,7 +6618,10 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(bridge, /test-anticodex-native-tool-loop\.ps1/);
   assert.match(bridge, /test-anticodex-native-tool-loop\.ps1/);
   assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE/);
-  assert.match(start, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*"cli"/);
+  assert.match(start, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*"desktop-cascade"/);
+  assert.match(start, /function Normalize-AntiCodexAntigravityTransport/);
+  assert.match(start, /ANTICODEX_ALLOW_CLI_MODEL_TRANSPORT/);
+  assert.match(start, /\$current\.ToLowerInvariant\(\) -eq "cli" -and -not \$allowCli/);
   assert.match(start, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.match(start, /antigravity-cli-profile/);
   assert.match(start, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"0"/);
@@ -6623,7 +6633,7 @@ test("Anti-Codex ships a tool bridge mode verifier", () => {
   assert.match(bridge, /verifier budget exhausted before \$Path request attempt \$attempt/);
   assert.match(bridge, /\$requestTimeoutSec = \[Math\]::Max\(1, \[Math\]::Min\(30, \[Math\]::Min\(\$TimeoutSec/);
   assert.match(bridge, /TimeoutSec \$requestTimeoutSec/);
-  assert.match(diagnostics, /\[int\]\$TimeoutSec = 20/);
+  assert.match(diagnostics, /\[int\]\$TimeoutSec = 60/);
   assert.match(bridge, /Start-Sleep -Milliseconds/);
   assert.match(diagnostics, /Start-Sleep -Milliseconds/);
   assert.match(bridge, /attempt \$attempt of \$MaxAttempts/);
@@ -7205,7 +7215,7 @@ test("Anti-Codex ships a translator-only recovery verification script", () => {
   assert.match(recovery, /LocalApplicationData/);
   assert.match(recovery, /Get-Command "powershell\.exe"/);
   assert.match(recovery, /TRANSLATOR_UPSTREAM_MODE\s*=\s*["']antigravity["']/i);
-  assert.match(recovery, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']cli["']/i);
+  assert.match(recovery, /ANTICODEX_ANTIGRAVITY_TRANSPORT\s*=\s*["']desktop-cascade["']/i);
   assert.match(recovery, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']0["']/i);
   assert.match(recovery, /ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT/);
   assert.doesNotMatch(recovery, /ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*["']1["']/i);
@@ -7346,10 +7356,10 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /third-party upstream missing protocol/);
   assert.match(overall, /third-party upstream missing model/);
   assert.match(overall, /Antigravity health missing modelTextTransport/);
-  assert.match(overall, /expected cli/);
+  assert.match(overall, /expected desktop-cascade model-only transport/);
   assert.match(overall, /Antigravity health missing modelDiscoverySource/);
   assert.match(overall, /Antigravity model discovery source is '\$healthModelDiscoverySource', expected an allowed catalog source/);
-  assert.match(overall, /antigravity-cli-catalog/);
+  assert.match(overall, /antigravity-desktop-catalog/);
   assert.match(overall, /Antigravity health missing antigravityCoworkerDefault/);
   assert.match(overall, /Antigravity coworker must not be the default tool execution path/);
   assert.match(overall, /modelTextTransport = \$healthModelTextTransport/);
@@ -8396,7 +8406,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing installedOverallEvidence/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing real traffic skipped checks/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary has Manager\/UI verifier busy lock evidence/);
-  assert.match(diagnostics, /diagnostic installed-overall .* summary model text transport is not cli/);
+  assert.match(diagnostics, /diagnostic installed-overall .* summary model text transport is not desktop-cascade/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary missing model discovery source/);
   assert.match(diagnostics, /diagnostic installed-overall .* summary model discovery source is not allowed/);
   assert.match(diagnostics, /AllowedAntigravityModelDiscoverySources/);
@@ -8710,7 +8720,7 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /\$diagnosticMode -eq "third-party"/);
   assert.match(diagnostics, /third-party diagnostics missing protocol/);
   assert.match(diagnostics, /third-party diagnostics missing model/);
-  assert.match(diagnostics, /diagnostics model text transport is not cli/);
+  assert.match(diagnostics, /diagnostics model text transport is not desktop-cascade/);
   assert.match(diagnostics, /diagnostics missing model discovery source/);
   assert.match(diagnostics, /diagnostics model discovery source is not allowed/);
   assert.match(diagnostics, /diagnostics antigravity coworker default is not false/);
@@ -11943,11 +11953,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /hash_mismatch/);
   assert.match(releaseGates, /requireInstalledOverallSemantics/);
   assert.match(releaseGates, /installed_overall_coverage_kind/);
-  assert.match(releaseGates, /installed_overall_model_text_transport_not_cli/);
+  assert.match(releaseGates, /installed_overall_model_text_transport_not_desktop_cascade/);
   assert.match(releaseGates, /installed_overall_model_discovery_source_missing/);
   assert.match(releaseGates, /installed_overall_model_discovery_source_not_allowed/);
   assert.match(releaseGates, /antigravity-coworker/);
-  assert.match(releaseGates, /antigravity-cli-catalog/);
+  assert.match(releaseGates, /antigravity-desktop-catalog/);
   assert.match(releaseGates, /installed_overall_antigravity_coworker_default_not_false/);
   assert.match(releaseGates, /installed_overall_real_traffic_skip_missing/);
   assert.match(releaseGates, /allowedFullSkipped = new Set\(\[[\s\S]*"managerButtonMcpSkills"[\s\S]*"managerButtonPluginCapabilities"[\s\S]*"uiIdleStability"/);
@@ -12293,13 +12303,22 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /typedFilter/);
   assert.match(verifier, /baseReportName/);
   assert.match(verifier, /requiredModelReportSuffix/);
+  assert.match(verifier, /configModelOverrideEvidence/);
+  assert.match(verifier, /restoreConfigModelOverride/);
+  assert.match(verifier, /ANTICODEX_CODEX_HOME/);
+  assert.doesNotMatch(verifier, /CODEX_HOME_DIR \|\| process\.env\.CODEX_HOME/);
+  assert.match(verifier, /confirmRequiredModelSelected/);
   assert.match(verifier, /preSubmitModelSelectionEvidence/);
   assert.match(verifier, /desktop UI did not keep required model selected before submit/);
   assert.match(verifier, /desktopRealTrafficObserved/);
+  assert.match(verifier, /latestUserChars/);
+  assert.match(verifier, /textDeltaChars/);
+  assert.match(verifier, /submitWaitMs/);
   assert.match(verifier, /desktop submit did not produce a model request payload/);
   assert.doesNotMatch(verifier, /needle\.includes\(text\)/);
   assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
   assert.match(server, /reason: "fast_diagnostics"/);
+  assert.match(server, /summary\.generate/);
   assert.match(server, /responsesRequestHasInputWork/);
   assert.match(server, /empty_responses_input/);
   assert.match(verifier, /const projectChatLabel = String\(args\.get\("--project-label"\) \|\| "Anti-Codex"\)/);
@@ -13350,8 +13369,10 @@ test("Anti-Codex ships a no-traffic CLI model transport boundary verifier", () =
   assert.match(boundary, /antigravityDesktopProcessAbsenceRequired: false/);
   assert.match(boundary, /codexOwnedTools: true/);
   assert.match(boundary, /antigravityModelTextOnly: true/);
-  assert.match(boundary, /health-model-text-transport-cli/);
-  assert.match(boundary, /health-model-discovery-cli-catalog/);
+  assert.match(boundary, /health-model-text-transport-desktop-cascade/);
+  assert.match(boundary, /health-model-discovery-desktop-catalog/);
+  assert.match(boundary, /desktopCascadeModelTextDefault: true/);
+  assert.match(boundary, /cliTransportExplicitOnly: true/);
   assert.match(boundary, /health-antigravity-coworker-disabled/);
   assert.match(boundary, /latest-cli-transport-boundary\.json/);
   assert.match(summarizer, /cliTransportBoundaryEvidence/);
@@ -13360,14 +13381,14 @@ test("Anti-Codex ships a no-traffic CLI model transport boundary verifier", () =
   assert.match(collector, /cliTransportBoundaryEvidence = \$json\.cliTransportBoundaryEvidence/);
   assert.match(collector, /latest-cli-transport-boundary\.json/);
   assert.match(diagnostics, /cli-transport-boundary summary missing cliTransportBoundaryEvidence/);
-  assert.match(diagnostics, /cli-transport-boundary summary model transport is not cli/);
+  assert.match(diagnostics, /cli-transport-boundary summary model transport is not desktop-cascade/);
   assert.match(runtimeSync, /scripts\\test-anticodex-cli-transport-boundary\.mjs/);
   assert.match(installedOverall, /latest-cli-transport-boundary\.json/);
   assert.match(signer, /latest-cli-transport-boundary\.json/);
   assert.match(server, /latest-cli-transport-boundary\.json/);
   assert.match(releaseGates, /id:\s*"cliTransportBoundary"[\s\S]*?file:\s*"latest-cli-transport-boundary\.json"[\s\S]*?requiredForRelease:\s*true/);
   assert.match(releaseGates, /requireCliTransportBoundarySemantics:\s*true/);
-  assert.match(releaseGates, /cli_transport_boundary_model_text_transport_not_cli/);
+  assert.match(releaseGates, /cli_transport_boundary_model_text_transport_not_desktop_cascade/);
   assert.match(releaseGates, /cli_transport_boundary_desktop_required/);
   assert.match(releaseGates, /node scripts\\\\test-anticodex-cli-transport-boundary\.mjs/);
 });

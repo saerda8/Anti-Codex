@@ -525,7 +525,7 @@ function summarizeGate(definition) {
       const health = report.health && typeof report.health === "object" ? report.health : {};
       if (health.mode === "antigravity" || health.mode === undefined || health.mode === "") {
         const allowedModelDiscoverySources = new Set(["antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog"]);
-        if (health.modelTextTransport !== "cli") semanticFailures.push("installed_overall_model_text_transport_not_cli");
+        if (health.modelTextTransport !== "desktop-cascade") semanticFailures.push("installed_overall_model_text_transport_not_desktop_cascade");
         if (typeof health.modelDiscoverySource !== "string" || !health.modelDiscoverySource) semanticFailures.push("installed_overall_model_discovery_source_missing");
         else if (!allowedModelDiscoverySources.has(health.modelDiscoverySource)) semanticFailures.push("installed_overall_model_discovery_source_not_allowed");
         if (health.antigravityCoworkerDefault !== false) semanticFailures.push("installed_overall_antigravity_coworker_default_not_false");
@@ -783,28 +783,30 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push("cli_transport_boundary_behavior_not_covered");
       if (report.coverageKind !== "cli-transport-boundary-report-only") semanticFailures.push("cli_transport_boundary_coverage_kind");
       if (report.cliTransportBoundaryComplete !== true) semanticFailures.push("cli_transport_boundary_incomplete");
-      if (report.modelTextTransport !== "cli") semanticFailures.push("cli_transport_boundary_model_text_transport_not_cli");
-      if (report.modelDiscoverySource !== "antigravity-cli-catalog") semanticFailures.push("cli_transport_boundary_model_discovery_source");
+      if (report.modelTextTransport !== "desktop-cascade") semanticFailures.push("cli_transport_boundary_model_text_transport_not_desktop_cascade");
+      if (report.modelDiscoverySource !== "antigravity-desktop-catalog") semanticFailures.push("cli_transport_boundary_model_discovery_source");
       if (report.antigravityCoworkerDefault !== true) semanticFailures.push("cli_transport_boundary_coworker_default_not_false");
+      if (report.desktopCascadeModelTextDefault !== true) semanticFailures.push("cli_transport_boundary_desktop_cascade_default_missing");
+      if (report.cliTransportExplicitOnly !== true) semanticFailures.push("cli_transport_boundary_cli_not_explicit_only");
       if (report.antigravityDesktopRequiredForCliTransport !== false) semanticFailures.push("cli_transport_boundary_desktop_required");
       if (report.antigravityDesktopProcessAbsenceRequired !== false) semanticFailures.push("cli_transport_boundary_requires_process_absence");
       if (report.codexOwnedTools !== true) semanticFailures.push("cli_transport_boundary_codex_tools_missing");
       if (report.antigravityModelTextOnly !== true) semanticFailures.push("cli_transport_boundary_model_text_only_missing");
       for (const checkId of [
-        "launcher-defaults-antigravity-transport-to-cli",
-        "launcher-cli-transport-does-not-require-desktop",
+        "launcher-defaults-antigravity-transport-to-desktop-cascade",
+        "launcher-explicit-cli-transport-does-not-require-desktop",
         "launcher-desktop-helper-is-guarded",
         "shared-launcher-watchdog-bails-for-cli-transport",
         "adaptive-server-splits-model-text-transport",
-        "adaptive-server-reports-cli-catalog",
+        "adaptive-server-reports-desktop-and-cli-catalogs",
         "adaptive-server-keeps-antigravity-coworker-disabled",
       ]) {
         if (!staticCheckIds.includes(checkId)) semanticFailures.push(`cli_transport_boundary_static_${checkId.replaceAll("-", "_")}_missing`);
       }
       for (const checkId of [
         "health-reachable",
-        "health-model-text-transport-cli",
-        "health-model-discovery-cli-catalog",
+        "health-model-text-transport-desktop-cascade",
+        "health-model-discovery-desktop-catalog",
         "health-antigravity-coworker-disabled",
         "health-model-catalog-present",
       ]) {
@@ -3070,7 +3072,7 @@ if (args.has("--self-test")) {
         elapsedMs: 100,
         health: {
           mode: "antigravity",
-          modelTextTransport: "desktop-cascade",
+          modelTextTransport: "cli",
           modelDiscoverySource: "antigravity-coworker",
           antigravityCoworkerDefault: true,
         },
@@ -3795,7 +3797,7 @@ if (args.has("--self-test")) {
       "installed_overall_coverage_kind",
       "installed_overall_behavior_not_covered",
       "installed_overall_fast_elapsed",
-      "installed_overall_model_text_transport_not_cli",
+      "installed_overall_model_text_transport_not_desktop_cascade",
       "installed_overall_model_discovery_source_not_allowed",
       "installed_overall_antigravity_coworker_default_not_false",
       "installed_overall_check_not_ok",
@@ -3810,7 +3812,7 @@ if (args.has("--self-test")) {
       "installed_overall_used_real_traffic",
       "installed_overall_coverage_kind",
       "installed_overall_behavior_not_covered",
-      "installed_overall_model_text_transport_not_cli",
+      "installed_overall_model_text_transport_not_desktop_cascade",
       "installed_overall_model_discovery_source_not_allowed",
       "installed_overall_antigravity_coworker_default_not_false",
       "installed_overall_check_not_ok",

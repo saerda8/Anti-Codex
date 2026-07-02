@@ -29,6 +29,10 @@ const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticod
 const taskMode = String(args.get("--task-mode") || "exact-marker");
 const requiredModel = String(args.get("--model") || args.get("--required-model") || process.env.ANTICODEX_TEST_MODEL || "").trim();
 const requiredModelLabel = String(args.get("--model-label") || args.get("--required-model-label") || "").trim();
+const configModelOverrideEnabled = requiredModel && !args.has("--no-config-model-override");
+const anticodexStateRoot = resolve(process.env.DEEPCODEX_STATE_ROOT || join(process.env.APPDATA || os.tmpdir(), "anticodex"));
+const anticodexCodexHome = resolve(process.env.ANTICODEX_CODEX_HOME || join(anticodexStateRoot, "codex-home-deepseek-app"));
+const anticodexConfigPath = resolve(anticodexCodexHome, "config.toml");
 const isolateChat = args.has("--same-chat") ? false : true;
 const baseReportName = taskMode === "web-search"
   ? "ui-web-search-smoke"
@@ -158,7 +162,7 @@ if (!hasCustomPrompt && taskMode === "agentic-step-flow") {
   ].join("\n");
 }
 if (!hasCustomPrompt && taskMode === "coding-project") {
-  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}，请用 [System.IO.File]::WriteAllText 写 UTF8Encoding(false)，不能有 BOM 或换行；不要用 Set-Content 写 done.txt。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"。最后必须运行 Get-Content done.txt 并让工具输出显示完整标记 ${marker}，核对后最后回复 ${marker}。`;
+  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时把命令行参数当作待统计文本，不要把参数当作文件路径；运行 node word-tally.mjs "red blue red" 时必须打印包含 {"red":2,"blue":1} 的 JSON。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}，请用 [System.IO.File]::WriteAllText 写 UTF8Encoding(false)，不能有 BOM 或换行；不要用 Set-Content 写 done.txt。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"。最后必须运行 Get-Content done.txt 并让工具输出显示完整标记 ${marker}，核对后最后回复 ${marker}。`;
 }
 if (!hasCustomPrompt && taskMode === "multi-turn-project") {
   promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。这是两轮任务的第 1 轮。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text)，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}_FIRST。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}_FIRST。`;
@@ -234,7 +238,69 @@ const promptLanguage = /[\u3400-\u9fff]/u.test(promptText) ? "zh" : "en";
 let followupPromptText = "";
 let followupPromptLanguage = "";
 const startedAt = Date.now();
+let configModelOverrideEvidence = null;
+let configModelOverrideRestore = null;
 const uiLockDir = join(reportRoot, "ui-chat-smoke.lock");
+
+function configModelFromText(text) {
+  const match = String(text || "").match(/^model\s*=\s*"([^"]+)"/m);
+  return match ? match[1] : "";
+}
+
+function installConfigModelOverride() {
+  if (!configModelOverrideEnabled) return null;
+  const requested = requiredModel.replace(/"/g, "");
+  let originalText = "";
+  try {
+    originalText = readFileSync(anticodexConfigPath, "utf8");
+  } catch (error) {
+    configModelOverrideEvidence = {
+      ok: false,
+      configPath: anticodexConfigPath,
+      requestedModel: requested,
+      error: error instanceof Error ? error.message : String(error),
+    };
+    return null;
+  }
+  const originalModel = configModelFromText(originalText);
+  if (!/^model\s*=\s*"[^"]*"/m.test(originalText)) {
+    configModelOverrideEvidence = {
+      ok: false,
+      configPath: anticodexConfigPath,
+      originalModel,
+      requestedModel: requested,
+      error: "config model line not found",
+    };
+    return null;
+  }
+  const changedText = originalText.replace(/^model\s*=\s*"[^"]*"/m, `model = "${requested}"`);
+  configModelOverrideEvidence = {
+    ok: true,
+    configPath: anticodexConfigPath,
+    originalModel,
+    requestedModel: requested,
+    changed: changedText !== originalText,
+    restored: false,
+    restoreError: "",
+  };
+  if (configModelOverrideEvidence.changed) writeFileSync(anticodexConfigPath, changedText, "utf8");
+  const restore = () => {
+    if (configModelOverrideEvidence?.restored) return;
+    try {
+      if (configModelOverrideEvidence?.changed) writeFileSync(anticodexConfigPath, originalText, "utf8");
+      if (configModelOverrideEvidence) configModelOverrideEvidence.restored = true;
+    } catch (error) {
+      if (configModelOverrideEvidence) configModelOverrideEvidence.restoreError = error instanceof Error ? error.message : String(error);
+    }
+  };
+  process.once("exit", restore);
+  configModelOverrideRestore = restore;
+  return { restore };
+}
+
+function restoreConfigModelOverride() {
+  if (typeof configModelOverrideRestore === "function") configModelOverrideRestore();
+}
 
 function processIsAlive(pid) {
   const value = Number(pid);
@@ -416,8 +482,12 @@ function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
 function desktopRealTrafficObserved(modelRouteEvidence, diagnostics) {
   if (Number(modelRouteEvidence?.newRouteCount || 0) > 0) return true;
   const ws = diagnostics?.responsesWebSocket || null;
-  if (Number(ws?.clientPayloads || 0) > 0) return true;
-  if (Number(ws?.relayAttempts || 0) > 0) return true;
+  const payload = ws?.lastClientPayload || null;
+  const relay = ws?.lastRelay || null;
+  if (Number(payload?.latestUserChars || 0) > 0) return true;
+  if (Number(payload?.inputItems || 0) > 0) return true;
+  if (Number(relay?.textDeltaChars || 0) > 0) return true;
+  if (Array.isArray(relay?.toolCallNames) && relay.toolCallNames.length > 0) return true;
   return false;
 }
 
@@ -2502,6 +2572,32 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
   return latest;
 }
 
+async function confirmRequiredModelSelected(ws, timeoutMs = 3_000) {
+  const requiredValues = requiredModelNeedles();
+  if (requiredValues.length === 0) return null;
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  while (Date.now() < deadline) {
+    const current = await ws.send("Runtime.evaluate", {
+      expression: currentModelProbeExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    const value = current.result?.result?.value || null;
+    latest = {
+      ok: value?.matched === true,
+      matched: value?.matched === true,
+      requiredValues,
+      current: value,
+      after: value?.selected || null,
+      readOnly: true,
+    };
+    if (latest.matched) return latest;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  }
+  return latest;
+}
+
 async function waitForComposerSubmitted(ws, prompt, marker, timeoutMs = 4_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -2861,6 +2957,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
 }
 
 async function main() {
+  installConfigModelOverride();
   const failures = [];
   let target = null;
   let ws = null;
@@ -2988,6 +3085,7 @@ async function main() {
           taskMode,
           requiredModel: requiredModel || null,
           requiredModelLabel: requiredModelLabel || null,
+          configModelOverrideEvidence,
           promptText,
           promptLanguage,
           elapsedMs: Date.now() - startedAt,
@@ -3007,10 +3105,12 @@ async function main() {
           modelSelectionEvidence,
           initialIdleObserved: Boolean(initialIdle?.diagnostics),
         };
+        restoreConfigModelOverride();
         writeReport(payload);
         console.log(JSON.stringify(payload));
         process.exit(1);
       }
+      preSubmitModelSelectionEvidence = modelSelectionEvidence;
     }
 
     if (taskMode === "multi-turn-project") {
@@ -3104,6 +3204,7 @@ async function main() {
         followupPromptLanguage,
         requiredModel: requiredModel || null,
         requiredModelLabel: requiredModelLabel || null,
+        configModelOverrideEvidence,
         turnPrompts: [promptText, followupPromptText],
         elapsedMs: Date.now() - startedAt,
         failures,
@@ -3159,6 +3260,7 @@ async function main() {
       };
       releaseUiLock?.();
       releaseUiLock = null;
+      restoreConfigModelOverride();
       writeReport(payload);
       console.log(JSON.stringify(payload));
       if (!payload.ok) process.exit(1);
@@ -3235,6 +3337,7 @@ async function main() {
         promptText,
         requiredModel: requiredModel || null,
         requiredModelLabel: requiredModelLabel || null,
+        configModelOverrideEvidence,
         implementationAttempted: Boolean(implementationPrompt),
         turnPrompts: implementationPrompt ? [promptText, implementationPrompt] : [promptText],
         elapsedMs: Date.now() - startedAt,
@@ -3292,6 +3395,7 @@ async function main() {
       };
       releaseUiLock?.();
       releaseUiLock = null;
+      restoreConfigModelOverride();
       writeReport(payload);
       console.log(JSON.stringify(payload));
       if (!payload.ok) process.exit(1);
@@ -3339,7 +3443,7 @@ async function main() {
       failures.push("send button was not found in the composer controls");
     } else {
       if (requiredModelNeedles().length > 0) {
-        preSubmitModelSelectionEvidence = await selectRequiredModel(ws, 8_000);
+        preSubmitModelSelectionEvidence = await confirmRequiredModelSelected(ws, 5_000);
         if (preSubmitModelSelectionEvidence?.matched !== true) {
           failures.push(`desktop UI did not keep required model selected before submit ${requiredModelNeedles().join(" / ")}`);
         }
@@ -3372,11 +3476,12 @@ async function main() {
           ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
           : null,
       };
-      submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, 4_000);
+      const submitWaitMs = requiredModelNeedles().length > 0 ? 15_000 : 4_000;
+      submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, submitWaitMs);
       if (!submitSucceeded) {
         await pressComposerEnter(ws);
         submitEvidence.enterFallback = true;
-        submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, 4_000);
+        submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, submitWaitMs);
         if (submitSucceeded) {
           submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
         }
@@ -3788,6 +3893,7 @@ async function main() {
     followupPromptLanguage,
     requiredModel: requiredModel || null,
     requiredModelLabel: requiredModelLabel || null,
+    configModelOverrideEvidence,
     repairPrompt,
     elapsedMs: Date.now() - startedAt,
     failures,
@@ -3854,6 +3960,7 @@ async function main() {
   };
   releaseUiLock?.();
   releaseUiLock = null;
+  restoreConfigModelOverride();
   writeReport(payload);
   releaseUiLock?.();
   console.log(JSON.stringify(payload));
@@ -3875,6 +3982,7 @@ main().catch((error) => {
     followupPromptLanguage,
     requiredModel: requiredModel || null,
     requiredModelLabel: requiredModelLabel || null,
+    configModelOverrideEvidence,
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
@@ -3885,6 +3993,7 @@ main().catch((error) => {
       : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
     timing: null,
   };
+  restoreConfigModelOverride();
   writeReport(payload);
   console.log(JSON.stringify(payload));
   process.exit(1);

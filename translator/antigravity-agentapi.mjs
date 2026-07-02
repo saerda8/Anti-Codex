@@ -52,7 +52,7 @@ export function antigravityNativeToolCapabilitySummary(options = {}) {
       ?? process.env.ANTICODEX_NATIVE_TOOL_BRIDGE,
     false,
   );
-  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
+  const transport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "desktop-cascade").toLowerCase();
   const toolConfig = antigravityModelOnlyToolConfig();
   const disabledKeys = Object.entries(toolConfig)
     .filter(([, value]) => value?.forceDisable === true || value?.enabled === false)

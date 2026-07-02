@@ -110,7 +110,7 @@ if ($IS_ANTICODEX_INSTALL_ROOT -and (Test-Path -LiteralPath $ANTICODEX_UPSTREAM_
             Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
             $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
             if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
-                $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
+                $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "desktop-cascade"
             }
             Set-AntiCodexAntigravityCliEnvironment -Profile $runtimeProfile
             if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
@@ -125,9 +125,6 @@ $IS_ANTIGRAVITY_MODE = $env:TRANSLATOR_UPSTREAM_MODE -eq "antigravity" -or $IS_A
 if ($IS_ANTIGRAVITY_MODE -and -not $env:TRANSLATOR_UPSTREAM_MODE) {
     $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
 }
-if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
-    $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
-}
 if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
     Set-AntiCodexAntigravityCliEnvironment
 }
@@ -136,9 +133,20 @@ if ($IS_ANTIGRAVITY_MODE -and -not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
 }
 $USES_ANTIGRAVITY_UPSTREAM = $env:TRANSLATOR_UPSTREAM_MODE -eq "antigravity"
 
+function Normalize-AntiCodexAntigravityTransport {
+    if (-not $USES_ANTIGRAVITY_UPSTREAM -and -not $IS_ANTIGRAVITY_MODE) { return }
+    $current = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "" }
+    $allowCli = $env:ANTICODEX_ALLOW_CLI_MODEL_TRANSPORT -eq "1"
+    if (-not $current -or ($current.ToLowerInvariant() -eq "cli" -and -not $allowCli)) {
+        $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "desktop-cascade"
+    }
+}
+
+Normalize-AntiCodexAntigravityTransport
+
 function Test-AntiCodexRequiresAntigravityDesktop {
     if (-not $USES_ANTIGRAVITY_UPSTREAM) { return $false }
-    $transport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "cli" }
+    $transport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "desktop-cascade" }
     return $transport.ToLowerInvariant() -ne "cli"
 }
 
@@ -163,9 +171,7 @@ function Update-AntiCodexUpstreamEnvironment {
             Remove-Item Env:UPSTREAM_PROTOCOL -ErrorAction SilentlyContinue
             Remove-Item Env:UPSTREAM_MODEL -ErrorAction SilentlyContinue
             $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-            if (-not $env:ANTICODEX_ANTIGRAVITY_TRANSPORT) {
-                $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "cli"
-            }
+            Normalize-AntiCodexAntigravityTransport
             Set-AntiCodexAntigravityCliEnvironment -Profile $runtimeProfile
             if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
                 $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"

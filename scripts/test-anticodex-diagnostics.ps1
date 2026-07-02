@@ -1068,8 +1068,8 @@ function Test-CliTransportBoundarySummaryEvidence {
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "cli-transport-boundary summary behavior not covered" }
     if ($evidence.coverageKind -ne "cli-transport-boundary-report-only") { Add-Failure "cli-transport-boundary summary coverage kind mismatch" }
     if ($evidence.cliTransportBoundaryComplete -ne $true) { Add-Failure "cli-transport-boundary summary incomplete" }
-    if ($evidence.modelTextTransport -ne "cli") { Add-Failure "cli-transport-boundary summary model transport is not cli" }
-    if ($evidence.modelDiscoverySource -ne "antigravity-cli-catalog") { Add-Failure "cli-transport-boundary summary discovery source is not CLI catalog" }
+    if ($evidence.modelTextTransport -ne "desktop-cascade") { Add-Failure "cli-transport-boundary summary model transport is not desktop-cascade" }
+    if ($evidence.modelDiscoverySource -ne "antigravity-desktop-catalog") { Add-Failure "cli-transport-boundary summary discovery source is not desktop catalog" }
     if ($evidence.antigravityCoworkerDefaultFalse -ne $true) { Add-Failure "cli-transport-boundary summary coworker default is not false" }
     if ($evidence.antigravityDesktopRequiredForCliTransport -ne $false) { Add-Failure "cli-transport-boundary summary says Desktop is required for CLI" }
     if ($evidence.antigravityDesktopProcessAbsenceRequired -ne $false) { Add-Failure "cli-transport-boundary summary incorrectly requires Desktop process absence" }
@@ -2249,7 +2249,7 @@ function Test-DiagnosticBundle {
                 if ([int]$overallEvidence.missingSkipMetadataCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing skip metadata" }
                 if ([int]$overallEvidence.managerVerifierBusyCheckCount -ne 0) { Add-Failure "diagnostic installed-overall $($entry.Label) summary has Manager/UI verifier busy lock evidence" }
                 if (@($overallEvidence.realTrafficSkippedChecks).Count -lt 3) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing real traffic skipped checks" }
-                if ([string]$overallEvidence.modelTextTransport -ne "cli") { Add-Failure "diagnostic installed-overall $($entry.Label) summary model text transport is not cli" }
+                if ([string]$overallEvidence.modelTextTransport -ne "desktop-cascade") { Add-Failure "diagnostic installed-overall $($entry.Label) summary model text transport is not desktop-cascade" }
                 if (-not [string]$overallEvidence.modelDiscoverySource) { Add-Failure "diagnostic installed-overall $($entry.Label) summary missing model discovery source" }
                 if ([string]$overallEvidence.modelDiscoverySource -and $AllowedAntigravityModelDiscoverySources -notcontains [string]$overallEvidence.modelDiscoverySource) { Add-Failure "diagnostic installed-overall $($entry.Label) summary model discovery source is not allowed" }
                 if ($overallEvidence.antigravityCoworkerDefault -ne $false) { Add-Failure "diagnostic installed-overall $($entry.Label) summary antigravity coworker default is not false" }
@@ -3057,7 +3057,7 @@ if ($diagnostics) {
         $diagnosticModelTextTransport = if (Has-Property $diagnostics.health "modelTextTransport") { [string]$diagnostics.health.modelTextTransport } else { "" }
         $diagnosticModelDiscoverySource = if (Has-Property $diagnostics.health "modelDiscoverySource") { [string]$diagnostics.health.modelDiscoverySource } else { "" }
         $diagnosticAntigravityCoworkerDefault = if (Has-Property $diagnostics.health "antigravityCoworkerDefault") { [bool]$diagnostics.health.antigravityCoworkerDefault } else { $null }
-        if ($diagnosticModelTextTransport -ne "cli") { Add-Failure "diagnostics model text transport is not cli" }
+        if ($diagnosticModelTextTransport -ne "desktop-cascade") { Add-Failure "diagnostics model text transport is not desktop-cascade" }
         if (-not $diagnosticModelDiscoverySource) { Add-Failure "diagnostics missing model discovery source" }
         if ($diagnosticModelDiscoverySource -and $AllowedAntigravityModelDiscoverySources -notcontains $diagnosticModelDiscoverySource) { Add-Failure "diagnostics model discovery source is not allowed" }
         if ($diagnosticAntigravityCoworkerDefault -ne $false) { Add-Failure "diagnostics antigravity coworker default is not false" }

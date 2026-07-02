@@ -194,7 +194,7 @@ export function makeAntigravityCompletion(model, text, options = {}) {
 }
 
 export async function callAntigravityUpstream(chatBody, options = {}) {
-  const requestedTransport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
+  const requestedTransport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "desktop-cascade").toLowerCase();
   const reasoningEffort = chatBody?.reasoning?.effort ?? chatBody?.reasoning_effort;
   const prompt = chatMessagesToPrompt(chatBody?.messages, {
     reasoningEffort,
@@ -263,7 +263,7 @@ export async function callAntigravityUpstream(chatBody, options = {}) {
 }
 
 export async function* streamAntigravityUpstream(chatBody, options = {}) {
-  const requestedTransport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "cli").toLowerCase();
+  const requestedTransport = String(options.transport ?? options.env?.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? process.env.ANTICODEX_ANTIGRAVITY_TRANSPORT ?? "desktop-cascade").toLowerCase();
   const reasoningEffort = chatBody?.reasoning?.effort ?? chatBody?.reasoning_effort;
   const resumed = takeNativeContinuation(chatBody?.messages);
   const prompt = chatMessagesToPrompt(chatBody?.messages, {

@@ -663,7 +663,7 @@ test("callAntigravityUpstream reports resolved model route metadata", async () =
 
   assert.equal(completion.id, "route-response-id");
   assert.equal(route.requestId, "route-response-id");
-  assert.equal(route.transport, "cli");
+  assert.equal(route.transport, "desktop-cascade");
   assert.equal(route.requestedModel, "gemini-3.1-pro-low");
   assert.equal(route.resolvedModel, "gemini-3.1-pro-low");
   assert.equal(route.displayName, "Gemini 3.1 Pro (Low)");
@@ -677,6 +677,7 @@ test("callAntigravityUpstream falls back to the selected model for CLI route aud
     model: "gemini-3.5-flash-low",
     messages: [{ role: "user", content: "hello" }],
   }, {
+    env: { ANTICODEX_ANTIGRAVITY_TRANSPORT: "cli" },
     responseId: "route-cli-fallback-id",
     onModelRouted: (entry) => { route = entry; },
     runTurn: async () => ({

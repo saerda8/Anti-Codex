@@ -231,7 +231,7 @@ test("antigravityModelOnlyToolConfig disables Antigravity-owned tools and permis
 test("antigravity native tool capability summary reports the model-only default", () => {
   const summary = antigravityNativeToolCapabilitySummary({ env: {} });
 
-  assert.equal(summary.transport, "cli");
+  assert.equal(summary.transport, "desktop-cascade");
   assert.match(summary.requestEnvelope, /model-only Antigravity text turn/);
   assert.equal(summary.modelField, "planModel");
   assert.equal(summary.toolConfigField, "toolConfig");

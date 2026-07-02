@@ -4176,6 +4176,58 @@ test("local artifact requests include an exact shell DSML example", () => {
   assert.match(body.messages[0].content, /Write-Output/);
 });
 
+test("coding project local artifact requests include a word-tally CLI example", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_1234567890";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\desktop-visible-coding-project\\run. word-tally.mjs must export tallyWords and done.txt must contain ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red".`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  assert.match(body.messages[0].content, /Exact local-file tool-call pattern/);
+  assert.match(body.messages[0].content, /word-tally\.mjs/);
+  assert.match(body.messages[0].content, /export function tallyWords/);
+  assert.match(body.messages[0].content, /node --test word-tally\.test\.mjs/);
+  assert.match(body.messages[0].content, /node word-tally\.mjs "red blue red"/);
+  assert.doesNotMatch(body.messages[0].content, /agentic step-flow verified/);
+  assert.doesNotMatch(body.messages[0].content, /index\.html/);
+});
+
+test("multi-turn project local artifact requests include word-tally follow-up examples", () => {
+  const firstMarker = "UI_MULTI_TURN_PROJECT_SMOKE_1234567890_FIRST";
+  const finalMarker = "UI_MULTI_TURN_PROJECT_SMOKE_1234567890";
+  const makeBody = (text) => responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  const first = makeBody(`Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\desktop-visible-multi-turn-project\\run. word-tally.mjs must export tallyWords and done.txt must contain ${firstMarker}.`);
+  assert.match(first.messages[0].content, /export function tallyWords/);
+  assert.match(first.messages[0].content, /export function uniqueWords/);
+  assert.match(first.messages[0].content, /node word-tally\.mjs "red blue red"/);
+  assert.doesNotMatch(first.messages[0].content, /index\.html/);
+
+  const followup = makeBody(`Continue the same project in C:\\Temp\\desktop-visible-multi-turn-project\\run. Modify word-tally.mjs so it also exports uniqueWords(text). Update word-tally.test.mjs and create CHANGELOG.md plus followup.txt containing exactly ${finalMarker}.`);
+  assert.match(followup.messages[0].content, /followup\.txt/);
+  assert.match(followup.messages[0].content, /CHANGELOG\.md/);
+  assert.match(followup.messages[0].content, /if \(\$marker -like '\*_FIRST'\)/);
+  assert.match(followup.messages[0].content, /Test-Path -LiteralPath \(Join-Path \$dir 'done\.txt'\)/);
+  assert.match(followup.messages[0].content, /node word-tally\.mjs "red blue red green"/);
+  assert.doesNotMatch(followup.messages[0].content, /index\.html/);
+});
+
 test("background rollout analysis is answered locally without model work", () => {
   const completion = deterministicBackgroundRolloutAnalysisCompletion({
     model: "gemini-pro-agent",
@@ -4393,6 +4445,124 @@ test("complex project tool output closes the turn after marker tests and CLI pas
   assert.ok(completion);
   assert.match(completion.choices[0].message.content, /Files created, tested, and verified/);
   assert.match(completion.choices[0].message.content, new RegExp(marker));
+});
+
+test("coding project artifact completion requires CLI JSON proof", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_20260702_NO_CLI";
+  const messages = [
+    {
+      role: "user",
+      content: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\coding. word-tally.mjs must export tallyWords and done.txt must contain ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red".`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_coding",
+      content: [
+        `Exit code: 0`,
+        `Output:`,
+        marker,
+        `✔ tallyWords counts words correctly (1ms)`,
+        `ℹ pass 1`,
+        `ℹ fail 0`,
+        `done.txt`,
+        `word-tally.mjs`,
+      ].join("\n"),
+    },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_coding", output: messages.at(-1).content }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.equal(completion, null);
+});
+
+test("coding project artifact completion closes after tests and CLI JSON pass", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_20260702_WITH_CLI";
+  const messages = [
+    {
+      role: "user",
+      content: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\coding. word-tally.mjs must export tallyWords and done.txt must contain ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red".`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_coding",
+      content: [
+        `Exit code: 0`,
+        `Output:`,
+        marker,
+        `✔ tallyWords counts words correctly (1ms)`,
+        `ℹ pass 1`,
+        `ℹ fail 0`,
+        `{"red":2,"blue":1}`,
+      ].join("\n"),
+    },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_coding", output: messages.at(-1).content }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, /测试和本地 CLI 输出已通过/);
+  assert.match(completion.choices[0].message.content, new RegExp(marker));
+});
+
+test("internal tool loop closes coding project from existing evidence before another model turn", async () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_20260702_PRE_LOOP";
+  let callCount = 0;
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    stream: false,
+    messages: [
+      {
+        role: "user",
+        content: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\coding. word-tally.mjs must export tallyWords and done.txt must contain ${marker}. Run node --test word-tally.test.mjs and node word-tally.mjs "red blue red".`,
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_coding",
+        content: [
+          `Exit code: 0`,
+          `Output:`,
+          marker,
+          `✔ tallyWords counts words correctly (1ms)`,
+          `ℹ pass 1`,
+          `ℹ fail 0`,
+          `{"red":2,"blue":1}`,
+        ].join("\n"),
+      },
+    ],
+  }, {
+    callOnce: async () => {
+      callCount += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          choices: [{
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_again",
+                type: "function",
+                function: { name: "web_search", arguments: "{}" },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(callCount, 0);
+  assert.equal(result.ok, true);
+  assert.match(result.json.choices[0].message.content, /Files created, tested, and verified/);
+  assert.match(result.json.choices[0].message.content, new RegExp(marker));
 });
 
 test("complex project chat tool output closes when Responses input has no tool output", () => {
@@ -5297,6 +5467,101 @@ test("multi-turn marker-only Set-Content writes are normalized without determini
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
 
+test("multi-turn first marker normalization does not create followup.txt", () => {
+  const marker = "UI_MULTI_TURN_PROJECT_SMOKE_20260701002_FIRST";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\multi. done.txt must contain ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_first",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: `Set-Content -Path (Join-Path $dir "done.txt") -Value '${marker}' -Encoding utf8`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /Join-Path \$__antiCodexMarkerOnlyDir 'done\.txt'/);
+  assert.doesNotMatch(args.command, /followup\.txt/);
+});
+
+test("local artifact tool calls block Antigravity brain transcript detours", () => {
+  const marker = "UI_MULTI_TURN_PROJECT_SMOKE_20260701003_FIRST";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\multi. Do not inspect Antigravity brain, transcript, history, or log directories. done.txt must contain ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_detour",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: String.raw`Get-Content -Path C:\Users\XD\.gemini\antigravity\brain\run\.system_generated\logs\transcript.jsonl; Get-ChildItem C:\Temp\multi`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /blocked forbidden Antigravity brain\/transcript\/history\/log inspection/);
+  assert.doesNotMatch(args.command, /\.gemini\\antigravity\\brain/i);
+  assert.doesNotMatch(args.command, /transcript\.jsonl/i);
+});
+
 test("complex project shell commands inherit the artifact workdir when using relative paths", () => {
   const marker = "UI_COMPLEX_PROJECT_SMOKE_WORKDIR_123";
   const artifactDir = "C:\\Temp\\anticodex-complex-workdir";
@@ -5343,6 +5608,54 @@ test("complex project shell commands inherit the artifact workdir when using rel
   const args = JSON.parse(call.arguments);
   assert.equal(args.workdir, artifactDir);
   assert.match(args.command, /package\.json/);
+});
+
+test("artifact directory creation commands run from the existing parent directory", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_WORKDIR_PARENT_123";
+  const artifactDir = path.join(os.tmpdir(), `anticodex-missing-artifact-${Date.now()}`);
+  fs.rmSync(artifactDir, { recursive: true, force: true });
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create a tiny Node.js project in ${artifactDir}. Create package.json, word-tally.mjs, word-tally.test.mjs, and done.txt. done.txt must contain ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_create_artifact_dir",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: `[System.IO.Directory]::CreateDirectory('${artifactDir}') | Out-Null; [System.IO.File]::WriteAllText('${artifactDir}\\done.txt','${marker}')`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, path.dirname(artifactDir));
 });
 
 test("repo file edit smoke markers do not trigger local artifact marker guard", () => {
@@ -5541,6 +5854,46 @@ test("combined local artifact command gets multi-step visible progress text", ()
   assert.match(text, /核对：最后读回完成标记/);
   assert.doesNotMatch(text, /^我/m);
   assert.equal(fmt.output[1].type, "function_call");
+});
+
+test("thin model progress does not suppress multi-step visible progress for combined commands", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_20260702_THIN_PROGRESS";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `请在 C:\\Temp\\desktop-visible-coding-project\\run 创建 package.json, word-tally.mjs, word-tally.test.mjs, done.txt。最终标记：${marker}` }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "阶段1：创建 Node.js CLI 项目。",
+        tool_calls: [{
+          id: "call_combined",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: "New-Item run; [System.IO.File]::WriteAllText('word-tally.mjs',''); [System.IO.File]::WriteAllText('word-tally.test.mjs',''); node --test word-tally.test.mjs; node word-tally.mjs \"red blue red\"; Get-Content done.txt" }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const text = fmt.output.map(item => item?.content?.[0]?.text || "").join("\n");
+  assert.match(text, /阶段1：创建 Node\.js CLI 项目/);
+  assert.match(text, /计划：这条命令同时落地项目文件和测试文件/);
+  assert.match(text, /验证：随后运行测试和本地 CLI/);
+  assert.match(text, /核对：最后读回完成标记/);
+  assert.equal(fmt.output.at(-1).type, "function_call");
 });
 
 test("complex project tool calls get visible progress text before execution", () => {

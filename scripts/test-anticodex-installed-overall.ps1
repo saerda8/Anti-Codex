@@ -1247,7 +1247,7 @@ try {
     } elseif ($healthMode -eq "antigravity") {
         if ($health.upstream -ne "antigravity-desktop") { Add-Failure "Antigravity mode but upstream is not antigravity-desktop: $($health.upstream)" }
         if (-not $healthModelTextTransport) { Add-Failure "Antigravity health missing modelTextTransport" }
-        if ($healthModelTextTransport -and $healthModelTextTransport -ne "cli") { Add-Failure "Antigravity model text transport is '$healthModelTextTransport', expected cli" }
+        if ($healthModelTextTransport -and $healthModelTextTransport -ne "desktop-cascade") { Add-Failure "Antigravity model text transport is '$healthModelTextTransport', expected desktop-cascade model-only transport" }
         if (-not $healthModelDiscoverySource) { Add-Failure "Antigravity health missing modelDiscoverySource" }
         if ($healthModelDiscoverySource -and $allowedAntigravityModelDiscoverySources -notcontains $healthModelDiscoverySource) { Add-Failure "Antigravity model discovery source is '$healthModelDiscoverySource', expected an allowed catalog source" }
         if ($null -eq $healthAntigravityCoworkerDefault) { Add-Failure "Antigravity health missing antigravityCoworkerDefault" }
