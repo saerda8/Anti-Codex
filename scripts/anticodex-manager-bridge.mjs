@@ -436,6 +436,11 @@ function latestReportsSummary(result) {
         if (runtimeSamples.length) lines.push(`  installedRuntime drift: ${runtimeSamples.join(", ")}`);
       }
     }
+    if (item.workerMcpSourceHygieneEvidence) {
+      const evidence = item.workerMcpSourceHygieneEvidence;
+      lines.push(`  workerMcpSourceHygiene: passed=${evidence.passedWorkerCount ?? "unknown"}/${evidence.workerCount ?? "unknown"} / failed=${Array.isArray(evidence.failedWorkers) ? evidence.failedWorkers.length : "unknown"} / nul=${Array.isArray(evidence.nulByteWorkers) ? evidence.nulByteWorkers.length : "unknown"} / syntaxFailed=${Array.isArray(evidence.syntaxFailedWorkers) ? evidence.syntaxFailedWorkers.length : "unknown"}`);
+      if (Array.isArray(evidence.failedWorkers) && evidence.failedWorkers.length) lines.push(`  workerMcpSourceHygiene failed: ${evidence.failedWorkers.slice(0, 6).join(", ")}`);
+    }
     if (item.goalReadinessEvidence?.goalOperatorActionCard) {
       const card = item.goalReadinessEvidence.goalOperatorActionCard;
       lines.push(`  goalOperatorActionCard: status=${card.status || "unknown"} / canClaim=${card.canClaimFullGoalNow ? "true" : "false"} / release=${card.releaseReady ? "true" : "false"} / worker=${card.workerStatus || "unknown"} / secondAccount=${card.secondAccountStatus || "unknown"}`);

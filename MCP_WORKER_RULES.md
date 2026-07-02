@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Worker MCP source hygiene cleanup did not recover current-channel transport
+
+- Task: verify configured worker MCP entrypoint source files after current-channel worker tools still returned `Transport closed`.
+- Result: source hygiene found real entrypoint hazards outside this repo and they were backed up before cleanup. MiMoCode, Kilo, OpenCode, and DevEco entrypoints had literal NUL bytes in source; Antigravity worker entrypoint had a BOM before the shebang. After cleanup, `test-anticodex-worker-mcp-source-hygiene.mjs` reports 7/7 configured workers passing entrypoint presence, zero NUL bytes, and `node --check`. Current-channel Kilo and DeepSeek read-only waits still returned `Transport closed`, while `node_repl` worked and direct worker server probe stayed 7/7.
+- Cause classification: source hygiene problems were real latent worker-server hazards, but the live blocker remains current Codex-channel worker transport injection/reload. Source hygiene green is not sufficient to dispatch current-channel workers.
+- Rule change: before worker recovery is claimed, check both layers: worker entrypoint hygiene/direct server probe, and a successful current-channel read-only worker status/get/wait call after reload or a fresh channel.
+
 ### 2026-07-03 - Current-channel MIMO read-only recheck still transport-closed after goal gate commit
 
 - Task: after checkpoint `a718d86`, re-run a current-channel read-only `mimo_get_job` for completed project-smoke job `dsw_mr3wn5f0_kiniqh` before allowing live worker dispatch.

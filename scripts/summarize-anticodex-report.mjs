@@ -224,6 +224,7 @@ const isRequiredRealTrafficSequenceReport = report?.reportName === "required-rea
 const isGoalRealRunReadinessReport = report?.reportName === "goal-real-run-readiness" || /latest-goal-real-run-readiness\.json$/i.test(path);
 const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-run-sequence" || /latest-approved-real-run-sequence\.json$/i.test(path);
 const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-probe" || /latest-worker-mcp-server-probe\.json$/i.test(path);
+const isWorkerMcpSourceHygieneReport = report?.reportName === "worker-mcp-source-hygiene" || /latest-worker-mcp-source-hygiene\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
@@ -1862,6 +1863,34 @@ const summary = {
       hasCancelTool: boolField(server || {}, "hasCancelTool"),
       errorPresent: typeof server?.error === "string" && server.error.trim().length > 0,
     })).filter((server) => server.name) : [],
+  } : null,
+  workerMcpSourceHygieneEvidence: isWorkerMcpSourceHygieneReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    configPathPresent: typeof report.configPath === "string" && report.configPath.trim().length > 0,
+    configPresent: boolField(report, "configPresent"),
+    requiredWorkers: Array.isArray(report.requiredWorkers) ? asStringArray(report.requiredWorkers) : [],
+    workerCount: has(report, "workerCount") ? report.workerCount : null,
+    passedWorkerCount: has(report, "passedWorkerCount") ? report.passedWorkerCount : null,
+    failedWorkers: Array.isArray(report.failedWorkers) ? asStringArray(report.failedWorkers) : [],
+    nulByteWorkers: Array.isArray(report.nulByteWorkers) ? asStringArray(report.nulByteWorkers) : [],
+    missingEntrypointWorkers: Array.isArray(report.missingEntrypointWorkers) ? asStringArray(report.missingEntrypointWorkers) : [],
+    syntaxFailedWorkers: Array.isArray(report.syntaxFailedWorkers) ? asStringArray(report.syntaxFailedWorkers) : [],
+    results: Array.isArray(report.results) ? report.results.map((result) => ({
+      name: asString(result?.name),
+      ok: boolField(result || {}, "ok"),
+      commandPresent: boolField(result || {}, "commandPresent"),
+      entrypointPresent: boolField(result || {}, "entrypointPresent"),
+      entrypointIsJavaScript: boolField(result || {}, "entrypointIsJavaScript"),
+      hasNulBytes: boolField(result || {}, "hasNulBytes"),
+      nulCount: has(result || {}, "nulCount") ? result.nulCount : null,
+      syntaxOk: boolField(result || {}, "syntaxOk"),
+      syntaxExitCode: has(result || {}, "syntaxExitCode") ? result.syntaxExitCode : null,
+    })).filter((result) => result.name) : [],
   } : null,
   workerMcpTaskSmokeEvidence: isWorkerMcpTaskSmokeReport ? {
     reportName: asString(report.reportName),

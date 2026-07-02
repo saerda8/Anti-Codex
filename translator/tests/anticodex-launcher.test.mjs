@@ -12078,6 +12078,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(syncRuntime, /scripts\\test-anticodex-local-connectors\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-mcp-skills\.ps1/);
   assert.match(syncRuntime, /scripts\\probe-anticodex-worker-mcp-servers\.mjs/);
+  assert.match(syncRuntime, /scripts\\test-anticodex-worker-mcp-source-hygiene\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-worker-mcp-task-smoke\.mjs/);
   assert.match(syncRuntime, /scripts\\test-anticodex-missing-history\.mjs/);
   assert.match(mcpProbe, /StdioClientTransport/);
@@ -13006,6 +13007,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-ui-report-site-smoke.json",
     "latest-current-channel-worker-transport.json",
     "latest-worker-mcp-server-probe.json",
+    "latest-worker-mcp-source-hygiene.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
   ];
@@ -13104,13 +13106,18 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerTaskSmoke, /extraFiles\.length === 0/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
+  assert.match(collector, /latest-worker-mcp-source-hygiene\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
   assert.match(collector, /latest-worker-mcp-project-smoke\.json/);
   assert.match(collector, /latest-current-channel-worker-transport\.json/);
   assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
+  assert.match(collector, /workerMcpSourceHygieneEvidence = \$json\.workerMcpSourceHygieneEvidence/);
   assert.match(collector, /workerMcpProjectSmokeEvidence = \$json\.workerMcpProjectSmokeEvidence/);
   assert.match(collector, /currentChannelWorkerTransportEvidence = \$json\.currentChannelWorkerTransportEvidence/);
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
+  assert.match(summarizer, /workerMcpSourceHygieneEvidence/);
+  assert.match(summarizer, /nulByteWorkers/);
+  assert.match(summarizer, /syntaxFailedWorkers/);
   assert.match(summarizer, /codexSessionTransportStatus/);
   assert.match(summarizer, /operatorRecoveryAction/);
   assert.match(summarizer, /postReloadVerification/);

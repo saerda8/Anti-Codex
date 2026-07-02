@@ -1060,7 +1060,7 @@
           }).join(" | ");
           lines.push(`  Release groups: ${groupSummary}`);
         }
-        if (item.installedRuntimeEvidence) {
+      if (item.installedRuntimeEvidence) {
           const evidence = item.installedRuntimeEvidence;
           const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
           lines.push(`  installedRuntime: satisfied=${evidence.satisfied ?? "unknown"} / files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0} / sourceMtime=${evidence.sourceMtimeMax || "unknown"} / installedMtime=${evidence.installedRuntimeMtimeMax || "unknown"}`);
@@ -1071,6 +1071,11 @@
           ].slice(0, 3);
           if (runtimeSamples.length) lines.push(`  installedRuntime drift: ${runtimeSamples.join(", ")}`);
         }
+      }
+      if (item.workerMcpSourceHygieneEvidence) {
+        const evidence = item.workerMcpSourceHygieneEvidence;
+        lines.push(`  workerMcpSourceHygiene: passed=${evidence.passedWorkerCount ?? "unknown"}/${evidence.workerCount ?? "unknown"} / failed=${Array.isArray(evidence.failedWorkers) ? evidence.failedWorkers.length : "unknown"} / nul=${Array.isArray(evidence.nulByteWorkers) ? evidence.nulByteWorkers.length : "unknown"} / syntaxFailed=${Array.isArray(evidence.syntaxFailedWorkers) ? evidence.syntaxFailedWorkers.length : "unknown"}`);
+        if (Array.isArray(evidence.failedWorkers) && evidence.failedWorkers.length) lines.push(`  workerMcpSourceHygiene failed: ${evidence.failedWorkers.slice(0, 6).join(", ")}`);
       }
       if (item.goalReadinessEvidence?.goalOperatorActionCard) {
         const card = item.goalReadinessEvidence.goalOperatorActionCard;

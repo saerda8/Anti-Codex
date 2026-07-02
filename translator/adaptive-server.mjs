@@ -3066,6 +3066,27 @@ function latestManagerReportItem(label, fileName) {
                 secondAccountStatusCommand: shortSafeText(report.goalOperatorActionCard.secondAccountStatusCommand || "", ""),
             } : null,
         } : null,
+        workerMcpSourceHygieneEvidence: report?.reportName === "worker-mcp-source-hygiene" ? {
+            requestedRealTraffic: report.requestedRealTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            behaviorCovered: report.behaviorCovered === true,
+            coverageKind: shortSafeText(report.coverageKind || "", ""),
+            configPresent: report.configPresent === true,
+            workerCount: Number.isFinite(Number(report.workerCount)) ? Number(report.workerCount) : null,
+            passedWorkerCount: Number.isFinite(Number(report.passedWorkerCount)) ? Number(report.passedWorkerCount) : null,
+            failedWorkers: Array.isArray(report.failedWorkers) ? report.failedWorkers.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            nulByteWorkers: Array.isArray(report.nulByteWorkers) ? report.nulByteWorkers.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            missingEntrypointWorkers: Array.isArray(report.missingEntrypointWorkers) ? report.missingEntrypointWorkers.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            syntaxFailedWorkers: Array.isArray(report.syntaxFailedWorkers) ? report.syntaxFailedWorkers.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            results: Array.isArray(report.results) ? report.results.map((item) => ({
+                name: shortSafeText(item?.name || "", ""),
+                ok: item?.ok === true,
+                commandPresent: item?.commandPresent === true,
+                entrypointPresent: item?.entrypointPresent === true,
+                hasNulBytes: item?.hasNulBytes === true,
+                syntaxOk: item?.syntaxOk === true,
+            })).filter((item) => item.name).slice(0, 12) : [],
+        } : null,
         antigravityCliWindowsUserReadinessEvidence: report?.reportName === "antigravity-cli-windows-user-readiness" ? {
             noTraffic: report.noTraffic === true,
             usedRealTraffic: report.usedRealTraffic === true,
@@ -3650,6 +3671,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Goal real run readiness", "latest-goal-real-run-readiness.json"),
         latestManagerReportItem("Approved real run sequence", "latest-approved-real-run-sequence.json"),
         latestManagerReportItem("Worker MCP server probe", "latest-worker-mcp-server-probe.json"),
+        latestManagerReportItem("Worker MCP source hygiene", "latest-worker-mcp-source-hygiene.json"),
         latestManagerReportItem("Worker MCP task smoke", "latest-worker-mcp-task-smoke.json"),
         latestManagerReportItem("Worker MCP project smoke", "latest-worker-mcp-project-smoke.json"),
         latestManagerReportItem("Current-channel worker transport", "latest-current-channel-worker-transport.json"),
@@ -4666,6 +4688,11 @@ function latestReportsSummary(result){
       lines.push("  goalOperatorActionCard: status="+(card.status||"unknown")+" / canClaim="+(card.canClaimFullGoalNow?"true":"false")+" / release="+(card.releaseReady?"true":"false")+" / worker="+(card.workerStatus||"unknown")+" / secondAccount="+(card.secondAccountStatus||"unknown"));
       lines.push("  goalOperatorActionCard missing: "+(Array.isArray(card.missingRequirements)&&card.missingRequirements.length?card.missingRequirements.join(", "):"none"));
       lines.push("  goalOperatorActionCard next: "+(Array.isArray(card.nextOperatorActions)&&card.nextOperatorActions.length?card.nextOperatorActions.join(" -> "):card.userVisibleNextStep||"unknown"));
+    }
+    if(item.workerMcpSourceHygieneEvidence){
+      const evidence=item.workerMcpSourceHygieneEvidence;
+      lines.push("  workerMcpSourceHygiene: passed="+(evidence.passedWorkerCount??"unknown")+"/"+(evidence.workerCount??"unknown")+" / failed="+(Array.isArray(evidence.failedWorkers)?evidence.failedWorkers.length:"unknown")+" / nul="+(Array.isArray(evidence.nulByteWorkers)?evidence.nulByteWorkers.length:"unknown")+" / syntaxFailed="+(Array.isArray(evidence.syntaxFailedWorkers)?evidence.syntaxFailedWorkers.length:"unknown"));
+      if(Array.isArray(evidence.failedWorkers)&&evidence.failedWorkers.length) lines.push("  workerMcpSourceHygiene failed: "+evidence.failedWorkers.slice(0,6).join(", "));
     }
     if(Array.isArray(item.releaseGateFailures)&&item.releaseGateFailures.length){
       const gateFailures=item.releaseGateFailures.slice(0,4).map((gate)=>{

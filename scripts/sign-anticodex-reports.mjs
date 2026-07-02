@@ -51,6 +51,7 @@ const defaultReports = [
   "latest-required-real-traffic-sequence.json",
   "latest-goal-real-run-readiness.json",
   "latest-approved-real-run-sequence.json",
+  "latest-worker-mcp-source-hygiene.json",
   "latest-ui-local-project-smoke.json",
   "latest-ui-coding-project-smoke.json",
   "latest-ui-multi-turn-project-smoke.json",
