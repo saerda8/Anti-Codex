@@ -262,6 +262,7 @@ function Read-JsonSummary {
             workerMcpServerProbeEvidence = $json.workerMcpServerProbeEvidence
             workerMcpTaskSmokeEvidence = $json.workerMcpTaskSmokeEvidence
             workerMcpProjectSmokeEvidence = $json.workerMcpProjectSmokeEvidence
+            currentChannelWorkerTransportEvidence = $json.currentChannelWorkerTransportEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -448,6 +449,7 @@ $latestReports = @(
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
+    "latest-current-channel-worker-transport.json",
     "latest-ui-chat-smoke.json",
     "latest-ui-web-search-smoke.json",
     "latest-ui-local-project-smoke.json",

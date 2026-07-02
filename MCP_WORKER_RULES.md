@@ -97,7 +97,7 @@ After every failure, before another dispatch:
 - Task: recheck whether MCP as a whole is broken or only worker namespaces are affected.
 - Result: tool discovery exposed worker namespaces, but read-only `kilo_get_job` for completed job `klw_mr34n5js_y7gshe` still returned `Transport closed`. In the same channel, `node_repl` returned a normal JSON response, and the direct SDK probe again listed all seven worker servers with tools.
 - Cause classification: current-channel worker MCP transport failure; not all MCP tooling is broken, and not local worker server/config failure.
-- Rule change: if a generic MCP such as `node_repl` works while worker namespaces return `Transport closed`, keep using direct SDK worker scripts for evidence and do not dispatch current-channel worker jobs until a read-only worker status call succeeds.
+- Rule change: if a generic MCP such as `node_repl` works while worker namespaces return `Transport closed`, keep using direct SDK worker scripts for evidence and do not dispatch current-channel worker jobs until a read-only worker status call succeeds. Record the observation with `record-anticodex-current-channel-worker-transport.mjs` so diagnostics can cite signed `latest-current-channel-worker-transport.json` instead of handoff prose.
 
 ### 2026-06-20 - Antigravity empty failure
 

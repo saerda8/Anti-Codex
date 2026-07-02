@@ -12940,6 +12940,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-shortcut-repair.json",
     "latest-ui-coding-project-smoke.json",
     "latest-ui-report-site-smoke.json",
+    "latest-current-channel-worker-transport.json",
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
@@ -13000,8 +13001,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
   assert.match(collector, /latest-worker-mcp-project-smoke\.json/);
+  assert.match(collector, /latest-current-channel-worker-transport\.json/);
   assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
   assert.match(collector, /workerMcpProjectSmokeEvidence = \$json\.workerMcpProjectSmokeEvidence/);
+  assert.match(collector, /currentChannelWorkerTransportEvidence = \$json\.currentChannelWorkerTransportEvidence/);
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
   assert.match(summarizer, /codexSessionTransportStatus/);
   assert.match(summarizer, /operatorRecoveryAction/);
@@ -13011,6 +13014,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerMcpTaskSmokeMissingRequiredWorkers/);
   assert.match(summarizer, /workerMcpProjectSmokeEvidence/);
   assert.match(summarizer, /workerMcpProjectSmokeScenario/);
+  assert.match(summarizer, /currentChannelWorkerTransportEvidence/);
+  assert.match(summarizer, /splitObserved/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-project-smoke\.json/);

@@ -226,6 +226,7 @@ const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-ru
 const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-probe" || /latest-worker-mcp-server-probe\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
+const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -1835,6 +1836,29 @@ const summary = {
       cliExitCode: has(result?.workspaceVerification || {}, "cliExitCode") ? result.workspaceVerification.cliExitCode : null,
       cliJson: result?.workspaceVerification?.cliJson && typeof result.workspaceVerification.cliJson === "object" ? result.workspaceVerification.cliJson : null,
     })).filter((result) => result.worker) : [],
+  } : null,
+  currentChannelWorkerTransportEvidence: isCurrentChannelWorkerTransportReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    currentChannelProbe: boolField(report, "currentChannelProbe"),
+    workerTool: asString(report.workerTool),
+    workerStatus: asString(report.workerStatus),
+    workerTransportOk: boolField(report, "workerTransportOk"),
+    workerTransportFailed: boolField(report, "workerTransportFailed"),
+    genericMcpTool: asString(report.genericMcpTool),
+    genericMcpStatus: asString(report.genericMcpStatus),
+    genericMcpControlOk: boolField(report, "genericMcpControlOk"),
+    directProbeOk: boolField(report.directProbeReport || {}, "ok"),
+    directProbePassedServerCount: has(report.directProbeReport || {}, "passedServerCount") ? report.directProbeReport.passedServerCount : null,
+    directProbeMissingServers: Array.isArray(report.directProbeReport?.missingServers) ? asStringArray(report.directProbeReport.missingServers) : [],
+    directProbeCodexSessionTransportStatus: asString(report.directProbeReport?.codexSessionTransportStatus),
+    splitObserved: boolField(report, "splitObserved"),
+    interpretation: asString(report.interpretation),
+    operatorRecoveryAction: asString(report.operatorRecoveryAction),
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),
