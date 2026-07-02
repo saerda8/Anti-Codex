@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Recovery report added after Kilo read-only reprobe stayed closed
+
+- Task: recheck one current-channel read-only Kilo wait after the diagnostic-generalization checkpoint, then make the post-reload acceptance path machine-checkable.
+- Result: `kilo_wait_for_job` still returned `Transport closed`. No worker implementation was dispatched. Added `test-anticodex-current-channel-worker-recovery.mjs`, which reports `reload_required` until a fresh current-channel read-only worker call is recorded as ok.
+- Cause classification: current Codex-channel worker MCP transport remains stale/dead for worker namespaces; support evidence needed a single recovery-readiness report instead of scattered transport, direct-probe, and goal-readiness fields.
+- Rule change: after reload or fresh channel, run one read-only worker status/wait/get call, record it with `record-anticodex-current-channel-worker-transport.mjs`, then run `test-anticodex-current-channel-worker-recovery.mjs`. Only start implementation workers when that report says `canDispatchCurrentChannelWorkers:true`.
+
 ### 2026-07-03 - Current-channel three-worker wait reprobe still transport-closed
 
 - Task: after goal-readiness/action-card checkpoint, recheck current-channel read-only worker waits for known completed Kilo, OpenCode, and DeepSeek project-smoke jobs.

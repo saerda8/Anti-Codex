@@ -13002,6 +13002,7 @@ test("optional and special latest reports stay visible without becoming release-
   const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
   const workerTaskSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-worker-mcp-task-smoke.mjs"), "utf8");
+  const workerRecovery = readFileSync(resolve(root, "scripts", "test-anticodex-current-channel-worker-recovery.mjs"), "utf8");
   const optionalReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*false[^}]*\}/g), (match) => match[1]))).sort();
   const specialReports = [
     "latest-antigravity-cli-profile-prepare.json",
@@ -13011,6 +13012,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-ui-coding-project-smoke.json",
     "latest-ui-report-site-smoke.json",
     "latest-current-channel-worker-transport.json",
+    "latest-current-channel-worker-recovery.json",
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-source-hygiene.json",
     "latest-worker-mcp-task-smoke.json",
@@ -13032,6 +13034,7 @@ test("optional and special latest reports stay visible without becoming release-
     assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
   }
   assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.mjs/);
   assert.match(summarizer, /goalReadinessEvidence/);
   assert.match(collector, /goalReadinessEvidence = \$json\.goalReadinessEvidence/);
   assert.match(diagnostics, /goal-readiness summary missing goalReadinessEvidence/);
@@ -13109,12 +13112,23 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerTaskSmoke, /scenario !== "project"[\s\S]*README\.md/);
   assert.match(workerTaskSmoke, /extraFiles = readdirSync\(workspace/);
   assert.match(workerTaskSmoke, /extraFiles\.length === 0/);
+  assert.match(workerRecovery, /reportName: "current-channel-worker-recovery"/);
+  assert.match(workerRecovery, /usedRealTraffic: false/);
+  assert.match(workerRecovery, /latest-current-channel-worker-transport\.json/);
+  assert.match(workerRecovery, /latest-worker-mcp-server-probe\.json/);
+  assert.match(workerRecovery, /canDispatchCurrentChannelWorkers/);
+  assert.match(workerRecovery, /postReloadAcceptanceCriteria/);
+  assert.match(workerRecovery, /operatorActionCard/);
+  assert.match(workerRecovery, /safeToStartImplementationWorker/);
+  assert.doesNotMatch(workerRecovery, /start_implementation/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-source-hygiene\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
   assert.match(collector, /latest-worker-mcp-project-smoke\.json/);
   assert.match(collector, /latest-current-channel-worker-transport\.json/);
+  assert.match(collector, /latest-current-channel-worker-recovery\.json/);
+  assert.match(server, /latest-current-channel-worker-recovery\.json/);
   assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
   assert.match(collector, /workerMcpSourceHygieneEvidence = \$json\.workerMcpSourceHygieneEvidence/);
   assert.match(collector, /workerMcpProjectSmokeEvidence = \$json\.workerMcpProjectSmokeEvidence/);
@@ -13141,6 +13155,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
   assert.match(summarizer, /currentChannelWorkerDispatchUsable/);
   assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
+  assert.match(summarizer, /currentChannelWorkerRecoveryEvidence/);
+  assert.match(summarizer, /safeToStartImplementationWorker/);
+  assert.match(summarizer, /postReloadAcceptanceCriteria/);
   assert.match(summarizer, /workerTransportRecoveryOk/);
   assert.match(summarizer, /workerTransportRecoveryCanDispatch/);
   assert.match(summarizer, /workerTransportRecoveryRequiresCodexMcpReload/);

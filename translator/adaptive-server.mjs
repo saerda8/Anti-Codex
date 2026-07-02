@@ -3705,6 +3705,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Worker MCP task smoke", "latest-worker-mcp-task-smoke.json"),
         latestManagerReportItem("Worker MCP project smoke", "latest-worker-mcp-project-smoke.json"),
         latestManagerReportItem("Current-channel worker transport", "latest-current-channel-worker-transport.json"),
+        latestManagerReportItem("Current-channel worker recovery", "latest-current-channel-worker-recovery.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),

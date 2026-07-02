@@ -228,6 +228,7 @@ const isWorkerMcpSourceHygieneReport = report?.reportName === "worker-mcp-source
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
+const isCurrentChannelWorkerRecoveryReport = report?.reportName === "current-channel-worker-recovery" || /latest-current-channel-worker-recovery\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -2001,6 +2002,34 @@ const summary = {
     interpretation: asString(report.interpretation),
     operatorRecoveryAction: asString(report.operatorRecoveryAction),
     postReloadVerification: asString(report.postReloadVerification),
+  } : null,
+  currentChannelWorkerRecoveryEvidence: isCurrentChannelWorkerRecoveryReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    status: asString(report.status),
+    canDispatchCurrentChannelWorkers: boolField(report, "canDispatchCurrentChannelWorkers"),
+    requiresCodexMcpReload: boolField(report, "requiresCodexMcpReload"),
+    requiresFreshReadOnlyProbe: boolField(report, "requiresFreshReadOnlyProbe"),
+    missingRequirements: Array.isArray(report.missingRequirements) ? asStringArray(report.missingRequirements) : [],
+    transportFresh: boolField(report.currentEvidence || {}, "transportFresh"),
+    currentChannelWorkerDispatchUsable: boolField(report.currentEvidence || {}, "currentChannelWorkerDispatchUsable"),
+    workerTransportFailedTools: Array.isArray(report.currentEvidence?.workerTransportFailedTools) ? asStringArray(report.currentEvidence.workerTransportFailedTools) : [],
+    workerTransportFailedWorkerPrefixes: Array.isArray(report.currentEvidence?.workerTransportFailedWorkerPrefixes) ? asStringArray(report.currentEvidence.workerTransportFailedWorkerPrefixes) : [],
+    genericMcpControlOk: boolField(report.currentEvidence || {}, "genericMcpControlOk"),
+    directProbeOk: boolField(report.currentEvidence || {}, "directProbeOk"),
+    postReloadAcceptanceCriteria: Array.isArray(report.postReloadAcceptanceCriteria) ? asStringArray(report.postReloadAcceptanceCriteria) : [],
+    operatorActionCard: report.operatorActionCard && typeof report.operatorActionCard === "object" ? {
+      status: asString(report.operatorActionCard.status),
+      canDispatchCurrentChannelWorkers: boolField(report.operatorActionCard, "canDispatchCurrentChannelWorkers"),
+      safeToStartImplementationWorker: boolField(report.operatorActionCard, "safeToStartImplementationWorker"),
+      missingRequirements: Array.isArray(report.operatorActionCard.missingRequirements) ? asStringArray(report.operatorActionCard.missingRequirements) : [],
+      nextOperatorAction: asString(report.operatorActionCard.nextOperatorAction),
+      userVisibleNextStep: asString(report.operatorActionCard.userVisibleNextStep),
+    } : null,
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),
