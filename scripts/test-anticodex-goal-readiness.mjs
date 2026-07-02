@@ -156,8 +156,10 @@ const workerMcp = {
   currentChannelSplitObserved: currentChannelWorkerTransport.splitObserved === true,
   currentChannelCheckedAt: String(currentChannelWorkerTransport.checkedAt || ""),
   currentChannelWorkerDispatchBlocked: currentChannelWorkerTransport.currentChannelWorkerDispatchBlocked === true,
-  currentChannelWorkerDispatchUsable: currentChannelWorkerTransport.workerTransportOk === true
-    && currentChannelWorkerTransport.currentChannelWorkerDispatchBlocked !== true,
+  currentChannelWorkerDispatchUsable: Object.prototype.hasOwnProperty.call(currentChannelWorkerTransport, "currentChannelWorkerDispatchUsable")
+    ? currentChannelWorkerTransport.currentChannelWorkerDispatchUsable === true
+    : currentChannelWorkerTransport.workerTransportOk === true
+      && currentChannelWorkerTransport.currentChannelWorkerDispatchBlocked !== true,
   currentChannelReadOnlyProbeRequiredBeforeDispatch: currentChannelWorkerTransport.readOnlyProbeRequiredBeforeDispatch === true,
   currentChannelOperatorRecoveryAction: String(currentChannelWorkerTransport.operatorRecoveryAction || ""),
   currentChannelPostReloadVerification: String(currentChannelWorkerTransport.postReloadVerification || ""),

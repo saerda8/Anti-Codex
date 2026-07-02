@@ -1873,6 +1873,7 @@ const summary = {
     directProbeCodexSessionTransportStatus: asString(report.directProbeReport?.codexSessionTransportStatus),
     splitObserved: boolField(report, "splitObserved"),
     currentChannelWorkerDispatchBlocked: boolField(report, "currentChannelWorkerDispatchBlocked"),
+    currentChannelWorkerDispatchUsable: boolField(report, "currentChannelWorkerDispatchUsable"),
     readOnlyProbeRequiredBeforeDispatch: boolField(report, "readOnlyProbeRequiredBeforeDispatch"),
     interpretation: asString(report.interpretation),
     operatorRecoveryAction: asString(report.operatorRecoveryAction),

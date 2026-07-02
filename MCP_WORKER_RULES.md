@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel MIMO read-only recheck still transport-closed after goal gate commit
+
+- Task: after checkpoint `a718d86`, re-run a current-channel read-only `mimo_get_job` for completed project-smoke job `dsw_mr3wn5f0_kiniqh` before allowing live worker dispatch.
+- Result: current-channel `mimo_get_job` still failed immediately with `Transport closed`; same-channel generic `node_repl` returned normal JSON. The signed transport report was refreshed and now includes raw `currentChannelWorkerDispatchUsable:false` instead of leaving that value only to goal-readiness derivation.
+- Cause classification: current Codex-channel worker MCP transport remains stale/dead for worker namespaces; generic MCP and direct worker server health remain separate and green.
+- Rule change: current-channel worker recovery evidence must carry both `currentChannelWorkerDispatchBlocked` and `currentChannelWorkerDispatchUsable` in the source transport report, not only in aggregate goal-readiness.
+
 ### 2026-07-03 - Current-channel MIMO read-only still transport-closed
 
 - Task: recheck completed MIMO project-smoke job `dsw_mr3wn5f0_kiniqh` through the current Codex channel with read-only `mimo_get_job` before considering any current-channel worker dispatch.

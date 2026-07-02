@@ -70,6 +70,8 @@ function main() {
   const workerTransportFailed = ["transport_closed", "error", "failed", "timeout"].includes(workerStatus);
   const genericMcpControlOk = genericMcpStatus === "ok";
   const splitObserved = workerTransportFailed && genericMcpControlOk && directProbeOk;
+  const currentChannelWorkerDispatchBlocked = !workerTransportOk;
+  const currentChannelWorkerDispatchUsable = workerTransportOk && !currentChannelWorkerDispatchBlocked;
 
   const payload = {
     reportName: "current-channel-worker-transport",
@@ -99,7 +101,8 @@ function main() {
       codexSessionTransportStatus: directProbe.parseable ? String(directProbe.report?.codexSessionTransportStatus || "") : "",
     },
     splitObserved,
-    currentChannelWorkerDispatchBlocked: !workerTransportOk,
+    currentChannelWorkerDispatchBlocked,
+    currentChannelWorkerDispatchUsable,
     readOnlyProbeRequiredBeforeDispatch: true,
     interpretation: splitObserved
       ? "worker namespace transport is failing in the current Codex channel while generic MCP and direct worker server probe are healthy"

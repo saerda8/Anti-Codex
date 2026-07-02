@@ -1842,6 +1842,9 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
         if ($evidence.workerStatus -ne "transport_closed") { Add-Failure "current-channel-worker-transport summary worker failure status mismatch" }
         if ($evidence.splitObserved -ne $true) { Add-Failure "current-channel-worker-transport summary did not prove split" }
         if ($evidence.currentChannelWorkerDispatchBlocked -ne $true) { Add-Failure "current-channel-worker-transport summary did not block worker dispatch" }
+        if ($evidence.currentChannelWorkerDispatchUsable -ne $false) { Add-Failure "current-channel-worker-transport summary unexpectedly marked worker dispatch usable" }
+    } else {
+        if ($evidence.currentChannelWorkerDispatchUsable -ne $true) { Add-Failure "current-channel-worker-transport summary did not mark healthy worker dispatch usable" }
     }
 }
 

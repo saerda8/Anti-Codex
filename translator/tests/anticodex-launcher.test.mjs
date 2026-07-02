@@ -13103,6 +13103,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /currentChannelWorkerTransportEvidence/);
   assert.match(summarizer, /splitObserved/);
   assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
+  assert.match(summarizer, /currentChannelWorkerDispatchUsable/);
   assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
   assert.match(summarizer, /postReloadVerification/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
@@ -13115,6 +13116,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not prove split/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
+  assert.match(diagnostics, /current-channel-worker-transport summary unexpectedly marked worker dispatch usable/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP task smoke worker/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP project smoke worker/);
