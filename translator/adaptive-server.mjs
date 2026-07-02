@@ -3045,6 +3045,27 @@ function latestManagerReportItem(label, fileName) {
             missingSkipMetadataCount: skippedCheckEntries.filter((entry) => !entry.value.reason || !entry.value.coveredBy).length,
             realTrafficSkippedChecks: skippedCheckEntries.filter((entry) => entry.id === "realMiniTool" || entry.id === "realWork" || entry.id === "realSmallProject").map((entry) => entry.id).sort(),
         } : null,
+        goalReadinessEvidence: report?.reportName === "goal-readiness" ? {
+            goalComplete: report.goalComplete === true,
+            blockerCount: Array.isArray(report.blockers) ? report.blockers.length : null,
+            blockers: Array.isArray(report.blockers) ? report.blockers.map((item) => shortSafeText(item || "", "")).filter(Boolean).slice(0, 12) : [],
+            nextRequiredUserAction: shortSafeText(report.nextRequiredUserAction || "", ""),
+            goalOperatorActionCard: report.goalOperatorActionCard && typeof report.goalOperatorActionCard === "object" ? {
+                status: shortSafeText(report.goalOperatorActionCard.status || "", ""),
+                canClaimFullGoalNow: report.goalOperatorActionCard.canClaimFullGoalNow === true,
+                releaseReady: report.goalOperatorActionCard.releaseReady === true,
+                workerStatus: shortSafeText(report.goalOperatorActionCard.workerStatus || "", ""),
+                workerCanDispatchCurrentChannel: report.goalOperatorActionCard.workerCanDispatchCurrentChannel === true,
+                secondAccountStatus: shortSafeText(report.goalOperatorActionCard.secondAccountStatus || "", ""),
+                secondAccountCanAskUserToLoginNow: report.goalOperatorActionCard.secondAccountCanAskUserToLoginNow === true,
+                missingRequirements: Array.isArray(report.goalOperatorActionCard.missingRequirements) ? report.goalOperatorActionCard.missingRequirements.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+                nextOperatorActions: Array.isArray(report.goalOperatorActionCard.nextOperatorActions) ? report.goalOperatorActionCard.nextOperatorActions.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+                userVisibleNextStep: shortSafeText(report.goalOperatorActionCard.userVisibleNextStep || "", ""),
+                noTrafficStatusCommand: shortSafeText(report.goalOperatorActionCard.noTrafficStatusCommand || "", ""),
+                workerRecoveryCommand: shortSafeText(report.goalOperatorActionCard.workerRecoveryCommand || "", ""),
+                secondAccountStatusCommand: shortSafeText(report.goalOperatorActionCard.secondAccountStatusCommand || "", ""),
+            } : null,
+        } : null,
         antigravityCliWindowsUserReadinessEvidence: report?.reportName === "antigravity-cli-windows-user-readiness" ? {
             noTraffic: report.noTraffic === true,
             usedRealTraffic: report.usedRealTraffic === true,
@@ -4639,6 +4660,12 @@ function latestReportsSummary(result){
         ].slice(0,3);
         if(runtimeSamples.length) lines.push("  installedRuntime drift: "+runtimeSamples.join(", "));
       }
+    }
+    if(item.goalReadinessEvidence?.goalOperatorActionCard){
+      const card=item.goalReadinessEvidence.goalOperatorActionCard;
+      lines.push("  goalOperatorActionCard: status="+(card.status||"unknown")+" / canClaim="+(card.canClaimFullGoalNow?"true":"false")+" / release="+(card.releaseReady?"true":"false")+" / worker="+(card.workerStatus||"unknown")+" / secondAccount="+(card.secondAccountStatus||"unknown"));
+      lines.push("  goalOperatorActionCard missing: "+(Array.isArray(card.missingRequirements)&&card.missingRequirements.length?card.missingRequirements.join(", "):"none"));
+      lines.push("  goalOperatorActionCard next: "+(Array.isArray(card.nextOperatorActions)&&card.nextOperatorActions.length?card.nextOperatorActions.join(" -> "):card.userVisibleNextStep||"unknown"));
     }
     if(Array.isArray(item.releaseGateFailures)&&item.releaseGateFailures.length){
       const gateFailures=item.releaseGateFailures.slice(0,4).map((gate)=>{

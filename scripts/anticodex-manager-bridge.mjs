@@ -436,6 +436,12 @@ function latestReportsSummary(result) {
         if (runtimeSamples.length) lines.push(`  installedRuntime drift: ${runtimeSamples.join(", ")}`);
       }
     }
+    if (item.goalReadinessEvidence?.goalOperatorActionCard) {
+      const card = item.goalReadinessEvidence.goalOperatorActionCard;
+      lines.push(`  goalOperatorActionCard: status=${card.status || "unknown"} / canClaim=${card.canClaimFullGoalNow ? "true" : "false"} / release=${card.releaseReady ? "true" : "false"} / worker=${card.workerStatus || "unknown"} / secondAccount=${card.secondAccountStatus || "unknown"}`);
+      lines.push(`  goalOperatorActionCard missing: ${Array.isArray(card.missingRequirements) && card.missingRequirements.length ? card.missingRequirements.join(", ") : "none"}`);
+      lines.push(`  goalOperatorActionCard next: ${Array.isArray(card.nextOperatorActions) && card.nextOperatorActions.length ? card.nextOperatorActions.join(" -> ") : card.userVisibleNextStep || "unknown"}`);
+    }
     if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
       const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
         const semanticFailures = Array.isArray(gate.semanticFailures) ? gate.semanticFailures : [];

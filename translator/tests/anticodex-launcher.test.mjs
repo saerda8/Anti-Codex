@@ -737,6 +737,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /managerOpenedNewPage/);
   }
   assert.match(managerInject, /native-panel-v99/);
+  assert.match(managerInject, /latest-reports-evidence-v2/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
   assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
   assert.match(syncReadiness, /native-panel-v99/);
@@ -15810,6 +15811,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerBridge, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(managerBridge, /secondAccountLoginEntrypoint proofCommand/);
   assert.match(managerBridge, /secondAccountReadinessSummary/);
+  assert.match(managerBridge, /goalOperatorActionCard/);
+  assert.match(managerBridge, /goalOperatorActionCard missing/);
   assert.match(managerBridge, /secondAccountReadinessSummary next/);
   assert.match(managerBridge, /secondAccountReadinessSummary checklist/);
   assert.match(managerBridge, /secondAccountReadinessSummary hint/);
@@ -15827,6 +15830,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerInject, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(managerInject, /secondAccountLoginEntrypoint proofCommand/);
   assert.match(managerInject, /secondAccountReadinessSummary/);
+  assert.match(managerInject, /goalOperatorActionCard/);
+  assert.match(managerInject, /goalOperatorActionCard missing/);
   assert.match(managerInject, /secondAccountReadinessSummary next/);
   assert.match(managerInject, /secondAccountReadinessSummary checklist/);
   assert.match(managerInject, /secondAccountReadinessSummary hint/);
@@ -15848,6 +15853,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(server, /secondAccountLoginEntrypoint proofCommand/);
   assert.match(server, /secondAccountReadinessSummaryEvidence/);
+  assert.match(server, /goalReadinessEvidence/);
+  assert.match(server, /goalOperatorActionCard/);
   assert.match(server, /secondAccountReadinessSummary next/);
   assert.match(server, /secondAccountReadinessSummary checklist/);
   assert.match(server, /secondAccountReadinessSummary hint/);
