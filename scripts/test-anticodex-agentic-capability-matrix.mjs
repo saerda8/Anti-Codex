@@ -22,6 +22,7 @@ const requiredCapabilities = [
   "multi_turn_continuation",
   "research_report_with_sources",
   "complex_research_code_site",
+  "autonomous_reasoning_project",
   "repo_multi_file_edit",
   "visible_staged_tool_loop",
 ];
@@ -32,6 +33,7 @@ const reportFiles = {
   multiTurnProject: "latest-ui-multi-turn-project-smoke.json",
   reportSite: "latest-ui-report-site-smoke.json",
   complexProject: "latest-ui-complex-project-smoke.json",
+  autonomousReasoning: "latest-ui-autonomous-reasoning-smoke-model-gemini-3-5-flash-low.json",
   repoMultiFileEdit: "latest-ui-repo-multi-file-edit-smoke.json",
   agenticStepFlow: "latest-ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low.json",
 };
@@ -326,6 +328,38 @@ const capabilities = [
       sharedUrlCount: Number(artifact.sharedUrlCount) || 0,
       testPassed: bool(artifact, "testPassed"),
       cliPassed: bool(artifact, "cliPassed"),
+      htmlComplete: bool(artifact, "htmlComplete"),
+      htmlLinksReport: bool(artifact, "htmlLinksReport"),
+      ...responseHistoryEvidence(responseHistory),
+    };
+  }),
+  capability("autonomous_reasoning_project", "autonomous-reasoning", reportFiles.autonomousReasoning, "ui-autonomous-reasoning-smoke-model-gemini-3-5-flash-low", (report, failures) => {
+    const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
+    const files = artifact.files || {};
+    for (const key of ["packageJson", "analyzer", "testFile", "sourcesJson", "reportMd", "indexHtml", "doneTxt"]) {
+      if (files[key] !== true) failures.push(`missing_file:${key}`);
+    }
+    for (const key of ["doneExact", "exportsFunction", "testPassed", "cliPassed", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"]) {
+      if (artifact[key] !== true) failures.push(`missing_artifact_evidence:${key}`);
+    }
+    if (artifact.reportHasMojibake === true) failures.push("report_has_mojibake");
+    if (artifact.htmlHasMojibake === true) failures.push("html_has_mojibake");
+    if ((Number(artifact.sourceUrlCount) || 0) < 3) failures.push("source_url_count_too_low");
+    if ((Number(artifact.trustedSourceUrlCount) || 0) < 3) failures.push("trusted_source_url_count_too_low");
+    requireResponseHistoryProof(responseHistory, failures);
+    return {
+      files,
+      sourceUrlCount: Number(artifact.sourceUrlCount) || 0,
+      trustedSourceUrlCount: Number(artifact.trustedSourceUrlCount) || 0,
+      doneExact: bool(artifact, "doneExact"),
+      exportsFunction: bool(artifact, "exportsFunction"),
+      testPassed: bool(artifact, "testPassed"),
+      cliPassed: bool(artifact, "cliPassed"),
+      reportHasChinese: bool(artifact, "reportHasChinese"),
+      htmlHasChinese: bool(artifact, "htmlHasChinese"),
+      reportHasMojibake: artifact.reportHasMojibake === true,
+      htmlHasMojibake: artifact.htmlHasMojibake === true,
       htmlComplete: bool(artifact, "htmlComplete"),
       htmlLinksReport: bool(artifact, "htmlLinksReport"),
       ...responseHistoryEvidence(responseHistory),

@@ -783,6 +783,7 @@ function summarizeGate(definition) {
         "multi_turn_continuation",
         "research_report_with_sources",
         "complex_research_code_site",
+        "autonomous_reasoning_project",
         "repo_multi_file_edit",
         "visible_staged_tool_loop",
       ];
