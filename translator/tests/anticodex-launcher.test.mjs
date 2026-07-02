@@ -12682,6 +12682,8 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /"local-project"/);
   assert.match(suite, /"repo-file-edit"/);
   assert.match(suite, /"repo-multi-file-edit"/);
+  assert.match(suite, /"autonomous-reasoning"/);
+  assert.match(suite, /"agentic-step-flow"/);
   assert.match(suite, /for \(const task of selectedTasks\)/);
   assert.match(suite, /spawnSync\(process\.execPath/);
   assert.match(suite, /requestedRealTraffic: allowRealTraffic/);
@@ -12719,6 +12721,10 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /latest_real_report_stale/);
   assert.match(suite, /expectedReportName/);
   assert.match(suite, /expectedTaskMode/);
+  assert.match(suite, /model-led-autonomous-project/);
+  assert.match(suite, /visible-staged-tool-loop/);
+  assert.match(suite, /latest-ui-autonomous-reasoning-smoke\.json/);
+  assert.match(suite, /latest-ui-agentic-step-flow-smoke\.json/);
   assert.match(summarizer, /desktopTaskSuiteEvidence/);
   assert.match(summarizer, /agenticCapabilityMatrixEvidence/);
   assert.match(summarizer, /suiteProfile/);
@@ -12867,14 +12873,20 @@ test("desktop task suite supports an extended concrete task matrix without using
     assert.ok(report.selectedTasks.includes("multi-turn-project"));
     assert.ok(report.selectedTasks.includes("report-site"));
     assert.ok(report.selectedTasks.includes("complex-project"));
+    assert.ok(report.selectedTasks.includes("autonomous-reasoning"));
+    assert.ok(report.selectedTasks.includes("agentic-step-flow"));
     assert.equal(report.perTaskReports["web-search"], "latest-ui-web-search-smoke.json");
     assert.equal(report.perTaskReports["coding-project"], "latest-ui-coding-project-smoke.json");
     assert.equal(report.perTaskReports["multi-turn-project"], "latest-ui-multi-turn-project-smoke.json");
     assert.equal(report.perTaskReports["report-site"], "latest-ui-report-site-smoke.json");
     assert.equal(report.perTaskReports["complex-project"], "latest-ui-complex-project-smoke.json");
+    assert.equal(report.perTaskReports["autonomous-reasoning"], "latest-ui-autonomous-reasoning-smoke.json");
+    assert.equal(report.perTaskReports["agentic-step-flow"], "latest-ui-agentic-step-flow-smoke.json");
     assert.equal(report.taskScenarioCatalog["web-search"].requiresWeb, true);
     assert.equal(report.taskScenarioCatalog["repo-multi-file-edit"].mutatesRepoFixture, true);
     assert.ok(report.taskScenarioCatalog["complex-project"].expectedEvidence.includes("sources-json"));
+    assert.ok(report.taskScenarioCatalog["autonomous-reasoning"].expectedEvidence.includes("task-tool-output"));
+    assert.ok(report.taskScenarioCatalog["agentic-step-flow"].expectedEvidence.includes("phase-2-visible"));
     assert.ok(report.selectedTaskScenarios["coding-project"].expectedEvidence.includes("node-test-passed"));
     assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
     assert.deepEqual(report.realTaskEvidenceRefreshPlan.hardFailureTaskModes.sort(), report.selectedTasks.slice().sort());
@@ -12906,9 +12918,13 @@ test("desktop task suite supports an agentic concrete task matrix without using 
       "multi-turn-project",
       "report-site",
       "complex-project",
+      "autonomous-reasoning",
+      "agentic-step-flow",
       "repo-multi-file-edit",
     ]);
     assert.equal(report.selectedTaskScenarios["report-site"].requiresWeb, true);
+    assert.equal(report.selectedTaskScenarios["autonomous-reasoning"].workType, "model-led-autonomous-project");
+    assert.equal(report.selectedTaskScenarios["agentic-step-flow"].workType, "visible-staged-tool-loop");
     assert.equal(report.selectedTaskScenarios["repo-multi-file-edit"].workType, "two-step-multi-file-repo-task");
     assert.equal(report.realTaskEvidenceRefreshPlan.requiresExplicitUserApproval, true);
     assert.equal(report.realTaskEvidenceRefreshPlan.commandPreview.includes("--suite-profile agentic"), true);
@@ -12928,6 +12944,8 @@ test("desktop task suite can preview all task refreshes without overwriting late
       "latest-ui-multi-turn-project-smoke.json": ["ui-multi-turn-project-smoke", "multi-turn-project"],
       "latest-ui-report-site-smoke.json": ["ui-report-site-smoke", "report-site"],
       "latest-ui-complex-project-smoke.json": ["ui-complex-project-smoke", "complex-project"],
+      "latest-ui-autonomous-reasoning-smoke.json": ["ui-autonomous-reasoning-smoke", "autonomous-reasoning"],
+      "latest-ui-agentic-step-flow-smoke.json": ["ui-agentic-step-flow-smoke", "agentic-step-flow"],
       "latest-ui-repo-file-edit-smoke.json": ["ui-repo-file-edit-smoke", "repo-file-edit"],
       "latest-ui-repo-multi-file-edit-smoke.json": ["ui-repo-multi-file-edit-smoke", "repo-multi-file-edit"],
     };
@@ -13326,6 +13344,11 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /missingResultProofTasks/);
   assert.match(roadmap, /profileResultProofComplete/);
   assert.match(roadmap, /repo-multi-file-edit/);
+  assert.match(roadmap, /autonomous-reasoning/);
+  assert.match(roadmap, /agentic-step-flow/);
+  assert.match(roadmap, /trustedSourceUrlCount/);
+  assert.match(roadmap, /assistantHasPhase1/);
+  assert.match(roadmap, /assistantHasPhase2/);
   assert.match(roadmap, /htmlComplete/);
   assert.match(summarizer, /realTaskCoverageRoadmapEvidence/);
   assert.match(summarizer, /minimalRefreshCommandPresent/);
@@ -13501,6 +13524,10 @@ test("Anti-Codex ships a no-traffic native Codex parity task matrix", () => {
   assert.match(matrix, /free-chat/);
   assert.match(matrix, /web-search/);
   assert.match(matrix, /repo-multi-file-edit/);
+  assert.match(matrix, /autonomous-reasoning/);
+  assert.match(matrix, /agentic-step-flow/);
+  assert.match(matrix, /model-led-autonomous-project/);
+  assert.match(matrix, /visible-staged-tool-loop/);
   assert.match(matrix, /pendingRealTaskScenarios/);
   assert.match(matrix, /realTrafficStillRequired/);
   assert.match(matrix, /minimalRefreshCommandArgs/);
@@ -13539,6 +13566,8 @@ test("Anti-Codex ships a no-traffic long task landing matrix verifier", () => {
   assert.match(matrix, /multi-turn-project/);
   assert.match(matrix, /report-site/);
   assert.match(matrix, /complex-project/);
+  assert.match(matrix, /autonomous-reasoning/);
+  assert.match(matrix, /agentic-step-flow/);
   assert.match(matrix, /repo-multi-file-edit/);
   assert.match(matrix, /requiredResponseHistoryKeys/);
   assert.match(matrix, /responseHistoryEvidence/);

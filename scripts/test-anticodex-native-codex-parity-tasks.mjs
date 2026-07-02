@@ -26,6 +26,8 @@ const taskReports = {
   "multi-turn-project": ["latest-ui-multi-turn-project-smoke.json", "ui-multi-turn-project-smoke"],
   "report-site": ["latest-ui-report-site-smoke.json", "ui-report-site-smoke"],
   "complex-project": ["latest-ui-complex-project-smoke.json", "ui-complex-project-smoke"],
+  "autonomous-reasoning": ["latest-ui-autonomous-reasoning-smoke.json", "ui-autonomous-reasoning-smoke"],
+  "agentic-step-flow": ["latest-ui-agentic-step-flow-smoke.json", "ui-agentic-step-flow-smoke"],
   "repo-file-edit": ["latest-ui-repo-file-edit-smoke.json", "ui-repo-file-edit-smoke"],
   "repo-multi-file-edit": ["latest-ui-repo-multi-file-edit-smoke.json", "ui-repo-multi-file-edit-smoke"],
 };
@@ -39,6 +41,8 @@ const taskScenarioCatalog = {
   "multi-turn-project": { workType: "multi-turn-project-continuation", acceptanceEvidence: ["first-turn-marker", "followup-marker", "node-test-passed"], expectedResult: "Assistant continues a task across turns" },
   "report-site": { workType: "web-backed-report-site", acceptanceEvidence: ["report-md", "index-html", "source-urls"], expectedResult: "Assistant produces a sourced report and linked site" },
   "complex-project": { workType: "web-backed-tested-dashboard-project", acceptanceEvidence: ["sources-json", "node-test-passed", "report-md", "index-html"], expectedResult: "Assistant combines research, code, tests, and site output" },
+  "autonomous-reasoning": { workType: "model-led-autonomous-project", acceptanceEvidence: ["sources-json", "node-test-passed", "cli-output-verified", "chinese-report-html", "visible-progress", "task-tool-output"], expectedResult: "Assistant independently plans and completes a sourced tested project with visible progress" },
+  "agentic-step-flow": { workType: "visible-staged-tool-loop", acceptanceEvidence: ["phase-1-visible", "phase-2-visible", "index-html", "readme-md", "done-marker", "marker-tool-output"], expectedResult: "Assistant performs a visible staged create-then-verify loop with real tool output" },
   "repo-file-edit": { workType: "single-file-repo-test-fix", acceptanceEvidence: ["target-source-changed", "acceptance-test-passed"], expectedResult: "Assistant edits a repo file so tests pass" },
   "repo-multi-file-edit": { workType: "two-step-multi-file-repo-task", acceptanceEvidence: ["readme-created", "source-changed", "test-passed", "offline-html"], expectedResult: "Assistant completes a multi-file repo task" },
 };
@@ -46,9 +50,9 @@ const taskScenarioCatalog = {
 const parityGroups = [
   { id: "conversation", taskModes: ["exact-marker", "free-chat"] },
   { id: "research", taskModes: ["web-search", "report-site"] },
-  { id: "projectCreation", taskModes: ["local-project", "coding-project", "complex-project"] },
+  { id: "projectCreation", taskModes: ["local-project", "coding-project", "complex-project", "autonomous-reasoning"] },
   { id: "codingAndRepoEditing", taskModes: ["repo-file-edit", "repo-multi-file-edit"] },
-  { id: "multiTurnAgentic", taskModes: ["multi-turn-project"] },
+  { id: "multiTurnAgentic", taskModes: ["multi-turn-project", "agentic-step-flow"] },
   { id: "toolUse", taskModes: ["tool-loop", "mcp-tool-loop", "custom-tool-loop"] },
 ];
 

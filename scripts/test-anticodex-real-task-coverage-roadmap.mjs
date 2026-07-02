@@ -26,6 +26,8 @@ const taskReportExpectations = {
   "multi-turn-project": ["latest-ui-multi-turn-project-smoke.json", "ui-multi-turn-project-smoke"],
   "report-site": ["latest-ui-report-site-smoke.json", "ui-report-site-smoke"],
   "complex-project": ["latest-ui-complex-project-smoke.json", "ui-complex-project-smoke"],
+  "autonomous-reasoning": ["latest-ui-autonomous-reasoning-smoke.json", "ui-autonomous-reasoning-smoke"],
+  "agentic-step-flow": ["latest-ui-agentic-step-flow-smoke.json", "ui-agentic-step-flow-smoke"],
   "repo-file-edit": ["latest-ui-repo-file-edit-smoke.json", "ui-repo-file-edit-smoke"],
   "repo-multi-file-edit": ["latest-ui-repo-multi-file-edit-smoke.json", "ui-repo-multi-file-edit-smoke"],
 };
@@ -36,6 +38,8 @@ const taskArtifactRequirements = {
   "multi-turn-project": ["firstDoneExact", "followupExact", "changelogHasFinalMarker", "testPassed", "cliPassed"],
   "report-site": ["doneExact", "reportHasMarker", "htmlHasMarker", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
   "complex-project": ["doneExact", "exportsFunction", "testPassed", "cliPassed", "sourceUrlCount", "reportUrlCount", "htmlUrlCount", "htmlComplete", "htmlLinksReport"],
+  "autonomous-reasoning": ["doneExact", "exportsFunction", "testPassed", "cliPassed", "sourceUrlCount", "trustedSourceUrlCount", "reportHasChinese", "htmlHasChinese", "htmlComplete", "htmlLinksReport"],
+  "agentic-step-flow": ["doneExact", "doneHasNoBom", "indexHasMarker", "indexHasChineseTitle", "readmeMentionsFiles"],
   "repo-file-edit": ["testPassed", "sourceHasLowercase", "sourceHandlesInvalidChars", "sourceTrimsHyphens"],
   "repo-multi-file-edit": [
     "exportsNormalizeStatus",
@@ -63,6 +67,8 @@ const taskResultRequirements = {
   "multi-turn-project": ["artifactEvidence", "followupExact", "testPassed", "cliPassed", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   "report-site": ["artifactEvidence", "reportHasChinese", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   "complex-project": ["artifactEvidence", "sourceUrlCount", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "autonomous-reasoning": ["artifactEvidence", "sourceUrlCount", "trustedSourceUrlCount", "testPassed", "cliPassed", "reportHasChinese", "htmlHasChinese", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
+  "agentic-step-flow": ["artifactEvidence", "doneExact", "indexHasMarker", "indexHasChineseTitle", "assistantHasPhase1", "assistantHasPhase2", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
   "repo-file-edit": ["artifactEvidence", "testPassed", "sourceHasLowercase"],
   "repo-multi-file-edit": ["artifactEvidence", "sourceChangedFromFixture", "testPassed", "cliPassed", "htmlComplete", "assistantHasFinalMarker", "markerToolOutputSeen", "visibleProgressCount", "distinctVisibleProgressCount", "firstPersonProgressClean", "taskToolCallCount", "taskToolOutputSeen", "modelLedExecution", "codexLikeProcessProof"],
 };
@@ -124,6 +130,20 @@ const taskScenarioCatalog = {
     acceptanceEvidence: ["sources-json", "analyzer-test-passed", "cli-output-verified", "report-md", "index-html"],
     expectedResult: "Assistant builds dashboard with sources, analyzer tests, CLI, and HTML report",
   },
+  "autonomous-reasoning": {
+    taskMode: "autonomous-reasoning",
+    workType: "model-led-autonomous-project",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["sources-json", "node-test-passed", "cli-output-verified", "chinese-report-html", "visible-progress", "task-tool-output"],
+    expectedResult: "Assistant independently plans and completes a sourced tested project with visible progress",
+  },
+  "agentic-step-flow": {
+    taskMode: "agentic-step-flow",
+    workType: "visible-staged-tool-loop",
+    realTrafficRequired: true,
+    acceptanceEvidence: ["phase-1-visible", "phase-2-visible", "index-html", "readme-md", "done-marker", "marker-tool-output"],
+    expectedResult: "Assistant performs a visible staged create-then-verify loop with real tool output",
+  },
   "repo-file-edit": {
     taskMode: "repo-file-edit",
     workType: "single-file-repo-test-fix",
@@ -142,9 +162,9 @@ const taskScenarioCatalog = {
 
 const requiredProfiles = {
   core: ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"],
-  agentic: ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"],
-  extended: ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit", "web-search", "coding-project", "multi-turn-project", "report-site", "complex-project"],
-  all: ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "report-site", "repo-file-edit", "repo-multi-file-edit"],
+  agentic: ["coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow", "repo-multi-file-edit"],
+  extended: ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit", "web-search", "coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow"],
+  all: ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "autonomous-reasoning", "agentic-step-flow", "report-site", "repo-file-edit", "repo-multi-file-edit"],
 };
 
 function artifactValuePasses(value) {
@@ -218,11 +238,14 @@ function resultProofFor(taskMode, report) {
     responseHistoryMarkerSeen: report?.responseHistoryMarkerSeen === true,
     lastSample: String(report?.lastSample || ""),
     sourceUrlCount: Number(artifactEvidence.sourceUrlCount || 0) || urlCountFromText(report?.lastSample),
+    trustedSourceUrlCount: Number(artifactEvidence.trustedSourceUrlCount || 0),
     artifactEvidence: Object.keys(artifactEvidence).length,
     doneExact: artifactEvidence.doneExact === true,
     indexHasMarker: artifactEvidence.indexHasMarker === true,
+    indexHasChineseTitle: artifactEvidence.indexHasChineseTitle === true,
     followupExact: artifactEvidence.followupExact === true,
     reportHasChinese: artifactEvidence.reportHasChinese === true,
+    htmlHasChinese: artifactEvidence.htmlHasChinese === true,
     htmlComplete: artifactEvidence.htmlComplete === true,
     sourceChangedFromFixture: artifactEvidence.sourceChangedFromFixture === true,
     sourceHasLowercase: artifactEvidence.sourceHasLowercase === true,
@@ -238,6 +261,8 @@ function resultProofFor(taskMode, report) {
     firstPersonProgressSamples: Array.isArray(responseHistory.firstPersonProgressSamples) ? responseHistory.firstPersonProgressSamples.slice(0, 5).join(" | ") : "",
     taskToolCallCount,
     taskToolOutputSeen,
+    assistantHasPhase1: responseHistory.assistantHasPhase1 === true,
+    assistantHasPhase2: responseHistory.assistantHasPhase2 === true,
     artifactGuardUsed: responseHistory.artifactGuardUsed === true,
     modelLedExecution: responseHistory.modelLedExecution === true,
     codexLikeProcessProof,

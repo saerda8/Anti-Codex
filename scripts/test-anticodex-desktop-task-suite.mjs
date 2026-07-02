@@ -40,9 +40,9 @@ const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA
 const uiSmokeScript = resolve(sourceRoot, "scripts", "test-anticodex-ui-chat-smoke.mjs");
 const suiteProfile = String(args.get("--suite-profile") || "core").toLowerCase();
 const coreTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit"];
-const agenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
-const extendedTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit", "web-search", "coding-project", "multi-turn-project", "report-site", "complex-project"];
-const allTasks = ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "report-site", "repo-file-edit", "repo-multi-file-edit"];
+const agenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow", "repo-multi-file-edit"];
+const extendedTasks = ["exact-marker", "local-project", "repo-file-edit", "repo-multi-file-edit", "web-search", "coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow"];
+const allTasks = ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "complex-project", "autonomous-reasoning", "agentic-step-flow", "report-site", "repo-file-edit", "repo-multi-file-edit"];
 const defaultTasks = suiteProfile === "all"
   ? allTasks
   : suiteProfile === "agentic"
@@ -99,6 +99,16 @@ const taskReportExpectations = {
     file: "latest-ui-complex-project-smoke.json",
     expectedReportName: "ui-complex-project-smoke",
     expectedTaskMode: "complex-project",
+  },
+  "autonomous-reasoning": {
+    file: "latest-ui-autonomous-reasoning-smoke.json",
+    expectedReportName: "ui-autonomous-reasoning-smoke",
+    expectedTaskMode: "autonomous-reasoning",
+  },
+  "agentic-step-flow": {
+    file: "latest-ui-agentic-step-flow-smoke.json",
+    expectedReportName: "ui-agentic-step-flow-smoke",
+    expectedTaskMode: "agentic-step-flow",
   },
   "repo-file-edit": {
     file: "latest-ui-repo-file-edit-smoke.json",
@@ -187,6 +197,24 @@ const taskScenarioCatalog = {
     expectedEvidence: ["sources-json", "analyzer-test-passed", "cli-output-verified", "report-md", "index-html"],
     reportFile: perTaskReports["complex-project"],
   },
+  "autonomous-reasoning": {
+    taskMode: "autonomous-reasoning",
+    workType: "model-led-autonomous-project",
+    profileCoverage: ["agentic", "extended", "all"],
+    requiresWeb: true,
+    mutatesRepoFixture: false,
+    expectedEvidence: ["sources-json", "node-test-passed", "cli-output-verified", "chinese-report-html", "visible-progress", "task-tool-output"],
+    reportFile: perTaskReports["autonomous-reasoning"],
+  },
+  "agentic-step-flow": {
+    taskMode: "agentic-step-flow",
+    workType: "visible-staged-tool-loop",
+    profileCoverage: ["agentic", "extended", "all"],
+    requiresWeb: false,
+    mutatesRepoFixture: false,
+    expectedEvidence: ["phase-1-visible", "phase-2-visible", "index-html", "readme-md", "done-marker", "marker-tool-output"],
+    reportFile: perTaskReports["agentic-step-flow"],
+  },
   "repo-file-edit": {
     taskMode: "repo-file-edit",
     workType: "single-file-repo-test-fix",
@@ -213,6 +241,8 @@ function timeoutForTask(taskMode) {
   if (taskMode === "repo-file-edit") return 240_000;
   if (taskMode === "multi-turn-project") return 240_000;
   if (taskMode === "complex-project") return 240_000;
+  if (taskMode === "autonomous-reasoning") return 300_000;
+  if (taskMode === "agentic-step-flow") return 300_000;
   if (taskMode === "local-project" || taskMode === "coding-project" || taskMode === "report-site" || taskMode === "web-search") return 180_000;
   return 120_000;
 }

@@ -951,7 +951,7 @@ function Test-SyncReadinessEvidence {
 }
 
 $AllowedAntigravityModelDiscoverySources = @("antigravity-desktop-catalog", "antigravity-cli-catalog", "antigravity-entitlement-catalog")
-$RequiredAgenticDesktopTaskSuiteTasks = @("coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit")
+$RequiredAgenticDesktopTaskSuiteTasks = @("coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow", "repo-multi-file-edit")
 
 function Test-RefreshFeaturesSummarySupportEvidence {
     param($RefreshFeaturesSummary)

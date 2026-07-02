@@ -135,7 +135,7 @@ const runtimeSyncFiles = [
 ];
 
 const allowedAntiCodexPatchScope = ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"];
-const requiredAgenticDesktopTaskSuiteTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
+const requiredAgenticDesktopTaskSuiteTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow", "repo-multi-file-edit"];
 
 const gateDefinitions = [
   { id: "fastOverallNoTraffic", group: "short", file: "latest-installed-overall-fast.json", requiredForShort: true, requiredForRelease: true, requireFastNoTraffic: true, requireInstalledOverallSemantics: true, expectedFast: true, expectedReportName: "installed-overall-fast", expectedCoverageKind: "installed-fast-no-traffic" },
@@ -869,6 +869,8 @@ function summarizeGate(definition) {
         "multi-turn-project",
         "report-site",
         "complex-project",
+        "autonomous-reasoning",
+        "agentic-step-flow",
         "repo-multi-file-edit",
       ];
       const taskModes = Array.isArray(report.requiredLongTaskModes) ? report.requiredLongTaskModes.map((item) => String(item || "")) : [];
@@ -1118,7 +1120,7 @@ function summarizeGate(definition) {
       for (const groupId of ["conversation", "research", "projectCreation", "codingAndRepoEditing", "multiTurnAgentic", "toolUse"]) {
         if (!parityGroupIds.includes(groupId)) semanticFailures.push(`native_codex_parity_task_matrix_${groupId}_group_missing`);
       }
-      for (const taskMode of ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "report-site", "complex-project", "repo-file-edit", "repo-multi-file-edit"]) {
+      for (const taskMode of ["exact-marker", "free-chat", "web-search", "local-project", "coding-project", "multi-turn-project", "report-site", "complex-project", "autonomous-reasoning", "agentic-step-flow", "repo-file-edit", "repo-multi-file-edit"]) {
         if (!taskModes.includes(taskMode)) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_task_missing`);
       }
       for (const toolMode of ["tool-loop", "mcp-tool-loop", "custom-tool-loop"]) {
@@ -1176,11 +1178,11 @@ function summarizeGate(definition) {
         if (Array.isArray(profile.missingArtifactProofTasks) && profile.missingArtifactProofTasks.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_artifact_profile_missing_tasks`);
         if (typeof profile.refreshCommand !== "string" || !profile.refreshCommand.includes("test-anticodex-desktop-task-suite.mjs")) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_refresh_command_missing`);
       }
-      if (taskModes.length < 9) semanticFailures.push("real_task_coverage_roadmap_task_modes_missing");
+      if (taskModes.length < 12) semanticFailures.push("real_task_coverage_roadmap_task_modes_missing");
       for (const profileName of ["core", "agentic"]) {
         if (!completeProfiles.includes(profileName)) semanticFailures.push(`real_task_coverage_roadmap_${profileName}_not_complete`);
       }
-      if (taskArtifactProofs.length < 5) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
+      if (taskArtifactProofs.length < 9) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
       if (!Array.isArray(report.missingArtifactProofTasks)) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
       if (!hasMissingArtifactProofTaskCount) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
       if (Number(report.missingArtifactProofTaskCount || 0) !== 0) semanticFailures.push("real_task_coverage_roadmap_artifact_proof_missing");
@@ -1191,7 +1193,7 @@ function summarizeGate(definition) {
         if (Number(proof?.artifactProofCount || 0) < 1) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_count`);
         if (missingKeys.length > 0) semanticFailures.push(`real_task_coverage_roadmap_${taskMode}_artifact_missing_keys`);
       }
-      if (taskResultProofs.length < 9) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
+      if (taskResultProofs.length < 12) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
       if (!Array.isArray(report.missingResultProofTasks)) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
       if (!hasMissingResultProofTaskCount) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
       if (Number(report.missingResultProofTaskCount || 0) !== 0) semanticFailures.push("real_task_coverage_roadmap_result_proof_missing");
