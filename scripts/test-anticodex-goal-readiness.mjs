@@ -61,6 +61,7 @@ const accountIsolation = readReport("latest-antigravity-account-isolation-status
 const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
 const secondAccountReadinessSummaryReport = readReport("latest-second-account-readiness-summary.json");
 const releaseGates = readReport("latest-release-gates.json");
+const workerMcpServerProbeReport = readReport("latest-worker-mcp-server-probe.json");
 const workerMcpTaskSmokeReport = readReport("latest-worker-mcp-task-smoke.json");
 
 const sync = syncReadiness.report || {};
@@ -87,6 +88,7 @@ const workerToolCountByServer = Object.fromEntries(
   }),
 );
 const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
+const workerServerProbe = workerMcpServerProbeReport.report || {};
 const workerTaskSmoke = workerMcpTaskSmokeReport.report || {};
 const workerTaskSmokeResults = Array.isArray(workerTaskSmoke.results) ? workerTaskSmoke.results : [];
 const workerTaskSmokePassedWorkers = workerTaskSmokeResults
@@ -103,6 +105,16 @@ const workerMcp = {
   toolCountByServer: workerToolCountByServer,
   incompleteToolCountServers: incompleteWorkerToolCountServers,
   allRequiredPassed: missingWorkerMcpServers.length === 0,
+  serverProbeReportPresent: workerMcpServerProbeReport.present,
+  serverProbeReportOk: workerServerProbe.ok === true,
+  directProbePassedServerCount: Number(workerServerProbe.passedServerCount || 0),
+  directProbeMissingServers: Array.isArray(workerServerProbe.missingServers) ? workerServerProbe.missingServers.map(String).filter(Boolean) : [],
+  directProbeMissingStartToolServers: Array.isArray(workerServerProbe.missingStartToolServers) ? workerServerProbe.missingStartToolServers.map(String).filter(Boolean) : [],
+  directProbeMissingWaitToolServers: Array.isArray(workerServerProbe.missingWaitToolServers) ? workerServerProbe.missingWaitToolServers.map(String).filter(Boolean) : [],
+  codexSessionTransportStatus: String(workerServerProbe.codexSessionTransportStatus || "unknown"),
+  currentChannelTransportProven: workerServerProbe.codexSessionTransportStatus === "verified-by-current-channel",
+  operatorRecoveryAction: String(workerServerProbe.operatorRecoveryAction || ""),
+  postReloadVerification: String(workerServerProbe.postReloadVerification || ""),
   taskSmokeReportPresent: workerMcpTaskSmokeReport.present,
   taskSmokeReportOk: workerTaskSmoke.ok === true,
   taskSmokeUsedRealTraffic: workerTaskSmoke.usedRealTraffic === true,

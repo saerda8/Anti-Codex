@@ -12973,6 +12973,13 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /passedServerCount/);
   assert.match(goalReadiness, /toolCountByServer/);
   assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
+  assert.match(goalReadiness, /serverProbeReportPresent/);
+  assert.match(goalReadiness, /directProbePassedServerCount/);
+  assert.match(goalReadiness, /directProbeMissingWaitToolServers/);
+  assert.match(goalReadiness, /codexSessionTransportStatus/);
+  assert.match(goalReadiness, /currentChannelTransportProven/);
+  assert.match(goalReadiness, /operatorRecoveryAction/);
+  assert.match(goalReadiness, /postReloadVerification/);
   assert.match(goalReadiness, /taskSmokeReportOk/);
   assert.match(goalReadiness, /minTaskSmokePassedWorkers = 4/);
   assert.match(goalReadiness, /taskSmokePassedWorkerCount/);
