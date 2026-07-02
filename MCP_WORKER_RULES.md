@@ -92,6 +92,13 @@ After every failure, before another dispatch:
 - Cause classification: stale/dead Codex MCP session transport, not broken worker scripts/config.
 - Rule change: before declaring worker MCP unavailable, run/read the direct no-traffic probe and distinguish local server health from current-channel tool exposure. Do not start implementation jobs from a short-lived standalone MCP client unless the client stays alive through wait/get; closing stdin cancels async jobs.
 
+### 2026-07-02 - Current-channel worker namespace split from node_repl
+
+- Task: recheck whether MCP as a whole is broken or only worker namespaces are affected.
+- Result: tool discovery exposed worker namespaces, but read-only `kilo_get_job` for completed job `klw_mr34n5js_y7gshe` still returned `Transport closed`. In the same channel, `node_repl` returned a normal JSON response, and the direct SDK probe again listed all seven worker servers with tools.
+- Cause classification: current-channel worker MCP transport failure; not all MCP tooling is broken, and not local worker server/config failure.
+- Rule change: if a generic MCP such as `node_repl` works while worker namespaces return `Transport closed`, keep using direct SDK worker scripts for evidence and do not dispatch current-channel worker jobs until a read-only worker status call succeeds.
+
 ### 2026-06-20 - Antigravity empty failure
 
 - Job: `ag-66bdafcf-2ffc-41f9-b638-902f5f2c6469`
