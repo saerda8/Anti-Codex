@@ -58,6 +58,15 @@ function Remove-Failure {
     while ($failures.Remove($Message)) {}
 }
 
+function Remove-FailuresMatching {
+    param([string]$Pattern)
+    for ($i = $failures.Count - 1; $i -ge 0; $i--) {
+        if ([string]$failures[$i] -match $Pattern) {
+            $failures.RemoveAt($i)
+        }
+    }
+}
+
 function Test-SyncReadinessHostSyncOnly {
     param($Report)
     if (-not $Report) { return $false }
@@ -619,6 +628,50 @@ function Invoke-JsonScript {
             tail = @($lines | Select-Object -Last 20)
         }
     }
+}
+
+function Test-TransientUiStateConnectionReset {
+    param($Result)
+    if (-not $Result) { return $false }
+    if ((Has-Property $Result "ok") -and $Result.ok -eq $true) { return $false }
+    try {
+        $text = $Result | ConvertTo-Json -Compress -Depth 8
+    } catch {
+        $text = [string]$Result
+    }
+    return [string]$text -match "(?i)(ECONNRESET|connection reset)"
+}
+
+function Invoke-UiStateVerificationWithResetRetry {
+    param(
+        [string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    $first = Invoke-JsonScript "UI state verification" $ScriptPath $Arguments
+    if (-not (Test-TransientUiStateConnectionReset $first)) {
+        return $first
+    }
+
+    Remove-FailuresMatching "^UI state verification failed with exit code "
+    Remove-FailuresMatching "^UI state verification reported ok=false$"
+    Remove-FailuresMatching "^UI state verification did not emit a JSON result$"
+    Remove-FailuresMatching "^UI state verification emitted invalid JSON: "
+    Start-Sleep -Milliseconds 1200
+
+    $second = Invoke-JsonScript "UI state verification" $ScriptPath $Arguments
+    if ($second) {
+        $firstFailureText = ""
+        if (Has-Property $first "failures") {
+            $firstFailureText = (@($first.failures | Where-Object { $_ }) -join "; ")
+        } elseif (Has-Property $first "tail") {
+            $firstFailureText = (@($first.tail | Where-Object { $_ }) -join "; ")
+        }
+        $second | Add-Member -NotePropertyName retriedAfterTransientConnectionReset -NotePropertyValue $true -Force
+        $second | Add-Member -NotePropertyName firstAttemptDurationMs -NotePropertyValue $(if (Has-Property $first "durationMs") { $first.durationMs } else { 0 }) -Force
+        $second | Add-Member -NotePropertyName firstAttemptFailure -NotePropertyValue $firstFailureText -Force
+    }
+    return $second
 }
 
 function Invoke-NodeJsonScript {
@@ -1319,7 +1372,7 @@ $checks.uiState = if ($SkipUiStateProbe) {
     Add-Failure "Manager/UI verifier lock is already held; rerun installed overall serially"
     New-ManagerVerifierBusyCheck $managerVerifierLockStatus "test-anticodex-ui-state.ps1"
 } else {
-    Invoke-JsonScript "UI state verification" (Join-Path $scriptsRoot "test-anticodex-ui-state.ps1") $uiStateArgs
+    Invoke-UiStateVerificationWithResetRetry (Join-Path $scriptsRoot "test-anticodex-ui-state.ps1") $uiStateArgs
 }
 $checks.uiStateMode = if ($healthMode -eq "third-party") {
     [pscustomobject]@{

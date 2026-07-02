@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel MIMO read-only still transport-closed
+
+- Task: recheck completed MIMO project-smoke job `dsw_mr3wn5f0_kiniqh` through the current Codex channel with read-only `mimo_get_job` before considering any current-channel worker dispatch.
+- Result: current-channel `mimo_get_job` failed immediately with `Transport closed`; no diff, no stdout, and no reusable job data was returned. This matches the current-channel Kilo transport failures while direct worker MCP server/project smokes remain green.
+- Cause classification: current Codex-channel worker MCP transport remains stale/dead for worker namespaces; this is not evidence that the MIMO CLI worker or direct worker MCP server is unhealthy.
+- Rule change: after reload/new-channel recovery, require a read-only current-channel worker status/get call to succeed before dispatching any implementation worker from that channel. Until then, use direct worker smokes/probes only as evidence and do not rely on current-channel worker tools for live edits.
+
 ### 2026-07-03 - Five-worker project smoke exact-file refresh
 
 - Task: rerun the direct MCP `project` smoke for MIMO, DeepSeek, MiMoCode, Kilo, and OpenCode to prove real multi-file Node CLI/test project landing without Antigravity worker.
