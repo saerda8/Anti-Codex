@@ -175,6 +175,11 @@ $readyForOperatorLogin = ($status -and $status.safeToAskUserForSecondAccountLogi
 $releaseAcceptableAccountProof = ($status -and $status.releaseAcceptableAccountProof -eq $true)
 $goalComplete = ($goal -and $goal.goalComplete -eq $true)
 $releaseReady = ($release -and $release.releaseReady -eq $true)
+$readyToRequestSecondAccountLoginApproval = ($sequence -and $sequence.readyToRequestSecondAccountLoginApproval -eq $true)
+$readyToRequestPostLoginProofApproval = ($sequence -and $sequence.readyToRequestPostLoginProofApproval -eq $true)
+$readyToRequestUserApproval = ($sequence -and $sequence.readyToRequestUserApproval -eq $true)
+$approvedSequenceOperatorNextAction = if ($sequence -and ($sequence.PSObject.Properties.Name -contains "operatorNextAction")) { [string]$sequence.operatorNextAction } else { "" }
+$approvedSequenceAccountReadinessBlockingReason = if ($sequence -and ($sequence.PSObject.Properties.Name -contains "accountReadinessBlockingReason")) { [string]$sequence.accountReadinessBlockingReason } else { "" }
 
 $nextOperatorAction = if (-not $targetUserExists) {
     "create_or_verify_target_windows_user_then_rerun_summary"
@@ -217,6 +222,12 @@ $payload = [ordered]@{
     releaseAcceptableAccountProof = [bool]$releaseAcceptableAccountProof
     goalComplete = [bool]$goalComplete
     releaseReady = [bool]$releaseReady
+    readyToRequestUserApproval = [bool]$readyToRequestUserApproval
+    readyToRequestSecondAccountLoginApproval = [bool]$readyToRequestSecondAccountLoginApproval
+    readyToRequestPostLoginProofApproval = [bool]$readyToRequestPostLoginProofApproval
+    approvedSequenceOperatorNextAction = $approvedSequenceOperatorNextAction
+    approvedSequenceNextAction = $approvedSequenceOperatorNextAction
+    approvedSequenceAccountReadinessBlockingReason = $approvedSequenceAccountReadinessBlockingReason
     completionState = if ($status) { [string]$status.completionState } else { "status_unavailable" }
     readinessBlockingReason = if ($status) { [string]$status.readinessBlockingReason } else { "" }
     operatorBlockingStage = if ($status) { [string]$status.operatorBlockingStage } else { "status_unavailable" }
