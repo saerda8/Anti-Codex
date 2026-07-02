@@ -18,6 +18,13 @@ $RequiredWorkerMcpServers = @(
     "opencode-worker"
 )
 $RequiredWorkerMcpTaskSmokePassedWorkers = 5
+$RequiredWorkerMcpTaskSmokeWorkers = @(
+    "deepseek-code-worker",
+    "kilo-worker",
+    "mimo-claude-coworker",
+    "mimocode-worker",
+    "opencode-worker"
+)
 
 if (-not $BaseUrl) {
     if (-not $VerifyReportsSummary) {
@@ -966,6 +973,11 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.workerMcpTaskSmokeAntigravityExcluded -ne $true) { Add-Failure "goal-readiness summary worker MCP task smoke did not exclude Antigravity" }
     if ([int]$evidence.workerMcpTaskSmokePassedWorkerCount -lt $RequiredWorkerMcpTaskSmokePassedWorkers) { Add-Failure "goal-readiness summary worker MCP task smoke passed worker count too low" }
     if (@(As-FlatArray $evidence.workerMcpTaskSmokePassedWorkers).Count -lt $RequiredWorkerMcpTaskSmokePassedWorkers) { Add-Failure "goal-readiness summary missing worker MCP task smoke passed workers" }
+    $goalPassedWorkerNames = @(As-FlatArray $evidence.workerMcpTaskSmokePassedWorkers | ForEach-Object { [string]$_ })
+    foreach ($requiredWorker in $RequiredWorkerMcpTaskSmokeWorkers) {
+        if ($goalPassedWorkerNames -notcontains $requiredWorker) { Add-Failure "goal-readiness summary missing required worker MCP task smoke worker $requiredWorker" }
+    }
+    if (@(As-FlatArray $evidence.workerMcpTaskSmokeMissingRequiredWorkers).Count -ne 0) { Add-Failure "goal-readiness summary reports missing required worker MCP task smoke workers" }
     if (@(As-FlatArray $evidence.workerMcpTaskSmokeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary has failed worker MCP task smoke workers" }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
@@ -1708,6 +1720,10 @@ function Test-WorkerMcpTaskSmokeSummaryEvidence {
     if ([int]$evidence.passedWorkerCount -lt $RequiredWorkerMcpTaskSmokePassedWorkers) { Add-Failure "worker-mcp-task-smoke summary passed worker count too low" }
     if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "worker-mcp-task-smoke summary has failed workers" }
     if ($results.Count -lt 1) { Add-Failure "worker-mcp-task-smoke summary missing results" }
+    $passedWorkerNames = @($results | Where-Object { $_.ok -eq $true } | ForEach-Object { [string]$_.worker })
+    foreach ($requiredWorker in $RequiredWorkerMcpTaskSmokeWorkers) {
+        if ($passedWorkerNames -notcontains $requiredWorker) { Add-Failure "worker-mcp-task-smoke summary missing required worker $requiredWorker" }
+    }
     foreach ($entry in $results) {
         if ($entry.worker -eq "antigravity-code-worker") { Add-Failure "worker-mcp-task-smoke unexpectedly used Antigravity worker" }
         if ($entry.ok -ne $true) { Add-Failure "worker-mcp-task-smoke result not ok for $($entry.worker)" }

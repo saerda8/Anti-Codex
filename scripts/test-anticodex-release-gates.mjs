@@ -1280,6 +1280,7 @@ function summarizeGate(definition) {
       if (worker.taskSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_real_traffic_missing");
       if (worker.taskSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_antigravity_not_excluded");
       if (Number(worker.taskSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_passed_count");
+      if (Array.isArray(worker.taskSmokeMissingRequiredWorkers) && worker.taskSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_missing_required_workers");
       if (Array.isArray(worker.taskSmokeFailedWorkers) && worker.taskSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_failed_workers");
       if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {

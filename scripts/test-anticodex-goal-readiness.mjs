@@ -23,6 +23,13 @@ const requiredWorkerMcpServers = [
   "mimocode-worker",
   "opencode-worker",
 ];
+const requiredWorkerMcpTaskSmokeWorkers = [
+  "deepseek-code-worker",
+  "kilo-worker",
+  "mimo-claude-coworker",
+  "mimocode-worker",
+  "opencode-worker",
+];
 const minTaskSmokePassedWorkers = 5;
 const requiredAgenticTasks = ["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"];
 
@@ -95,6 +102,8 @@ const workerTaskSmokePassedWorkers = workerTaskSmokeResults
   .filter((entry) => entry?.ok === true && entry?.workspaceVerification?.ok === true && String(entry?.worker || "") !== "antigravity-code-worker")
   .map((entry) => String(entry.worker || ""))
   .filter(Boolean);
+const workerTaskSmokePassedWorkerSet = new Set(workerTaskSmokePassedWorkers);
+const workerTaskSmokeMissingRequiredWorkers = requiredWorkerMcpTaskSmokeWorkers.filter((worker) => !workerTaskSmokePassedWorkerSet.has(worker));
 const workerMcp = {
   reportPresent: mcpSkills.present,
   reportOk: mcpSkills.report?.ok === true,
@@ -120,8 +129,10 @@ const workerMcp = {
   taskSmokeUsedRealTraffic: workerTaskSmoke.usedRealTraffic === true,
   taskSmokeAntigravityExcluded: workerTaskSmoke.antigravityWorkerExcluded === true,
   taskSmokeRequiredPassedWorkerCount: minTaskSmokePassedWorkers,
+  taskSmokeRequiredWorkers: requiredWorkerMcpTaskSmokeWorkers,
   taskSmokePassedWorkerCount: workerTaskSmokePassedWorkers.length,
   taskSmokePassedWorkers: workerTaskSmokePassedWorkers,
+  taskSmokeMissingRequiredWorkers: workerTaskSmokeMissingRequiredWorkers,
   taskSmokeFailedWorkers: Array.isArray(workerTaskSmoke.failedWorkers) ? workerTaskSmoke.failedWorkers.map(String).filter(Boolean) : [],
 };
 
@@ -406,6 +417,7 @@ const proven = {
     && workerMcp.taskSmokeUsedRealTraffic
     && workerMcp.taskSmokeAntigravityExcluded
     && workerMcp.taskSmokePassedWorkerCount >= minTaskSmokePassedWorkers
+    && workerMcp.taskSmokeMissingRequiredWorkers.length === 0
     && workerMcp.taskSmokeFailedWorkers.length === 0,
   desktopAgenticTasks: desktopAgenticTasks.reportOk
     && desktopAgenticTasks.suiteProfile === "agentic"
@@ -516,6 +528,7 @@ if (!workerMcp.taskSmokeUsedRealTraffic) blockers.push("worker_mcp_task_smoke_re
 if (!workerMcp.taskSmokeAntigravityExcluded) blockers.push("worker_mcp_task_smoke_antigravity_not_excluded");
 if (workerMcp.taskSmokePassedWorkerCount < 1) blockers.push("worker_mcp_task_smoke_no_passed_worker");
 if (workerMcp.taskSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_task_smoke_insufficient_worker_diversity");
+if (workerMcp.taskSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_task_smoke_missing_required_worker");
 if (workerMcp.taskSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_task_smoke_failed_workers");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
