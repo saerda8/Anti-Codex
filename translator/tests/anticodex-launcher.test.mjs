@@ -12640,6 +12640,9 @@ test("Anti-Codex completes verified desktop artifact tool loops without reopenin
   assert.match(server, /Anti-Codex artifact marker verification/);
   assert.match(server, /requirement\.complexProject[\s\S]*?complexProjectArtifactSafetyPowerShell/);
   assert.match(server, /if \(!\(requirement\.reportSite \|\| requirement\.complexProject\)\) return null/);
+  assert.match(server, /requirement\.agenticStepFlow[\s\S]*?Anti-Codex agentic step-flow verified[\s\S]*?Verified staged files and marker-scoped tool output/);
+  assert.match(server, /function appendAgenticStepFlowArtifactRewrite/);
+  assert.match(server, /Anti-Codex agentic step-flow exact artifact normalization/);
   assert.match(server, /Anti-Codex report-site tool example\|Creates report\\.md/);
   assert.match(server, /这条命令一次生成中文报告站点/);
   assert.match(server, /这条命令一次生成分析项目、来源数据和离线页面/);

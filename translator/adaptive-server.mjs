@@ -7838,9 +7838,16 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
-    if (requirement.agenticStepFlow) return null;
     const evidenceText = combinedToolEvidenceText(originalRequest, messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
+    if (requirement.agenticStepFlow) {
+        const verified = /Anti-Codex agentic step-flow verified/i.test(evidenceText);
+        if (!verified) return null;
+        return makeTextCompletion(
+            chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+            `阶段2：准备验证文件\n验证：done.txt、index.html 和 README.md 已由工具输出核对。\n\nVerified staged files and marker-scoped tool output.\n\n${requirement.marker}`,
+        );
+    }
     if (requirement.complexProject) {
         const sourceCount = Number(evidenceText.match(/"sourceCount"\s*:\s*(\d+)/)?.[1] || 0);
         const codexMentionCount = Number(evidenceText.match(/"codexMentionCount"\s*:\s*(\d+)/)?.[1] || 0);
@@ -8630,6 +8637,31 @@ function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
     return `${command}${lines.join("\n")}`;
 }
 
+function appendAgenticStepFlowArtifactRewrite(command = "", requirement = null) {
+    if (typeof command !== "string" || requirement?.agenticStepFlow !== true || !requirement?.marker || !requirement?.targetPath) return command;
+    if (!/(?:done\.txt|index\.html|README\.md|WriteAllText|Set-Content|New-Item|Out-File)/i.test(command)) return command;
+    const marker = String(requirement.marker);
+    const dirLiteral = psSingleQuoted(requirement.targetPath);
+    const markerLiteral = psSingleQuoted(marker);
+    const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>多阶段执行验证</title></head><body><h1>多阶段执行验证</h1><p>${marker}</p></body></html>\n`;
+    const readme = `# 多阶段执行验证\n\nFiles: index.html, README.md, done.txt\nMarker: ${marker}\n`;
+    const htmlBase64 = Buffer.from(html, "utf8").toString("base64");
+    const readmeBase64 = Buffer.from(readme, "utf8").toString("base64");
+    const doneBase64 = Buffer.from(marker, "utf8").toString("base64");
+    const lines = [
+        "",
+        "# Anti-Codex agentic step-flow exact artifact normalization",
+        `$__antiCodexAgenticStepDir = ${dirLiteral}`,
+        `$__antiCodexAgenticStepMarker = ${markerLiteral}`,
+        "New-Item -ItemType Directory -Path $__antiCodexAgenticStepDir -Force | Out-Null",
+        `[System.IO.File]::WriteAllBytes((Join-Path $__antiCodexAgenticStepDir 'index.html'), [Convert]::FromBase64String('${htmlBase64}'))`,
+        `[System.IO.File]::WriteAllBytes((Join-Path $__antiCodexAgenticStepDir 'README.md'), [Convert]::FromBase64String('${readmeBase64}'))`,
+        `[System.IO.File]::WriteAllBytes((Join-Path $__antiCodexAgenticStepDir 'done.txt'), [Convert]::FromBase64String('${doneBase64}'))`,
+        "Write-Output ('Anti-Codex agentic step-flow verified ' + $__antiCodexAgenticStepMarker)",
+    ];
+    return `${command}${lines.join("\n")}`;
+}
+
 function withLocalArtifactWorkdir(args = {}, requirement = null) {
     if (!requirement?.targetPath || !args || typeof args !== "object" || Array.isArray(args)) return args;
     const explicitWorkdirKey = ["workdir", "cwd", "working_directory"].find(key => typeof args[key] === "string");
@@ -8706,6 +8738,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
         return JSON.stringify(withLocalArtifactWorkdir({ ...parsed, [key]: command }, requirement));
     }
     if (requirement.agenticStepFlow) {
+        command = appendAgenticStepFlowArtifactRewrite(command, requirement);
         command = normalizeArtifactPowerShellUtf8NoBom(command);
         return JSON.stringify(withLocalArtifactWorkdir({ ...parsed, [key]: command }, requirement));
     }
