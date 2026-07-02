@@ -7471,10 +7471,13 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /external-owner-alive/);
   assert.match(overall, /Manager\/UI verifier lock is already held; rerun installed overall serially/);
   assert.match(overall, /manager-verifier-lock-busy/);
+  const uiStateBranch = overall.slice(overall.indexOf("$checks.uiState = if ($SkipUiStateProbe)"));
   assert.ok(
-    overall.indexOf("$managerVerifierLockStatus = Get-ManagerButtonVerifierLockStatus") < overall.indexOf('Invoke-JsonScript "UI state verification"'),
+    uiStateBranch.indexOf("$managerVerifierLockStatus = Get-ManagerButtonVerifierLockStatus") < uiStateBranch.indexOf("Invoke-UiStateVerificationWithResetRetry"),
     "installed overall must check the Manager/UI verifier lock before launching UI-state",
   );
+  assert.match(overall, /function Invoke-UiStateVerificationWithResetRetry/);
+  assert.match(overall, /Test-TransientUiStateConnectionReset/);
   assert.match(overall, /Node script timed out after \$ProcessTimeoutSec seconds/);
   assert.doesNotMatch(overall, /"--action", "mcpSkills", "--timeout-ms", "\$managerButtonTimeoutMs", "--compact", "1"\) \$managerButtonProcessTimeoutSec/);
   assert.doesNotMatch(overall, /--action", "pluginCapabilities"/);
@@ -8037,12 +8040,12 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /in-app manager still shows endpoint fetch failure/);
   assert.match(uiScript, /mojibakePattern/);
   assert.match(uiScript, /mojibakeMatch/);
-  assert.match(uiScript, /containsLikelyChineseMojibake/);
+  assert.match(uiScript, /mojibakeMatch/);
   assert.doesNotMatch(uiScript, /銆\?/);
-  assert.match(uiScript, /銆\[\^\\s\]\{0,3\}\\\?/);
-  assert.match(uiScript, /reportHasMojibake/);
-  assert.match(uiScript, /htmlHasMojibake/);
-  assert.match(uiScript, /contains likely Chinese mojibake/);
+  assert.doesNotMatch(uiScript, /銆\[\^\\s\]\{0,3\}\\\?/);
+  assert.match(uiScript, /managerHtmlMojibake/);
+  assert.match(uiScript, /overlayMojibake/);
+  assert.match(uiScript, /pageMojibake/);
   assert.match(uiScript, /in-app manager rendered mojibake text/);
   assert.match(uiScript, /main page rendered mojibake text/);
   assert.match(uiScript, /manager page source contains mojibake text/);
@@ -8059,8 +8062,6 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /releaseManagerButtonLock/);
   assert.match(uiScript, /isLockOwnerAlive/);
   assert.match(uiScript, /process\.kill\(pid, 0\)/);
-  assert.match(uiScript, /taskMode === "autonomous-reasoning" \? 80 : 0/);
-  assert.match(uiScript, /inputItems > 80/);
   assert.match(uiScript, /actionCount/);
   assert.match(uiScript, /managerPage/);
   assert.match(uiScript, /getText/);
@@ -12322,7 +12323,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /emptyPrewarmRetry/);
   assert.match(verifier, /retryModelSelection/);
   assert.match(verifier, /retryRealSubmit/);
-  assert.match(verifier, /responses request routed through non-required model/);
+  assert.match(verifier, /desktop task did not route through required model/);
   assert.match(verifier, /desktop UI did not select required model/);
   assert.match(verifier, /usedRealTraffic:\s*false/);
   assert.match(verifier, /modelSelectionEvidence/);
@@ -12463,8 +12464,9 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.doesNotMatch(verifier, /buttons\.some\(\(button\) => \/正在思考\|Thinking\/i\.test\(button\.innerText \|\| ''\)\)/);
   assert.match(verifier, /desktop tool result did not settle into response history before the follow-up/);
   assert.match(verifier, /follow-up was not submitted because turn1 tool output was not settled/);
+  assert.match(verifier, /inputItems > 80/);
   assert.match(verifier, /taskMode === "complex-project"/);
-  assert.match(verifier, /const complexProjectRequiresModelLed = taskMode === "complex-project";/);
+  assert.match(verifier, /const complexProjectRequiresModelLed = taskMode === "complex-project" \|\| taskMode === "autonomous-reasoning";/);
   assert.match(verifier, /taskMode === "repo-file-edit"/);
   assert.match(verifier, /Do not start with Get-ChildItem/);
   assert.match(verifier, /Your first tool action must modify/);
@@ -13047,6 +13049,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /currentChannelWorkerTransportReportOk/);
   assert.match(goalReadiness, /currentChannelSplitObserved/);
   assert.match(goalReadiness, /currentChannelWorkerDispatchBlocked/);
+  assert.match(goalReadiness, /currentChannelWorkerDispatchUsable/);
+  assert.match(goalReadiness, /current_channel_worker_transport_not_recovered/);
   assert.match(goalReadiness, /currentChannelReadOnlyProbeRequiredBeforeDispatch/);
   assert.match(goalReadiness, /currentChannelOperatorRecoveryAction/);
   assert.match(goalReadiness, /currentChannelPostReloadVerification/);
@@ -14047,7 +14051,7 @@ test("agentic release gates require visible staged tool loop proof", () => {
   assert.match(capabilityMatrix, /modelLedExecution/);
   assert.match(capabilityMatrix, /artifactGuardUsed/);
   assert.match(releaseGates, /visible_staged_tool_loop/);
-  assert.match(goalReadiness, /okCapabilityCount >= 6/);
+  assert.match(goalReadiness, /okCapabilityCount >= agenticCapabilityMatrix\.requiredCapabilities\.length/);
 });
 
 test("real third-party provider verifier is explicit isolated and secret-safe", () => {
@@ -14490,9 +14494,10 @@ test("task plan current status distinguishes release readiness from second-accou
 
   assert.match(currentStatus, /shortReady:true/);
   assert.match(currentStatus, /releaseReady:true/);
-  assert.match(currentStatus, /active goal still lacks separate Antigravity account proof|second Antigravity account proof still requires/);
+  assert.match(currentStatus, /current_channel_worker_transport_not_recovered/);
+  assert.match(currentStatus, /active goal still lacks separate Antigravity account proof|second Antigravity account proof still requires|second_antigravity_account_real_proof_missing/);
   assert.match(currentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
-  assert.match(currentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782942452664/);
+  assert.match(currentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782997540226|UI_COMPLEX_PROJECT_SMOKE_1783010032086|UI_AUTONOMOUS_REASONING_SMOKE_1783022208952/);
   assert.match(currentStatus, /quota-exhausted|quota exhaustion/);
   assert.match(currentStatus, /claude-sonnet-4-6/);
   assert.match(currentStatus, /compactionResume/);
@@ -14501,9 +14506,10 @@ test("task plan current status distinguishes release readiness from second-accou
   assert.match(currentStatus, /releaseAcceptableAccountProof:false/);
   assert.match(handoffCurrentStatus, /shortReady:true/);
   assert.match(handoffCurrentStatus, /releaseReady:true/);
-  assert.match(handoffCurrentStatus, /Full active-goal completion is still blocked|active goal still needs separate Antigravity account proof/);
+  assert.match(handoffCurrentStatus, /current_channel_worker_transport_not_recovered/);
+  assert.match(handoffCurrentStatus, /Full active-goal completion is still blocked|active goal still needs separate Antigravity account proof|second_antigravity_account_real_proof_missing|second Antigravity account proof/);
   assert.match(handoffCurrentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
-  assert.match(handoffCurrentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782942452664/);
+  assert.match(handoffCurrentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782997540226|UI_COMPLEX_PROJECT_SMOKE_1783010032086|UI_AUTONOMOUS_REASONING_SMOKE_1783022208952/);
   assert.match(handoffCurrentStatus, /claude-sonnet-4-6/);
   assert.match(handoffCurrentStatus, /separateAccountVerified:false/);
   assert.match(handoffCurrentStatus, /releaseAcceptableAccountProof:false/);

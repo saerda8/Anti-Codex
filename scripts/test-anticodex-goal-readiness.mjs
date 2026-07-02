@@ -156,6 +156,8 @@ const workerMcp = {
   currentChannelSplitObserved: currentChannelWorkerTransport.splitObserved === true,
   currentChannelCheckedAt: String(currentChannelWorkerTransport.checkedAt || ""),
   currentChannelWorkerDispatchBlocked: currentChannelWorkerTransport.currentChannelWorkerDispatchBlocked === true,
+  currentChannelWorkerDispatchUsable: currentChannelWorkerTransport.workerTransportOk === true
+    && currentChannelWorkerTransport.currentChannelWorkerDispatchBlocked !== true,
   currentChannelReadOnlyProbeRequiredBeforeDispatch: currentChannelWorkerTransport.readOnlyProbeRequiredBeforeDispatch === true,
   currentChannelOperatorRecoveryAction: String(currentChannelWorkerTransport.operatorRecoveryAction || ""),
   currentChannelPostReloadVerification: String(currentChannelWorkerTransport.postReloadVerification || ""),
@@ -597,6 +599,7 @@ if (!workerMcp.projectSmokeAntigravityExcluded) blockers.push("worker_mcp_projec
 if (workerMcp.projectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_project_smoke_insufficient_worker_diversity");
 if (workerMcp.projectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_project_smoke_missing_required_worker");
 if (workerMcp.projectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_project_smoke_failed_workers");
+if (!workerMcp.currentChannelWorkerDispatchUsable) blockers.push("current_channel_worker_transport_not_recovered");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
@@ -611,6 +614,7 @@ if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("s
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
 const goalComplete = proven.codexClientCopy
   && proven.workerMcp
+  && workerMcp.currentChannelWorkerDispatchUsable
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
   && proven.realTaskCoverageRoadmap
