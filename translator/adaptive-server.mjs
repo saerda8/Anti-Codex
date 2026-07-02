@@ -8543,8 +8543,11 @@ function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
     const shouldRewriteDone = !requirement.multiTurnProject || /_FIRST\b/.test(requirement.marker);
     if (shouldRewriteDone && /(?:done\.txt|Set-Content|WriteAllText)/i.test(command)) targets.push("done.txt");
     if (requirement.multiTurnProject && !/_FIRST\b/.test(requirement.marker) && /followup\.txt/i.test(command)) targets.push("followup.txt");
+    const shouldRewriteMultiTurnChangelog = requirement.multiTurnProject
+        && !/_FIRST\b/.test(requirement.marker)
+        && /(?:followup\.txt|CHANGELOG\.md|uniqueWords|word-tally\.test\.mjs)/i.test(command);
     const uniqueTargets = Array.from(new Set(targets));
-    if (!uniqueTargets.length) return command;
+    if (!uniqueTargets.length && !shouldRewriteMultiTurnChangelog) return command;
     const markerLiteral = psSingleQuoted(requirement.marker);
     const pathLiteral = psSingleQuoted(requirement.targetPath);
     const lines = [
@@ -8557,6 +8560,9 @@ function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
     ];
     for (const fileName of uniqueTargets) {
         lines.push(`  [System.IO.File]::WriteAllText((Join-Path $__antiCodexMarkerOnlyDir ${psSingleQuoted(fileName)}), $__antiCodexMarkerOnlyText, $__antiCodexMarkerOnlyUtf8)`);
+    }
+    if (shouldRewriteMultiTurnChangelog) {
+        lines.push(`  [System.IO.File]::WriteAllText((Join-Path $__antiCodexMarkerOnlyDir 'CHANGELOG.md'), ("# Changelog\`r\`n\`r\`n- Added uniqueWords follow-up for " + $__antiCodexMarkerOnlyText + ".\`r\`n"), $__antiCodexMarkerOnlyUtf8)`);
     }
     lines.push("  Write-Output $__antiCodexMarkerOnlyText");
     lines.push("}");

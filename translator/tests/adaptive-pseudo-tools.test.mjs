@@ -5594,6 +5594,8 @@ test("multi-turn marker-only Set-Content writes are normalized without determini
   assert.match(args.command, /\s-NoNewline\b/);
   assert.match(args.command, /exact marker-only write normalization/);
   assert.match(args.command, /WriteAllText\(\(Join-Path \$__antiCodexMarkerOnlyDir 'followup\.txt'\)/);
+  assert.match(args.command, /WriteAllText\(\(Join-Path \$__antiCodexMarkerOnlyDir 'CHANGELOG\.md'\)/);
+  assert.match(args.command, /Added uniqueWords follow-up/);
   assert.doesNotMatch(args.command, /Join-Path \$__antiCodexMarkerOnlyDir 'done\.txt'/);
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
