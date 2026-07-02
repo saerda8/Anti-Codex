@@ -12300,6 +12300,16 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /args\.get\("--model"\)/);
   assert.match(verifier, /args\.get\("--model-label"\)/);
   assert.match(verifier, /function collectRequiredModelFailures/);
+  assert.match(verifier, /function diagnosticsHasRealResponsesSubmitAfter/);
+  assert.match(verifier, /function responsesSubmitModelValues/);
+  assert.match(verifier, /function diagnosticsHasRequiredModelSubmit/);
+  assert.match(verifier, /function waitForRealResponsesSubmitAfter/);
+  assert.match(verifier, /function refillComposerPrompt/);
+  assert.match(verifier, /function selectRequiredModelBeforeRetry/);
+  assert.match(verifier, /emptyPrewarmRetry/);
+  assert.match(verifier, /retryModelSelection/);
+  assert.match(verifier, /retryRealSubmit/);
+  assert.match(verifier, /responses request routed through non-required model/);
   assert.match(verifier, /desktop UI did not select required model/);
   assert.match(verifier, /usedRealTraffic:\s*false/);
   assert.match(verifier, /modelSelectionEvidence/);
@@ -12390,6 +12400,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /function filterReportSiteUiCompletionFailures/);
   assert.match(verifier, /filterReportSiteUiCompletionFailures\(failures, artifactEvidence, answerMarkerCount\)/);
   assert.match(verifier, /function buildComplexProjectRepairPrompt/);
+  assert.match(verifier, /const agenticFailures = collectAgenticResponseHistoryFailures\("complex-project", artifactEvidence, false\)/);
+  assert.match(verifier, /const uiMarkerFailures = failures\.filter\(\(failure\) => \/assistant reply marker was not observed\/i\.test/);
+  assert.match(verifier, /const repairableFailures = Array\.from\(new Set\(\[\.\.\.artifactFailures, \.\.\.agenticFailures, \.\.\.uiMarkerFailures\]\)\)/);
+  assert.match(verifier, /if \(repairableFailures\.length > 0\)/);
   assert.match(verifier, /report-site repair-step/);
   assert.match(verifier, /complex-project repair-step/);
   assert.match(verifier, /sources\.json must be written as UTF-8 without BOM/);

@@ -313,6 +313,19 @@ function installConfigModelOverride() {
     }
   };
   process.once("exit", restore);
+  process.once("SIGINT", () => {
+    restore();
+    process.exit(130);
+  });
+  process.once("SIGTERM", () => {
+    restore();
+    process.exit(143);
+  });
+  process.once("uncaughtException", (error) => {
+    restore();
+    console.error(error?.stack || error?.message || String(error));
+    process.exit(1);
+  });
   configModelOverrideRestore = restore;
   return { restore };
 }
@@ -508,6 +521,71 @@ function desktopRealTrafficObserved(modelRouteEvidence, diagnostics) {
   if (Number(relay?.textDeltaChars || 0) > 0) return true;
   if (Array.isArray(relay?.toolCallNames) && relay.toolCallNames.length > 0) return true;
   return false;
+}
+
+function responsesWebSocketPayloadCount(diagnostics) {
+  return Number(diagnostics?.responsesWebSocket?.clientPayloads || 0);
+}
+
+function diagnosticsHasRealResponsesSubmitAfter(diagnostics, beforePayloadCount = 0) {
+  if (responsesWebSocketPayloadCount(diagnostics) <= beforePayloadCount) return false;
+  const ws = diagnostics?.responsesWebSocket || null;
+  const payload = ws?.lastClientPayload || null;
+  const relay = ws?.lastRelay || null;
+  if (Number(payload?.latestUserChars || 0) > 0) return true;
+  if (Number(payload?.inputItems || 0) > 0) return true;
+  if (Number(relay?.textDeltaChars || 0) > 0) return true;
+  if (Array.isArray(relay?.toolCallNames) && relay.toolCallNames.length > 0) return true;
+  return false;
+}
+
+function responsesSubmitModelValues(diagnostics) {
+  const payload = diagnostics?.responsesWebSocket?.lastClientPayload || null;
+  return [
+    payload?.model,
+    payload?.metadata?.model,
+    payload?.metadata?.selectedModel,
+  ].filter(Boolean).map(String);
+}
+
+function diagnosticsHasRequiredModelSubmit(diagnostics) {
+  const expected = requiredModelNeedles();
+  if (expected.length === 0) return true;
+  return responsesSubmitModelValues(diagnostics).some((value) => modelValueMatches(value, expected));
+}
+
+async function waitForRealResponsesSubmitAfter(url, beforePayloadCount = 0, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      latest = await httpJson(`${url}/anticodex/diagnostics?fast=1`);
+      if (diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
+        const requiredModelMatched = diagnosticsHasRequiredModelSubmit(latest);
+        if (requiredModelMatched) {
+          return {
+            ok: true,
+            diagnostics: latest,
+            lastError: null,
+            requiredModelMatched,
+            observedModels: responsesSubmitModelValues(latest),
+          };
+        }
+        lastError = `responses request routed through non-required model: ${responsesSubmitModelValues(latest).join(", ") || "none"}`;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+  }
+  return {
+    ok: false,
+    diagnostics: latest,
+    lastError,
+    requiredModelMatched: diagnosticsHasRequiredModelSubmit(latest),
+    observedModels: responsesSubmitModelValues(latest),
+  };
 }
 
 async function readModelRoutesEvidence() {
@@ -2653,6 +2731,37 @@ async function pressComposerEnter(ws) {
   await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
 }
 
+async function refillComposerPrompt(ws, prompt) {
+  await closeManagerOverlayIfOpen(ws);
+  await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+      if (!composer) return null;
+      composer.focus();
+      document.execCommand('selectAll');
+      document.execCommand('delete');
+      composer.innerHTML = '<p><br></p>';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      return composer.innerText || '';
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  await ws.send("Input.insertText", { text: prompt });
+  return waitForComposerPromptReady(ws, prompt, 5_000);
+}
+
+async function selectRequiredModelBeforeRetry(ws) {
+  if (requiredModelNeedles().length === 0) return { ok: true, matched: true, skipped: true };
+  const evidence = await selectRequiredModel(ws, 8_000);
+  return {
+    ...(evidence || {}),
+    ok: evidence?.matched === true,
+    matched: evidence?.matched === true,
+    retrySelection: true,
+  };
+}
+
 async function pressEscapeKey(ws) {
   await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
   await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
@@ -2825,6 +2934,8 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   } else if (prep?.hasSendButton !== true) {
     failures.push("send button was not found in the composer controls");
   } else {
+    const submitDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+    const submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
     const domClick = await ws.send("Runtime.evaluate", {
       expression: sendButtonProbeExpression(prompt, { click: true }),
       returnByValue: true,
@@ -2864,6 +2975,40 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
       if (submitSucceeded) {
         submitEvidence.clickMethod = `${submitEvidence.clickMethod}-enter-fallback`;
+      }
+    }
+    if (submitSucceeded) {
+      const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
+      if (realSubmit.ok !== true) {
+        submitEvidence.emptyPrewarmRetry = realSubmit;
+        submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
+        if (submitEvidence.retryModelSelection?.matched !== true) {
+          submitEvidence.retry = { ok: false, reason: "required_model_reselect_failed", modelSelection: submitEvidence.retryModelSelection };
+          submitSucceeded = false;
+        } else {
+          prep = await refillComposerPrompt(ws, prompt);
+        }
+        if (submitSucceeded && prep?.composerMatches === true && prep?.hasSendButton === true) {
+          const retryDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+          const retryPayloadsBefore = responsesWebSocketPayloadCount(retryDiagnosticsBefore);
+          const retryClick = await ws.send("Runtime.evaluate", {
+            expression: sendButtonProbeExpression(prompt, { click: true }),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          submitEvidence.retry = retryClick.result?.result?.value || {};
+          submitSucceeded = submitEvidence.retry.clicked === true
+            ? await waitForComposerSubmitted(ws, prompt, expectedMarker, 8_000)
+            : false;
+          if (submitSucceeded) {
+            const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
+            submitEvidence.retryRealSubmit = retryRealSubmit;
+            if (retryRealSubmit.ok !== true) submitSucceeded = false;
+          }
+        } else if (submitSucceeded) {
+          submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
+          submitSucceeded = false;
+        }
       }
     }
   }
@@ -3491,6 +3636,8 @@ async function main() {
       if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
         failures.push("send button coordinates were not available");
       } else {
+        const submitDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+        const submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
         const x = rect.x + (rect.w / 2);
         const y = rect.y + (rect.h / 2);
         await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
@@ -3519,6 +3666,40 @@ async function main() {
         submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, submitWaitMs);
         if (submitSucceeded) {
           submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
+        }
+        if (submitSucceeded) {
+          const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
+          if (realSubmit.ok !== true) {
+            submitEvidence.emptyPrewarmRetry = realSubmit;
+            submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
+            if (submitEvidence.retryModelSelection?.matched !== true) {
+              submitEvidence.retry = { ok: false, reason: "required_model_reselect_failed", modelSelection: submitEvidence.retryModelSelection };
+              submitSucceeded = false;
+            } else {
+              prep = await refillComposerPrompt(ws, promptText);
+            }
+            if (submitSucceeded && prep?.composerMatches === true && prep?.hasSendButton === true) {
+              const retryDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+              const retryPayloadsBefore = responsesWebSocketPayloadCount(retryDiagnosticsBefore);
+              const retryClick = await ws.send("Runtime.evaluate", {
+                expression: sendButtonProbeExpression(promptText, { click: true }),
+                returnByValue: true,
+                awaitPromise: true,
+              });
+              submitEvidence.retry = retryClick.result?.result?.value || {};
+              submitSucceeded = submitEvidence.retry.clicked === true
+                ? await waitForComposerSubmitted(ws, promptText, marker, 8_000)
+                : false;
+              if (submitSucceeded) {
+                const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
+                submitEvidence.retryRealSubmit = retryRealSubmit;
+                if (retryRealSubmit.ok !== true) submitSucceeded = false;
+              }
+            } else if (submitSucceeded) {
+              submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
+              submitSucceeded = false;
+            }
+          }
         }
       }
       if (submitSucceeded) submitCompletedAt = Date.now();
@@ -3823,10 +4004,13 @@ async function main() {
   }
   if (taskMode === "complex-project") {
     const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
-    if (failuresAreOnlyArtifactFailures(failures, artifactFailures)) {
+    const agenticFailures = collectAgenticResponseHistoryFailures("complex-project", artifactEvidence, false);
+    const uiMarkerFailures = failures.filter((failure) => /assistant reply marker was not observed/i.test(String(failure || "")));
+    const repairableFailures = Array.from(new Set([...artifactFailures, ...agenticFailures, ...uiMarkerFailures]));
+    if (repairableFailures.length > 0) {
       preRepairFailures = failures.slice();
       preRepairArtifactEvidence = artifactEvidence;
-      repairPrompt = buildComplexProjectRepairPrompt(artifactFailures, artifactEvidence);
+      repairPrompt = buildComplexProjectRepairPrompt(repairableFailures, artifactEvidence);
       repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
       artifactEvidence = await waitForArtifactEvidence(
         () => verifyComplexProjectArtifact(artifactDir, marker),
