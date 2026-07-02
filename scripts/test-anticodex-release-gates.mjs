@@ -2002,6 +2002,15 @@ function summarizeGate(definition) {
       if (!report.operatorBlockingStage) semanticFailures.push("windows_user_setup_guidance_operator_stage_missing");
       if (!report.operatorNextStep) semanticFailures.push("windows_user_setup_guidance_operator_next_step_missing");
       if (!report.manualSetupCommandHint) semanticFailures.push("windows_user_setup_guidance_manual_hint_missing");
+      const postManualSetupValidationCommands = Array.isArray(report.postManualSetupValidationCommands) ? report.postManualSetupValidationCommands.map(String) : [];
+      const postManualSetupRequiredReadyFields = Array.isArray(report.postManualSetupRequiredReadyFields) ? report.postManualSetupRequiredReadyFields.map(String) : [];
+      if (postManualSetupValidationCommands.length < 3
+        || !postManualSetupValidationCommands.some((command) => command.includes("test-anticodex-windows-user-account-prepare.ps1"))
+        || !postManualSetupValidationCommands.some((command) => command.includes("test-anticodex-antigravity-account-isolation-status.ps1"))
+        || !postManualSetupValidationCommands.some((command) => command.includes("start-anticodex-second-antigravity-account-login.ps1"))) semanticFailures.push("windows_user_setup_guidance_post_manual_commands");
+      for (const requiredField of ["targetUserExists:true", "targetWindowsUserSid:present", "targetUserIdentityBoundaryOk:true", "safeToAskUserForSecondAccountLogin:true", "canProceedToInteractiveLogin:true", "startedLogin:false", "usedRealTraffic:false"]) {
+        if (!postManualSetupRequiredReadyFields.includes(requiredField)) semanticFailures.push(`windows_user_setup_guidance_post_manual_ready_field:${requiredField}`);
+      }
       const expectedSetupSequence = [
         "create_target_windows_user",
         "windows_user_account_prepare",
@@ -2033,6 +2042,10 @@ function summarizeGate(definition) {
         if (operatorSetupPlan.rawUserManagementCommandProvided !== false) semanticFailures.push("windows_user_setup_guidance_setup_plan_raw_command");
         const afterManualSetupChecks = Array.isArray(operatorSetupPlan.afterManualSetupChecks) ? operatorSetupPlan.afterManualSetupChecks : [];
         if (afterManualSetupChecks.join("|") !== "windows_user_account_prepare|account_isolation_status") semanticFailures.push("windows_user_setup_guidance_setup_plan_after_checks");
+        const planPostManualCommands = Array.isArray(operatorSetupPlan.postManualSetupValidationCommands) ? operatorSetupPlan.postManualSetupValidationCommands.map(String) : [];
+        const planPostManualReadyFields = Array.isArray(operatorSetupPlan.postManualSetupRequiredReadyFields) ? operatorSetupPlan.postManualSetupRequiredReadyFields.map(String) : [];
+        if (planPostManualCommands.join("|") !== postManualSetupValidationCommands.join("|")) semanticFailures.push("windows_user_setup_guidance_setup_plan_post_manual_commands");
+        if (planPostManualReadyFields.join("|") !== postManualSetupRequiredReadyFields.join("|")) semanticFailures.push("windows_user_setup_guidance_setup_plan_post_manual_ready_fields");
         if (operatorSetupPlan.finalLoginEntrypoint !== "start-anticodex-second-antigravity-account-login.ps1") semanticFailures.push("windows_user_setup_guidance_setup_plan_entrypoint");
         if (operatorSetupPlan.finalLoginApproval !== "start-separate-windows-user-login") semanticFailures.push("windows_user_setup_guidance_setup_plan_approval");
       }
@@ -2181,6 +2194,15 @@ function summarizeGate(definition) {
       if ((report.readyForOperatorLogin === true || report.safeToAskUserForSecondAccountLogin === true)
         && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("second_account_readiness_summary_identity_boundary_unverified");
       if (!String(report.nextOperatorAction || "")) semanticFailures.push("second_account_readiness_summary_next_action_missing");
+      const summaryPostManualCommands = Array.isArray(report.postManualSetupValidationCommands) ? report.postManualSetupValidationCommands.map(String) : [];
+      const summaryPostManualReadyFields = Array.isArray(report.postManualSetupRequiredReadyFields) ? report.postManualSetupRequiredReadyFields.map(String) : [];
+      if (summaryPostManualCommands.length < 3
+        || !summaryPostManualCommands.some((command) => command.includes("test-anticodex-windows-user-account-prepare.ps1"))
+        || !summaryPostManualCommands.some((command) => command.includes("test-anticodex-antigravity-account-isolation-status.ps1"))
+        || !summaryPostManualCommands.some((command) => command.includes("start-anticodex-second-antigravity-account-login.ps1"))) semanticFailures.push("second_account_readiness_summary_post_manual_commands");
+      for (const requiredField of ["targetUserExists:true", "targetWindowsUserSid:present", "targetUserIdentityBoundaryOk:true", "safeToAskUserForSecondAccountLogin:true", "canProceedToInteractiveLogin:true", "startedLogin:false", "usedRealTraffic:false"]) {
+        if (!summaryPostManualReadyFields.includes(requiredField)) semanticFailures.push(`second_account_readiness_summary_post_manual_ready_field:${requiredField}`);
+      }
       if (!String(report.approvedLoginCommandTemplate || "").includes("start-anticodex-second-antigravity-account-login.ps1")
         || !String(report.approvedLoginCommandTemplate || "").includes("-StartLoginApproval start-separate-windows-user-login")) semanticFailures.push("second_account_readiness_summary_login_command_missing");
       if (!String(report.nextNoTrafficStatusCommand || "").includes("test-anticodex-antigravity-account-isolation-status.ps1")) semanticFailures.push("second_account_readiness_summary_status_command_missing");

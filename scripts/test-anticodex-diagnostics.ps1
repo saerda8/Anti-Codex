@@ -98,6 +98,16 @@ function Test-WindowsUserSetupGuidanceOperatorSetupPlan {
             }
         }
     }
+    $postManualCommands = @($plan.postManualSetupValidationCommands | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    if ($postManualCommands.Count -lt 3 -or -not (($postManualCommands -join "`n").Contains("test-anticodex-windows-user-account-prepare.ps1")) -or -not (($postManualCommands -join "`n").Contains("test-anticodex-antigravity-account-isolation-status.ps1")) -or -not (($postManualCommands -join "`n").Contains("start-anticodex-second-antigravity-account-login.ps1"))) {
+        Add-Failure "$Prefix setup plan post-manual validation commands missing"
+    }
+    $postManualReadyFields = @($plan.postManualSetupRequiredReadyFields | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    foreach ($requiredField in @("targetUserExists:true", "targetWindowsUserSid:present", "targetUserIdentityBoundaryOk:true", "safeToAskUserForSecondAccountLogin:true", "canProceedToInteractiveLogin:true", "startedLogin:false", "usedRealTraffic:false")) {
+        if ($postManualReadyFields -notcontains $requiredField) {
+            Add-Failure "$Prefix setup plan post-manual ready field missing: $requiredField"
+        }
+    }
     if ([string]$plan.finalLoginEntrypoint -ne "start-anticodex-second-antigravity-account-login.ps1") { Add-Failure "$Prefix setup plan entrypoint mismatch" }
     if ([string]$plan.finalLoginApproval -ne "start-separate-windows-user-login") { Add-Failure "$Prefix setup plan approval mismatch" }
 }
@@ -202,6 +212,16 @@ function Test-SecondAccountReadinessSummaryEvidence {
     if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account readiness summary claims account proof" }
     if ($evidence.goalComplete -ne $false) { Add-Failure "second-account readiness summary claims goal complete" }
     if (-not [string]$evidence.nextOperatorAction) { Add-Failure "second-account readiness summary missing next operator action" }
+    $summaryPostManualCommands = @($evidence.postManualSetupValidationCommands | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    if ($summaryPostManualCommands.Count -lt 3 -or -not (($summaryPostManualCommands -join "`n").Contains("test-anticodex-windows-user-account-prepare.ps1")) -or -not (($summaryPostManualCommands -join "`n").Contains("test-anticodex-antigravity-account-isolation-status.ps1")) -or -not (($summaryPostManualCommands -join "`n").Contains("start-anticodex-second-antigravity-account-login.ps1"))) {
+        Add-Failure "second-account readiness summary post-manual validation commands missing"
+    }
+    $summaryPostManualReadyFields = @($evidence.postManualSetupRequiredReadyFields | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    foreach ($requiredField in @("targetUserExists:true", "targetWindowsUserSid:present", "targetUserIdentityBoundaryOk:true", "safeToAskUserForSecondAccountLogin:true", "canProceedToInteractiveLogin:true", "startedLogin:false", "usedRealTraffic:false")) {
+        if ($summaryPostManualReadyFields -notcontains $requiredField) {
+            Add-Failure "second-account readiness summary post-manual ready field missing: $requiredField"
+        }
+    }
     if (-not ([string]$evidence.approvedLoginCommandTemplate).Contains("start-anticodex-second-antigravity-account-login.ps1") -or -not ([string]$evidence.approvedLoginCommandTemplate).Contains("-StartLoginApproval start-separate-windows-user-login")) {
         Add-Failure "second-account readiness summary login command incomplete"
     }

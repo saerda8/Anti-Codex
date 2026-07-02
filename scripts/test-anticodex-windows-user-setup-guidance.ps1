@@ -68,6 +68,22 @@ $manualSetupCommandHint = if ($targetUserExists -eq $false) {
 } else {
     "verify the separate Windows user manually, then rerun this guidance"
 }
+$postManualSetupValidationCommands = @(
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-windows-user-account-prepare.ps1 -WindowsUser .\AntiCodexModel",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\AntiCodexModel",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\AntiCodexModel"
+)
+$postManualSetupRequiredReadyFields = @(
+    "targetUserExists:true",
+    "targetWindowsUserSid:present",
+    "targetUserSidMatchesCurrentUser:false",
+    "targetUserIdentityBoundaryOk:true",
+    "readyForInteractiveLogin:true",
+    "safeToAskUserForSecondAccountLogin:true",
+    "canProceedToInteractiveLogin:true",
+    "startedLogin:false",
+    "usedRealTraffic:false"
+)
 
 if ($targetUserExists -eq $false) { $warnings.Add("target_windows_user_missing") | Out-Null }
 if ($prepare -and $prepare.changedSystem -ne $false) { $failures.Add("prepare_report_changed_system") | Out-Null }
@@ -112,6 +128,8 @@ $report = [ordered]@{
     operatorBlockingStage = $operatorBlockingStage
     operatorNextStep = $operatorNextStep
     manualSetupCommandHint = $manualSetupCommandHint
+    postManualSetupValidationCommands = @($postManualSetupValidationCommands)
+    postManualSetupRequiredReadyFields = @($postManualSetupRequiredReadyFields)
     readinessCheckSequence = @(
         "create_target_windows_user",
         "windows_user_account_prepare",
@@ -145,6 +163,8 @@ $report = [ordered]@{
             "windows_user_account_prepare",
             "account_isolation_status"
         )
+        postManualSetupValidationCommands = @($postManualSetupValidationCommands)
+        postManualSetupRequiredReadyFields = @($postManualSetupRequiredReadyFields)
         finalLoginEntrypoint = "start-anticodex-second-antigravity-account-login.ps1"
         finalLoginApproval = "start-separate-windows-user-login"
     }

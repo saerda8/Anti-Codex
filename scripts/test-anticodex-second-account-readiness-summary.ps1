@@ -152,6 +152,16 @@ $operatorChecklistUsesRealTrafficCount = if ($setupGuidance -and ($setupGuidance
 } else {
     0
 }
+$postManualSetupValidationCommands = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "postManualSetupValidationCommands")) {
+    @($setupGuidance.postManualSetupValidationCommands | ForEach-Object { [string]$_ } | Where-Object { $_ })
+} else {
+    @()
+}
+$postManualSetupRequiredReadyFields = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "postManualSetupRequiredReadyFields")) {
+    @($setupGuidance.postManualSetupRequiredReadyFields | ForEach-Object { [string]$_ } | Where-Object { $_ })
+} else {
+    @()
+}
 
 foreach ($step in @(
     @{ id = "windowsUserAccountPrepare"; result = $prepareResult },
@@ -234,6 +244,8 @@ $payload = [ordered]@{
     operatorNextStep = if ($status) { [string]$status.operatorNextStep } else { "run_account_isolation_status" }
     nextOperatorAction = $nextOperatorAction
     manualSetupCommandHint = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "manualSetupCommandHint")) { [string]$setupGuidance.manualSetupCommandHint } else { "" }
+    postManualSetupValidationCommands = @($postManualSetupValidationCommands)
+    postManualSetupRequiredReadyFields = @($postManualSetupRequiredReadyFields)
     readinessCheckSequence = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "readinessCheckSequence")) { @($setupGuidance.readinessCheckSequence) } else { @() }
     operatorChecklistStages = @($operatorChecklistStages)
     operatorChecklistStartsLoginCount = [int]$operatorChecklistStartsLoginCount

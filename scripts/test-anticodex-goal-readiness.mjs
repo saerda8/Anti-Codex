@@ -371,6 +371,8 @@ const secondSummaryLoginCommand = String(secondSummary.approvedLoginCommandTempl
 const secondSummaryStatusCommand = String(secondSummary.nextNoTrafficStatusCommand || "");
 const secondSummaryProofCommand = String(secondSummary.postLoginProofCommandTemplate || "");
 const secondSummaryChecklistStages = Array.isArray(secondSummary.operatorChecklistStages) ? secondSummary.operatorChecklistStages.map(String) : [];
+const secondSummaryPostManualCommands = Array.isArray(secondSummary.postManualSetupValidationCommands) ? secondSummary.postManualSetupValidationCommands.map(String) : [];
+const secondSummaryPostManualReadyFields = Array.isArray(secondSummary.postManualSetupRequiredReadyFields) ? secondSummary.postManualSetupRequiredReadyFields.map(String) : [];
 const expectedSecondAccountChecklistStages = [
   "create_target_windows_user",
   "windows_user_account_prepare",
@@ -415,6 +417,19 @@ const secondAccountReadinessSummary = {
   operatorNextStep: String(secondSummary.operatorNextStep || ""),
   nextOperatorAction: String(secondSummary.nextOperatorAction || ""),
   manualSetupCommandHint: String(secondSummary.manualSetupCommandHint || ""),
+  postManualSetupValidationCommands: secondSummaryPostManualCommands,
+  postManualSetupRequiredReadyFields: secondSummaryPostManualReadyFields,
+  postManualSetupValidationCommandsOk: secondSummaryPostManualCommands.length >= 3
+    && secondSummaryPostManualCommands.some((command) => command.includes("test-anticodex-windows-user-account-prepare.ps1"))
+    && secondSummaryPostManualCommands.some((command) => command.includes("test-anticodex-antigravity-account-isolation-status.ps1"))
+    && secondSummaryPostManualCommands.some((command) => command.includes("start-anticodex-second-antigravity-account-login.ps1")),
+  postManualSetupRequiredReadyFieldsOk: secondSummaryPostManualReadyFields.includes("targetUserExists:true")
+    && secondSummaryPostManualReadyFields.includes("targetWindowsUserSid:present")
+    && secondSummaryPostManualReadyFields.includes("targetUserIdentityBoundaryOk:true")
+    && secondSummaryPostManualReadyFields.includes("safeToAskUserForSecondAccountLogin:true")
+    && secondSummaryPostManualReadyFields.includes("canProceedToInteractiveLogin:true")
+    && secondSummaryPostManualReadyFields.includes("startedLogin:false")
+    && secondSummaryPostManualReadyFields.includes("usedRealTraffic:false"),
   readinessCheckSequence: Array.isArray(secondSummary.readinessCheckSequence) ? secondSummary.readinessCheckSequence.map(String) : [],
   operatorChecklistStages: secondSummaryChecklistStages,
   operatorChecklistStartsLoginCount: Number(secondSummary.operatorChecklistStartsLoginCount || 0),
@@ -563,6 +578,8 @@ const proven = {
     && (secondAccountReadinessSummary.targetUserExists === false || (secondAccountReadinessSummary.targetWindowsUserSid.length > 0 && secondAccountReadinessSummary.targetUserIdentityBoundaryOk === true))
     && secondAccountReadinessSummary.nextOperatorAction.length > 0
     && secondAccountReadinessSummary.manualSetupCommandHint.length > 0
+    && secondAccountReadinessSummary.postManualSetupValidationCommandsOk
+    && secondAccountReadinessSummary.postManualSetupRequiredReadyFieldsOk
     && secondAccountReadinessSummary.operatorChecklistOrderOk
     && secondAccountReadinessSummary.operatorChecklistStartsLoginCount === 1
     && secondAccountReadinessSummary.operatorChecklistUsesRealTrafficCount === 0
