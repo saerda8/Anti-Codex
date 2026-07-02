@@ -784,6 +784,7 @@ function summarizeGate(definition) {
         "research_report_with_sources",
         "complex_research_code_site",
         "repo_multi_file_edit",
+        "visible_staged_tool_loop",
       ];
       const requiredCapabilities = Array.isArray(report.requiredCapabilities) ? report.requiredCapabilities.map((item) => String(item || "")) : [];
       const capabilities = Array.isArray(report.capabilities) ? report.capabilities : [];

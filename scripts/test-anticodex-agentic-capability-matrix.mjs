@@ -23,6 +23,7 @@ const requiredCapabilities = [
   "research_report_with_sources",
   "complex_research_code_site",
   "repo_multi_file_edit",
+  "visible_staged_tool_loop",
 ];
 
 const reportFiles = {
@@ -32,6 +33,7 @@ const reportFiles = {
   reportSite: "latest-ui-report-site-smoke.json",
   complexProject: "latest-ui-complex-project-smoke.json",
   repoMultiFileEdit: "latest-ui-repo-multi-file-edit-smoke.json",
+  agenticStepFlow: "latest-ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low.json",
 };
 
 function readReport(file) {
@@ -142,6 +144,60 @@ function reportSiteProcessEvidence(report, responseHistory) {
       && responseHistory.artifactGuardUsed !== true
       && responseHistory.modelLedExecution === true
       && report.repairAttempted !== true,
+  };
+}
+
+function requireAgenticStepFlowProof(report, responseHistory, failures) {
+  const finalMarkerSeen = responseHistory.assistantHasFinalMarker === true
+    || Number(report.answerMarkerCount || 0) > 0
+    || report.responseHistoryMarkerSeen === true;
+  if (!finalMarkerSeen) failures.push("response_history_final_marker_missing");
+  if (responseHistory.assistantHasPhase1 !== true) failures.push("phase1_missing");
+  if (responseHistory.assistantHasPhase2 !== true) failures.push("phase2_missing");
+  if (Number(responseHistory.phase1Count || 0) !== 1) failures.push("phase1_count_not_one");
+  if (Number(responseHistory.phase2Count || 0) !== 1) failures.push("phase2_count_not_one");
+  if (Number(responseHistory.repeatedPhaseCount || 0) > 0) failures.push("repeated_phase_text");
+  if (responseHistory.markerToolOutputSeen !== true) failures.push("response_history_marker_tool_output_missing");
+  if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push("visible_progress_too_shallow");
+  if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push("visible_progress_not_distinct");
+  if (firstPersonProgressCount(responseHistory) > 0) failures.push("first_person_visible_progress_present");
+  if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push("task_tool_call_missing");
+  if ((Number(responseHistory.taskToolCallCount) || 0) > 24) failures.push("task_tool_call_count_too_high");
+  if (responseHistory.taskToolOutputSeen !== true) failures.push("task_tool_output_missing");
+  if (responseHistory.artifactGuardUsed === true) failures.push("artifact_guard_used");
+  if (responseHistory.modelLedExecution !== true) failures.push("model_led_execution_missing");
+}
+
+function agenticStepFlowEvidence(report, responseHistory) {
+  const finalMarkerSeen = responseHistory.assistantHasFinalMarker === true
+    || Number(report.answerMarkerCount || 0) > 0
+    || report.responseHistoryMarkerSeen === true;
+  return {
+    ...responseHistoryEvidence(responseHistory),
+    assistantHasPhase1: responseHistory.assistantHasPhase1 === true,
+    assistantHasPhase2: responseHistory.assistantHasPhase2 === true,
+    visibleFinalMarkerSeen: finalMarkerSeen,
+    responseHistoryMarkerSeen: report.responseHistoryMarkerSeen === true,
+    answerMarkerCount: Number(report.answerMarkerCount || 0),
+    markerToolCallCount: Number(responseHistory.markerToolCallCount || 0),
+    phase1Count: Number(responseHistory.phase1Count || 0),
+    phase2Count: Number(responseHistory.phase2Count || 0),
+    repeatedPhaseCount: Number(responseHistory.repeatedPhaseCount || 0),
+    stagedToolLoopProof: finalMarkerSeen
+      && responseHistory.assistantHasPhase1 === true
+      && responseHistory.assistantHasPhase2 === true
+      && Number(responseHistory.phase1Count || 0) === 1
+      && Number(responseHistory.phase2Count || 0) === 1
+      && Number(responseHistory.repeatedPhaseCount || 0) === 0
+      && responseHistory.markerToolOutputSeen === true
+      && (Number(responseHistory.visibleProgressCount) || 0) >= 2
+      && (Number(responseHistory.distinctVisibleProgressCount) || 0) >= 2
+      && firstPersonProgressCount(responseHistory) === 0
+      && (Number(responseHistory.taskToolCallCount) || 0) >= 1
+      && (Number(responseHistory.taskToolCallCount) || 0) <= 24
+      && responseHistory.taskToolOutputSeen === true
+      && responseHistory.artifactGuardUsed !== true
+      && responseHistory.modelLedExecution === true,
   };
 }
 
@@ -301,6 +357,27 @@ const capabilities = [
       htmlComplete: bool(artifact, "htmlComplete"),
       readmeHasChinese: bool(artifact, "readmeHasChinese"),
       ...responseHistoryEvidence(responseHistory),
+    };
+  }),
+  capability("visible_staged_tool_loop", "agentic-step-flow", reportFiles.agenticStepFlow, "ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low", (report, failures) => {
+    const artifact = report.artifactEvidence || {};
+    const responseHistory = artifact.responseHistory || {};
+    const files = artifact.files || {};
+    for (const key of ["indexHtml", "readmeMd", "doneTxt"]) {
+      if (files[key] !== true) failures.push(`missing_file:${key}`);
+    }
+    for (const key of ["doneExact", "indexHasMarker", "indexHasChineseTitle", "readmeMentionsFiles", "doneHasNoBom"]) {
+      if (artifact[key] !== true) failures.push(`missing_artifact_evidence:${key}`);
+    }
+    requireAgenticStepFlowProof(report, responseHistory, failures);
+    return {
+      files,
+      doneExact: bool(artifact, "doneExact"),
+      indexHasMarker: bool(artifact, "indexHasMarker"),
+      indexHasChineseTitle: bool(artifact, "indexHasChineseTitle"),
+      readmeMentionsFiles: bool(artifact, "readmeMentionsFiles"),
+      doneHasNoBom: bool(artifact, "doneHasNoBom"),
+      ...agenticStepFlowEvidence(report, responseHistory),
     };
   }),
 ];

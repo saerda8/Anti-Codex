@@ -479,7 +479,7 @@ const proven = {
     && agenticCapabilityMatrix.coverageKind === "agentic-capability-matrix-report-only"
     && agenticCapabilityMatrix.missingCapabilities.length === 0
     && agenticCapabilityMatrix.staleCapabilities.length === 0
-    && agenticCapabilityMatrix.okCapabilityCount >= 5,
+    && agenticCapabilityMatrix.okCapabilityCount >= 6,
   realTaskCoverageRoadmap: realTaskCoverageRoadmap.reportOk
     && realTaskCoverageRoadmap.coverageKind === "real-task-coverage-roadmap-report-only"
     && realTaskCoverageRoadmap.requestedRealTraffic === false

@@ -14001,6 +14001,20 @@ test("release gates require structured provider save and restart continuity evid
   assert.match(releaseGates, /sixthOpenAiToolEvidence/);
 });
 
+test("agentic release gates require visible staged tool loop proof", () => {
+  const capabilityMatrix = readFileSync(resolve(root, "scripts", "test-anticodex-agentic-capability-matrix.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
+
+  assert.match(capabilityMatrix, /visible_staged_tool_loop/);
+  assert.match(capabilityMatrix, /latest-ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low\.json/);
+  assert.match(capabilityMatrix, /stagedToolLoopProof/);
+  assert.match(capabilityMatrix, /modelLedExecution/);
+  assert.match(capabilityMatrix, /artifactGuardUsed/);
+  assert.match(releaseGates, /visible_staged_tool_loop/);
+  assert.match(goalReadiness, /okCapabilityCount >= 6/);
+});
+
 test("real third-party provider verifier is explicit isolated and secret-safe", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-real-third-party-provider.mjs"), "utf8");
 
