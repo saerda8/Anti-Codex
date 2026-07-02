@@ -1017,6 +1017,12 @@ function Test-GoalReadinessSummaryEvidence {
     if ([string]$evidence.workerTransportRecoveryBlockingReason -ne "current_channel_worker_transport_not_recovered") { Add-Failure "goal-readiness summary worker transport recovery blocker mismatch" }
     if (-not ([string]$evidence.workerTransportRecoverySafeToDispatchRule).Contains("read-only worker status call succeeds")) { Add-Failure "goal-readiness summary worker transport dispatch rule missing" }
     if ([string]$evidence.workerTransportRecoveryCurrentChannelWorkerStatus -ne "transport_closed") { Add-Failure "goal-readiness summary worker transport status mismatch" }
+    if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerObservationCount -lt 3) { Add-Failure "goal-readiness summary worker transport observation count too low" }
+    if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerTransportFailedCount -lt 3) { Add-Failure "goal-readiness summary worker transport failed count too low" }
+    $recoveryFailedTools = @(As-FlatArray $evidence.workerTransportRecoveryCurrentChannelWorkerTransportFailedTools | ForEach-Object { [string]$_ })
+    foreach ($requiredFailedTool in @("mimo_get_job", "kilo_get_job", "opencode_get_job")) {
+        if ($recoveryFailedTools -notcontains $requiredFailedTool) { Add-Failure "goal-readiness summary worker transport failed tool missing: $requiredFailedTool" }
+    }
     if ([string]$evidence.workerTransportRecoveryCurrentChannelGenericMcpStatus -ne "ok") { Add-Failure "goal-readiness summary generic MCP status missing from worker recovery" }
     if ($evidence.workerTransportRecoveryCurrentChannelSplitObserved -ne $true) { Add-Failure "goal-readiness summary worker transport split not proven" }
     if ($evidence.workerTransportRecoveryDirectProbeOk -ne $true) { Add-Failure "goal-readiness summary worker transport direct probe missing" }
@@ -1858,6 +1864,12 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     if ($evidence.currentChannelProbe -ne $true) { Add-Failure "current-channel-worker-transport summary missing current-channel probe" }
     if (-not [string]$evidence.workerTool) { Add-Failure "current-channel-worker-transport summary missing worker tool" }
     if (-not [string]$evidence.workerStatus) { Add-Failure "current-channel-worker-transport summary missing worker status" }
+    if ([int]$evidence.workerObservationCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker observation count too low" }
+    if ([int]$evidence.workerTransportFailedCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker failed count too low" }
+    $transportFailedTools = @(As-FlatArray $evidence.workerTransportFailedTools | ForEach-Object { [string]$_ })
+    foreach ($requiredFailedTool in @("mimo_get_job", "kilo_get_job", "opencode_get_job")) {
+        if ($transportFailedTools -notcontains $requiredFailedTool) { Add-Failure "current-channel-worker-transport summary failed tool missing: $requiredFailedTool" }
+    }
     if (-not [string]$evidence.genericMcpTool) { Add-Failure "current-channel-worker-transport summary missing generic MCP tool" }
     if ($evidence.genericMcpStatus -ne "ok") { Add-Failure "current-channel-worker-transport summary generic MCP control failed" }
     if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-transport summary missing generic MCP control proof" }

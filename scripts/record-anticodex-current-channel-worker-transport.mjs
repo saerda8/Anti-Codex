@@ -12,6 +12,14 @@ function argValue(name, fallback = "") {
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
 }
 
+function argValues(name) {
+  const values = [];
+  for (let index = 0; index < process.argv.length - 1; index += 1) {
+    if (process.argv[index] === name && process.argv[index + 1]) values.push(process.argv[index + 1]);
+  }
+  return values;
+}
+
 function hasArg(name) {
   return process.argv.includes(name);
 }
@@ -47,11 +55,40 @@ function normalizeStatus(status) {
   return String(status || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function parseWorkerObservation(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return makeWorkerObservation(parsed?.workerTool, parsed?.workerStatus, parsed?.workerDetail);
+  } catch {
+    const first = text.indexOf("=");
+    const second = first >= 0 ? text.indexOf("=", first + 1) : -1;
+    const tool = first >= 0 ? text.slice(0, first) : text;
+    const status = first >= 0 && second >= 0 ? text.slice(first + 1, second) : (first >= 0 ? text.slice(first + 1) : "");
+    const detail = second >= 0 ? text.slice(second + 1) : "";
+    return makeWorkerObservation(tool, status, detail);
+  }
+}
+
+function makeWorkerObservation(workerTool, workerStatus, workerDetail = "") {
+  const status = normalizeStatus(workerStatus);
+  const observation = {
+    workerTool: String(workerTool || "").trim(),
+    workerStatus: status,
+    workerDetail: String(workerDetail || ""),
+    workerTransportOk: status === "ok",
+    workerTransportFailed: ["transport_closed", "error", "failed", "timeout"].includes(status),
+  };
+  return observation.workerTool ? observation : null;
+}
+
 function main() {
   if (hasArg("--help")) {
     console.log([
       "Usage: node scripts/record-anticodex-current-channel-worker-transport.mjs",
       "  --worker-tool kilo_get_job --worker-status transport_closed",
+      "  --worker-observation kilo_get_job=transport_closed=optional-detail",
       "  --generic-mcp-tool node_repl --generic-mcp-status ok",
       "  [--worker-detail TEXT] [--generic-mcp-detail TEXT]",
     ].join("\n"));
@@ -65,28 +102,43 @@ function main() {
   const genericMcpStatus = normalizeStatus(argValue("--generic-mcp-status", "unknown"));
   const workerTool = argValue("--worker-tool", "");
   const genericMcpTool = argValue("--generic-mcp-tool", "");
+  const workerObservations = [
+    ...argValues("--worker-observation").map(parseWorkerObservation),
+    makeWorkerObservation(workerTool, workerStatus, argValue("--worker-detail", "")),
+  ].filter(Boolean);
   const directProbeOk = directProbe.parseable && directProbe.report?.ok === true;
-  const workerTransportOk = workerStatus === "ok";
-  const workerTransportFailed = ["transport_closed", "error", "failed", "timeout"].includes(workerStatus);
+  const primaryObservation = workerObservations[0] || makeWorkerObservation(workerTool, workerStatus, argValue("--worker-detail", "")) || {};
+  const workerTransportOkCount = workerObservations.filter((item) => item.workerTransportOk).length;
+  const workerTransportFailedCount = workerObservations.filter((item) => item.workerTransportFailed).length;
+  const workerTransportOk = workerTransportOkCount > 0;
+  const workerTransportFailed = workerTransportFailedCount > 0 && workerTransportOkCount === 0;
   const genericMcpControlOk = genericMcpStatus === "ok";
-  const splitObserved = workerTransportFailed && genericMcpControlOk && directProbeOk;
+  const splitObserved = workerTransportFailedCount > 0 && genericMcpControlOk && directProbeOk;
   const currentChannelWorkerDispatchBlocked = !workerTransportOk;
   const currentChannelWorkerDispatchUsable = workerTransportOk && !currentChannelWorkerDispatchBlocked;
 
   const payload = {
     reportName: "current-channel-worker-transport",
-    ok: workerTool.length > 0 && genericMcpTool.length > 0 && directProbe.parseable === true,
+    ok: workerObservations.length > 0 && genericMcpTool.length > 0 && directProbe.parseable === true,
     requestedRealTraffic: false,
     usedRealTraffic: false,
     behaviorCovered: true,
     coverageKind: "current-channel-worker-transport-observation",
     checkedAt: new Date().toISOString(),
     currentChannelProbe: true,
-    workerTool,
-    workerStatus,
-    workerDetail: argValue("--worker-detail", ""),
+    workerTool: primaryObservation.workerTool || workerTool,
+    workerStatus: primaryObservation.workerStatus || workerStatus,
+    workerDetail: primaryObservation.workerDetail || argValue("--worker-detail", ""),
     workerTransportOk,
     workerTransportFailed,
+    workerObservations,
+    workerObservationCount: workerObservations.length,
+    workerTransportOkCount,
+    workerTransportFailedCount,
+    workerTransportOkTools: workerObservations.filter((item) => item.workerTransportOk).map((item) => item.workerTool),
+    workerTransportFailedTools: workerObservations.filter((item) => item.workerTransportFailed).map((item) => item.workerTool),
+    workerTransportAnyOk: workerTransportOkCount > 0,
+    workerTransportAllFailed: workerObservations.length > 0 && workerTransportFailedCount === workerObservations.length,
     genericMcpTool,
     genericMcpStatus,
     genericMcpDetail: argValue("--generic-mcp-detail", ""),

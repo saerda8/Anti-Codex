@@ -102,6 +102,21 @@ const workerToolCountByServer = Object.fromEntries(
 const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
 const workerServerProbe = workerMcpServerProbeReport.report || {};
 const currentChannelWorkerTransport = currentChannelWorkerTransportReport.report || {};
+const currentChannelWorkerObservations = Array.isArray(currentChannelWorkerTransport.workerObservations)
+  ? currentChannelWorkerTransport.workerObservations.map((item) => ({
+    workerTool: String(item?.workerTool || ""),
+    workerStatus: String(item?.workerStatus || ""),
+    workerTransportOk: item?.workerTransportOk === true,
+    workerTransportFailed: item?.workerTransportFailed === true,
+  })).filter((item) => item.workerTool)
+  : (currentChannelWorkerTransport.workerTool
+    ? [{
+      workerTool: String(currentChannelWorkerTransport.workerTool || ""),
+      workerStatus: String(currentChannelWorkerTransport.workerStatus || ""),
+      workerTransportOk: currentChannelWorkerTransport.workerTransportOk === true,
+      workerTransportFailed: currentChannelWorkerTransport.workerTransportFailed === true,
+    }]
+    : []);
 const currentChannelWorkerTransportMaxAgeMs = Number(args.get("--current-channel-worker-transport-max-age-ms") || 6 * 60 * 60 * 1000);
 const currentChannelCheckedAtMs = Date.parse(String(currentChannelWorkerTransport.checkedAt || ""));
 const currentChannelWorkerTransportAgeMs = Number.isFinite(currentChannelCheckedAtMs) ? Math.max(0, startedAt - currentChannelCheckedAtMs) : null;
@@ -156,6 +171,14 @@ const workerMcp = {
   currentChannelWorkerStatus: String(currentChannelWorkerTransport.workerStatus || ""),
   currentChannelWorkerTransportOk: currentChannelWorkerTransport.workerTransportOk === true,
   currentChannelWorkerTransportFailed: currentChannelWorkerTransport.workerTransportFailed === true,
+  currentChannelWorkerObservations,
+  currentChannelWorkerObservationCount: Number(currentChannelWorkerTransport.workerObservationCount || currentChannelWorkerObservations.length),
+  currentChannelWorkerTransportOkCount: Number(currentChannelWorkerTransport.workerTransportOkCount || currentChannelWorkerObservations.filter((item) => item.workerTransportOk).length),
+  currentChannelWorkerTransportFailedCount: Number(currentChannelWorkerTransport.workerTransportFailedCount || currentChannelWorkerObservations.filter((item) => item.workerTransportFailed).length),
+  currentChannelWorkerTransportOkTools: Array.isArray(currentChannelWorkerTransport.workerTransportOkTools) ? currentChannelWorkerTransport.workerTransportOkTools.map(String).filter(Boolean) : currentChannelWorkerObservations.filter((item) => item.workerTransportOk).map((item) => item.workerTool),
+  currentChannelWorkerTransportFailedTools: Array.isArray(currentChannelWorkerTransport.workerTransportFailedTools) ? currentChannelWorkerTransport.workerTransportFailedTools.map(String).filter(Boolean) : currentChannelWorkerObservations.filter((item) => item.workerTransportFailed).map((item) => item.workerTool),
+  currentChannelWorkerTransportAnyOk: currentChannelWorkerTransport.workerTransportAnyOk === true,
+  currentChannelWorkerTransportAllFailed: currentChannelWorkerTransport.workerTransportAllFailed === true,
   currentChannelGenericMcpTool: String(currentChannelWorkerTransport.genericMcpTool || ""),
   currentChannelGenericMcpStatus: String(currentChannelWorkerTransport.genericMcpStatus || ""),
   currentChannelGenericMcpControlOk: currentChannelWorkerTransport.genericMcpControlOk === true,
@@ -215,6 +238,9 @@ const workerTransportRecoveryReadiness = {
       : "current_channel_worker_transport_probe_stale",
   safeToDispatchRule: "only dispatch worker implementation jobs after a fresh current-channel read-only worker status call succeeds",
   currentChannelWorkerStatus: workerMcp.currentChannelWorkerStatus,
+  currentChannelWorkerObservationCount: workerMcp.currentChannelWorkerObservationCount,
+  currentChannelWorkerTransportFailedCount: workerMcp.currentChannelWorkerTransportFailedCount,
+  currentChannelWorkerTransportFailedTools: workerMcp.currentChannelWorkerTransportFailedTools,
   currentChannelGenericMcpStatus: workerMcp.currentChannelGenericMcpStatus,
   currentChannelSplitObserved: workerMcp.currentChannelSplitObserved,
   directProbeOk: workerMcp.currentChannelDirectProbeOk || workerMcp.serverProbeReportOk,
