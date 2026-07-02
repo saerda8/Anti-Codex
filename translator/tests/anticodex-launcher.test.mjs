@@ -12355,13 +12355,15 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /if \(clicked && submitSucceeded\)/);
   assert.match(verifier, /submitEvidence/);
   assert.match(verifier, /staleRecovery/);
-  assert.match(verifier, /Search the web for recent Codex updates/);
+  assert.match(verifier, /const reportSiteCommand = buildReportSiteRepairCommandSafe\(artifactDir, marker\)/);
+  assert.match(verifier, /\\u8bf7\\u7528\\u4e2d\\u6587\\u5b8c\\u6210\\u4e00\\u4e2a\\u771f\\u5b9e\\u7684\\u684c\\u9762\\u957f\\u4efb\\u52a1/);
+  assert.match(verifier, /\\u7b2c\\u4e00\\u6b65\\u5fc5\\u987b\\u53d1\\u8d77\\u771f\\u5b9e\\u5de5\\u5177\\u8c03\\u7528/);
   assert.match(verifier, /Use PowerShell file commands to create exactly these files/);
   assert.match(verifier, /Do not create README\.md/);
-  assert.match(verifier, /Create exactly these files and no others: report\.md, index\.html, done\.txt/);
+  assert.match(verifier, /\\u53ea\\u521b\\u5efa report\.md\\u3001index\.html\\u3001done\.txt/);
   assert.match(verifier, /Use PowerShell only to run Node\.js file-write commands/);
   assert.match(verifier, /Do not create README\.md; README\.md is explicitly wrong for this task/);
-  assert.match(verifier, /Your first file write action must create report\.md, not README\.md/);
+  assert.match(verifier, /PowerShell-safe Node/);
   assert.match(verifier, /do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files/);
   assert.match(verifier, /must define stripUtf8Bom\(text\)/);
   assert.match(verifier, /must call stripUtf8Bom before JSON\.parse/);
@@ -12379,6 +12381,8 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /execFileSync\(process\.execPath, \["--test", testPath\]/);
   assert.match(verifier, /CLI output did not contain red=2 and blue=1/);
   assert.match(verifier, /function buildReportSiteRepairPrompt/);
+  assert.match(verifier, /function filterReportSiteUiCompletionFailures/);
+  assert.match(verifier, /filterReportSiteUiCompletionFailures\(failures, artifactEvidence, answerMarkerCount\)/);
   assert.match(verifier, /function buildComplexProjectRepairPrompt/);
   assert.match(verifier, /report-site repair-step/);
   assert.match(verifier, /complex-project repair-step/);
@@ -12645,6 +12649,9 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(suite, /maxRealEvidenceAgeHours/);
   assert.match(suite, /realTaskEvidenceFailures/);
   assert.match(suite, /realTaskEvidenceRefreshPlan/);
+  assert.match(suite, /releaseSummaryPublished/);
+  assert.match(suite, /payload\.ok === true/);
+  assert.match(suite, /real_traffic_run_failed_summary_not_published/);
   assert.match(suite, /requiresExplicitUserApproval/);
   assert.match(suite, /commandArgs: \[\.\.\.command\]/);
   assert.match(suite, /approvalSummary/);

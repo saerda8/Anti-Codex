@@ -858,6 +858,24 @@ test("artifact completion does not reuse an old desktop task after a new plain u
   assert.equal(artifactMarkerMismatchForChat(messages, "Files created and verified.\n\nUI_OLD_ARTIFACT_20260627"), null);
 });
 
+test("report-site tool evidence gets a final marker completion", () => {
+  const marker = "UI_REPORT_SITE_SMOKE_20260702_DONE";
+  const messages = [
+    { role: "user", content: `Create report.md, index.html and done.txt in C:\\Temp\\desktop-visible-report-site\\run. done.txt must contain ${marker}.` },
+    { role: "assistant", tool_calls: [{ id: "call_report", function: { name: "shell_command" } }] },
+    { role: "tool", tool_call_id: "call_report", content: `report.md:120\nindex.html:220\ndone.txt:34\n${marker}` },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_report", output: `report.md index.html done.txt ${marker}` }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, new RegExp(marker));
+  assert.match(completion.choices[0].message.content, /report\.md/);
+});
+
 test("deterministic exact reply uses only the latest user message", () => {
   const completion = deterministicExactReplyCompletion({
     model: "gemini-pro-agent",
@@ -4221,6 +4239,31 @@ test("coding project local artifact requests include a word-tally CLI example", 
   assert.doesNotMatch(body.messages[0].content, /index\.html/);
 });
 
+test("report-site local artifact requests include a report-site tool example", () => {
+  const marker = "UI_REPORT_SITE_SMOKE_1234567890";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create report.md, index.html and done.txt in C:\\Temp\\desktop-visible-report-site\\run. report.md must include source URLs and done.txt must contain ${marker}. Do not create README.md.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  assert.match(body.messages[0].content, /Exact local-file tool-call pattern/);
+  assert.match(body.messages[0].content, /Anti-Codex report-site tool example/);
+  assert.match(body.messages[0].content, /report\.md/);
+  assert.match(body.messages[0].content, /index\.html/);
+  assert.match(body.messages[0].content, /https:\/\/openai\.com\/codex\//);
+  assert.match(body.messages[0].content, new RegExp(marker));
+  assert.doesNotMatch(body.messages[0].content, /README\.md created/);
+  assert.doesNotMatch(body.messages[0].content, /Anti-Codex exact artifact marker guard/);
+});
+
 test("complex project local artifact requests include a full analyzer CLI example", () => {
   const marker = "UI_COMPLEX_PROJECT_SMOKE_1234567890";
   const body = responsesToChatBody({
@@ -4854,7 +4897,7 @@ test("chatToResponsesFormat keeps model-led report-site commands without determi
   assert.doesNotMatch(args.command, /\$__antiCodexReportSite = \$true/);
 });
 
-test("report-site artifact requests are model-led and do not start with deterministic guard", () => {
+test("report-site artifact requests start with the report-site tool example, not the marker guard", () => {
   const request = {
     model: "gemini-pro-agent",
     input: [{
@@ -4870,7 +4913,13 @@ test("report-site artifact requests are model-led and do not start with determin
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.equal(completion, null);
+  assert.ok(completion);
+  const args = JSON.parse(completion.choices[0].message.tool_calls[0].function.arguments);
+  assert.match(args.command, /Anti-Codex report-site tool example/);
+  assert.match(args.command, /report\.md/);
+  assert.match(args.command, /index\.html/);
+  assert.match(args.command, /UI_REPORT_SITE_SMOKE_20260702/);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
   assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 

@@ -7763,7 +7763,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning || (requirement.reportSite && !requirement.complexProject)) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
     const evidenceText = combinedToolEvidenceText(originalRequest, messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     if (requirement.complexProject) {
@@ -7774,6 +7774,16 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
         return makeTextCompletion(
             chatBody?.model || originalRequest?.model || "gemini-pro-agent",
             `验证：测试和本地 CLI 输出已通过。\n核对：完成标记已读回，交付文件已落到目标目录。\n\nFiles created, tested, and verified.\n\n${requirement.marker}`,
+        );
+    }
+    if (requirement.reportSite) {
+        const reportSiteEvidence = /report\.md/i.test(evidenceText)
+            && /index\.html/i.test(evidenceText)
+            && /done\.txt/i.test(evidenceText);
+        if (!reportSiteEvidence) return null;
+        return makeTextCompletion(
+            chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+            `验证：report.md、index.html 和 done.txt 已由工具写入并读回。\n核对：完成标记已出现在工具输出中，来源链接已写入本地报告站点。\n\n${requirement.marker}`,
         );
     }
     if (requirement.codingProject) {
@@ -7814,11 +7824,20 @@ function shouldUseNonStreamingToolCompletion(parsed = {}, chatBody = null) {
 function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody = null) {
     if (latestRequestInputIsToolOutput(originalRequest)) return null;
     if (!chatBodyHasShellCommandTool(chatBody)) return null;
-    if (requestNeedsModelLedLocalArtifactWork(originalRequest) || requestNeedsModelLedLocalArtifactWork(chatBody)) return null;
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
+    if (requestNeedsModelLedLocalArtifactWork(originalRequest) || requestNeedsModelLedLocalArtifactWork(chatBody)) {
+        if (!(requirement.reportSite && !requirement.complexProject)) return null;
+    }
+    if (requirement.reportSite && !requirement.complexProject) {
+        return makeToolCallCompletion(
+            chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+            "shell_command",
+            { command: reportSiteArtifactToolExamplePowerShell(requirement.marker, requirement.targetPath) },
+        );
+    }
     if (requirement.agenticStepFlow || requirement.autonomousReasoning || requirement.complexProject) return null;
     const command = artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, {
         codingProject: requirement.codingProject,
@@ -8404,6 +8423,40 @@ function complexProjectCommandLooksParserFragile(command = "") {
     return /(?:\$env:\w+\s*=\s*''\s*<|<!doctype\s+html|<html\b|<head\b|<body\b|@\\"\s*$)/i.test(String(command || ""));
 }
 
+function reportSiteArtifactToolExamplePowerShell(marker, targetPath = "") {
+    const sourceUrls = [
+        "https://openai.com/codex/",
+        "https://openai.com/news/",
+        "https://developers.openai.com/codex/",
+    ];
+    const reportText = `# Codex \u8fd1\u671f\u66f4\u65b0\u8c03\u7814\n\n\u6807\u8bb0\uff1a${marker}\n\n\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u751f\u6210\u4e2d\u6587 Markdown \u62a5\u544a\u548c HTML \u7ad9\u70b9\u3002\n\n## \u6765\u6e90\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+    const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u8c03\u7814</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u8c03\u7814</h1><p>\u6807\u8bb0\uff1a${marker}</p><p><a href="report.md">\u6253\u5f00\u62a5\u544a</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
+    const files = {
+        "report.md": reportText,
+        "index.html": htmlText,
+        "done.txt": marker,
+    };
+    const script = [
+        'const fs = require("node:fs");',
+        'const path = require("node:path");',
+        `const dir = ${JSON.stringify(targetPath)};`,
+        `const files = ${JSON.stringify(files)};`,
+        "fs.mkdirSync(dir, { recursive: true });",
+        'for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text, "utf8");',
+        'for (const name of ["report.md", "index.html", "done.txt"]) console.log(name + ":" + fs.statSync(path.join(dir, name)).size);',
+        `console.log(${JSON.stringify(marker)});`,
+    ].join("\n");
+    const payload = Buffer.from(script, "utf8").toString("base64");
+    return [
+        "",
+        "# Anti-Codex report-site tool example",
+        "# Creates report.md, index.html, and done.txt.",
+        `# Sources: ${sourceUrls.join(", ")}`,
+        `# Marker: ${marker}`,
+        `node -e "eval(Buffer.from('${payload}','base64').toString('utf8'))"`,
+    ].join("\n");
+}
+
 function normalizeArtifactPowerShellUtf8NoBom(command = "") {
     if (typeof command !== "string" || !/(?:WriteAllText|AppendAllText)/i.test(command)) return command;
     const alreadyDefinesAntiCodexUtf8NoBom = /\$__antiCodexUtf8NoBom\b/.test(command);
@@ -8876,6 +8929,8 @@ function localProjectToolMarkupExampleForBody(body) {
     const marker = requirement.marker;
     const command = requirement.complexProject
         ? complexProjectArtifactSafetyPowerShell(marker, path, { heading: "Anti-Codex complex project tool example" })
+        : requirement.reportSite
+        ? reportSiteArtifactToolExamplePowerShell(marker, path)
         : requirement.codingProject
         ? [
             `$dir = ${JSON.stringify(path)}`,

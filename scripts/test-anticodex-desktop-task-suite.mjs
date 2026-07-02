@@ -614,17 +614,26 @@ if (noWriteReport) {
     latestName: "latest-desktop-task-suite-real.json",
     historySuffix: "desktop-task-suite-real",
   });
-  const summaryReport = writeReport(releaseSummaryPayload, summaryReportOptions);
+  const publishSummaryReport = dryRun || payload.ok === true;
+  const summaryReport = publishSummaryReport
+    ? writeReport(releaseSummaryPayload, summaryReportOptions)
+    : {
+        skipped: true,
+        reason: "real_traffic_run_failed_summary_not_published",
+        latest: "",
+        history: "",
+      };
   console.log(JSON.stringify({
     ...payload,
     releaseSummaryEligible,
+    releaseSummaryPublished: publishSummaryReport,
     report: dryRun ? summaryReport : realTrafficReport,
     profileSummaryReport: summaryReport,
-    releaseSummaryReport: releaseSummaryEligible
+    releaseSummaryReport: releaseSummaryEligible && publishSummaryReport
       ? summaryReport
       : {
           skipped: true,
-          reason: "not_agentic_release_suite",
+          reason: releaseSummaryEligible ? "real_traffic_run_failed_summary_not_published" : "not_agentic_release_suite",
           latest: "",
           history: "",
         },
