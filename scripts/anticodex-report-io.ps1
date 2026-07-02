@@ -25,7 +25,15 @@ function Write-AntiCodexTextAtomic {
             [System.IO.File]::Replace($tempPath, $targetPath, $backupPath, $true)
             Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
         } else {
-            [System.IO.File]::Move($tempPath, $targetPath)
+            try {
+                [System.IO.File]::Move($tempPath, $targetPath)
+            } catch [System.IO.IOException] {
+                if (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
+                    throw
+                }
+                [System.IO.File]::Replace($tempPath, $targetPath, $backupPath, $true)
+                Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            }
         }
 
         if (-not $SkipHash) {

@@ -5031,6 +5031,8 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(reportIo, /UTF8Encoding\(\$false\)/);
   assert.match(reportIo, /ConvertFrom-Json -ErrorAction Stop/);
   assert.match(reportIo, /System\.IO\.File\]::Replace/);
+  assert.match(reportIo, /catch \[System\.IO\.IOException\]/);
+  assert.match(reportIo, /Test-Path -LiteralPath \$targetPath -PathType Leaf/);
   assert.match(reportIo, /SHA256\]::Create/);
   assert.match(reportIo, /\.sha256/);
   assert.match(reportIo, /ASCIIEncoding/);
