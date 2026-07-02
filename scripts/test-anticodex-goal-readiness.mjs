@@ -729,6 +729,34 @@ const secondAccountOperatorStatus = secondAccountReadinessSummary.releaseAccepta
   : secondAccountReadinessSummary.canProceedToInteractiveLogin
     ? "ready_for_interactive_login"
     : "manual_windows_user_setup_required";
+const goalOperatorActionCard = {
+  status: goalComplete ? "goal_complete" : "external_actions_required",
+  canClaimFullGoalNow: goalComplete,
+  releaseReady: releaseGateStatus.releaseReady,
+  workerStatus: currentChannelWorkerTransportStatus,
+  workerCanDispatchCurrentChannel: currentChannelWorkerCanDispatch,
+  secondAccountStatus: secondAccountOperatorStatus,
+  secondAccountCanAskUserToLoginNow: secondAccountReadinessSummary.canProceedToInteractiveLogin,
+  missingRequirements: [
+    ...(!currentChannelWorkerCanDispatch ? ["reload_codex_channel_and_verify_worker_read_only_call"] : []),
+    ...(!antigravityAccountIsolation.releaseAcceptableAccountProof ? ["second_antigravity_account_login_and_proof"] : []),
+  ],
+  nextOperatorActions: [
+    ...(!currentChannelWorkerCanDispatch ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
+    ...(!secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
+    ...(secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
+  ],
+  userVisibleNextStep: !secondAccountReadinessSummary.targetUserExists
+    ? "Create or verify the separate Windows user, then rerun the no-traffic readiness summary."
+    : !currentChannelWorkerCanDispatch
+      ? "Reload Codex or open a fresh channel, then rerun a worker read-only status probe."
+      : !antigravityAccountIsolation.releaseAcceptableAccountProof
+        ? "With the user present, run the approved second-account login and post-login proof."
+        : "Rerun goal readiness.",
+  noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
+  workerRecoveryCommand: currentChannelRecoveryRecordCommand,
+  secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1",
+};
 
 const payload = {
   ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.accountIsolationPreparedOnly),
@@ -742,6 +770,7 @@ const payload = {
   goalComplete,
   proven,
   blockers,
+  goalOperatorActionCard,
   currentChannelWorkerCanDispatch,
   currentChannelWorkerTransportStatus,
   currentChannelWorkerRecoveryRequired: !currentChannelWorkerCanDispatch,

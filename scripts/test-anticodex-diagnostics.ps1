@@ -983,6 +983,25 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
+    $goalOperatorActionCard = $evidence.goalOperatorActionCard
+    if (-not $goalOperatorActionCard) { Add-Failure "goal-readiness summary operator action card missing" }
+    else {
+        if ([string]$goalOperatorActionCard.status -ne "external_actions_required") { Add-Failure "goal-readiness summary operator action card status mismatch" }
+        if ($goalOperatorActionCard.canClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary operator action card claims full goal" }
+        if ($goalOperatorActionCard.releaseReady -ne $true) { Add-Failure "goal-readiness summary operator action card release state mismatch" }
+        if ([string]$goalOperatorActionCard.workerStatus -ne "reload_required") { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
+        if ($goalOperatorActionCard.workerCanDispatchCurrentChannel -ne $false) { Add-Failure "goal-readiness summary operator action card allows worker dispatch" }
+        if ([string]$goalOperatorActionCard.secondAccountStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary operator action card second-account status mismatch" }
+        if ($goalOperatorActionCard.secondAccountCanAskUserToLoginNow -ne $false) { Add-Failure "goal-readiness summary operator action card allows second-account login too early" }
+        $goalMissingRequirements = @(As-FlatArray $goalOperatorActionCard.missingRequirements | ForEach-Object { [string]$_ })
+        foreach ($requiredGoalMissing in @("reload_codex_channel_and_verify_worker_read_only_call", "second_antigravity_account_login_and_proof")) {
+            if ($goalMissingRequirements -notcontains $requiredGoalMissing) { Add-Failure "goal-readiness summary operator action card missing requirement: $requiredGoalMissing" }
+        }
+        $goalNextActions = @(As-FlatArray $goalOperatorActionCard.nextOperatorActions | ForEach-Object { [string]$_ })
+        if ($goalNextActions.Count -lt 2) { Add-Failure "goal-readiness summary operator action card next actions missing" }
+        if (-not ([string]$goalOperatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-goal-readiness.mjs")) { Add-Failure "goal-readiness summary operator action card no-traffic command missing" }
+        if (-not ([string]$goalOperatorActionCard.secondAccountStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "goal-readiness summary operator action card second-account command missing" }
+    }
     if ($evidence.currentChannelWorkerCanDispatch -ne $false) { Add-Failure "goal-readiness summary compact worker dispatch field is not blocked" }
     if ([string]$evidence.currentChannelWorkerTransportStatus -ne "reload_required") { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
     if ($evidence.currentChannelWorkerRecoveryRequired -ne $true) { Add-Failure "goal-readiness summary compact worker recovery field missing" }

@@ -13062,6 +13062,11 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /currentChannelPostReloadVerification/);
   assert.match(goalReadiness, /workerTransportRecoveryReadiness/);
   assert.match(goalReadiness, /requiresCodexMcpReload/);
+  assert.match(goalReadiness, /goalOperatorActionCard/);
+  assert.match(goalReadiness, /canClaimFullGoalNow/);
+  assert.match(goalReadiness, /missingRequirements/);
+  assert.match(goalReadiness, /nextOperatorActions/);
+  assert.match(goalReadiness, /workerRecoveryCommand/);
   assert.match(goalReadiness, /currentChannelWorkerTransportStatus/);
   assert.match(goalReadiness, /currentChannelWorkerRecoveryRequired/);
   assert.match(goalReadiness, /secondAccountTargetWindowsUser/);
@@ -13130,6 +13135,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelWorkerTransportFailedTools/);
   assert.match(summarizer, /workerTransportRecoveryDirectWorkerProbeCommand/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelRecoveryRecordCommand/);
+  assert.match(summarizer, /goalOperatorActionCard/);
+  assert.match(summarizer, /workerRecoveryCommand/);
   assert.match(summarizer, /currentChannelWorkerTransportStatus/);
   assert.match(summarizer, /secondAccountOperatorStatus/);
   assert.match(summarizer, /secondAccountNextOperatorAction/);
@@ -13149,6 +13156,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary unexpectedly marked worker dispatch usable/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
   assert.match(diagnostics, /goal-readiness summary missing worker transport reload requirement/);
+  assert.match(diagnostics, /goal-readiness summary operator action card missing/);
   assert.match(diagnostics, /goal-readiness summary worker transport observation count too low/);
   assert.match(diagnostics, /goal-readiness summary worker transport failed tool missing/);
   assert.match(diagnostics, /goal-readiness summary unexpectedly allows current-channel worker dispatch/);
