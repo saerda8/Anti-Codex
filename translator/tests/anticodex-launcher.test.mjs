@@ -12965,6 +12965,7 @@ test("optional and special latest reports stay visible without becoming release-
   const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
   const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
+  const workerTaskSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-worker-mcp-task-smoke.mjs"), "utf8");
   const optionalReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*false[^}]*\}/g), (match) => match[1]))).sort();
   const specialReports = [
     "latest-antigravity-cli-profile-prepare.json",
@@ -13033,6 +13034,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /projectSmokeScenario/);
   assert.match(goalReadiness, /projectSmokePassedWorkerCount/);
   assert.match(goalReadiness, /worker_mcp_project_smoke_insufficient_worker_diversity/);
+  assert.match(workerTaskSmoke, /--merge-latest/);
+  assert.match(workerTaskSmoke, /function mergeLatestResults/);
+  assert.match(workerTaskSmoke, /mergedFromLatest/);
+  assert.match(workerTaskSmoke, /payload\.failedWorkers = payload\.results\.filter/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);

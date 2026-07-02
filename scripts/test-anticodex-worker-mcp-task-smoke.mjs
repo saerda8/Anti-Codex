@@ -140,6 +140,43 @@ function writeSignedReport(payload, reportRoot) {
   return { latest, history };
 }
 
+function readLatestReport(reportRoot, scenario) {
+  const reportFileName = reportFileNameForScenario(scenario);
+  const latest = resolve(reportRoot, `latest-${reportFileName}.json`);
+  if (!existsSync(latest)) return null;
+  try {
+    return JSON.parse(readFileSync(latest, "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return null;
+  }
+}
+
+function mergeLatestResults(payload, reportRoot) {
+  if (!hasArg("--merge-latest")) return payload;
+  const latest = readLatestReport(reportRoot, payload.scenario);
+  if (!latest || latest.scenario !== payload.scenario || !Array.isArray(latest.results)) return payload;
+
+  const byWorker = new Map(latest.results
+    .filter((result) => result && typeof result === "object" && result.worker)
+    .map((result) => [String(result.worker), result]));
+  for (const result of payload.results) {
+    if (result && typeof result === "object" && result.worker) {
+      byWorker.set(String(result.worker), result);
+    }
+  }
+  const results = [...byWorker.values()];
+  return {
+    ...latest,
+    ...payload,
+    mergedFromLatest: true,
+    mergedLatestCheckedAt: latest.checkedAt || "",
+    workerCount: results.length,
+    passedWorkerCount: results.filter((result) => result.ok).length,
+    failedWorkers: results.filter((result) => !result.ok).map((result) => result.worker),
+    results,
+  };
+}
+
 function makeWorkspace(workerName, workspaceRoot) {
   const root = resolve(workspaceRoot, `${workerName}-${utcStamp()}-${process.pid}`);
   mkdirSync(root, { recursive: true });
@@ -154,6 +191,7 @@ function buildTask(workerName, marker, scenario) {
       "Create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt.",
       "word-tally.mjs must export function tallyWords(text). It must split words by whitespace, lowercase them, ignore empty words, and return a plain object of word counts.",
       "When run as a CLI, word-tally.mjs must print JSON word counts for the remaining command line text.",
+      "The CLI code must use process.argv.slice(2); do not reference program.argv or any undeclared program variable.",
       "word-tally.test.mjs must use node:test and assert that tallyWords('red blue red') returns red=2 and blue=1.",
       "package.json must set type module and a test script that runs node --test word-tally.test.mjs.",
       `done.txt must contain exactly ${marker}.`,
@@ -406,7 +444,7 @@ async function main() {
     results.push(await runWorker(worker, { configPath, workspaceRoot, timeoutMs, scenario }));
   }
 
-  const payload = {
+  const payload = mergeLatestResults({
     reportName: scenario === "project" ? "worker-mcp-project-smoke" : "worker-mcp-task-smoke",
     ok: results.length > 0 && results.every((result) => result.ok),
     requestedRealTraffic: true,
@@ -421,7 +459,11 @@ async function main() {
     passedWorkerCount: results.filter((result) => result.ok).length,
     failedWorkers: results.filter((result) => !result.ok).map((result) => result.worker),
     results,
-  };
+  }, reportRoot);
+  payload.ok = payload.results.length > 0 && payload.results.every((result) => result.ok);
+  payload.workerCount = payload.results.length;
+  payload.passedWorkerCount = payload.results.filter((result) => result.ok).length;
+  payload.failedWorkers = payload.results.filter((result) => !result.ok).map((result) => result.worker);
   const report = writeSignedReport(payload, reportRoot);
   const output = report ? { ...payload, report } : payload;
   console.log(JSON.stringify(output));
