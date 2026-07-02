@@ -13164,14 +13164,15 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not prove split/);
   assert.match(diagnostics, /current-channel-worker-transport summary worker observation count too low/);
-  assert.match(diagnostics, /current-channel-worker-transport summary failed tool missing/);
+  assert.match(diagnostics, /Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary"/);
+  assert.match(diagnostics, /distinct failed worker namespace count too low/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
   assert.match(diagnostics, /current-channel-worker-transport summary unexpectedly marked worker dispatch usable/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
   assert.match(diagnostics, /goal-readiness summary missing worker transport reload requirement/);
   assert.match(diagnostics, /goal-readiness summary operator action card missing/);
   assert.match(diagnostics, /goal-readiness summary worker transport observation count too low/);
-  assert.match(diagnostics, /goal-readiness summary worker transport failed tool missing/);
+  assert.match(diagnostics, /Assert-DistinctWorkerTransportFailures -Label "goal-readiness summary worker transport"/);
   assert.match(diagnostics, /goal-readiness summary unexpectedly allows current-channel worker dispatch/);
   assert.match(diagnostics, /goal-readiness summary worker transport direct probe command missing/);
   assert.match(diagnostics, /goal-readiness summary worker transport record command missing/);

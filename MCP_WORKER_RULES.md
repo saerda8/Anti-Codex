@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel three-worker wait reprobe still transport-closed
+
+- Task: after goal-readiness/action-card checkpoint, recheck current-channel read-only worker waits for known completed Kilo, OpenCode, and DeepSeek project-smoke jobs.
+- Result: `kilo_wait_for_job`, `opencode_wait_for_job`, and `deepseek_wait_for_job` all failed immediately with `Transport closed`; same-channel `node_repl` returned `CURRENT_CHANNEL_GENERIC_MCP_OK_AFTER_WORKER_REPROBE`; direct no-traffic worker server probe still passed 7/7.
+- Cause classification: current Codex-channel worker MCP transport remains stale/dead for worker namespaces. This is not a global MCP outage, not a worker server/config failure, and not Antigravity model evidence.
+- Rule change: diagnostics must validate the semantic proof of at least three distinct failed worker namespaces instead of hard-coding historical tool names. Do not dispatch implementation workers from this channel until a fresh read-only worker call succeeds after reload/new channel.
+
 ### 2026-07-03 - Worker MCP source hygiene cleanup did not recover current-channel transport
 
 - Task: verify configured worker MCP entrypoint source files after current-channel worker tools still returned `Transport closed`.

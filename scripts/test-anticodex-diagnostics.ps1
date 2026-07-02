@@ -57,6 +57,41 @@ function As-FlatArray {
     return $items
 }
 
+function Assert-DistinctWorkerTransportFailures {
+    param(
+        [string]$Label,
+        $Tools,
+        [int]$MinimumCount = 3
+    )
+    $knownWorkerPrefixes = @(
+        "antigravity",
+        "deepseek",
+        "deveco",
+        "kilo",
+        "mimo",
+        "mimocode",
+        "opencode"
+    )
+    $flatTools = @(As-FlatArray $Tools | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    $distinctTools = @($flatTools | Select-Object -Unique)
+    if ($distinctTools.Count -lt $MinimumCount) {
+        Add-Failure "$Label distinct failed worker tool count too low"
+        return
+    }
+
+    $distinctWorkerPrefixes = @(
+        $distinctTools |
+            ForEach-Object {
+                if ($_ -match "^([^_]+)_") { $Matches[1] }
+            } |
+            Where-Object { $knownWorkerPrefixes -contains $_ } |
+            Select-Object -Unique
+    )
+    if ($distinctWorkerPrefixes.Count -lt $MinimumCount) {
+        Add-Failure "$Label distinct failed worker namespace count too low"
+    }
+}
+
 function Test-WindowsUserSetupGuidanceOperatorSetupPlan {
     param(
         $Evidence,
@@ -1109,9 +1144,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerObservationCount -lt 3) { Add-Failure "goal-readiness summary worker transport observation count too low" }
     if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerTransportFailedCount -lt 3) { Add-Failure "goal-readiness summary worker transport failed count too low" }
     $recoveryFailedTools = @(As-FlatArray $evidence.workerTransportRecoveryCurrentChannelWorkerTransportFailedTools | ForEach-Object { [string]$_ })
-    foreach ($requiredFailedTool in @("mimo_get_job", "kilo_get_job", "opencode_get_job")) {
-        if ($recoveryFailedTools -notcontains $requiredFailedTool) { Add-Failure "goal-readiness summary worker transport failed tool missing: $requiredFailedTool" }
-    }
+    Assert-DistinctWorkerTransportFailures -Label "goal-readiness summary worker transport" -Tools $recoveryFailedTools
     if ([string]$evidence.workerTransportRecoveryCurrentChannelGenericMcpStatus -ne "ok") { Add-Failure "goal-readiness summary generic MCP status missing from worker recovery" }
     if ($evidence.workerTransportRecoveryCurrentChannelSplitObserved -ne $true) { Add-Failure "goal-readiness summary worker transport split not proven" }
     if ($evidence.workerTransportRecoveryDirectProbeOk -ne $true) { Add-Failure "goal-readiness summary worker transport direct probe missing" }
@@ -1956,9 +1989,7 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     if ([int]$evidence.workerObservationCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker observation count too low" }
     if ([int]$evidence.workerTransportFailedCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker failed count too low" }
     $transportFailedTools = @(As-FlatArray $evidence.workerTransportFailedTools | ForEach-Object { [string]$_ })
-    foreach ($requiredFailedTool in @("mimo_get_job", "kilo_get_job", "opencode_get_job")) {
-        if ($transportFailedTools -notcontains $requiredFailedTool) { Add-Failure "current-channel-worker-transport summary failed tool missing: $requiredFailedTool" }
-    }
+    Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary" -Tools $transportFailedTools
     if (-not [string]$evidence.genericMcpTool) { Add-Failure "current-channel-worker-transport summary missing generic MCP tool" }
     if ($evidence.genericMcpStatus -ne "ok") { Add-Failure "current-channel-worker-transport summary generic MCP control failed" }
     if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-transport summary missing generic MCP control proof" }
