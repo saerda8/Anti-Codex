@@ -212,6 +212,18 @@ function Test-SecondAccountReadinessSummaryEvidence {
     if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account readiness summary claims account proof" }
     if ($evidence.goalComplete -ne $false) { Add-Failure "second-account readiness summary claims goal complete" }
     if (-not [string]$evidence.nextOperatorAction) { Add-Failure "second-account readiness summary missing next operator action" }
+    $operatorActionCard = $evidence.operatorActionCard
+    if (-not $operatorActionCard) { Add-Failure "second-account readiness summary operator action card missing" }
+    else {
+        if (-not [string]$operatorActionCard.status) { Add-Failure "second-account readiness summary operator action card status missing" }
+        if (-not [string]$operatorActionCard.windowsUser) { Add-Failure "second-account readiness summary operator action card Windows user missing" }
+        if ($operatorActionCard.canAskUserToLoginNow -ne $false) { Add-Failure "second-account readiness summary operator action card allows login too early" }
+        if ($operatorActionCard.targetUserExists -ne $false) { Add-Failure "second-account readiness summary operator action card target user mismatch" }
+        if ([string]$operatorActionCard.missingRequirement -ne "separate_windows_user_missing") { Add-Failure "second-account readiness summary operator action card missing requirement mismatch" }
+        if (-not [string]$operatorActionCard.nextOperatorAction) { Add-Failure "second-account readiness summary operator action card next action missing" }
+        if (-not [string]$operatorActionCard.userVisibleNextStep) { Add-Failure "second-account readiness summary operator action card user step missing" }
+        if (-not ([string]$operatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "second-account readiness summary operator action card status command missing" }
+    }
     $summaryPostManualCommands = @($evidence.postManualSetupValidationCommands | ForEach-Object { [string]$_ } | Where-Object { $_ })
     if ($summaryPostManualCommands.Count -lt 3 -or -not (($summaryPostManualCommands -join "`n").Contains("test-anticodex-windows-user-account-prepare.ps1")) -or -not (($summaryPostManualCommands -join "`n").Contains("test-anticodex-antigravity-account-isolation-status.ps1")) -or -not (($summaryPostManualCommands -join "`n").Contains("start-anticodex-second-antigravity-account-login.ps1"))) {
         Add-Failure "second-account readiness summary post-manual validation commands missing"

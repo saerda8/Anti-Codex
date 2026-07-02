@@ -202,6 +202,40 @@ $nextOperatorAction = if (-not $targetUserExists) {
 } else {
     "goal_complete"
 }
+$operatorActionCard = [ordered]@{
+    status = if ($releaseAcceptableAccountProof) {
+        "second_account_proof_complete"
+    } elseif ($readyForOperatorLogin) {
+        "ready_for_user_login"
+    } else {
+        "not_ready_for_login"
+    }
+    windowsUser = $WindowsUser
+    canAskUserToLoginNow = [bool]$readyForOperatorLogin
+    targetUserExists = [bool]$targetUserExists
+    missingRequirement = if (-not $targetUserExists) {
+        "separate_windows_user_missing"
+    } elseif (-not $readyForOperatorLogin) {
+        "account_isolation_status_not_ready"
+    } elseif (-not $releaseAcceptableAccountProof) {
+        "interactive_second_account_login_and_post_login_proof_missing"
+    } else {
+        ""
+    }
+    nextOperatorAction = $nextOperatorAction
+    userVisibleNextStep = if (-not $targetUserExists) {
+        "Create or verify the separate Windows user, then rerun this summary."
+    } elseif (-not $readyForOperatorLogin) {
+        "Rerun the no-traffic account prepare and isolation checks until login is marked safe."
+    } elseif (-not $releaseAcceptableAccountProof) {
+        "With the user present, run the approved second-account login and then the post-login account proof."
+    } else {
+        "Rerun goal readiness."
+    }
+    noTrafficStatusCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-second-account-readiness-summary.ps1 -WindowsUser $WindowsUser"
+    approvedLoginCommandTemplate = if ($entrypoint) { [string]$entrypoint.approvedLoginCommandTemplate } else { "" }
+    postLoginProofCommandTemplate = if ($entrypoint) { [string]$entrypoint.postLoginProofCommandTemplate } else { "" }
+}
 
 $reportRootFull = [IO.Path]::GetFullPath($ReportRoot)
 New-Item -ItemType Directory -Path $reportRootFull -Force | Out-Null
@@ -243,6 +277,7 @@ $payload = [ordered]@{
     operatorBlockingStage = if ($status) { [string]$status.operatorBlockingStage } else { "status_unavailable" }
     operatorNextStep = if ($status) { [string]$status.operatorNextStep } else { "run_account_isolation_status" }
     nextOperatorAction = $nextOperatorAction
+    operatorActionCard = $operatorActionCard
     manualSetupCommandHint = if ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "manualSetupCommandHint")) { [string]$setupGuidance.manualSetupCommandHint } else { "" }
     postManualSetupValidationCommands = @($postManualSetupValidationCommands)
     postManualSetupRequiredReadyFields = @($postManualSetupRequiredReadyFields)

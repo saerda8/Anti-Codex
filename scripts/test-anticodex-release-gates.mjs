@@ -2194,6 +2194,18 @@ function summarizeGate(definition) {
       if ((report.readyForOperatorLogin === true || report.safeToAskUserForSecondAccountLogin === true)
         && report.targetUserIdentityBoundaryOk !== true) semanticFailures.push("second_account_readiness_summary_identity_boundary_unverified");
       if (!String(report.nextOperatorAction || "")) semanticFailures.push("second_account_readiness_summary_next_action_missing");
+      const operatorActionCard = report.operatorActionCard && typeof report.operatorActionCard === "object" ? report.operatorActionCard : null;
+      if (!operatorActionCard) semanticFailures.push("second_account_readiness_summary_operator_action_card_missing");
+      else {
+        if (!String(operatorActionCard.status || "")) semanticFailures.push("second_account_readiness_summary_operator_action_card_status");
+        if (!String(operatorActionCard.windowsUser || "")) semanticFailures.push("second_account_readiness_summary_operator_action_card_windows_user");
+        if (operatorActionCard.canAskUserToLoginNow !== false) semanticFailures.push("second_account_readiness_summary_operator_action_card_login_too_early");
+        if (operatorActionCard.targetUserExists !== false) semanticFailures.push("second_account_readiness_summary_operator_action_card_target_exists");
+        if (String(operatorActionCard.missingRequirement || "") !== "separate_windows_user_missing") semanticFailures.push("second_account_readiness_summary_operator_action_card_missing_requirement");
+        if (!String(operatorActionCard.nextOperatorAction || "")) semanticFailures.push("second_account_readiness_summary_operator_action_card_next_action");
+        if (!String(operatorActionCard.userVisibleNextStep || "")) semanticFailures.push("second_account_readiness_summary_operator_action_card_user_step");
+        if (!String(operatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-second-account-readiness-summary.ps1")) semanticFailures.push("second_account_readiness_summary_operator_action_card_status_command");
+      }
       const summaryPostManualCommands = Array.isArray(report.postManualSetupValidationCommands) ? report.postManualSetupValidationCommands.map(String) : [];
       const summaryPostManualReadyFields = Array.isArray(report.postManualSetupRequiredReadyFields) ? report.postManualSetupRequiredReadyFields.map(String) : [];
       if (summaryPostManualCommands.length < 3

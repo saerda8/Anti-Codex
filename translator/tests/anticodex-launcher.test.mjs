@@ -15355,6 +15355,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /targetUserIdentityBoundaryOk/);
   assert.match(secondAccountReadinessSummary, /targetUserIsCurrentUser/);
   assert.match(secondAccountReadinessSummary, /nextOperatorAction/);
+  assert.match(secondAccountReadinessSummary, /operatorActionCard/);
+  assert.match(secondAccountReadinessSummary, /canAskUserToLoginNow/);
+  assert.match(secondAccountReadinessSummary, /userVisibleNextStep/);
+  assert.match(secondAccountReadinessSummary, /noTrafficStatusCommand/);
   assert.match(secondAccountReadinessSummary, /readyToRequestUserApproval/);
   assert.match(secondAccountReadinessSummary, /readyToRequestSecondAccountLoginApproval/);
   assert.match(secondAccountReadinessSummary, /readyToRequestPostLoginProofApproval/);
@@ -15387,11 +15391,13 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*readyToRequestSecondAccountLoginApproval/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*readyToRequestPostLoginProofApproval/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*approvedSequenceNextAction/);
+  assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*operatorActionCard/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*operatorChecklistStartsLoginCount/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*manualSetupCommandHint/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*postManualSetupValidationCommands/);
   assert.match(summarizer, /secondAccountReadinessSummaryEvidence:[\s\S]*postManualSetupRequiredReadyFields/);
   assert.match(diagnosticsTest, /Test-SecondAccountReadinessSummaryEvidence/);
+  assert.match(diagnosticsTest, /second-account readiness summary operator action card missing/);
   assert.match(diagnosticsTest, /diagnostic reports summary missing latest-second-account-readiness-summary\.json/);
   assert.match(installedOverall, /latest-second-account-readiness-summary\.json/);
   assert.match(releaseGates, /secondAccountReadinessSummary/);
@@ -15399,6 +15405,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /requireSecondAccountReadinessSummarySemantics/);
   assert.match(releaseGates, /second_account_readiness_summary_identity_boundary_unverified/);
   assert.match(releaseGates, /second_account_readiness_summary_post_manual_commands/);
+  assert.match(releaseGates, /second_account_readiness_summary_operator_action_card_missing/);
   assert.match(releaseGates, /test-anticodex-second-account-readiness-summary\.ps1/);
   assert.match(server, /latest-second-account-readiness-summary\.json/);
   assert.match(server, /secondAccountReadinessSummary identity/);
