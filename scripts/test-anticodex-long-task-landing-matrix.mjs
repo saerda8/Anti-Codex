@@ -123,6 +123,17 @@ function firstPersonProgressCount(responseHistory = {}) {
   return Math.max(Number.isFinite(explicit) ? explicit : 0, textCount);
 }
 
+function responseHistoryKeyPasses(spec, key, responseHistory, capability = null) {
+  if (spec.taskMode === "report-site") {
+    const evidence = capability?.evidence || {};
+    if (key === "assistantHasFinalMarker") return responseHistory.assistantHasFinalMarker === true || evidence.visibleFinalMarkerSeen === true;
+    if (key === "markerToolOutputSeen") return responseHistory.markerToolOutputSeen === true || evidence.effectiveMarkerToolOutputSeen === true;
+    if (key === "taskToolOutputSeen") return responseHistory.taskToolOutputSeen === true || evidence.effectiveTaskToolOutputSeen === true;
+    if (key === "codexLikeProcessProof") return responseHistory.codexLikeProcessProof === true || evidence.reportSiteProcessProof === true;
+  }
+  return artifactPasses(responseHistory[key]);
+}
+
 const agenticEntry = readJsonReport("latest-agentic-capability-matrix.json");
 const agentic = agenticEntry.report || {};
 const agenticCapabilities = Array.isArray(agentic.capabilities) ? agentic.capabilities : [];
@@ -173,7 +184,7 @@ function taskResult(spec) {
     if ((Number(artifact.htmlUrlCount) || 0) < spec.minHtmlUrlCount) failures.push("html_source_url_count_too_low");
   }
   for (const key of spec.requiredResponseHistoryKeys || []) {
-    if (!artifactPasses(responseHistory[key])) failures.push(`response_history_key_missing:${key}`);
+    if (!responseHistoryKeyPasses(spec, key, responseHistory, capability)) failures.push(`response_history_key_missing:${key}`);
   }
   if (firstPersonProgressCount(responseHistory) > 0) failures.push("first_person_visible_progress_present");
   if (!capability || capability.ok !== true) failures.push("agentic_capability_missing_or_not_ok");

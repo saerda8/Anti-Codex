@@ -12355,14 +12355,20 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /if \(clicked && submitSucceeded\)/);
   assert.match(verifier, /submitEvidence/);
   assert.match(verifier, /staleRecovery/);
+  assert.match(verifier, /const complexProjectCommand = buildComplexProjectRepairCommandSafe\(artifactDir, marker\)/);
+  assert.match(verifier, /write-anticodex-complex-project-artifact\.mjs/);
+  assert.match(verifier, /第一条工具调用必须直接执行这条 PowerShell-safe Node 命令/);
+  assert.match(verifier, /不要手写 sources\.json，不要手抄半截 JSON/);
   assert.match(verifier, /const reportSiteCommand = buildReportSiteRepairCommandSafe\(artifactDir, marker\)/);
+  assert.match(verifier, /function reportSiteArtifactComplete\(evidence\)/);
+  assert.match(verifier, /waitForArtifactEvidence\(\s*\(\) => verifyReportSiteArtifact\(artifactDir, marker\),\s*reportSiteArtifactComplete/);
   assert.match(verifier, /\\u8bf7\\u7528\\u4e2d\\u6587\\u5b8c\\u6210\\u4e00\\u4e2a\\u771f\\u5b9e\\u7684\\u684c\\u9762\\u957f\\u4efb\\u52a1/);
   assert.match(verifier, /\\u7b2c\\u4e00\\u6b65\\u5fc5\\u987b\\u53d1\\u8d77\\u771f\\u5b9e\\u5de5\\u5177\\u8c03\\u7528/);
   assert.match(verifier, /Use PowerShell file commands to create exactly these files/);
   assert.match(verifier, /Do not create README\.md/);
   assert.match(verifier, /\\u53ea\\u521b\\u5efa report\.md\\u3001index\.html\\u3001done\.txt/);
   assert.match(verifier, /Use PowerShell only to run Node\.js file-write commands/);
-  assert.match(verifier, /Do not create README\.md; README\.md is explicitly wrong for this task/);
+  assert.match(verifier, /Do not create README\.md\. README\.md is explicitly wrong for this task/);
   assert.match(verifier, /PowerShell-safe Node/);
   assert.match(verifier, /do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files/);
   assert.match(verifier, /must define stripUtf8Bom\(text\)/);
@@ -12597,9 +12603,16 @@ test("Anti-Codex completes verified desktop artifact tool loops without reopenin
 
   assert.match(server, /function requestIncludesToolOutput/);
   assert.match(server, /function deterministicArtifactCompletionResponse/);
+  assert.match(server, /function deterministicArtifactToolCallCompletion/);
   assert.match(server, /Anti-Codex artifact marker verification/);
+  assert.match(server, /requirement\.complexProject[\s\S]*?complexProjectArtifactSafetyPowerShell/);
+  assert.match(server, /if \(!\(requirement\.reportSite \|\| requirement\.complexProject\)\) return null/);
+  assert.match(server, /Anti-Codex report-site tool example\|Creates report\\.md/);
+  assert.match(server, /这条命令一次生成中文报告站点/);
+  assert.match(server, /这条命令一次生成分析项目、来源数据和离线页面/);
   assert.match(server, /Files created and verified/);
   assert.match(server, /const artifactCompletion = deterministicArtifactCompletionResponse\(parsed, chatBody\)/);
+  assert.match(server, /const artifactToolCall = deterministicArtifactToolCallCompletion\(parsed, chatBody\)/);
   assert.match(server, /settleAntigravitySessionLease\(sessionLease, fmt\)/);
   assert.match(server, /artifactCompletion[\s\S]*?return parsed\.stream === false \? jsonResponse\(res, 200, fmt\) : pipeSSE\(res, fmt\)/);
 });
@@ -12618,6 +12631,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const agenticCapabilityMatrix = readFileSync(resolve(root, "scripts", "test-anticodex-agentic-capability-matrix.mjs"), "utf8");
+  const longTaskMatrix = readFileSync(resolve(root, "scripts", "test-anticodex-long-task-landing-matrix.mjs"), "utf8");
 
   assert.match(suite, /allowRealTraffic = args\.has\("--allow-real-traffic"\)/);
   assert.match(suite, /--suite-profile/);
@@ -12723,6 +12737,15 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(agenticCapabilityMatrix, /markerToolOutputSeen/);
   assert.match(agenticCapabilityMatrix, /visible_progress_too_shallow/);
   assert.match(agenticCapabilityMatrix, /visible_progress_not_distinct/);
+  assert.match(agenticCapabilityMatrix, /function requireReportSiteProcessProof\(report, responseHistory, failures\)/);
+  assert.match(agenticCapabilityMatrix, /Number\(report\.answerMarkerCount \|\| 0\) > 0/);
+  assert.match(agenticCapabilityMatrix, /report\.responseHistoryMarkerSeen === true/);
+  assert.match(agenticCapabilityMatrix, /effectiveTaskToolOutputSeen/);
+  assert.match(agenticCapabilityMatrix, /report_site_repair_attempted/);
+  assert.match(agenticCapabilityMatrix, /reportSiteProcessProof/);
+  assert.match(longTaskMatrix, /function responseHistoryKeyPasses\(spec, key, responseHistory, capability = null\)/);
+  assert.match(longTaskMatrix, /spec\.taskMode === "report-site"/);
+  assert.match(longTaskMatrix, /evidence\.reportSiteProcessProof === true/);
   assert.match(agenticCapabilityMatrix, /artifact_guard_used/);
   assert.match(agenticCapabilityMatrix, /codex_like_process_proof_missing/);
   assert.match(agenticCapabilityMatrix, /task_tool_call_missing/);
@@ -13148,6 +13171,9 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /artifactProofCount/);
   assert.match(roadmap, /missingArtifactProofKeys/);
   assert.match(roadmap, /taskResultRequirements/);
+  assert.match(roadmap, /isReportSite/);
+  assert.match(roadmap, /report\?\.repairAttempted !== true/);
+  assert.match(roadmap, /report\?\.responseHistoryMarkerSeen === true/);
   assert.match(roadmap, /assistantHasFinalMarker/);
   assert.match(roadmap, /markerToolOutputSeen/);
   assert.match(roadmap, /visibleProgressCount/);

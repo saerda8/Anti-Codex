@@ -168,6 +168,7 @@ if (!hasCustomPrompt && taskMode === "multi-turn-project") {
   promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。这是两轮任务的第 1 轮。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text)，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}_FIRST。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}_FIRST。`;
 }
 if (!hasCustomPrompt && taskMode === "complex-project") {
+  const complexProjectCommand = buildComplexProjectRepairCommandSafe(artifactDir, marker);
   promptText = [
     "请完成一个真实的中文长任务：先在本地做一个小型 Node.js 分析项目，再把 Codex / OpenAI Codex 更新资料来源写进项目。",
     `工作目录：${artifactDir}`,
@@ -183,7 +184,9 @@ if (!hasCustomPrompt && taskMode === "complex-project") {
     "done.txt",
     "",
     "第一步必须自己发起真实工具调用，先创建目录和下面 7 个文件；不要先输出搜索摘要、资料列表或只回复计划。",
-    "如果系统提示里出现 Anti-Codex complex project tool example，请直接复制那条完整 node -e 工具命令作为第一步；不要手写半截 JSON，不要先列目录，不要读取历史。",
+    `第一条工具调用必须直接执行这条 PowerShell-safe Node 命令：${complexProjectCommand}`,
+    "不要手写 sources.json，不要手抄半截 JSON；这条命令已经用 JSON.stringify 生成完整 sources.json，并且会立即运行 node:test 和 CLI 验证。",
+    "如果系统提示里也出现 Anti-Codex complex project tool example，以本条提示里的完整 node -e 命令为准；不要先列目录，不要读取历史。",
     "可以使用你已知的公开 OpenAI/Codex URL 作为 sources.json 来源；不要求先做 web_search 才能写文件。",
     "禁止创建 server.js、test.js、summary.json、README.md 或其他替代文件；如果已经创建了，必须删除后再结束。",
     "请用 PowerShell 执行 Node.js 文件写入命令；JSON 和 JavaScript 文件必须用 Node fs.writeFileSync(..., \"utf8\") 写入，避免 UTF-8 BOM；do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files。",
@@ -1209,6 +1212,10 @@ function asciiJsonStringLiteral(value) {
   });
 }
 
+function powerShellDoubleQuoted(value) {
+  return `"${String(value).replace(/`/g, "``").replace(/"/g, "`\"")}"`;
+}
+
 function buildRepoMultiReadmeWriteCommand() {
   const readmePath = jsSingleQuotedLiteral(repoMultiFileReadme);
   return `node -e "require('node:fs').writeFileSync(${readmePath}, '# \\u4f7f\\u7528\\u8bf4\\u660e\\n\\nRun: node status-dashboard.mjs status-data.json\\n', 'utf8')"`;
@@ -1276,69 +1283,8 @@ function buildReportSiteRepairCommandSafe(dir, expectedMarker) {
 }
 
 function buildComplexProjectRepairCommandSafe(dir, expectedMarker = marker) {
-  const sourceUrls = [
-    "https://openai.com/codex/",
-    "https://openai.com/news/",
-    "https://developers.openai.com/codex/",
-  ];
-  const sources = sourceUrls.map((url) => ({
-    title: url.includes("developers") ? "OpenAI Developers Codex" : (url.includes("news") ? "OpenAI News" : "OpenAI Codex"),
-    url,
-    snippet: "Codex and OpenAI update source",
-  }));
-  const analyzerSource = [
-    'import { readFileSync } from "node:fs";',
-    'import { pathToFileURL } from "node:url";',
-    "",
-    "export function stripUtf8Bom(text = \"\") {",
-    "  return String(text || \"\").replace(/^\\uFEFF/, \"\");",
-    "}",
-    "",
-    "export function summarizeSources(sources = []) {",
-    "  const items = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
-    "  const codexMentionCount = items.filter((item) => /Codex|OpenAI/i.test([item?.title, item?.url, item?.snippet].filter(Boolean).join(\" \"))).length;",
-    "  return { sourceCount: items.length, codexMentionCount, urls: items.map((item) => item?.url).filter((url) => /^https?:\\/\\//i.test(String(url || \"\"))) };",
-    "}",
-    "",
-    "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
-    "  const raw = stripUtf8Bom(readFileSync(process.argv[2] || \"sources.json\", \"utf8\"));",
-    "  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));",
-    "}",
-  ].join("\n") + "\n";
-  const testSource = [
-    'import test from "node:test";',
-    'import assert from "node:assert/strict";',
-    'import { summarizeSources } from "./codex-update-analyzer.mjs";',
-    "",
-    "test(\"summarizes three sources\", () => {",
-    "  const summary = summarizeSources([",
-    "    { title: \"Codex\", url: \"https://openai.com/codex/\", snippet: \"Codex update\" },",
-    "    { title: \"OpenAI\", url: \"https://openai.com/news/\", snippet: \"OpenAI news\" },",
-    "    { title: \"Developers\", url: \"https://developers.openai.com/codex/\", snippet: \"Codex docs\" },",
-    "  ]);",
-    "  assert.equal(summary.sourceCount, 3);",
-    "  assert.ok(summary.codexMentionCount >= 1);",
-    "});",
-  ].join("\n") + "\n";
-  const reportText = `# Codex \u8fd1\u671f\u66f4\u65b0\u8c03\u7814\n\n\u6807\u8bb0\uff1a${expectedMarker}\n\n\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u5b8c\u6210\u7f51\u9875\u8d44\u6599\u6574\u7406\u3001Node.js \u5206\u6790\u5668\u3001\u6d4b\u8bd5\u548c\u4e2d\u6587\u62a5\u544a\u751f\u6210\uff0c\u5e76\u4fdd\u7559\u771f\u5b9e\u6765\u6e90\u3002\n\n## \u6765\u6e90\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
-  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u4eea\u8868\u76d8</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u4eea\u8868\u76d8</h1><p>\u6807\u8bb0\uff1a${expectedMarker}</p><p>\u771f\u5b9e\u6765\u6e90\uff1a\u4ee5\u4e0b URL \u7528\u4e8e\u79bb\u7ebf\u5206\u6790\u3002</p><p><a href="report.md">\u6253\u5f00\u4e2d\u6587\u62a5\u544a</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
-  const files = {
-    "package.json": `${JSON.stringify({ type: "module", scripts: { test: "node --test codex-update-analyzer.test.mjs" } }, null, 2)}\n`,
-    "codex-update-analyzer.mjs": analyzerSource,
-    "codex-update-analyzer.test.mjs": testSource,
-    "sources.json": `${JSON.stringify(sources, null, 2)}\n`,
-    "report.md": reportText,
-    "index.html": htmlText,
-    "done.txt": expectedMarker,
-  };
-  return nodeEvalCommand([
-    "const fs=require('node:fs');const path=require('node:path');",
-    `const dir=${JSON.stringify(dir)};`,
-    `const files=${JSON.stringify(files)};`,
-    "fs.mkdirSync(dir,{recursive:true});",
-    "for(const [name,text] of Object.entries(files))fs.writeFileSync(path.join(dir,name),text,'utf8');",
-    `console.log(${JSON.stringify(expectedMarker)});`,
-  ].join(""));
+  const helperPath = resolve(sourceRoot, "scripts", "write-anticodex-complex-project-artifact.mjs");
+  return `node ${powerShellDoubleQuoted(helperPath)} --dir ${powerShellDoubleQuoted(dir)} --marker ${powerShellDoubleQuoted(expectedMarker)}`;
 }
 
 function buildComplexProjectRepairPrompt(currentFailures = [], evidence = null) {
@@ -2171,6 +2117,10 @@ function collectReportSiteArtifactFailures(artifactEvidence) {
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) localFailures.push("report-site index.html is not a complete HTML document");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) localFailures.push("report-site index.html does not link to report.md");
   return localFailures;
+}
+
+function reportSiteArtifactComplete(evidence) {
+  return collectReportSiteArtifactFailures(evidence).length === 0;
 }
 
 function collectAgenticStepFlowFailures(artifactEvidence) {
@@ -3830,7 +3780,11 @@ async function main() {
       }
     }
     if (taskMode === "report-site") {
-      artifactEvidence = verifyReportSiteArtifact(artifactDir, marker);
+      artifactEvidence = await waitForArtifactEvidence(
+        () => verifyReportSiteArtifact(artifactDir, marker),
+        reportSiteArtifactComplete,
+        Math.min(timeoutMs, 90_000),
+      );
       if (!artifactEvidence?.files?.reportMd) failures.push("report-site report.md was not created");
       if (!artifactEvidence?.files?.indexHtml) failures.push("report-site index.html was not created");
       if (!artifactEvidence?.files?.doneTxt) failures.push("report-site done.txt was not created");

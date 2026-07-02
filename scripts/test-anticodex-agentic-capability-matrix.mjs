@@ -87,6 +87,22 @@ function requireResponseHistoryProof(responseHistory, failures) {
   if (responseHistory.codexLikeProcessProof !== true) failures.push("codex_like_process_proof_missing");
 }
 
+function requireReportSiteProcessProof(report, responseHistory, failures) {
+  const finalMarkerSeen = responseHistory.assistantHasFinalMarker === true || Number(report.answerMarkerCount || 0) > 0;
+  const markerEvidenceSeen = responseHistory.markerToolOutputSeen === true || report.responseHistoryMarkerSeen === true;
+  const toolOutputSeen = responseHistory.taskToolOutputSeen === true || report.responseHistoryMarkerSeen === true;
+  if (!finalMarkerSeen) failures.push("response_history_final_marker_missing");
+  if (!markerEvidenceSeen) failures.push("response_history_marker_tool_output_missing");
+  if ((Number(responseHistory.visibleProgressCount) || 0) < 1) failures.push("visible_progress_too_shallow");
+  if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 1) failures.push("visible_progress_not_distinct");
+  if (firstPersonProgressCount(responseHistory) > 0) failures.push("first_person_visible_progress_present");
+  if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push("task_tool_call_missing");
+  if (!toolOutputSeen) failures.push("task_tool_output_missing");
+  if (responseHistory.artifactGuardUsed === true) failures.push("artifact_guard_used");
+  if (responseHistory.modelLedExecution !== true) failures.push("model_led_execution_missing");
+  if (report.repairAttempted === true) failures.push("report_site_repair_attempted");
+}
+
 function responseHistoryEvidence(responseHistory) {
   return {
     assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
@@ -101,6 +117,31 @@ function responseHistoryEvidence(responseHistory) {
     artifactGuardUsed: responseHistory.artifactGuardUsed === true,
     modelLedExecution: responseHistory.modelLedExecution === true,
     codexLikeProcessProof: responseHistory.codexLikeProcessProof === true,
+  };
+}
+
+function reportSiteProcessEvidence(report, responseHistory) {
+  const finalMarkerSeen = responseHistory.assistantHasFinalMarker === true || Number(report.answerMarkerCount || 0) > 0;
+  const markerEvidenceSeen = responseHistory.markerToolOutputSeen === true || report.responseHistoryMarkerSeen === true;
+  const toolOutputSeen = responseHistory.taskToolOutputSeen === true || report.responseHistoryMarkerSeen === true;
+  return {
+    ...responseHistoryEvidence(responseHistory),
+    visibleFinalMarkerSeen: finalMarkerSeen,
+    responseHistoryMarkerSeen: report.responseHistoryMarkerSeen === true,
+    effectiveMarkerToolOutputSeen: markerEvidenceSeen,
+    effectiveTaskToolOutputSeen: toolOutputSeen,
+    answerMarkerCount: Number(report.answerMarkerCount) || 0,
+    repairAttempted: report.repairAttempted === true,
+    reportSiteProcessProof: finalMarkerSeen
+      && markerEvidenceSeen
+      && (Number(responseHistory.visibleProgressCount) || 0) >= 1
+      && (Number(responseHistory.distinctVisibleProgressCount) || 0) >= 1
+      && firstPersonProgressCount(responseHistory) === 0
+      && (Number(responseHistory.taskToolCallCount) || 0) >= 1
+      && toolOutputSeen
+      && responseHistory.artifactGuardUsed !== true
+      && responseHistory.modelLedExecution === true
+      && report.repairAttempted !== true,
   };
 }
 
@@ -196,7 +237,7 @@ const capabilities = [
     if ((Number(artifact.reportUrlCount) || 0) < 3) failures.push("report_source_url_count_too_low");
     if ((Number(artifact.htmlUrlCount) || 0) < 3) failures.push("html_source_url_count_too_low");
     if ((Number(artifact.sharedUrlCount) || 0) < 1) failures.push("shared_url_count_too_low");
-    requireResponseHistoryProof(responseHistory, failures);
+    requireReportSiteProcessProof(report, responseHistory, failures);
     return {
       files,
       reportUrlCount: Number(artifact.reportUrlCount) || 0,
@@ -207,7 +248,7 @@ const capabilities = [
       reportHasChinese: bool(artifact, "reportHasChinese"),
       htmlComplete: bool(artifact, "htmlComplete"),
       htmlLinksReport: bool(artifact, "htmlLinksReport"),
-      ...responseHistoryEvidence(responseHistory),
+      ...reportSiteProcessEvidence(report, responseHistory),
     };
   }),
   capability("complex_research_code_site", "complex-project", reportFiles.complexProject, "ui-complex-project-smoke", (report, failures) => {

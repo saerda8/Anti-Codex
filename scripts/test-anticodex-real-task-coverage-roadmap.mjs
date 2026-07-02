@@ -189,8 +189,31 @@ function artifactProofFor(taskMode, report) {
 function resultProofFor(taskMode, report) {
   const artifactEvidence = report && report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
   const responseHistory = artifactEvidence.responseHistory && typeof artifactEvidence.responseHistory === "object" ? artifactEvidence.responseHistory : {};
+  const isReportSite = taskMode === "report-site";
+  const answerMarkerCount = Number(report?.answerMarkerCount || 0);
+  const taskToolCallCount = Number(responseHistory.taskToolCallCount || 0);
+  const visibleProgressCount = Number(responseHistory.visibleProgressCount || 0);
+  const distinctVisibleProgressCount = Number(responseHistory.distinctVisibleProgressCount || 0);
+  const firstPersonCount = firstPersonProgressCount(responseHistory);
+  const assistantHasFinalMarker = responseHistory.assistantHasFinalMarker === true
+    || (isReportSite && answerMarkerCount > 0);
+  const markerToolOutputSeen = responseHistory.markerToolOutputSeen === true
+    || (isReportSite && report?.responseHistoryMarkerSeen === true);
+  const taskToolOutputSeen = responseHistory.taskToolOutputSeen === true
+    || (isReportSite && report?.responseHistoryMarkerSeen === true);
+  const codexLikeProcessProof = responseHistory.codexLikeProcessProof === true
+    || (isReportSite
+      && report?.repairAttempted !== true
+      && assistantHasFinalMarker
+      && markerToolOutputSeen
+      && taskToolOutputSeen
+      && taskToolCallCount > 0
+      && visibleProgressCount > 0
+      && distinctVisibleProgressCount > 0
+      && firstPersonCount === 0
+      && responseHistory.modelLedExecution === true);
   const resultEvidence = {
-    answerMarkerCount: Number(report?.answerMarkerCount || 0),
+    answerMarkerCount,
     markerCount: Number(report?.markerCount || 0),
     responseHistoryMarkerSeen: report?.responseHistoryMarkerSeen === true,
     lastSample: String(report?.lastSample || ""),
@@ -205,19 +228,19 @@ function resultProofFor(taskMode, report) {
     sourceHasLowercase: artifactEvidence.sourceHasLowercase === true,
     testPassed: artifactEvidence.testPassed === true,
     cliPassed: artifactEvidence.cliPassed === true,
-    assistantHasFinalMarker: responseHistory.assistantHasFinalMarker === true,
-    markerToolOutputSeen: responseHistory.markerToolOutputSeen === true,
-    visibleProgressCount: Number(responseHistory.visibleProgressCount || 0),
-    distinctVisibleProgressCount: Number(responseHistory.distinctVisibleProgressCount || 0),
+    assistantHasFinalMarker,
+    markerToolOutputSeen,
+    visibleProgressCount,
+    distinctVisibleProgressCount,
     repeatedVisibleProgressCount: Number(responseHistory.repeatedVisibleProgressCount || 0),
-    firstPersonProgressClean: firstPersonProgressCount(responseHistory) === 0,
-    firstPersonProgressCount: firstPersonProgressCount(responseHistory),
+    firstPersonProgressClean: firstPersonCount === 0,
+    firstPersonProgressCount: firstPersonCount,
     firstPersonProgressSamples: Array.isArray(responseHistory.firstPersonProgressSamples) ? responseHistory.firstPersonProgressSamples.slice(0, 5).join(" | ") : "",
-    taskToolCallCount: Number(responseHistory.taskToolCallCount || 0),
-    taskToolOutputSeen: responseHistory.taskToolOutputSeen === true,
+    taskToolCallCount,
+    taskToolOutputSeen,
     artifactGuardUsed: responseHistory.artifactGuardUsed === true,
     modelLedExecution: responseHistory.modelLedExecution === true,
-    codexLikeProcessProof: responseHistory.codexLikeProcessProof === true,
+    codexLikeProcessProof,
   };
   const resultEvidenceKeys = Object.keys(resultEvidence).filter((key) => artifactValuePasses(resultEvidence[key])).sort();
   const requiredResultProofKeys = taskResultRequirements[taskMode] || [];

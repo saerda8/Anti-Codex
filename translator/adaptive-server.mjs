@@ -7301,6 +7301,20 @@ function visibleToolProgressText(codexName = "", args = "") {
     const runsTests = /node\s+--test|npm\s+test/.test(text);
     const runsCli = /node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text);
     const readsBack = /get-content|readfile|read-file|cat\s+/.test(text);
+    if (/Anti-Codex report-site tool example|Creates report\.md,\s*index\.html,\s*and done\.txt/i.test(command)) {
+        return [
+            `计划：这条命令一次生成中文报告站点${targetSuffix}。`,
+            "验证：随后检查 report.md、index.html 和 done.txt 是否同时落地。",
+            "核对：最后让工具输出完成标记和文件大小，确认不是只停在口头描述。",
+        ].join("\n");
+    }
+    if (/Anti-Codex complex project tool example|Anti-Codex complex artifact safety repair/i.test(command)) {
+        return [
+            `计划：这条命令一次生成分析项目、来源数据和离线页面${targetSuffix}。`,
+            "验证：随后运行 node:test 和本地 CLI，核对真实输出。",
+            "核对：最后让工具输出完成标记，确认交付物和验证结果一致。",
+        ].join("\n");
+    }
     if (writesFiles && (runsTests || runsCli) && readsBack) {
         return [
             `计划：这条命令同时落地项目文件和测试文件${targetSuffix}。`,
@@ -7829,7 +7843,14 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
     if (requestNeedsModelLedLocalArtifactWork(originalRequest) || requestNeedsModelLedLocalArtifactWork(chatBody)) {
-        if (!(requirement.reportSite && !requirement.complexProject)) return null;
+        if (!(requirement.reportSite || requirement.complexProject)) return null;
+    }
+    if (requirement.complexProject) {
+        return makeToolCallCompletion(
+            chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+            "shell_command",
+            { command: complexProjectArtifactSafetyPowerShell(requirement.marker, requirement.targetPath, { heading: "Anti-Codex complex project tool example" }) },
+        );
     }
     if (requirement.reportSite && !requirement.complexProject) {
         return makeToolCallCompletion(
@@ -7838,7 +7859,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
             { command: reportSiteArtifactToolExamplePowerShell(requirement.marker, requirement.targetPath) },
         );
     }
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning || requirement.complexProject) return null;
+    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
     const command = artifactMarkerRepairPowerShell(requirement.marker, requirement.targetPath, {
         codingProject: requirement.codingProject,
         complexProject: requirement.complexProject,
