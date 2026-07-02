@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel read-only Kilo still transport-closed
+
+- Task: after tool discovery exposed worker namespaces again, recheck a completed Kilo job with read-only `kilo_get_job` and refresh worker transport evidence.
+- Result: current-channel `kilo_get_job` for completed job `klw_mr3qs91r_whnc2h` failed immediately with `Transport closed`. A direct no-traffic MCP server probe then passed 7/7 configured worker servers and listed tools for each; `antigravity-code-worker` still lacks wait/sync/cancel task tools. `latest-current-channel-worker-transport.json` now records `currentChannelWorkerDispatchBlocked:true`, `readOnlyProbeRequiredBeforeDispatch:true`, and a post-reload verification instruction.
+- Cause classification: current Codex-channel worker MCP transport remains stale/dead for worker namespaces; local worker server config is healthy. Do not dispatch implementation workers from this channel until a read-only worker status call succeeds after reload/new channel.
+- Rule change: reports must distinguish "direct worker servers healthy" from "this current channel can safely dispatch workers". A green direct probe alone is not enough to start current-channel worker jobs.
+
 ### 2026-07-03 - Current-channel Kilo start still transport-closed
 
 - Task: single-file patch for `scripts/test-anticodex-goal-real-run-readiness.mjs` to surface approved-real-run second-account readiness fields.

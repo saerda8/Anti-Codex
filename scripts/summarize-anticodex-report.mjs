@@ -1870,8 +1870,11 @@ const summary = {
     directProbeMissingServers: Array.isArray(report.directProbeReport?.missingServers) ? asStringArray(report.directProbeReport.missingServers) : [],
     directProbeCodexSessionTransportStatus: asString(report.directProbeReport?.codexSessionTransportStatus),
     splitObserved: boolField(report, "splitObserved"),
+    currentChannelWorkerDispatchBlocked: boolField(report, "currentChannelWorkerDispatchBlocked"),
+    readOnlyProbeRequiredBeforeDispatch: boolField(report, "readOnlyProbeRequiredBeforeDispatch"),
     interpretation: asString(report.interpretation),
     operatorRecoveryAction: asString(report.operatorRecoveryAction),
+    postReloadVerification: asString(report.postReloadVerification),
   } : null,
   coldRelaunchEvidence: report.reportName === "cold-relaunch" ? {
     healthOk: boolField(report.health || {}, "ok"),

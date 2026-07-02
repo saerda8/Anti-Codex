@@ -12047,6 +12047,11 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /scripts\/test-anticodex-local-connectors\.mjs/);
   assert.match(releaseGates, /scripts\/test-anticodex-mcp-skills\.ps1/);
   assert.match(releaseGates, /scripts\/probe-anticodex-worker-mcp-servers\.mjs/);
+  assert.match(mcpProbe, /function printHelp\(\)/);
+  assert.match(mcpProbe, /hasArg\("--help"\) \|\| hasArg\("-h"\)/);
+  assert.match(mcpProbe, /Show this help message without starting workers/);
+  assert.doesNotMatch(mcpProbe, /^import \{ Client \} from "file:\/\/\/G:\/Trae-Project\/mimocode-worker-mcp-main\/node_modules\/@modelcontextprotocol\/sdk/m);
+  assert.match(mcpProbe, /async function loadMcpSdk\(\)/);
   assert.match(releaseGates, /scripts\/test-anticodex-missing-history\.mjs/);
   assert.match(releaseGates, /scripts\/test-anticodex-model-routing\.ps1/);
   assert.match(releaseGates, /scripts\/test-anticodex-model-thinking\.ps1/);
@@ -13041,6 +13046,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /latest-current-channel-worker-transport\.json/);
   assert.match(goalReadiness, /currentChannelWorkerTransportReportOk/);
   assert.match(goalReadiness, /currentChannelSplitObserved/);
+  assert.match(goalReadiness, /currentChannelWorkerDispatchBlocked/);
+  assert.match(goalReadiness, /currentChannelReadOnlyProbeRequiredBeforeDispatch/);
+  assert.match(goalReadiness, /currentChannelOperatorRecoveryAction/);
+  assert.match(goalReadiness, /currentChannelPostReloadVerification/);
   assert.match(goalReadiness, /operatorRecoveryAction/);
   assert.match(goalReadiness, /postReloadVerification/);
   assert.match(goalReadiness, /taskSmokeReportOk/);
@@ -13083,6 +13092,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerMcpProjectSmokeScenario/);
   assert.match(summarizer, /currentChannelWorkerTransportEvidence/);
   assert.match(summarizer, /splitObserved/);
+  assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
+  assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
+  assert.match(summarizer, /postReloadVerification/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-project-smoke\.json/);
@@ -13092,6 +13104,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /worker-mcp-project-smoke summary missing workerMcpProjectSmokeEvidence/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not prove split/);
+  assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
+  assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP task smoke worker/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP project smoke worker/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing required worker/);

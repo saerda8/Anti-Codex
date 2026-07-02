@@ -3,8 +3,6 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { resolve } from "node:path";
-import { Client } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
-import { StdioClientTransport } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
 
 const DEFAULT_CONFIG_PATH = "C:/Users/XD/.codex/config.toml";
 const DEFAULT_WORKERS = [
@@ -24,6 +22,19 @@ function argValue(name, fallback = "") {
 
 function hasArg(name) {
   return process.argv.includes(name);
+}
+
+function printHelp() {
+  console.log([
+    "Usage: node scripts/probe-anticodex-worker-mcp-servers.mjs [options]",
+    "",
+    "Options:",
+    "  --workers a,b,c       Probe only the listed worker MCP servers.",
+    "  --config PATH         Read worker MCP server config from PATH.",
+    "  --report-root PATH    Write latest/history reports under PATH.",
+    "  --no-write-report     Print JSON without writing signed reports.",
+    "  --help, -h            Show this help message without starting workers.",
+  ].join("\n"));
 }
 
 function parseTomlValue(raw) {
@@ -83,11 +94,26 @@ function withTimeout(promise, timeoutMs, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+let mcpSdkPromise;
+async function loadMcpSdk() {
+  if (!mcpSdkPromise) {
+    mcpSdkPromise = Promise.all([
+      import("file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js"),
+      import("file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js"),
+    ]).then(([clientModule, stdioModule]) => ({
+      Client: clientModule.Client,
+      StdioClientTransport: stdioModule.StdioClientTransport,
+    }));
+  }
+  return mcpSdkPromise;
+}
+
 async function probeWorker(config) {
   if (!config.command) {
     return { name: config.name, ok: false, toolCount: 0, toolNames: [], error: "missing command" };
   }
 
+  const { Client, StdioClientTransport } = await loadMcpSdk();
   const transport = new StdioClientTransport({
     command: config.command,
     args: config.args,
@@ -167,6 +193,12 @@ function finish(payload, reportRoot) {
 }
 
 async function main() {
+  if (hasArg("--help") || hasArg("-h")) {
+    printHelp();
+    process.exit(0);
+    return;
+  }
+
   const configPath = argValue("--config", DEFAULT_CONFIG_PATH);
   const reportRoot = resolve(argValue("--report-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`));
   const workerArg = argValue("--workers", "");

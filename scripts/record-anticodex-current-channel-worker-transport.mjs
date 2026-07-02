@@ -99,12 +99,17 @@ function main() {
       codexSessionTransportStatus: directProbe.parseable ? String(directProbe.report?.codexSessionTransportStatus || "") : "",
     },
     splitObserved,
+    currentChannelWorkerDispatchBlocked: !workerTransportOk,
+    readOnlyProbeRequiredBeforeDispatch: true,
     interpretation: splitObserved
       ? "worker namespace transport is failing in the current Codex channel while generic MCP and direct worker server probe are healthy"
       : "current-channel worker transport is not proven split; inspect worker/generic/direct statuses before dispatching worker jobs",
     operatorRecoveryAction: workerTransportOk
       ? "current-channel worker read path is healthy; a narrow worker task can be dispatched after normal scope checks"
       : "reload Codex MCP/session or open a fresh channel, then rerun a read-only worker status check before dispatching worker jobs",
+    postReloadVerification: workerTransportOk
+      ? "keep the successful read-only worker status report as dispatch evidence before starting implementation work"
+      : "after reload or a fresh channel, run one read-only worker get_job/wait/list status check; only dispatch if workerTransportOk is true",
   };
   const report = writeSignedReport(payload, reportRoot);
   console.log(JSON.stringify({ ...payload, report }));

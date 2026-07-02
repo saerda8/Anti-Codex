@@ -1829,6 +1829,8 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     if ($evidence.directProbeCodexSessionTransportStatus -ne "not-tested-by-direct-probe") { Add-Failure "current-channel-worker-transport summary missing direct-probe transport caveat" }
     if (-not [string]$evidence.interpretation) { Add-Failure "current-channel-worker-transport summary missing interpretation" }
     if (-not [string]$evidence.operatorRecoveryAction) { Add-Failure "current-channel-worker-transport summary missing operator recovery action" }
+    if (-not [string]$evidence.postReloadVerification) { Add-Failure "current-channel-worker-transport summary missing post-reload verification" }
+    if ($evidence.readOnlyProbeRequiredBeforeDispatch -ne $true) { Add-Failure "current-channel-worker-transport summary missing read-only pre-dispatch probe requirement" }
 
     $workerTransportOk = $evidence.workerTransportOk -eq $true
     $workerTransportFailed = $evidence.workerTransportFailed -eq $true
@@ -1838,6 +1840,7 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     if ($workerTransportFailed) {
         if ($evidence.workerStatus -ne "transport_closed") { Add-Failure "current-channel-worker-transport summary worker failure status mismatch" }
         if ($evidence.splitObserved -ne $true) { Add-Failure "current-channel-worker-transport summary did not prove split" }
+        if ($evidence.currentChannelWorkerDispatchBlocked -ne $true) { Add-Failure "current-channel-worker-transport summary did not block worker dispatch" }
     }
 }
 
