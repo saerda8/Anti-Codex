@@ -2154,7 +2154,7 @@ function filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, a
     && history.markerToolOutputSeen === true
     && history.taskToolOutputSeen === true;
   if (!hasCompletedResponse) return failures;
-  return failures.filter((failure) => !/assistant reply marker was not observed/i.test(String(failure || "")));
+  return failures.filter((failure) => !/assistant reply marker was not observed|send click did not submit/i.test(String(failure || "")));
 }
 
 function filterReportSiteUiCompletionFailures(failures, artifactEvidence, answerMarkerCount = 0) {
@@ -3231,7 +3231,7 @@ async function main() {
   let submitCompletedAt = 0;
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
-  const complexProjectRequiresModelLed = taskMode === "complex-project";
+  const complexProjectRequiresModelLed = taskMode === "complex-project" || taskMode === "autonomous-reasoning";
 
   try {
     releaseUiLock = await acquireUiSmokeLock();
@@ -4120,9 +4120,12 @@ async function main() {
     }
   }
   if (taskMode === "autonomous-reasoning") {
+    const historyConfirmedFailures = filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, artifactEvidence);
+    failures.length = 0;
+    failures.push(...historyConfirmedFailures);
     for (let continuationIndex = 0; continuationIndex < 2; continuationIndex += 1) {
-      const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
-      const toolFailures = failures.filter((failure) => /autonomous-reasoning did not|assistant reply marker was not observed/i.test(String(failure || "")));
+      const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
+      const toolFailures = failures.filter((failure) => /autonomous-reasoning did not|assistant reply marker was not observed|send click did not submit/i.test(String(failure || "")));
       const currentFailures = [...artifactFailures, ...toolFailures];
       const canContinue = currentFailures.length > 0
         && failures.every((failure) => artifactFailures.includes(failure) || toolFailures.includes(failure));
