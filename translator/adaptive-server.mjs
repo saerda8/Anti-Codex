@@ -91,6 +91,7 @@ const ANTIGRAVITY_STREAM_IDLE_TIMEOUT_MS = Math.max(10_000, Number(process.env.A
 const ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS = Math.max(30_000, Number(process.env.ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS || 120_000) || 120_000);
 const ANTIGRAVITY_SSE_KEEPALIVE_MS = Math.max(1_000, Number(process.env.ANTIGRAVITY_SSE_KEEPALIVE_MS || 5_000) || 5_000);
 const MAX_TOOL_LOOPS = Number(process.env.TRANSLATOR_MAX_TOOL_LOOPS || 12);
+const ANTIGRAVITY_SESSION_MAX_CONTINUATIONS = Math.max(1, Number(process.env.ANTIGRAVITY_SESSION_MAX_CONTINUATIONS || MAX_TOOL_LOOPS) || MAX_TOOL_LOOPS);
 const MAX_FAKE_TOOL_CLAIM_REPLAYS = Number(process.env.TRANSLATOR_MAX_FAKE_TOOL_CLAIM_REPLAYS || 2);
 const MAX_RESTORED_INPUT_ITEMS = Number(process.env.TRANSLATOR_MAX_RESTORED_INPUT_ITEMS || 220);
 const MAX_RESTORED_TOOL_CALLS = Number(process.env.TRANSLATOR_MAX_RESTORED_TOOL_CALLS || 6);
@@ -143,6 +144,7 @@ const ANTIGRAVITY_REQUEST_QUEUE = createAntigravityRequestQueue({
 const ANTIGRAVITY_SESSION_LOCK = createAntigravitySessionLock({
     maxQueued: ANTIGRAVITY_MAX_QUEUED_REQUESTS,
     ttlMs: ANTIGRAVITY_SESSION_TTL_MS,
+    maxContinuations: ANTIGRAVITY_SESSION_MAX_CONTINUATIONS,
 });
 const DIRECT_ANTIGRAVITY_REQUEST_QUEUE = {
     run: async (task, { signal } = {}) => task({ signal }),
@@ -5269,6 +5271,7 @@ function buildSystemBlock(options = {}) {
     lines.push("- Do not prepend C:\\Program Files\\nodejs to PATH to find these commands. Anti-Codex already provides command shims at the front of PATH.");
     lines.push("- If an existing command uses Start-Process -FilePath \"npx\" or \"npm\", rewrite it to the .cmd executable before running.");
     lines.push("- When reading or writing files that contain Chinese or other non-ASCII text, avoid copying mojibake from PowerShell display output. Use UTF-8 file APIs, Node.js fs read/write, or JavaScript Unicode escapes such as \\u72b6\\u6001; do not edit tests or expected files to match garbled console text.");
+    lines.push("- For Chinese deliverables on Windows, do not put Chinese literal text directly inside a PowerShell command string. Write those files with Node.js fs.writeFileSync(..., \"utf8\") and JavaScript Unicode escapes, then read the files back and fix any mojibake such as 鐪, 鏉ユ簮, 鏇存柊, 锟, or other garbled CJK text.");
 
     lines.push("");
     lines.push("Freeform patch tool rule:");
@@ -7777,7 +7780,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
-    if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
+    if (requirement.agenticStepFlow) return null;
     const evidenceText = combinedToolEvidenceText(originalRequest, messages);
     if (!evidenceContainsExactMarker(evidenceText, requirement.marker)) return null;
     if (requirement.complexProject) {
@@ -10757,6 +10760,7 @@ async function callQueuedAntigravityUpstream(chatBody, dependencies = {}) {
 async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, routing = null, dependencies = {}) {
     const registry = dependencies.registry ?? ACTIVE_ANTIGRAVITY_REQUESTS;
     const sessionLease = dependencies.sessionLease ?? null;
+    const internalToolsCompletion = dependencies.callAntigravityWithInternalTools ?? callAntigravityWithInternalTools;
     const id = responseId();
     const created = Math.floor(Date.now() / 1000);
     const controller = new AbortController();
@@ -10764,6 +10768,20 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
     const inProgress = responseShell(parsed, { id, created, model, status: "in_progress", output: [] });
     const sse = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     const cleanupClientAbort = attachAntigravityStreamingClientAbort(req, res, controller);
+    const timeoutMs = Math.max(1, Number(dependencies.internalToolsTimeoutMs || ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS) || ANTIGRAVITY_STREAM_TOTAL_TIMEOUT_MS);
+    let timeoutTimer = null;
+    const timeoutWait = new Promise((_, reject) => {
+        timeoutTimer = setTimeout(() => {
+            if (!controller.signal.aborted) {
+                const timeoutError = new DOMException(
+                    `Anti-Codex Antigravity internal-tool turn exceeded ${timeoutMs}ms without finishing.`,
+                    "TimeoutError",
+                );
+                controller.abort(timeoutError);
+                reject(timeoutError);
+            }
+        }, timeoutMs);
+    });
 
     registry.register(id, { controller, fingerprint: resetReplayFingerprint(parsed) });
     res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", connection: "keep-alive", "x-accel-buffering": "no", "access-control-allow-origin": "*" });
@@ -10771,11 +10789,14 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
     sse("response.in_progress", { type: "response.in_progress", response: inProgress });
     const startedAtMs = Date.now();
     try {
-        const completion = await callAntigravityWithInternalTools(chatBody, {
-            ...dependencies,
-            signal: controller.signal,
-            onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
-        });
+        const completion = await Promise.race([
+            internalToolsCompletion(chatBody, {
+                ...dependencies,
+                signal: controller.signal,
+                onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
+            }),
+            timeoutWait,
+        ]);
         completion.id = id;
         completion.created = created;
         const fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true, chatMessages: chatBody.messages || [] });
@@ -10787,7 +10808,19 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
         sse("response.completed", { type: "response.completed", response: fmt });
     } catch (error) {
         releaseAntigravitySessionLease(sessionLease);
-        if (controller.signal.aborted || error?.name === "AbortError") {
+        if (error?.name === "TimeoutError") {
+            const failed = {
+                ...responseShell(parsed, { id, created, model, status: "failed", output: [] }),
+                error: {
+                    type: "antigravity_internal_tools_timeout",
+                    diagnosis: "Antigravity internal-tool turn did not finish before the local timeout.",
+                    status: 504,
+                    message: error.message,
+                    retryable: true,
+                },
+            };
+            sse("response.failed", { type: "response.failed", response: failed });
+        } else if (controller.signal.aborted || error?.name === "AbortError") {
             const cancelled = cancelledResponse(id);
             sse("response.cancelled", { type: "response.cancelled", response: cancelled });
         } else {
@@ -10807,6 +10840,7 @@ async function pipeAntigravityInternalToolsAsSSE(req, res, chatBody, parsed, rou
             sse("response.failed", { type: "response.failed", response: failed });
         }
     } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
         cleanupClientAbort();
         registry.finish(id);
         res.end();
@@ -10951,11 +10985,14 @@ async function pipeAntigravityResponseAsSSE(req, res, chatBody, parsed, routing 
             let nonStreamingToolReplays = 0;
             let fmt = null;
             while (true) {
-                const completion = await nonStreamingUpstream({ ...workingChatBody, stream: false }, {
-                    ...dependencies,
-                    signal: controller.signal,
-                    onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
-                });
+                const completion = await Promise.race([
+                    nonStreamingUpstream({ ...workingChatBody, stream: false }, {
+                        ...dependencies,
+                        signal: controller.signal,
+                        onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
+                    }),
+                    streamIdleWait,
+                ]);
                 completion.id = id;
                 completion.created = created;
                 fmt = chatToResponsesFormat(completion, parsed, routing, { strictTools: true, chatMessages: workingChatBody.messages || [] });

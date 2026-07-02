@@ -554,6 +554,10 @@ function diagnosticsHasRequiredModelSubmit(diagnostics) {
   return responsesSubmitModelValues(diagnostics).some((value) => modelValueMatches(value, expected));
 }
 
+function realSubmitInputItems(realSubmit) {
+  return Number(realSubmit?.diagnostics?.responsesWebSocket?.lastClientPayload?.inputItems || 0);
+}
+
 async function waitForRealResponsesSubmitAfter(url, beforePayloadCount = 0, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   let latest = null;
@@ -563,16 +567,13 @@ async function waitForRealResponsesSubmitAfter(url, beforePayloadCount = 0, time
       latest = await httpJson(`${url}/anticodex/diagnostics?fast=1`);
       if (diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
         const requiredModelMatched = diagnosticsHasRequiredModelSubmit(latest);
-        if (requiredModelMatched) {
-          return {
-            ok: true,
-            diagnostics: latest,
-            lastError: null,
-            requiredModelMatched,
-            observedModels: responsesSubmitModelValues(latest),
-          };
-        }
-        lastError = `responses request routed through non-required model: ${responsesSubmitModelValues(latest).join(", ") || "none"}`;
+        return {
+          ok: true,
+          diagnostics: latest,
+          lastError: requiredModelMatched ? null : `raw responses payload model did not match required model: ${responsesSubmitModelValues(latest).join(", ") || "none"}`,
+          requiredModelMatched,
+          observedModels: responsesSubmitModelValues(latest),
+        };
       }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -1836,6 +1837,10 @@ function isTrustedOpenAiSourceUrl(url) {
   }
 }
 
+function containsLikelyChineseMojibake(text) {
+  return /(?:锟|鐪|鏉ユ簮|鏇存柊|浠〃|鏍囪|杩欎釜|楠岃瘉|鍒嗘瀽|鎶ュ憡|涓枃|歎I_|銆[^\s]{0,3}\?)/u.test(String(text || ""));
+}
+
 function verifyReportSiteArtifact(dir, expectedMarker) {
   if (!dir) return null;
   const reportPath = join(dir, "report.md");
@@ -1857,6 +1862,8 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     htmlMentionsCodex: false,
     reportHasTrustedChinesePhrase: false,
     htmlHasTrustedChinesePhrase: false,
+    reportHasMojibake: false,
+    htmlHasMojibake: false,
     reportHasLiteralEscapedNewlines: false,
     htmlHasLiteralEscapedNewlines: false,
     reportUrlCount: 0,
@@ -1882,6 +1889,7 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     evidence.reportHasChinese = /[\u4e00-\u9fff]/.test(text);
     evidence.reportMentionsCodex = /Codex|OpenAI/i.test(text);
     evidence.reportHasTrustedChinesePhrase = /真实来源/.test(text);
+    evidence.reportHasMojibake = containsLikelyChineseMojibake(text);
     evidence.reportHasLiteralEscapedNewlines = /\\n/.test(text);
     reportUrls = uniqueUrls(text);
     evidence.reportUrlCount = reportUrls.length;
@@ -1893,6 +1901,7 @@ function verifyReportSiteArtifact(dir, expectedMarker) {
     evidence.htmlHasChinese = /[\u4e00-\u9fff]/.test(text);
     evidence.htmlMentionsCodex = /Codex|OpenAI/i.test(text);
     evidence.htmlHasTrustedChinesePhrase = /真实来源/.test(text);
+    evidence.htmlHasMojibake = containsLikelyChineseMojibake(text);
     evidence.htmlHasLiteralEscapedNewlines = /\\n/.test(text);
     htmlUrls = uniqueUrls(text);
     evidence.htmlUrlCount = htmlUrls.length;
@@ -1939,6 +1948,8 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     htmlMentionsCodex: false,
     reportHasTrustedChinesePhrase: false,
     htmlHasTrustedChinesePhrase: false,
+    reportHasMojibake: false,
+    htmlHasMojibake: false,
     reportHasLiteralEscapedNewlines: false,
     htmlHasLiteralEscapedNewlines: false,
     reportUrlCount: 0,
@@ -1977,6 +1988,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.reportHasChinese = /[\u4e00-\u9fff]/.test(text);
       evidence.reportMentionsCodex = /Codex|OpenAI/i.test(text);
       evidence.reportHasTrustedChinesePhrase = /真实来源/.test(text);
+      evidence.reportHasMojibake = containsLikelyChineseMojibake(text);
       evidence.reportHasLiteralEscapedNewlines = /\\n/.test(text);
       reportUrls = uniqueUrls(text);
       evidence.reportUrlCount = reportUrls.length;
@@ -1988,6 +2000,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.htmlHasChinese = /[\u4e00-\u9fff]/.test(text);
       evidence.htmlMentionsCodex = /Codex|OpenAI/i.test(text);
       evidence.htmlHasTrustedChinesePhrase = /真实来源/.test(text);
+      evidence.htmlHasMojibake = containsLikelyChineseMojibake(text);
       evidence.htmlHasLiteralEscapedNewlines = /\\n/.test(text);
       htmlUrls = uniqueUrls(text);
       evidence.htmlUrlCount = htmlUrls.length;
@@ -2066,6 +2079,7 @@ function complexProjectArtifactComplete(evidence, { requireModelLed = false } = 
   if (evidence.reportHasMarker !== true || evidence.htmlHasMarker !== true) return false;
   if (evidence.reportHasChinese !== true || evidence.htmlHasChinese !== true) return false;
   if (evidence.reportHasTrustedChinesePhrase !== true || evidence.htmlHasTrustedChinesePhrase !== true) return false;
+  if (evidence.reportHasMojibake === true || evidence.htmlHasMojibake === true) return false;
   if (evidence.reportHasLiteralEscapedNewlines === true || evidence.htmlHasLiteralEscapedNewlines === true) return false;
   if (evidence.reportMentionsCodex !== true || evidence.htmlMentionsCodex !== true) return false;
   if (Number(evidence.reportUrlCount || 0) < 3 || Number(evidence.htmlUrlCount || 0) < 3) return false;
@@ -2103,6 +2117,8 @@ function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) localFailures.push("complex-project index.html missing Chinese content");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasTrustedChinesePhrase !== true) localFailures.push("complex-project report.md did not preserve required Chinese phrase");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasTrustedChinesePhrase !== true) localFailures.push("complex-project index.html did not preserve required Chinese phrase");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMojibake === true) localFailures.push("complex-project report.md contains likely Chinese mojibake");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMojibake === true) localFailures.push("complex-project index.html contains likely Chinese mojibake");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasLiteralEscapedNewlines === true) localFailures.push("complex-project report.md contains literal escaped newlines");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasLiteralEscapedNewlines === true) localFailures.push("complex-project index.html contains literal escaped newlines");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) localFailures.push("complex-project report.md missing Codex/OpenAI content");
@@ -2187,6 +2203,8 @@ function collectReportSiteArtifactFailures(artifactEvidence) {
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) localFailures.push("report-site index.html missing marker");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) localFailures.push("report-site report.md missing Chinese content");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) localFailures.push("report-site index.html missing Chinese content");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMojibake === true) localFailures.push("report-site report.md contains likely Chinese mojibake");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMojibake === true) localFailures.push("report-site index.html contains likely Chinese mojibake");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) localFailures.push("report-site report.md missing Codex/OpenAI content");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) localFailures.push("report-site index.html missing Codex/OpenAI content");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) localFailures.push("report-site report.md has fewer than three source URLs");
@@ -3004,11 +3022,25 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
             const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
             submitEvidence.retryRealSubmit = retryRealSubmit;
             if (retryRealSubmit.ok !== true) submitSucceeded = false;
+            if (submitSucceeded && Number(options.maxInputItems || 0) > 0 && realSubmitInputItems(retryRealSubmit) > Number(options.maxInputItems || 0)) {
+              failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(retryRealSubmit)}, max=${Number(options.maxInputItems || 0)}`);
+              try { await resetBackendSessionLock(baseUrl); } catch {}
+              submitSucceeded = false;
+            }
           }
         } else if (submitSucceeded) {
           submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
           submitSucceeded = false;
         }
+      } else if (Number(options.maxInputItems || 0) > 0 && realSubmitInputItems(realSubmit) > Number(options.maxInputItems || 0)) {
+        submitEvidence.contextGuard = {
+          ok: false,
+          inputItems: realSubmitInputItems(realSubmit),
+          maxInputItems: Number(options.maxInputItems || 0),
+        };
+        failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(realSubmit)}, max=${Number(options.maxInputItems || 0)}`);
+        try { await resetBackendSessionLock(baseUrl); } catch {}
+        submitSucceeded = false;
       }
     }
   }
@@ -3073,6 +3105,38 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
             if (diagnosticsAreIdle(loopDiagnostics)) {
               artifactCompletionObserved = true;
               inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+          } catch {}
+        }
+      }
+      if (taskMode === "autonomous-reasoning") {
+        artifactEvidence = verifyComplexProjectArtifact(options.artifactDir || artifactDir, expectedMarker);
+        const hasRequiredFiles = artifactEvidence?.files?.packageJson === true
+          && artifactEvidence?.files?.analyzer === true
+          && artifactEvidence?.files?.testFile === true
+          && artifactEvidence?.files?.sourcesJson === true
+          && artifactEvidence?.files?.reportMd === true
+          && artifactEvidence?.files?.indexHtml === true
+          && artifactEvidence?.files?.doneTxt === true;
+        const hasToolEvidence = artifactEvidence?.responseHistory?.taskToolOutputSeen === true
+          || artifactEvidence?.responseHistory?.markerToolOutputSeen === true;
+        if (hasRequiredFiles && hasToolEvidence && !composer.includes(prompt)) {
+          try {
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              artifactCompletionObserved = true;
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+            if (Date.now() - waitStartedAt >= 45_000) {
+              const reset = await resetBackendSessionLock(baseUrl).catch((error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+              const afterReset = await waitForIdleDiagnostics(baseUrl, 20_000);
+              artifactEvidence.autonomousStaleContinuationReset = reset;
+              artifactCompletionObserved = true;
+              inLoopIdleDiagnostics = afterReset.diagnostics || loopDiagnostics;
               idleCompletedAt = Date.now();
               break;
             }
@@ -3161,6 +3225,7 @@ async function main() {
   let preSubmitModelSelectionEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
+  let submitPayloadsBefore = 0;
   let modelRoutesBefore = null;
   let modelRouteEvidence = null;
   let submitCompletedAt = 0;
@@ -3637,7 +3702,7 @@ async function main() {
         failures.push("send button coordinates were not available");
       } else {
         const submitDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
-        const submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
+        submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
         const x = rect.x + (rect.w / 2);
         const y = rect.y + (rect.h / 2);
         await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
@@ -3702,6 +3767,23 @@ async function main() {
           }
         }
       }
+      const maxInputItems = taskMode === "autonomous-reasoning" ? 80 : 0;
+      if (submitSucceeded && maxInputItems > 0) {
+        const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
+        submitEvidence.realSubmit = realSubmit;
+        if (realSubmit.ok !== true) {
+          submitSucceeded = false;
+        } else if (realSubmitInputItems(realSubmit) > maxInputItems) {
+          submitEvidence.contextGuard = {
+            ok: false,
+            inputItems: realSubmitInputItems(realSubmit),
+            maxInputItems,
+          };
+          failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(realSubmit)}, max=${maxInputItems}`);
+          try { await resetBackendSessionLock(baseUrl); } catch {}
+          submitSucceeded = false;
+        }
+      }
       if (submitSucceeded) submitCompletedAt = Date.now();
       if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
     }
@@ -3738,6 +3820,21 @@ async function main() {
       }
       answerMarkerCount = marker && answerSample ? (answerSample.match(new RegExp(marker, "g")) || []).length : 0;
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
+      if (taskMode === "autonomous-reasoning") {
+        try {
+          const loopDiagnostics = await httpJson(diagnosticsUrl);
+          const inputItems = Number(loopDiagnostics?.responsesWebSocket?.lastClientPayload?.inputItems || 0);
+          if (inputItems > 80) {
+            failures.push(`desktop submit carried too much restored context: inputItems=${inputItems}, max=80`);
+            submitEvidence = {
+              ...(submitEvidence || {}),
+              contextGuard: { ok: false, inputItems, maxInputItems: 80 },
+            };
+            try { await resetBackendSessionLock(baseUrl); } catch {}
+            break;
+          }
+        } catch {}
+      }
       if (taskMode === "free-chat") {
         const normalizedAnswer = answerSample.replace(/完全访问|输出|暂无产物|来源|暂无来源|Gemini[^\n]*/g, "").trim();
         if (!composer.includes(promptText) && /[\u4e00-\u9fff]/.test(normalizedAnswer) && !/正在思考|已处理|停止了|重新连接/.test(normalizedAnswer)) break;
@@ -3974,6 +4071,8 @@ async function main() {
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMarker !== true) failures.push("report-site index.html missing marker");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasChinese !== true) failures.push("report-site report.md missing Chinese content");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasChinese !== true) failures.push("report-site index.html missing Chinese content");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMojibake === true) failures.push("report-site report.md contains likely Chinese mojibake");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlHasMojibake === true) failures.push("report-site index.html contains likely Chinese mojibake");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportMentionsCodex !== true) failures.push("report-site report.md missing Codex/OpenAI content");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) failures.push("report-site index.html missing Codex/OpenAI content");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) failures.push("report-site report.md has fewer than three source URLs");

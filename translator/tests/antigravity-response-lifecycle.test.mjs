@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 
 import { createAntigravityRequestRegistry } from "../antigravity-request-registry.mjs";
-import { pipeAntigravityResponseAsSSE } from "../adaptive-server.mjs";
+import { pipeAntigravityInternalToolsAsSSE, pipeAntigravityResponseAsSSE } from "../adaptive-server.mjs";
 
 test("Antigravity response publishes its id before the upstream turn completes", async () => {
   const response = new FakeResponse();
@@ -138,6 +138,63 @@ test("Antigravity streamed response keeps the SSE connection active before first
     "SSE keepalive comment should be emitted while upstream is silent",
   );
   assert.equal(response.event("response.completed").data.response.output[0].content[0].text, "late answer");
+});
+
+test("Antigravity non-streaming tool completion respects stream idle timeout", async () => {
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+  const prompt = "Create C:\\Temp\\anticodex-timeout-smoke\\done.txt containing UI_LOCAL_PROJECT_SMOKE_TIMEOUT.";
+  const tool = { type: "function", function: { name: "shell_command", parameters: { type: "object" } } };
+
+  await pipeAntigravityResponseAsSSE(
+    { headers: {}, path: "/responses" },
+    response,
+    { model: "gemini-pro-agent", messages: [{ role: "user", content: prompt }], tools: [tool] },
+    {
+      model: "gemini-pro-agent",
+      stream: true,
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+      tools: [tool],
+    },
+    null,
+    {
+      registry,
+      streamIdleTimeoutMs: 25,
+      streamTotalTimeoutMs: 100,
+      nonStreamingUpstream: () => new Promise(() => {}),
+      streamUpstream: async function* () {
+        throw new Error("stream path should not be used for local tool completion");
+      },
+    },
+  );
+
+  const failed = response.event("response.failed").data.response;
+  assert.equal(failed.error.type, "antigravity_stream_idle_timeout");
+  assert.equal(registry.snapshot().active, 0);
+  assert.equal(response.ended, true);
+});
+
+test("Antigravity internal-tool response respects local timeout", async () => {
+  const response = new FakeResponse();
+  const registry = createAntigravityRequestRegistry();
+
+  await pipeAntigravityInternalToolsAsSSE(
+    { headers: {}, path: "/responses" },
+    response,
+    { model: "gemini-pro-agent", messages: [{ role: "user", content: "search then write" }], tools: [] },
+    { model: "gemini-pro-agent", stream: true, input: "search then write" },
+    null,
+    {
+      registry,
+      internalToolsTimeoutMs: 25,
+      callAntigravityWithInternalTools: () => new Promise(() => {}),
+    },
+  );
+
+  const failed = response.event("response.failed").data.response;
+  assert.equal(failed.error.type, "antigravity_internal_tools_timeout");
+  assert.equal(registry.snapshot().active, 0);
+  assert.equal(response.ended, true);
 });
 
 test("Antigravity streamed response records model route metadata", async () => {

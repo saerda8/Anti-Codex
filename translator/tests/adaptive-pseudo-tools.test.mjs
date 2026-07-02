@@ -1756,6 +1756,9 @@ test("system block tells Windows agents to use Node .cmd shims", () => {
   assert.match(block, /npx\.cmd/);
   assert.match(block, /Start-Process -FilePath "npx"/);
   assert.match(block, /Do not prepend C:\\Program Files\\nodejs to PATH/);
+  assert.match(block, /do not put Chinese literal text directly inside a PowerShell command string/i);
+  assert.match(block, /fs\.writeFileSync\(\.\.\., "utf8"\)/);
+  assert.match(block, /read the files back and fix any mojibake/i);
 });
 
 test("system block distinguishes hosted tool limits from internal web tools", () => {
@@ -4595,6 +4598,38 @@ test("complex project tool output closes the turn after marker tests and CLI pas
   const completion = deterministicArtifactCompletionResponse({
     model: "gemini-pro-agent",
     input: [{ type: "function_call_output", call_id: "call_complex", output: messages.at(-1).content }],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.ok(completion);
+  assert.match(completion.choices[0].message.content, /Files created, tested, and verified/);
+  assert.match(completion.choices[0].message.content, new RegExp(marker));
+});
+
+test("autonomous reasoning tool output closes the turn after marker tests and CLI pass", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260702";
+  const messages = [
+    {
+      role: "user",
+      content: `请自主完成任务。工作目录：C:\\Temp\\autonomous。最终标记：${marker}。必须创建 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt，并运行测试和 CLI。`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_autonomous",
+      content: [
+        `Exit code: 0`,
+        `Output:`,
+        marker,
+        `✔ summarizes three sources (1ms)`,
+        `ℹ pass 1`,
+        `ℹ fail 0`,
+        `{"sourceCount":3,"codexMentionCount":3,"urls":["https://openai.com/codex/","https://openai.com/news/","https://developers.openai.com/codex/"]}`,
+      ].join("\n"),
+    },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [{ type: "function_call_output", call_id: "call_autonomous", output: messages.at(-1).content }],
   }, { model: "gemini-pro-agent", messages });
 
   assert.ok(completion);

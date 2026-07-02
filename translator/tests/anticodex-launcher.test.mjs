@@ -8037,6 +8037,12 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /in-app manager still shows endpoint fetch failure/);
   assert.match(uiScript, /mojibakePattern/);
   assert.match(uiScript, /mojibakeMatch/);
+  assert.match(uiScript, /containsLikelyChineseMojibake/);
+  assert.doesNotMatch(uiScript, /銆\?/);
+  assert.match(uiScript, /銆\[\^\\s\]\{0,3\}\\\?/);
+  assert.match(uiScript, /reportHasMojibake/);
+  assert.match(uiScript, /htmlHasMojibake/);
+  assert.match(uiScript, /contains likely Chinese mojibake/);
   assert.match(uiScript, /in-app manager rendered mojibake text/);
   assert.match(uiScript, /main page rendered mojibake text/);
   assert.match(uiScript, /manager page source contains mojibake text/);
@@ -8053,6 +8059,8 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiScript, /releaseManagerButtonLock/);
   assert.match(uiScript, /isLockOwnerAlive/);
   assert.match(uiScript, /process\.kill\(pid, 0\)/);
+  assert.match(uiScript, /taskMode === "autonomous-reasoning" \? 80 : 0/);
+  assert.match(uiScript, /inputItems > 80/);
   assert.match(uiScript, /actionCount/);
   assert.match(uiScript, /managerPage/);
   assert.match(uiScript, /getText/);

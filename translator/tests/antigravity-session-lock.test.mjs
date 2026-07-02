@@ -214,6 +214,34 @@ test("Antigravity session lock rejects overflow without releasing the active ses
   secondLease.release();
 });
 
+test("Antigravity session lock releases runaway continuations at the configured limit", async () => {
+  const lock = createAntigravitySessionLock({ maxContinuations: 2 });
+  const first = await lock.acquire();
+  first.continueWith("resp_tool_1");
+
+  const second = await lock.acquire({ previousResponseId: "resp_tool_1" });
+  second.continueWith("resp_tool_2");
+
+  const third = await lock.acquire({ previousResponseId: "resp_tool_2" });
+  third.continueWith("resp_tool_3");
+
+  await assert.rejects(
+    lock.acquire({ previousResponseId: "resp_tool_3" }),
+    (error) => {
+      assert.equal(error.name, "AntigravitySessionContinuationLimitError");
+      assert.equal(error.statusCode, 409);
+      assert.equal(error.type, "antigravity_session_continuation_limit");
+      assert.equal(error.retryable, false);
+      return true;
+    },
+  );
+
+  const snap = lock.snapshot();
+  assert.equal(snap.active, false);
+  assert.equal(snap.continuationLimitReleased, 1);
+  assert.equal(snap.maxContinuations, 2);
+});
+
 test("Antigravity session lock auto-releases an idle continued session after TTL expires (no queued requests)", async () => {
   const lock = createAntigravitySessionLock({ ttlMs: 1000 });
   const first = await lock.acquire();

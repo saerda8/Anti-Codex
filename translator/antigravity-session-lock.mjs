@@ -8,6 +8,7 @@ export function createAntigravitySessionLock(options = {}) {
     ? Math.max(1, Math.floor(configuredMaxQueued))
     : 32;
   const ttlMs = Math.max(1_000, Number(options.ttlMs ?? 60 * 1000) || 60 * 1000);
+  const maxContinuations = Math.max(1, Number(options.maxContinuations ?? 12) || 12);
   const queue = [];
   let active = null;
   let accepted = 0;
@@ -16,6 +17,7 @@ export function createAntigravitySessionLock(options = {}) {
   let expired = 0;
   let responseCancelled = 0;
   let idleReleased = 0;
+  let continuationLimitReleased = 0;
 
   function acquire({ previousResponseId = "", continuationCallIds = [], signal } = {}) {
     if (signal?.aborted) return Promise.reject(abortReason(signal));
@@ -24,6 +26,18 @@ export function createAntigravitySessionLock(options = {}) {
     const matchesActiveResponse = active && previousId && active.responseIds.has(previousId);
     const matchesActiveToolCall = active && callIds.size > 0 && intersects(active.callIds, callIds);
     if (matchesActiveResponse || matchesActiveToolCall) {
+      if (active.continuations >= maxContinuations) {
+        continuationLimitReleased += 1;
+        releaseEntry(active);
+        const error = new Error(`Antigravity session continuation limit reached (${maxContinuations}); start a fresh task turn.`);
+        error.name = "AntigravitySessionContinuationLimitError";
+        error.statusCode = 409;
+        error.type = "antigravity_session_continuation_limit";
+        error.retryable = false;
+        error.maxContinuations = maxContinuations;
+        return Promise.reject(error);
+      }
+      active.continuations += 1;
       continued += 1;
       return Promise.resolve(createLease(active));
     }
@@ -66,6 +80,7 @@ export function createAntigravitySessionLock(options = {}) {
       timer: null,
       createdAt: Date.now(),
       continuedAt: null,
+      continuations: 0,
     };
   }
 
@@ -165,6 +180,9 @@ export function createAntigravitySessionLock(options = {}) {
       expired,
       responseCancelled,
       idleReleased,
+      continuationLimitReleased,
+      activeContinuations: active ? active.continuations : 0,
+      maxContinuations,
       activeAgeMs: active ? Date.now() - active.createdAt : 0,
       activeContinuedAgeMs: active?.continuedAt ? Date.now() - active.continuedAt : 0,
     };
