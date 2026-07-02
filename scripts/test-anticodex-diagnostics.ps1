@@ -1796,6 +1796,48 @@ function Test-WorkerMcpProjectSmokeSummaryEvidence {
     }
 }
 
+function Test-CurrentChannelWorkerTransportSummaryEvidence {
+    param($CurrentChannelWorkerTransportSummary)
+    if (-not $CurrentChannelWorkerTransportSummary) {
+        Add-Failure "diagnostic reports summary missing latest-current-channel-worker-transport.json"
+        return
+    }
+
+    $evidence = $CurrentChannelWorkerTransportSummary.currentChannelWorkerTransportEvidence
+    if (-not $evidence) {
+        Add-Failure "current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "current-channel-worker-transport") { Add-Failure "current-channel-worker-transport summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "current-channel-worker-transport summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "current-channel-worker-transport summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "current-channel-worker-transport summary behavior not covered" }
+    if ($evidence.coverageKind -ne "current-channel-worker-transport-observation") { Add-Failure "current-channel-worker-transport summary coverage kind mismatch" }
+    if ($evidence.currentChannelProbe -ne $true) { Add-Failure "current-channel-worker-transport summary missing current-channel probe" }
+    if (-not [string]$evidence.workerTool) { Add-Failure "current-channel-worker-transport summary missing worker tool" }
+    if (-not [string]$evidence.workerStatus) { Add-Failure "current-channel-worker-transport summary missing worker status" }
+    if (-not [string]$evidence.genericMcpTool) { Add-Failure "current-channel-worker-transport summary missing generic MCP tool" }
+    if ($evidence.genericMcpStatus -ne "ok") { Add-Failure "current-channel-worker-transport summary generic MCP control failed" }
+    if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-transport summary missing generic MCP control proof" }
+    if ($evidence.directProbeOk -ne $true) { Add-Failure "current-channel-worker-transport summary missing direct worker probe proof" }
+    if ([int]$evidence.directProbePassedServerCount -lt 7) { Add-Failure "current-channel-worker-transport summary direct probe server count too low" }
+    if (@(As-FlatArray $evidence.directProbeMissingServers).Count -ne 0) { Add-Failure "current-channel-worker-transport summary direct probe has missing servers" }
+    if ($evidence.directProbeCodexSessionTransportStatus -ne "not-tested-by-direct-probe") { Add-Failure "current-channel-worker-transport summary missing direct-probe transport caveat" }
+    if (-not [string]$evidence.interpretation) { Add-Failure "current-channel-worker-transport summary missing interpretation" }
+    if (-not [string]$evidence.operatorRecoveryAction) { Add-Failure "current-channel-worker-transport summary missing operator recovery action" }
+
+    $workerTransportOk = $evidence.workerTransportOk -eq $true
+    $workerTransportFailed = $evidence.workerTransportFailed -eq $true
+    if (-not $workerTransportOk -and -not $workerTransportFailed) {
+        Add-Failure "current-channel-worker-transport summary did not prove current worker transport state"
+    }
+    if ($workerTransportFailed) {
+        if ($evidence.workerStatus -ne "transport_closed") { Add-Failure "current-channel-worker-transport summary worker failure status mismatch" }
+        if ($evidence.splitObserved -ne $true) { Add-Failure "current-channel-worker-transport summary did not prove split" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -1825,6 +1867,7 @@ function Test-ReportsSummary {
     $workerMcpServerProbeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-server-probe.json" } | Select-Object -First 1)[0]
     $workerMcpTaskSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-task-smoke.json" } | Select-Object -First 1)[0]
     $workerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
+    $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
@@ -1882,6 +1925,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $workerMcpServerProbeSummary) { Test-WorkerMcpServerProbeSummaryEvidence $workerMcpServerProbeSummary }
     if ($RequireReleaseReady -or $workerMcpTaskSmokeSummary) { Test-WorkerMcpTaskSmokeSummaryEvidence $workerMcpTaskSmokeSummary }
     if ($RequireReleaseReady -or $workerMcpProjectSmokeSummary) { Test-WorkerMcpProjectSmokeSummaryEvidence $workerMcpProjectSmokeSummary }
+    if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($localConnectorsSummary) {

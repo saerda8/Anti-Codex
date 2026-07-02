@@ -13019,9 +13019,12 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-project-smoke\.json/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-current-channel-worker-transport\.json/);
   assert.match(diagnostics, /worker-mcp-server-probe summary missing workerMcpServerProbeEvidence/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing workerMcpTaskSmokeEvidence/);
   assert.match(diagnostics, /worker-mcp-project-smoke summary missing workerMcpProjectSmokeEvidence/);
+  assert.match(diagnostics, /current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence/);
+  assert.match(diagnostics, /current-channel-worker-transport summary did not prove split/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP task smoke worker/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP project smoke worker/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing required worker/);
