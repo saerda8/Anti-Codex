@@ -13112,6 +13112,11 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
   assert.match(summarizer, /currentChannelWorkerDispatchUsable/);
   assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
+  assert.match(summarizer, /workerTransportRecoveryOk/);
+  assert.match(summarizer, /workerTransportRecoveryCanDispatch/);
+  assert.match(summarizer, /workerTransportRecoveryRequiresCodexMcpReload/);
+  assert.match(summarizer, /workerTransportRecoveryDirectWorkerProbeCommand/);
+  assert.match(summarizer, /workerTransportRecoveryCurrentChannelRecoveryRecordCommand/);
   assert.match(summarizer, /postReloadVerification/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
@@ -13125,6 +13130,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
   assert.match(diagnostics, /current-channel-worker-transport summary unexpectedly marked worker dispatch usable/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
+  assert.match(diagnostics, /goal-readiness summary missing worker transport reload requirement/);
+  assert.match(diagnostics, /goal-readiness summary unexpectedly allows current-channel worker dispatch/);
+  assert.match(diagnostics, /goal-readiness summary worker transport direct probe command missing/);
+  assert.match(diagnostics, /goal-readiness summary worker transport record command missing/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP task smoke worker/);
   assert.match(diagnostics, /goal-readiness summary missing required worker MCP project smoke worker/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing required worker/);

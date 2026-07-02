@@ -1010,6 +1010,23 @@ function Test-GoalReadinessSummaryEvidence {
     }
     if (@(As-FlatArray $evidence.workerMcpProjectSmokeMissingRequiredWorkers).Count -ne 0) { Add-Failure "goal-readiness summary reports missing required worker MCP project smoke workers" }
     if (@(As-FlatArray $evidence.workerMcpProjectSmokeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary has failed worker MCP project smoke workers" }
+    if ($evidence.workerTransportRecoveryOk -ne $false) { Add-Failure "goal-readiness summary unexpectedly marks worker transport recovered" }
+    if ($evidence.workerTransportRecoveryCanDispatch -ne $false) { Add-Failure "goal-readiness summary unexpectedly allows current-channel worker dispatch" }
+    if ($evidence.workerTransportRecoveryRequiresCodexMcpReload -ne $true) { Add-Failure "goal-readiness summary missing worker transport reload requirement" }
+    if ($evidence.workerTransportRecoveryRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-readiness summary missing fresh read-only worker probe requirement" }
+    if ([string]$evidence.workerTransportRecoveryBlockingReason -ne "current_channel_worker_transport_not_recovered") { Add-Failure "goal-readiness summary worker transport recovery blocker mismatch" }
+    if (-not ([string]$evidence.workerTransportRecoverySafeToDispatchRule).Contains("read-only worker status call succeeds")) { Add-Failure "goal-readiness summary worker transport dispatch rule missing" }
+    if ([string]$evidence.workerTransportRecoveryCurrentChannelWorkerStatus -ne "transport_closed") { Add-Failure "goal-readiness summary worker transport status mismatch" }
+    if ([string]$evidence.workerTransportRecoveryCurrentChannelGenericMcpStatus -ne "ok") { Add-Failure "goal-readiness summary generic MCP status missing from worker recovery" }
+    if ($evidence.workerTransportRecoveryCurrentChannelSplitObserved -ne $true) { Add-Failure "goal-readiness summary worker transport split not proven" }
+    if ($evidence.workerTransportRecoveryDirectProbeOk -ne $true) { Add-Failure "goal-readiness summary worker transport direct probe missing" }
+    if ([int]$evidence.workerTransportRecoveryDirectProbePassedServerCount -lt $RequiredWorkerMcpServers.Count) { Add-Failure "goal-readiness summary worker transport direct probe server count too low" }
+    if (-not ([string]$evidence.workerTransportRecoveryOperatorRecoveryAction).Contains("reload")) { Add-Failure "goal-readiness summary worker transport recovery action missing" }
+    if (-not ([string]$evidence.workerTransportRecoveryPostReloadVerification).Contains("read-only")) { Add-Failure "goal-readiness summary worker transport post-reload verification missing" }
+    if (-not ([string]$evidence.workerTransportRecoveryDirectWorkerProbeCommand).Contains("probe-anticodex-worker-mcp-servers.mjs")) { Add-Failure "goal-readiness summary worker transport direct probe command missing" }
+    if (-not ([string]$evidence.workerTransportRecoveryCurrentChannelReadOnlyProbeInstruction).Contains("read-only")) { Add-Failure "goal-readiness summary worker transport read-only instruction missing" }
+    if (-not ([string]$evidence.workerTransportRecoveryCurrentChannelRecoveryRecordCommand).Contains("record-anticodex-current-channel-worker-transport.mjs")) { Add-Failure "goal-readiness summary worker transport record command missing" }
+    if (@(As-FlatArray $evidence.workerTransportRecoveryNextActions).Count -lt 3) { Add-Failure "goal-readiness summary worker transport next actions missing" }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
     if (@(As-FlatArray $evidence.agenticStaleCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has stale agentic capabilities" }
