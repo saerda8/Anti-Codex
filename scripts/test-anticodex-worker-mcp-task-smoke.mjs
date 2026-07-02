@@ -152,18 +152,24 @@ function buildTask(workerName, marker) {
   ].join(" ");
 }
 
-function buildWorkerArgs(workerName, workspace, marker, timeoutMs) {
+function buildValidationCommand(workerName, marker) {
   const expectedMarker = JSON.stringify(marker);
   const expectedWorker = JSON.stringify(workerName);
-  const validation = [
+  const validationScript = [
+    'const fs=require("fs");',
+    'const data=JSON.parse(fs.readFileSync("worker-smoke-result.json","utf8"));',
+    `if(data.marker!==${expectedMarker}||data.worker!==${expectedWorker}||data.ok!==true) process.exit(2);`,
+  ].join("");
+  const encoded = Buffer.from(validationScript, "utf8").toString("base64");
+  return [
     "node",
     "-e",
-    [
-      "const fs=require('fs');",
-      "const data=JSON.parse(fs.readFileSync('worker-smoke-result.json','utf8'));",
-      `if(data.marker!==${expectedMarker}||data.worker!==${expectedWorker}||data.ok!==true) process.exit(2);`,
-    ].join(""),
+    `"eval(Buffer.from('${encoded}','base64').toString('utf8'))"`,
   ].join(" ");
+}
+
+function buildWorkerArgs(workerName, workspace, marker, timeoutMs) {
+  const validation = buildValidationCommand(workerName, marker);
   const args = {
     cwd: workspace,
     allowed_dirs: [workspace],
@@ -189,6 +195,23 @@ function buildWorkerArgs(workerName, workspace, marker, timeoutMs) {
     args.reasoning_effort = "high";
   }
   return args;
+}
+
+function selfTestWorkerChecksCommand() {
+  const command = buildValidationCommand("opencode-worker", "SELF_TEST_MARKER");
+  const failures = [];
+  if (!command.includes('node -e "eval(Buffer.from(')) failures.push("validation command does not quote node -e script");
+  if (!command.includes("base64")) failures.push("validation command does not use shell-safe base64 script transport");
+  const encoded = command.match(/Buffer\.from\('([^']+)'/)?.[1] || "";
+  const decoded = encoded ? Buffer.from(encoded, "base64").toString("utf8") : "";
+  if (!decoded.includes('"SELF_TEST_MARKER"')) failures.push("validation command does not preserve marker literal");
+  if (!decoded.includes('"opencode-worker"')) failures.push("validation command does not preserve worker literal");
+  if (/\bnode -e const\b/.test(command)) failures.push("validation command is still unquoted");
+  return {
+    ok: failures.length === 0,
+    command,
+    failures,
+  };
 }
 
 function verifyWorkspace(workspace, workerName, marker) {
@@ -297,6 +320,11 @@ async function runWorker(workerName, options) {
 }
 
 async function main() {
+  if (hasArg("--self-test-worker-checks")) {
+    const result = selfTestWorkerChecksCommand();
+    console.log(JSON.stringify(result, null, 2));
+    process.exit(result.ok ? 0 : 1);
+  }
   const configPath = argValue("--config", DEFAULT_CONFIG_PATH);
   const reportRoot = resolve(argValue("--report-root", DEFAULT_REPORT_ROOT));
   const workspaceRoot = resolve(argValue("--workspace-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/worker-task-smoke`));
