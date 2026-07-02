@@ -638,7 +638,7 @@ function latestReportsSummary(result) {
       const tasks = Array.isArray(evidence.pendingRealTaskScenarios) && evidence.pendingRealTaskScenarios.length
         ? evidence.pendingRealTaskScenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ")
         : "none";
-      lines.push(`  approvedRealRun: blocked=${evidence.executionBlockedBeforeRealTraffic ? "true" : "false"} / stages=${evidence.sequenceStageCount ?? "unknown"} / real=${evidence.realTrafficStageCount ?? "unknown"} / login=${evidence.startsLoginStageCount ?? "unknown"} / approvals=${evidence.explicitApprovalStageCount ?? "unknown"}`);
+      lines.push(`  approvedRealRun: blocked=${evidence.executionBlockedBeforeRealTraffic ? "true" : "false"} / readyLogin=${evidence.readyToRequestSecondAccountLoginApproval ? "true" : "false"} / readyProof=${evidence.readyToRequestPostLoginProofApproval ? "true" : "false"} / stages=${evidence.sequenceStageCount ?? "unknown"} / real=${evidence.realTrafficStageCount ?? "unknown"} / login=${evidence.startsLoginStageCount ?? "unknown"} / approvals=${evidence.explicitApprovalStageCount ?? "unknown"}`);
       lines.push(`  approvedRealRun tasks: ${tasks}`);
     }
     if (item.toolBridgeEvidence) {

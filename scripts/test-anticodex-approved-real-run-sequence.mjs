@@ -179,6 +179,14 @@ const approvedRealRunSequence = [
 ];
 
 const optionalActionsSeparated = optionalActionIds.length > 0 && optionalActionIds.every((id) => !requiredActionIds.includes(id));
+const accountReadinessBlockingReason = String(account.readinessBlockingReason || account.blockingReason || "");
+const readyToRequestSecondAccountLoginApproval = account.safeToAskUserForSecondAccountLogin === true
+  && secondAccountLoginEntrypoint.safeToStartLogin === true
+  && account.releaseAcceptableAccountProof !== true;
+const readyToRequestPostLoginProofApproval = account.safeToAskUserForSecondAccountLogin === true
+  && accountProofPlan.canRunAfterInteractiveLogin === true
+  && account.releaseAcceptableAccountProof !== true;
+const readyToRequestUserApproval = readyToRequestSecondAccountLoginApproval || readyToRequestPostLoginProofApproval;
 const executionBlockedBeforeRealTraffic = account.safeToAskUserForSecondAccountLogin !== true
   || account.releaseAcceptableAccountProof !== true
   || readiness.safeToAskUserForSecondAccountLogin !== true
@@ -216,7 +224,9 @@ if (!loginCommand.includes("-StartLoginApproval start-separate-windows-user-logi
 if (!loginCommand.includes("-WindowsUser")) failures.push("login_command_missing_windows_user");
 if (accountProofCommand && !accountProofCommand.includes("SeparateAccountProofApprovalId")) failures.push("account_proof_command_missing_approval_id");
 if (accountProofCommand && !accountProofCommand.includes("-AllowSeparateAccountProof")) failures.push("account_proof_command_missing_separate_account_flag");
-if (executionBlockedBeforeRealTraffic !== true) failures.push("execution_not_blocked_before_real_traffic");
+if (executionBlockedBeforeRealTraffic !== (account.releaseAcceptableAccountProof !== true || readiness.releaseAcceptableAccountProof !== true)) failures.push("execution_block_state_inconsistent");
+if (readyToRequestUserApproval && executionBlockedBeforeRealTraffic !== true) failures.push("approval_ready_after_execution_unblocked");
+if (readyToRequestSecondAccountLoginApproval && accountReadinessBlockingReason) failures.push("login_approval_ready_with_blocking_reason");
 if (approvedRealRunSequence.some((item) => item.requiresRealTraffic && item.requiresExplicitUserApproval !== true)) failures.push("real_traffic_stage_without_explicit_approval");
 if (approvedRealRunSequence.some((item) => item.startsLogin && item.requiresExplicitUserApproval !== true)) failures.push("login_stage_without_explicit_approval");
 if (release.shortReady !== true) failures.push("short_path_not_ready");
@@ -229,7 +239,9 @@ const payload = {
   behaviorCovered: true,
   coverageKind: "approved-real-run-sequence-report-only",
   executionBlockedBeforeRealTraffic,
-  readyToRequestUserApproval: false,
+  readyToRequestUserApproval,
+  readyToRequestSecondAccountLoginApproval,
+  readyToRequestPostLoginProofApproval,
   sourceReports: {
     goalRealRunReadiness: { present: readinessReport.present, parseable: readinessReport.parseable },
     realApprovalPlan: { present: approvalReport.present, parseable: approvalReport.parseable },
@@ -256,13 +268,20 @@ const payload = {
   releaseShortReady: release.shortReady === true,
   releaseReady: effectiveReleaseReady,
   accountCompletionState: String(account.completionState || ""),
-  accountReadinessBlockingReason: String(account.readinessBlockingReason || account.blockingReason || ""),
+  accountReadinessBlockingReason,
   safeToAskUserForSecondAccountLogin: account.safeToAskUserForSecondAccountLogin === true,
   releaseAcceptableAccountProof: account.releaseAcceptableAccountProof === true,
-  operatorNextAction: executionBlockedBeforeRealTraffic
+  operatorNextAction: accountReadinessBlockingReason === "target_windows_user_missing"
     ? "complete_separate_windows_user_account_setup_before_any_real_traffic"
-    : "request_explicit_user_approval_for_approved_real_run_sequence",
+    : (readyToRequestSecondAccountLoginApproval
+      ? "request_explicit_user_approval_for_second_account_login"
+      : (readyToRequestPostLoginProofApproval
+        ? "request_explicit_user_approval_for_separate_account_identity_proof"
+        : (executionBlockedBeforeRealTraffic
+          ? "complete_second_account_login_and_identity_proof_before_real_traffic"
+          : "request_explicit_user_approval_for_approved_real_run_sequence"))),
   failures,
+  failureCount: failures.length,
   elapsedMs: Date.now() - startedAt,
 };
 

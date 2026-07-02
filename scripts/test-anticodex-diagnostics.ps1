@@ -1602,8 +1602,12 @@ function Test-ApprovedRealRunSequenceSummaryEvidence {
     if ($evidence.usedRealTraffic -ne $false) { Add-Failure "approved-real-run-sequence summary used real traffic" }
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "approved-real-run-sequence summary behavior not covered" }
     if ($evidence.coverageKind -ne "approved-real-run-sequence-report-only") { Add-Failure "approved-real-run-sequence summary coverage kind mismatch" }
-    if ($evidence.executionBlockedBeforeRealTraffic -ne $true) { Add-Failure "approved-real-run-sequence summary not blocked before real traffic" }
-    if ($evidence.readyToRequestUserApproval -ne $false) { Add-Failure "approved-real-run-sequence summary ready too early" }
+    $readyForLoginApproval = ($evidence.readyToRequestSecondAccountLoginApproval -eq $true)
+    $readyForProofApproval = ($evidence.readyToRequestPostLoginProofApproval -eq $true)
+    $readyForAnyApproval = ($readyForLoginApproval -or $readyForProofApproval)
+    if ($evidence.executionBlockedBeforeRealTraffic -ne ($evidence.releaseAcceptableAccountProof -ne $true)) { Add-Failure "approved-real-run-sequence summary block state inconsistent" }
+    if ($evidence.readyToRequestUserApproval -ne $readyForAnyApproval) { Add-Failure "approved-real-run-sequence summary ready state inconsistent" }
+    if ($readyForAnyApproval -and $evidence.releaseAcceptableAccountProof -eq $true) { Add-Failure "approved-real-run-sequence summary ready after proof complete" }
     if ([int]$evidence.sequenceStageCount -lt 8 -or $sequence.Count -lt 8) { Add-Failure "approved-real-run-sequence summary stage count too low" }
     $minimumRealStages = if ($taskModes.Count -gt 0 -or $scenarios.Count -gt 0) { 4 } else { 3 }
     if ([int]$evidence.realTrafficStageCount -lt $minimumRealStages -or $realStages.Count -lt $minimumRealStages) { Add-Failure "approved-real-run-sequence summary real stage count too low" }
@@ -1634,9 +1638,8 @@ function Test-ApprovedRealRunSequenceSummaryEvidence {
     }
     if ($evidence.optionalActionsSeparated -ne $true -or $mixedOptional.Count -gt 0) { Add-Failure "approved-real-run-sequence summary mixed optional actions" }
     if ($evidence.releaseShortReady -ne $true) { Add-Failure "approved-real-run-sequence summary short path not ready" }
-    if ($evidence.safeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "approved-real-run-sequence summary login safety mismatch" }
-    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "approved-real-run-sequence summary claimed account proof" }
-    if (-not [string]$evidence.accountReadinessBlockingReason) { Add-Failure "approved-real-run-sequence summary missing account blocking reason" }
+    if ($evidence.safeToAskUserForSecondAccountLogin -eq $true -and -not $readyForLoginApproval -and $evidence.releaseAcceptableAccountProof -ne $true) { Add-Failure "approved-real-run-sequence summary safe login not actionable" }
+    if ($evidence.safeToAskUserForSecondAccountLogin -ne $true -and -not [string]$evidence.accountReadinessBlockingReason) { Add-Failure "approved-real-run-sequence summary missing account blocking reason" }
     if (-not [string]$evidence.operatorNextAction) { Add-Failure "approved-real-run-sequence summary missing operator next action" }
     if ($prechecks.Count -lt 4) { Add-Failure "approved-real-run-sequence summary precheck count too low" }
     if (@($prechecks | Where-Object { $_.requiresRealTraffic -eq $true -or $_.startsLogin -eq $true }).Count -gt 0) { Add-Failure "approved-real-run-sequence summary precheck starts traffic or login" }

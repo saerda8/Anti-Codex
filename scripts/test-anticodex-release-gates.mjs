@@ -1037,13 +1037,20 @@ function summarizeGate(definition) {
       const accountProofStages = sequence.filter((item) => String(item?.id || "") === "separateAccountIdentityProof");
       const mixedOptional = requiredActionIds.filter((id) => optionalActionIds.includes(id));
       const realTaskRefreshNeeded = requiredTaskModes.length > 0 || scenarios.length > 0;
+      const releaseAcceptableAccountProof = report.releaseAcceptableAccountProof === true;
+      const readyToRequestSecondAccountLoginApproval = report.readyToRequestSecondAccountLoginApproval === true;
+      const readyToRequestPostLoginProofApproval = report.readyToRequestPostLoginProofApproval === true;
+      const readyToRequestAnyUserApproval = readyToRequestSecondAccountLoginApproval || readyToRequestPostLoginProofApproval;
       if (report.reportName !== "approved-real-run-sequence") semanticFailures.push("approved_real_run_sequence_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("approved_real_run_sequence_real_traffic_requested");
       if (report.usedRealTraffic !== false) semanticFailures.push("approved_real_run_sequence_used_real_traffic");
       if (report.behaviorCovered !== true) semanticFailures.push("approved_real_run_sequence_behavior_not_covered");
       if (report.coverageKind !== "approved-real-run-sequence-report-only") semanticFailures.push("approved_real_run_sequence_coverage_kind");
-      if (report.executionBlockedBeforeRealTraffic !== true) semanticFailures.push("approved_real_run_sequence_not_blocked_before_real_traffic");
-      if (report.readyToRequestUserApproval !== false) semanticFailures.push("approved_real_run_sequence_ready_too_early");
+      if (report.executionBlockedBeforeRealTraffic !== (releaseAcceptableAccountProof !== true)) semanticFailures.push("approved_real_run_sequence_block_state_inconsistent");
+      if (report.readyToRequestUserApproval !== readyToRequestAnyUserApproval) semanticFailures.push("approved_real_run_sequence_ready_state_inconsistent");
+      if (readyToRequestSecondAccountLoginApproval && report.safeToAskUserForSecondAccountLogin !== true) semanticFailures.push("approved_real_run_sequence_login_ready_without_safe_account");
+      if (readyToRequestPostLoginProofApproval && report.safeToAskUserForSecondAccountLogin !== true) semanticFailures.push("approved_real_run_sequence_proof_ready_without_safe_account");
+      if (readyToRequestAnyUserApproval && releaseAcceptableAccountProof === true) semanticFailures.push("approved_real_run_sequence_ready_after_proof_complete");
       if (Number(report.sequenceStageCount || 0) < 8 || sequence.length < 8) semanticFailures.push("approved_real_run_sequence_stage_count");
       if (Number(report.realTrafficStageCount || 0) < (realTaskRefreshNeeded ? 4 : 3) || realStages.length < (realTaskRefreshNeeded ? 4 : 3)) semanticFailures.push("approved_real_run_sequence_real_stage_count");
       if (Number(report.startsLoginStageCount || 0) !== 1 || loginStages.length !== 1) semanticFailures.push("approved_real_run_sequence_login_stage_count");
@@ -1079,9 +1086,9 @@ function summarizeGate(definition) {
       if (report.optionalActionsSeparated !== true || mixedOptional.length > 0) semanticFailures.push("approved_real_run_sequence_optional_actions_mixed");
       if (report.releaseShortReady !== true) semanticFailures.push("approved_real_run_sequence_short_not_ready");
       if (sourceReports.secondAccountLoginEntrypoint?.present !== true) semanticFailures.push("approved_real_run_sequence_second_account_entrypoint_source_missing");
-      if (report.safeToAskUserForSecondAccountLogin !== false) semanticFailures.push("approved_real_run_sequence_login_safety_mismatch");
-      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("approved_real_run_sequence_release_proof_claimed");
-      if (typeof report.accountReadinessBlockingReason !== "string" || !report.accountReadinessBlockingReason) semanticFailures.push("approved_real_run_sequence_account_blocking_reason_missing");
+      if (report.safeToAskUserForSecondAccountLogin === true && readyToRequestSecondAccountLoginApproval !== true && releaseAcceptableAccountProof !== true) semanticFailures.push("approved_real_run_sequence_safe_login_not_actionable");
+      if (releaseAcceptableAccountProof !== report.releaseAcceptableAccountProof) semanticFailures.push("approved_real_run_sequence_release_proof_state_mismatch");
+      if (report.safeToAskUserForSecondAccountLogin !== true && (typeof report.accountReadinessBlockingReason !== "string" || !report.accountReadinessBlockingReason)) semanticFailures.push("approved_real_run_sequence_account_blocking_reason_missing");
       if (typeof report.operatorNextAction !== "string" || !report.operatorNextAction) semanticFailures.push("approved_real_run_sequence_operator_next_action_missing");
       if (prechecks.length < 4) semanticFailures.push("approved_real_run_sequence_precheck_count");
       if (prechecks.some((item) => item?.requiresRealTraffic === true || item?.startsLogin === true)) semanticFailures.push("approved_real_run_sequence_precheck_started_traffic_or_login");
@@ -4032,8 +4039,7 @@ if (args.has("--self-test")) {
       "approved_real_run_sequence_used_real_traffic",
       "approved_real_run_sequence_behavior_not_covered",
       "approved_real_run_sequence_coverage_kind",
-      "approved_real_run_sequence_not_blocked_before_real_traffic",
-      "approved_real_run_sequence_ready_too_early",
+      "approved_real_run_sequence_ready_state_inconsistent",
       "approved_real_run_sequence_stage_count",
       "approved_real_run_sequence_real_stage_count",
       "approved_real_run_sequence_login_stage_count",
@@ -4044,9 +4050,6 @@ if (args.has("--self-test")) {
       "approved_real_run_sequence_accountProxyReadiness_blocked_gate_missing",
       "approved_real_run_sequence_optional_actions_mixed",
       "approved_real_run_sequence_short_not_ready",
-      "approved_real_run_sequence_login_safety_mismatch",
-      "approved_real_run_sequence_release_proof_claimed",
-      "approved_real_run_sequence_account_blocking_reason_missing",
       "approved_real_run_sequence_operator_next_action_missing",
       "approved_real_run_sequence_precheck_count",
       "approved_real_run_sequence_precheck_started_traffic_or_login",

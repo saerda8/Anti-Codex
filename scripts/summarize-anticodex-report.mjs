@@ -1719,6 +1719,8 @@ const summary = {
     coverageKind: asString(report.coverageKind),
     executionBlockedBeforeRealTraffic: boolField(report, "executionBlockedBeforeRealTraffic"),
     readyToRequestUserApproval: boolField(report, "readyToRequestUserApproval"),
+    readyToRequestSecondAccountLoginApproval: boolField(report, "readyToRequestSecondAccountLoginApproval"),
+    readyToRequestPostLoginProofApproval: boolField(report, "readyToRequestPostLoginProofApproval"),
     sequenceStageCount: has(report, "sequenceStageCount") ? report.sequenceStageCount : null,
     explicitApprovalStageCount: has(report, "explicitApprovalStageCount") ? report.explicitApprovalStageCount : null,
     realTrafficStageCount: has(report, "realTrafficStageCount") ? report.realTrafficStageCount : null,
