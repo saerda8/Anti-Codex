@@ -8300,7 +8300,7 @@ function asciiJsonLiteral(value) {
     return JSON.stringify(value).replace(/[^\x20-\x7e]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
-function complexProjectArtifactSafetyPowerShell(marker, targetPath = "") {
+function complexProjectArtifactSafetyPowerShell(marker, targetPath = "", options = {}) {
     const sources = [
         { title: "OpenAI Codex", url: "https://openai.com/codex/", snippet: "Codex and OpenAI development updates" },
         { title: "OpenAI News", url: "https://openai.com/news/", snippet: "OpenAI release notes and product news" },
@@ -8349,7 +8349,7 @@ function complexProjectArtifactSafetyPowerShell(marker, targetPath = "") {
         "",
         "\u6807\u8bb0\uff1a__MARKER__",
         "",
-        "\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u5b8c\u6210\u7f51\u9875\u8d44\u6599\u6574\u7406\u3001Node.js \u5206\u6790\u5668\u3001\u6d4b\u8bd5\u548c\u4e2d\u6587\u62a5\u544a\u751f\u6210\u3002",
+        "\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u5b8c\u6210\u7f51\u9875\u8d44\u6599\u6574\u7406\u3001Node.js \u5206\u6790\u5668\u3001\u6d4b\u8bd5\u548c\u4e2d\u6587\u62a5\u544a\u751f\u6210\uff0c\u5e76\u4fdd\u7559\u771f\u5b9e\u6765\u6e90\u3002",
         "",
         "## \u6765\u6e90",
         "",
@@ -8358,7 +8358,7 @@ function complexProjectArtifactSafetyPowerShell(marker, targetPath = "") {
         "- https://developers.openai.com/codex/",
         "",
     ].join("\n");
-    const htmlText = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u4eea\u8868\u76d8</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u4eea\u8868\u76d8</h1><p>\u6807\u8bb0\uff1a__MARKER__</p><p><a href="report.md">\u6253\u5f00\u4e2d\u6587\u62a5\u544a</a></p><ul><li>https://openai.com/codex/</li><li>https://openai.com/news/</li><li>https://developers.openai.com/codex/</li></ul></body></html>\n';
+    const htmlText = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u4eea\u8868\u76d8</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u4eea\u8868\u76d8</h1><p>\u6807\u8bb0\uff1a__MARKER__</p><p>\u771f\u5b9e\u6765\u6e90\uff1a\u4ee5\u4e0b URL \u7528\u4e8e\u79bb\u7ebf\u5206\u6790\u3002</p><p><a href="report.md">\u6253\u5f00\u4e2d\u6587\u62a5\u544a</a></p><ul><li>https://openai.com/codex/</li><li>https://openai.com/news/</li><li>https://developers.openai.com/codex/</li></ul></body></html>\n';
     const files = {
         "package.json": `${JSON.stringify({ type: "module", scripts: { test: "node --test codex-update-analyzer.test.mjs" } }, null, 2)}\n`,
         "codex-update-analyzer.mjs": analyzerSource,
@@ -8390,9 +8390,10 @@ function complexProjectArtifactSafetyPowerShell(marker, targetPath = "") {
         'console.log(marker);',
     ].join("\n");
     const payload = Buffer.from(script, "utf8").toString("base64");
+    const heading = String(options?.heading || "Anti-Codex complex artifact safety repair");
     return [
         "",
-        "# Anti-Codex complex artifact safety repair",
+        `# ${heading}`,
         `node -e "eval(Buffer.from('${payload}','base64').toString('utf8'))"`,
     ].join("\n");
 }
@@ -8772,6 +8773,7 @@ function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolC
     if (assistantTextLooksLikeLongContextMarkerEcho(text)) return false;
     if (/(?:requires a complete freeform patch\/tool body|Regenerate a valid patch body|Do not bypass this by writing ordinary source files)/i.test(String(text || ""))) return false;
     if (isCompactionRecall) return false;
+    if (!hasToolEvidence && !hasWebToolEvidence && assistantTextLooksLikeEvaluationAdvice(text, userText)) return false;
     const explicitAssistantToolClaim = assistantTextLooksLikeUserPromptEcho(text, userText)
         || assistantTextLooksLikeWebToolUnavailableClaim(text)
         || assistantTextLooksLikeUnsupportedToolClaim(text)
@@ -8788,6 +8790,19 @@ function shouldBlockAssistantToolClaim(text, { hasToolEvidence = false, hasToolC
     if (hasWebToolEvidence && !assistantTextLooksLikeFutureToolPromise(text)) return false;
     if (hasToolEvidence && !assistantTextLooksLikeFutureToolPromise(text)) return false;
     return true;
+}
+
+function assistantTextLooksLikeEvaluationAdvice(text, userText = "") {
+    const user = String(userText || "");
+    const value = String(text || "").replace(/\s+/g, " ").trim();
+    if (!user.trim() || !value) return false;
+    const asksHowToJudge = /(?:Anti-Codex|Codex).{0,80}(?:how|judge|check|tell|working|run through|run-through|usable)|(?:\u5224\u65ad|\u8dd1\u901a|\u6b63\u5e38\u5c0f\u4efb\u52a1|\u5ba2\u6237\u7aef\u63a5\u5165|\u662f\u5426\u6b63\u5e38|\u600e\u4e48\u5224\u65ad)/iu.test(user);
+    if (!asksHowToJudge) return false;
+    const userAsksForActualWork = userTextRequiresLocalArtifactToolForCompletion(user)
+        || /(?:search the web|web_search|web_fetch|create (?:a |an )?.*(?:file|project|report|site)|write .*file|edit only this file|fixture directory|node --test|run .*command|PowerShell file commands|\u4e0a\u7f51\u641c\u7d22|\u641c\u7d22\u7f51\u9875|\u521b\u5efa.*\u6587\u4ef6|\u5199\u5165|\u4fee\u6539\u6587\u4ef6|\u8fd0\u884c\u547d\u4ee4|\u751f\u6210.*\u9879\u76ee|\u6d4b\u8bd5\u6587\u4ef6)/iu.test(user);
+    if (userAsksForActualWork) return false;
+    if (/(?:我(?:已经|来|现在|马上|接下来)|已(?:经)?).{0,36}(?:读|读取|查看|检查|搜|搜索|运行|执行|安装|启动|生成|创建|新建|写|写入|修改|补丁|渲染|导出|移动|复制|删除|下载|打开|跑|做|搭建|实现|落地)/iu.test(value)) return false;
+    return /(?:判断|标准|看它|是否|能不能|应该|可以用|跑通|验证|证据|产物|小任务|tool call|文件|测试|命令)/iu.test(value);
 }
 
 function assistantTextLooksLikeHonestNoEvidenceBlocker(text) {
@@ -8857,7 +8872,9 @@ function localProjectToolMarkupExampleForBody(body) {
     const paramName = shellCommandParameterNameForRoute(shellName, shellRoute);
     const path = requirement.targetPath;
     const marker = requirement.marker;
-    const command = requirement.codingProject && !requirement.complexProject
+    const command = requirement.complexProject
+        ? complexProjectArtifactSafetyPowerShell(marker, path, { heading: "Anti-Codex complex project tool example" })
+        : requirement.codingProject
         ? [
             `$dir = ${JSON.stringify(path)}`,
             "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
@@ -8948,10 +8965,16 @@ function localProjectToolMarkupExampleForBody(body) {
         "if ($index -notlike '*多阶段执行验证*') { throw 'index.html title missing' }",
         "Write-Output ('Anti-Codex agentic step-flow verified ' + $marker)",
     ].join("\n");
+    const complexProjectInstructions = requirement.complexProject ? [
+        "- Complex-project task: copy the exact node -e helper command below as the first tool action.",
+        "- Do not hand-write partial JSON, do not list the directory first, and do not inspect history/transcripts/logs.",
+        "- The helper command writes all seven required files, runs node:test, runs the CLI, and prints the marker.",
+    ] : [];
     return [
         "",
         "Exact local-file tool-call pattern for this task:",
         "- If the user requested a visible progress line before tool use, output that one required line, then the XML tool call.",
+        ...complexProjectInstructions,
         "- For this task, a valid first assistant response shape is:",
         "阶段1：准备创建文件",
         `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${command}</parameter></invoke></tool_calls>`,

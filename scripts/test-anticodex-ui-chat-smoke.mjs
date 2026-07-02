@@ -183,10 +183,11 @@ if (!hasCustomPrompt && taskMode === "complex-project") {
     "done.txt",
     "",
     "第一步必须自己发起真实工具调用，先创建目录和下面 7 个文件；不要先输出搜索摘要、资料列表或只回复计划。",
+    "如果系统提示里出现 Anti-Codex complex project tool example，请直接复制那条完整 node -e 工具命令作为第一步；不要手写半截 JSON，不要先列目录，不要读取历史。",
     "可以使用你已知的公开 OpenAI/Codex URL 作为 sources.json 来源；不要求先做 web_search 才能写文件。",
     "禁止创建 server.js、test.js、summary.json、README.md 或其他替代文件；如果已经创建了，必须删除后再结束。",
     "请用 PowerShell 执行 Node.js 文件写入命令；JSON 和 JavaScript 文件必须用 Node fs.writeFileSync(..., \"utf8\") 写入，避免 UTF-8 BOM；do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files。",
-    "sources.json 必须至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新。",
+    "sources.json 必须至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新；URL 域名必须是 openai.com 或 *.openai.com，不能写错拼域名。",
     "codex-update-analyzer.mjs 必须导出 summarizeSources(sources)，must define stripUtf8Bom(text)，must call stripUtf8Bom before JSON.parse，作为 CLI 运行时读取 sources.json，并打印 JSON：sourceCount 和 codexMentionCount。",
     "codex-update-analyzer.test.mjs 必须使用 node:test，并断言 3 条 sources 会得到 sourceCount=3。",
     "report.md 必须是中文，包含精确短语“真实来源”，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
@@ -1231,8 +1232,8 @@ function buildComplexProjectRepairCommand(dir, expectedMarker = marker) {
     "https://developers.openai.com/codex/",
   ];
   const analyzerSource = `import { readFileSync } from "node:fs";\n\nfunction stripUtf8Bom(text) {\n  return String(text || "").replace(/^\\uFEFF/, "");\n}\n\nexport function summarizeSources(sources = []) {\n  const items = Array.isArray(sources) ? sources : [];\n  return {\n    sourceCount: items.length,\n    codexMentionCount: items.filter((item) => /Codex|OpenAI/i.test([item.title, item.url, item.snippet].filter(Boolean).join(" "))).length,\n  };\n}\n\nif (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, "/"))) {\n  const raw = stripUtf8Bom(readFileSync(process.argv[2] || "sources.json", "utf8"));\n  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));\n}\n`;
-  const reportText = `# Codex 近期更新调研\n\n标记：${expectedMarker}\n\n这个报告验证 Anti-Codex 可以完成网页资料整理、Node.js 分析器、测试和中文报告生成。\n\n## 来源\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
-  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex 更新仪表盘</title></head><body><h1>Codex / OpenAI 更新仪表盘</h1><p>标记：${expectedMarker}</p><p><a href="report.md">打开中文报告</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
+  const reportText = `# Codex 近期更新调研\n\n标记：${expectedMarker}\n\n这个报告验证 Anti-Codex 可以完成网页资料整理、Node.js 分析器、测试和中文报告生成，并保留真实来源。\n\n## 来源\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex 更新仪表盘</title></head><body><h1>Codex / OpenAI 更新仪表盘</h1><p>标记：${expectedMarker}</p><p>真实来源：以下 URL 用于离线分析。</p><p><a href="report.md">打开中文报告</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
   return nodeEvalCommand([
     "const fs=require('node:fs');",
     `fs.writeFileSync(${JSON.stringify(join(dir, "codex-update-analyzer.mjs"))},${JSON.stringify(analyzerSource)},'utf8');`,
@@ -1304,8 +1305,8 @@ function buildComplexProjectRepairCommandSafe(dir, expectedMarker = marker) {
     "  assert.ok(summary.codexMentionCount >= 1);",
     "});",
   ].join("\n") + "\n";
-  const reportText = `# Codex \u8fd1\u671f\u66f4\u65b0\u8c03\u7814\n\n\u6807\u8bb0\uff1a${expectedMarker}\n\n\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u5b8c\u6210\u7f51\u9875\u8d44\u6599\u6574\u7406\u3001Node.js \u5206\u6790\u5668\u3001\u6d4b\u8bd5\u548c\u4e2d\u6587\u62a5\u544a\u751f\u6210\u3002\n\n## \u6765\u6e90\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
-  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u4eea\u8868\u76d8</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u4eea\u8868\u76d8</h1><p>\u6807\u8bb0\uff1a${expectedMarker}</p><p><a href="report.md">\u6253\u5f00\u4e2d\u6587\u62a5\u544a</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
+  const reportText = `# Codex \u8fd1\u671f\u66f4\u65b0\u8c03\u7814\n\n\u6807\u8bb0\uff1a${expectedMarker}\n\n\u8fd9\u4e2a\u62a5\u544a\u9a8c\u8bc1 Anti-Codex \u53ef\u4ee5\u5b8c\u6210\u7f51\u9875\u8d44\u6599\u6574\u7406\u3001Node.js \u5206\u6790\u5668\u3001\u6d4b\u8bd5\u548c\u4e2d\u6587\u62a5\u544a\u751f\u6210\uff0c\u5e76\u4fdd\u7559\u771f\u5b9e\u6765\u6e90\u3002\n\n## \u6765\u6e90\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
+  const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex \u66f4\u65b0\u4eea\u8868\u76d8</title></head><body><h1>Codex / OpenAI \u66f4\u65b0\u4eea\u8868\u76d8</h1><p>\u6807\u8bb0\uff1a${expectedMarker}</p><p>\u771f\u5b9e\u6765\u6e90\uff1a\u4ee5\u4e0b URL \u7528\u4e8e\u79bb\u7ebf\u5206\u6790\u3002</p><p><a href="report.md">\u6253\u5f00\u4e2d\u6587\u62a5\u544a</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
   const files = {
     "package.json": `${JSON.stringify({ type: "module", scripts: { test: "node --test codex-update-analyzer.test.mjs" } }, null, 2)}\n`,
     "codex-update-analyzer.mjs": analyzerSource,
@@ -1787,6 +1788,15 @@ function uniqueUrls(text) {
   ));
 }
 
+function isTrustedOpenAiSourceUrl(url) {
+  try {
+    const parsed = new URL(String(url || ""));
+    return parsed.protocol === "https:" && (parsed.hostname === "openai.com" || parsed.hostname.endsWith(".openai.com"));
+  } catch {
+    return false;
+  }
+}
+
 function verifyReportSiteArtifact(dir, expectedMarker) {
   if (!dir) return null;
   const reportPath = join(dir, "report.md");
@@ -1881,6 +1891,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     cliJson: null,
     sourceCount: 0,
     sourceUrlCount: 0,
+    trustedSourceUrlCount: 0,
     reportHasMarker: false,
     htmlHasMarker: false,
     reportHasChinese: false,
@@ -1893,7 +1904,10 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
     htmlHasLiteralEscapedNewlines: false,
     reportUrlCount: 0,
     htmlUrlCount: 0,
+    reportTrustedUrlCount: 0,
+    htmlTrustedUrlCount: 0,
     sharedUrlCount: 0,
+    sharedTrustedUrlCount: 0,
     htmlComplete: false,
     htmlLinksReport: false,
     testOutput: "",
@@ -1914,6 +1928,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       const sources = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);
       evidence.sourceCount = sources.length;
       evidence.sourceUrlCount = sources.filter((item) => /^https?:\/\//i.test(String(item?.url || ""))).length;
+      evidence.trustedSourceUrlCount = sources.filter((item) => isTrustedOpenAiSourceUrl(item?.url)).length;
     }
     let reportUrls = [];
     let htmlUrls = [];
@@ -1926,6 +1941,7 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.reportHasLiteralEscapedNewlines = /\\n/.test(text);
       reportUrls = uniqueUrls(text);
       evidence.reportUrlCount = reportUrls.length;
+      evidence.reportTrustedUrlCount = reportUrls.filter(isTrustedOpenAiSourceUrl).length;
     }
     if (evidence.files.indexHtml) {
       const text = readFileSync(htmlPath, "utf8");
@@ -1936,10 +1952,12 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.htmlHasLiteralEscapedNewlines = /\\n/.test(text);
       htmlUrls = uniqueUrls(text);
       evidence.htmlUrlCount = htmlUrls.length;
+      evidence.htmlTrustedUrlCount = htmlUrls.filter(isTrustedOpenAiSourceUrl).length;
       evidence.htmlComplete = /<html|<!doctype/i.test(text) && /<\/html>/i.test(text);
       evidence.htmlLinksReport = /report\.md/i.test(text);
     }
     evidence.sharedUrlCount = reportUrls.filter((url) => htmlUrls.includes(url)).length;
+    evidence.sharedTrustedUrlCount = reportUrls.filter((url) => isTrustedOpenAiSourceUrl(url) && htmlUrls.includes(url)).length;
     if (evidence.files.testFile) {
       evidence.testOutput = execFileSync(process.execPath, ["--test", testPath], {
         cwd: dir,
@@ -2003,6 +2021,7 @@ function complexProjectArtifactComplete(evidence, { requireModelLed = false } = 
   if (evidence.doneExact !== true) return false;
   if (evidence.exportsFunction !== true) return false;
   if (Number(evidence.sourceUrlCount || 0) < 3) return false;
+  if (Number(evidence.trustedSourceUrlCount || 0) < 3) return false;
   if (evidence.testPassed !== true) return false;
   if (evidence.cliPassed !== true) return false;
   if (evidence.reportHasMarker !== true || evidence.htmlHasMarker !== true) return false;
@@ -2011,7 +2030,8 @@ function complexProjectArtifactComplete(evidence, { requireModelLed = false } = 
   if (evidence.reportHasLiteralEscapedNewlines === true || evidence.htmlHasLiteralEscapedNewlines === true) return false;
   if (evidence.reportMentionsCodex !== true || evidence.htmlMentionsCodex !== true) return false;
   if (Number(evidence.reportUrlCount || 0) < 3 || Number(evidence.htmlUrlCount || 0) < 3) return false;
-  if (Number(evidence.sharedUrlCount || 0) < 1) return false;
+  if (Number(evidence.reportTrustedUrlCount || 0) < 3 || Number(evidence.htmlTrustedUrlCount || 0) < 3) return false;
+  if (Number(evidence.sharedTrustedUrlCount || 0) < 1) return false;
   if (evidence.htmlComplete !== true || evidence.htmlLinksReport !== true) return false;
   if (!requireModelLed) return true;
   if (evidence?.responseHistory?.artifactGuardUsed === true) return false;
@@ -2035,6 +2055,7 @@ function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) localFailures.push("complex-project done.txt did not exactly match the marker");
   if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) localFailures.push("complex-project analyzer did not export summarizeSources");
   if (artifactEvidence?.files?.sourcesJson && artifactEvidence.sourceUrlCount < 3) localFailures.push("complex-project sources.json had fewer than three source URLs");
+  if (artifactEvidence?.files?.sourcesJson && artifactEvidence.trustedSourceUrlCount < 3) localFailures.push("complex-project sources.json had fewer than three trusted OpenAI source URLs");
   if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) localFailures.push("complex-project node:test did not pass");
   if (artifactEvidence?.files?.analyzer && artifactEvidence.cliPassed !== true) localFailures.push("complex-project CLI output did not prove sourceCount>=3 and codexMentionCount>=1");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMarker !== true) localFailures.push("complex-project report.md missing marker");
@@ -2049,7 +2070,9 @@ function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) localFailures.push("complex-project index.html missing Codex/OpenAI content");
   if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) localFailures.push("complex-project report.md has fewer than three source URLs");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlUrlCount < 3) localFailures.push("complex-project index.html has fewer than three source URLs");
-  if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) localFailures.push("complex-project report.md and index.html did not share a source URL");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence.reportTrustedUrlCount < 3) localFailures.push("complex-project report.md has fewer than three trusted OpenAI source URLs");
+  if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlTrustedUrlCount < 3) localFailures.push("complex-project index.html has fewer than three trusted OpenAI source URLs");
+  if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedTrustedUrlCount < 1) localFailures.push("complex-project report.md and index.html did not share a trusted OpenAI source URL");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) localFailures.push("complex-project index.html is not a complete HTML document");
   if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) localFailures.push("complex-project index.html does not link to report.md");
   if (options.requireModelLed === true && artifactEvidence?.responseHistory?.artifactGuardUsed === true) {
@@ -2276,7 +2299,12 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       .filter((item) => item.score >= 0)
       .sort((a, b) => b.score - a.score);
     const selected = ranked[0] || null;
-    if (${click ? "true" : "false"} && selected) selected.button.click();
+    const hit = selected
+      ? document.elementFromPoint(selected.rect.x + selected.rect.w / 2, selected.rect.y + selected.rect.h / 2)
+      : null;
+    const hitButton = hit?.closest?.('button') || null;
+    const selectedHit = Boolean(selected && hitButton === selected.button);
+    if (${click ? "true" : "false"} && selected && selectedHit) selected.button.click();
     const summarize = (item) => item ? {
       index: item.index,
       label: item.label,
@@ -2288,6 +2316,11 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       near: item.near,
       score: item.score,
     } : null;
+    const summarizeHit = (element) => element ? {
+      tag: element.tagName || '',
+      label: (element.getAttribute?.('aria-label') || element.getAttribute?.('title') || element.textContent || '').trim().slice(0, 160),
+      className: String(element.className || '').slice(0, 160),
+    } : null;
     const composerText = composer?.innerText || '';
     const normalizeInsertedText = (value) => String(value || '')
       .replaceAll(String.fromCharCode(13) + String.fromCharCode(10), String.fromCharCode(10))
@@ -2298,9 +2331,12 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       composer: composerText,
       composerMatches: composerText.trim() === expected.trim()
         || normalizeInsertedText(composerText) === normalizeInsertedText(expected),
-      hasSendButton: Boolean(selected),
-      clicked: Boolean(${click ? "true" : "false"} && selected),
+      hasSendButton: Boolean(selected && selectedHit),
+      clicked: Boolean(${click ? "true" : "false"} && selected && selectedHit),
       selected: summarize(selected),
+      selectedHit,
+      hitElement: summarizeHit(hit),
+      hitButton: summarizeHit(hitButton),
       candidates: ranked.slice(0, 5).map(summarize),
       nearbyButtons: visibleButtons
         .sort((a, b) => (a.near || 99999) - (b.near || 99999))
@@ -2308,6 +2344,26 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
         .map(summarize),
     };
   })()`;
+}
+
+async function closeManagerOverlayIfOpen(ws) {
+  const closed = await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const overlay = document.querySelector('#anticodex-manager-overlay');
+      if (!overlay) return { overlayPresent: false, closed: false };
+      const close = overlay.querySelector('.anticodex-close')
+        || [...overlay.querySelectorAll('button')].find((button) => /关闭|Close/i.test(button.innerText || button.getAttribute('aria-label') || ''));
+      if (close) close.click();
+      return { overlayPresent: true, closed: Boolean(close) };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const value = closed.result?.result?.value || {};
+  if (value.overlayPresent) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+  }
+  return value;
 }
 
 async function waitForComposerPromptReady(ws, prompt, timeoutMs = 5_000) {
@@ -2746,6 +2802,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
 
+  await closeManagerOverlayIfOpen(ws);
   const clear = await ws.send("Runtime.evaluate", {
     expression: `(() => {
       const composer = document.querySelector('.ProseMirror');
@@ -3402,6 +3459,7 @@ async function main() {
       process.exit(0);
     }
 
+    await closeManagerOverlayIfOpen(ws);
     const clear = await ws.send("Runtime.evaluate", {
       expression: `(() => {
         const composer = document.querySelector('.ProseMirror');
@@ -3699,6 +3757,7 @@ async function main() {
       if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) failures.push("complex-project done.txt did not exactly match the marker");
       if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) failures.push("complex-project analyzer did not export summarizeSources");
       if (artifactEvidence?.files?.sourcesJson && artifactEvidence.sourceUrlCount < 3) failures.push("complex-project sources.json had fewer than three source URLs");
+      if (artifactEvidence?.files?.sourcesJson && artifactEvidence.trustedSourceUrlCount < 3) failures.push("complex-project sources.json had fewer than three trusted OpenAI source URLs");
       if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) failures.push("complex-project node:test did not pass");
       if (artifactEvidence?.files?.analyzer && artifactEvidence.cliPassed !== true) failures.push("complex-project CLI output did not prove sourceCount>=3 and codexMentionCount>=1");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportHasMarker !== true) failures.push("complex-project report.md missing marker");
@@ -3713,7 +3772,9 @@ async function main() {
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlMentionsCodex !== true) failures.push("complex-project index.html missing Codex/OpenAI content");
       if (artifactEvidence?.files?.reportMd && artifactEvidence.reportUrlCount < 3) failures.push("complex-project report.md has fewer than three source URLs");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlUrlCount < 3) failures.push("complex-project index.html has fewer than three source URLs");
-      if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedUrlCount < 1) failures.push("complex-project report.md and index.html did not share a source URL");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence.reportTrustedUrlCount < 3) failures.push("complex-project report.md has fewer than three trusted OpenAI source URLs");
+      if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlTrustedUrlCount < 3) failures.push("complex-project index.html has fewer than three trusted OpenAI source URLs");
+      if (artifactEvidence?.files?.reportMd && artifactEvidence?.files?.indexHtml && artifactEvidence.sharedTrustedUrlCount < 1) failures.push("complex-project report.md and index.html did not share a trusted OpenAI source URL");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlComplete !== true) failures.push("complex-project index.html is not a complete HTML document");
       if (artifactEvidence?.files?.indexHtml && artifactEvidence.htmlLinksReport !== true) failures.push("complex-project index.html does not link to report.md");
       if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.artifactGuardUsed === true) {
@@ -3848,6 +3909,10 @@ async function main() {
     activeReconnectSeen = activeReconnectSeen === true || repairTurn.activeReconnectSeen === true;
     activeReconnectEvidence.push(...(repairTurn.activeReconnectEvidence || []));
     inLoopIdleDiagnostics = repairTurn.inLoopIdleDiagnostics || inLoopIdleDiagnostics;
+  }
+
+  if (taskMode === "complex-project" && !repairTurn) {
+    pushUniqueFailures(failures, collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed }));
   }
 
   if (["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"].includes(taskMode)) {

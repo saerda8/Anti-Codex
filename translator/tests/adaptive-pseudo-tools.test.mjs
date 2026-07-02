@@ -438,6 +438,27 @@ test("chat response does not block evaluation advice that mentions files and com
   assert.match(formatted.output[0].content[0].text, /\u6587\u4ef6\u521b\u5efa/);
 });
 
+test("chat response does not block small-task run-through criteria advice with a marker", () => {
+  const marker = "UI_CHAT_SMOKE_1782969105956";
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: `\u5224\u65ad\u6807\u51c6\uff1a\u770b\u5b83\u662f\u5426\u80fd\u5148\u7406\u89e3\u4efb\u52a1\uff0c\u518d\u521b\u5efa\u6587\u4ef6\u3001\u8fd0\u884c\u6d4b\u8bd5\uff0c\u5e76\u628a\u4ea7\u7269\u548c\u7ed3\u679c\u6838\u5bf9\u6e05\u695a\u3002\n${marker}`,
+      },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: `\u7528\u4e2d\u6587\u7b80\u77ed\u56de\u7b54\uff1a\u5982\u679c Anti-Codex \u662f Codex \u5ba2\u6237\u7aef\u63a5\u5165\u53e6\u4e00\u4e2a\u6a21\u578b\uff0c\u6b63\u5e38\u5c0f\u4efb\u52a1\u5e94\u8be5\u600e\u4e48\u5224\u65ad\u662f\u5426\u8dd1\u901a\uff1f\u6700\u540e\u5355\u72ec\u4e00\u884c\u5199 ${marker}\u3002`,
+  });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.doesNotMatch(formatted.output[0].content[0].text, /Anti-Codex \u5df2\u62e6\u622a/);
+  assert.match(formatted.output[0].content[0].text, new RegExp(marker));
+});
+
 test("system prompt does not expose legacy DeepCodex product identity", () => {
   const block = buildSystemBlock();
 
@@ -4198,6 +4219,34 @@ test("coding project local artifact requests include a word-tally CLI example", 
   assert.match(body.messages[0].content, /node word-tally\.mjs "red blue red"/);
   assert.doesNotMatch(body.messages[0].content, /agentic step-flow verified/);
   assert.doesNotMatch(body.messages[0].content, /index\.html/);
+});
+
+test("complex project local artifact requests include a full analyzer CLI example", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_1234567890";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain ${marker}. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  assert.match(body.messages[0].content, /Exact local-file tool-call pattern/);
+  assert.match(body.messages[0].content, /Anti-Codex complex project tool example/);
+  assert.match(body.messages[0].content, /copy the exact node -e helper command below as the first tool action/);
+  assert.match(body.messages[0].content, /Buffer\.from\('[A-Za-z0-9+/=]+','base64'\)/);
+  assert.match(body.messages[0].content, /<tool_calls><invoke name="shell_command">/);
+  const payload = body.messages[0].content.match(/Buffer\.from\('([A-Za-z0-9+/=]+)','base64'\)/)?.[1];
+  assert.ok(payload, "expected a base64 Node helper payload");
+  const decoded = Buffer.from(payload, "base64").toString("utf8");
+  assert.match(decoded, /\\u771f\\u5b9e\\u6765\\u6e90/);
+  assert.doesNotMatch(body.messages[0].content, /Anti-Codex complex artifact safety repair/);
+  assert.doesNotMatch(body.messages[0].content, /word-tally\.mjs/);
 });
 
 test("multi-turn project local artifact requests include word-tally follow-up examples", () => {
