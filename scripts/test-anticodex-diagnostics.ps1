@@ -971,6 +971,13 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
+    if ($evidence.currentChannelWorkerCanDispatch -ne $false) { Add-Failure "goal-readiness summary compact worker dispatch field is not blocked" }
+    if ([string]$evidence.currentChannelWorkerTransportStatus -ne "reload_required") { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
+    if ($evidence.currentChannelWorkerRecoveryRequired -ne $true) { Add-Failure "goal-readiness summary compact worker recovery field missing" }
+    if (-not [string]$evidence.secondAccountTargetWindowsUser) { Add-Failure "goal-readiness summary compact second-account target user missing" }
+    if ($evidence.secondAccountTargetUserExists -ne $false) { Add-Failure "goal-readiness summary compact second-account target existence mismatch" }
+    if ($evidence.secondAccountOperatorStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary compact second-account operator status mismatch" }
+    if (-not [string]$evidence.secondAccountNextOperatorAction) { Add-Failure "goal-readiness summary compact second-account next action missing" }
     $requiredBlockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
     if ($evidence.releaseReady -eq $true) {
         if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $false) { Add-Failure "goal-readiness summary release-ready state still claims real-traffic-only blocker" }

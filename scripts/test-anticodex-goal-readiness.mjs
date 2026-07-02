@@ -455,6 +455,7 @@ const secondAccountReadinessSummary = {
   reportPresent: secondAccountReadinessSummaryReport.present,
   reportOk: secondSummary.ok === true,
   reportName: String(secondSummary.reportName || ""),
+  windowsUser: String(secondSummary.windowsUser || ""),
   noTraffic: secondSummary.noTraffic === true,
   requestedRealTraffic: secondSummary.requestedRealTraffic === true,
   usedRealTraffic: secondSummary.usedRealTraffic === true,
@@ -718,6 +719,17 @@ const goalComplete = proven.codexClientCopy
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
+const currentChannelWorkerTransportStatus = currentChannelWorkerCanDispatch
+  ? "dispatch_ready"
+  : workerMcp.currentChannelWorkerTransportFresh
+    ? "reload_required"
+    : "fresh_probe_required";
+const secondAccountOperatorStatus = secondAccountReadinessSummary.releaseAcceptableAccountProof
+  ? "proof_complete"
+  : secondAccountReadinessSummary.canProceedToInteractiveLogin
+    ? "ready_for_interactive_login"
+    : "manual_windows_user_setup_required";
+
 const payload = {
   ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
@@ -730,6 +742,19 @@ const payload = {
   goalComplete,
   proven,
   blockers,
+  currentChannelWorkerCanDispatch,
+  currentChannelWorkerTransportStatus,
+  currentChannelWorkerRecoveryRequired: !currentChannelWorkerCanDispatch,
+  secondAccountTargetWindowsUser: secondAccountReadinessSummary.windowsUser,
+  secondAccountTargetUserExists: secondAccountReadinessSummary.targetUserExists,
+  secondAccountReadyForOperatorLogin: secondAccountReadinessSummary.readyForOperatorLogin,
+  secondAccountSafeToAskUserForSecondAccountLogin: secondAccountReadinessSummary.safeToAskUserForSecondAccountLogin,
+  secondAccountCanProceedToInteractiveLogin: secondAccountReadinessSummary.canProceedToInteractiveLogin,
+  secondAccountOperatorStatus,
+  secondAccountReadinessBlockingReason: secondAccountReadinessSummary.readinessBlockingReason,
+  secondAccountOperatorBlockingStage: secondAccountReadinessSummary.operatorBlockingStage,
+  secondAccountOperatorNextStep: secondAccountReadinessSummary.operatorNextStep,
+  secondAccountNextOperatorAction: secondAccountReadinessSummary.nextOperatorAction,
   codexClientCopy,
   workerMcp,
   workerTransportRecoveryReadiness,

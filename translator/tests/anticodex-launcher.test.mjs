@@ -13062,6 +13062,11 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /currentChannelPostReloadVerification/);
   assert.match(goalReadiness, /workerTransportRecoveryReadiness/);
   assert.match(goalReadiness, /requiresCodexMcpReload/);
+  assert.match(goalReadiness, /currentChannelWorkerTransportStatus/);
+  assert.match(goalReadiness, /currentChannelWorkerRecoveryRequired/);
+  assert.match(goalReadiness, /secondAccountTargetWindowsUser/);
+  assert.match(goalReadiness, /secondAccountOperatorStatus/);
+  assert.match(goalReadiness, /secondAccountNextOperatorAction/);
   assert.match(goalReadiness, /currentChannelReadOnlyProbeInstruction/);
   assert.match(goalReadiness, /currentChannelRecoveryRecordCommand/);
   assert.match(goalReadiness, /operatorRecoveryAction/);
@@ -13125,6 +13130,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelWorkerTransportFailedTools/);
   assert.match(summarizer, /workerTransportRecoveryDirectWorkerProbeCommand/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelRecoveryRecordCommand/);
+  assert.match(summarizer, /currentChannelWorkerTransportStatus/);
+  assert.match(summarizer, /secondAccountOperatorStatus/);
+  assert.match(summarizer, /secondAccountNextOperatorAction/);
   assert.match(summarizer, /postReloadVerification/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
