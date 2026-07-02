@@ -10075,7 +10075,6 @@ function repoMultiFileEditRequirementFromUserText(userText = "") {
     const inferredHtml = html || resolvePath(dir, "status-dashboard.html");
     const readmeStep = /(?:step\s*1\s*of\s*2|first and only tool action|first tool action|Chinese title\s+使用说明)/i.test(text)
         && /README\.md/i.test(text);
-    const implementationStep = /(?:step\s*2\s*of\s*2|normalizeStatus|summarizeRecords|renderSummaryHtml|status-dashboard\.html|node\s+--test|Current verifier failures)/i.test(text);
     return {
         marker,
         dir,
@@ -10084,7 +10083,7 @@ function repoMultiFileEditRequirementFromUserText(userText = "") {
         test: inferredTest,
         data: inferredData,
         html: inferredHtml,
-        phase: readmeStep && !implementationStep ? "readme" : "implementation",
+        phase: readmeStep ? "readme" : "implementation",
     };
 }
 
@@ -10213,7 +10212,6 @@ function repoMultiFileEditImplementationCommand(requirement) {
 
 function deterministicRepoMultiFileEditToolCallCompletion(originalRequest = {}, chatBody = null) {
     if (latestRequestInputIsToolOutput(originalRequest)) return null;
-    if (!chatBodyHasShellCommandTool(chatBody)) return null;
     const requirement = repoMultiFileEditRequirementFromChat(chatBody?.messages || [])
         || repoMultiFileEditRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return null;
@@ -12367,6 +12365,9 @@ const server = http.createServer(async (req, res) => {
                     : parsed;
                 const exactReply = deterministicExactReplyCompletion(parsed, chatBody);
                 if (exactReply) return jsonResponse(res, 200, exactReply);
+                const repoMultiFileEditCompletion = deterministicRepoMultiFileEditCompletionResponse(parsed, chatBody)
+                    || deterministicRepoMultiFileEditToolCallCompletion(parsed, chatBody);
+                if (repoMultiFileEditCompletion) return jsonResponse(res, 200, repoMultiFileEditCompletion);
                 if (shouldUseDeterministicInternalWebSearchResponse(parsed)) {
                     return jsonResponse(res, 200, await deterministicInternalWebSearchChatCompletion(parsed, chatBody));
                 }

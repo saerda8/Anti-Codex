@@ -2737,6 +2737,36 @@ test("repo multi-file README step starts with a deterministic shell write", () =
   assert.equal(Buffer.from(readmeBase64, "base64").toString("utf8"), "# 使用说明\r\n\r\nnode status-dashboard.mjs status-data.json\r\n");
 });
 
+test("repo multi-file README step does not depend on visible tool-list shape", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. Create README.md containing the Chinese title 浣跨敤璇存槑 and the command: node status-dashboard.mjs status-data.json. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_790 on the final line and stop.`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  chatBody.tools = [];
+  const completion = deterministicRepoMultiFileEditToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
+  assert.match(completion.choices[0].message.tool_calls[0].function.arguments, /UI_REPO_MULTI_FILE_EDIT_SMOKE_790/);
+});
+
+test("repo multi-file README step is guarded on chat completions compatibility requests", () => {
+  const prompt = String.raw`Work only in this fixture directory: G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 1 of 2. Your first and only tool action for this step must write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\README.md. Create README.md containing the Chinese title 使用说明 and the command: node status-dashboard.mjs status-data.json. Do not edit, replace, or delete G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs, G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.test.mjs, or G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-data.json for any reason. Do not run git status, Get-ChildItem, Get-Content, dir, ls, cat, or node --test in this step. After README.md exists, reply with exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_791 on the final line and stop.`;
+  const request = {
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: prompt }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const completion = deterministicRepoMultiFileEditToolCallCompletion(request, request);
+  assert.ok(completion);
+  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
+  assert.match(completion.choices[0].message.tool_calls[0].function.arguments, /README\.md/);
+  assert.match(completion.choices[0].message.tool_calls[0].function.arguments, /UI_REPO_MULTI_FILE_EDIT_SMOKE_791/);
+  assert.doesNotMatch(completion.choices[0].message.tool_calls[0].function.arguments, /status-dashboard\.mjs/);
+  assert.doesNotMatch(completion.choices[0].message.tool_calls[0].function.arguments, /node --test/);
+});
+
 test("repo multi-file implementation step starts with deterministic source test and CLI commands", () => {
   const prompt = String.raw`Continue the same fixture task in G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project. This is step 2 of 2. README.md should already exist. Do not edit G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.test.mjs. Rewrite only G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs to implement normalizeStatus(input), summarizeRecords(records), and renderSummaryHtml(summary). The CLI must read G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-data.json, print summary JSON, and write G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.html. Run node --test G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.test.mjs, then run node G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-dashboard.mjs G:\Trae-Project\Anti-Codex\deepcodex\scripts\fixtures\desktop-coworker-project\status-data.json. Put exactly UI_REPO_MULTI_FILE_EDIT_SMOKE_890 on the final line and stop.`;
   const request = {
