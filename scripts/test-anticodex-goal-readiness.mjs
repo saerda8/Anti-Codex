@@ -99,6 +99,11 @@ const workerToolCountByServer = Object.fromEntries(
 const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
 const workerServerProbe = workerMcpServerProbeReport.report || {};
 const currentChannelWorkerTransport = currentChannelWorkerTransportReport.report || {};
+const currentChannelWorkerTransportMaxAgeMs = Number(args.get("--current-channel-worker-transport-max-age-ms") || 6 * 60 * 60 * 1000);
+const currentChannelCheckedAtMs = Date.parse(String(currentChannelWorkerTransport.checkedAt || ""));
+const currentChannelWorkerTransportAgeMs = Number.isFinite(currentChannelCheckedAtMs) ? Math.max(0, startedAt - currentChannelCheckedAtMs) : null;
+const currentChannelWorkerTransportFresh = Number.isFinite(currentChannelWorkerTransportAgeMs)
+  && currentChannelWorkerTransportAgeMs <= currentChannelWorkerTransportMaxAgeMs;
 const workerTaskSmoke = workerMcpTaskSmokeReport.report || {};
 const workerTaskSmokeResults = Array.isArray(workerTaskSmoke.results) ? workerTaskSmoke.results : [];
 const workerTaskSmokePassedWorkers = workerTaskSmokeResults
@@ -155,6 +160,9 @@ const workerMcp = {
   currentChannelDirectProbePassedServerCount: Number(currentChannelWorkerTransport.directProbeReport?.passedServerCount || 0),
   currentChannelSplitObserved: currentChannelWorkerTransport.splitObserved === true,
   currentChannelCheckedAt: String(currentChannelWorkerTransport.checkedAt || ""),
+  currentChannelWorkerTransportAgeMs,
+  currentChannelWorkerTransportMaxAgeMs,
+  currentChannelWorkerTransportFresh,
   currentChannelWorkerDispatchBlocked: currentChannelWorkerTransport.currentChannelWorkerDispatchBlocked === true,
   currentChannelWorkerDispatchUsable: Object.prototype.hasOwnProperty.call(currentChannelWorkerTransport, "currentChannelWorkerDispatchUsable")
     ? currentChannelWorkerTransport.currentChannelWorkerDispatchUsable === true
@@ -618,6 +626,7 @@ if (!workerMcp.projectSmokeAntigravityExcluded) blockers.push("worker_mcp_projec
 if (workerMcp.projectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_project_smoke_insufficient_worker_diversity");
 if (workerMcp.projectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_project_smoke_missing_required_worker");
 if (workerMcp.projectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_project_smoke_failed_workers");
+if (!workerMcp.currentChannelWorkerTransportFresh) blockers.push("current_channel_worker_transport_probe_stale");
 if (!workerMcp.currentChannelWorkerDispatchUsable) blockers.push("current_channel_worker_transport_not_recovered");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
@@ -634,6 +643,7 @@ for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.p
 const goalComplete = proven.codexClientCopy
   && proven.workerMcp
   && workerMcp.currentChannelWorkerDispatchUsable
+  && workerMcp.currentChannelWorkerTransportFresh
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
   && proven.realTaskCoverageRoadmap

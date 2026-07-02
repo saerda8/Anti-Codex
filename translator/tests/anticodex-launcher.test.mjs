@@ -13048,6 +13048,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /latest-current-channel-worker-transport\.json/);
   assert.match(goalReadiness, /currentChannelWorkerTransportReportOk/);
   assert.match(goalReadiness, /currentChannelSplitObserved/);
+  assert.match(goalReadiness, /currentChannelWorkerTransportMaxAgeMs/);
+  assert.match(goalReadiness, /currentChannelWorkerTransportFresh/);
+  assert.match(goalReadiness, /current_channel_worker_transport_probe_stale/);
   assert.match(goalReadiness, /currentChannelWorkerDispatchBlocked/);
   assert.match(goalReadiness, /currentChannelWorkerDispatchUsable/);
   assert.match(goalReadiness, /current_channel_worker_transport_not_recovered/);
