@@ -13060,6 +13060,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerTaskSmoke, /function mergeLatestResults/);
   assert.match(workerTaskSmoke, /mergedFromLatest/);
   assert.match(workerTaskSmoke, /payload\.failedWorkers = payload\.results\.filter/);
+  assert.match(workerTaskSmoke, /pathToFileURL\(process\.argv\[1\]\)\.href/);
+  assert.match(workerTaskSmoke, /Do not build a file URL by string concatenation/);
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);

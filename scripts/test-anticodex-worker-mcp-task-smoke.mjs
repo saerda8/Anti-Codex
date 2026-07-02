@@ -192,6 +192,8 @@ function buildTask(workerName, marker, scenario) {
       "word-tally.mjs must export function tallyWords(text). It must split words by whitespace, lowercase them, ignore empty words, and return a plain object of word counts.",
       "When run as a CLI, word-tally.mjs must print JSON word counts for the remaining command line text.",
       "The CLI code must use process.argv.slice(2); do not reference program.argv or any undeclared program variable.",
+      "If word-tally.mjs uses an ESM main-module guard, import pathToFileURL from node:url and compare import.meta.url to pathToFileURL(process.argv[1]).href.",
+      "Do not build a file URL by string concatenation from process.argv[1]; that breaks on Windows and produces no CLI JSON.",
       "word-tally.test.mjs must use node:test and assert that tallyWords('red blue red') returns red=2 and blue=1.",
       "package.json must set type module and a test script that runs node --test word-tally.test.mjs.",
       `done.txt must contain exactly ${marker}.`,
