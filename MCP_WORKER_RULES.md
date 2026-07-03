@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-04 - Current-channel Kilo/OpenCode/DeepSeek read-only probes still transport-closed
+
+- Task: before any new implementation dispatch, recheck exposed current-channel worker read tools with completed historical jobs.
+- Result: `kilo_get_job`, `opencode_get_job`, and `deepseek_get_job` all returned `Transport closed`; same-channel generic `node_repl` returned `CURRENT_CHANNEL_GENERIC_MCP_OK_20260704`. The recovery report now has 13 failed worker observations, 0 worker successes, exposed worker prefixes `kilo,opencode,deepseek,mimocode`, and missing expected prefixes `antigravity,deveco,mimo`.
+- Cause classification: current Codex-channel worker namespace transport remains closed while generic MCP and direct worker evidence are separate. This is not a product task-capability failure and not proof that the worker CLIs are broken.
+- Rule change: do not keep retrying same-channel implementation or read-only worker calls in this channel. A fresh/reloaded channel must first return one normal read-only worker status/get/wait response and record it before implementation workers can be dispatched.
+
 ### 2026-07-03 - Direct worker complex-project smoke added; Kilo import failure tightened prompt
 
 - Task: add a stronger direct worker MCP `complex-project` smoke that verifies a 7-file analyzer/report/html project across non-Antigravity workers.
