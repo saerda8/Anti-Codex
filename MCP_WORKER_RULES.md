@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-04 - Resumed-channel worker read-only probes still transport-closed
+
+- Task: after the long-running goal was resumed, verify whether worker namespaces became usable before allowing any implementation worker dispatch.
+- Result: `tool_search` exposed Kilo/OpenCode/DeepSeek worker read tools, but read-only `kilo_get_job`, `opencode_get_job`, and `deepseek_get_job` all immediately returned `Transport closed`. The signed transport report was refreshed to 16 failed observations, 0 successes, failed prefixes `kilo,opencode,deepseek,mimocode`, generic MCP control ok, and direct worker probe ok. Recovery remains `reload_required`, `canDispatchCurrentChannelWorkers:false`, and `sameChannelRetryRecommended:false`.
+- Cause classification: current Codex-channel worker namespace transport remains closed after resume; this is still not evidence that the worker CLIs or Anti-Codex product path are broken.
+- Rule change: do not retry same-channel Kilo/OpenCode/DeepSeek read probes again in this channel unless the channel is actually reloaded/fresh or a different generic MCP/tooling state changes. Next valid recovery attempt should start with the recommended fresh-channel read-only probe and record a success only if the call returns normally.
+
 ### 2026-07-04 - Current-channel Kilo/OpenCode/DeepSeek read-only probes still transport-closed
 
 - Task: before any new implementation dispatch, recheck exposed current-channel worker read tools with completed historical jobs.
