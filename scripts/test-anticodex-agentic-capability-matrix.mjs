@@ -33,9 +33,9 @@ const reportFiles = {
   multiTurnProject: "latest-ui-multi-turn-project-smoke.json",
   reportSite: "latest-ui-report-site-smoke.json",
   complexProject: "latest-ui-complex-project-smoke.json",
-  autonomousReasoning: "latest-ui-autonomous-reasoning-smoke-model-gemini-3-5-flash-low.json",
+  autonomousReasoning: "latest-ui-autonomous-reasoning-smoke.json",
   repoMultiFileEdit: "latest-ui-repo-multi-file-edit-smoke.json",
-  agenticStepFlow: "latest-ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low.json",
+  agenticStepFlow: "latest-ui-agentic-step-flow-smoke.json",
 };
 
 function readReport(file) {
@@ -333,7 +333,7 @@ const capabilities = [
       ...responseHistoryEvidence(responseHistory),
     };
   }),
-  capability("autonomous_reasoning_project", "autonomous-reasoning", reportFiles.autonomousReasoning, "ui-autonomous-reasoning-smoke-model-gemini-3-5-flash-low", (report, failures) => {
+  capability("autonomous_reasoning_project", "autonomous-reasoning", reportFiles.autonomousReasoning, "ui-autonomous-reasoning-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
     const responseHistory = artifact.responseHistory || {};
     const files = artifact.files || {};
@@ -393,7 +393,7 @@ const capabilities = [
       ...responseHistoryEvidence(responseHistory),
     };
   }),
-  capability("visible_staged_tool_loop", "agentic-step-flow", reportFiles.agenticStepFlow, "ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low", (report, failures) => {
+  capability("visible_staged_tool_loop", "agentic-step-flow", reportFiles.agenticStepFlow, "ui-agentic-step-flow-smoke", (report, failures) => {
     const artifact = report.artifactEvidence || {};
     const responseHistory = artifact.responseHistory || {};
     const files = artifact.files || {};
