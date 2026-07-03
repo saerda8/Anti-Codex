@@ -2,7 +2,7 @@
 param(
     [string]$BaseUrl = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
-    [string]$Model = $(if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "claude-sonnet-4-6" }),
+    [string]$Model = $(if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.5-flash-low" }),
     [int]$TimeoutSec = 180,
     [switch]$AllowRealTraffic
 )
@@ -347,7 +347,7 @@ try {
         behaviorCovered = $false
         coverageKind = "real-traffic-small-project"
         failures = @($failures)
-        model = "gemini-3.5-flash-low"
+        model = $Model
         baseUrl = $script:ResolvedBaseUrl
         elapsedMs = [int]((Get-Date) - $started).TotalMilliseconds
         marker = $marker

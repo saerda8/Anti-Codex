@@ -2186,6 +2186,24 @@ function filterReportSiteUiCompletionFailures(failures, artifactEvidence, answer
   return failures.filter((failure) => !/report-site required verifier repair before completion|report-site did not prove a Codex-like visible agent process|report-site did not show at least two visible progress updates|report-site did not show at least two distinct visible progress updates|report-site assistant final marker was not observed in response history/i.test(String(failure || "")));
 }
 
+function filterComplexProjectUiCompletionFailures(failures, artifactEvidence) {
+  if (collectComplexProjectArtifactFailures(artifactEvidence).length > 0) return failures;
+  if (!complexProjectArtifactComplete(artifactEvidence, { requireModelLed: true })) return failures;
+  const history = artifactEvidence?.responseHistory || {};
+  const hasStrongFinalProof = history.codexLikeProcessProof === true
+    && history.modelLedExecution === true
+    && history.artifactGuardUsed !== true
+    && history.assistantHasFinalMarker === true
+    && history.markerToolOutputSeen === true
+    && history.taskToolOutputSeen === true
+    && (Number(history.taskToolCallCount) || 0) > 0
+    && (Number(history.visibleProgressCount) || 0) >= 2
+    && (Number(history.distinctVisibleProgressCount) || 0) >= 2
+    && (Number(history.firstPersonProgressCount) || 0) === 0;
+  if (!hasStrongFinalProof) return failures;
+  return failures.filter((failure) => !/complex-project required verifier repair before completion|complex-project did not prove a Codex-like visible agent process|complex-project did not show at least two visible progress updates|complex-project did not show at least two distinct visible progress updates|complex-project did not observe marker-scoped tool output|complex-project assistant final marker was not observed in response history/i.test(String(failure || "")));
+}
+
 function collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, repairAttempted = false) {
   if (!["coding-project", "multi-turn-project", "report-site", "complex-project", "repo-multi-file-edit"].includes(taskMode)) return [];
   const responseHistory = artifactEvidence?.responseHistory || {};
@@ -4248,6 +4266,11 @@ async function main() {
     const reportSiteEffectiveFailures = filterReportSiteUiCompletionFailures(failures, artifactEvidence, answerMarkerCount);
     failures.length = 0;
     failures.push(...reportSiteEffectiveFailures);
+  }
+  if (taskMode === "complex-project") {
+    const complexProjectEffectiveFailures = filterComplexProjectUiCompletionFailures(failures, artifactEvidence);
+    failures.length = 0;
+    failures.push(...complexProjectEffectiveFailures);
   }
   const observedRealTraffic = desktopRealTrafficObserved(modelRouteEvidence, diagnostics);
   if (!observedRealTraffic) failures.push("desktop submit did not produce a model request payload");

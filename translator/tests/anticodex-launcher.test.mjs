@@ -2426,7 +2426,8 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(realSmallProject, /\[switch\]\$AllowRealTraffic/);
   assert.match(realSmallProject, /\[string\]\$Model/);
   assert.match(realSmallProject, /ANTICODEX_TEST_MODEL/);
-  assert.match(realSmallProject, /claude-sonnet-4-6/);
+  assert.match(realSmallProject, /gemini-3\.5-flash-low/);
+  assert.doesNotMatch(realSmallProject, /claude-sonnet-4-6/);
   assert.match(realSmallProject, /if \(-not \$AllowRealTraffic\)/);
   assert.match(realSmallProject, /name\s*=\s*"write_small_project"/);
   assert.match(realSmallProject, /tool_choice\s*=\s*"required"/);
@@ -15030,6 +15031,62 @@ test("Antigravity CLI real-smoke skip path ignores account proof inputs without 
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("complex-project artifact helper writes trusted OpenAI URLs and Chinese marker content", () => {
+  const tempRoot = mkdtempSync(join(os.tmpdir(), "anticodex-complex-project-helper-"));
+  const marker = "UI_COMPLEX_PROJECT_HELPER_STATIC";
+  try {
+    const result = spawnSync(process.execPath, [
+      resolve(root, "scripts", "write-anticodex-complex-project-artifact.mjs"),
+      "--dir",
+      tempRoot,
+      "--marker",
+      marker,
+    ], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const files = readdirSync(tempRoot).sort();
+    assert.deepEqual(files, [
+      "codex-update-analyzer.mjs",
+      "codex-update-analyzer.test.mjs",
+      "done.txt",
+      "index.html",
+      "package.json",
+      "report.md",
+      "sources.json",
+    ]);
+
+    const sources = JSON.parse(readFileSync(join(tempRoot, "sources.json"), "utf8"));
+    assert.equal(sources.length, 3);
+    assert.ok(sources.every((source) => /^https:\/\/(?:[a-z0-9-]+\.)?openai\.com\//.test(source.url)));
+    assert.doesNotMatch(JSON.stringify(sources), /openab/i);
+    const report = readFileSync(join(tempRoot, "report.md"), "utf8");
+    const html = readFileSync(join(tempRoot, "index.html"), "utf8");
+    assert.match(report, /真实来源/);
+    assert.match(html, /真实来源/);
+    assert.match(report, new RegExp(marker));
+    assert.match(html, new RegExp(marker));
+    assert.equal(readFileSync(join(tempRoot, "done.txt"), "utf8"), marker);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("complex-project completion accepts repaired runs only with strong model-led proof", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
+  assert.match(verifier, /function filterComplexProjectUiCompletionFailures/);
+  assert.match(verifier, /complexProjectArtifactComplete\(artifactEvidence, \{ requireModelLed: true \}\)/);
+  assert.match(verifier, /complex-project required verifier repair before completion/);
+  assert.match(verifier, /history\.codexLikeProcessProof === true/);
+  assert.match(verifier, /history\.artifactGuardUsed !== true/);
+});
+
+test("real-small-project verifier defaults to Gemini and reports the requested model on failures", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-real-small-project.ps1"), "utf8");
+  assert.match(verifier, /else \{ "gemini-3\.5-flash-low" \}/);
+  assert.doesNotMatch(verifier, /else \{ "claude-sonnet-4-6" \}/);
+  assert.match(verifier, /model = \$Model/);
+  assert.doesNotMatch(verifier, /model = "gemini-3\.5-flash-low"\s*\r?\n\s*baseUrl = \$script:ResolvedBaseUrl/);
 });
 
 test("Antigravity CLI real-smoke rejects wrong Windows user before real traffic", () => {
