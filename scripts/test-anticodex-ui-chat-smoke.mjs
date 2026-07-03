@@ -3182,9 +3182,10 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
-            const hasProgressEvidence = answerMarkerCount >= 1
-              || artifactProgressEvidenceForWait(artifactEvidence, options);
-            if (hasProgressEvidence || Date.now() - waitStartedAt >= waitMs * 0.6) {
+            const requiresArtifactProgress = taskMode === "repo-multi-file-edit";
+            const hasProgressEvidence = artifactProgressEvidenceForWait(artifactEvidence, options)
+              || (!requiresArtifactProgress && answerMarkerCount >= 1);
+            if (hasProgressEvidence || (!requiresArtifactProgress && Date.now() - waitStartedAt >= waitMs * 0.6)) {
               inLoopIdleDiagnostics = loopDiagnostics;
               idleCompletedAt = Date.now();
               break;
@@ -3548,7 +3549,11 @@ async function main() {
 
     if (taskMode === "repo-multi-file-edit") {
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat, readmeOnly: true });
-      const firstArtifactEvidence = verifyRepoMultiFileEditFixture(marker);
+      const firstArtifactEvidence = await waitForArtifactEvidence(
+        () => verifyRepoMultiFileEditFixture(marker),
+        (evidence) => collectRepoMultiFileReadmeFailures(evidence).length === 0,
+        Math.min(timeoutMs, 120_000),
+      );
       const firstTurnSettle = repoMultiArtifactIdleSettle(turn1, "readme", firstArtifactEvidence);
       const firstArtifactFailures = collectRepoMultiFileReadmeFailures(firstArtifactEvidence);
       const actionableTurn1Failures = filterRepoMultiReadmeTextOnlyFailures(turn1.failures, firstArtifactFailures);
