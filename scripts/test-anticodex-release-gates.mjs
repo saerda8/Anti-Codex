@@ -1327,6 +1327,26 @@ function summarizeGate(definition) {
       if (report.behaviorCovered !== true) semanticFailures.push("goal_readiness_behavior_not_covered");
       if (report.coverageKind !== "goal-readiness-report-only") semanticFailures.push("goal_readiness_coverage_kind");
       if (report.goalComplete === true) semanticFailures.push("goal_readiness_goal_unexpectedly_complete");
+      const currentUsability = report.currentUsability && typeof report.currentUsability === "object" ? report.currentUsability : null;
+      if (!currentUsability) semanticFailures.push("goal_readiness_current_usability_missing");
+      else {
+        if (String(currentUsability.mode || "") !== "shared-account-worker-mcp-disabled") semanticFailures.push("goal_readiness_current_usability_mode");
+        if (currentUsability.usableNow !== true) semanticFailures.push("goal_readiness_current_usability_not_ready");
+        if (currentUsability.releaseReady !== true) semanticFailures.push("goal_readiness_current_usability_release");
+        if (currentUsability.usesSharedAntigravityAccount !== true) semanticFailures.push("goal_readiness_current_usability_shared_account");
+        if (currentUsability.requiresSeparateAntigravityAccount !== false) semanticFailures.push("goal_readiness_current_usability_requires_separate_account");
+        if (currentUsability.requiresCurrentChannelWorkerMcp !== false) semanticFailures.push("goal_readiness_current_usability_requires_worker");
+        if (currentUsability.workerMcpTemporarilyDisabled !== true) semanticFailures.push("goal_readiness_current_usability_worker_not_disabled");
+        if (currentUsability.codexClientCopy !== true) semanticFailures.push("goal_readiness_current_usability_client_copy");
+        if (currentUsability.antigravityModelText !== true) semanticFailures.push("goal_readiness_current_usability_model_text");
+        if (currentUsability.codexOwnedTools !== true) semanticFailures.push("goal_readiness_current_usability_tools");
+        if (currentUsability.nativeCodexLikeAgenticEvidence !== true) semanticFailures.push("goal_readiness_current_usability_agentic");
+        const relaxedRequirements = Array.isArray(currentUsability.temporaryRelaxedRequirements) ? currentUsability.temporaryRelaxedRequirements.map(String) : [];
+        for (const relaxedRequirement of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
+          if (!relaxedRequirements.includes(relaxedRequirement)) semanticFailures.push(`goal_readiness_current_usability_relaxed_missing:${relaxedRequirement}`);
+        }
+        if (!String(currentUsability.caveat || "").includes("Full goal")) semanticFailures.push("goal_readiness_current_usability_caveat");
+      }
       const goalOperatorActionCard = report.goalOperatorActionCard && typeof report.goalOperatorActionCard === "object" ? report.goalOperatorActionCard : null;
       if (!goalOperatorActionCard) semanticFailures.push("goal_readiness_operator_action_card_missing");
       else {

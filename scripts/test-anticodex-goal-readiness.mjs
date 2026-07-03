@@ -1195,6 +1195,35 @@ const goalOperatorActionCard = {
   secondAccountPostLoginProofCommand: secondAccountPostLoginProof.operatorActionCard.noTrafficStatusCommand,
 };
 
+const currentUsability = {
+  mode: "shared-account-worker-mcp-disabled",
+  usableNow: proven.codexClientCopy === true
+    && proven.desktopAgenticTasks === true
+    && proven.agenticCapabilityMatrix === true
+    && proven.realTaskCoverageRoadmap === true
+    && proven.longTaskLandingMatrix === true
+    && proven.realApprovalPlan === true
+    && proven.releaseShortPath === true
+    && releaseGateStatus.releaseReady === true,
+  releaseReady: releaseGateStatus.releaseReady === true,
+  usesSharedAntigravityAccount: true,
+  requiresSeparateAntigravityAccount: false,
+  requiresCurrentChannelWorkerMcp: false,
+  workerMcpTemporarilyDisabled: true,
+  codexClientCopy: proven.codexClientCopy === true,
+  antigravityModelText: proven.desktopAgenticTasks === true && proven.releaseShortPath === true,
+  codexOwnedTools: true,
+  nativeCodexLikeAgenticEvidence: proven.agenticCapabilityMatrix === true
+    && proven.longTaskLandingMatrix === true
+    && realTaskCoverageRoadmap.artifactProofComplete === true
+    && realTaskCoverageRoadmap.resultProofComplete === true,
+  caveat: "Full goal still requires separate Antigravity account proof and current-channel worker MCP recovery; this field only answers whether Anti-Codex can be used now with one shared Antigravity account and worker MCP disabled.",
+  temporaryRelaxedRequirements: [
+    "separate_antigravity_accounts",
+    "worker_mcp_multiuse",
+  ],
+};
+
 const payload = {
   ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.longTaskLandingMatrix && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.secondAccountPostLoginProof && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
@@ -1209,6 +1238,7 @@ const payload = {
   blockers,
   objectiveRequirementSummary,
   objectiveRequirementAudit,
+  currentUsability,
   goalOperatorActionCard,
   currentChannelWorkerCanDispatch,
   currentChannelWorkerTransportStatus,
