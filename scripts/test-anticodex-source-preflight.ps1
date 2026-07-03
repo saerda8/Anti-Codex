@@ -740,6 +740,7 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         targetUserIdentityBoundaryOk = $false
         localUserLookupAvailable = $false
         targetUserExists = $null
+        targetUserEnabled = $null
         targetUserIsCurrentUser = $true
         readyForInteractiveLogin = $false
         readinessBlockingReason = ""
@@ -766,6 +767,7 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
             $contract.targetUserIdentityBoundaryOk = if ($parsed.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk") { [bool]$parsed.targetUserIdentityBoundaryOk } else { $false }
             $contract.localUserLookupAvailable = [bool]$parsed.localUserLookupAvailable
             $contract.targetUserExists = $parsed.targetUserExists
+            $contract.targetUserEnabled = if ($parsed.PSObject.Properties.Name -contains "targetUserEnabled") { $parsed.targetUserEnabled } else { $null }
             $contract.targetUserIsCurrentUser = [bool]$parsed.targetUserIsCurrentUser
             $contract.readyForInteractiveLogin = [bool]$parsed.readyForInteractiveLogin
             $contract.readinessBlockingReason = [string]$parsed.readinessBlockingReason
@@ -785,6 +787,7 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
                 -and [string]$contract.currentWindowsUserSid `
                 -and $parsed.targetUserIsCurrentUser -eq $false `
                 -and $contract.targetUserSidMatchesCurrentUser -eq $false `
+                -and ($parsed.readyForInteractiveLogin -ne $true -or $contract.targetUserEnabled -ne $false) `
                 -and ($parsed.readyForInteractiveLogin -ne $true -or ([string]$contract.targetWindowsUserSid -and $contract.targetUserIdentityBoundaryOk -eq $true)) `
                 -and $parsed.credentialBoundary -eq "separate-windows-user" `
                 -and $parsed.expectedCredentialStoreIsolation -eq $true `
@@ -821,6 +824,7 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
         targetUserIdentityBoundaryOk = $contract.targetUserIdentityBoundaryOk
         localUserLookupAvailable = $contract.localUserLookupAvailable
         targetUserExists = $contract.targetUserExists
+        targetUserEnabled = $contract.targetUserEnabled
         targetUserIsCurrentUser = $contract.targetUserIsCurrentUser
         readyForInteractiveLogin = $contract.readyForInteractiveLogin
         readinessBlockingReason = $contract.readinessBlockingReason

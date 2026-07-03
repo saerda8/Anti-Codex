@@ -177,6 +177,7 @@ foreach ($step in @(
 }
 
 $targetUserExists = ($status -and $status.targetUserExists -eq $true) -or ($prepare -and $prepare.targetUserExists -eq $true)
+$targetUserEnabled = if ($status -and ($status.PSObject.Properties.Name -contains "targetUserEnabled")) { $status.targetUserEnabled } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserEnabled")) { $prepare.targetUserEnabled } else { $null }
 $currentWindowsUserSid = if ($status -and ($status.PSObject.Properties.Name -contains "currentWindowsUserSid")) { [string]$status.currentWindowsUserSid } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "currentWindowsUserSid")) { [string]$prepare.currentWindowsUserSid } else { "" }
 $targetWindowsUserSid = if ($status -and ($status.PSObject.Properties.Name -contains "targetWindowsUserSid")) { [string]$status.targetWindowsUserSid } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetWindowsUserSid")) { [string]$prepare.targetWindowsUserSid } else { "" }
 $targetUserSidMatchesCurrentUser = if ($status -and ($status.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$status.targetUserSidMatchesCurrentUser } elseif ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$prepare.targetUserSidMatchesCurrentUser } else { $false }
@@ -214,8 +215,11 @@ $operatorActionCard = [ordered]@{
     windowsUser = $WindowsUser
     canAskUserToLoginNow = [bool]$readyForOperatorLogin
     targetUserExists = [bool]$targetUserExists
+    targetUserEnabled = $targetUserEnabled
     missingRequirement = if (-not $targetUserExists) {
         "separate_windows_user_missing"
+    } elseif ($targetUserEnabled -eq $false) {
+        "separate_windows_user_disabled"
     } elseif (-not $readyForOperatorLogin) {
         "account_isolation_status_not_ready"
     } elseif (-not $releaseAcceptableAccountProof) {
@@ -226,6 +230,8 @@ $operatorActionCard = [ordered]@{
     nextOperatorAction = $nextOperatorAction
     userVisibleNextStep = if (-not $targetUserExists) {
         "Create or verify the separate Windows user, then rerun this summary."
+    } elseif ($targetUserEnabled -eq $false) {
+        "Enable the separate Windows user, then rerun the no-traffic account checks."
     } elseif (-not $readyForOperatorLogin) {
         "Rerun the no-traffic account prepare and isolation checks until login is marked safe."
     } elseif (-not $releaseAcceptableAccountProof) {
@@ -256,6 +262,7 @@ $payload = [ordered]@{
     coverageKind = "second-account-readiness-summary-no-traffic"
     windowsUser = $WindowsUser
     targetUserExists = [bool]$targetUserExists
+    targetUserEnabled = $targetUserEnabled
     currentWindowsUserSid = $currentWindowsUserSid
     targetWindowsUserSid = $targetWindowsUserSid
     targetUserSidMatchesCurrentUser = [bool]$targetUserSidMatchesCurrentUser
@@ -324,6 +331,7 @@ if ($Compact) {
         storesPassword = $payload["storesPassword"]
         windowsUser = $payload["windowsUser"]
         targetUserExists = $payload["targetUserExists"]
+        targetUserEnabled = $payload["targetUserEnabled"]
         targetWindowsUserSid = $payload["targetWindowsUserSid"]
         targetUserSidMatchesCurrentUser = $payload["targetUserSidMatchesCurrentUser"]
         targetUserIdentityBoundaryOk = $payload["targetUserIdentityBoundaryOk"]

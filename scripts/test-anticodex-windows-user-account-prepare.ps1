@@ -65,6 +65,7 @@ function Get-OperatorNextStep {
         "choose_different_windows_user" { return "choose_separate_windows_user_then_rerun_prepare" }
         "create_target_windows_user_with_explicit_user_approval" { return "create_target_windows_user_then_rerun_prepare" }
         "open_elevated_windows_user_settings" { return "open_elevated_windows_user_settings_then_rerun_prepare" }
+        "enable_target_windows_user_then_rerun_prepare" { return "enable_target_windows_user_then_rerun_prepare" }
         default { return "verify_windows_user_manually_then_rerun_prepare" }
     }
 }
@@ -104,6 +105,7 @@ $currentProcessElevated = Test-IsCurrentProcessElevated
 $localUserCommandAvailable = [bool](Get-Command "Get-LocalUser" -ErrorAction SilentlyContinue)
 $newLocalUserCommandAvailable = [bool](Get-Command "New-LocalUser" -ErrorAction SilentlyContinue)
 $targetUserExists = if ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserExists")) { $readiness.targetUserExists } else { $null }
+$targetUserEnabled = if ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserEnabled")) { $readiness.targetUserEnabled } else { $null }
 $targetUserIsCurrentUser = if ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$readiness.targetUserIsCurrentUser } else { $false }
 $targetUserSidMatchesCurrentUser = if ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$readiness.targetUserSidMatchesCurrentUser } else { $false }
 $targetUserIdentityBoundaryOk = if ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$readiness.targetUserIdentityBoundaryOk } else { $false }
@@ -132,6 +134,7 @@ $setupActionRequired = $blockedBeforeInteractiveLogin
 $canProceedToInteractiveLogin = $safeToAskUserForSecondAccountLogin
 
 if ($targetUserExists -eq $false) { $warnings += "target_windows_user_missing" }
+if ($targetUserEnabled -eq $false) { $warnings += "target_windows_user_disabled" }
 if (-not $currentProcessElevated -and $targetUserExists -eq $false) { $warnings += "not_elevated_for_user_creation" }
 if ($targetUserIsCurrentUser) { $failures += "target_windows_user_is_current_user" }
 if ($targetUserSidMatchesCurrentUser) { $failures += "target_windows_user_sid_matches_current_user" }
@@ -159,6 +162,7 @@ $report = [ordered]@{
     storesPassword = $false
     canCreateTargetWindowsUser = $canCreateTargetWindowsUser
     targetUserExists = $targetUserExists
+    targetUserEnabled = $targetUserEnabled
     targetUserIsCurrentUser = $targetUserIsCurrentUser
     currentWindowsUserSid = if ($readiness) { [string]$readiness.currentWindowsUserSid } else { "" }
     targetWindowsUserSid = if ($readiness) { [string]$readiness.targetWindowsUserSid } else { "" }
@@ -199,6 +203,7 @@ if ($Compact) {
         windowsUser = $report["windowsUser"]
         currentProcessElevated = $report["currentProcessElevated"]
         targetUserExists = $report["targetUserExists"]
+        targetUserEnabled = $report["targetUserEnabled"]
         targetWindowsUserSid = $report["targetWindowsUserSid"]
         targetUserSidMatchesCurrentUser = $report["targetUserSidMatchesCurrentUser"]
         targetUserIdentityBoundaryOk = $report["targetUserIdentityBoundaryOk"]

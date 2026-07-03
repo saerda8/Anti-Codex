@@ -1972,6 +1972,7 @@ function summarizeGate(definition) {
       if (!report.normalizedTargetWindowsUser) semanticFailures.push("windows_user_readiness_target_user_missing");
       if (!report.currentWindowsUser) semanticFailures.push("windows_user_readiness_current_user_missing");
       if (report.targetUserIsCurrentUser === true) semanticFailures.push("windows_user_readiness_target_is_current_user");
+      if (report.targetUserEnabled === false && report.readyForInteractiveLogin === true) semanticFailures.push("windows_user_readiness_disabled_user_ready");
       if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("windows_user_readiness_target_sid_matches_current_user");
       if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("windows_user_readiness_current_sid_missing");
       if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("windows_user_readiness_target_sid_missing");
@@ -1999,6 +2000,7 @@ function summarizeGate(definition) {
       if (report.capturesPassword !== false) semanticFailures.push("windows_user_prepare_captures_password");
       if (report.storesPassword !== false) semanticFailures.push("windows_user_prepare_stores_password");
       if (report.targetUserIsCurrentUser === true) semanticFailures.push("windows_user_prepare_target_is_current_user");
+      if (report.targetUserEnabled === false && report.readyForInteractiveLogin === true) semanticFailures.push("windows_user_prepare_disabled_user_ready");
       if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("windows_user_prepare_target_sid_matches_current_user");
       if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("windows_user_prepare_current_sid_missing");
       if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("windows_user_prepare_target_sid_missing");
@@ -2116,6 +2118,7 @@ function summarizeGate(definition) {
       if (report.credentialBoundary !== "separate-windows-user") semanticFailures.push("account_isolation_status_credential_boundary");
       if (report.expectedCredentialStoreIsolation !== true) semanticFailures.push("account_isolation_status_expected_credential_isolation");
       if (report.targetUserIsCurrentUser === true) semanticFailures.push("account_isolation_status_target_is_current_user");
+      if (report.targetUserEnabled === false && report.readyForInteractiveLogin === true) semanticFailures.push("account_isolation_status_disabled_user_ready");
       if (report.targetUserSidMatchesCurrentUser === true) semanticFailures.push("account_isolation_status_target_sid_matches_current_user");
       if (report.readyForInteractiveLogin === true && !report.currentWindowsUserSid) semanticFailures.push("account_isolation_status_current_sid_missing");
       if (report.readyForInteractiveLogin === true && !report.targetWindowsUserSid) semanticFailures.push("account_isolation_status_target_sid_missing");
@@ -2229,6 +2232,7 @@ function summarizeGate(definition) {
       if (typeof report.currentWindowsUserSid !== "string" || !report.currentWindowsUserSid.trim()) semanticFailures.push("second_account_readiness_summary_current_sid_missing");
       if (report.targetUserSidMatchesCurrentUser !== false) semanticFailures.push("second_account_readiness_summary_target_sid_matches_current");
       if (report.targetUserIsCurrentUser !== false) semanticFailures.push("second_account_readiness_summary_target_is_current_user");
+      if (report.targetUserEnabled === false && report.readyForOperatorLogin === true) semanticFailures.push("second_account_readiness_summary_disabled_user_ready");
       if ((report.targetUserExists === true || report.readyForOperatorLogin === true || report.safeToAskUserForSecondAccountLogin === true)
         && (typeof report.targetWindowsUserSid !== "string" || !report.targetWindowsUserSid.trim())) semanticFailures.push("second_account_readiness_summary_target_sid_missing_when_ready");
       if ((report.readyForOperatorLogin === true || report.safeToAskUserForSecondAccountLogin === true)

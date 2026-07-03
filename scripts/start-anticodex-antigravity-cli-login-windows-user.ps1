@@ -42,6 +42,7 @@ function Get-LocalWindowsUserReadiness {
     $lookupError = ""
     $targetExists = $null
     $targetUserSid = ""
+    $targetUserEnabled = $null
     if ($normalizedTarget -match ('^{0}\\(.+)$' -f [regex]::Escape($env:COMPUTERNAME))) {
         $localUserName = $Matches[1]
     }
@@ -49,6 +50,9 @@ function Get-LocalWindowsUserReadiness {
         try {
             $targetUser = Get-LocalUser -Name $localUserName -ErrorAction Stop
             $targetExists = $true
+            if ($targetUser -and ($targetUser.PSObject.Properties.Name -contains "Enabled")) {
+                $targetUserEnabled = [bool]$targetUser.Enabled
+            }
             if ($targetUser -and $targetUser.SID) {
                 $targetUserSid = [string]$targetUser.SID.Value
             }
@@ -67,12 +71,15 @@ function Get-LocalWindowsUserReadiness {
         $targetIsCurrent = $true
     }
     $targetUserIdentityBoundaryOk = ($targetExists -eq $true -and [string]$targetUserSid -and [string]$currentUserSid -and -not $targetUserSidMatchesCurrentUser)
-    $ready = ($targetExists -eq $true -and -not $targetIsCurrent -and $targetUserIdentityBoundaryOk)
+    $targetUserLoginEnabled = ($targetUserEnabled -ne $false)
+    $ready = ($targetExists -eq $true -and -not $targetIsCurrent -and $targetUserIdentityBoundaryOk -and $targetUserLoginEnabled)
     $blockingReason = ""
     if ($targetIsCurrent) {
         $blockingReason = "target_windows_user_is_current_user"
     } elseif ($targetExists -eq $false) {
         $blockingReason = "target_windows_user_missing"
+    } elseif ($targetUserEnabled -eq $false) {
+        $blockingReason = "target_windows_user_disabled"
     } elseif ($targetExists -eq $true -and -not $targetUserIdentityBoundaryOk) {
         $blockingReason = "target_windows_user_identity_unverified"
     } elseif ($targetExists -ne $true) {
@@ -89,6 +96,7 @@ function Get-LocalWindowsUserReadiness {
         targetUserIdentityBoundaryOk = [bool]$targetUserIdentityBoundaryOk
         localUserLookupAvailable = $lookupAvailable
         targetUserExists = $targetExists
+        targetUserEnabled = $targetUserEnabled
         targetUserIsCurrentUser = $targetIsCurrent
         readyForInteractiveLogin = $ready
         readinessBlockingReason = $blockingReason

@@ -40,6 +40,9 @@ function Get-RecommendedOperatorAction {
     if ($TargetUserExists -eq $false -or $Reason -eq "target_windows_user_missing") {
         return "create_target_windows_user"
     }
+    if ($Reason -eq "target_windows_user_disabled") {
+        return "enable_target_windows_user_then_rerun_prepare"
+    }
     return "verify_windows_user_manually"
 }
 
@@ -85,7 +88,10 @@ if ($dryRun) {
     if ($dryRun.targetUserIsCurrentUser -eq $true) { $failures += "target_windows_user_is_current_user" }
     if ($dryRun.targetUserSidMatchesCurrentUser -eq $true) { $failures += "target_windows_user_sid_matches_current_user" }
     if ($dryRun.readyForInteractiveLogin -eq $true -and $dryRun.targetUserIdentityBoundaryOk -ne $true) { $failures += "target_windows_user_identity_boundary_unverified" }
+    $dryRunTargetUserEnabled = if ($dryRun.PSObject.Properties.Name -contains "targetUserEnabled") { $dryRun.targetUserEnabled } else { $null }
+    if ($dryRun.readyForInteractiveLogin -eq $true -and $dryRunTargetUserEnabled -eq $false) { $failures += "target_windows_user_disabled_but_ready" }
     if ($dryRun.targetUserExists -eq $false) { $warnings += "target_windows_user_missing" }
+    if ($dryRunTargetUserEnabled -eq $false) { $warnings += "target_windows_user_disabled" }
     if ($dryRun.readyForInteractiveLogin -ne $true -and -not [string]$dryRun.readinessBlockingReason) {
         $failures += "missing_readiness_blocking_reason"
     }
@@ -121,6 +127,7 @@ $report = [ordered]@{
     targetUserIdentityBoundaryOk = if ($dryRun) { [bool]$dryRun.targetUserIdentityBoundaryOk } else { $false }
     localUserLookupAvailable = if ($dryRun) { [bool]$dryRun.localUserLookupAvailable } else { $false }
     targetUserExists = $targetExists
+    targetUserEnabled = if ($dryRun -and ($dryRun.PSObject.Properties.Name -contains "targetUserEnabled")) { $dryRun.targetUserEnabled } else { $null }
     targetUserIsCurrentUser = $targetIsCurrent
     readyForInteractiveLogin = $ready
     readinessBlockingReason = $reason

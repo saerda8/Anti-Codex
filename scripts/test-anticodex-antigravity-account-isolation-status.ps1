@@ -91,6 +91,7 @@ $antiCodexLanePrepared = ($dual -and $dual.ok -eq $true -and $dual.antiCodexLane
 $mcpLanePrepared = ($dual -and $dual.ok -eq $true -and $dual.mcpLane.role -eq "external-mcp-antigravity-account" -and $dual.mcpLane.managedByAntiCodex -eq $false)
 $fileIsolationPrepared = ($dual -and $dual.ok -eq $true -and $dual.laneComparison.profileRootsDifferent -eq $true -and $dual.laneComparison.profileRootsNested -eq $false -and $dual.laneComparison.appDataDifferent -eq $true -and $dual.laneComparison.localAppDataDifferent -eq $true -and $dual.laneComparison.geminiDirDifferent -eq $true)
 $targetUserExists = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserExists")) { $prepare.targetUserExists } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserExists")) { $readiness.targetUserExists } else { $null }
+$targetUserEnabled = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserEnabled")) { $prepare.targetUserEnabled } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserEnabled")) { $readiness.targetUserEnabled } else { $null }
 $targetUserIsCurrentUser = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$prepare.targetUserIsCurrentUser } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserIsCurrentUser")) { [bool]$readiness.targetUserIsCurrentUser } else { $false }
 $targetUserSidMatchesCurrentUser = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$prepare.targetUserSidMatchesCurrentUser } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserSidMatchesCurrentUser")) { [bool]$readiness.targetUserSidMatchesCurrentUser } else { $false }
 $targetUserIdentityBoundaryOk = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$prepare.targetUserIdentityBoundaryOk } elseif ($readiness -and ($readiness.PSObject.Properties.Name -contains "targetUserIdentityBoundaryOk")) { [bool]$readiness.targetUserIdentityBoundaryOk } else { $false }
@@ -155,6 +156,7 @@ $report = [ordered]@{
     credentialBoundary = "separate-windows-user"
     expectedCredentialStoreIsolation = $true
     targetUserExists = $targetUserExists
+    targetUserEnabled = $targetUserEnabled
     targetUserIsCurrentUser = $targetUserIsCurrentUser
     currentWindowsUserSid = if ($prepare) { [string]$prepare.currentWindowsUserSid } elseif ($readiness) { [string]$readiness.currentWindowsUserSid } else { "" }
     targetWindowsUserSid = if ($prepare) { [string]$prepare.targetWindowsUserSid } elseif ($readiness) { [string]$readiness.targetWindowsUserSid } else { "" }
@@ -178,7 +180,7 @@ $report = [ordered]@{
     accountIsolationCaveat = "This is a no-traffic status report. It can say when the second-account login is safe to start, but it cannot prove login or distinct Antigravity account identity without explicit approved real traffic."
     evidence = [ordered]@{
         dualAccountLanes = if ($dual) { [ordered]@{ ok = [bool]$dual.ok; report = (Get-OptionalProperty -Object $dual -Name "report"); accountIsolationBoundary = [string]$dual.accountIsolationBoundary; accountIsolationCaveat = [string]$dual.accountIsolationCaveat } } else { $null }
-        windowsUserReadiness = if ($readiness) { [ordered]@{ ok = [bool]$readiness.ok; report = (Get-OptionalProperty -Object $readiness -Name "report"); readyForInteractiveLogin = [bool]$readiness.readyForInteractiveLogin; readinessBlockingReason = [string]$readiness.readinessBlockingReason } } else { $null }
+        windowsUserReadiness = if ($readiness) { [ordered]@{ ok = [bool]$readiness.ok; report = (Get-OptionalProperty -Object $readiness -Name "report"); readyForInteractiveLogin = [bool]$readiness.readyForInteractiveLogin; readinessBlockingReason = [string]$readiness.readinessBlockingReason; targetUserEnabled = (Get-OptionalProperty -Object $readiness -Name "targetUserEnabled") } } else { $null }
         windowsUserAccountPrepare = if ($prepare) { [ordered]@{ ok = [bool]$prepare.ok; report = (Get-OptionalProperty -Object $prepare -Name "report"); recommendedOperatorAction = [string]$prepare.recommendedOperatorAction; operatorBlockingStage = [string]$prepare.operatorBlockingStage; operatorNextStep = [string]$prepare.operatorNextStep } } else { $null }
     }
     failures = @($failures)
@@ -201,6 +203,7 @@ if ($Compact) {
         completionState = $report["completionState"]
         credentialBoundary = $report["credentialBoundary"]
         targetUserExists = $report["targetUserExists"]
+        targetUserEnabled = $report["targetUserEnabled"]
         targetWindowsUserSid = $report["targetWindowsUserSid"]
         targetUserSidMatchesCurrentUser = $report["targetUserSidMatchesCurrentUser"]
         targetUserIdentityBoundaryOk = $report["targetUserIdentityBoundaryOk"]

@@ -15496,6 +15496,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountReadinessSummary, /readyForOperatorLogin/);
   assert.match(secondAccountReadinessSummary, /currentWindowsUserSid/);
   assert.match(secondAccountReadinessSummary, /targetWindowsUserSid/);
+  assert.match(secondAccountReadinessSummary, /targetUserEnabled/);
   assert.match(secondAccountReadinessSummary, /targetUserSidMatchesCurrentUser/);
   assert.match(secondAccountReadinessSummary, /targetUserIdentityBoundaryOk/);
   assert.match(secondAccountReadinessSummary, /targetUserIsCurrentUser/);
@@ -15548,6 +15549,10 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(releaseGates, /secondAccountReadinessSummary/);
   assert.match(releaseGates, /latest-second-account-readiness-summary\.json/);
   assert.match(releaseGates, /requireSecondAccountReadinessSummarySemantics/);
+  assert.match(releaseGates, /windows_user_readiness_disabled_user_ready/);
+  assert.match(releaseGates, /windows_user_prepare_disabled_user_ready/);
+  assert.match(releaseGates, /account_isolation_status_disabled_user_ready/);
+  assert.match(releaseGates, /second_account_readiness_summary_disabled_user_ready/);
   assert.match(releaseGates, /second_account_readiness_summary_identity_boundary_unverified/);
   assert.match(releaseGates, /second_account_readiness_summary_post_manual_commands/);
   assert.match(releaseGates, /second_account_readiness_summary_operator_action_card_missing/);
@@ -15563,6 +15568,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(readiness, /capturesLoginOutput\s*=\s*if \(\$dryRun\) \{ \[bool\]\$dryRun\.capturesLoginOutput \} else \{ \$false \}/);
   assert.match(readiness, /currentWindowsUserSid/);
   assert.match(readiness, /targetWindowsUserSid/);
+  assert.match(readiness, /targetUserEnabled/);
+  assert.match(readiness, /target_windows_user_disabled/);
+  assert.match(readiness, /enable_target_windows_user_then_rerun_prepare/);
   assert.match(readiness, /targetUserSidMatchesCurrentUser/);
   assert.match(readiness, /targetUserIdentityBoundaryOk/);
   assert.match(readiness, /separateAccountVerified\s*=\s*\$false/);
@@ -15583,6 +15591,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(prepare, /storesPassword\s*=\s*\$false/);
   assert.match(prepare, /currentWindowsUserSid/);
   assert.match(prepare, /targetWindowsUserSid/);
+  assert.match(prepare, /targetUserEnabled/);
+  assert.match(prepare, /target_windows_user_disabled/);
+  assert.match(prepare, /enable_target_windows_user_then_rerun_prepare/);
   assert.match(prepare, /targetUserSidMatchesCurrentUser/);
   assert.match(prepare, /targetUserIdentityBoundaryOk/);
   assert.match(prepare, /currentProcessElevated/);
@@ -15610,6 +15621,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(status, /mcpAccountLaneOwner\s*=\s*"external-antigravity-account-not-managed-here"/);
   assert.match(status, /currentWindowsUserSid/);
   assert.match(status, /targetWindowsUserSid/);
+  assert.match(status, /targetUserEnabled/);
   assert.match(status, /targetUserSidMatchesCurrentUser/);
   assert.match(status, /targetUserIdentityBoundaryOk/);
   assert.match(status, /finalProofPlan/);
@@ -15639,6 +15651,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(dryRunLauncher, /operatorNextStep/);
   assert.match(dryRunLauncher, /currentWindowsUserSid/);
   assert.match(dryRunLauncher, /targetWindowsUserSid/);
+  assert.match(dryRunLauncher, /targetUserEnabled/);
+  assert.match(dryRunLauncher, /target_windows_user_disabled/);
   assert.match(dryRunLauncher, /targetUserSidMatchesCurrentUser/);
   assert.match(dryRunLauncher, /targetUserIdentityBoundaryOk/);
   assert.match(dryRunLauncher, /windows_user_not_ready_for_interactive_login/);
