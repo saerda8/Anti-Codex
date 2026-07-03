@@ -7487,6 +7487,16 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /timed out after \$SubcheckTimeoutSec seconds/);
   assert.doesNotMatch(overall, /Start-Process[\s\S]{0,260}-Wait[\s\S]{0,260}-RedirectStandardOutput/);
   assert.match(overall, /function Invoke-NodeJsonScript/);
+  const jsonScriptBody = overall.slice(
+    overall.indexOf("function Invoke-JsonScript"),
+    overall.indexOf("function Invoke-UiStateVerificationWithResetRetry"),
+  );
+  assert.match(jsonScriptBody, /catch \{/);
+  assert.match(jsonScriptBody, /function Invoke-PowerShellJsonScriptInRunspace/);
+  assert.match(jsonScriptBody, /function Convert-AntiCodexRunspaceArguments/);
+  assert.match(jsonScriptBody, /named\[\$name\] = \$true/);
+  assert.match(jsonScriptBody, /failed to start; falling back to same-process runspace execution/);
+  assert.match(jsonScriptBody, /Start-Process failed and runspace fallback failed/);
   assert.match(overall, /function Read-AntiCodexTempTextWithRetry/);
   assert.match(overall, /FileShare\]::ReadWrite/);
   assert.match(overall, /Read-AntiCodexTempTextWithRetry \$stdoutPath/);
@@ -7496,6 +7506,9 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
     overall.indexOf("function New-ReportPaths"),
   );
   assert.match(nodeJsonBody, /Start-Process -FilePath \$node/);
+  assert.match(nodeJsonBody, /catch \{/);
+  assert.match(nodeJsonBody, /failed to start; falling back to direct node execution/);
+  assert.match(nodeJsonBody, /Start-Process failed and direct node fallback failed/);
   assert.match(nodeJsonBody, /Wait-AntiCodexSubcheckProcess/);
   assert.doesNotMatch(nodeJsonBody, /WaitForExit\(\[Math\]::Max\(1, \$SubcheckTimeoutSec\) \* 1000\)/);
   assert.match(nodeJsonBody, /Node script timed out after \$ProcessTimeoutSec seconds/);
@@ -8030,6 +8043,10 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
   assert.match(uiWrapper, /\$process\.WaitForExit\(\$waitMs\)/);
   assert.match(uiWrapper, /UI verifier timed out after \$TimeoutSec seconds/);
   assert.match(uiWrapper, /\$process\.Kill\(\)/);
+  assert.match(uiWrapper, /failed to start; falling back to direct node execution/);
+  assert.match(uiWrapper, /Start-Process failed and direct node fallback failed/);
+  assert.doesNotMatch(uiWrapper, /\$output = @\("UI verifier failed to start; falling back to direct node execution: \$startError"\)/);
+  assert.match(uiWrapper, /fallbackWarnings/);
   assert.match(uiWrapper, /Get-Content -LiteralPath \$stdoutPath -Encoding UTF8/);
   assert.match(uiWrapper, /if \(\$parsed\.ok -eq \$true\) \{ exit 0 \}/);
   assert.match(uiScript, /fastUiState/);
@@ -8307,6 +8324,10 @@ test("Anti-Codex ships a read-only UI idle stability verifier", () => {
   assert.match(idle, /\$process\.WaitForExit\(\$waitMs\)/);
   assert.match(idle, /\$process\.Refresh\(\)/);
   assert.match(idle, /\$process\.Kill\(\)/);
+  assert.match(idle, /failed to start; falling back to same-process UI state verification/);
+  assert.match(idle, /Start-Process failed and same-process fallback failed/);
+  assert.doesNotMatch(idle, /\$output = @\("\$ScriptPath failed to start; falling back to same-process UI state verification: \$startError"\)/);
+  assert.match(idle, /fallbackWarnings/);
   assert.match(idle, /uiFailures/);
   assert.match(idle, /uiExitCode/);
   assert.match(idle, /\$ui\.PSObject\.Properties\.Name -contains "exitCode"/);

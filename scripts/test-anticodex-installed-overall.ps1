@@ -524,6 +524,61 @@ function Invoke-JsonScript {
         [string[]]$Arguments = @()
     )
 
+    function Invoke-PowerShellJsonScriptInRunspace {
+        param(
+            [string]$Path,
+            [string[]]$ScriptArguments = @()
+        )
+
+        $ps = [powershell]::Create()
+        try {
+            [void]$ps.AddScript(@'
+param([string]$Path, [string[]]$ScriptArguments)
+function Convert-AntiCodexRunspaceArguments {
+    param([string[]]$Items = @())
+    $named = @{}
+    $positionals = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $Items.Count; $i++) {
+        $item = [string]$Items[$i]
+        if ($item -match "^-([A-Za-z_][A-Za-z0-9_-]*)$") {
+            $name = $Matches[1]
+            if (($i + 1) -lt $Items.Count -and [string]$Items[$i + 1] -notmatch "^-([A-Za-z_][A-Za-z0-9_-]*)$") {
+                $named[$name] = [string]$Items[$i + 1]
+                $i++
+            } else {
+                $named[$name] = $true
+            }
+        } else {
+            $positionals.Add($item) | Out-Null
+        }
+    }
+    [pscustomobject]@{
+        named = $named
+        positionals = @($positionals)
+    }
+}
+$converted = Convert-AntiCodexRunspaceArguments $ScriptArguments
+$namedArgs = $converted.named
+$positionalArgs = @($converted.positionals)
+& $Path @namedArgs @positionalArgs
+'@)
+            [void]$ps.AddArgument($Path)
+            [void]$ps.AddArgument($ScriptArguments)
+            $output = @($ps.Invoke())
+            $errors = @($ps.Streams.Error | ForEach-Object { [string]$_ })
+            $stdout = @($output | ForEach-Object {
+                if ($_ -is [string]) { $_ } else { ($_ | Out-String).TrimEnd() }
+            }) -join "`n"
+            return [pscustomobject]@{
+                exitCode = if ($ps.HadErrors) { 1 } else { 0 }
+                stdoutText = [string]$stdout
+                stderrText = [string]($errors -join "`n")
+            }
+        } finally {
+            $ps.Dispose()
+        }
+    }
+
     if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
         Add-Failure "$Name script missing: $ScriptPath"
         return $null
@@ -534,23 +589,40 @@ function Invoke-JsonScript {
     $durationMs = 0
     $stdoutPath = [IO.Path]::GetTempFileName()
     $stderrPath = [IO.Path]::GetTempFileName()
+    $exitCode = 0
+    $stdoutText = ""
+    $stderrText = ""
     try {
         $argumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments
-        $process = Start-Process -FilePath $powerShellBin `
-            -ArgumentList $argumentList `
-            -NoNewWindow `
-            -PassThru `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath
-        [void]$process.Handle
-        $completed = Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds $SubcheckTimeoutSec
-        if (-not $completed) {
-            try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
-            Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null
-            Add-Failure "$Name timed out after $SubcheckTimeoutSec seconds"
-            $exitCode = -1
-        } else {
-            $exitCode = [int]$process.ExitCode
+        try {
+            $process = Start-Process -FilePath $powerShellBin `
+                -ArgumentList $argumentList `
+                -NoNewWindow `
+                -PassThru `
+                -RedirectStandardOutput $stdoutPath `
+                -RedirectStandardError $stderrPath
+            [void]$process.Handle
+            $completed = Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds $SubcheckTimeoutSec
+            if (-not $completed) {
+                try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
+                Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null
+                Add-Failure "$Name timed out after $SubcheckTimeoutSec seconds"
+                $exitCode = -1
+            } else {
+                $exitCode = [int]$process.ExitCode
+            }
+        } catch {
+            $startError = $_.Exception.Message
+            try {
+                $fallback = Invoke-PowerShellJsonScriptInRunspace -Path $ScriptPath -ScriptArguments $Arguments
+                $exitCode = [int]$fallback.exitCode
+                Set-Content -LiteralPath $stdoutPath -Value ([string]$fallback.stdoutText) -Encoding UTF8
+                $fallbackNotice = "$Name failed to start; falling back to same-process runspace execution: $startError"
+                Set-Content -LiteralPath $stderrPath -Value (($fallbackNotice, [string]$fallback.stderrText) -join "`n") -Encoding UTF8
+            } catch {
+                $exitCode = -1
+                Set-Content -LiteralPath $stderrPath -Value "$Name Start-Process failed and runspace fallback failed: $startError / $($_.Exception.Message)" -Encoding UTF8
+            }
         }
         $durationMs = [int]([DateTime]::UtcNow - $checkStarted).TotalMilliseconds
         $stdoutText = Read-AntiCodexTempTextWithRetry $stdoutPath
@@ -701,26 +773,43 @@ function Invoke-NodeJsonScript {
     $durationMs = 0
     $stdoutPath = [IO.Path]::GetTempFileName()
     $stderrPath = [IO.Path]::GetTempFileName()
+    $exitCode = 0
+    $stdoutText = ""
+    $stderrText = ""
     try {
         $argumentList = @($ScriptPath) + $Arguments
-        $process = Start-Process -FilePath $node `
-            -ArgumentList $argumentList `
-            -NoNewWindow `
-            -PassThru `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath
-        [void]$process.Handle
-        $completed = Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds $ProcessTimeoutSec
-        if (-not $completed) {
-            try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
-            Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null
-            if ((Split-Path -Leaf $ScriptPath) -eq "test-anticodex-manager-button.mjs") {
-                Clear-ManagerButtonVerifierLock -ProcessId ([int]$process.Id)
+        try {
+            $process = Start-Process -FilePath $node `
+                -ArgumentList $argumentList `
+                -NoNewWindow `
+                -PassThru `
+                -RedirectStandardOutput $stdoutPath `
+                -RedirectStandardError $stderrPath
+            [void]$process.Handle
+            $completed = Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds $ProcessTimeoutSec
+            if (-not $completed) {
+                try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
+                Wait-AntiCodexSubcheckProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null
+                if ((Split-Path -Leaf $ScriptPath) -eq "test-anticodex-manager-button.mjs") {
+                    Clear-ManagerButtonVerifierLock -ProcessId ([int]$process.Id)
+                }
+                Add-Failure "$Name Node script timed out after $ProcessTimeoutSec seconds"
+                $exitCode = -1
+            } else {
+                $exitCode = [int]$process.ExitCode
             }
-            Add-Failure "$Name Node script timed out after $ProcessTimeoutSec seconds"
-            $exitCode = -1
-        } else {
-            $exitCode = [int]$process.ExitCode
+        } catch {
+            $startError = $_.Exception.Message
+            try {
+                & $node @argumentList > $stdoutPath 2> $stderrPath
+                $exitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+                $existingError = Read-AntiCodexTempTextWithRetry $stderrPath
+                $fallbackNotice = "$Name failed to start; falling back to direct node execution: $startError"
+                Set-Content -LiteralPath $stderrPath -Value (($fallbackNotice, $existingError) -join "`n") -Encoding UTF8
+            } catch {
+                $exitCode = -1
+                Set-Content -LiteralPath $stderrPath -Value "$Name Start-Process failed and direct node fallback failed: $startError / $($_.Exception.Message)" -Encoding UTF8
+            }
         }
         $durationMs = [int]([DateTime]::UtcNow - $checkStarted).TotalMilliseconds
         $stdoutText = Read-AntiCodexTempTextWithRetry $stdoutPath

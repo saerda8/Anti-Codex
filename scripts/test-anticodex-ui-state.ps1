@@ -97,28 +97,47 @@ if ($Fast) {
 $stdoutPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-state-{0}.out" -f ([guid]::NewGuid().ToString("N")))
 $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-state-{0}.err" -f ([guid]::NewGuid().ToString("N")))
 $process = $null
+$fallbackWarnings = @()
 try {
-    $process = Start-Process -FilePath $node -ArgumentList $nodeArgs -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
-    $waitMs = [Math]::Max(1000, ($TimeoutSec * 1000) + 5000)
-    if (-not $process.WaitForExit($waitMs)) {
-        try { $process.Kill() } catch {}
-        try { $process.WaitForExit(5000) | Out-Null } catch {}
-        $stdoutTail = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8 -Tail 20) } else { @() }
-        $stderrTail = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { @(Get-Content -LiteralPath $stderrPath -Encoding UTF8 -Tail 20) } else { @() }
-        [pscustomobject]@{
-            ok = $false
-            failures = @("UI verifier timed out after $TimeoutSec seconds")
-            exitCode = -1
-            stdoutTail = $stdoutTail
-            stderrTail = $stderrTail
-        } | ConvertTo-Json -Depth 8 -Compress
-        exit 1
+    try {
+        $process = Start-Process -FilePath $node -ArgumentList $nodeArgs -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $waitMs = [Math]::Max(1000, ($TimeoutSec * 1000) + 5000)
+        if (-not $process.WaitForExit($waitMs)) {
+            try { $process.Kill() } catch {}
+            try { $process.WaitForExit(5000) | Out-Null } catch {}
+            $stdoutTail = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8 -Tail 20) } else { @() }
+            $stderrTail = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { @(Get-Content -LiteralPath $stderrPath -Encoding UTF8 -Tail 20) } else { @() }
+            [pscustomobject]@{
+                ok = $false
+                failures = @("UI verifier timed out after $TimeoutSec seconds")
+                exitCode = -1
+                stdoutTail = $stdoutTail
+                stderrTail = $stderrTail
+            } | ConvertTo-Json -Depth 8 -Compress
+            exit 1
+        }
+        $process.Refresh()
+        $exitCode = if ($null -ne $process.ExitCode) { [int]$process.ExitCode } else { 1 }
+        $output = @()
+        if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8) }
+        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -Encoding UTF8) }
+    } catch {
+        $startError = $_.Exception.Message
+        try {
+            $directOutput = @(& $node @nodeArgs 2>&1 | ForEach-Object { [string]$_ })
+            $exitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+            $fallbackWarnings += "UI verifier failed to start; falling back to direct node execution: $startError"
+            $output = @($directOutput)
+        } catch {
+            [pscustomobject]@{
+                ok = $false
+                failures = @("UI verifier Start-Process failed and direct node fallback failed: $startError / $($_.Exception.Message)")
+                exitCode = -1
+                tail = @()
+            } | ConvertTo-Json -Depth 8 -Compress
+            exit 1
+        }
     }
-    $process.Refresh()
-    $exitCode = if ($null -ne $process.ExitCode) { [int]$process.ExitCode } else { 1 }
-    $output = @()
-    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8) }
-    if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -Encoding UTF8) }
 } finally {
     Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
 }
@@ -144,6 +163,7 @@ if ($start -ge 0 -and $end -gt $start) {
 }
 
 $parsed = $payloadText | ConvertFrom-Json -ErrorAction Stop
+$parsed | Add-Member -NotePropertyName fallbackWarnings -NotePropertyValue @($fallbackWarnings) -Force
 $parsed | ConvertTo-Json -Depth 10 -Compress
 if ($parsed.ok -eq $true) { exit 0 }
 exit 1

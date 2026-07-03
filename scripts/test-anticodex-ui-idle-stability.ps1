@@ -44,6 +44,41 @@ function Invoke-LocalJson {
 function Invoke-UiState {
     param([string]$ScriptPath, [string]$RuntimeRootFull, [int]$RequestTimeoutSec = $TimeoutSec)
 
+    function Invoke-UiStateInRunspace {
+        param([string]$Path, [string]$RuntimeRootForUi, [int]$UiTimeoutSec)
+        $ps = [powershell]::Create()
+        try {
+            [void]$ps.AddScript(@'
+param([string]$Path, [string]$BaseUrl, [string]$RuntimeRoot, [int]$TimeoutSec, [bool]$SkipManagerActionProbe)
+$args = @{
+    BaseUrl = $BaseUrl
+    RuntimeRoot = $RuntimeRoot
+    TimeoutSec = $TimeoutSec
+}
+if ($SkipManagerActionProbe) {
+    $args.SkipManagerActionProbe = $true
+}
+& $Path @args
+'@)
+            [void]$ps.AddArgument($Path)
+            [void]$ps.AddArgument($BaseUrl)
+            [void]$ps.AddArgument($RuntimeRootForUi)
+            [void]$ps.AddArgument([Math]::Max(1, $UiTimeoutSec))
+            [void]$ps.AddArgument([bool]$SkipManagerActionProbe)
+            $output = @($ps.Invoke())
+            $errors = @($ps.Streams.Error | ForEach-Object { [string]$_ })
+            return [pscustomobject]@{
+                exitCode = if ($ps.HadErrors) { 1 } else { 0 }
+                output = @($output | ForEach-Object {
+                    if ($_ -is [string]) { $_ } else { ($_ | Out-String).TrimEnd() }
+                })
+                errors = $errors
+            }
+        } finally {
+            $ps.Dispose()
+        }
+    }
+
     $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
     $arguments = @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath,
@@ -56,23 +91,42 @@ function Invoke-UiState {
     }
     $stdoutPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-idle-ui-state-{0}.out" -f ([Guid]::NewGuid().ToString("N")))
     $stderrPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-ui-idle-ui-state-{0}.err" -f ([Guid]::NewGuid().ToString("N")))
+    $fallbackWarnings = @()
     try {
-        $process = Start-Process -FilePath $powerShellBin -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
-        $waitMs = [Math]::Max(1000, ([Math]::Max(1, $RequestTimeoutSec) * 1000) + 5000)
-        if (-not $process.WaitForExit($waitMs)) {
-            try { $process.Kill() } catch {}
-            return [pscustomobject]@{
-                ok = $false
-                exitCode = $null
-                failures = @("UI state verifier timed out after $RequestTimeoutSec seconds")
-                tail = @()
+        try {
+            $process = Start-Process -FilePath $powerShellBin -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $waitMs = [Math]::Max(1000, ([Math]::Max(1, $RequestTimeoutSec) * 1000) + 5000)
+            if (-not $process.WaitForExit($waitMs)) {
+                try { $process.Kill() } catch {}
+                return [pscustomobject]@{
+                    ok = $false
+                    exitCode = $null
+                    failures = @("UI state verifier timed out after $RequestTimeoutSec seconds")
+                    tail = @()
+                }
+            }
+            $process.Refresh()
+            $exitCode = $process.ExitCode
+            $output = @()
+            if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8 -ErrorAction SilentlyContinue) }
+            if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -Encoding UTF8 -ErrorAction SilentlyContinue) }
+        } catch {
+            $startError = $_.Exception.Message
+            try {
+                $fallback = Invoke-UiStateInRunspace -Path $ScriptPath -RuntimeRootForUi $RuntimeRootFull -UiTimeoutSec $RequestTimeoutSec
+                $exitCode = [int]$fallback.exitCode
+                $fallbackWarnings += "$ScriptPath failed to start; falling back to same-process UI state verification: $startError"
+                $output = @($fallback.output)
+                $output += @($fallback.errors)
+            } catch {
+                return [pscustomobject]@{
+                    ok = $false
+                    exitCode = -1
+                    failures = @("UI state verifier Start-Process failed and same-process fallback failed: $startError / $($_.Exception.Message)")
+                    tail = @()
+                }
             }
         }
-        $process.Refresh()
-        $exitCode = $process.ExitCode
-        $output = @()
-        if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stdoutPath -Encoding UTF8 -ErrorAction SilentlyContinue) }
-        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $output += @(Get-Content -LiteralPath $stderrPath -Encoding UTF8 -ErrorAction SilentlyContinue) }
     } finally {
         Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
     }
@@ -94,6 +148,7 @@ function Invoke-UiState {
         }
         $parsed = $payloadText | ConvertFrom-Json -ErrorAction Stop
         $parsed | Add-Member -NotePropertyName exitCode -NotePropertyValue $exitCode -Force
+        $parsed | Add-Member -NotePropertyName fallbackWarnings -NotePropertyValue @($fallbackWarnings) -Force
         return $parsed
     } catch {
         return [pscustomobject]@{
