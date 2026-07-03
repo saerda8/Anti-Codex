@@ -9,6 +9,7 @@ param(
     [switch]$ConfirmInteractiveLoginComplete,
     [string]$AntiCodexAccountId = "",
     [string]$McpAccountId = "",
+    [string]$McpAccountIdentityReport = "",
     [string]$SeparateAccountProofApprovalId = "",
     [string]$Model = "gemini-pro-agent",
     [int]$TimeoutSec = 90
@@ -97,6 +98,72 @@ function Get-LatestAntiCodexAccountFingerprint {
     return $result
 }
 
+function Get-ObjectStringProperty {
+    param(
+        $Object,
+        [string]$Name
+    )
+    if (-not $Object -or -not $Object.PSObject.Properties[$Name]) { return "" }
+    return [string]$Object.PSObject.Properties[$Name].Value
+}
+
+function Get-ExternalMcpAccountIdentity {
+    param([string]$Path)
+
+    $result = [ordered]@{
+        present = [bool]$Path
+        path = $Path
+        ok = $false
+        accepted = $false
+        reportName = ""
+        accountLaneRole = ""
+        mcpAccountLaneManagedByAntiCodex = $null
+        identityAvailable = $false
+        fingerprint = ""
+        source = ""
+        approvalId = ""
+        error = ""
+        failureReason = ""
+    }
+    if (-not $Path) { return $result }
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $result.path = $fullPath
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        $result.failureReason = "external_mcp_identity_report_missing"
+        return $result
+    }
+
+    try {
+        $report = Get-Content -LiteralPath $fullPath -Raw | ConvertFrom-Json
+        $account = if ($report.PSObject.Properties["account"] -and $report.account -is [object]) { $report.account } else { $null }
+        $fingerprint = Get-ObjectStringProperty -Object $report -Name "accountFingerprint"
+        if (-not $fingerprint) { $fingerprint = Get-ObjectStringProperty -Object $report -Name "fingerprint" }
+        if (-not $fingerprint -and $account) { $fingerprint = Get-ObjectStringProperty -Object $account -Name "fingerprint" }
+
+        $result.ok = ($report.ok -eq $true)
+        $result.reportName = Get-ObjectStringProperty -Object $report -Name "reportName"
+        $result.accountLaneRole = Get-ObjectStringProperty -Object $report -Name "accountLaneRole"
+        $result.mcpAccountLaneManagedByAntiCodex = $report.mcpAccountLaneManagedByAntiCodex
+        $result.identityAvailable = ($report.identityAvailable -eq $true -or ($account -and $account.identityAvailable -eq $true))
+        $result.fingerprint = $fingerprint
+        $result.source = if ([string](Get-ObjectStringProperty -Object $report -Name "source")) { Get-ObjectStringProperty -Object $report -Name "source" } else { "external-mcp-antigravity-account-identity-report" }
+        $result.approvalId = Get-ObjectStringProperty -Object $report -Name "approvalId"
+        $result.accepted = [bool](
+            $result.ok -eq $true `
+            -and $result.accountLaneRole -eq "external-mcp-antigravity-account" `
+            -and $result.mcpAccountLaneManagedByAntiCodex -eq $false `
+            -and $result.identityAvailable -eq $true `
+            -and [string]$result.fingerprint
+        )
+        if (-not $result.accepted) { $result.failureReason = "external_mcp_identity_report_invalid" }
+    } catch {
+        $result.error = $_.Exception.Message
+        $result.failureReason = "external_mcp_identity_report_parse_failed"
+    }
+    return $result
+}
+
 function New-ProofCommandPreview {
     param(
         [string]$ResolvedProfileRoot,
@@ -115,7 +182,8 @@ function New-AccountIdentityInputChecklist {
         [string]$ProvidedAntiCodexAccountId,
         [string]$ProvidedMcpAccountId,
         [string]$ProvidedApprovalId,
-        $LatestAntiCodexFingerprint
+        $LatestAntiCodexFingerprint,
+        $ExternalMcpIdentity
     )
 
     $suggestedAntiCodexId = ""
@@ -125,8 +193,10 @@ function New-AccountIdentityInputChecklist {
         $suggestedAntiCodexSource = "latest-account-proxy-readiness.account.fingerprint"
     }
 
+    $externalMcpId = if ($ExternalMcpIdentity -and $ExternalMcpIdentity.accepted -eq $true) { [string]$ExternalMcpIdentity.fingerprint } else { "" }
+    $mcpEffective = if ($ProvidedMcpAccountId) { $ProvidedMcpAccountId } else { $externalMcpId }
     $antiCodexEffective = if ($ProvidedAntiCodexAccountId) { $ProvidedAntiCodexAccountId } else { $suggestedAntiCodexId }
-    $accountIdsDiffer = ($antiCodexEffective -and $ProvidedMcpAccountId -and $antiCodexEffective -ne $ProvidedMcpAccountId)
+    $accountIdsDiffer = ($antiCodexEffective -and $mcpEffective -and $antiCodexEffective -ne $mcpEffective)
     return [ordered]@{
         antiCodexAccountId = [ordered]@{
             provided = [bool]$ProvidedAntiCodexAccountId
@@ -139,6 +209,10 @@ function New-AccountIdentityInputChecklist {
         }
         mcpAccountId = [ordered]@{
             provided = [bool]$ProvidedMcpAccountId
+            suggestedAvailable = [bool]$externalMcpId
+            suggestedValue = $externalMcpId
+            suggestedSource = if ($externalMcpId) { "externalMcpAccountIdentityReport.fingerprint" } else { "" }
+            sourceReport = if ($ExternalMcpIdentity) { [string]$ExternalMcpIdentity.path } else { "" }
             managedByAntiCodex = $false
             requiredSource = "external-mcp-antigravity-account"
             note = "Anti-Codex must not invent or fetch this value from its own lane."
@@ -149,10 +223,11 @@ function New-AccountIdentityInputChecklist {
             suggestedFormat = "second-antigravity-account-proof-YYYYMMDD"
         }
         effectiveAntiCodexAccountIdPresent = [bool]$antiCodexEffective
-        mcpAccountIdPresent = [bool]$ProvidedMcpAccountId
+        effectiveMcpAccountIdPresent = [bool]$mcpEffective
+        mcpAccountIdPresent = [bool]$mcpEffective
         approvalIdPresent = [bool]$ProvidedApprovalId
         accountIdsDiffer = [bool]$accountIdsDiffer
-        allInputsReadyForProof = [bool]($antiCodexEffective -and $ProvidedMcpAccountId -and $ProvidedApprovalId -and $accountIdsDiffer)
+        allInputsReadyForProof = [bool]($antiCodexEffective -and $mcpEffective -and $ProvidedApprovalId -and $accountIdsDiffer)
     }
 }
 
@@ -254,17 +329,22 @@ $antiCodexAccountIdTrimmed = ([string]$AntiCodexAccountId).Trim()
 $mcpAccountIdTrimmed = ([string]$McpAccountId).Trim()
 $approvalIdTrimmed = ([string]$SeparateAccountProofApprovalId).Trim()
 $latestAntiCodexFingerprint = Get-LatestAntiCodexAccountFingerprint
-$identityChecklist = New-AccountIdentityInputChecklist -ProvidedAntiCodexAccountId $antiCodexAccountIdTrimmed -ProvidedMcpAccountId $mcpAccountIdTrimmed -ProvidedApprovalId $approvalIdTrimmed -LatestAntiCodexFingerprint $latestAntiCodexFingerprint
+$externalMcpIdentity = Get-ExternalMcpAccountIdentity -Path ([string]$McpAccountIdentityReport).Trim()
+if ($externalMcpIdentity.present -eq $true -and $externalMcpIdentity.accepted -ne $true) {
+    $failures.Add([string]$externalMcpIdentity.failureReason) | Out-Null
+}
+$identityChecklist = New-AccountIdentityInputChecklist -ProvidedAntiCodexAccountId $antiCodexAccountIdTrimmed -ProvidedMcpAccountId $mcpAccountIdTrimmed -ProvidedApprovalId $approvalIdTrimmed -LatestAntiCodexFingerprint $latestAntiCodexFingerprint -ExternalMcpIdentity $externalMcpIdentity
 $effectiveAntiCodexAccountId = if ($antiCodexAccountIdTrimmed) { $antiCodexAccountIdTrimmed } else { [string]$identityChecklist.antiCodexAccountId.suggestedValue }
-$accountIdsDiffer = ($effectiveAntiCodexAccountId -and $mcpAccountIdTrimmed -and $effectiveAntiCodexAccountId -ne $mcpAccountIdTrimmed)
+$effectiveMcpAccountId = if ($mcpAccountIdTrimmed) { $mcpAccountIdTrimmed } else { [string]$identityChecklist.mcpAccountId.suggestedValue }
+$accountIdsDiffer = ($effectiveAntiCodexAccountId -and $effectiveMcpAccountId -and $effectiveAntiCodexAccountId -ne $effectiveMcpAccountId)
 
 if (-not $resolvedProfileRoot) { $failures.Add("isolated_profile_root_missing") | Out-Null }
 if ($AllowRealTraffic -and -not $AllowSeparateAccountProof) { $failures.Add("allow_separate_account_proof_required") | Out-Null }
 if ($AllowRealTraffic -and -not $ConfirmInteractiveLoginComplete) { $failures.Add("interactive_login_confirmation_required") | Out-Null }
 if ($AllowRealTraffic -and -not $effectiveAntiCodexAccountId) { $failures.Add("anticodex_account_id_required") | Out-Null }
-if ($AllowRealTraffic -and -not $mcpAccountIdTrimmed) { $failures.Add("mcp_account_id_required") | Out-Null }
+if ($AllowRealTraffic -and -not $effectiveMcpAccountId) { $failures.Add("mcp_account_id_required") | Out-Null }
 if ($AllowRealTraffic -and -not $approvalIdTrimmed) { $failures.Add("separate_account_proof_approval_id_required") | Out-Null }
-if ($AllowRealTraffic -and $effectiveAntiCodexAccountId -and $mcpAccountIdTrimmed -and -not $accountIdsDiffer) { $failures.Add("account_ids_match") | Out-Null }
+if ($AllowRealTraffic -and $effectiveAntiCodexAccountId -and $effectiveMcpAccountId -and -not $accountIdsDiffer) { $failures.Add("account_ids_match") | Out-Null }
 if ($status -and $status.postLoginProofPlan -and $status.postLoginProofPlan.canRunAfterInteractiveLogin -ne $true) {
     $warnings.Add("post_login_proof_plan_not_ready: $([string]$status.postLoginProofPlan.blockedReason)") | Out-Null
 }
@@ -282,7 +362,7 @@ if ($willRunRealSmoke) {
         "-AccountIsolationBoundary", "separate-windows-user",
         "-AllowSeparateAccountProof",
         "-AntiCodexAccountId", $effectiveAntiCodexAccountId,
-        "-McpAccountId", $mcpAccountIdTrimmed,
+        "-McpAccountId", $effectiveMcpAccountId,
         "-SeparateAccountProofApprovalId", $approvalIdTrimmed,
         "-Model", $Model,
         "-TimeoutSec", ([string]$TimeoutSec)
@@ -301,9 +381,9 @@ $targetUserExists = if ($status) { [bool]$status.targetUserExists } else { $fals
 $safeToAskUserForSecondAccountLogin = if ($status) { [bool]$status.safeToAskUserForSecondAccountLogin } else { $false }
 $readinessBlockingReason = if ($status) { [string]$status.readinessBlockingReason } else { "status_unavailable" }
 $canRunAfterInteractiveLogin = if ($status -and $status.postLoginProofPlan) { [bool]$status.postLoginProofPlan.canRunAfterInteractiveLogin } else { $false }
-$proofCommandPreview = New-ProofCommandPreview -ResolvedProfileRoot $resolvedProfileRoot -HasAntiCodexId ([bool]$antiCodexAccountIdTrimmed) -HasMcpId ([bool]$mcpAccountIdTrimmed) -HasApproval ([bool]$approvalIdTrimmed)
+$proofCommandPreview = New-ProofCommandPreview -ResolvedProfileRoot $resolvedProfileRoot -HasAntiCodexId ([bool]$antiCodexAccountIdTrimmed) -HasMcpId ([bool]$effectiveMcpAccountId) -HasApproval ([bool]$approvalIdTrimmed)
 $proofCommandPreviewWithSuggestedAntiCodexId = if ((-not $antiCodexAccountIdTrimmed) -and $effectiveAntiCodexAccountId) {
-    New-ProofCommandPreview -ResolvedProfileRoot $resolvedProfileRoot -HasAntiCodexId $true -HasMcpId ([bool]$mcpAccountIdTrimmed) -HasApproval ([bool]$approvalIdTrimmed)
+    New-ProofCommandPreview -ResolvedProfileRoot $resolvedProfileRoot -HasAntiCodexId $true -HasMcpId ([bool]$effectiveMcpAccountId) -HasApproval ([bool]$approvalIdTrimmed)
 } else {
     $proofCommandPreview
 }
@@ -314,8 +394,8 @@ $operatorActionCard = New-PostLoginProofOperatorActionCard `
     -ConfirmLogin ([bool]$ConfirmInteractiveLoginComplete) `
     -RealTrafficAllowed ([bool]$AllowRealTraffic) `
     -SeparateAccountProofAllowed ([bool]$AllowSeparateAccountProof) `
-    -AntiCodexIdPresent ([bool]$antiCodexAccountIdTrimmed) `
-    -McpIdPresent ([bool]$mcpAccountIdTrimmed) `
+    -AntiCodexIdPresent ([bool]$effectiveAntiCodexAccountId) `
+    -McpIdPresent ([bool]$effectiveMcpAccountId) `
     -AccountIdsDiffer ([bool]$accountIdsDiffer) `
     -ApprovalIdPresent ([bool]$approvalIdTrimmed) `
     -WillRunProofNow ([bool]$willRunRealSmoke) `
@@ -341,12 +421,15 @@ $payload = [ordered]@{
     proofCommandPreview = $proofCommandPreview
     proofCommandPreviewWithSuggestedAntiCodexId = $proofCommandPreviewWithSuggestedAntiCodexId
     accountIdentityInputChecklist = $identityChecklist
+    externalMcpAccountIdentityReport = $externalMcpIdentity
     operatorActionCard = $operatorActionCard
     proofInputs = [ordered]@{
         antiCodexAccountIdPresent = [bool]$antiCodexAccountIdTrimmed
         antiCodexAccountIdSuggested = [bool]$identityChecklist.antiCodexAccountId.suggestedAvailable
         effectiveAntiCodexAccountIdPresent = [bool]$effectiveAntiCodexAccountId
         mcpAccountIdPresent = [bool]$mcpAccountIdTrimmed
+        mcpAccountIdFromExternalReport = [bool](((-not $mcpAccountIdTrimmed) -and $externalMcpIdentity.accepted -eq $true))
+        effectiveMcpAccountIdPresent = [bool]$effectiveMcpAccountId
         separateAccountProofApprovalIdPresent = [bool]$approvalIdTrimmed
         accountIdsDiffer = [bool]$accountIdsDiffer
     }

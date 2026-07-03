@@ -358,6 +358,7 @@ function Test-SecondAccountPostLoginProofEvidence {
     if ($evidence.effectiveAntiCodexAccountIdPresent -ne $true) { Add-Failure "second-account post-login proof effective Anti-Codex account id missing" }
     if ($evidence.mcpAccountIdManagedByAntiCodex -ne $false) { Add-Failure "second-account post-login proof MCP account unexpectedly managed by Anti-Codex" }
     if ([string]$evidence.mcpAccountIdRequiredSource -ne "external-mcp-antigravity-account") { Add-Failure "second-account post-login proof MCP account source mismatch" }
+    if ($evidence.externalMcpAccountIdentityReportPresent -eq $true -and $evidence.externalMcpAccountIdentityReportAccepted -ne $true) { Add-Failure "second-account post-login proof external MCP identity report rejected" }
     if ($evidence.approvalIdRequired -ne $true) { Add-Failure "second-account post-login proof approval id not required" }
     if ($isDryRun -and $evidence.allInputsReadyForProof -ne $false) { Add-Failure "second-account post-login proof dry-run inputs unexpectedly complete" }
     if ($isDryRun) {
@@ -383,6 +384,30 @@ function Test-SecondAccountPostLoginProofEvidence {
         if (-not ([string]$operatorActionCard.proofCommandPreview).Contains("test-anticodex-antigravity-cli-real-smoke.ps1")) { Add-Failure "second-account post-login proof operator action card proof command missing" }
     }
     if (-not [string]$evidence.accountIsolationCaveat) { Add-Failure "second-account post-login proof caveat missing" }
+}
+
+function Test-ExternalMcpIdentityContractSummaryEvidence {
+    param($ExternalMcpIdentityContractSummary)
+
+    if (-not $ExternalMcpIdentityContractSummary) {
+        Add-Failure "diagnostic reports summary missing latest-external-mcp-identity-contract.json"
+        return
+    }
+
+    if ($ExternalMcpIdentityContractSummary.reportName -ne "external-mcp-identity-contract") { Add-Failure "external MCP identity contract reportName mismatch" }
+    if ($ExternalMcpIdentityContractSummary.ok -ne $true) { Add-Failure "external MCP identity contract ok=false" }
+    if ($ExternalMcpIdentityContractSummary.noTraffic -ne $true) { Add-Failure "external MCP identity contract noTraffic mismatch" }
+    if ($ExternalMcpIdentityContractSummary.requestedRealTraffic -ne $false -or $ExternalMcpIdentityContractSummary.usedRealTraffic -ne $false) { Add-Failure "external MCP identity contract used real traffic" }
+    if ($ExternalMcpIdentityContractSummary.changedSystem -ne $false -or $ExternalMcpIdentityContractSummary.createdUser -ne $false -or $ExternalMcpIdentityContractSummary.capturesPassword -ne $false -or $ExternalMcpIdentityContractSummary.storesPassword -ne $false) { Add-Failure "external MCP identity contract changed system or credentials" }
+    if ($ExternalMcpIdentityContractSummary.behaviorCovered -ne $true) { Add-Failure "external MCP identity contract behavior not covered" }
+    if ($ExternalMcpIdentityContractSummary.coverageKind -ne "external-mcp-identity-contract-no-traffic") { Add-Failure "external MCP identity contract coverage kind mismatch" }
+    if ($ExternalMcpIdentityContractSummary.externalMcpIdentityAccepted -ne $true) { Add-Failure "external MCP identity contract identity not accepted" }
+    if ($ExternalMcpIdentityContractSummary.mcpAccountIdFromExternalReport -ne $true) { Add-Failure "external MCP identity contract MCP id not sourced from report" }
+    if ($ExternalMcpIdentityContractSummary.effectiveMcpAccountIdPresent -ne $true) { Add-Failure "external MCP identity contract effective MCP id missing" }
+    if ($ExternalMcpIdentityContractSummary.mcpAccountLaneManagedByAntiCodex -ne $false) { Add-Failure "external MCP identity contract MCP account managed by Anti-Codex" }
+    if ([string]$ExternalMcpIdentityContractSummary.mcpAccountRequiredSource -ne "external-mcp-antigravity-account") { Add-Failure "external MCP identity contract source mismatch" }
+    if ($ExternalMcpIdentityContractSummary.operatorIdentityInputsClear -ne $true) { Add-Failure "external MCP identity contract operator identity inputs not clear" }
+    if (@(As-FlatArray $ExternalMcpIdentityContractSummary.failures).Count -ne 0) { Add-Failure "external MCP identity contract has failures" }
 }
 
 function Get-NonNegativeIntProperty {
@@ -1349,6 +1374,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountPostLoginProofEffectiveAntiCodexAccountIdPresent -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof effective Anti-Codex account id missing" }
     if ($evidence.secondAccountPostLoginProofMcpAccountIdManagedByAntiCodex -ne $false) { Add-Failure "goal-readiness summary second-account post-login proof MCP account unexpectedly managed by Anti-Codex" }
     if ([string]$evidence.secondAccountPostLoginProofMcpAccountIdRequiredSource -ne "external-mcp-antigravity-account") { Add-Failure "goal-readiness summary second-account post-login proof MCP account source mismatch" }
+    if ($evidence.secondAccountPostLoginProofExternalMcpAccountIdentityReportPresent -eq $true -and $evidence.secondAccountPostLoginProofExternalMcpAccountIdentityReportAccepted -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof external MCP identity report rejected" }
     if ($evidence.secondAccountPostLoginProofApprovalIdRequired -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof approval id not required" }
     if ($evidence.secondAccountPostLoginProofDryRunValid -eq $true -and $evidence.secondAccountPostLoginProofAllInputsReadyForProof -ne $false) { Add-Failure "goal-readiness summary second-account post-login proof dry-run inputs unexpectedly complete" }
     if (-not [string]$evidence.secondAccountPostLoginProofOperatorStatus) { Add-Failure "goal-readiness summary second-account post-login proof operator status missing" }
@@ -2297,6 +2323,7 @@ function Test-ReportsSummary {
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     $secondAccountPostLoginProofSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-post-login-proof.json" } | Select-Object -First 1)[0]
+    $externalMcpIdentityContractSummary = @($summary | Where-Object { $_.file -eq "latest-external-mcp-identity-contract.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -2358,6 +2385,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($RequireReleaseReady -or $secondAccountPostLoginProofSummary) { Test-SecondAccountPostLoginProofEvidence $secondAccountPostLoginProofSummary }
+    if ($RequireReleaseReady -or $externalMcpIdentityContractSummary) { Test-ExternalMcpIdentityContractSummaryEvidence $externalMcpIdentityContractSummary }
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

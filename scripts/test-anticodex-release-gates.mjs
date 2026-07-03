@@ -70,6 +70,7 @@ const runtimeSyncFiles = [
   "scripts/start-anticodex-antigravity-cli-login-windows-user.ps1",
   "scripts/start-anticodex-second-antigravity-account-login.ps1",
   "scripts/test-anticodex-second-account-login-entrypoint.ps1",
+  "scripts/test-anticodex-external-mcp-identity-contract.ps1",
   "scripts/test-anticodex-windows-user-setup-guidance.ps1",
   "scripts/test-anticodex-antigravity-cli-dual-account-lanes.ps1",
   "scripts/test-anticodex-antigravity-cli-windows-user-readiness.ps1",
@@ -167,6 +168,7 @@ const gateDefinitions = [
   { id: "secondAccountLoginEntrypoint", group: "no-traffic", file: "latest-second-antigravity-account-login-entrypoint.json", requiredForRelease: true, requireSecondAccountLoginEntrypointSemantics: true },
   { id: "secondAccountReadinessSummary", group: "no-traffic", file: "latest-second-account-readiness-summary.json", requiredForRelease: true, requireSecondAccountReadinessSummarySemantics: true },
   { id: "secondAccountPostLoginProof", group: "no-traffic", file: "latest-second-account-post-login-proof.json", requiredForRelease: true, requireSecondAccountPostLoginProofSemantics: true },
+  { id: "externalMcpIdentityContract", group: "no-traffic", file: "latest-external-mcp-identity-contract.json", requiredForRelease: true, requireExternalMcpIdentityContractSemantics: true },
   { id: "cliTransportBoundary", group: "no-traffic", file: "latest-cli-transport-boundary.json", requiredForRelease: true, requireCliTransportBoundarySemantics: true },
   { id: "longTaskLandingMatrix", group: "no-traffic", file: "latest-long-task-landing-matrix.json", requiredForRelease: true, requireLongTaskLandingMatrixSemantics: true },
   { id: "agenticCapabilityMatrix", group: "no-traffic", file: "latest-agentic-capability-matrix.json", requiredForRelease: true, requireAgenticCapabilityMatrixSemantics: true },
@@ -2333,6 +2335,8 @@ function summarizeGate(definition) {
       if (!accountIdentityInputChecklist || accountIdentityInputChecklist.effectiveAntiCodexAccountIdPresent !== true) semanticFailures.push("second_account_post_login_proof_effective_anticodex_account_missing");
       if (!mcpAccountIdInput || mcpAccountIdInput.managedByAntiCodex !== false) semanticFailures.push("second_account_post_login_proof_mcp_managed_here");
       if (!mcpAccountIdInput || mcpAccountIdInput.requiredSource !== "external-mcp-antigravity-account") semanticFailures.push("second_account_post_login_proof_mcp_required_source");
+      const externalMcpIdentity = report.externalMcpAccountIdentityReport && typeof report.externalMcpAccountIdentityReport === "object" ? report.externalMcpAccountIdentityReport : null;
+      if (externalMcpIdentity?.present === true && externalMcpIdentity.accepted !== true) semanticFailures.push("second_account_post_login_proof_external_mcp_identity_rejected");
       if (!approvalIdInput || approvalIdInput.required !== true) semanticFailures.push("second_account_post_login_proof_approval_id_not_required");
       if (postLoginDryRunValid && accountIdentityInputChecklist?.allInputsReadyForProof !== false) semanticFailures.push("second_account_post_login_proof_dry_run_inputs_complete");
       if (postLoginRealProofValid && accountIdentityInputChecklist?.allInputsReadyForProof !== true) semanticFailures.push("second_account_post_login_proof_real_inputs_incomplete");
@@ -2353,6 +2357,21 @@ function summarizeGate(definition) {
         if (!String(operatorActionCard.proofCommandPreview || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")) semanticFailures.push("second_account_post_login_proof_operator_action_card_proof_command");
       }
       if (!report.accountIsolationCaveat) semanticFailures.push("second_account_post_login_proof_caveat_missing");
+    }
+    if (definition.requireExternalMcpIdentityContractSemantics) {
+      if (report.reportName !== "external-mcp-identity-contract") semanticFailures.push("external_mcp_identity_contract_report_name");
+      if (report.noTraffic !== true) semanticFailures.push("external_mcp_identity_contract_no_traffic");
+      if (report.requestedRealTraffic !== false || report.usedRealTraffic !== false) semanticFailures.push("external_mcp_identity_contract_used_real_traffic");
+      if (report.changedSystem !== false || report.createdUser !== false || report.capturesPassword !== false || report.storesPassword !== false) semanticFailures.push("external_mcp_identity_contract_changed_system");
+      if (report.behaviorCovered !== true) semanticFailures.push("external_mcp_identity_contract_behavior_not_covered");
+      if (report.coverageKind !== "external-mcp-identity-contract-no-traffic") semanticFailures.push("external_mcp_identity_contract_coverage_kind");
+      if (report.externalMcpIdentityAccepted !== true) semanticFailures.push("external_mcp_identity_contract_identity_not_accepted");
+      if (report.mcpAccountIdFromExternalReport !== true) semanticFailures.push("external_mcp_identity_contract_mcp_not_from_report");
+      if (report.effectiveMcpAccountIdPresent !== true) semanticFailures.push("external_mcp_identity_contract_effective_mcp_missing");
+      if (report.mcpAccountLaneManagedByAntiCodex !== false) semanticFailures.push("external_mcp_identity_contract_mcp_managed_here");
+      if (report.mcpAccountRequiredSource !== "external-mcp-antigravity-account") semanticFailures.push("external_mcp_identity_contract_mcp_source");
+      if (report.operatorIdentityInputsClear !== true) semanticFailures.push("external_mcp_identity_contract_operator_inputs_not_clear");
+      if (!Array.isArray(report.failures) || report.failures.length !== 0) semanticFailures.push("external_mcp_identity_contract_failures");
     }
     if (definition.requireModelRoutingSemantics) {
       const results = Array.isArray(report.results) ? report.results : [];
@@ -2824,6 +2843,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["secondAccountLoginEntrypoint", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-login-entrypoint.ps1"],
   ["secondAccountReadinessSummary", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1"],
   ["secondAccountPostLoginProof", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-post-login-proof.ps1"],
+  ["externalMcpIdentityContract", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-external-mcp-identity-contract.ps1"],
   ["cliTransportBoundary", "no-traffic-gateway", "node scripts\\test-anticodex-cli-transport-boundary.mjs", { requiresGatewayStart: true }],
   ["longTaskLandingMatrix", "no-traffic-local", "node scripts\\test-anticodex-long-task-landing-matrix.mjs"],
   ["agenticCapabilityMatrix", "no-traffic-local", "node scripts\\test-anticodex-agentic-capability-matrix.mjs"],
