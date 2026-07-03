@@ -664,6 +664,18 @@ const postLoginProof = secondAccountPostLoginProofReport.report || {};
 const postLoginProofOperatorActionCard = postLoginProof.operatorActionCard && typeof postLoginProof.operatorActionCard === "object"
   ? postLoginProof.operatorActionCard
   : {};
+const postLoginProofIdentityChecklist = postLoginProof.accountIdentityInputChecklist && typeof postLoginProof.accountIdentityInputChecklist === "object"
+  ? postLoginProof.accountIdentityInputChecklist
+  : {};
+const postLoginProofAntiCodexAccountId = postLoginProofIdentityChecklist.antiCodexAccountId && typeof postLoginProofIdentityChecklist.antiCodexAccountId === "object"
+  ? postLoginProofIdentityChecklist.antiCodexAccountId
+  : {};
+const postLoginProofMcpAccountId = postLoginProofIdentityChecklist.mcpAccountId && typeof postLoginProofIdentityChecklist.mcpAccountId === "object"
+  ? postLoginProofIdentityChecklist.mcpAccountId
+  : {};
+const postLoginProofApprovalId = postLoginProofIdentityChecklist.approvalId && typeof postLoginProofIdentityChecklist.approvalId === "object"
+  ? postLoginProofIdentityChecklist.approvalId
+  : {};
 const postLoginProofDryRunValid = postLoginProof.reportName === "second-account-post-login-proof"
   && postLoginProof.noTraffic === true
   && postLoginProof.requestedRealTraffic === false
@@ -711,6 +723,16 @@ const secondAccountPostLoginProof = {
   failureCount: Array.isArray(postLoginProof.failures) ? postLoginProof.failures.length : 0,
   warningCount: Array.isArray(postLoginProof.warnings) ? postLoginProof.warnings.length : 0,
   proofCommandPreview: String(postLoginProof.proofCommandPreview || ""),
+  proofCommandPreviewWithSuggestedAntiCodexIdPresent: String(postLoginProof.proofCommandPreviewWithSuggestedAntiCodexId || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1"),
+  accountIdentityInputChecklistPresent: !!postLoginProof.accountIdentityInputChecklist,
+  antiCodexAccountIdSuggestedAvailable: postLoginProofAntiCodexAccountId.suggestedAvailable === true,
+  effectiveAntiCodexAccountIdPresent: postLoginProofIdentityChecklist.effectiveAntiCodexAccountIdPresent === true,
+  mcpAccountIdManagedByAntiCodex: postLoginProofMcpAccountId.managedByAntiCodex === true,
+  mcpAccountIdRequiredSource: String(postLoginProofMcpAccountId.requiredSource || ""),
+  mcpAccountIdPresent: postLoginProofMcpAccountId.provided === true || postLoginProofIdentityChecklist.mcpAccountIdPresent === true,
+  approvalIdRequired: postLoginProofApprovalId.required === true,
+  approvalIdPresent: postLoginProofApprovalId.provided === true || postLoginProofIdentityChecklist.approvalIdPresent === true,
+  allInputsReadyForProof: postLoginProofIdentityChecklist.allInputsReadyForProof === true,
   operatorActionCard: {
     status: String(postLoginProofOperatorActionCard.status || ""),
     windowsUser: String(postLoginProofOperatorActionCard.windowsUser || ""),
@@ -737,8 +759,15 @@ const secondAccountPostLoginProof = {
     && String(postLoginProof.accountIsolationBoundary || "") === "separate-windows-user"
     && String(postLoginProof.accountIsolationCaveat || "").length > 0
     && String(postLoginProof.proofCommandPreview || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
+    && String(postLoginProof.proofCommandPreviewWithSuggestedAntiCodexId || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
     && String(postLoginProof.proofCommandPreview || "").includes("-AllowSeparateAccountProof")
     && String(postLoginProof.proofCommandPreview || "").includes("-WindowsUser")
+    && !!postLoginProof.accountIdentityInputChecklist
+    && postLoginProofAntiCodexAccountId.suggestedAvailable === true
+    && postLoginProofIdentityChecklist.effectiveAntiCodexAccountIdPresent === true
+    && postLoginProofMcpAccountId.managedByAntiCodex === false
+    && String(postLoginProofMcpAccountId.requiredSource || "") === "external-mcp-antigravity-account"
+    && postLoginProofApprovalId.required === true
     && String(postLoginProofOperatorActionCard.status || "").length > 0
     && String(postLoginProofOperatorActionCard.windowsUser || "").length > 0
     && String(postLoginProofOperatorActionCard.nextOperatorAction || "").length > 0

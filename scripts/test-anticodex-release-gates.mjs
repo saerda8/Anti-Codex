@@ -2324,6 +2324,18 @@ function summarizeGate(definition) {
       if (!String(report.proofCommandPreview || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
         || !String(report.proofCommandPreview || "").includes("-AllowSeparateAccountProof")
         || !String(report.proofCommandPreview || "").includes("-WindowsUser")) semanticFailures.push("second_account_post_login_proof_command_preview");
+      const accountIdentityInputChecklist = report.accountIdentityInputChecklist && typeof report.accountIdentityInputChecklist === "object" ? report.accountIdentityInputChecklist : null;
+      const antiCodexAccountIdInput = accountIdentityInputChecklist?.antiCodexAccountId && typeof accountIdentityInputChecklist.antiCodexAccountId === "object" ? accountIdentityInputChecklist.antiCodexAccountId : null;
+      const mcpAccountIdInput = accountIdentityInputChecklist?.mcpAccountId && typeof accountIdentityInputChecklist.mcpAccountId === "object" ? accountIdentityInputChecklist.mcpAccountId : null;
+      const approvalIdInput = accountIdentityInputChecklist?.approvalId && typeof accountIdentityInputChecklist.approvalId === "object" ? accountIdentityInputChecklist.approvalId : null;
+      if (!accountIdentityInputChecklist) semanticFailures.push("second_account_post_login_proof_identity_checklist_missing");
+      if (!antiCodexAccountIdInput || antiCodexAccountIdInput.suggestedAvailable !== true) semanticFailures.push("second_account_post_login_proof_anticodex_account_suggestion_missing");
+      if (!accountIdentityInputChecklist || accountIdentityInputChecklist.effectiveAntiCodexAccountIdPresent !== true) semanticFailures.push("second_account_post_login_proof_effective_anticodex_account_missing");
+      if (!mcpAccountIdInput || mcpAccountIdInput.managedByAntiCodex !== false) semanticFailures.push("second_account_post_login_proof_mcp_managed_here");
+      if (!mcpAccountIdInput || mcpAccountIdInput.requiredSource !== "external-mcp-antigravity-account") semanticFailures.push("second_account_post_login_proof_mcp_required_source");
+      if (!approvalIdInput || approvalIdInput.required !== true) semanticFailures.push("second_account_post_login_proof_approval_id_not_required");
+      if (postLoginDryRunValid && accountIdentityInputChecklist?.allInputsReadyForProof !== false) semanticFailures.push("second_account_post_login_proof_dry_run_inputs_complete");
+      if (postLoginRealProofValid && accountIdentityInputChecklist?.allInputsReadyForProof !== true) semanticFailures.push("second_account_post_login_proof_real_inputs_incomplete");
       const operatorActionCard = report.operatorActionCard && typeof report.operatorActionCard === "object" ? report.operatorActionCard : null;
       if (!operatorActionCard) semanticFailures.push("second_account_post_login_proof_operator_action_card_missing");
       else {

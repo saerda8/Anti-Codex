@@ -353,6 +353,13 @@ function Test-SecondAccountPostLoginProofEvidence {
         $evidence.accountIdentityComparisonPresent -eq $true
     )
     if (-not $isDryRun -and -not $isRealProof) { Add-Failure "second-account post-login proof is neither valid dry-run nor valid real proof" }
+    if ($evidence.accountIdentityInputChecklistPresent -ne $true) { Add-Failure "second-account post-login proof identity input checklist missing" }
+    if ($evidence.antiCodexAccountIdSuggestedAvailable -ne $true) { Add-Failure "second-account post-login proof Anti-Codex account suggestion missing" }
+    if ($evidence.effectiveAntiCodexAccountIdPresent -ne $true) { Add-Failure "second-account post-login proof effective Anti-Codex account id missing" }
+    if ($evidence.mcpAccountIdManagedByAntiCodex -ne $false) { Add-Failure "second-account post-login proof MCP account unexpectedly managed by Anti-Codex" }
+    if ([string]$evidence.mcpAccountIdRequiredSource -ne "external-mcp-antigravity-account") { Add-Failure "second-account post-login proof MCP account source mismatch" }
+    if ($evidence.approvalIdRequired -ne $true) { Add-Failure "second-account post-login proof approval id not required" }
+    if ($isDryRun -and $evidence.allInputsReadyForProof -ne $false) { Add-Failure "second-account post-login proof dry-run inputs unexpectedly complete" }
     if ($isDryRun) {
         if ($evidence.targetUserExists -ne $false) { Add-Failure "second-account post-login proof target user unexpectedly exists in current dry-run" }
         if ($evidence.safeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "second-account post-login proof allows login too early" }
@@ -1337,6 +1344,13 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountPostLoginProofDryRunValid -ne $true -and $evidence.secondAccountPostLoginProofRealProofValid -ne $true) {
         Add-Failure "goal-readiness summary second-account post-login proof has no valid mode"
     }
+    if ($evidence.secondAccountPostLoginProofAccountIdentityChecklistPresent -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof identity input checklist missing" }
+    if ($evidence.secondAccountPostLoginProofAntiCodexAccountIdSuggestedAvailable -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof Anti-Codex account suggestion missing" }
+    if ($evidence.secondAccountPostLoginProofEffectiveAntiCodexAccountIdPresent -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof effective Anti-Codex account id missing" }
+    if ($evidence.secondAccountPostLoginProofMcpAccountIdManagedByAntiCodex -ne $false) { Add-Failure "goal-readiness summary second-account post-login proof MCP account unexpectedly managed by Anti-Codex" }
+    if ([string]$evidence.secondAccountPostLoginProofMcpAccountIdRequiredSource -ne "external-mcp-antigravity-account") { Add-Failure "goal-readiness summary second-account post-login proof MCP account source mismatch" }
+    if ($evidence.secondAccountPostLoginProofApprovalIdRequired -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof approval id not required" }
+    if ($evidence.secondAccountPostLoginProofDryRunValid -eq $true -and $evidence.secondAccountPostLoginProofAllInputsReadyForProof -ne $false) { Add-Failure "goal-readiness summary second-account post-login proof dry-run inputs unexpectedly complete" }
     if (-not [string]$evidence.secondAccountPostLoginProofOperatorStatus) { Add-Failure "goal-readiness summary second-account post-login proof operator status missing" }
     if (-not [string]$evidence.secondAccountPostLoginProofOperatorNextAction) { Add-Failure "goal-readiness summary second-account post-login proof operator next action missing" }
     if (-not [string]$evidence.nextRequiredUserAction) { Add-Failure "goal-readiness summary missing next required user action" }
