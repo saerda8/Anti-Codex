@@ -13409,6 +13409,11 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(roadmap, /minimalRefreshCommandArgs/);
   assert.match(roadmap, /refreshApprovalSummary/);
   assert.match(roadmap, /--tasks/);
+  assert.match(roadmap, /canonicalReleaseMaxAgeHours/);
+  assert.match(roadmap, /customFreshnessReportOnly/);
+  assert.match(roadmap, /latest-real-task-coverage-roadmap-max-age-\$\{safeMaxAgeLabel\}\.json/);
+  assert.match(roadmap, /canonicalLatest/);
+  assert.match(roadmap, /custom freshness roadmap does not overwrite release latest/);
   assert.match(roadmap, /test-anticodex-desktop-task-suite\.mjs --suite-profile/);
   assert.match(roadmap, /taskArtifactRequirements/);
   assert.match(roadmap, /artifactEvidenceKeys/);

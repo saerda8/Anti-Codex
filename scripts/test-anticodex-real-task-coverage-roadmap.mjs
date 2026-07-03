@@ -13,8 +13,12 @@ const defaultReportRoot = process.env.APPDATA
   ? resolve(process.env.APPDATA, "anticodex", "reports")
   : resolve(process.cwd(), ".anticodex-reports");
 const reportRoot = resolve(argValue("--report-root", defaultReportRoot));
-const maxAgeHours = Number(argValue("--max-age-hours", "24"));
-const maxAgeMs = Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? maxAgeHours * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+const canonicalReleaseMaxAgeHours = 24;
+const requestedMaxAgeHours = Number(argValue("--max-age-hours", String(canonicalReleaseMaxAgeHours)));
+const maxAgeHours = Number.isFinite(requestedMaxAgeHours) && requestedMaxAgeHours > 0 ? requestedMaxAgeHours : canonicalReleaseMaxAgeHours;
+const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+const customFreshnessReportOnly = maxAgeHours !== canonicalReleaseMaxAgeHours;
+const safeMaxAgeLabel = String(maxAgeHours).replace(/[^0-9A-Za-z]+/g, "-").replace(/^-|-$/g, "") || String(canonicalReleaseMaxAgeHours);
 const startedAt = Date.now();
 
 const taskReportExpectations = {
@@ -439,6 +443,8 @@ const payload = {
   coverageKind: "real-task-coverage-roadmap-report-only",
   reportRoot,
   maxAgeHours,
+  canonicalReleaseMaxAgeHours,
+  customFreshnessReportOnly,
   requiredProfiles: Object.keys(requiredProfiles),
   taskModes: Object.keys(taskReportExpectations),
   profiles,
@@ -468,10 +474,15 @@ const payload = {
 };
 
 mkdirSync(reportRoot, { recursive: true });
-const latest = resolve(reportRoot, "latest-real-task-coverage-roadmap.json");
+const canonicalLatest = resolve(reportRoot, "latest-real-task-coverage-roadmap.json");
+// A custom freshness roadmap does not overwrite release latest.
+const latest = customFreshnessReportOnly
+  ? resolve(reportRoot, `latest-real-task-coverage-roadmap-max-age-${safeMaxAgeLabel}.json`)
+  : canonicalLatest;
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-");
-const history = resolve(reportRoot, `${stamp}-real-task-coverage-roadmap.json`);
-payload.report = { latest, history };
+const historySuffix = customFreshnessReportOnly ? `-max-age-${safeMaxAgeLabel}` : "";
+const history = resolve(reportRoot, `${stamp}-real-task-coverage-roadmap${historySuffix}.json`);
+payload.report = { latest, history, canonicalLatest };
 
 const json = JSON.stringify(payload, null, 2);
 const hash = createHash("sha256").update(json).digest("hex");
