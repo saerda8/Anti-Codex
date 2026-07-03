@@ -13243,6 +13243,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not prove split/);
   assert.match(diagnostics, /current-channel-worker-transport summary worker observation count too low/);
+  assert.match(diagnostics, /current-channel-worker-transport summary healthy worker ok count too low/);
+  assert.match(diagnostics, /current-channel-worker-transport summary missing healthy worker ok tool/);
   assert.match(diagnostics, /Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary"/);
   assert.match(diagnostics, /distinct failed worker namespace count too low/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
