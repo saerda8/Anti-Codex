@@ -1068,6 +1068,15 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountLoginEntrypointProven -ne $true) { Add-Failure "goal-readiness summary missing second-account login entrypoint proof" }
     if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
+    if ([int]$evidence.objectiveRequirementTotal -ne 6) { Add-Failure "goal-readiness summary objective requirement total mismatch" }
+    if ([int]$evidence.objectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary objective complete count mismatch" }
+    if ([int]$evidence.objectiveRequirementIncompleteCount -ne 2) { Add-Failure "goal-readiness summary objective incomplete count mismatch" }
+    if ($evidence.objectiveRequirementCanClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary objective audit claims full goal" }
+    $objectiveIncompleteIds = @(As-FlatArray $evidence.objectiveRequirementIncompleteIds | ForEach-Object { [string]$_ })
+    foreach ($expectedIncompleteObjective in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
+        if ($objectiveIncompleteIds -notcontains $expectedIncompleteObjective) { Add-Failure "goal-readiness summary objective audit missing incomplete requirement: $expectedIncompleteObjective" }
+    }
+    if (@(As-FlatArray $evidence.objectiveRequirementAuditIds).Count -ne 6) { Add-Failure "goal-readiness summary objective audit id count mismatch" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
     $goalOperatorActionCard = $evidence.goalOperatorActionCard
     if (-not $goalOperatorActionCard) { Add-Failure "goal-readiness summary operator action card missing" }

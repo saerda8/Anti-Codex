@@ -731,6 +731,125 @@ const goalComplete = proven.codexClientCopy
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
+function objectiveRequirement(id, label, complete, evidence = [], missing = []) {
+  return {
+    id,
+    label,
+    status: complete ? "complete" : "incomplete",
+    complete,
+    evidence: evidence.map(String).filter(Boolean),
+    missing: missing.map(String).filter(Boolean),
+  };
+}
+
+const objectiveRequirementAudit = [
+  objectiveRequirement(
+    "codex_client_copy",
+    "Anti-Codex is a guarded complete Codex client copy, not a feature-by-feature rewrite",
+    proven.codexClientCopy,
+    [
+      `sync report ok: ${codexClientCopy.reportOk}`,
+      `mode: ${codexClientCopy.mode}`,
+      `version matches: ${codexClientCopy.versionMatches}`,
+      `maintenance path: ${codexClientCopy.maintenancePath}`,
+    ],
+    [
+      ...(!proven.codexClientCopy ? ["codex client-copy sync contract not fully proven"] : []),
+    ],
+  ),
+  objectiveRequirement(
+    "antigravity_model_text",
+    "Antigravity supplies model text while Codex-owned tools stay in Anti-Codex",
+    proven.desktopAgenticTasks && proven.realTaskCoverageRoadmap && proven.releaseShortPath,
+    [
+      `desktop agentic task suite ok: ${desktopAgenticTasks.reportOk}`,
+      `real task coverage complete: ${realTaskCoverageRoadmap.resultProofComplete}`,
+      `release short path ready: ${releaseGateStatus.shortReady}`,
+    ],
+    [
+      ...(!proven.desktopAgenticTasks ? ["desktop agentic task evidence missing or stale"] : []),
+      ...(!proven.realTaskCoverageRoadmap ? ["real task coverage roadmap missing or invalid"] : []),
+      ...(!proven.releaseShortPath ? ["release short path not clean"] : []),
+    ],
+  ),
+  objectiveRequirement(
+    "separate_antigravity_accounts",
+    "Two Antigravity accounts can be isolated for Anti-Codex model text and MCP use",
+    antigravityAccountIsolation.releaseAcceptableAccountProof === true,
+    [
+      `credential boundary: ${antigravityAccountIsolation.credentialBoundary}`,
+      `target user exists: ${antigravityAccountIsolation.targetUserExists}`,
+      `safe to ask login: ${antigravityAccountIsolation.safeToAskUserForSecondAccountLogin}`,
+      `release acceptable account proof: ${antigravityAccountIsolation.releaseAcceptableAccountProof}`,
+    ],
+    [
+      ...(!antigravityAccountIsolation.targetUserExists ? [`target Windows user missing: ${secondAccountReadinessSummary.windowsUser}`] : []),
+      ...(!antigravityAccountIsolation.releaseAcceptableAccountProof ? ["interactive second-account login and distinct account proof missing"] : []),
+    ],
+  ),
+  objectiveRequirement(
+    "worker_mcp_multiuse",
+    "Worker MCPs are available, used, and dispatchable from the current Codex channel",
+    proven.workerMcp && currentChannelWorkerCanDispatch,
+    [
+      `configured worker servers passed: ${workerMcp.passedServerCount}/${requiredWorkerMcpServers.length}`,
+      `direct status-call workers ok: ${workerMcp.statusProbeStatusCallOkCount}`,
+      `task smoke passed workers: ${workerMcp.taskSmokePassedWorkerCount}`,
+      `project smoke passed workers: ${workerMcp.projectSmokePassedWorkerCount}`,
+      `current-channel dispatch usable: ${workerMcp.currentChannelWorkerDispatchUsable}`,
+    ],
+    [
+      ...(!proven.workerMcp ? ["worker MCP inventory/probe evidence incomplete"] : []),
+      ...(!currentChannelWorkerCanDispatch ? ["current Codex channel worker transport has no successful read-only worker call"] : []),
+    ],
+  ),
+  objectiveRequirement(
+    "real_long_tasks_with_results",
+    "Visible real long tasks land concrete files, tests, CLI output, reports, and final markers",
+    proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap,
+    [
+      `selected agentic tasks: ${desktopAgenticTasks.selectedTasks.join(",")}`,
+      `capability count: ${agenticCapabilityMatrix.okCapabilityCount}/${agenticCapabilityMatrix.capabilityCount}`,
+      `artifact proof complete: ${realTaskCoverageRoadmap.artifactProofComplete}`,
+      `result proof complete: ${realTaskCoverageRoadmap.resultProofComplete}`,
+    ],
+    [
+      ...(!proven.desktopAgenticTasks ? ["desktop agentic task suite incomplete or stale"] : []),
+      ...(!proven.agenticCapabilityMatrix ? ["agentic capability matrix incomplete or stale"] : []),
+      ...(!proven.realTaskCoverageRoadmap ? ["real task coverage roadmap incomplete"] : []),
+    ],
+  ),
+  objectiveRequirement(
+    "native_codex_like_agentic_experience",
+    "Anti-Codex behaves like native Codex for complex agentic work, not just text replies",
+    proven.desktopAgenticTasks
+      && proven.agenticCapabilityMatrix
+      && realTaskCoverageRoadmap.artifactProofComplete
+      && realTaskCoverageRoadmap.resultProofComplete
+      && releaseGateStatus.releaseReady,
+    [
+      `agentic task suite fresh: ${desktopAgenticTasks.realTaskEvidenceFresh}`,
+      `real task profiles complete: ${realTaskCoverageRoadmap.completeProfiles.join(",")}`,
+      `release ready: ${releaseGateStatus.releaseReady}`,
+      `missing required release reports: ${releaseGateStatus.missingRequired.join(",")}`,
+    ],
+    [
+      ...(!desktopAgenticTasks.realTaskEvidenceFresh ? ["real desktop task evidence stale"] : []),
+      ...(!realTaskCoverageRoadmap.artifactProofComplete ? ["artifact proof incomplete"] : []),
+      ...(!realTaskCoverageRoadmap.resultProofComplete ? ["result proof incomplete"] : []),
+      ...(!releaseGateStatus.releaseReady ? ["release gates not ready"] : []),
+    ],
+  ),
+];
+
+const objectiveRequirementSummary = {
+  total: objectiveRequirementAudit.length,
+  completeCount: objectiveRequirementAudit.filter((item) => item.complete).length,
+  incompleteCount: objectiveRequirementAudit.filter((item) => !item.complete).length,
+  incompleteRequirementIds: objectiveRequirementAudit.filter((item) => !item.complete).map((item) => item.id),
+  canClaimFullGoalNow: objectiveRequirementAudit.every((item) => item.complete) && goalComplete,
+};
+
 const currentChannelWorkerTransportStatus = currentChannelWorkerCanDispatch
   ? "dispatch_ready"
   : workerMcp.currentChannelWorkerTransportFresh
@@ -782,6 +901,8 @@ const payload = {
   goalComplete,
   proven,
   blockers,
+  objectiveRequirementSummary,
+  objectiveRequirementAudit,
   goalOperatorActionCard,
   currentChannelWorkerCanDispatch,
   currentChannelWorkerTransportStatus,

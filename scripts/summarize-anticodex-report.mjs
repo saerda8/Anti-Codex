@@ -1364,6 +1364,13 @@ const summary = {
     accountIsolationPreparedOnly: boolField(report.proven || {}, "accountIsolationPreparedOnly"),
     blockerCount: Array.isArray(report.blockers) ? report.blockers.length : null,
     blockers: Array.isArray(report.blockers) ? asStringArray(report.blockers) : [],
+    objectiveRequirementTotal: report.objectiveRequirementSummary && has(report.objectiveRequirementSummary, "total") ? report.objectiveRequirementSummary.total : null,
+    objectiveRequirementCompleteCount: report.objectiveRequirementSummary && has(report.objectiveRequirementSummary, "completeCount") ? report.objectiveRequirementSummary.completeCount : null,
+    objectiveRequirementIncompleteCount: report.objectiveRequirementSummary && has(report.objectiveRequirementSummary, "incompleteCount") ? report.objectiveRequirementSummary.incompleteCount : null,
+    objectiveRequirementIncompleteIds: report.objectiveRequirementSummary && Array.isArray(report.objectiveRequirementSummary.incompleteRequirementIds) ? asStringArray(report.objectiveRequirementSummary.incompleteRequirementIds) : [],
+    objectiveRequirementCanClaimFullGoalNow: report.objectiveRequirementSummary ? boolField(report.objectiveRequirementSummary, "canClaimFullGoalNow") : null,
+    objectiveRequirementAuditIds: Array.isArray(report.objectiveRequirementAudit) ? asStringArray(report.objectiveRequirementAudit.map((item) => item?.id)) : [],
+    objectiveRequirementAuditStatuses: Array.isArray(report.objectiveRequirementAudit) ? asStringArray(report.objectiveRequirementAudit.map((item) => item?.status)) : [],
     nextRequiredUserAction: asString(report.nextRequiredUserAction),
     goalOperatorActionCard: report.goalOperatorActionCard && typeof report.goalOperatorActionCard === "object" ? {
       status: asString(report.goalOperatorActionCard.status),

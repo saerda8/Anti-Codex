@@ -1336,8 +1336,25 @@ function summarizeGate(definition) {
         }
         const cardNextActions = Array.isArray(goalOperatorActionCard.nextOperatorActions) ? goalOperatorActionCard.nextOperatorActions.map(String) : [];
         if (cardNextActions.length < 2) semanticFailures.push("goal_readiness_operator_action_card_next_actions");
-        if (!String(goalOperatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-goal-readiness.mjs")) semanticFailures.push("goal_readiness_operator_action_card_status_command");
-        if (!String(goalOperatorActionCard.secondAccountStatusCommand || "").includes("test-anticodex-second-account-readiness-summary.ps1")) semanticFailures.push("goal_readiness_operator_action_card_second_account_command");
+      if (!String(goalOperatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-goal-readiness.mjs")) semanticFailures.push("goal_readiness_operator_action_card_status_command");
+      if (!String(goalOperatorActionCard.secondAccountStatusCommand || "").includes("test-anticodex-second-account-readiness-summary.ps1")) semanticFailures.push("goal_readiness_operator_action_card_second_account_command");
+      }
+      const objectiveRequirementSummary = report.objectiveRequirementSummary && typeof report.objectiveRequirementSummary === "object" ? report.objectiveRequirementSummary : null;
+      const objectiveRequirementAudit = Array.isArray(report.objectiveRequirementAudit) ? report.objectiveRequirementAudit : [];
+      const objectiveIncompleteIds = objectiveRequirementSummary && Array.isArray(objectiveRequirementSummary.incompleteRequirementIds) ? objectiveRequirementSummary.incompleteRequirementIds.map(String) : [];
+      if (!objectiveRequirementSummary) semanticFailures.push("goal_readiness_objective_requirement_summary_missing");
+      else {
+        if (Number(objectiveRequirementSummary.total || 0) !== 6) semanticFailures.push("goal_readiness_objective_requirement_total");
+        if (Number(objectiveRequirementSummary.completeCount || 0) !== 4) semanticFailures.push("goal_readiness_objective_requirement_complete_count");
+        if (Number(objectiveRequirementSummary.incompleteCount || 0) !== 2) semanticFailures.push("goal_readiness_objective_requirement_incomplete_count");
+        if (objectiveRequirementSummary.canClaimFullGoalNow !== false) semanticFailures.push("goal_readiness_objective_requirement_claims_goal");
+        for (const expectedIncomplete of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
+          if (!objectiveIncompleteIds.includes(expectedIncomplete)) semanticFailures.push(`goal_readiness_objective_requirement_missing_incomplete:${expectedIncomplete}`);
+        }
+      }
+      if (objectiveRequirementAudit.length !== 6) semanticFailures.push("goal_readiness_objective_requirement_audit_count");
+      for (const requiredAuditId of ["codex_client_copy", "antigravity_model_text", "separate_antigravity_accounts", "worker_mcp_multiuse", "real_long_tasks_with_results", "native_codex_like_agentic_experience"]) {
+        if (!objectiveRequirementAudit.some((item) => String(item?.id || "") === requiredAuditId)) semanticFailures.push(`goal_readiness_objective_requirement_audit_missing:${requiredAuditId}`);
       }
       for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "secondAccountReadinessSummary", "accountIsolationPreparedOnly"]) {
         if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
