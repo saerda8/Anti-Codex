@@ -16,6 +16,11 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
   const reportPath = join(process.env.APPDATA || ".", "anticodex", "reports", "latest-goal-readiness.json");
   const report = JSON.parse(readFileSync(reportPath, "utf8").replace(/^\uFEFF/, ""));
   assert.equal(report.goalComplete, false);
+  assert.equal(report.releaseReady, true);
+  assert.equal(report.shortReady, true);
+  assert.deepEqual(report.missingRequired, []);
+  assert.deepEqual(report.missingShort, []);
+  assert.equal(report.releaseReady, report.releaseGateStatus?.releaseReady);
   assert.equal(report.currentUsability?.mode, "shared-account-worker-mcp-disabled");
   assert.equal(report.currentUsability?.usableNow, true);
   assert.equal(report.currentUsability?.releaseReady, true);
