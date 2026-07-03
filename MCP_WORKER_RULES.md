@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Direct worker complex-project smoke added; Kilo import failure tightened prompt
+
+- Task: add a stronger direct worker MCP `complex-project` smoke that verifies a 7-file analyzer/report/html project across non-Antigravity workers.
+- Result: the first Kilo run created the exact files and valid report/html/sources, but host `node:test` and CLI failed because `analyzer.mjs` used a default import from `node:url` (`pathToFileURL is not a function`). The prompt now explicitly requires the named import `import { pathToFileURL } from 'node:url';`. The repaired Kilo run passed, then a merged remaining-worker run passed MIMO, DeepSeek, MiMoCode, and OpenCode. Latest report is `latest-worker-mcp-complex-project-smoke.json`, `ok:true`, 5/5 workers.
+- Cause classification: prompt contract ambiguity for Windows-safe ESM main guards, not worker inability. Current-channel worker transport remains a separate blocker.
+- Rule change: when prompting ESM main guards for workers, specify the exact named `pathToFileURL` import, not just the function name. For stricter worker proof, prefer exact-file complex project smokes with host-side test/CLI/report/html validation.
+
 ### 2026-07-03 - Direct five-worker project smoke timed out, then DeepSeek exact-file repair restored green
 
 - Task: refresh direct worker MCP `project` smoke for the five non-Antigravity workers without using current-channel implementation dispatch.

@@ -34,7 +34,8 @@ function printUsage() {
     "Usage: node scripts/test-anticodex-worker-mcp-task-smoke.mjs [options]",
     "",
     "Options:",
-    "  --scenario json|project       Smoke scenario to run (default: json)",
+    "  --scenario json|project|complex-project",
+    "                                 Smoke scenario to run (default: json)",
     "  --workers <list>              Comma-separated worker names (default: opencode-worker)",
     "  --worker-checks               Ask workers to run their own validation command",
     "  --merge-latest                Merge this run into the existing latest report",
@@ -140,7 +141,9 @@ function utcStamp() {
 }
 
 function reportFileNameForScenario(scenario) {
-  return scenario === "project" ? "worker-mcp-project-smoke" : "worker-mcp-task-smoke";
+  if (scenario === "project") return "worker-mcp-project-smoke";
+  if (scenario === "complex-project") return "worker-mcp-complex-project-smoke";
+  return "worker-mcp-task-smoke";
 }
 
 function writeSignedReport(payload, reportRoot) {
@@ -199,13 +202,33 @@ function mergeLatestResults(payload, reportRoot) {
 function makeWorkspace(workerName, workspaceRoot, scenario) {
   const root = resolve(workspaceRoot, `${workerName}-${utcStamp()}-${process.pid}`);
   mkdirSync(root, { recursive: true });
-  if (scenario !== "project") {
+  if (scenario === "json") {
     writeFileSync(resolve(root, "README.md"), "Anti-Codex worker MCP task smoke workspace.\n", "utf8");
   }
   return root;
 }
 
 function buildTask(workerName, marker, scenario) {
+  if (scenario === "complex-project") {
+    return [
+      "Work only in the current workspace directory.",
+      "Create exactly these files: package.json, analyzer.mjs, analyzer.test.mjs, sources.json, report.md, index.html, done.txt.",
+      "Do not create verify.mjs, helper scripts, notes, README files, logs, or any other extra files.",
+      "sources.json must be valid JSON containing exactly 3 source objects. Each object must have title, url, and notes string fields. Use these URLs exactly once each: https://github.com/openai/codex, https://github.com/openai/codex/releases, https://platform.openai.com/docs/codex.",
+      "analyzer.mjs must export loadSources(filePath), countCodexMentions(items), and renderSummaryHtml(items). loadSources must read and parse the JSON file. countCodexMentions must count case-insensitive occurrences of the word codex across title, url, and notes fields. renderSummaryHtml must return a complete HTML document string mentioning Anti-Codex and Codex.",
+      "When run as a CLI, analyzer.mjs must read the first command line argument as the sources JSON path and print JSON with sourceCount and codexMentionCount.",
+      "The CLI code must use process.argv.slice(2); do not reference program.argv or any undeclared program variable.",
+      "If analyzer.mjs uses an ESM main-module guard, use the named import `import { pathToFileURL } from 'node:url';` and compare import.meta.url to pathToFileURL(process.argv[1]).href.",
+      "Do not build a file URL by string concatenation from process.argv[1]; that breaks on Windows and produces no CLI JSON.",
+      "analyzer.test.mjs must use node:test and assert loadSources('sources.json') returns 3 items, countCodexMentions is at least 3, renderSummaryHtml returns a complete HTML document, and the rendered HTML mentions Anti-Codex.",
+      "package.json must set type module and a test script that runs node --test analyzer.test.mjs.",
+      "report.md must mention Anti-Codex, Codex, all 3 source URLs, and the marker.",
+      "index.html must be a complete offline HTML page that mentions Anti-Codex, Codex, all 3 source URLs, and the marker.",
+      `done.txt must contain exactly ${marker}.`,
+      "After writing files, run npm test and node analyzer.mjs sources.json before finishing.",
+      "Do not edit files outside this workspace.",
+    ].join(" ");
+  }
   if (scenario === "project") {
     return [
       "Work only in the current workspace directory.",
@@ -214,7 +237,7 @@ function buildTask(workerName, marker, scenario) {
       "word-tally.mjs must export function tallyWords(text). It must split words by whitespace, lowercase them, ignore empty words, and return a plain object of word counts.",
       "When run as a CLI, word-tally.mjs must print JSON word counts for the remaining command line text.",
       "The CLI code must use process.argv.slice(2); do not reference program.argv or any undeclared program variable.",
-      "If word-tally.mjs uses an ESM main-module guard, import pathToFileURL from node:url and compare import.meta.url to pathToFileURL(process.argv[1]).href.",
+      "If word-tally.mjs uses an ESM main-module guard, use the named import `import { pathToFileURL } from 'node:url';` and compare import.meta.url to pathToFileURL(process.argv[1]).href.",
       "Do not build a file URL by string concatenation from process.argv[1]; that breaks on Windows and produces no CLI JSON.",
       "word-tally.test.mjs must use node:test and assert that tallyWords('red blue red') returns red=2 and blue=1.",
       "package.json must set type module and a test script that runs node --test word-tally.test.mjs.",
@@ -236,7 +259,22 @@ function buildTask(workerName, marker, scenario) {
 function buildValidationCommand(workerName, marker, scenario) {
   const expectedMarker = JSON.stringify(marker);
   const expectedWorker = JSON.stringify(workerName);
-  const validationScript = scenario === "project"
+  const validationScript = scenario === "complex-project"
+    ? [
+        'const fs=require("fs");',
+        'const cp=require("child_process");',
+        `if(fs.readFileSync("done.txt","utf8").trim()!==${expectedMarker}) process.exit(2);`,
+        'const t=cp.spawnSync(process.execPath,["--test","analyzer.test.mjs"],{encoding:"utf8"});',
+        'if(t.status!==0) process.exit(3);',
+        'const c=cp.spawnSync(process.execPath,["analyzer.mjs","sources.json"],{encoding:"utf8"});',
+        'if(c.status!==0) process.exit(4);',
+        'const data=JSON.parse(c.stdout);',
+        'if(data.sourceCount!==3||data.codexMentionCount<3) process.exit(5);',
+        'const report=fs.readFileSync("report.md","utf8");',
+        'const html=fs.readFileSync("index.html","utf8");',
+        `if(!report.includes(${expectedMarker})||!html.includes(${expectedMarker})) process.exit(6);`,
+      ].join("")
+    : scenario === "project"
     ? [
         'const fs=require("fs");',
         'const cp=require("child_process");',
@@ -292,17 +330,24 @@ function buildWorkerArgs(workerName, workspace, marker, timeoutMs, scenario) {
 
 function selfTestWorkerChecksCommand() {
   const command = buildValidationCommand("opencode-worker", "SELF_TEST_MARKER", "json");
+  const complexCommand = buildValidationCommand("opencode-worker", "SELF_TEST_MARKER", "complex-project");
   const failures = [];
   if (!command.includes('node -e "eval(Buffer.from(')) failures.push("validation command does not quote node -e script");
   if (!command.includes("base64")) failures.push("validation command does not use shell-safe base64 script transport");
   const encoded = command.match(/Buffer\.from\('([^']+)'/)?.[1] || "";
   const decoded = encoded ? Buffer.from(encoded, "base64").toString("utf8") : "";
+  const complexEncoded = complexCommand.match(/Buffer\.from\('([^']+)'/)?.[1] || "";
+  const complexDecoded = complexEncoded ? Buffer.from(complexEncoded, "base64").toString("utf8") : "";
   if (!decoded.includes('"SELF_TEST_MARKER"')) failures.push("validation command does not preserve marker literal");
   if (!decoded.includes('"opencode-worker"')) failures.push("validation command does not preserve worker literal");
+  if (!complexDecoded.includes("analyzer.test.mjs")) failures.push("complex validation command does not run analyzer tests");
+  if (!complexDecoded.includes("sourceCount")) failures.push("complex validation command does not validate CLI sourceCount");
+  if (!complexDecoded.includes("codexMentionCount")) failures.push("complex validation command does not validate CLI codexMentionCount");
   if (/\bnode -e const\b/.test(command)) failures.push("validation command is still unquoted");
   return {
     ok: failures.length === 0,
     command,
+    complexCommand,
     failures,
   };
 }
@@ -347,6 +392,71 @@ function verifyProjectWorkspace(workspace, marker) {
     testExitCode: test.status,
     cliExitCode: cli.status,
     cliJson,
+  };
+}
+
+function verifyComplexProjectWorkspace(workspace, marker) {
+  const requiredFiles = ["package.json", "analyzer.mjs", "analyzer.test.mjs", "sources.json", "report.md", "index.html", "done.txt"];
+  const missingFiles = requiredFiles.filter((file) => !existsSync(resolve(workspace, file)));
+  const extraFiles = readdirSync(workspace, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((file) => !requiredFiles.includes(file));
+  if (missingFiles.length > 0) return { ok: false, missingFiles, extraFiles };
+
+  const doneText = readFileSync(resolve(workspace, "done.txt"), "utf8").trim();
+  let sources = null;
+  try {
+    sources = JSON.parse(readFileSync(resolve(workspace, "sources.json"), "utf8"));
+  } catch {
+    sources = null;
+  }
+  const test = spawnSync(process.execPath, ["--test", "analyzer.test.mjs"], { cwd: workspace, encoding: "utf8", timeout: 45000 });
+  const cli = spawnSync(process.execPath, ["analyzer.mjs", "sources.json"], { cwd: workspace, encoding: "utf8", timeout: 45000 });
+  let cliJson = null;
+  try {
+    cliJson = JSON.parse(String(cli.stdout || "").trim());
+  } catch {
+    cliJson = null;
+  }
+  const report = readFileSync(resolve(workspace, "report.md"), "utf8");
+  const html = readFileSync(resolve(workspace, "index.html"), "utf8");
+  const requiredUrls = [
+    "https://github.com/openai/codex",
+    "https://github.com/openai/codex/releases",
+    "https://platform.openai.com/docs/codex",
+  ];
+  const sourcesOk = Array.isArray(sources)
+    && sources.length === 3
+    && requiredUrls.every((url) => sources.some((item) => item?.url === url));
+  const reportOk = report.includes(marker)
+    && report.includes("Anti-Codex")
+    && requiredUrls.every((url) => report.includes(url));
+  const htmlOk = html.includes(marker)
+    && html.includes("Anti-Codex")
+    && /<!doctype html/i.test(html)
+    && /<\/html>/i.test(html)
+    && requiredUrls.every((url) => html.includes(url));
+  const ok = extraFiles.length === 0
+    && doneText === marker
+    && sourcesOk
+    && test.status === 0
+    && cli.status === 0
+    && cliJson?.sourceCount === 3
+    && Number(cliJson?.codexMentionCount || 0) >= 3
+    && reportOk
+    && htmlOk;
+  return {
+    ok,
+    missingFiles,
+    extraFiles,
+    doneTextMatches: doneText === marker,
+    sourcesOk,
+    testExitCode: test.status,
+    cliExitCode: cli.status,
+    cliJson,
+    reportOk,
+    htmlOk,
   };
 }
 
@@ -428,11 +538,13 @@ async function runWorker(workerName, options) {
     }
   }
 
-  const workspaceVerification = options.scenario === "project"
-    ? verifyProjectWorkspace(workspace, marker)
-    : verifyWorkspace(workspace, workerName, marker);
+  const workspaceVerification = options.scenario === "complex-project"
+    ? verifyComplexProjectWorkspace(workspace, marker)
+    : options.scenario === "project"
+      ? verifyProjectWorkspace(workspace, marker)
+      : verifyWorkspace(workspace, workerName, marker);
   const terminalStatus = String(terminal?.status || terminal?.result?.status || terminal?.progress?.status || "").toLowerCase();
-  const artifactVerifiedAfterNonterminalWorker = options.scenario === "project"
+  const artifactVerifiedAfterNonterminalWorker = ["project", "complex-project"].includes(options.scenario)
     && workspaceVerification.ok === true
     && !isSuccessStatus(terminalStatus)
     && !isExplicitFailureStatus(terminalStatus);
@@ -467,7 +579,7 @@ async function main() {
   const workspaceRoot = resolve(argValue("--workspace-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/worker-task-smoke`));
   const timeoutMs = Number(argValue("--timeout-ms", "0")) || null;
   const scenario = argValue("--scenario", "json");
-  if (!["json", "project"].includes(scenario)) throw new Error(`Unsupported scenario: ${scenario}`);
+  if (!["json", "project", "complex-project"].includes(scenario)) throw new Error(`Unsupported scenario: ${scenario}`);
   const workers = argValue("--workers", DEFAULT_WORKER).split(",").map((item) => item.trim()).filter(Boolean);
   const unsupported = workers.filter((worker) => !WORKERS[worker]);
   if (unsupported.length) throw new Error(`Unsupported workers: ${unsupported.join(", ")}`);
@@ -487,7 +599,7 @@ async function main() {
   }
 
   const payload = mergeLatestResults({
-    reportName: scenario === "project" ? "worker-mcp-project-smoke" : "worker-mcp-task-smoke",
+    reportName: reportFileNameForScenario(scenario),
     ok: results.length > 0 && results.every((result) => result.ok),
     requestedRealTraffic: true,
     usedRealTraffic: true,

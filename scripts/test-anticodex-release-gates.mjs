@@ -1391,6 +1391,13 @@ function summarizeGate(definition) {
       if (Number(worker.projectSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_passed_count");
       if (Array.isArray(worker.projectSmokeMissingRequiredWorkers) && worker.projectSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_missing_required_workers");
       if (Array.isArray(worker.projectSmokeFailedWorkers) && worker.projectSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_failed_workers");
+      if (worker.complexProjectSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_not_ok");
+      if (worker.complexProjectSmokeScenario !== "complex-project") semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_scenario");
+      if (worker.complexProjectSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_real_traffic_missing");
+      if (worker.complexProjectSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_antigravity_not_excluded");
+      if (Number(worker.complexProjectSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_passed_count");
+      if (Array.isArray(worker.complexProjectSmokeMissingRequiredWorkers) && worker.complexProjectSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_missing_required_workers");
+      if (Array.isArray(worker.complexProjectSmokeFailedWorkers) && worker.complexProjectSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_failed_workers");
       if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (requiredReleaseComplete) {

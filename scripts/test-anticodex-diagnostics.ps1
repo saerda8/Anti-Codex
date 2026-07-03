@@ -1103,6 +1103,13 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.goalComplete -eq $true) { Add-Failure "goal-readiness summary unexpectedly claims goal complete" }
     if ($evidence.codexClientCopyProven -ne $true) { Add-Failure "goal-readiness summary missing Codex client-copy proof" }
     if ($evidence.workerMcpProven -ne $true) { Add-Failure "goal-readiness summary missing worker MCP proof" }
+    if ($evidence.workerMcpComplexProjectSmokeReportOk -ne $true) { Add-Failure "goal-readiness summary missing worker MCP complex-project smoke proof" }
+    if ([string]$evidence.workerMcpComplexProjectSmokeScenario -ne "complex-project") { Add-Failure "goal-readiness summary worker MCP complex-project smoke scenario mismatch" }
+    if ($evidence.workerMcpComplexProjectSmokeUsedRealTraffic -ne $true) { Add-Failure "goal-readiness summary worker MCP complex-project smoke real traffic missing" }
+    if ($evidence.workerMcpComplexProjectSmokeAntigravityExcluded -ne $true) { Add-Failure "goal-readiness summary worker MCP complex-project smoke Antigravity exclusion missing" }
+    if ([int]$evidence.workerMcpComplexProjectSmokePassedWorkerCount -lt 5) { Add-Failure "goal-readiness summary worker MCP complex-project smoke passed worker count too low" }
+    if (@(As-FlatArray $evidence.workerMcpComplexProjectSmokeMissingRequiredWorkers).Count -ne 0) { Add-Failure "goal-readiness summary worker MCP complex-project smoke missing required workers" }
+    if (@(As-FlatArray $evidence.workerMcpComplexProjectSmokeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary worker MCP complex-project smoke failed workers" }
     if ($evidence.desktopAgenticTasksProven -ne $true) { Add-Failure "goal-readiness summary missing desktop agentic task proof" }
     if ($evidence.agenticCapabilityMatrixProven -ne $true) { Add-Failure "goal-readiness summary missing agentic capability matrix proof" }
     if ($evidence.realTaskCoverageRoadmapProven -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage roadmap proof" }

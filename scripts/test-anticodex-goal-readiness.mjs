@@ -78,6 +78,7 @@ const workerMcpServerProbeReport = readReport("latest-worker-mcp-server-probe.js
 const workerMcpStatusProbeReport = readReport("latest-worker-mcp-status-probe.json");
 const workerMcpTaskSmokeReport = readReport("latest-worker-mcp-task-smoke.json");
 const workerMcpProjectSmokeReport = readReport("latest-worker-mcp-project-smoke.json");
+const workerMcpComplexProjectSmokeReport = readReport("latest-worker-mcp-complex-project-smoke.json");
 const currentChannelWorkerTransportReport = readReport("latest-current-channel-worker-transport.json");
 const currentChannelWorkerRecoveryReport = readReport("latest-current-channel-worker-recovery.json");
 
@@ -203,6 +204,26 @@ const workerProjectSmokePassedWorkers = workerProjectSmokeResults
   .filter(Boolean);
 const workerProjectSmokePassedWorkerSet = new Set(workerProjectSmokePassedWorkers);
 const workerProjectSmokeMissingRequiredWorkers = requiredWorkerMcpTaskSmokeWorkers.filter((worker) => !workerProjectSmokePassedWorkerSet.has(worker));
+const workerComplexProjectSmoke = workerMcpComplexProjectSmokeReport.report || {};
+const workerComplexProjectSmokeResults = Array.isArray(workerComplexProjectSmoke.results) ? workerComplexProjectSmoke.results : [];
+const workerComplexProjectSmokePassedWorkers = workerComplexProjectSmokeResults
+  .filter((entry) => entry?.ok === true
+    && entry?.workspaceVerification?.ok === true
+    && entry.workspaceVerification?.doneTextMatches === true
+    && entry.workspaceVerification?.sourcesOk === true
+    && Array.isArray(entry.workspaceVerification?.extraFiles)
+    && entry.workspaceVerification.extraFiles.length === 0
+    && Number(entry.workspaceVerification?.testExitCode) === 0
+    && Number(entry.workspaceVerification?.cliExitCode) === 0
+    && Number(entry.workspaceVerification?.cliJson?.sourceCount) === 3
+    && Number(entry.workspaceVerification?.cliJson?.codexMentionCount || 0) >= 3
+    && entry.workspaceVerification?.reportOk === true
+    && entry.workspaceVerification?.htmlOk === true
+    && String(entry?.worker || "") !== "antigravity-code-worker")
+  .map((entry) => String(entry.worker || ""))
+  .filter(Boolean);
+const workerComplexProjectSmokePassedWorkerSet = new Set(workerComplexProjectSmokePassedWorkers);
+const workerComplexProjectSmokeMissingRequiredWorkers = requiredWorkerMcpTaskSmokeWorkers.filter((worker) => !workerComplexProjectSmokePassedWorkerSet.has(worker));
 const workerMcp = {
   reportPresent: mcpSkills.present,
   reportOk: mcpSkills.report?.ok === true,
@@ -284,6 +305,15 @@ const workerMcp = {
   projectSmokePassedWorkers: workerProjectSmokePassedWorkers,
   projectSmokeMissingRequiredWorkers: workerProjectSmokeMissingRequiredWorkers,
   projectSmokeFailedWorkers: Array.isArray(workerProjectSmoke.failedWorkers) ? workerProjectSmoke.failedWorkers.map(String).filter(Boolean) : [],
+  complexProjectSmokeReportPresent: workerMcpComplexProjectSmokeReport.present,
+  complexProjectSmokeReportOk: workerComplexProjectSmoke.ok === true,
+  complexProjectSmokeScenario: String(workerComplexProjectSmoke.scenario || ""),
+  complexProjectSmokeUsedRealTraffic: workerComplexProjectSmoke.usedRealTraffic === true,
+  complexProjectSmokeAntigravityExcluded: workerComplexProjectSmoke.antigravityWorkerExcluded === true,
+  complexProjectSmokePassedWorkerCount: workerComplexProjectSmokePassedWorkers.length,
+  complexProjectSmokePassedWorkers: workerComplexProjectSmokePassedWorkers,
+  complexProjectSmokeMissingRequiredWorkers: workerComplexProjectSmokeMissingRequiredWorkers,
+  complexProjectSmokeFailedWorkers: Array.isArray(workerComplexProjectSmoke.failedWorkers) ? workerComplexProjectSmoke.failedWorkers.map(String).filter(Boolean) : [],
 };
 
 const currentChannelWorkerCanDispatch = workerMcp.currentChannelWorkerDispatchUsable
@@ -764,7 +794,14 @@ const proven = {
     && workerMcp.projectSmokeAntigravityExcluded
     && workerMcp.projectSmokePassedWorkerCount >= minTaskSmokePassedWorkers
     && workerMcp.projectSmokeMissingRequiredWorkers.length === 0
-    && workerMcp.projectSmokeFailedWorkers.length === 0,
+    && workerMcp.projectSmokeFailedWorkers.length === 0
+    && workerMcp.complexProjectSmokeReportOk
+    && workerMcp.complexProjectSmokeScenario === "complex-project"
+    && workerMcp.complexProjectSmokeUsedRealTraffic
+    && workerMcp.complexProjectSmokeAntigravityExcluded
+    && workerMcp.complexProjectSmokePassedWorkerCount >= minTaskSmokePassedWorkers
+    && workerMcp.complexProjectSmokeMissingRequiredWorkers.length === 0
+    && workerMcp.complexProjectSmokeFailedWorkers.length === 0,
   desktopAgenticTasks: desktopAgenticTasks.reportOk
     && desktopAgenticTasks.suiteProfile === "agentic"
     && desktopAgenticTasks.dryRun
@@ -897,6 +934,13 @@ if (!workerMcp.projectSmokeAntigravityExcluded) blockers.push("worker_mcp_projec
 if (workerMcp.projectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_project_smoke_insufficient_worker_diversity");
 if (workerMcp.projectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_project_smoke_missing_required_worker");
 if (workerMcp.projectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_project_smoke_failed_workers");
+if (!workerMcp.complexProjectSmokeReportOk) blockers.push("worker_mcp_complex_project_smoke_missing_or_failed");
+if (workerMcp.complexProjectSmokeScenario !== "complex-project") blockers.push("worker_mcp_complex_project_smoke_wrong_scenario");
+if (!workerMcp.complexProjectSmokeUsedRealTraffic) blockers.push("worker_mcp_complex_project_smoke_real_traffic_missing");
+if (!workerMcp.complexProjectSmokeAntigravityExcluded) blockers.push("worker_mcp_complex_project_smoke_antigravity_not_excluded");
+if (workerMcp.complexProjectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_complex_project_smoke_insufficient_worker_diversity");
+if (workerMcp.complexProjectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_complex_project_smoke_missing_required_worker");
+if (workerMcp.complexProjectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_complex_project_smoke_failed_workers");
 if (!workerMcp.currentChannelWorkerTransportFresh) blockers.push("current_channel_worker_transport_probe_stale");
 if (!workerMcp.currentChannelWorkerDispatchUsable) blockers.push("current_channel_worker_transport_not_recovered");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
@@ -994,6 +1038,7 @@ const objectiveRequirementAudit = [
       `direct status-call workers ok: ${workerMcp.statusProbeStatusCallOkCount}`,
       `task smoke passed workers: ${workerMcp.taskSmokePassedWorkerCount}`,
       `project smoke passed workers: ${workerMcp.projectSmokePassedWorkerCount}`,
+      `complex project smoke passed workers: ${workerMcp.complexProjectSmokePassedWorkerCount}`,
       `current-channel dispatch usable: ${workerMcp.currentChannelWorkerDispatchUsable}`,
     ],
     [
