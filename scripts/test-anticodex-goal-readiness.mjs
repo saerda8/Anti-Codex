@@ -11,6 +11,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
   const value = process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[++i] : "1";
   args.set(key, value);
 }
+const compactStatus = args.has("--compact-status") || args.has("--status");
 
 const startedAt = Date.now();
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
@@ -60,6 +61,31 @@ function writeReport(payload) {
     writeFileSync(`${file}.sha256`, `sha256:${createHash("sha256").update(json).digest("hex")}`, "ascii");
   }
   return { latest, history };
+}
+
+function compactGoalReadinessStatus(payload) {
+  const currentUsability = payload?.currentUsability && typeof payload.currentUsability === "object" ? payload.currentUsability : {};
+  const objectiveSummary = payload?.objectiveRequirementSummary && typeof payload.objectiveRequirementSummary === "object" ? payload.objectiveRequirementSummary : {};
+  const operatorCard = payload?.goalOperatorActionCard && typeof payload.goalOperatorActionCard === "object" ? payload.goalOperatorActionCard : {};
+  return {
+    ok: payload?.ok === true,
+    reportName: "goal-readiness-status",
+    usableNow: currentUsability.usableNow === true,
+    mode: typeof currentUsability.mode === "string" ? currentUsability.mode : "",
+    releaseReady: payload?.releaseReady === true,
+    shortReady: payload?.shortReady === true,
+    goalComplete: payload?.goalComplete === true,
+    completeRequirements: Number.isFinite(Number(objectiveSummary.completeCount)) ? Number(objectiveSummary.completeCount) : 0,
+    totalRequirements: Number.isFinite(Number(objectiveSummary.total)) ? Number(objectiveSummary.total) : 0,
+    incompleteRequirements: Array.isArray(objectiveSummary.incompleteRequirementIds) ? objectiveSummary.incompleteRequirementIds : [],
+    blockers: Array.isArray(payload?.blockers) ? payload.blockers : [],
+    currentChannelWorkerTransportStatus: typeof payload?.currentChannelWorkerTransportStatus === "string" ? payload.currentChannelWorkerTransportStatus : "",
+    currentChannelWorkerCanDispatch: payload?.currentChannelWorkerCanDispatch === true,
+    secondAccountOperatorStatus: typeof payload?.secondAccountOperatorStatus === "string" ? payload.secondAccountOperatorStatus : "",
+    secondAccountTargetWindowsUser: typeof payload?.secondAccountTargetWindowsUser === "string" ? payload.secondAccountTargetWindowsUser : "",
+    nextRequiredUserAction: typeof payload?.nextRequiredUserAction === "string" ? payload.nextRequiredUserAction : "",
+    canMakeUnattendedProgress: operatorCard.canMakeUnattendedProgress === true,
+  };
 }
 
 const syncReadiness = readReport("latest-sync-readiness.json");
@@ -1281,5 +1307,5 @@ const payload = {
 };
 
 const report = writeReport(payload);
-console.log(JSON.stringify({ ...payload, report }));
+console.log(JSON.stringify(compactStatus ? compactGoalReadinessStatus(payload) : { ...payload, report }));
 if (!payload.ok) process.exit(1);

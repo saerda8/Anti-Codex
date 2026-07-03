@@ -34,3 +34,23 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
   assert.match(report.currentUsability?.caveat || "", /Full goal/);
   assert.equal(report.objectiveRequirementSummary.canClaimFullGoalNow, false);
 });
+
+test("goal readiness compact-status is short and carries operator status", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/test-anticodex-goal-readiness.mjs", "--compact-status"],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const status = JSON.parse(result.stdout);
+  assert.equal(status.reportName, "goal-readiness-status");
+  assert.equal(status.usableNow, true);
+  assert.equal(status.releaseReady, true);
+  assert.equal(status.shortReady, true);
+  assert.equal(status.goalComplete, false);
+  assert.deepEqual(status.incompleteRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
+  assert.match(status.currentChannelWorkerTransportStatus, /reload_required|fresh_probe_required|dispatch_ready/);
+  assert.equal(status.currentChannelWorkerCanDispatch, false);
+  assert.equal(status.secondAccountTargetWindowsUser, ".\\AntiCodexModel");
+  assert.ok(!Object.hasOwn(status, "workerMcp"));
+});
