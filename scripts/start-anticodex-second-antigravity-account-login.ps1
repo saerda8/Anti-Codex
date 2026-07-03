@@ -4,7 +4,8 @@ param(
     [string]$WindowsUser = ".\AntiCodexModel",
     [switch]$StartLogin,
     [string]$StartLoginApproval = "",
-    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [switch]$Compact
 )
 
 Set-StrictMode -Version Latest
@@ -21,6 +22,31 @@ foreach ($required in @($statusScript, $loginScript, $jsonInvoke)) {
     }
 }
 . $jsonInvoke
+
+function ConvertTo-CompactEntrypointJson {
+    param($Value)
+    [ordered]@{
+        ok = $Value["ok"]
+        reportName = $Value["reportName"]
+        noTraffic = $Value["noTraffic"]
+        usedRealTraffic = $Value["usedRealTraffic"]
+        windowsUser = $Value["windowsUser"]
+        requestedStartLogin = $Value["requestedStartLogin"]
+        startedLogin = $Value["startedLogin"]
+        changedSystem = $Value["changedSystem"]
+        createdUser = $Value["createdUser"]
+        capturesPassword = $Value["capturesPassword"]
+        storesPassword = $Value["storesPassword"]
+        safeToStartLogin = $Value["safeToStartLogin"]
+        completionState = $Value["completionState"]
+        readinessBlockingReason = $Value["readinessBlockingReason"]
+        operatorBlockingStage = $Value["operatorBlockingStage"]
+        operatorNextStep = $Value["operatorNextStep"]
+        approvedLoginCommandTemplate = $Value["approvedLoginCommandTemplate"]
+        postLoginProofCommandTemplate = $Value["postLoginProofCommandTemplate"]
+        error = if ($Value.Contains("error")) { $Value["error"] } else { "" }
+    } | ConvertTo-Json -Depth 8 -Compress
+}
 
 function Invoke-JsonScript {
     param(
@@ -84,26 +110,42 @@ if (-not $statusResult.ok) {
     $result.error = "account_isolation_status_unavailable"
     $result.statusExitCode = $statusResult.exitCode
     $result.statusParseError = $statusResult.parseError
-    $result | ConvertTo-Json -Depth 20 -Compress
+    if ($Compact) {
+        ConvertTo-CompactEntrypointJson -Value $result
+    } else {
+        $result | ConvertTo-Json -Depth 20 -Compress
+    }
     exit 1
 }
 
 if (-not $StartLogin) {
-    $result | ConvertTo-Json -Depth 20 -Compress
+    if ($Compact) {
+        ConvertTo-CompactEntrypointJson -Value $result
+    } else {
+        $result | ConvertTo-Json -Depth 20 -Compress
+    }
     exit 0
 }
 
 if ($StartLoginApproval -ne $approvalToken) {
     $result.ok = $false
     $result.error = "explicit_start_login_approval_missing"
-    $result | ConvertTo-Json -Depth 20 -Compress
+    if ($Compact) {
+        ConvertTo-CompactEntrypointJson -Value $result
+    } else {
+        $result | ConvertTo-Json -Depth 20 -Compress
+    }
     exit 2
 }
 
 if (-not $safeToStartLogin) {
     $result.ok = $false
     $result.error = "second_account_login_not_ready"
-    $result | ConvertTo-Json -Depth 20 -Compress
+    if ($Compact) {
+        ConvertTo-CompactEntrypointJson -Value $result
+    } else {
+        $result | ConvertTo-Json -Depth 20 -Compress
+    }
     exit 2
 }
 
@@ -119,5 +161,9 @@ $result.loginExitCode = $loginResult.exitCode
 if (-not $result.ok) {
     $result.error = if ($login -and $login.error) { [string]$login.error } else { "second_account_login_start_failed" }
 }
-$result | ConvertTo-Json -Depth 20 -Compress
+if ($Compact) {
+    ConvertTo-CompactEntrypointJson -Value $result
+} else {
+    $result | ConvertTo-Json -Depth 20 -Compress
+}
 if (-not $result.ok) { exit 2 }

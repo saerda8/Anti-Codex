@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [string]$WindowsUser = ".\AntiCodexModel",
-    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [switch]$Compact
 )
 
 Set-StrictMode -Version Latest
@@ -310,5 +311,39 @@ Write-AntiCodexJsonReport `
     -HistoryPath (Join-Path $reportRootFull ("{0}-second-account-readiness-summary.json" -f ([DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")))) `
     -Json $json
 
-$payload | ConvertTo-Json -Depth 24 -Compress
+if ($Compact) {
+    [ordered]@{
+        ok = $payload["ok"]
+        reportName = $payload["reportName"]
+        noTraffic = $payload["noTraffic"]
+        usedRealTraffic = $payload["usedRealTraffic"]
+        changedSystem = $payload["changedSystem"]
+        createdUser = $payload["createdUser"]
+        startedLogin = $payload["startedLogin"]
+        capturesPassword = $payload["capturesPassword"]
+        storesPassword = $payload["storesPassword"]
+        windowsUser = $payload["windowsUser"]
+        targetUserExists = $payload["targetUserExists"]
+        targetWindowsUserSid = $payload["targetWindowsUserSid"]
+        targetUserSidMatchesCurrentUser = $payload["targetUserSidMatchesCurrentUser"]
+        targetUserIdentityBoundaryOk = $payload["targetUserIdentityBoundaryOk"]
+        readyForOperatorLogin = $payload["readyForOperatorLogin"]
+        safeToAskUserForSecondAccountLogin = $payload["safeToAskUserForSecondAccountLogin"]
+        canProceedToInteractiveLogin = $payload["canProceedToInteractiveLogin"]
+        releaseAcceptableAccountProof = $payload["releaseAcceptableAccountProof"]
+        goalComplete = $payload["goalComplete"]
+        releaseReady = $payload["releaseReady"]
+        completionState = $payload["completionState"]
+        readinessBlockingReason = $payload["readinessBlockingReason"]
+        operatorBlockingStage = $payload["operatorBlockingStage"]
+        nextOperatorAction = $payload["nextOperatorAction"]
+        operatorActionCard = $payload["operatorActionCard"]
+        failures = $payload["failures"]
+        report = @{
+            latest = Join-Path $reportRootFull "latest-second-account-readiness-summary.json"
+        }
+    } | ConvertTo-Json -Depth 10 -Compress
+} else {
+    $payload | ConvertTo-Json -Depth 24 -Compress
+}
 if ($failures.Count -gt 0) { exit 1 }

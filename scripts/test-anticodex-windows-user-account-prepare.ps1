@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [string]$WindowsUser = ".\AntiCodexModel",
-    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [switch]$Compact
 )
 
 Set-StrictMode -Version Latest
@@ -184,4 +185,34 @@ $report = [ordered]@{
     elapsedMs = $elapsedMs
 }
 $report["report"] = Save-PrepareReport -Report $report
-$report | ConvertTo-Json -Depth 12 -Compress
+if ($Compact) {
+    [ordered]@{
+        ok = $report["ok"]
+        reportName = $report["reportName"]
+        noTraffic = $report["noTraffic"]
+        usedRealTraffic = $report["usedRealTraffic"]
+        changedSystem = $report["changedSystem"]
+        createdUser = $report["createdUser"]
+        startedLogin = $report["startedLogin"]
+        capturesPassword = $report["capturesPassword"]
+        storesPassword = $report["storesPassword"]
+        windowsUser = $report["windowsUser"]
+        currentProcessElevated = $report["currentProcessElevated"]
+        targetUserExists = $report["targetUserExists"]
+        targetWindowsUserSid = $report["targetWindowsUserSid"]
+        targetUserSidMatchesCurrentUser = $report["targetUserSidMatchesCurrentUser"]
+        targetUserIdentityBoundaryOk = $report["targetUserIdentityBoundaryOk"]
+        readyForInteractiveLogin = $report["readyForInteractiveLogin"]
+        safeToAskUserForSecondAccountLogin = $report["safeToAskUserForSecondAccountLogin"]
+        canProceedToInteractiveLogin = $report["canProceedToInteractiveLogin"]
+        readinessBlockingReason = $report["readinessBlockingReason"]
+        operatorBlockingStage = $report["operatorBlockingStage"]
+        operatorNextStep = $report["operatorNextStep"]
+        recommendedOperatorAction = $report["recommendedOperatorAction"]
+        failures = $report["failures"]
+        warnings = $report["warnings"]
+        report = $report["report"]
+    } | ConvertTo-Json -Depth 8 -Compress
+} else {
+    $report | ConvertTo-Json -Depth 12 -Compress
+}
