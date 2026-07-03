@@ -16176,6 +16176,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /secondAccountLoginEntrypoint proofCommand/);
   assert.match(server, /secondAccountReadinessSummaryEvidence/);
   assert.match(server, /goalReadinessEvidence/);
+  assert.match(server, /incompleteDeferredRequirementIds/);
+  assert.match(server, /deferredRequirementReason/);
   assert.match(server, /goalOperatorActionCard/);
   assert.match(server, /workerRecoveryStatusCommand/);
   assert.match(server, /secondAccountReadinessSummary next/);

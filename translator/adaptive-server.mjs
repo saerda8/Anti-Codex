@@ -3070,6 +3070,9 @@ function latestManagerReportItem(label, fileName) {
             fullObjectiveRequirementIncompleteIds: report.fullObjectiveRequirementSummary && Array.isArray(report.fullObjectiveRequirementSummary.incompleteRequirementIds) ? report.fullObjectiveRequirementSummary.incompleteRequirementIds.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
             fullObjectiveRequirementCanClaimFullGoalNow: report.fullObjectiveRequirementSummary?.canClaimFullGoalNow === true,
             deferredRequirementIds: report.deferredObjectiveRequirementSummary && Array.isArray(report.deferredObjectiveRequirementSummary.deferredRequirementIds) ? report.deferredObjectiveRequirementSummary.deferredRequirementIds.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            incompleteDeferredRequirementIds: report.deferredObjectiveRequirementSummary && Array.isArray(report.deferredObjectiveRequirementSummary.incompleteDeferredRequirementIds) ? report.deferredObjectiveRequirementSummary.incompleteDeferredRequirementIds.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            deferredRequirementReason: shortSafeText(report.deferredObjectiveRequirementSummary?.reason || "", ""),
+            deferredBlockers: Array.isArray(report.deferredBlockers) ? report.deferredBlockers.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
             nextRequiredUserAction: shortSafeText(report.nextRequiredUserAction || "", ""),
             goalOperatorActionCard: report.goalOperatorActionCard && typeof report.goalOperatorActionCard === "object" ? {
                 status: shortSafeText(report.goalOperatorActionCard.status || "", ""),
