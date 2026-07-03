@@ -13127,6 +13127,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /canClaimFullGoalNow/);
   assert.match(goalReadiness, /missingRequirements/);
   assert.match(goalReadiness, /nextOperatorActions/);
+  assert.match(goalReadiness, /workerRecoveryStatusCommand/);
   assert.match(goalReadiness, /workerRecoveryCommand/);
   assert.match(goalReadiness, /currentChannelWorkerTransportStatus/);
   assert.match(goalReadiness, /currentChannelWorkerRecoveryRequired/);
@@ -13237,6 +13238,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerTransportRecoveryDirectWorkerProbeCommand/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelRecoveryRecordCommand/);
   assert.match(summarizer, /goalOperatorActionCard/);
+  assert.match(summarizer, /workerRecoveryStatusCommand/);
   assert.match(summarizer, /workerRecoveryCommand/);
   assert.match(summarizer, /currentChannelWorkerTransportStatus/);
   assert.match(summarizer, /secondAccountOperatorStatus/);
@@ -15989,6 +15991,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /secondAccountReadinessSummaryEvidence/);
   assert.match(server, /goalReadinessEvidence/);
   assert.match(server, /goalOperatorActionCard/);
+  assert.match(server, /workerRecoveryStatusCommand/);
   assert.match(server, /secondAccountReadinessSummary next/);
   assert.match(server, /secondAccountReadinessSummary checklist/);
   assert.match(server, /secondAccountReadinessSummary hint/);

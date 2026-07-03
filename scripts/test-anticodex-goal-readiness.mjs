@@ -35,6 +35,7 @@ const requiredAgenticTasks = ["coding-project", "multi-turn-project", "report-si
 const directWorkerProbeCommand = "node scripts\\probe-anticodex-worker-mcp-servers.mjs";
 const currentChannelReadOnlyProbeInstruction = "from a freshly reloaded Codex channel, run one worker read-only get_job/wait/status tool call, then record it with record-anticodex-current-channel-worker-transport.mjs";
 const currentChannelRecoveryRecordCommand = "node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool <worker_read_tool> --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok";
+const currentChannelRecoveryStatusCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-current-channel-worker-recovery.ps1 -Compact";
 
 function readReport(fileName) {
   const path = resolve(reportRoot, fileName);
@@ -540,22 +541,26 @@ const secondAccountReadinessSummary = {
 const gates = releaseGates.report || {};
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
+const rawMissingShort = Array.isArray(gates.missingShort) ? gates.missingShort.map(String) : [];
 const effectiveMissingRequired = rawMissingRequired.filter((gateId) => !selfCycleGateIds.has(gateId));
+const effectiveMissingShort = rawMissingShort.filter((gateId) => !selfCycleGateIds.has(gateId));
 const effectiveRequiredRealTrafficBlockedGates = Array.isArray(gates.requiredRealTrafficBlockedGates) ? gates.requiredRealTrafficBlockedGates.map(String) : [];
 const effectiveReleaseBlockedOnlyByRequiredRealTraffic = gates.releaseBlockedOnlyByRequiredRealTraffic === true
   || (effectiveMissingRequired.length > 0
     && effectiveMissingRequired.length === effectiveRequiredRealTrafficBlockedGates.length
     && effectiveMissingRequired.every((gateId) => effectiveRequiredRealTrafficBlockedGates.includes(gateId)));
+const effectiveShortReady = gates.shortReady === true || effectiveMissingShort.length === 0;
 const effectiveReleaseReady = gates.releaseReady === true
-  || (gates.shortReady === true && effectiveMissingRequired.length === 0 && effectiveRequiredRealTrafficBlockedGates.length === 0);
+  || (effectiveShortReady && effectiveMissingRequired.length === 0 && effectiveRequiredRealTrafficBlockedGates.length === 0);
 const releaseGateStatus = {
   reportPresent: releaseGates.present,
   reportOk: gates.ok === true,
-  shortReady: gates.shortReady === true,
+  shortReady: effectiveShortReady,
   releaseReady: effectiveReleaseReady,
   releaseBlockedOnlyByRequiredRealTraffic: effectiveReleaseBlockedOnlyByRequiredRealTraffic,
-  missingShort: Array.isArray(gates.missingShort) ? gates.missingShort.map(String) : [],
+  missingShort: effectiveMissingShort,
   missingRequired: effectiveMissingRequired,
+  rawMissingShort,
   rawMissingRequired,
   requiredRealTrafficBlockedGates: effectiveRequiredRealTrafficBlockedGates,
 };
@@ -885,6 +890,7 @@ const goalOperatorActionCard = {
         ? "With the user present, run the approved second-account login and post-login proof."
         : "Rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
+  workerRecoveryStatusCommand: currentChannelRecoveryStatusCommand,
   workerRecoveryCommand: currentChannelRecoveryRecordCommand,
   secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1 -Compact",
 };

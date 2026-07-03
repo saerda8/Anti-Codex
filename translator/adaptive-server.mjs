@@ -3069,6 +3069,7 @@ function latestManagerReportItem(label, fileName) {
                 nextOperatorActions: Array.isArray(report.goalOperatorActionCard.nextOperatorActions) ? report.goalOperatorActionCard.nextOperatorActions.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
                 userVisibleNextStep: shortSafeText(report.goalOperatorActionCard.userVisibleNextStep || "", ""),
                 noTrafficStatusCommand: shortSafeText(report.goalOperatorActionCard.noTrafficStatusCommand || "", ""),
+                workerRecoveryStatusCommand: shortSafeText(report.goalOperatorActionCard.workerRecoveryStatusCommand || "", ""),
                 workerRecoveryCommand: shortSafeText(report.goalOperatorActionCard.workerRecoveryCommand || "", ""),
                 secondAccountStatusCommand: shortSafeText(report.goalOperatorActionCard.secondAccountStatusCommand || "", ""),
             } : null,
@@ -4739,6 +4740,7 @@ function latestReportsSummary(result){
       lines.push("  goalOperatorActionCard: status="+(card.status||"unknown")+" / canClaim="+(card.canClaimFullGoalNow?"true":"false")+" / release="+(card.releaseReady?"true":"false")+" / worker="+(card.workerStatus||"unknown")+" / secondAccount="+(card.secondAccountStatus||"unknown"));
       lines.push("  goalOperatorActionCard missing: "+(Array.isArray(card.missingRequirements)&&card.missingRequirements.length?card.missingRequirements.join(", "):"none"));
       lines.push("  goalOperatorActionCard next: "+(Array.isArray(card.nextOperatorActions)&&card.nextOperatorActions.length?card.nextOperatorActions.join(" -> "):card.userVisibleNextStep||"unknown"));
+      if(card.workerRecoveryStatusCommand) lines.push("  goalOperatorActionCard worker status: "+card.workerRecoveryStatusCommand);
     }
     if(item.workerMcpSourceHygieneEvidence){
       const evidence=item.workerMcpSourceHygieneEvidence;
