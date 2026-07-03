@@ -83,12 +83,22 @@ function makeWorkerObservation(workerTool, workerStatus, workerDetail = "") {
   return observation.workerTool ? observation : null;
 }
 
+function uniqueStrings(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function workerPrefixFromTool(tool) {
+  return String(tool || "").trim().split("_")[0] || "";
+}
+
 function main() {
   if (hasArg("--help")) {
     console.log([
       "Usage: node scripts/record-anticodex-current-channel-worker-transport.mjs",
       "  --worker-tool kilo_get_job --worker-status transport_closed",
       "  --worker-observation kilo_get_job=transport_closed=optional-detail",
+      "  --exposed-worker-tool kilo_get_job",
+      "  --expected-worker-prefix kilo",
       "  --generic-mcp-tool node_repl --generic-mcp-status ok",
       "  [--worker-detail TEXT] [--generic-mcp-detail TEXT]",
     ].join("\n"));
@@ -106,6 +116,17 @@ function main() {
     ...argValues("--worker-observation").map(parseWorkerObservation),
     makeWorkerObservation(workerTool, workerStatus, argValue("--worker-detail", "")),
   ].filter(Boolean);
+  const expectedWorkerPrefixes = uniqueStrings([
+    ...argValues("--expected-worker-prefix"),
+    ...argValue("--expected-worker-prefixes", "").split(","),
+  ]);
+  const exposedWorkerTools = uniqueStrings(argValues("--exposed-worker-tool"));
+  const observedWorkerPrefixes = uniqueStrings(workerObservations.map((item) => workerPrefixFromTool(item.workerTool)));
+  const exposedWorkerPrefixes = uniqueStrings(exposedWorkerTools.map(workerPrefixFromTool));
+  const missingExpectedWorkerPrefixes = expectedWorkerPrefixes.length
+    ? expectedWorkerPrefixes.filter((prefix) => !exposedWorkerPrefixes.includes(prefix))
+    : [];
+  const exposedButUntestedWorkerPrefixes = exposedWorkerPrefixes.filter((prefix) => !observedWorkerPrefixes.includes(prefix));
   const directProbeOk = directProbe.parseable && directProbe.report?.ok === true;
   const primaryObservation = workerObservations[0] || makeWorkerObservation(workerTool, workerStatus, argValue("--worker-detail", "")) || {};
   const workerTransportOkCount = workerObservations.filter((item) => item.workerTransportOk).length;
@@ -139,6 +160,15 @@ function main() {
     workerTransportFailedTools: workerObservations.filter((item) => item.workerTransportFailed).map((item) => item.workerTool),
     workerTransportAnyOk: workerTransportOkCount > 0,
     workerTransportAllFailed: workerObservations.length > 0 && workerTransportFailedCount === workerObservations.length,
+    expectedWorkerPrefixes,
+    exposedWorkerTools,
+    exposedWorkerToolCount: exposedWorkerTools.length,
+    exposedWorkerPrefixes,
+    exposedWorkerPrefixCount: exposedWorkerPrefixes.length,
+    observedWorkerPrefixes,
+    observedWorkerPrefixCount: observedWorkerPrefixes.length,
+    missingExpectedWorkerPrefixes,
+    exposedButUntestedWorkerPrefixes,
     genericMcpTool,
     genericMcpStatus,
     genericMcpDetail: argValue("--generic-mcp-detail", ""),

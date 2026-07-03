@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Seven-worker metadata visible but current-channel calls still closed
+
+- Task: after goal auto-continuation, re-evaluate all seven worker lanes before dispatching any worker implementation task.
+- Result: tool discovery exposed all seven worker prefixes (`antigravity`, `deepseek`, `deveco`, `kilo`, `mimo`, `mimocode`, `opencode`). Current-channel calls still failed before usable work for six non-Antigravity lanes: `kilo_wait_for_job`, `opencode_wait_for_job`, `deepseek_wait_for_job`, `mimo_get_job`, `mimocode_start_implementation`, and `deveco_get_job` returned `Transport closed`; same-channel `node_repl` returned ok. Antigravity worker was discovered but not invoked because the separate Antigravity account boundary is not proven.
+- Cause classification: current Codex-channel worker transport remains closed even though worker tool metadata is discoverable and direct server probe is green. Discovery is not dispatch readiness.
+- Rule change: current-channel worker reports must record expected, exposed, observed, missing, and exposed-but-untested worker prefixes. Do not start implementation work until a fresh read-only worker call succeeds and the recovery report says `canDispatchCurrentChannelWorkers:true`.
+
 ### 2026-07-03 - Recovery report added after Kilo read-only reprobe stayed closed
 
 - Task: recheck one current-channel read-only Kilo wait after the diagnostic-generalization checkpoint, then make the post-reload acceptance path machine-checkable.

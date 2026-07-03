@@ -1990,6 +1990,13 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     if ([int]$evidence.workerTransportFailedCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker failed count too low" }
     $transportFailedTools = @(As-FlatArray $evidence.workerTransportFailedTools | ForEach-Object { [string]$_ })
     Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary" -Tools $transportFailedTools
+    $expectedWorkerPrefixes = @(As-FlatArray $evidence.expectedWorkerPrefixes | ForEach-Object { [string]$_ })
+    $exposedWorkerPrefixes = @(As-FlatArray $evidence.exposedWorkerPrefixes | ForEach-Object { [string]$_ })
+    $observedWorkerPrefixes = @(As-FlatArray $evidence.observedWorkerPrefixes | ForEach-Object { [string]$_ })
+    if ($expectedWorkerPrefixes.Count -lt 7) { Add-Failure "current-channel-worker-transport summary missing expected worker prefix inventory" }
+    if ($exposedWorkerPrefixes.Count -lt 7) { Add-Failure "current-channel-worker-transport summary missing exposed worker prefix inventory" }
+    if ($observedWorkerPrefixes.Count -lt 3) { Add-Failure "current-channel-worker-transport summary missing observed worker prefix inventory" }
+    if (@(As-FlatArray $evidence.missingExpectedWorkerPrefixes).Count -ne 0) { Add-Failure "current-channel-worker-transport summary has missing expected worker prefixes" }
     if (-not [string]$evidence.genericMcpTool) { Add-Failure "current-channel-worker-transport summary missing generic MCP tool" }
     if ($evidence.genericMcpStatus -ne "ok") { Add-Failure "current-channel-worker-transport summary generic MCP control failed" }
     if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-transport summary missing generic MCP control proof" }

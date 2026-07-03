@@ -13184,6 +13184,11 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerObservations/);
   assert.match(summarizer, /workerObservationCount/);
   assert.match(summarizer, /workerTransportFailedTools/);
+  assert.match(summarizer, /expectedWorkerPrefixes/);
+  assert.match(summarizer, /exposedWorkerTools/);
+  assert.match(summarizer, /exposedWorkerPrefixes/);
+  assert.match(summarizer, /observedWorkerPrefixes/);
+  assert.match(summarizer, /missingExpectedWorkerPrefixes/);
   assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
   assert.match(summarizer, /currentChannelWorkerDispatchUsable/);
   assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
@@ -13195,6 +13200,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerTransportRecoveryRequiresCodexMcpReload/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelWorkerObservationCount/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelWorkerTransportFailedTools/);
+  assert.match(summarizer, /exposedButUntestedWorkerPrefixes/);
   assert.match(summarizer, /workerTransportRecoveryDirectWorkerProbeCommand/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelRecoveryRecordCommand/);
   assert.match(summarizer, /goalOperatorActionCard/);
