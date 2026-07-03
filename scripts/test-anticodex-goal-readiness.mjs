@@ -809,9 +809,15 @@ const gates = releaseGates.report || {};
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
 const rawMissingShort = Array.isArray(gates.missingShort) ? gates.missingShort.map(String) : [];
+const rawDamagedReports = Array.isArray(gates.damagedReports) ? gates.damagedReports.map(String) : [];
 const effectiveMissingRequired = rawMissingRequired.filter((gateId) => !selfCycleGateIds.has(gateId));
 const effectiveMissingShort = rawMissingShort.filter((gateId) => !selfCycleGateIds.has(gateId));
 const effectiveRequiredRealTrafficBlockedGates = Array.isArray(gates.requiredRealTrafficBlockedGates) ? gates.requiredRealTrafficBlockedGates.map(String) : [];
+const effectiveReportOk = gates.ok === true
+  || (releaseGates.present
+    && rawDamagedReports.length === 0
+    && effectiveMissingRequired.length === 0
+    && effectiveMissingShort.length === 0);
 const effectiveReleaseBlockedOnlyByRequiredRealTraffic = gates.releaseBlockedOnlyByRequiredRealTraffic === true
   || (effectiveMissingRequired.length > 0
     && effectiveMissingRequired.length === effectiveRequiredRealTrafficBlockedGates.length
@@ -821,7 +827,7 @@ const effectiveReleaseReady = gates.releaseReady === true
   || (effectiveShortReady && effectiveMissingRequired.length === 0 && effectiveRequiredRealTrafficBlockedGates.length === 0);
 const releaseGateStatus = {
   reportPresent: releaseGates.present,
-  reportOk: gates.ok === true,
+  reportOk: effectiveReportOk,
   shortReady: effectiveShortReady,
   releaseReady: effectiveReleaseReady,
   releaseBlockedOnlyByRequiredRealTraffic: effectiveReleaseBlockedOnlyByRequiredRealTraffic,
@@ -829,6 +835,7 @@ const releaseGateStatus = {
   missingRequired: effectiveMissingRequired,
   rawMissingShort,
   rawMissingRequired,
+  rawDamagedReports,
   requiredRealTrafficBlockedGates: effectiveRequiredRealTrafficBlockedGates,
 };
 
