@@ -1965,6 +1965,54 @@ function Test-WorkerMcpProjectSmokeSummaryEvidence {
     }
 }
 
+function Test-WorkerMcpStatusProbeSummaryEvidence {
+    param($WorkerMcpStatusProbeSummary)
+    if (-not $WorkerMcpStatusProbeSummary) {
+        Add-Failure "diagnostic reports summary missing latest-worker-mcp-status-probe.json"
+        return
+    }
+
+    $evidence = $WorkerMcpStatusProbeSummary.workerMcpStatusProbeEvidence
+    if (-not $evidence) {
+        Add-Failure "worker-mcp-status-probe summary missing workerMcpStatusProbeEvidence"
+        return
+    }
+
+    $results = @(As-FlatArray $evidence.results)
+    if ($evidence.reportName -ne "worker-mcp-status-probe") { Add-Failure "worker-mcp-status-probe summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "worker-mcp-status-probe summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "worker-mcp-status-probe summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "worker-mcp-status-probe summary behavior not covered" }
+    if ($evidence.coverageKind -ne "worker-mcp-direct-status-call-no-traffic") { Add-Failure "worker-mcp-status-probe summary coverage kind mismatch" }
+    if ($evidence.includeAntigravity -ne $false) { Add-Failure "worker-mcp-status-probe summary unexpectedly included Antigravity worker" }
+    if ($evidence.antigravitySkippedForAccountIsolation -ne $true) { Add-Failure "worker-mcp-status-probe summary did not preserve Antigravity account-isolation skip" }
+    if ([int]$evidence.probedWorkerCount -lt 6) { Add-Failure "worker-mcp-status-probe summary probed worker count too low" }
+    if ([int]$evidence.statusCallOkCount -lt 6) { Add-Failure "worker-mcp-status-probe summary status-call ok count too low" }
+    if ([int]$evidence.failedWorkerCount -ne 0) { Add-Failure "worker-mcp-status-probe summary has failed workers" }
+    if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "worker-mcp-status-probe summary has failed worker names" }
+    if (@(As-FlatArray $evidence.skippedWorkers | Where-Object { [string]$_ -eq "antigravity-code-worker" }).Count -lt 1) { Add-Failure "worker-mcp-status-probe summary missing Antigravity skip" }
+    if (-not [string]$evidence.interpretation) { Add-Failure "worker-mcp-status-probe summary missing interpretation" }
+    if (-not [string]$evidence.currentChannelCaveat) { Add-Failure "worker-mcp-status-probe summary missing current-channel caveat" }
+
+    $okWorkers = @(As-FlatArray $evidence.statusCallOkWorkers | ForEach-Object { [string]$_ })
+    foreach ($requiredWorker in @("mimo-claude-coworker", "mimocode-worker", "kilo-worker", "opencode-worker", "deepseek-code-worker", "deveco-code-worker")) {
+        if ($okWorkers -notcontains $requiredWorker) { Add-Failure "worker-mcp-status-probe summary missing status-call worker $requiredWorker" }
+    }
+    foreach ($entry in $results) {
+        if ($entry.worker -eq "antigravity-code-worker") {
+            if ($entry.skipped -ne $true) { Add-Failure "worker-mcp-status-probe Antigravity result was not skipped" }
+            continue
+        }
+        if ($entry.ok -ne $true) { Add-Failure "worker-mcp-status-probe result not ok for $($entry.worker)" }
+        if ($entry.statusCallOk -ne $true) { Add-Failure "worker-mcp-status-probe status call not ok for $($entry.worker)" }
+        if (-not [string]$entry.statusTool) { Add-Failure "worker-mcp-status-probe missing status tool for $($entry.worker)" }
+        if ($entry.statusToolPresent -ne $true) { Add-Failure "worker-mcp-status-probe status tool absent for $($entry.worker)" }
+        if (-not [string]$entry.jobId) { Add-Failure "worker-mcp-status-probe missing job id for $($entry.worker)" }
+        if ([int]$entry.toolCount -lt 1) { Add-Failure "worker-mcp-status-probe missing tool count for $($entry.worker)" }
+        if (-not [string]$entry.status) { Add-Failure "worker-mcp-status-probe missing terminal status for $($entry.worker)" }
+    }
+}
+
 function Test-CurrentChannelWorkerTransportSummaryEvidence {
     param($CurrentChannelWorkerTransportSummary)
     if (-not $CurrentChannelWorkerTransportSummary) {
@@ -2051,6 +2099,7 @@ function Test-ReportsSummary {
     $goalRealRunReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-real-run-readiness.json" } | Select-Object -First 1)[0]
     $approvedRealRunSequenceSummary = @($summary | Where-Object { $_.file -eq "latest-approved-real-run-sequence.json" } | Select-Object -First 1)[0]
     $workerMcpServerProbeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-server-probe.json" } | Select-Object -First 1)[0]
+    $workerMcpStatusProbeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-status-probe.json" } | Select-Object -First 1)[0]
     $workerMcpTaskSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-task-smoke.json" } | Select-Object -First 1)[0]
     $workerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
@@ -2110,6 +2159,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $goalRealRunReadinessSummary) { Test-GoalRealRunReadinessSummaryEvidence $goalRealRunReadinessSummary }
     if ($RequireReleaseReady -or $approvedRealRunSequenceSummary) { Test-ApprovedRealRunSequenceSummaryEvidence $approvedRealRunSequenceSummary }
     if ($RequireReleaseReady -or $workerMcpServerProbeSummary) { Test-WorkerMcpServerProbeSummaryEvidence $workerMcpServerProbeSummary }
+    if ($RequireReleaseReady -or $workerMcpStatusProbeSummary) { Test-WorkerMcpStatusProbeSummaryEvidence $workerMcpStatusProbeSummary }
     if ($RequireReleaseReady -or $workerMcpTaskSmokeSummary) { Test-WorkerMcpTaskSmokeSummaryEvidence $workerMcpTaskSmokeSummary }
     if ($RequireReleaseReady -or $workerMcpProjectSmokeSummary) { Test-WorkerMcpProjectSmokeSummaryEvidence $workerMcpProjectSmokeSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }

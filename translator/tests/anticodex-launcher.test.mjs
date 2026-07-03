@@ -13047,6 +13047,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-current-channel-worker-recovery.json",
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-source-hygiene.json",
+    "latest-worker-mcp-status-probe.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
   ];
@@ -13066,6 +13067,7 @@ test("optional and special latest reports stay visible without becoming release-
     assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
   }
   assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-worker-mcp-status-probe\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.mjs/);
   assert.match(summarizer, /goalReadinessEvidence/);
   assert.match(collector, /goalReadinessEvidence = \$json\.goalReadinessEvidence/);
@@ -13156,6 +13158,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(collector, /worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-source-hygiene\.json/);
+  assert.match(collector, /latest-worker-mcp-status-probe\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
   assert.match(collector, /latest-worker-mcp-project-smoke\.json/);
   assert.match(collector, /latest-current-channel-worker-transport\.json/);
@@ -13163,10 +13166,15 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(server, /latest-current-channel-worker-recovery\.json/);
   assert.match(collector, /workerMcpTaskSmokeEvidence = \$json\.workerMcpTaskSmokeEvidence/);
   assert.match(collector, /workerMcpSourceHygieneEvidence = \$json\.workerMcpSourceHygieneEvidence/);
+  assert.match(collector, /workerMcpStatusProbeEvidence = \$json\.workerMcpStatusProbeEvidence/);
   assert.match(collector, /workerMcpProjectSmokeEvidence = \$json\.workerMcpProjectSmokeEvidence/);
   assert.match(collector, /currentChannelWorkerTransportEvidence = \$json\.currentChannelWorkerTransportEvidence/);
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
   assert.match(summarizer, /workerMcpSourceHygieneEvidence/);
+  assert.match(summarizer, /workerMcpStatusProbeEvidence/);
+  assert.match(summarizer, /statusCallOkWorkers/);
+  assert.match(summarizer, /antigravitySkippedForAccountIsolation/);
+  assert.match(summarizer, /currentChannelCaveat/);
   assert.match(summarizer, /nulByteWorkers/);
   assert.match(summarizer, /syntaxFailedWorkers/);
   assert.match(summarizer, /codexSessionTransportStatus/);
@@ -13210,10 +13218,13 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /secondAccountNextOperatorAction/);
   assert.match(summarizer, /postReloadVerification/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-server-probe\.json/);
+  assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-status-probe\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-task-smoke\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-worker-mcp-project-smoke\.json/);
   assert.match(diagnostics, /diagnostic reports summary missing latest-current-channel-worker-transport\.json/);
   assert.match(diagnostics, /worker-mcp-server-probe summary missing workerMcpServerProbeEvidence/);
+  assert.match(diagnostics, /worker-mcp-status-probe summary missing workerMcpStatusProbeEvidence/);
+  assert.match(diagnostics, /worker-mcp-status-probe summary missing current-channel caveat/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing workerMcpTaskSmokeEvidence/);
   assert.match(diagnostics, /worker-mcp-project-smoke summary missing workerMcpProjectSmokeEvidence/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing currentChannelWorkerTransportEvidence/);

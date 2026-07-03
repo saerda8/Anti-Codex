@@ -225,6 +225,7 @@ const isGoalRealRunReadinessReport = report?.reportName === "goal-real-run-readi
 const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-run-sequence" || /latest-approved-real-run-sequence\.json$/i.test(path);
 const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-probe" || /latest-worker-mcp-server-probe\.json$/i.test(path);
 const isWorkerMcpSourceHygieneReport = report?.reportName === "worker-mcp-source-hygiene" || /latest-worker-mcp-source-hygiene\.json$/i.test(path);
+const isWorkerMcpStatusProbeReport = report?.reportName === "worker-mcp-status-probe" || /latest-worker-mcp-status-probe\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
@@ -1923,6 +1924,41 @@ const summary = {
       syntaxOk: boolField(result || {}, "syntaxOk"),
       syntaxExitCode: has(result || {}, "syntaxExitCode") ? result.syntaxExitCode : null,
     })).filter((result) => result.name) : [],
+  } : null,
+  workerMcpStatusProbeEvidence: isWorkerMcpStatusProbeReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    configPathPresent: typeof report.configPath === "string" && report.configPath.trim().length > 0,
+    includeAntigravity: boolField(report, "includeAntigravity"),
+    workerCount: has(report, "workerCount") ? report.workerCount : null,
+    probedWorkerCount: has(report, "probedWorkerCount") ? report.probedWorkerCount : null,
+    statusCallOkCount: has(report, "statusCallOkCount") ? report.statusCallOkCount : null,
+    failedWorkerCount: has(report, "failedWorkerCount") ? report.failedWorkerCount : null,
+    skippedWorkerCount: has(report, "skippedWorkerCount") ? report.skippedWorkerCount : null,
+    statusCallOkWorkers: Array.isArray(report.statusCallOkWorkers) ? asStringArray(report.statusCallOkWorkers) : [],
+    failedWorkers: Array.isArray(report.failedWorkers) ? asStringArray(report.failedWorkers) : [],
+    skippedWorkers: Array.isArray(report.skippedWorkers) ? asStringArray(report.skippedWorkers) : [],
+    antigravitySkippedForAccountIsolation: boolField(report, "antigravitySkippedForAccountIsolation"),
+    interpretation: asString(report.interpretation),
+    currentChannelCaveat: asString(report.currentChannelCaveat),
+    results: Array.isArray(report.results) ? report.results.map((result) => ({
+      worker: asString(result?.worker),
+      ok: boolField(result || {}, "ok"),
+      skipped: boolField(result || {}, "skipped"),
+      skipReason: asString(result?.skipReason),
+      statusCallOk: boolField(result || {}, "statusCallOk"),
+      statusTool: asString(result?.statusTool),
+      statusToolPresent: boolField(result || {}, "statusToolPresent"),
+      jobId: asString(result?.jobId),
+      toolCount: has(result || {}, "toolCount") ? result.toolCount : null,
+      status: asString(result?.status),
+      dataKeys: Array.isArray(result?.dataKeys) ? asStringArray(result.dataKeys) : [],
+      elapsedMs: has(result || {}, "elapsedMs") ? result.elapsedMs : null,
+    })).filter((result) => result.worker) : [],
   } : null,
   workerMcpTaskSmokeEvidence: isWorkerMcpTaskSmokeReport ? {
     reportName: asString(report.reportName),

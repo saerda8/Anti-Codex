@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Direct status calls work while current-channel worker calls stay closed
+
+- Task: add a no-traffic direct status/get/wait probe for completed historical worker jobs before retrying current-channel worker implementation.
+- Result: `test-anticodex-worker-mcp-status-probe.mjs --timeout-ms 30000` passed direct status calls for MIMO, MiMoCode, Kilo, OpenCode, DeepSeek, and DevEco; Antigravity was skipped because separate-account isolation is not proven. A current-channel read-only `mimo_get_job` still returned `Transport closed`.
+- Cause classification: direct worker MCP servers and their status tools are healthy enough to answer historical job status; the current Codex-channel worker transport remains unrecovered.
+- Rule change: do not treat a green direct status probe as current-channel dispatch readiness. It may be used as support evidence only; implementation worker dispatch still requires one fresh current-channel read-only status/get/wait response after reload/new channel.
+
 ### 2026-07-03 - Seven-worker metadata visible but current-channel calls still closed
 
 - Task: after goal auto-continuation, re-evaluate all seven worker lanes before dispatching any worker implementation task.
