@@ -32,6 +32,7 @@ const stateRoot = mkdtempSync(join(os.tmpdir(), "anticodex-third-party-provider-
 const startedAt = Date.now();
 const failures = [];
 const requests = [];
+const debug = {};
 let translator = null;
 let upstream = null;
 let upstreamB = null;
@@ -1154,7 +1155,7 @@ async function main() {
       input: [
         "turn-10 Antigravity return: inspect only the prior conversation history.",
         "Do not copy values from this instruction.",
-        "Return six lines: the first user request, the ninth assistant answer, the historical tool name,",
+        "Return six lines: the first user request, the most recent assistant answer immediately before this user message, the historical tool name,",
         "the historical tool call id, the marker stored in that tool call's arguments, and the paired tool result marker.",
       ].join(" "),
     });
@@ -1162,6 +1163,8 @@ async function main() {
     assert.equal(tenthAfterAntigravityReturn.previous_response_id, ninthAfterReverseProtocolSwitch.id);
     const tenthText = textFromResponse(tenthAfterAntigravityReturn);
     const missingTurnTenMarkers = turnTenMarkers.filter((marker) => !tenthText.includes(marker));
+    debug.tenthAfterAntigravityReturnText = tenthText;
+    debug.tenthAfterAntigravityReturnMissingMarkers = missingTurnTenMarkers;
     assert.deepEqual(missingTurnTenMarkers, []);
     const antigravityRouteAudit = await getJson(`${translatorUrl}/anticodex/model-routes`);
     assert.equal(antigravityRouteAudit.latest.requestedModel, antigravityModel);
@@ -1206,6 +1209,7 @@ async function main() {
     reverseCrossProtocolWithoutHistoryLoss: true,
     behaviorCovered: true,
     coverageKind: allowRealAntigravityTurn ? "real-traffic" : "local-fake-provider",
+    requestedRealTraffic: allowRealAntigravityTurn,
     usedRealTraffic: realAntigravityEvidence.realAntigravityTurnUsed,
     realAntigravityEvidence,
     previousResponseContinuity,
@@ -1317,6 +1321,7 @@ try {
     reportName,
     ok: false,
     failures,
+    debug,
     elapsedMs: Date.now() - startedAt,
   };
 } finally {
