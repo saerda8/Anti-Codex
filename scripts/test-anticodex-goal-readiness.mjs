@@ -1000,10 +1000,30 @@ const secondAccountOperatorStatus = secondAccountReadinessSummary.releaseAccepta
   : secondAccountReadinessSummary.canProceedToInteractiveLogin
     ? "ready_for_interactive_login"
     : "manual_windows_user_setup_required";
+const goalRequiresFreshCodexChannel = !currentChannelWorkerCanDispatch;
+const goalRequiresUserPresence = !antigravityAccountIsolation.releaseAcceptableAccountProof;
+const unattendedSafeActions = goalComplete ? [] : [
+  "refresh_no_traffic_goal_readiness",
+  "refresh_current_channel_worker_recovery_status",
+  "refresh_release_gate_summary",
+];
+const freshChannelRequiredActions = [
+  ...(!currentChannelWorkerCanDispatch ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
+];
+const userPresenceRequiredActions = [
+  ...(!secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
+  ...(secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
+];
 const goalOperatorActionCard = {
   status: goalComplete ? "goal_complete" : "external_actions_required",
   canClaimFullGoalNow: goalComplete,
   releaseReady: releaseGateStatus.releaseReady,
+  requiresFreshCodexChannel: goalRequiresFreshCodexChannel,
+  requiresUserPresence: goalRequiresUserPresence,
+  canMakeUnattendedProgress: false,
+  unattendedSafeActions,
+  freshChannelRequiredActions,
+  userPresenceRequiredActions,
   workerStatus: currentChannelWorkerTransportStatus,
   workerCanDispatchCurrentChannel: currentChannelWorkerCanDispatch,
   secondAccountStatus: secondAccountOperatorStatus,
@@ -1013,9 +1033,8 @@ const goalOperatorActionCard = {
     ...(!antigravityAccountIsolation.releaseAcceptableAccountProof ? ["second_antigravity_account_login_and_proof"] : []),
   ],
   nextOperatorActions: [
-    ...(!currentChannelWorkerCanDispatch ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
-    ...(!secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
-    ...(secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
+    ...freshChannelRequiredActions,
+    ...userPresenceRequiredActions,
   ],
   userVisibleNextStep: !secondAccountReadinessSummary.targetUserExists
     ? "Create or verify the separate Windows user, then rerun the no-traffic readiness summary."

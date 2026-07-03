@@ -1128,6 +1128,17 @@ function Test-GoalReadinessSummaryEvidence {
         if ([string]$goalOperatorActionCard.status -ne "external_actions_required") { Add-Failure "goal-readiness summary operator action card status mismatch" }
         if ($goalOperatorActionCard.canClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary operator action card claims full goal" }
         if ($goalOperatorActionCard.releaseReady -ne $true) { Add-Failure "goal-readiness summary operator action card release state mismatch" }
+        if ($goalOperatorActionCard.requiresFreshCodexChannel -ne $true) { Add-Failure "goal-readiness summary operator action card fresh-channel requirement missing" }
+        if ($goalOperatorActionCard.requiresUserPresence -ne $true) { Add-Failure "goal-readiness summary operator action card user-presence requirement missing" }
+        if ($goalOperatorActionCard.canMakeUnattendedProgress -ne $false) { Add-Failure "goal-readiness summary operator action card unattended progress state mismatch" }
+        $goalUnattendedActions = @(As-FlatArray $goalOperatorActionCard.unattendedSafeActions | ForEach-Object { [string]$_ })
+        foreach ($requiredUnattendedAction in @("refresh_no_traffic_goal_readiness", "refresh_current_channel_worker_recovery_status", "refresh_release_gate_summary")) {
+            if ($goalUnattendedActions -notcontains $requiredUnattendedAction) { Add-Failure "goal-readiness summary operator action card missing unattended action: $requiredUnattendedAction" }
+        }
+        $goalFreshChannelActions = @(As-FlatArray $goalOperatorActionCard.freshChannelRequiredActions | ForEach-Object { [string]$_ })
+        if ($goalFreshChannelActions -notcontains "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe") { Add-Failure "goal-readiness summary operator action card fresh-channel action missing" }
+        $goalUserPresenceActions = @(As-FlatArray $goalOperatorActionCard.userPresenceRequiredActions | ForEach-Object { [string]$_ })
+        if ($goalUserPresenceActions -notcontains "create_or_verify_target_windows_user_then_rerun_summary") { Add-Failure "goal-readiness summary operator action card user-presence action missing" }
         if ([string]$goalOperatorActionCard.workerStatus -ne "reload_required") { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
         if ($goalOperatorActionCard.workerCanDispatchCurrentChannel -ne $false) { Add-Failure "goal-readiness summary operator action card allows worker dispatch" }
         if ([string]$goalOperatorActionCard.secondAccountStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary operator action card second-account status mismatch" }

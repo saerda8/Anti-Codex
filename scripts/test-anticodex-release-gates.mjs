@@ -1326,6 +1326,17 @@ function summarizeGate(definition) {
         if (String(goalOperatorActionCard.status || "") !== "external_actions_required") semanticFailures.push("goal_readiness_operator_action_card_status");
         if (goalOperatorActionCard.canClaimFullGoalNow !== false) semanticFailures.push("goal_readiness_operator_action_card_claims_goal");
         if (goalOperatorActionCard.releaseReady !== true) semanticFailures.push("goal_readiness_operator_action_card_release_state");
+        if (goalOperatorActionCard.requiresFreshCodexChannel !== true) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_required");
+        if (goalOperatorActionCard.requiresUserPresence !== true) semanticFailures.push("goal_readiness_operator_action_card_user_presence_required");
+        if (goalOperatorActionCard.canMakeUnattendedProgress !== false) semanticFailures.push("goal_readiness_operator_action_card_unattended_progress");
+        const unattendedSafeActions = Array.isArray(goalOperatorActionCard.unattendedSafeActions) ? goalOperatorActionCard.unattendedSafeActions.map(String) : [];
+        for (const requiredUnattendedAction of ["refresh_no_traffic_goal_readiness", "refresh_current_channel_worker_recovery_status", "refresh_release_gate_summary"]) {
+          if (!unattendedSafeActions.includes(requiredUnattendedAction)) semanticFailures.push(`goal_readiness_operator_action_card_unattended_action:${requiredUnattendedAction}`);
+        }
+        const freshChannelRequiredActions = Array.isArray(goalOperatorActionCard.freshChannelRequiredActions) ? goalOperatorActionCard.freshChannelRequiredActions.map(String) : [];
+        if (!freshChannelRequiredActions.includes("reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe")) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_action");
+        const userPresenceRequiredActions = Array.isArray(goalOperatorActionCard.userPresenceRequiredActions) ? goalOperatorActionCard.userPresenceRequiredActions.map(String) : [];
+        if (!userPresenceRequiredActions.includes("create_or_verify_target_windows_user_then_rerun_summary")) semanticFailures.push("goal_readiness_operator_action_card_user_presence_action");
         if (String(goalOperatorActionCard.workerStatus || "") !== "reload_required") semanticFailures.push("goal_readiness_operator_action_card_worker_status");
         if (goalOperatorActionCard.workerCanDispatchCurrentChannel !== false) semanticFailures.push("goal_readiness_operator_action_card_worker_dispatch");
         if (String(goalOperatorActionCard.secondAccountStatus || "") !== "manual_windows_user_setup_required") semanticFailures.push("goal_readiness_operator_action_card_second_account_status");
