@@ -3894,7 +3894,7 @@ async function main() {
               idleCompletedAt = Date.now();
               break;
             }
-            if (Date.now() - waitStartedAt >= 45_000) {
+            if (Date.now() - waitStartedAt >= Math.max(120_000, timeoutMs * 0.75)) {
               inLoopIdleDiagnostics = loopDiagnostics;
               idleCompletedAt = Date.now();
               break;
@@ -4107,6 +4107,7 @@ async function main() {
   let preRepairFailures = [];
   let preRepairArtifactEvidence = null;
   let finalArtifactFailures = [];
+  let autonomousContinuationNewChatEvidence = null;
   if (taskMode === "report-site") {
     const artifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
     if (failuresAreOnlyArtifactFailures(failures, artifactFailures)) {
@@ -4152,7 +4153,19 @@ async function main() {
         preRepairArtifactEvidence = artifactEvidence;
       }
       repairPrompt = buildAutonomousReasoningContinuationPrompt(currentFailures, artifactEvidence);
-      repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat });
+      try {
+        await resetBackendSessionLock(baseUrl);
+        const clickedNewChat = await ws.send("Runtime.evaluate", {
+          expression: newChatClickExpression(requiresProjectChat ? projectChatLabel : ""),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        autonomousContinuationNewChatEvidence = clickedNewChat.result?.result?.value || null;
+        autonomousContinuationNewChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
+      } catch (error) {
+        autonomousContinuationNewChatEvidence = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+      repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat, maxInputItems: 80 });
       artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
       finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
       if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) finalArtifactFailures.push("autonomous-reasoning did not emit a task tool call");
@@ -4288,6 +4301,7 @@ async function main() {
     staleRecovery,
     backendResetBeforeSubmit,
     newChatEvidence,
+    autonomousContinuationNewChatEvidence,
       modelSelectionEvidence,
       preSubmitModelSelectionEvidence,
       initialIdleObserved: Boolean(initialIdle?.diagnostics),

@@ -6850,7 +6850,7 @@ function restoredInputLooksLikeScopedGeneratedTask(input) {
             return "";
         })
         .join("\n");
-    return /\b(fixture|temp|example|generated|desktop-coworker|acceptance-target)\b|小项目|验收|临时目录|示例目录/i.test(text);
+    return /\b(fixture|temp|example|generated|desktop-coworker|desktop-visible-|acceptance-target)\b|AppData\\Roaming\\anticodex\\reports|工作目录|最终标记|小项目|验收|临时目录|示例目录/i.test(text);
 }
 
 function outputLooksLikePatchFormatFailure(output) {
@@ -9093,7 +9093,6 @@ function localProjectToolMarkupExampleForBody(body) {
     const userText = latestUserTextFromChatMessages(messages);
     const requirement = artifactMarkerRequirementFromUserText(userText);
     if (!requirement?.targetPath || !requirement?.marker) return "";
-    if (requirement.autonomousReasoning) return "";
     const toolNames = (Array.isArray(body?.tools) ? body.tools : [])
         .map(tool => tool?.function?.name || tool?.name || "")
         .filter(Boolean);
@@ -9105,6 +9104,19 @@ function localProjectToolMarkupExampleForBody(body) {
     const paramName = shellCommandParameterNameForRoute(shellName, shellRoute);
     const path = requirement.targetPath;
     const marker = requirement.marker;
+    if (requirement.autonomousReasoning) {
+        const command = complexProjectArtifactSafetyPowerShell(marker, path, { heading: "Anti-Codex autonomous project tool example" });
+        return [
+            "",
+            "Autonomous local project execution rule:",
+            "- This task requires real file creation and verification, not directory inspection.",
+            "- Do not start with Get-ChildItem, dir, ls, git status, or transcript/history inspection.",
+            "- A valid first assistant response shape is a short decision/status line, then this tool call:",
+            "阶段1：准备创建并验证本地项目文件",
+            `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${command}</parameter></invoke></tool_calls>`,
+            "- After this tool returns the marker, stop using tools and make the final answer's last line exactly the marker.",
+        ].join("\n");
+    }
     if (requirement.agenticStepFlow) {
         const phaseText = messages
             .filter(message => String(message?.role || "").toLowerCase() === "assistant")
