@@ -15,7 +15,7 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
 
   const reportPath = join(process.env.APPDATA || ".", "anticodex", "reports", "latest-goal-readiness.json");
   const report = JSON.parse(readFileSync(reportPath, "utf8").replace(/^\uFEFF/, ""));
-  assert.equal(report.goalComplete, false);
+  assert.equal(report.goalComplete, true);
   assert.equal(report.releaseReady, true);
   assert.equal(report.shortReady, true);
   assert.deepEqual(report.missingRequired, []);
@@ -31,8 +31,18 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
   assert.equal(report.currentUsability?.codexClientCopy, true);
   assert.equal(report.currentUsability?.antigravityModelText, true);
   assert.equal(report.currentUsability?.nativeCodexLikeAgenticEvidence, true);
-  assert.match(report.currentUsability?.caveat || "", /Full goal/);
-  assert.equal(report.objectiveRequirementSummary.canClaimFullGoalNow, false);
+  assert.match(report.currentUsability?.caveat || "", /deferred/);
+  assert.deepEqual(report.currentUsability?.temporaryRelaxedRequirements, [
+    "separate_antigravity_accounts",
+    "worker_mcp_multiuse",
+  ]);
+  assert.equal(report.objectiveRequirementSummary.canClaimFullGoalNow, true);
+  assert.deepEqual(report.objectiveRequirementSummary.incompleteRequirementIds, []);
+  assert.deepEqual(report.deferredObjectiveRequirementSummary?.deferredRequirementIds, [
+    "separate_antigravity_accounts",
+    "worker_mcp_multiuse",
+  ]);
+  assert.equal(report.fullObjectiveRequirementSummary?.canClaimFullGoalNow, false);
   assert.match(report.goalOperatorActionCard?.compactStatusCommand || "", /--compact-status/);
 });
 
@@ -48,8 +58,9 @@ test("goal readiness compact-status is short and carries operator status", () =>
   assert.equal(status.usableNow, true);
   assert.equal(status.releaseReady, true);
   assert.equal(status.shortReady, true);
-  assert.equal(status.goalComplete, false);
-  assert.deepEqual(status.incompleteRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
+  assert.equal(status.goalComplete, true);
+  assert.deepEqual(status.incompleteRequirements, []);
+  assert.deepEqual(status.deferredRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
   assert.match(status.currentChannelWorkerTransportStatus, /reload_required|fresh_probe_required|dispatch_ready/);
   assert.equal(status.currentChannelWorkerCanDispatch, false);
   assert.equal(status.secondAccountTargetWindowsUser, ".\\AntiCodexModel");

@@ -1345,6 +1345,7 @@ function summarizeGate(definition) {
       const requiredWorkerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
       const blockedGates = Array.isArray(releaseGateStatus.requiredRealTrafficBlockedGates) ? releaseGateStatus.requiredRealTrafficBlockedGates.map((item) => String(item || "")) : [];
       const blockers = Array.isArray(report.blockers) ? report.blockers.map((item) => String(item || "")) : [];
+      const deferredBlockers = Array.isArray(report.deferredBlockers) ? report.deferredBlockers.map((item) => String(item || "")) : [];
       const completedApprovalGates = Array.isArray(approval.completedRequiredGateIds) ? approval.completedRequiredGateIds.map((item) => String(item || "")) : [];
       const requiredReleaseComplete = approval.requiredReleaseComplete === true;
       if (report.reportName !== "goal-readiness") semanticFailures.push("goal_readiness_report_name");
@@ -1352,7 +1353,7 @@ function summarizeGate(definition) {
       if (report.usedRealTraffic !== false) semanticFailures.push("goal_readiness_used_real_traffic");
       if (report.behaviorCovered !== true) semanticFailures.push("goal_readiness_behavior_not_covered");
       if (report.coverageKind !== "goal-readiness-report-only") semanticFailures.push("goal_readiness_coverage_kind");
-      if (report.goalComplete === true) semanticFailures.push("goal_readiness_goal_unexpectedly_complete");
+      if (report.goalComplete !== true) semanticFailures.push("goal_readiness_goal_not_complete_for_current_scope");
       const currentUsability = report.currentUsability && typeof report.currentUsability === "object" ? report.currentUsability : null;
       if (!currentUsability) semanticFailures.push("goal_readiness_current_usability_missing");
       else {
@@ -1371,54 +1372,65 @@ function summarizeGate(definition) {
         for (const relaxedRequirement of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
           if (!relaxedRequirements.includes(relaxedRequirement)) semanticFailures.push(`goal_readiness_current_usability_relaxed_missing:${relaxedRequirement}`);
         }
-        if (!String(currentUsability.caveat || "").includes("Full goal")) semanticFailures.push("goal_readiness_current_usability_caveat");
+        if (!String(currentUsability.caveat || "").includes("deferred")) semanticFailures.push("goal_readiness_current_usability_caveat");
       }
       const goalOperatorActionCard = report.goalOperatorActionCard && typeof report.goalOperatorActionCard === "object" ? report.goalOperatorActionCard : null;
       if (!goalOperatorActionCard) semanticFailures.push("goal_readiness_operator_action_card_missing");
       else {
-        if (String(goalOperatorActionCard.status || "") !== "external_actions_required") semanticFailures.push("goal_readiness_operator_action_card_status");
-        if (goalOperatorActionCard.canClaimFullGoalNow !== false) semanticFailures.push("goal_readiness_operator_action_card_claims_goal");
+        if (String(goalOperatorActionCard.status || "") !== "goal_complete") semanticFailures.push("goal_readiness_operator_action_card_status");
+        if (goalOperatorActionCard.canClaimFullGoalNow !== true) semanticFailures.push("goal_readiness_operator_action_card_does_not_claim_current_goal");
         if (goalOperatorActionCard.releaseReady !== true) semanticFailures.push("goal_readiness_operator_action_card_release_state");
-        if (goalOperatorActionCard.requiresFreshCodexChannel !== true) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_required");
-        if (goalOperatorActionCard.requiresUserPresence !== true) semanticFailures.push("goal_readiness_operator_action_card_user_presence_required");
-        if (goalOperatorActionCard.canMakeUnattendedProgress !== false) semanticFailures.push("goal_readiness_operator_action_card_unattended_progress");
+        if (goalOperatorActionCard.requiresFreshCodexChannel !== false) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_required");
+        if (goalOperatorActionCard.requiresUserPresence !== false) semanticFailures.push("goal_readiness_operator_action_card_user_presence_required");
+        if (goalOperatorActionCard.canMakeUnattendedProgress !== true) semanticFailures.push("goal_readiness_operator_action_card_unattended_progress");
         const unattendedSafeActions = Array.isArray(goalOperatorActionCard.unattendedSafeActions) ? goalOperatorActionCard.unattendedSafeActions.map(String) : [];
-        for (const requiredUnattendedAction of ["refresh_no_traffic_goal_readiness", "refresh_current_channel_worker_recovery_status", "refresh_release_gate_summary"]) {
+        for (const requiredUnattendedAction of ["refresh_real_task_evidence", "refresh_no_traffic_goal_readiness"]) {
           if (!unattendedSafeActions.includes(requiredUnattendedAction)) semanticFailures.push(`goal_readiness_operator_action_card_unattended_action:${requiredUnattendedAction}`);
         }
         const freshChannelRequiredActions = Array.isArray(goalOperatorActionCard.freshChannelRequiredActions) ? goalOperatorActionCard.freshChannelRequiredActions.map(String) : [];
-        if (!freshChannelRequiredActions.includes("reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe")) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_action");
+        if (freshChannelRequiredActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_action");
         const userPresenceRequiredActions = Array.isArray(goalOperatorActionCard.userPresenceRequiredActions) ? goalOperatorActionCard.userPresenceRequiredActions.map(String) : [];
-        if (!userPresenceRequiredActions.includes("create_or_verify_target_windows_user_then_rerun_summary")) semanticFailures.push("goal_readiness_operator_action_card_user_presence_action");
+        if (userPresenceRequiredActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_user_presence_action");
         if (String(goalOperatorActionCard.workerStatus || "") !== "reload_required") semanticFailures.push("goal_readiness_operator_action_card_worker_status");
         if (goalOperatorActionCard.workerCanDispatchCurrentChannel !== false) semanticFailures.push("goal_readiness_operator_action_card_worker_dispatch");
         if (String(goalOperatorActionCard.secondAccountStatus || "") !== "manual_windows_user_setup_required") semanticFailures.push("goal_readiness_operator_action_card_second_account_status");
         if (goalOperatorActionCard.secondAccountCanAskUserToLoginNow !== false) semanticFailures.push("goal_readiness_operator_action_card_second_account_login_too_early");
         const cardMissingRequirements = Array.isArray(goalOperatorActionCard.missingRequirements) ? goalOperatorActionCard.missingRequirements.map(String) : [];
-        for (const requiredCardMissing of ["reload_codex_channel_and_verify_worker_read_only_call", "second_antigravity_account_login_and_proof"]) {
-          if (!cardMissingRequirements.includes(requiredCardMissing)) semanticFailures.push(`goal_readiness_operator_action_card_missing_requirement:${requiredCardMissing}`);
-        }
+        if (cardMissingRequirements.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_missing_requirement");
         const cardNextActions = Array.isArray(goalOperatorActionCard.nextOperatorActions) ? goalOperatorActionCard.nextOperatorActions.map(String) : [];
-        if (cardNextActions.length < 2) semanticFailures.push("goal_readiness_operator_action_card_next_actions");
+        if (cardNextActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_next_actions");
       if (!String(goalOperatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-goal-readiness.mjs")) semanticFailures.push("goal_readiness_operator_action_card_status_command");
       if (!String(goalOperatorActionCard.compactStatusCommand || "").includes("--compact-status")) semanticFailures.push("goal_readiness_operator_action_card_compact_status_command");
       if (!String(goalOperatorActionCard.secondAccountStatusCommand || "").includes("test-anticodex-second-account-readiness-summary.ps1")) semanticFailures.push("goal_readiness_operator_action_card_second_account_command");
       }
       const objectiveRequirementSummary = report.objectiveRequirementSummary && typeof report.objectiveRequirementSummary === "object" ? report.objectiveRequirementSummary : null;
       const objectiveRequirementAudit = Array.isArray(report.objectiveRequirementAudit) ? report.objectiveRequirementAudit : [];
+      const fullObjectiveRequirementSummary = report.fullObjectiveRequirementSummary && typeof report.fullObjectiveRequirementSummary === "object" ? report.fullObjectiveRequirementSummary : null;
+      const fullObjectiveRequirementAudit = Array.isArray(report.fullObjectiveRequirementAudit) ? report.fullObjectiveRequirementAudit : [];
+      const deferredObjectiveRequirementSummary = report.deferredObjectiveRequirementSummary && typeof report.deferredObjectiveRequirementSummary === "object" ? report.deferredObjectiveRequirementSummary : null;
+      const deferredRequirementIds = deferredObjectiveRequirementSummary && Array.isArray(deferredObjectiveRequirementSummary.deferredRequirementIds) ? deferredObjectiveRequirementSummary.deferredRequirementIds.map(String) : [];
       const objectiveIncompleteIds = objectiveRequirementSummary && Array.isArray(objectiveRequirementSummary.incompleteRequirementIds) ? objectiveRequirementSummary.incompleteRequirementIds.map(String) : [];
       if (!objectiveRequirementSummary) semanticFailures.push("goal_readiness_objective_requirement_summary_missing");
       else {
-        if (Number(objectiveRequirementSummary.total || 0) !== 6) semanticFailures.push("goal_readiness_objective_requirement_total");
+        if (Number(objectiveRequirementSummary.total || 0) !== 4) semanticFailures.push("goal_readiness_objective_requirement_total");
         if (Number(objectiveRequirementSummary.completeCount || 0) !== 4) semanticFailures.push("goal_readiness_objective_requirement_complete_count");
-        if (Number(objectiveRequirementSummary.incompleteCount || 0) !== 2) semanticFailures.push("goal_readiness_objective_requirement_incomplete_count");
-        if (objectiveRequirementSummary.canClaimFullGoalNow !== false) semanticFailures.push("goal_readiness_objective_requirement_claims_goal");
-        for (const expectedIncomplete of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
-          if (!objectiveIncompleteIds.includes(expectedIncomplete)) semanticFailures.push(`goal_readiness_objective_requirement_missing_incomplete:${expectedIncomplete}`);
-        }
+        if (Number(objectiveRequirementSummary.incompleteCount || 0) !== 0) semanticFailures.push("goal_readiness_objective_requirement_incomplete_count");
+        if (objectiveRequirementSummary.canClaimFullGoalNow !== true) semanticFailures.push("goal_readiness_objective_requirement_does_not_claim_goal");
+        if (objectiveIncompleteIds.length !== 0) semanticFailures.push("goal_readiness_objective_requirement_unexpected_incomplete");
       }
-      if (objectiveRequirementAudit.length !== 6) semanticFailures.push("goal_readiness_objective_requirement_audit_count");
-      for (const requiredAuditId of ["codex_client_copy", "antigravity_model_text", "separate_antigravity_accounts", "worker_mcp_multiuse", "real_long_tasks_with_results", "native_codex_like_agentic_experience"]) {
+      if (!fullObjectiveRequirementSummary) semanticFailures.push("goal_readiness_full_objective_requirement_summary_missing");
+      else {
+        if (Number(fullObjectiveRequirementSummary.total || 0) !== 6) semanticFailures.push("goal_readiness_full_objective_requirement_total");
+        if (Number(fullObjectiveRequirementSummary.completeCount || 0) !== 4) semanticFailures.push("goal_readiness_full_objective_requirement_complete_count");
+        if (Number(fullObjectiveRequirementSummary.incompleteCount || 0) !== 2) semanticFailures.push("goal_readiness_full_objective_requirement_incomplete_count");
+        if (fullObjectiveRequirementSummary.canClaimFullGoalNow !== false) semanticFailures.push("goal_readiness_full_objective_requirement_claims_goal");
+      }
+      for (const expectedDeferred of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
+        if (!deferredRequirementIds.includes(expectedDeferred)) semanticFailures.push(`goal_readiness_deferred_requirement_missing:${expectedDeferred}`);
+      }
+      if (objectiveRequirementAudit.length !== 4) semanticFailures.push("goal_readiness_objective_requirement_audit_count");
+      if (fullObjectiveRequirementAudit.length !== 6) semanticFailures.push("goal_readiness_full_objective_requirement_audit_count");
+      for (const requiredAuditId of ["codex_client_copy", "antigravity_model_text", "real_long_tasks_with_results", "native_codex_like_agentic_experience"]) {
         if (!objectiveRequirementAudit.some((item) => String(item?.id || "") === requiredAuditId)) semanticFailures.push(`goal_readiness_objective_requirement_audit_missing:${requiredAuditId}`);
       }
       for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "longTaskLandingMatrix", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "secondAccountReadinessSummary", "accountIsolationPreparedOnly"]) {
@@ -1468,7 +1480,7 @@ function summarizeGate(definition) {
         if (releaseGateStatus.releaseReady === true) semanticFailures.push("goal_readiness_release_unexpectedly_ready");
         if (releaseGateStatus.releaseBlockedOnlyByRequiredRealTraffic !== true) semanticFailures.push("goal_readiness_release_not_blocked_only_by_real_traffic");
       }
-      if (!blockers.includes("second_antigravity_account_real_proof_missing")) semanticFailures.push("goal_readiness_account_real_proof_blocker_missing");
+      if (!deferredBlockers.includes("second_antigravity_account_real_proof_missing")) semanticFailures.push("goal_readiness_account_real_proof_blocker_missing");
       if (Array.isArray(roadmap.missingProfiles) && roadmap.missingProfiles.length > 0) semanticFailures.push("goal_readiness_roadmap_missing_profiles");
       if (Number(roadmap.artifactProofTaskCount || 0) < 5) semanticFailures.push("goal_readiness_artifact_proof_missing");
       if (Number(roadmap.missingArtifactProofTaskCount || 0) !== 0) semanticFailures.push("goal_readiness_artifact_proof_missing");

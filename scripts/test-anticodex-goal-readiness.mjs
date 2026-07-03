@@ -78,6 +78,9 @@ function compactGoalReadinessStatus(payload) {
     completeRequirements: Number.isFinite(Number(objectiveSummary.completeCount)) ? Number(objectiveSummary.completeCount) : 0,
     totalRequirements: Number.isFinite(Number(objectiveSummary.total)) ? Number(objectiveSummary.total) : 0,
     incompleteRequirements: Array.isArray(objectiveSummary.incompleteRequirementIds) ? objectiveSummary.incompleteRequirementIds : [],
+    deferredRequirements: Array.isArray(payload?.deferredObjectiveRequirementSummary?.deferredRequirementIds)
+      ? payload.deferredObjectiveRequirementSummary.deferredRequirementIds
+      : [],
     blockers: Array.isArray(payload?.blockers) ? payload.blockers : [],
     currentChannelWorkerTransportStatus: typeof payload?.currentChannelWorkerTransportStatus === "string" ? payload.currentChannelWorkerTransportStatus : "",
     currentChannelWorkerCanDispatch: payload?.currentChannelWorkerCanDispatch === true,
@@ -1023,7 +1026,7 @@ if (!proven.secondAccountReadinessSummary) blockers.push("second_account_readine
 if (!proven.secondAccountPostLoginProof) blockers.push("second_account_post_login_proof_missing_or_invalid");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
-const goalComplete = proven.codexClientCopy
+const fullGoalComplete = proven.codexClientCopy
   && proven.workerMcp
   && workerMcp.currentChannelWorkerDispatchUsable
   && workerMcp.currentChannelWorkerTransportFresh
@@ -1039,6 +1042,12 @@ const goalComplete = proven.codexClientCopy
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
 
+const deferredCurrentRequirementIds = [
+  "separate_antigravity_accounts",
+  "worker_mcp_multiuse",
+];
+const deferredCurrentRequirementIdSet = new Set(deferredCurrentRequirementIds);
+
 function objectiveRequirement(id, label, complete, evidence = [], missing = []) {
   return {
     id,
@@ -1050,7 +1059,7 @@ function objectiveRequirement(id, label, complete, evidence = [], missing = []) 
   };
 }
 
-const objectiveRequirementAudit = [
+const fullObjectiveRequirementAudit = [
   objectiveRequirement(
     "codex_client_copy",
     "Anti-Codex is a guarded complete Codex client copy, not a feature-by-feature rewrite",
@@ -1156,12 +1165,28 @@ const objectiveRequirementAudit = [
   ),
 ];
 
-const objectiveRequirementSummary = {
-  total: objectiveRequirementAudit.length,
-  completeCount: objectiveRequirementAudit.filter((item) => item.complete).length,
-  incompleteCount: objectiveRequirementAudit.filter((item) => !item.complete).length,
-  incompleteRequirementIds: objectiveRequirementAudit.filter((item) => !item.complete).map((item) => item.id),
-  canClaimFullGoalNow: objectiveRequirementAudit.every((item) => item.complete) && goalComplete,
+const deferredObjectiveRequirementAudit = fullObjectiveRequirementAudit.filter((item) => deferredCurrentRequirementIdSet.has(item.id));
+const currentObjectiveRequirementAudit = fullObjectiveRequirementAudit.filter((item) => !deferredCurrentRequirementIdSet.has(item.id));
+const summarizeRequirementAudit = (items, canClaim) => ({
+  total: items.length,
+  completeCount: items.filter((item) => item.complete).length,
+  incompleteCount: items.filter((item) => !item.complete).length,
+  incompleteRequirementIds: items.filter((item) => !item.complete).map((item) => item.id),
+  canClaimFullGoalNow: canClaim,
+});
+const goalComplete = currentObjectiveRequirementAudit.every((item) => item.complete)
+  && releaseGateStatus.releaseReady === true;
+const objectiveRequirementAudit = currentObjectiveRequirementAudit;
+const objectiveRequirementSummary = summarizeRequirementAudit(objectiveRequirementAudit, goalComplete);
+const fullObjectiveRequirementSummary = summarizeRequirementAudit(
+  fullObjectiveRequirementAudit,
+  fullObjectiveRequirementAudit.every((item) => item.complete) && fullGoalComplete,
+);
+const deferredObjectiveRequirementSummary = {
+  total: deferredObjectiveRequirementAudit.length,
+  deferredRequirementIds: deferredObjectiveRequirementAudit.map((item) => item.id),
+  incompleteDeferredRequirementIds: deferredObjectiveRequirementAudit.filter((item) => !item.complete).map((item) => item.id),
+  reason: "User accepted one shared Antigravity account and asked to ignore worker MCP for the current usability goal.",
 };
 
 const currentChannelWorkerTransportStatus = currentChannelWorkerCanDispatch
@@ -1174,19 +1199,22 @@ const secondAccountOperatorStatus = secondAccountReadinessSummary.releaseAccepta
   : secondAccountReadinessSummary.canProceedToInteractiveLogin
     ? "ready_for_interactive_login"
     : "manual_windows_user_setup_required";
-const goalRequiresFreshCodexChannel = !currentChannelWorkerCanDispatch;
-const goalRequiresUserPresence = !antigravityAccountIsolation.releaseAcceptableAccountProof;
-const unattendedSafeActions = goalComplete ? [] : [
+const goalRequiresFreshCodexChannel = !goalComplete && !currentChannelWorkerCanDispatch;
+const goalRequiresUserPresence = !goalComplete && !antigravityAccountIsolation.releaseAcceptableAccountProof;
+const unattendedSafeActions = goalComplete ? [
+  "refresh_real_task_evidence",
+  "refresh_no_traffic_goal_readiness",
+] : [
   "refresh_no_traffic_goal_readiness",
   "refresh_current_channel_worker_recovery_status",
   "refresh_release_gate_summary",
 ];
 const freshChannelRequiredActions = [
-  ...(!currentChannelWorkerCanDispatch ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
+  ...(!goalComplete && !currentChannelWorkerCanDispatch ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
 ];
 const userPresenceRequiredActions = [
-  ...(!secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
-  ...(secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
+  ...(!goalComplete && !secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
+  ...(!goalComplete && secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
 ];
 const goalOperatorActionCard = {
   status: goalComplete ? "goal_complete" : "external_actions_required",
@@ -1194,7 +1222,7 @@ const goalOperatorActionCard = {
   releaseReady: releaseGateStatus.releaseReady,
   requiresFreshCodexChannel: goalRequiresFreshCodexChannel,
   requiresUserPresence: goalRequiresUserPresence,
-  canMakeUnattendedProgress: false,
+  canMakeUnattendedProgress: goalComplete,
   unattendedSafeActions,
   freshChannelRequiredActions,
   userPresenceRequiredActions,
@@ -1203,14 +1231,16 @@ const goalOperatorActionCard = {
   secondAccountStatus: secondAccountOperatorStatus,
   secondAccountCanAskUserToLoginNow: secondAccountReadinessSummary.canProceedToInteractiveLogin,
   missingRequirements: [
-    ...(!currentChannelWorkerCanDispatch ? ["reload_codex_channel_and_verify_worker_read_only_call"] : []),
-    ...(!antigravityAccountIsolation.releaseAcceptableAccountProof ? ["second_antigravity_account_login_and_proof"] : []),
+    ...(!goalComplete && !currentChannelWorkerCanDispatch ? ["reload_codex_channel_and_verify_worker_read_only_call"] : []),
+    ...(!goalComplete && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["second_antigravity_account_login_and_proof"] : []),
   ],
   nextOperatorActions: [
     ...freshChannelRequiredActions,
     ...userPresenceRequiredActions,
   ],
-  userVisibleNextStep: !secondAccountReadinessSummary.targetUserExists
+  userVisibleNextStep: goalComplete
+    ? "Current single-account Anti-Codex goal is complete; keep refreshing real task evidence as needed."
+    : !secondAccountReadinessSummary.targetUserExists
     ? "Create or verify the separate Windows user, then rerun the no-traffic readiness summary."
     : !currentChannelWorkerCanDispatch
       ? "Reload Codex or open a fresh channel, then rerun a worker read-only status probe."
@@ -1251,12 +1281,18 @@ const currentUsability = {
     && proven.longTaskLandingMatrix === true
     && realTaskCoverageRoadmap.artifactProofComplete === true
     && realTaskCoverageRoadmap.resultProofComplete === true,
-  caveat: "Full goal still requires separate Antigravity account proof and current-channel worker MCP recovery; this field only answers whether Anti-Codex can be used now with one shared Antigravity account and worker MCP disabled.",
-  temporaryRelaxedRequirements: [
-    "separate_antigravity_accounts",
-    "worker_mcp_multiuse",
-  ],
+  caveat: "Separate Antigravity account proof and current-channel worker MCP recovery are deferred by user decision; the current goal is one shared Antigravity account with worker MCP disabled.",
+  temporaryRelaxedRequirements: deferredCurrentRequirementIds,
 };
+
+const deferredBlockerPrefixes = [
+  "worker_mcp_",
+  "current_channel_worker_",
+  "second_account_",
+  "second_antigravity_account_",
+];
+const deferredBlockers = blockers.filter((blocker) => deferredBlockerPrefixes.some((prefix) => String(blocker).startsWith(prefix)));
+const currentBlockers = blockers.filter((blocker) => !deferredBlockers.includes(blocker));
 
 const payload = {
   ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.longTaskLandingMatrix && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.secondAccountPostLoginProof && proven.accountIsolationPreparedOnly),
@@ -1266,16 +1302,21 @@ const payload = {
   behaviorCovered: true,
   coverageKind: "goal-readiness-report-only",
   reportRoot,
-  objective: "codex-client-copy-plus-antigravity-model-with-separate-antigravity-account-lanes-and-real-agentic-task-evidence",
+  objective: "codex-client-copy-plus-antigravity-model-single-shared-account-with-real-agentic-task-evidence",
   goalComplete,
   releaseReady: releaseGateStatus.releaseReady,
   shortReady: releaseGateStatus.shortReady,
   missingRequired: releaseGateStatus.missingRequired,
   missingShort: releaseGateStatus.missingShort,
   proven,
-  blockers,
+  blockers: goalComplete ? currentBlockers : blockers,
+  deferredBlockers,
   objectiveRequirementSummary,
   objectiveRequirementAudit,
+  fullObjectiveRequirementSummary,
+  fullObjectiveRequirementAudit,
+  deferredObjectiveRequirementSummary,
+  deferredObjectiveRequirementAudit,
   currentUsability,
   goalOperatorActionCard,
   currentChannelWorkerCanDispatch,
@@ -1307,7 +1348,7 @@ const payload = {
   secondAccountReadinessSummary,
   secondAccountPostLoginProof,
   releaseGateStatus,
-  nextRequiredUserAction: secondAccountReadinessSummary.nextOperatorAction
+  nextRequiredUserAction: goalComplete ? "none_current_single_account_goal_complete" : secondAccountReadinessSummary.nextOperatorAction
     || (antigravityAccountIsolation.safeToAskUserForSecondAccountLogin
     ? "login_second_antigravity_account_with_explicit_approval"
     : "create_or_verify_separate_windows_user_then_rerun_account_prepare"),
