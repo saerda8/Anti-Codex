@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel worker recovery now lists concrete read-only probe candidates
+
+- Task: make the post-reload/fresh-channel worker acceptance step concrete instead of relying on placeholder `<worker_read_tool>` guidance.
+- Result: `test-anticodex-current-channel-worker-recovery.mjs` now derives `recommendedReadOnlyProbes` from `latest-worker-mcp-status-probe.json`. The compact recovery output lists concrete no-dispatch candidates for MIMO, MiMoCode, Kilo, OpenCode, DeepSeek, and DevEco with status tool, historical job ID, expected status, and record command. `goal-readiness` preserves those candidates and uses the first concrete record command in its operator action card. Diagnostics validates concrete Kilo, DeepSeek, and OpenCode candidates plus non-empty job IDs.
+- Cause classification: the current blocker is still current-channel transport, but recovery needed an operator-proof handoff that a fresh channel can execute without guessing.
+- Rule change: after reload/new-channel recovery, use one `recommendedReadOnlyProbes` entry first. Only record success and dispatch implementation workers after that read-only call returns normally in the current channel.
+
 ### 2026-07-03 - Current-channel Kilo read-only reprobe still transport-closed after settings evidence checkpoint
 
 - Task: after checkpoint `3eb4e9c`, recheck a completed Kilo project-smoke job through the current Codex channel using read-only `kilo_wait_for_job` before considering worker dispatch.

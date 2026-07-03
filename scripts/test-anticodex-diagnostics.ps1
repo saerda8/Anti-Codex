@@ -1202,6 +1202,15 @@ function Test-GoalReadinessSummaryEvidence {
     if (-not ([string]$evidence.workerTransportRecoveryDirectWorkerProbeCommand).Contains("probe-anticodex-worker-mcp-servers.mjs")) { Add-Failure "goal-readiness summary worker transport direct probe command missing" }
     if (-not ([string]$evidence.workerTransportRecoveryCurrentChannelReadOnlyProbeInstruction).Contains("read-only")) { Add-Failure "goal-readiness summary worker transport read-only instruction missing" }
     if (-not ([string]$evidence.workerTransportRecoveryCurrentChannelRecoveryRecordCommand).Contains("record-anticodex-current-channel-worker-transport.mjs")) { Add-Failure "goal-readiness summary worker transport record command missing" }
+    $goalRecommendedProbes = @(As-FlatArray $evidence.workerTransportRecoveryRecommendedReadOnlyProbes)
+    if ($goalRecommendedProbes.Count -lt 3) { Add-Failure "goal-readiness summary missing worker recovery recommended read-only probes" }
+    $goalRecommendedTools = @($goalRecommendedProbes | ForEach-Object { [string]$_.statusTool } | Where-Object { $_ })
+    if ($goalRecommendedTools -notcontains "kilo_wait_for_job") { Add-Failure "goal-readiness summary missing Kilo recommended read-only probe" }
+    if ($goalRecommendedTools -notcontains "deepseek_wait_for_job") { Add-Failure "goal-readiness summary missing DeepSeek recommended read-only probe" }
+    if ($goalRecommendedTools -notcontains "opencode_wait_for_job") { Add-Failure "goal-readiness summary missing OpenCode recommended read-only probe" }
+    if (-not $evidence.workerTransportRecoveryRecommendedFirstReadOnlyProbe -or -not [string]$evidence.workerTransportRecoveryRecommendedFirstReadOnlyProbe.statusTool) {
+        Add-Failure "goal-readiness summary missing first worker recovery recommended read-only probe"
+    }
     if (@(As-FlatArray $evidence.workerTransportRecoveryNextActions).Count -lt 3) { Add-Failure "goal-readiness summary worker transport next actions missing" }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
@@ -2157,6 +2166,17 @@ function Test-CurrentChannelWorkerRecoverySummaryEvidence {
     if ($evidence.directStatusProbeCurrentChannelCaveatPresent -ne $true) { Add-Failure "current-channel-worker-recovery summary missing current-channel caveat" }
     if (@(As-FlatArray $evidence.postReloadAcceptanceCriteria | Where-Object { [string]$_ -match "direct worker status probe" }).Count -lt 1) {
         Add-Failure "current-channel-worker-recovery summary missing direct status probe acceptance criterion"
+    }
+    $recommendedProbes = @(As-FlatArray $evidence.recommendedReadOnlyProbes)
+    if ($recommendedProbes.Count -lt 3) { Add-Failure "current-channel-worker-recovery summary missing recommended read-only probe candidates" }
+    $recommendedTools = @($recommendedProbes | ForEach-Object { [string]$_.statusTool } | Where-Object { $_ })
+    $recommendedJobIds = @($recommendedProbes | ForEach-Object { [string]$_.jobId } | Where-Object { $_ })
+    if ($recommendedTools -notcontains "kilo_wait_for_job") { Add-Failure "current-channel-worker-recovery summary missing Kilo read-only probe candidate" }
+    if ($recommendedTools -notcontains "deepseek_wait_for_job") { Add-Failure "current-channel-worker-recovery summary missing DeepSeek read-only probe candidate" }
+    if ($recommendedTools -notcontains "opencode_wait_for_job") { Add-Failure "current-channel-worker-recovery summary missing OpenCode read-only probe candidate" }
+    if ($recommendedJobIds.Count -lt $recommendedProbes.Count) { Add-Failure "current-channel-worker-recovery summary has recommended probes without job ids" }
+    if (-not $evidence.operatorActionCard -or -not $evidence.operatorActionCard.recommendedFirstReadOnlyProbe -or -not [string]$evidence.operatorActionCard.recommendedFirstReadOnlyProbe.statusTool) {
+        Add-Failure "current-channel-worker-recovery summary missing first recommended read-only probe"
     }
 }
 

@@ -69,6 +69,19 @@ function deriveWorkerPrefixes(tools) {
   return [...new Set(tools.map((tool) => String(tool).split("_")[0]).filter(Boolean))];
 }
 
+function recommendedReadOnlyProbesFromStatusProbe(report) {
+  const results = Array.isArray(report?.results) ? report.results : [];
+  return results
+    .filter((item) => item && item.statusCallOk === true && item.skipped !== true && item.statusTool && item.jobId)
+    .map((item) => ({
+      worker: String(item.worker || ""),
+      statusTool: String(item.statusTool || ""),
+      jobId: String(item.jobId || ""),
+      expectedStatus: String(item.status || ""),
+      recordCommand: `node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool ${String(item.statusTool || "")} --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok`,
+    }));
+}
+
 const transportFile = readReport("latest-current-channel-worker-transport.json");
 const probeFile = readReport("latest-worker-mcp-server-probe.json");
 const statusProbeFile = readReport("latest-worker-mcp-status-probe.json");
@@ -92,6 +105,7 @@ const directStatusProbeOk = statusProbe.ok === true
   && statusProbe.antigravitySkippedForAccountIsolation === true
   && typeof statusProbe.currentChannelCaveat === "string"
   && statusProbe.currentChannelCaveat.trim().length > 0;
+const recommendedReadOnlyProbes = recommendedReadOnlyProbesFromStatusProbe(statusProbe);
 const genericMcpOk = transport.genericMcpControlOk === true && String(transport.genericMcpStatus || "") === "ok";
 const currentWorkerOk = transport.workerTransportOk === true && transport.currentChannelWorkerDispatchUsable === true;
 const canDispatchCurrentChannelWorkers = Boolean(
@@ -177,9 +191,11 @@ const payload = {
     "same-channel generic MCP control must be ok",
     "direct worker server probe must be ok",
     "direct worker status probe must be ok",
+    "use one recommendedReadOnlyProbes entry from the latest direct status probe as the first fresh-channel worker read-only call",
     "latest transport report must be fresh",
     "canDispatchCurrentChannelWorkers must be true before starting implementation workers",
   ],
+  recommendedReadOnlyProbes,
   commands: {
     directWorkerProbe: "node scripts\\probe-anticodex-worker-mcp-servers.mjs",
     directWorkerStatusProbe: "node scripts\\test-anticodex-worker-mcp-status-probe.mjs --timeout-ms 30000",
@@ -195,6 +211,7 @@ const payload = {
     nextOperatorAction: canDispatchCurrentChannelWorkers
       ? "dispatch_only_a_narrow_worker_task_after_normal_scope_checks"
       : "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe",
+    recommendedFirstReadOnlyProbe: recommendedReadOnlyProbes[0] || null,
     userVisibleNextStep: canDispatchCurrentChannelWorkers
       ? "Worker MCP read path is healthy in this channel; start only a narrow worker task first."
       : "Reload Codex or use a fresh channel, then run one read-only worker status check before worker tasks.",
@@ -223,6 +240,8 @@ if (compact) {
     genericMcpControlOk: payload.currentEvidence.genericMcpControlOk,
     directProbeOk: payload.currentEvidence.directProbeOk,
     directStatusProbeOk: payload.currentEvidence.directStatusProbeOk,
+    recommendedReadOnlyProbes: payload.recommendedReadOnlyProbes,
+    recommendedFirstReadOnlyProbe: payload.operatorActionCard.recommendedFirstReadOnlyProbe,
     nextOperatorAction: payload.operatorActionCard.nextOperatorAction,
     report,
   }));
