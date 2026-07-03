@@ -462,6 +462,7 @@ function latestReportsSummary(result) {
       lines.push(`  goalOperatorActionCard: status=${card.status || "unknown"} / canClaim=${card.canClaimFullGoalNow ? "true" : "false"} / release=${card.releaseReady ? "true" : "false"} / worker=${card.workerStatus || "unknown"} / secondAccount=${card.secondAccountStatus || "unknown"}`);
       lines.push(`  goalOperatorActionCard missing: ${Array.isArray(card.missingRequirements) && card.missingRequirements.length ? card.missingRequirements.join(", ") : "none"}`);
       lines.push(`  goalOperatorActionCard next: ${Array.isArray(card.nextOperatorActions) && card.nextOperatorActions.length ? card.nextOperatorActions.join(" -> ") : card.userVisibleNextStep || "unknown"}`);
+      if (card.compactStatusCommand) lines.push(`  goalOperatorActionCard statusCommand: ${card.compactStatusCommand}`);
     }
     if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
       const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
@@ -1088,6 +1089,7 @@ if (args.has("--self-test")) {
           secondAccountStatus: "manual_windows_user_setup_required",
           missingRequirements: ["reload_codex_channel_and_verify_worker_read_only_call", "second_antigravity_account_login_and_proof"],
           nextOperatorActions: ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe", "create_or_verify_target_windows_user_then_rerun_summary"],
+          compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
         },
       },
     }, {
@@ -1143,6 +1145,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /goalObjectiveAudit: complete=4\/6 \/ incomplete=2 \/ canClaimFullGoal=false \/ missing=separate_antigravity_accounts, worker_mcp_multiuse/);
   assert.match(evidenceSummary, /goalOperatorActionCard: status=external_actions_required \/ canClaim=false \/ release=true \/ worker=reload_required \/ secondAccount=manual_windows_user_setup_required/);
   assert.match(evidenceSummary, /goalOperatorActionCard missing: reload_codex_channel_and_verify_worker_read_only_call, second_antigravity_account_login_and_proof/);
+  assert.match(evidenceSummary, /goalOperatorActionCard statusCommand: node scripts\\test-anticodex-goal-readiness\.mjs --compact-status/);
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1 missingOpt=coldRelaunch/);
