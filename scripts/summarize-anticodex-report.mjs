@@ -246,6 +246,7 @@ const isAntigravityCliDualAccountLanesReport = report?.reportName === "antigravi
 const isAntigravityCliWindowsUserReadinessReport = report?.reportName === "antigravity-cli-windows-user-readiness" || /latest-antigravity-cli-windows-user-readiness\.json$/i.test(path);
 const isWindowsUserAccountPrepareReport = report?.reportName === "windows-user-account-prepare" || /latest-windows-user-account-prepare\.json$/i.test(path);
 const isWindowsUserSetupGuidanceReport = report?.reportName === "windows-user-setup-guidance" || /latest-windows-user-setup-guidance\.json$/i.test(path);
+const isWindowsUserSettingsEntrypointReport = report?.reportName === "windows-user-settings-entrypoint" || /latest-windows-user-settings-entrypoint\.json$/i.test(path);
 const isAntigravityAccountIsolationStatusReport = report?.reportName === "antigravity-account-isolation-status" || /latest-antigravity-account-isolation-status\.json$/i.test(path);
 const isSecondAccountLoginEntrypointReport = report?.reportName === "second-antigravity-account-login-entrypoint" || /latest-second-antigravity-account-login-entrypoint\.json$/i.test(path);
 const isSecondAccountReadinessSummaryReport = report?.reportName === "second-account-readiness-summary" || /latest-second-account-readiness-summary\.json$/i.test(path);
@@ -957,6 +958,28 @@ const summary = {
     separateAccountVerified: boolField(report, "separateAccountVerified"),
     loginVerified: boolField(report, "loginVerified"),
     releaseAcceptableAccountProof: boolField(report, "releaseAcceptableAccountProof"),
+  } : null,
+  windowsUserSettingsEntrypointEvidence: isWindowsUserSettingsEntrypointReport ? {
+    reportName: has(report, "reportName") ? asString(report.reportName) : null,
+    noTraffic: boolField(report, "noTraffic"),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: has(report, "coverageKind") ? asString(report.coverageKind) : null,
+    requestedOpenSettings: boolField(report, "requestedOpenSettings"),
+    openedSettings: boolField(report, "openedSettings"),
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
+    startedLogin: boolField(report, "startedLogin"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
+    runsSystemUserCommand: boolField(report, "runsSystemUserCommand"),
+    requiredOpenSettingsApproval: has(report, "requiredOpenSettingsApproval") ? asString(report.requiredOpenSettingsApproval) : null,
+    openSettingsApprovalProvided: boolField(report, "openSettingsApprovalProvided"),
+    settingsUri: has(report, "settingsUri") ? asString(report.settingsUri) : null,
+    targetLocalWindowsUser: has(report, "targetLocalWindowsUser") ? asString(report.targetLocalWindowsUser) : null,
+    nextNoTrafficStatusCommand: has(report, "nextNoTrafficStatusCommand") ? asString(report.nextNoTrafficStatusCommand) : null,
+    accountIsolationCaveat: has(report, "accountIsolationCaveat") ? asString(report.accountIsolationCaveat) : null,
   } : null,
   antigravityAccountIsolationStatusEvidence: isAntigravityAccountIsolationStatusReport ? {
     reportName: has(report, "reportName") ? asString(report.reportName) : null,

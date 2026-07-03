@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel MiMoCode read-only reprobe still transport-closed after settings-entrypoint checkpoint
+
+- Task: before considering any worker dispatch in the resumed goal turn, query a completed MiMoCode job through the current Codex channel.
+- Result: `tool_search` exposed worker metadata, but read-only `mimocode_get_job` returned `Transport closed`. The transport and recovery reports were refreshed; recovery remains `status:"reload_required"` and `canDispatchCurrentChannelWorkers:false`.
+- Cause classification: current Codex-channel worker transport remains closed for worker namespaces. This is not proof that the direct worker servers or MiMoCode CLI are unhealthy.
+- Rule change: keep using only read-only worker probes in this channel. Do not dispatch implementation work until a reloaded/fresh channel produces one successful worker read-only status/get/wait call.
+
 ### 2026-07-03 - Direct status calls work while current-channel worker calls stay closed
 
 - Task: add a no-traffic direct status/get/wait probe for completed historical worker jobs before retrying current-channel worker implementation.

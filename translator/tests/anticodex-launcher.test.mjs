@@ -15899,6 +15899,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(summarizer, /postLoginProofCommandTemplate/);
   assert.match(summarizer, /canRunPostLoginProof/);
   assert.match(summarizer, /windowsUserSetupGuidanceEvidence/);
+  assert.match(summarizer, /isWindowsUserSettingsEntrypointReport/);
+  assert.match(summarizer, /windowsUserSettingsEntrypointEvidence/);
   assert.match(summarizer, /readinessCheckSequence/);
   assert.match(summarizer, /operatorChecklistStages/);
   assert.match(summarizer, /operatorChecklistStartsLoginCount/);
@@ -15938,6 +15940,8 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(diagnostics, /windowsUserAccountPrepareEvidence/);
   assert.match(diagnostics, /latest-windows-user-setup-guidance\.json/);
   assert.match(diagnostics, /windowsUserSetupGuidanceEvidence/);
+  assert.match(diagnostics, /latest-windows-user-settings-entrypoint\.json/);
+  assert.match(diagnostics, /windowsUserSettingsEntrypointEvidence/);
   assert.match(diagnostics, /latest-antigravity-account-isolation-status\.json/);
   assert.match(diagnostics, /latest-second-antigravity-account-login-entrypoint\.json/);
   assert.match(diagnosticsTest, /runasWorkingDirectory/);
@@ -15945,6 +15949,11 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(diagnosticsTest, /runas working directory/);
   assert.match(diagnosticsTest, /keeps bootstrap shell open/);
   assert.match(diagnosticsTest, /windowsUserSetupGuidanceEvidence/);
+  assert.match(diagnosticsTest, /Test-WindowsUserSettingsEntrypointEvidence/);
+  assert.match(diagnosticsTest, /windowsUserSettingsEntrypointEvidence/);
+  assert.match(diagnosticsTest, /latest-windows-user-settings-entrypoint\.json/);
+  assert.match(diagnosticsTest, /open-windows-user-settings-for-anticodex-second-account/);
+  assert.match(diagnosticsTest, /ms-settings:otherusers/);
   assert.match(diagnosticsTest, /operatorSetupPlan/);
   assert.match(diagnosticsTest, /targetLocalWindowsUser/);
   assert.match(diagnosticsTest, /setupMode/);
@@ -15970,6 +15979,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(installedOverall, /latest-antigravity-cli-windows-user-readiness\.json/);
   assert.match(installedOverall, /latest-windows-user-account-prepare\.json/);
   assert.match(installedOverall, /latest-windows-user-setup-guidance\.json/);
+  assert.match(installedOverall, /latest-windows-user-settings-entrypoint\.json/);
   assert.match(installedOverall, /latest-antigravity-account-isolation-status\.json/);
   assert.match(installedOverall, /latest-second-antigravity-account-login-entrypoint\.json/);
   assert.match(syncRuntime, /test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
@@ -16050,6 +16060,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerBridge, /safeToAskLogin/);
   assert.match(managerBridge, /canProceedLogin/);
   assert.match(managerBridge, /windowsUserSetupGuidance/);
+  assert.match(managerBridge, /windowsUserSettingsEntrypoint/);
   assert.match(managerBridge, /readinessCheckSequence/);
   assert.match(managerBridge, /operatorChecklistStages/);
   assert.match(managerBridge, /operatorSetupPlan/);
@@ -16069,6 +16080,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(managerInject, /safeToAskLogin/);
   assert.match(managerInject, /canProceedLogin/);
   assert.match(managerInject, /windowsUserSetupGuidance/);
+  assert.match(managerInject, /windowsUserSettingsEntrypoint/);
   assert.match(managerInject, /readinessCheckSequence/);
   assert.match(managerInject, /operatorChecklistStages/);
   assert.match(managerInject, /operatorSetupPlan/);
@@ -16096,6 +16108,9 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(server, /safeToAskLogin/);
   assert.match(server, /canProceedLogin/);
   assert.match(server, /latest-windows-user-setup-guidance\.json/);
+  assert.match(server, /latest-windows-user-settings-entrypoint\.json/);
+  assert.match(server, /windowsUserSettingsEntrypointEvidence/);
+  assert.match(server, /windowsUserSettingsEntrypoint/);
   assert.match(server, /secondAccountLoginEntrypointEvidence/);
   assert.match(server, /secondAccountLoginEntrypoint loginCommand/);
   assert.match(server, /secondAccountLoginEntrypoint proofCommand/);

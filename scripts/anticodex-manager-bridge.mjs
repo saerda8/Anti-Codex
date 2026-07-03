@@ -571,6 +571,13 @@ function latestReportsSummary(result) {
       }
       if (evidence.manualSetupCommandHint) lines.push(`  windowsUserSetupGuidance hint: ${evidence.manualSetupCommandHint}`);
     }
+    if (item.windowsUserSettingsEntrypointEvidence) {
+      const evidence = item.windowsUserSettingsEntrypointEvidence;
+      lines.push(`  windowsUserSettingsEntrypoint: requestedOpen=${evidence.requestedOpenSettings ? "true" : "false"} / opened=${evidence.openedSettings ? "true" : "false"} / target=${evidence.targetLocalWindowsUser || "unknown"} / uri=${evidence.settingsUri || "unknown"}`);
+      lines.push(`  windowsUserSettingsEntrypoint guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"} / approval=${evidence.requiredOpenSettingsApproval || "unknown"}`);
+      if (evidence.nextNoTrafficStatusCommand) lines.push(`  windowsUserSettingsEntrypoint next: ${evidence.nextNoTrafficStatusCommand}`);
+      if (evidence.accountIsolationCaveat) lines.push(`  windowsUserSettingsEntrypoint caveat: ${evidence.accountIsolationCaveat}`);
+    }
     if (item.secondAccountLoginEntrypointEvidence) {
       const evidence = item.secondAccountLoginEntrypointEvidence;
       lines.push(`  secondAccountLoginEntrypoint: statusOnly=${evidence.statusOnlyOk ? "true" : "false"} / missingApprovalBlocked=${evidence.missingApprovalBlocked ? "true" : "false"} / approvedBlocked=${evidence.approvedStartBlockedByStatusGate ? "true" : "false"} / sameUserBlocked=${evidence.sameWindowsUserTargetBlocked ? "true" : "false"} / safeToStart=${evidence.safeToStartLogin ? "true" : "false"}`);

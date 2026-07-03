@@ -147,6 +147,33 @@ function Test-WindowsUserSetupGuidanceOperatorSetupPlan {
     if ([string]$plan.finalLoginApproval -ne "start-separate-windows-user-login") { Add-Failure "$Prefix setup plan approval mismatch" }
 }
 
+function Test-WindowsUserSettingsEntrypointEvidence {
+    param(
+        $Evidence,
+        [string]$Prefix
+    )
+
+    if (-not $Evidence) {
+        Add-Failure "$Prefix missing windowsUserSettingsEntrypointEvidence"
+        return
+    }
+    if ($Evidence.reportName -ne "windows-user-settings-entrypoint") { Add-Failure "$Prefix reportName mismatch" }
+    if ($Evidence.noTraffic -ne $true) { Add-Failure "$Prefix noTraffic mismatch" }
+    if ($Evidence.usedRealTraffic -ne $false) { Add-Failure "$Prefix used real traffic" }
+    if ($Evidence.coverageKind -ne "windows-user-settings-entrypoint-no-traffic") { Add-Failure "$Prefix coverage kind mismatch" }
+    if ($Evidence.changedSystem -ne $false) { Add-Failure "$Prefix changed system" }
+    if ($Evidence.createdUser -ne $false) { Add-Failure "$Prefix created user" }
+    if ($Evidence.startedLogin -ne $false) { Add-Failure "$Prefix started login" }
+    if ($Evidence.capturesPassword -ne $false) { Add-Failure "$Prefix captures password" }
+    if ($Evidence.storesPassword -ne $false) { Add-Failure "$Prefix stores password" }
+    if ($Evidence.runsSystemUserCommand -ne $false) { Add-Failure "$Prefix runs system user command" }
+    if ($Evidence.requiredOpenSettingsApproval -ne "open-windows-user-settings-for-anticodex-second-account") { Add-Failure "$Prefix approval token mismatch" }
+    if ($Evidence.settingsUri -ne "ms-settings:otherusers") { Add-Failure "$Prefix settings URI mismatch" }
+    if ($Evidence.targetLocalWindowsUser -ne "AntiCodexModel") { Add-Failure "$Prefix target Windows user mismatch" }
+    if (-not ([string]$Evidence.nextNoTrafficStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "$Prefix next status command missing" }
+    if (-not [string]$Evidence.accountIsolationCaveat) { Add-Failure "$Prefix caveat missing" }
+}
+
 function Test-SecondAccountLoginEntrypointSummaryEvidence {
     param($SecondAccountLoginEntrypointSummary)
 
@@ -2845,6 +2872,12 @@ function Test-DiagnosticBundle {
         } else {
             Test-WindowsUserSetupGuidanceOperatorSetupPlan $windowsUserSetupGuidanceSummary.windowsUserSetupGuidanceEvidence "diagnostic windows-user setup-guidance summary"
         }
+        $windowsUserSettingsEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-windows-user-settings-entrypoint.json" } | Select-Object -First 1)[0]
+        if (-not $windowsUserSettingsEntrypointSummary) {
+            Add-Failure "diagnostic reports summary missing latest-windows-user-settings-entrypoint.json"
+        } else {
+            Test-WindowsUserSettingsEntrypointEvidence $windowsUserSettingsEntrypointSummary.windowsUserSettingsEntrypointEvidence "diagnostic windows-user settings-entrypoint summary"
+        }
         $antigravityCliRealSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-cli-real-smoke.json" } | Select-Object -First 1)[0]
         if ($antigravityCliRealSmokeSummary) {
             $realSmokeEvidence = $antigravityCliRealSmokeSummary.antigravityCliRealSmokeEvidence
@@ -3763,6 +3796,7 @@ if ($diagnostics) {
         if (-not (Has-Property $sourcePreflight "skipFullRegression")) { Add-Failure "diagnostics source preflight missing skipFullRegression" }
     }
     Test-WindowsUserSetupGuidanceOperatorSetupPlan $diagnostics.windowsUserSetupGuidanceEvidence "diagnostics windows-user setup guidance"
+    Test-WindowsUserSettingsEntrypointEvidence $diagnostics.windowsUserSettingsEntrypointEvidence "diagnostics windows-user settings entrypoint"
 
     if (-not (Has-Property $diagnostics "lifecycle")) {
         Add-Failure "diagnostics missing translator lifecycle status"

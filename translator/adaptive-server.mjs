@@ -1333,6 +1333,7 @@ function diagnosticsPayload({
         sourcePreflight,
         syncReadinessEvidence: fast ? null : latestManagerReportItem("Sync readiness", "latest-sync-readiness.json").syncReadinessEvidence,
         windowsUserSetupGuidanceEvidence: fast ? null : latestManagerReportItem("Windows setup guidance", "latest-windows-user-setup-guidance.json").windowsUserSetupGuidanceEvidence,
+        windowsUserSettingsEntrypointEvidence: fast ? null : latestManagerReportItem("Windows settings entrypoint", "latest-windows-user-settings-entrypoint.json").windowsUserSettingsEntrypointEvidence,
         antigravityRetries: {
             count: ANTIGRAVITY_RETRY_AUDIT.count,
             latest: ANTIGRAVITY_RETRY_AUDIT.latest,
@@ -3192,6 +3193,28 @@ function latestManagerReportItem(label, fileName) {
             loginVerified: report.loginVerified === true,
             releaseAcceptableAccountProof: report.releaseAcceptableAccountProof === true,
         } : null,
+        windowsUserSettingsEntrypointEvidence: report?.reportName === "windows-user-settings-entrypoint" ? {
+            reportName: shortSafeText(report.reportName || "", ""),
+            noTraffic: report.noTraffic === true,
+            requestedRealTraffic: report.requestedRealTraffic === true,
+            usedRealTraffic: report.usedRealTraffic === true,
+            behaviorCovered: report.behaviorCovered === true,
+            coverageKind: shortSafeText(report.coverageKind || "", ""),
+            requestedOpenSettings: report.requestedOpenSettings === true,
+            openedSettings: report.openedSettings === true,
+            changedSystem: report.changedSystem === true,
+            createdUser: report.createdUser === true,
+            startedLogin: report.startedLogin === true,
+            capturesPassword: report.capturesPassword === true,
+            storesPassword: report.storesPassword === true,
+            runsSystemUserCommand: report.runsSystemUserCommand === true,
+            requiredOpenSettingsApproval: shortSafeText(report.requiredOpenSettingsApproval || "", ""),
+            openSettingsApprovalProvided: report.openSettingsApprovalProvided === true,
+            settingsUri: shortSafeText(report.settingsUri || "", ""),
+            targetLocalWindowsUser: shortSafeText(report.targetLocalWindowsUser || "", ""),
+            nextNoTrafficStatusCommand: shortSafeText(report.nextNoTrafficStatusCommand || "", ""),
+            accountIsolationCaveat: shortSafeText(report.accountIsolationCaveat || "", ""),
+        } : null,
         secondAccountLoginEntrypointEvidence: report?.reportName === "second-antigravity-account-login-entrypoint" ? {
             noTraffic: report.noTraffic === true,
             usedRealTraffic: report.usedRealTraffic === true,
@@ -3754,6 +3777,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Antigravity Windows 用户准备", "latest-antigravity-cli-windows-user-readiness.json"),
         latestManagerReportItem("Windows 隔离用户准备", "latest-windows-user-account-prepare.json"),
         latestManagerReportItem("Windows 隔离用户指引", "latest-windows-user-setup-guidance.json"),
+        latestManagerReportItem("Windows 隔离用户设置入口", "latest-windows-user-settings-entrypoint.json"),
         latestManagerReportItem("Antigravity 账号隔离状态", "latest-antigravity-account-isolation-status.json"),
         latestManagerReportItem("Antigravity 第二账号登录入口", "latest-second-antigravity-account-login-entrypoint.json"),
         latestManagerReportItem("Antigravity 第二账号总状态", "latest-second-account-readiness-summary.json"),
@@ -4531,6 +4555,13 @@ function latestReportsSummary(result){
         lines.push("  windowsUserSetupGuidance afterManualSetup: checks="+(Array.isArray(plan.afterManualSetupChecks)&&plan.afterManualSetupChecks.length?plan.afterManualSetupChecks.join(" -> "):"missing")+" / entrypoint="+(plan.finalLoginEntrypoint||"unknown")+" / approval="+(plan.finalLoginApproval||"unknown"));
       }
       if(evidence.manualSetupCommandHint) lines.push("  windowsUserSetupGuidance hint: "+evidence.manualSetupCommandHint);
+    }
+    if(item.windowsUserSettingsEntrypointEvidence){
+      const evidence=item.windowsUserSettingsEntrypointEvidence;
+      lines.push("  windowsUserSettingsEntrypoint: requestedOpen="+(evidence.requestedOpenSettings?"true":"false")+" / opened="+(evidence.openedSettings?"true":"false")+" / target="+(evidence.targetLocalWindowsUser||"unknown")+" / uri="+(evidence.settingsUri||"unknown"));
+      lines.push("  windowsUserSettingsEntrypoint guard: traffic="+(evidence.usedRealTraffic?"true":"false")+" / changedSystem="+(evidence.changedSystem?"true":"false")+" / createdUser="+(evidence.createdUser?"true":"false")+" / startedLogin="+(evidence.startedLogin?"true":"false")+" / storesPassword="+(evidence.storesPassword?"true":"false")+" / approval="+(evidence.requiredOpenSettingsApproval||"unknown"));
+      if(evidence.nextNoTrafficStatusCommand) lines.push("  windowsUserSettingsEntrypoint next: "+evidence.nextNoTrafficStatusCommand);
+      if(evidence.accountIsolationCaveat) lines.push("  windowsUserSettingsEntrypoint caveat: "+evidence.accountIsolationCaveat);
     }
     if(item.secondAccountLoginEntrypointEvidence){
       const evidence=item.secondAccountLoginEntrypointEvidence;

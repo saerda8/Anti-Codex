@@ -238,6 +238,7 @@ function Read-JsonSummary {
             antigravityCliWindowsUserReadinessEvidence = $json.antigravityCliWindowsUserReadinessEvidence
             windowsUserAccountPrepareEvidence = $json.windowsUserAccountPrepareEvidence
             windowsUserSetupGuidanceEvidence = $json.windowsUserSetupGuidanceEvidence
+            windowsUserSettingsEntrypointEvidence = $json.windowsUserSettingsEntrypointEvidence
             secondAccountLoginEntrypointEvidence = $json.secondAccountLoginEntrypointEvidence
             secondAccountReadinessSummaryEvidence = $json.secondAccountReadinessSummaryEvidence
             secondAccountPostLoginProofEvidence = $json.secondAccountPostLoginProofEvidence
@@ -490,6 +491,7 @@ $latestReports = @(
     "latest-antigravity-cli-windows-user-readiness.json",
     "latest-windows-user-account-prepare.json",
     "latest-windows-user-setup-guidance.json",
+    "latest-windows-user-settings-entrypoint.json",
     "latest-antigravity-account-isolation-status.json",
     "latest-second-antigravity-account-login-entrypoint.json",
     "latest-second-account-readiness-summary.json",
