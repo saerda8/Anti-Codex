@@ -210,6 +210,7 @@ function buildTask(workerName, marker, scenario) {
     return [
       "Work only in the current workspace directory.",
       "Create exactly these files: package.json, word-tally.mjs, word-tally.test.mjs, done.txt.",
+      "Do not create verify.mjs, helper scripts, notes, README files, logs, or any other extra files.",
       "word-tally.mjs must export function tallyWords(text). It must split words by whitespace, lowercase them, ignore empty words, and return a plain object of word counts.",
       "When run as a CLI, word-tally.mjs must print JSON word counts for the remaining command line text.",
       "The CLI code must use process.argv.slice(2); do not reference program.argv or any undeclared program variable.",

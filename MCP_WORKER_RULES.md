@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Direct five-worker project smoke timed out, then DeepSeek exact-file repair restored green
+
+- Task: refresh direct worker MCP `project` smoke for the five non-Antigravity workers without using current-channel implementation dispatch.
+- Result: the five-worker caller timed out, but the background smoke later published a report. MIMO, MiMoCode, Kilo, and OpenCode produced valid exact-file word-tally projects; DeepSeek passed tests and CLI JSON but created an extra `verify.mjs`, so strict host verification failed. The task prompt now explicitly forbids `verify.mjs`, helper scripts, notes, README files, logs, and all other extra files. A DeepSeek-only `--merge-latest` rerun passed as `dsw_mr4rpeql_hh2e3h`, restoring 5/5 project-smoke success.
+- Cause classification: the initial red report was not worker inability or model failure; it was a strict extra-file contract violation plus a long multi-worker caller timeout. Current-channel worker transport remains a separate blocker and is still not dispatchable.
+- Rule change: after a multi-worker direct smoke caller timeout, first inspect process state and the latest report. If one worker is red, materially narrow or tighten the prompt and repair with one-worker `--merge-latest`; do not rerun all five workers by default.
+
 ### 2026-07-03 - Repeated current-channel worker failure now stops same-channel retries
 
 - Task: after checkpoint `6174000`, rerun the exposed MiMoCode read-only recovery probe before any worker implementation dispatch.
