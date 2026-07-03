@@ -101,6 +101,7 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-ui-idle-stability.ps1",
     "scripts\test-anticodex-desktop-task-suite.mjs",
     "scripts\test-anticodex-cli-transport-boundary.mjs",
+    "scripts\test-anticodex-conversation-hygiene.mjs",
     "scripts\test-anticodex-long-task-landing-matrix.mjs",
     "scripts\test-anticodex-native-codex-parity-tasks.mjs",
     "scripts\test-anticodex-goal-readiness.mjs",

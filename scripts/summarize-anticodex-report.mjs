@@ -229,6 +229,7 @@ const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
 const isCurrentChannelWorkerRecoveryReport = report?.reportName === "current-channel-worker-recovery" || /latest-current-channel-worker-recovery\.json$/i.test(path);
+const isConversationHygieneReport = report?.reportName === "conversation-hygiene" || /latest-conversation-hygiene\.json$/i.test(path);
 const isAmbientSuggestionsReport = report?.reportName === "ambient-suggestions" || /latest-ambient-suggestions\.json$/i.test(path);
 const isUiChatSmokeReport = report?.reportName === "ui-chat-smoke" || /latest-ui-chat-smoke\.json$/i.test(path);
 const isUiWebSearchSmokeReport = report?.reportName === "ui-web-search-smoke" || /latest-ui-web-search-smoke\.json$/i.test(path);
@@ -606,6 +607,21 @@ const summary = {
       ...(Array.isArray(report.nameScans?.installRoot?.entries) ? report.nameScans.installRoot.entries : []),
     ].filter((item) => item?.allowed !== true).length,
     chromiumHeadSuggestFileCount: Number.isFinite(Number(report.chromiumOnDeviceHeadSuggestModel?.fileCount)) ? Number(report.chromiumOnDeviceHeadSuggestModel.fileCount) : null,
+  } : null,
+  conversationHygieneEvidence: isConversationHygieneReport ? {
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    inspectedSessionFileCount: Number.isFinite(Number(report.inspectedSessionFileCount)) ? Number(report.inspectedSessionFileCount) : null,
+    likelyValidationSessionCount: Number.isFinite(Number(report.likelyValidationSessionCount)) ? Number(report.likelyValidationSessionCount) : null,
+    smokeMarkerCount: Number.isFinite(Number(report.smokeMarkerCount)) ? Number(report.smokeMarkerCount) : null,
+    uniqueSmokeMarkerCount: Number.isFinite(Number(report.uniqueSmokeMarkerCount)) ? Number(report.uniqueSmokeMarkerCount) : null,
+    recommendCleanup: boolField(report, "recommendCleanup"),
+    destructiveActionTaken: boolField(report, "destructiveActionTaken"),
+    nativeCodexTouched: boolField(report, "nativeCodexTouched"),
+    cleanupCommandPreview: asString(report.cleanupCommandPreview),
+    nextSafeCleanupStep: asString(report.nextSafeCleanupStep),
   } : null,
   uiChatSmokeEvidence: isUiChatSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

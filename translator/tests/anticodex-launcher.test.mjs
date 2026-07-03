@@ -257,6 +257,10 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
 
 test("Anti-Codex conversation cleanup preserves project roots and native Codex isolation", () => {
   const cleanup = readFileSync(resolve(root, "scripts", "clear-anticodex-conversations.ps1"), "utf8");
+  const hygiene = readFileSync(resolve(root, "scripts", "test-anticodex-conversation-hygiene.mjs"), "utf8");
+  const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+  const syncRuntime = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+  const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
 
   assert.match(cleanup, /conversation-backups/);
   assert.match(cleanup, /state_5\.sqlite/);
@@ -313,6 +317,16 @@ test("Anti-Codex conversation cleanup preserves project roots and native Codex i
   assert.match(cleanup, /protect-anticodex-log-db\.mjs/);
   assert.doesNotMatch(cleanup, /Remove-Item\s+[^`r`n]*(?:USERPROFILE|\\\.codex|AppData\\Roaming\\Codex|AppData\\Local\\Codex)/i);
   assert.doesNotMatch(cleanup, /Move-Item\s+[^`r`n]*(?:USERPROFILE|\\\.codex|AppData\\Roaming\\Codex|AppData\\Local\\Codex)/i);
+  assert.match(hygiene, /conversation-inventory-report-only/);
+  assert.match(hygiene, /latest-conversation-hygiene\.json/);
+  assert.match(hygiene, /destructiveActionTaken: false/);
+  assert.match(hygiene, /nativeCodexTouched: false/);
+  assert.match(hygiene, /clear-anticodex-conversations\.ps1 -WhatIfOnly/);
+  assert.match(hygiene, /UI_\[A-Z0-9_\]\+_SMOKE/);
+  assert.match(collector, /latest-conversation-hygiene\.json/);
+  assert.match(syncRuntime, /scripts\\test-anticodex-conversation-hygiene\.mjs/);
+  assert.match(summarizer, /conversationHygieneEvidence/);
+  assert.match(summarizer, /conversation-hygiene/);
 });
 
 test("Anti-Codex recovers a dead translator without restarting its desktop window", () => {
