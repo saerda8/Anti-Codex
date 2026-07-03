@@ -13452,6 +13452,9 @@ test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
   assert.match(summarizer, /profileResultProofComplete/);
   assert.match(summarizer, /pendingRealTaskScenarios/);
   assert.match(summarizer, /expectedResultPresent/);
+  assert.match(summarizer, /customFreshnessReportOnly/);
+  assert.match(summarizer, /canonicalReleaseMaxAgeHours/);
+  assert.match(summarizer, /canonicalLatest/);
   assert.match(collector, /realTaskCoverageRoadmapEvidence = \$json\.realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing realTaskCoverageRoadmapEvidence/);
   assert.match(diagnostics, /real-task-coverage-roadmap summary missing minimal refresh command/);
