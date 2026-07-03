@@ -15,7 +15,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 if (args.has("--help") || args.has("-h")) {
   console.log([
     "Usage: node scripts/test-anticodex-current-channel-worker-recovery.mjs",
-    "  [--report-root PATH] [--max-age-ms N]",
+    "  [--report-root PATH] [--max-age-ms N] [--compact]",
     "",
     "Reads current-channel transport plus direct worker server/status probe reports.",
     "Writes latest-current-channel-worker-recovery.json without traffic or worker dispatch.",
@@ -26,6 +26,7 @@ if (args.has("--help") || args.has("-h")) {
 const startedAt = Date.now();
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const maxAgeMs = Number(args.get("--max-age-ms") || 6 * 60 * 60 * 1000);
+const compact = args.has("--compact");
 
 function readReport(fileName) {
   const path = resolve(reportRoot, fileName);
@@ -201,4 +202,25 @@ const payload = {
 };
 
 const report = writeSignedReport(payload);
-console.log(JSON.stringify({ ...payload, report }));
+if (compact) {
+  console.log(JSON.stringify({
+    ok: payload.ok,
+    reportName: payload.reportName,
+    requestedRealTraffic: payload.requestedRealTraffic,
+    usedRealTraffic: payload.usedRealTraffic,
+    status: payload.status,
+    canDispatchCurrentChannelWorkers: payload.canDispatchCurrentChannelWorkers,
+    requiresCodexMcpReload: payload.requiresCodexMcpReload,
+    requiresFreshReadOnlyProbe: payload.requiresFreshReadOnlyProbe,
+    missingRequirements: payload.missingRequirements,
+    workerTransportFailedTools: payload.currentEvidence.workerTransportFailedTools,
+    workerTransportOkTools: payload.currentEvidence.workerTransportOkTools,
+    genericMcpControlOk: payload.currentEvidence.genericMcpControlOk,
+    directProbeOk: payload.currentEvidence.directProbeOk,
+    directStatusProbeOk: payload.currentEvidence.directStatusProbeOk,
+    nextOperatorAction: payload.operatorActionCard.nextOperatorAction,
+    report,
+  }));
+} else {
+  console.log(JSON.stringify({ ...payload, report }));
+}

@@ -74,6 +74,7 @@ $requiredSourceFiles = @(
     "scripts\test-anticodex-worker-mcp-status-probe.mjs",
     "scripts\record-anticodex-current-channel-worker-transport.mjs",
     "scripts\test-anticodex-current-channel-worker-recovery.mjs",
+    "scripts\test-anticodex-current-channel-worker-recovery.ps1",
     "scripts\test-anticodex-worker-mcp-task-smoke.mjs",
     "scripts\test-anticodex-mcp-tool-loop.ps1",
     "scripts\test-anticodex-missing-history.mjs",

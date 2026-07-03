@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$ReportRoot = "",
-    [int]$MaxAgeMs = 21600000
+    [int]$MaxAgeMs = 21600000,
+    [switch]$Compact
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,9 @@ $Script = Join-Path $ScriptRoot "test-anticodex-current-channel-worker-recovery.
 $ArgsList = @($Script, "--max-age-ms", [string]$MaxAgeMs)
 if ($ReportRoot) {
     $ArgsList += @("--report-root", $ReportRoot)
+}
+if ($Compact) {
+    $ArgsList += @("--compact")
 }
 
 & $Node @ArgsList

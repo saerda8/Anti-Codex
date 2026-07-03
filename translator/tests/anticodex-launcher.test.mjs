@@ -13081,6 +13081,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-worker-mcp-status-probe\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.ps1/);
   assert.match(summarizer, /goalReadinessEvidence/);
   assert.match(collector, /goalReadinessEvidence = \$json\.goalReadinessEvidence/);
   assert.match(diagnostics, /goal-readiness summary missing goalReadinessEvidence/);
@@ -13169,6 +13170,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerRecovery, /directWorkerStatusProbe/);
   assert.match(workerRecovery, /canDispatchCurrentChannelWorkers/);
   assert.match(workerRecovery, /postReloadAcceptanceCriteria/);
+  assert.match(workerRecovery, /--compact/);
   assert.match(workerRecovery, /operatorActionCard/);
   assert.match(workerRecovery, /safeToStartImplementationWorker/);
   assert.doesNotMatch(workerRecovery, /start_implementation/);
