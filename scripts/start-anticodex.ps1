@@ -81,10 +81,34 @@ function Activate-AntiCodexWindow {
     } catch {}
 }
 
+function Resolve-AntiCodexPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return [IO.Path]::GetFullPath($Path).TrimEnd("\")
+}
+
+function Invoke-InstalledAntiCodexLauncherIfAvailable {
+    $installedLauncher = Join-Path (Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime\scripts") "start-anticodex.ps1"
+    if (-not (Test-Path -LiteralPath $installedLauncher -PathType Leaf)) { return }
+
+    $currentLauncher = Resolve-AntiCodexPath $PSCommandPath
+    $installedLauncher = Resolve-AntiCodexPath $installedLauncher
+    if ($currentLauncher.Equals($installedLauncher, [StringComparison]::OrdinalIgnoreCase)) { return }
+
+    $forwardArgs = @{}
+    if ($SkipUpdateCheck) {
+        $forwardArgs.SkipUpdateCheck = $true
+    }
+    & $installedLauncher @forwardArgs
+    $exitCode = if ($null -ne $global:LASTEXITCODE) { [int]$global:LASTEXITCODE } else { 0 }
+    exit $exitCode
+}
+
 function Resolve-AntiCodexInstallRoot {
     $scriptParent = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
     return [IO.Path]::GetFullPath((Split-Path -Parent $scriptParent))
 }
+
+Invoke-InstalledAntiCodexLauncherIfAvailable
 
 function Get-RunningAntiCodexMain {
     param([Parameter(Mandatory = $true)][string]$MainExecutable)

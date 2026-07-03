@@ -230,7 +230,20 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   assert.match(server, /模型发现/);
   assert.match(launcher, /expectedTransport/);
   assert.match(launcher, /DEEPCODEX_STATE_ROOT/);
+  assert.match(launcher, /function Invoke-InstalledAntiCodexLauncherIfAvailable/);
+  assert.match(launcher, /\$installedLauncher = Join-Path \(Join-Path \$env:LOCALAPPDATA "Anti-Codex\\runtime\\scripts"\) "start-anticodex\.ps1"/);
+  assert.match(launcher, /\$currentLauncher = Resolve-AntiCodexPath \$PSCommandPath/);
+  assert.match(launcher, /\$currentLauncher\.Equals\(\$installedLauncher, \[StringComparison\]::OrdinalIgnoreCase\)/);
+  assert.match(launcher, /\$forwardArgs = @\{\}/);
+  assert.match(launcher, /\$forwardArgs\.SkipUpdateCheck = \$true/);
+  assert.match(launcher, /& \$installedLauncher @forwardArgs/);
+  assert.doesNotMatch(launcher, /& powershell\.exe @forwardArgs/);
+  assert.match(launcher, /exit \$exitCode/);
   assert.match(launcher, /function Resolve-AntiCodexInstallRoot/);
+  assert.ok(
+    launcher.indexOf("Invoke-InstalledAntiCodexLauncherIfAvailable") < launcher.indexOf("$installRoot = Resolve-AntiCodexInstallRoot"),
+    "source-tree launcher forwarding must run before install-root resolution",
+  );
   assert.doesNotMatch(launcher, /Split-Path -Leaf \$scriptParent\) -ieq "runtime"/);
   assert.match(launcher, /CODEX_HOME_DIR\s*=\s*Join-Path \$env:DEEPCODEX_STATE_ROOT "codex-home-deepseek-app"/);
   assert.match(launcher, /CODEX_HOME\s*=\s*\$env:CODEX_HOME_DIR/);
