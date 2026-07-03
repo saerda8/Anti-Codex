@@ -1515,6 +1515,7 @@ const summary = {
       nextOperatorActions: Array.isArray(report.goalOperatorActionCard.nextOperatorActions) ? asStringArray(report.goalOperatorActionCard.nextOperatorActions) : [],
       userVisibleNextStep: asString(report.goalOperatorActionCard.userVisibleNextStep),
       noTrafficStatusCommand: asString(report.goalOperatorActionCard.noTrafficStatusCommand),
+      compactStatusCommand: asString(report.goalOperatorActionCard.compactStatusCommand),
       workerRecoveryStatusCommand: asString(report.goalOperatorActionCard.workerRecoveryStatusCommand),
       workerRecoveryCommand: asString(report.goalOperatorActionCard.workerRecoveryCommand),
       secondAccountStatusCommand: asString(report.goalOperatorActionCard.secondAccountStatusCommand),

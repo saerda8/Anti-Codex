@@ -33,6 +33,7 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
   assert.equal(report.currentUsability?.nativeCodexLikeAgenticEvidence, true);
   assert.match(report.currentUsability?.caveat || "", /Full goal/);
   assert.equal(report.objectiveRequirementSummary.canClaimFullGoalNow, false);
+  assert.match(report.goalOperatorActionCard?.compactStatusCommand || "", /--compact-status/);
 });
 
 test("goal readiness compact-status is short and carries operator status", () => {

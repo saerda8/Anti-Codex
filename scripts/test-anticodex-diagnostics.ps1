@@ -1190,6 +1190,7 @@ function Test-GoalReadinessSummaryEvidence {
         $goalNextActions = @(As-FlatArray $goalOperatorActionCard.nextOperatorActions | ForEach-Object { [string]$_ })
         if ($goalNextActions.Count -lt 2) { Add-Failure "goal-readiness summary operator action card next actions missing" }
         if (-not ([string]$goalOperatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-goal-readiness.mjs")) { Add-Failure "goal-readiness summary operator action card no-traffic command missing" }
+        if (-not ([string]$goalOperatorActionCard.compactStatusCommand).Contains("--compact-status")) { Add-Failure "goal-readiness summary operator action card compact status command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "goal-readiness summary operator action card second-account command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountPostLoginProofCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "goal-readiness summary operator action card second-account post-login proof command missing" }
     }

@@ -1375,6 +1375,7 @@ function summarizeGate(definition) {
         const cardNextActions = Array.isArray(goalOperatorActionCard.nextOperatorActions) ? goalOperatorActionCard.nextOperatorActions.map(String) : [];
         if (cardNextActions.length < 2) semanticFailures.push("goal_readiness_operator_action_card_next_actions");
       if (!String(goalOperatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-goal-readiness.mjs")) semanticFailures.push("goal_readiness_operator_action_card_status_command");
+      if (!String(goalOperatorActionCard.compactStatusCommand || "").includes("--compact-status")) semanticFailures.push("goal_readiness_operator_action_card_compact_status_command");
       if (!String(goalOperatorActionCard.secondAccountStatusCommand || "").includes("test-anticodex-second-account-readiness-summary.ps1")) semanticFailures.push("goal_readiness_operator_action_card_second_account_command");
       }
       const objectiveRequirementSummary = report.objectiveRequirementSummary && typeof report.objectiveRequirementSummary === "object" ? report.objectiveRequirementSummary : null;

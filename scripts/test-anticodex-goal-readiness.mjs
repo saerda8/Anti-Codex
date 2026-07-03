@@ -1211,6 +1211,7 @@ const goalOperatorActionCard = {
         ? "With the user present, run the approved second-account login and post-login proof."
         : "Rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
+  compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
   workerRecoveryStatusCommand: currentChannelRecoveryStatusCommand,
   workerRecoveryCommand: recommendedFirstReadOnlyProbe?.recordCommand || currentChannelRecoveryRecordCommand,
   workerRecoveryRecommendedReadOnlyProbes: recommendedReadOnlyProbes,
