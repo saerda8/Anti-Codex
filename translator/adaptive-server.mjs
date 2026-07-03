@@ -7954,7 +7954,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
     if (requestNeedsModelLedLocalArtifactWork(originalRequest) || requestNeedsModelLedLocalArtifactWork(chatBody)) {
-        if (!(requirement.reportSite || requirement.complexProject)) return null;
+        if (!(requirement.reportSite && !requirement.complexProject && !requirement.autonomousReasoning)) return null;
     }
     if (requirement.complexProject) {
         return makeToolCallCompletion(
@@ -8724,7 +8724,7 @@ function withLocalArtifactWorkdir(args = {}, requirement = null) {
 }
 
 function localArtifactForbiddenHistoryDetour(command = "") {
-    return /(?:\\\.gemini\\antigravity\\brain|[\\\/]\.gemini[\\\/]antigravity[\\\/]brain|Antigravity\s+(?:brain|transcript|history|log)|system_generated|transcript\.jsonl|\.system_generated[\\\/]logs)/i.test(String(command || ""));
+    return /(?:\\\.gemini\\antigravity\\brain|[\\\/]\.gemini[\\\/]antigravity[\\\/]brain|[\\\/]\.system_generated[\\\/]logs|transcript\.jsonl)/i.test(String(command || ""));
 }
 
 function localArtifactForbiddenHistoryBlockedCommand(requirement = null) {

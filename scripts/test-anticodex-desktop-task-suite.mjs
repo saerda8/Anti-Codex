@@ -239,12 +239,20 @@ function timeoutForTask(taskMode) {
   if (args.has("--timeout-ms")) return Math.max(15_000, Number(args.get("--timeout-ms") || 0));
   if (taskMode === "repo-multi-file-edit") return 360_000;
   if (taskMode === "repo-file-edit") return 240_000;
-  if (taskMode === "multi-turn-project") return 240_000;
+  if (taskMode === "multi-turn-project") return 300_000;
   if (taskMode === "complex-project") return 240_000;
   if (taskMode === "autonomous-reasoning") return 300_000;
   if (taskMode === "agentic-step-flow") return 300_000;
   if (taskMode === "local-project" || taskMode === "coding-project" || taskMode === "report-site" || taskMode === "web-search") return 180_000;
   return 120_000;
+}
+
+function childProcessTimeoutForTask(taskMode) {
+  const timeoutMs = timeoutForTask(taskMode);
+  if (taskMode === "multi-turn-project") return timeoutMs * 3 + 120_000;
+  if (taskMode === "autonomous-reasoning") return timeoutMs * 3 + 120_000;
+  if (taskMode === "complex-project" || taskMode === "report-site") return timeoutMs * 2 + 120_000;
+  return timeoutMs + 90_000;
 }
 
 function taskCommand(taskMode) {
@@ -261,6 +269,32 @@ function taskCommand(taskMode) {
 function reportPathForTask(taskMode) {
   const name = perTaskReports[taskMode];
   return name ? resolve(reportRoot, name) : "";
+}
+
+function taskReportSnapshot(taskMode) {
+  const reportPath = reportPathForTask(taskMode);
+  const snapshot = {
+    reportPath,
+    present: false,
+    mtime: null,
+    marker: "",
+    ok: null,
+    elapsedMs: null,
+    failures: [],
+  };
+  if (!reportPath || !existsSync(reportPath)) return snapshot;
+  snapshot.present = true;
+  snapshot.mtime = statSync(reportPath).mtime.toISOString();
+  try {
+    const parsed = JSON.parse(readFileSync(reportPath, "utf8"));
+    snapshot.marker = String(parsed?.marker || "");
+    snapshot.ok = parsed?.ok === true;
+    snapshot.elapsedMs = Number.isFinite(Number(parsed?.elapsedMs)) ? Number(parsed.elapsedMs) : null;
+    snapshot.failures = Array.isArray(parsed?.failures) ? parsed.failures : [];
+  } catch (error) {
+    snapshot.parseError = error instanceof Error ? error.message : String(error);
+  }
+  return snapshot;
 }
 
 function compactText(value, max = 4000) {
@@ -543,26 +577,34 @@ function runTask(taskMode) {
     };
   }
   const started = Date.now();
+  const latestReportBeforeTask = taskReportSnapshot(taskMode);
+  const childTimeoutMs = childProcessTimeoutForTask(taskMode);
   const child = spawnSync(process.execPath, command.slice(1), {
     cwd: sourceRoot,
     encoding: "utf8",
-    timeout: timeoutForTask(taskMode) + 60_000,
+    timeout: childTimeoutMs,
     windowsHide: true,
   });
   const parsed = parseChildPayload(child.stdout);
   const cleanup = taskMode.startsWith("repo-") ? cleanupFixtureArtifacts() : null;
+  const latestReportAfterTask = taskReportSnapshot(taskMode);
   return {
     taskMode,
     ok: child.status === 0 && parsed?.ok === true,
     skipped: false,
     command: command.map((part) => String(part)),
     reportPath: reportPathForTask(taskMode),
+    taskTimeoutMs: timeoutForTask(taskMode),
+    childTimeoutMs,
+    timedOut: child.error?.code === "ETIMEDOUT",
     exitCode: child.status,
     signal: child.signal,
     elapsedMs: Date.now() - started,
     reportName: parsed?.reportName || "",
     marker: parsed?.marker || "",
     failures: Array.isArray(parsed?.failures) ? parsed.failures : [],
+    latestReportBeforeTask,
+    latestReportAfterTask,
     stdout: child.status === 0 ? "" : compactText(child.stdout),
     stderr: compactText(child.stderr),
     cleanup,

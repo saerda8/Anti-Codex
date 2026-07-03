@@ -5797,6 +5797,54 @@ test("local artifact tool calls block Antigravity brain transcript detours", () 
   assert.doesNotMatch(args.command, /transcript\.jsonl/i);
 });
 
+test("local artifact tool calls allow commands that only repeat forbidden history guidance", () => {
+  const marker = "UI_MULTI_TURN_PROJECT_SMOKE_GUIDANCE_123_FIRST";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create package.json, word-tally.mjs, word-tally.test.mjs and done.txt in C:\\Temp\\multi. Do not inspect Antigravity brain, transcript, history, or log directories. done.txt must contain ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_guidance_text",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: String.raw`$dir='C:\Temp\multi'; New-Item -ItemType Directory -Path $dir -Force | Out-Null; Set-Content -Path (Join-Path $dir 'done.txt') -Value '${marker}' -NoNewline; Write-Output 'Do not inspect Antigravity brain, transcript, history, or log directories.'`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.doesNotMatch(args.command, /blocked forbidden Antigravity brain\/transcript\/history\/log inspection/);
+  assert.match(args.command, /Anti-Codex exact marker-only write normalization/);
+  assert.match(args.command, /done\.txt/);
+});
+
 test("complex project shell commands inherit the artifact workdir when using relative paths", () => {
   const marker = "UI_COMPLEX_PROJECT_SMOKE_WORKDIR_123";
   const artifactDir = "C:\\Temp\\anticodex-complex-workdir";
@@ -6554,7 +6602,7 @@ test("agentic step-flow suppresses repeated phase text restored through chat mes
   });
   assert.equal(fmt.output[0].type, "message");
   assert.doesNotMatch(fmt.output[0].content[0].text, /阶段2：准备验证文件/);
-  assert.match(fmt.output[0].content[0].text, /读回关键结果/);
+  assert.match(fmt.output[0].content[0].text, /(?:读回关键结果|交付物需要互相校验)/);
   assert.match(fmt.output[0].content[0].text, /done\.txt/);
   assert.equal(fmt.output[1].type, "function_call");
   assert.equal(fmt.output[1].name, "shell_command");
