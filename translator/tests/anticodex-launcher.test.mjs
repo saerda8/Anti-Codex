@@ -15514,6 +15514,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   const prepare = readFileSync(resolve(root, "scripts", "test-anticodex-windows-user-account-prepare.ps1"), "utf8");
   const status = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-account-isolation-status.ps1"), "utf8");
   const dryRunLauncher = readFileSync(resolve(root, "scripts", "start-anticodex-antigravity-cli-login-windows-user.ps1"), "utf8");
+  const windowsUserSettingsEntrypoint = readFileSync(resolve(root, "scripts", "open-anticodex-windows-user-settings.ps1"), "utf8");
   const secondAccountLogin = readFileSync(resolve(root, "scripts", "start-anticodex-second-antigravity-account-login.ps1"), "utf8");
   const secondAccountLoginReport = readFileSync(resolve(root, "scripts", "test-anticodex-second-account-login-entrypoint.ps1"), "utf8");
   const secondAccountPostLoginProof = readFileSync(resolve(root, "scripts", "test-anticodex-second-account-post-login-proof.ps1"), "utf8");
@@ -15839,10 +15840,15 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(setupGuidance, /rawUserManagementCommandProvided = \$false/);
   assert.match(setupGuidance, /afterManualSetupChecks = @\(/);
   assert.match(setupGuidance, /postManualSetupValidationCommands = @\(/);
+  assert.match(setupGuidance, /open-anticodex-windows-user-settings\.ps1/);
+  assert.match(setupGuidance, /open-windows-user-settings-for-anticodex-second-account/);
   assert.match(setupGuidance, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(setupGuidance, /test-anticodex-antigravity-account-isolation-status\.ps1/);
   assert.match(setupGuidance, /start-anticodex-second-antigravity-account-login\.ps1/);
   assert.match(setupGuidance, /postManualSetupRequiredReadyFields = @\(/);
+  assert.match(setupGuidance, /optionalSettingsEntrypoint = "open-anticodex-windows-user-settings\.ps1"/);
+  assert.match(setupGuidance, /optionalSettingsCommandTemplate = \$settingsOpenCommandTemplate/);
+  assert.match(setupGuidance, /optionalSettingsApproval = "open-windows-user-settings-for-anticodex-second-account"/);
   assert.match(setupGuidance, /"targetUserExists:true"/);
   assert.match(setupGuidance, /"targetWindowsUserSid:present"/);
   assert.match(setupGuidance, /"targetUserIdentityBoundaryOk:true"/);
@@ -15865,6 +15871,21 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(setupGuidance, /startsLogin = \$true/);
   assert.match(setupGuidance, /usesRealTraffic = \$false/);
   assert.doesNotMatch(setupGuidance, /New-LocalUser|Add-LocalGroupMember|Start-Process|Invoke-RestMethod|Invoke-WebRequest|\.env/);
+
+  assert.match(windowsUserSettingsEntrypoint, /reportName = "windows-user-settings-entrypoint"/);
+  assert.match(windowsUserSettingsEntrypoint, /coverageKind = "windows-user-settings-entrypoint-no-traffic"/);
+  assert.match(windowsUserSettingsEntrypoint, /requiredOpenSettingsApproval = \$approvalToken/);
+  assert.match(windowsUserSettingsEntrypoint, /open-windows-user-settings-for-anticodex-second-account/);
+  assert.match(windowsUserSettingsEntrypoint, /settingsUri = \$settingsUri/);
+  assert.match(windowsUserSettingsEntrypoint, /ms-settings:otherusers/);
+  assert.match(windowsUserSettingsEntrypoint, /Start-Process -FilePath \$settingsUri/);
+  assert.match(windowsUserSettingsEntrypoint, /createdUser = \$false/);
+  assert.match(windowsUserSettingsEntrypoint, /startedLogin = \$false/);
+  assert.match(windowsUserSettingsEntrypoint, /capturesPassword = \$false/);
+  assert.match(windowsUserSettingsEntrypoint, /storesPassword = \$false/);
+  assert.match(windowsUserSettingsEntrypoint, /usedRealTraffic = \$false/);
+  assert.match(windowsUserSettingsEntrypoint, /latest-windows-user-settings-entrypoint\.json/);
+  assert.doesNotMatch(windowsUserSettingsEntrypoint, /New-LocalUser|Add-LocalGroupMember|Invoke-RestMethod|Invoke-WebRequest|AllowRealTraffic|\.env/);
 
   assert.match(summarizer, /runasWorkingDirectory/);
   assert.match(summarizer, /bootstrapKeepsShellOpen/);
@@ -15954,6 +15975,7 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(syncRuntime, /test-anticodex-antigravity-cli-windows-user-readiness\.ps1/);
   assert.match(syncRuntime, /test-anticodex-windows-user-account-prepare\.ps1/);
   assert.match(syncRuntime, /test-anticodex-windows-user-setup-guidance\.ps1/);
+  assert.match(syncRuntime, /open-anticodex-windows-user-settings\.ps1/);
   assert.match(syncRuntime, /test-anticodex-antigravity-account-isolation-status\.ps1/);
   assert.match(syncRuntime, /scripts\\anticodex-powershell-json-invoke\.ps1/);
   assert.match(syncRuntime, /test-anticodex-second-account-readiness-summary\.ps1/);

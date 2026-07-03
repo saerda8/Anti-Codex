@@ -73,6 +73,7 @@ $postManualSetupValidationCommands = @(
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\AntiCodexModel -Compact",
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\AntiCodexModel -Compact"
 )
+$settingsOpenCommandTemplate = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\open-anticodex-windows-user-settings.ps1 -OpenSettings -OpenSettingsApproval open-windows-user-settings-for-anticodex-second-account"
 $postManualSetupRequiredReadyFields = @(
     "targetUserExists:true",
     "targetWindowsUserSid:present",
@@ -165,6 +166,9 @@ $report = [ordered]@{
         )
         postManualSetupValidationCommands = @($postManualSetupValidationCommands)
         postManualSetupRequiredReadyFields = @($postManualSetupRequiredReadyFields)
+        optionalSettingsEntrypoint = "open-anticodex-windows-user-settings.ps1"
+        optionalSettingsCommandTemplate = $settingsOpenCommandTemplate
+        optionalSettingsApproval = "open-windows-user-settings-for-anticodex-second-account"
         finalLoginEntrypoint = "start-anticodex-second-antigravity-account-login.ps1"
         finalLoginApproval = "start-separate-windows-user-login"
     }
