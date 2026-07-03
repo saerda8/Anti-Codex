@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Current-channel Kilo read-only reprobe still transport-closed after settings evidence checkpoint
+
+- Task: after checkpoint `3eb4e9c`, recheck a completed Kilo project-smoke job through the current Codex channel using read-only `kilo_wait_for_job` before considering worker dispatch.
+- Result: `kilo_wait_for_job` returned `Transport closed` immediately. A same-channel `node_repl` control check returned `CURRENT_CHANNEL_GENERIC_MCP_OK_AFTER_KILO_REPROBE`, and the signed transport/recovery reports were refreshed. Recovery remains `status:"reload_required"` and `canDispatchCurrentChannelWorkers:false`; exposed worker prefixes are currently `kilo,mimocode,deepseek,opencode`, with `antigravity,deveco,mimo` missing from this channel's exposed prefix inventory.
+- Cause classification: current Codex-channel worker transport remains closed for worker namespaces. Generic MCP is still usable, and direct worker probe/status evidence remains separate support evidence only.
+- Rule change: keep the no-dispatch rule in force for this channel. A fresh/reloaded channel still needs one successful read-only worker status/get/wait call before implementation worker jobs are allowed.
+
 ### 2026-07-03 - Current-channel MiMoCode read-only reprobe still transport-closed after settings-entrypoint checkpoint
 
 - Task: before considering any worker dispatch in the resumed goal turn, query a completed MiMoCode job through the current Codex channel.
