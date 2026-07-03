@@ -1,6 +1,6 @@
 (() => {
   const VERSION = "native-panel-v99";
-  const SUMMARY_VERSION = "latest-reports-evidence-v3";
+  const SUMMARY_VERSION = "latest-reports-evidence-v4";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
   const TRAFFIC_NOTICE_ID = "anticodex-traffic-notice";
@@ -41,6 +41,7 @@
     ["resetAntigravitySessionLock", "\u91cd\u7f6e Antigravity \u4f1a\u8bdd\u9501"],
     ["syncHost", "\u540c\u6b65 Codex \u66f4\u65b0"],
     ["mcpSkills", "\u68c0\u67e5 MCP/Skill"],
+    ["workerTransportStatus", "Worker \u901a\u9053\u72b6\u6001\uff08\u4e0d\u6d3e\u5de5\uff09"],
     ["pluginCapabilities", "\u68c0\u67e5\u63d2\u4ef6/\u5e94\u7528"],
     ["refreshFeatures", "\u5237\u65b0\u672c\u5730\u529f\u80fd"],
     ["stabilitySoak", "\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
@@ -62,6 +63,7 @@
     "updateCheck",
     "sourcePreflight",
     "mcpSkills",
+    "workerTransportStatus",
     "pluginCapabilities",
     "diagnosticsBundle",
     "viewLatestReports",
@@ -1537,6 +1539,17 @@
       `MCP ${r.mcp?.count ?? "\u672a\u77e5"} / Skill ${r.skills?.count ?? "\u672a\u77e5"}`,
       `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${r.mcp?.smoke?.realCall?.passed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cworker list ${Array.isArray(r.mcp?.smoke?.realList) ? r.mcp.smoke.realList.filter((entry) => entry && entry.passed === true).length : "\u672a\u77e5"}/${Array.isArray(r.mcp?.smoke?.realList) ? r.mcp.smoke.realList.length : "\u672a\u77e5"}\uff0cSkill \u6587\u4ef6 ${r.skills?.smoke?.readable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
     ].join("\n");
+    if (action === "workerTransportStatus") {
+      const evidence = r.currentEvidence || {};
+      return [
+        `Worker \u901a\u9053\u72b6\u6001\uff1a${r.canDispatchCurrentChannelWorkers ? "\u53ef\u6d3e\u5de5" : "\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053"}`,
+        `\u5f53\u524d\u9891\u9053\uff1a${r.status || "unknown"} / \u53ef\u6d3e\u5de5=${triStateText(r.canDispatchCurrentChannelWorkers)}`,
+        `\u76f4\u63a5 worker \u68c0\u67e5\uff1aserver ${evidence.directProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"} / status ${evidence.directStatusProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"}`,
+        Array.isArray(evidence.workerTransportFailedTools) && evidence.workerTransportFailedTools.length ? `\u5931\u8d25\u5de5\u5177\uff1a${evidence.workerTransportFailedTools.slice(0, 6).join(", ")}` : "",
+        r.operatorActionCard?.userVisibleNextStep ? `\u4e0b\u4e00\u6b65\uff1a${r.operatorActionCard.userVisibleNextStep}` : "",
+        failureSummaryLine(r),
+      ].filter(Boolean).join("\n");
+    }
     if (action === "pluginCapabilities") {
       const c = r.capabilities || {};
       const appTools = c.appToolCount ?? 0;
@@ -1620,7 +1633,7 @@
   function actionUiTimeoutMs(action) {
     if (action === "accountSwitch") return 65000;
     if (action === "fastOverallNoTraffic") return 90000;
-    if (action === "mcpSkills" || action === "pluginCapabilities") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
+    if (action === "mcpSkills" || action === "pluginCapabilities" || action === "workerTransportStatus") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
     if (action === "updateCheck" || action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
     return ACTION_UI_TIMEOUT_MS;
   }

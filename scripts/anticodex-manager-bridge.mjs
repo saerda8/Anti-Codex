@@ -838,6 +838,17 @@ function managerSummary(action, payload) {
     `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
     `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${result.mcp?.smoke?.realCall?.passed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cworker list ${Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList.filter((entry) => entry && entry.passed === true).length : "\u672a\u77e5"}/${Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList.length : "\u672a\u77e5"}\uff0cSkill \u6587\u4ef6 ${result.skills?.smoke?.readable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
   ].join("\n");
+  if (action === "workerTransportStatus") {
+    const evidence = result.currentEvidence || {};
+    return [
+      `Worker \u901a\u9053\u72b6\u6001\uff1a${result.canDispatchCurrentChannelWorkers ? "\u53ef\u6d3e\u5de5" : "\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053"}`,
+      `\u5f53\u524d\u9891\u9053\uff1a${result.status || "unknown"} / \u53ef\u6d3e\u5de5=${triStateText(result.canDispatchCurrentChannelWorkers)}`,
+      `\u76f4\u63a5 worker \u68c0\u67e5\uff1aserver ${evidence.directProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"} / status ${evidence.directStatusProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"}`,
+      Array.isArray(evidence.workerTransportFailedTools) && evidence.workerTransportFailedTools.length ? `\u5931\u8d25\u5de5\u5177\uff1a${evidence.workerTransportFailedTools.slice(0, 6).join(", ")}` : "",
+      result.operatorActionCard?.userVisibleNextStep ? `\u4e0b\u4e00\u6b65\uff1a${result.operatorActionCard.userVisibleNextStep}` : "",
+      failureSummaryLine(result),
+    ].filter(Boolean).join("\n");
+  }
   if (action === "pluginCapabilities") {
     const capabilities = result.capabilities || {};
     const appTools = capabilities.appToolCount ?? 0;

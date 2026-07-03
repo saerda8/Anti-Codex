@@ -2331,6 +2331,13 @@ const MANAGER_ACTIONS = Object.freeze({
         timeoutMs: 180_000,
         foregroundSingleton: true,
     },
+    workerTransportStatus: {
+        label: "Worker \u901a\u9053\u72b6\u6001\uff08\u4e0d\u6d3e\u5de5\uff09",
+        script: "test-anticodex-current-channel-worker-recovery.ps1",
+        args: [],
+        timeoutMs: 30_000,
+        foregroundSingleton: true,
+    },
     pluginCapabilities: {
         label: "检查插件/应用",
         script: "test-anticodex-plugin-capabilities.ps1",
@@ -4181,6 +4188,7 @@ main{max-width:1080px;margin:0 auto;padding:24px}body[data-manager-surface="code
         <button data-action="pluginCapabilities" data-manager-action="pluginCapabilities">检查插件/应用</button>
         <button data-action="diagnosticsBundle" data-manager-action="diagnosticsBundle">生成诊断包</button>
         <button data-action="viewLatestReports" data-manager-action="viewLatestReports">查看最新报告</button>
+        <button data-action="workerTransportStatus" data-manager-action="workerTransportStatus">Worker 通道状态（不派工）</button>
         <button data-action="secondAccountLoginStatus" data-manager-action="secondAccountLoginStatus">第二账号状态检查（不登录）</button>
       </div>
     </section>
@@ -5069,6 +5077,17 @@ function actionText(payload){
       longTasks?"\\u957f\\u4efb\\u52a1\\uff1a\\u8fd0\\u884c "+(longTasks.runningCount??0)+" / \\u9700\\u5904\\u7406 "+(longTasks.attentionCount??0)+" / \\u5176\\u4ed6\\u8fd0\\u884c "+(otherRunningCount??0):"",
       failureSummaryLine(unwrapped),
       (!unwrapped.zipPath&&!unwrapped.bundleRoot&&!unwrapped.failures?.length)?(payload?.message||r.message||""):""
+    ].filter(Boolean).join("\\n");
+  }
+  if(payload?.action==="workerTransportStatus"){
+    const evidence=r.currentEvidence||{};
+    return [
+      "Worker \\u901a\\u9053\\u72b6\\u6001\\uff1a"+(r.canDispatchCurrentChannelWorkers?"\\u53ef\\u6d3e\\u5de5":"\\u9700\\u8981\\u91cd\\u8f7d/\\u65b0\\u9891\\u9053"),
+      "\\u5f53\\u524d\\u9891\\u9053\\uff1a"+(r.status||"unknown")+" / \\u53ef\\u6d3e\\u5de5="+triStateText(r.canDispatchCurrentChannelWorkers),
+      "\\u76f4\\u63a5 worker \\u68c0\\u67e5\\uff1aserver "+(evidence.directProbeOk?"\\u901a\\u8fc7":"\\u672a\\u901a\\u8fc7")+" / status "+(evidence.directStatusProbeOk?"\\u901a\\u8fc7":"\\u672a\\u901a\\u8fc7"),
+      Array.isArray(evidence.workerTransportFailedTools)&&evidence.workerTransportFailedTools.length?"\\u5931\\u8d25\\u5de5\\u5177\\uff1a"+evidence.workerTransportFailedTools.slice(0,6).join(", "):"",
+      r.operatorActionCard?.userVisibleNextStep?"\\u4e0b\\u4e00\\u6b65\\uff1a"+r.operatorActionCard.userVisibleNextStep:"",
+      failureSummaryLine(r)
     ].filter(Boolean).join("\\n");
   }
   if(payload?.action==="viewLatestReports") return ensureLatestReportsEvidenceLines(latestReportsSummary(r),payload);
