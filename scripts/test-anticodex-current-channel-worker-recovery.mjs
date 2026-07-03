@@ -137,6 +137,26 @@ const status = canDispatchCurrentChannelWorkers
   : transportFile.present && transportFile.parseable
     ? "reload_required"
     : "missing_evidence";
+const repeatedFailureThreshold = 3;
+const repeatedCurrentChannelWorkerFailure = !canDispatchCurrentChannelWorkers
+  && failedTools.length >= repeatedFailureThreshold
+  && okTools.length === 0
+  && genericMcpOk
+  && directProbeOk;
+const repeatedFailureAudit = {
+  threshold: repeatedFailureThreshold,
+  failedObservationCount: failedTools.length,
+  okObservationCount: okTools.length,
+  failedWorkerPrefixCount: failedWorkerPrefixes.length,
+  failedWorkerPrefixes,
+  genericMcpControlOk: genericMcpOk,
+  directWorkerProbeOk: directProbeOk,
+  repeatedCurrentChannelWorkerFailure,
+  sameChannelRetryRecommended: !repeatedCurrentChannelWorkerFailure,
+  recommendedAction: repeatedCurrentChannelWorkerFailure
+    ? "stop_same_channel_worker_retries_and_use_fresh_channel_or_reload"
+    : "rerun_read_only_worker_probe_if_evidence_is_stale_or_incomplete",
+};
 
 const payload = {
   reportName: "current-channel-worker-recovery",
@@ -151,6 +171,7 @@ const payload = {
   requiresCodexMcpReload: !canDispatchCurrentChannelWorkers,
   requiresFreshReadOnlyProbe: !canDispatchCurrentChannelWorkers,
   missingRequirements,
+  repeatedFailureAudit,
   currentEvidence: {
     transportReportPresent: transportFile.present,
     transportReportParseable: transportFile.parseable,
@@ -214,13 +235,19 @@ const payload = {
     status,
     canDispatchCurrentChannelWorkers,
     safeToStartImplementationWorker: canDispatchCurrentChannelWorkers,
+    repeatedCurrentChannelWorkerFailure,
+    sameChannelRetryRecommended: repeatedFailureAudit.sameChannelRetryRecommended,
     missingRequirements,
     nextOperatorAction: canDispatchCurrentChannelWorkers
       ? "dispatch_only_a_narrow_worker_task_after_normal_scope_checks"
+      : repeatedCurrentChannelWorkerFailure
+        ? "stop_same_channel_worker_retries_and_use_fresh_channel_or_reload"
       : "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe",
     recommendedFirstReadOnlyProbe,
     userVisibleNextStep: canDispatchCurrentChannelWorkers
       ? "Worker MCP read path is healthy in this channel; start only a narrow worker task first."
+      : repeatedCurrentChannelWorkerFailure
+        ? "Stop retrying worker tools in this channel; reload Codex or use a fresh channel, then run one read-only worker status check."
       : "Reload Codex or use a fresh channel, then run one read-only worker status check before worker tasks.",
   },
 };
@@ -237,6 +264,7 @@ if (compact) {
     requiresCodexMcpReload: payload.requiresCodexMcpReload,
     requiresFreshReadOnlyProbe: payload.requiresFreshReadOnlyProbe,
     missingRequirements: payload.missingRequirements,
+    repeatedFailureAudit: payload.repeatedFailureAudit,
     workerTransportFailedTools: payload.currentEvidence.workerTransportFailedTools,
     workerTransportOkTools: payload.currentEvidence.workerTransportOkTools,
     expectedWorkerPrefixes: payload.currentEvidence.expectedWorkerPrefixes,

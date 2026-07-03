@@ -2198,6 +2198,20 @@ function Test-CurrentChannelWorkerRecoverySummaryEvidence {
     if ($evidence.requiresCodexMcpReload -ne $true) { Add-Failure "current-channel-worker-recovery summary missing reload requirement" }
     if ($evidence.requiresFreshReadOnlyProbe -ne $true) { Add-Failure "current-channel-worker-recovery summary missing fresh read-only probe requirement" }
     if ($evidence.currentChannelWorkerDispatchUsable -ne $false) { Add-Failure "current-channel-worker-recovery summary unexpectedly marks dispatch usable" }
+    if (-not $evidence.repeatedFailureAudit) { Add-Failure "current-channel-worker-recovery summary missing repeated failure audit" }
+    else {
+        if ([int]$evidence.repeatedFailureAudit.threshold -lt 3) { Add-Failure "current-channel-worker-recovery repeated failure threshold too low" }
+        if ([int]$evidence.repeatedFailureAudit.failedObservationCount -lt 3) { Add-Failure "current-channel-worker-recovery repeated failure count too low" }
+        if ([int]$evidence.repeatedFailureAudit.okObservationCount -ne 0) { Add-Failure "current-channel-worker-recovery repeated failure ok count mismatch" }
+        if ($evidence.repeatedFailureAudit.repeatedCurrentChannelWorkerFailure -ne $true) { Add-Failure "current-channel-worker-recovery repeated failure flag missing" }
+        if ($evidence.repeatedFailureAudit.sameChannelRetryRecommended -ne $false) { Add-Failure "current-channel-worker-recovery still recommends same-channel retry" }
+        if ([string]$evidence.repeatedFailureAudit.recommendedAction -ne "stop_same_channel_worker_retries_and_use_fresh_channel_or_reload") { Add-Failure "current-channel-worker-recovery repeated failure action mismatch" }
+    }
+    if ($evidence.operatorActionCard) {
+        if ($evidence.operatorActionCard.repeatedCurrentChannelWorkerFailure -ne $true) { Add-Failure "current-channel-worker-recovery operator card repeated failure flag missing" }
+        if ($evidence.operatorActionCard.sameChannelRetryRecommended -ne $false) { Add-Failure "current-channel-worker-recovery operator card still recommends same-channel retry" }
+        if ([string]$evidence.operatorActionCard.nextOperatorAction -ne "stop_same_channel_worker_retries_and_use_fresh_channel_or_reload") { Add-Failure "current-channel-worker-recovery operator card next action mismatch" }
+    }
     if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-recovery summary missing generic MCP proof" }
     if ($evidence.directProbeOk -ne $true) { Add-Failure "current-channel-worker-recovery summary missing direct server probe proof" }
     if ($evidence.directStatusProbeOk -ne $true) { Add-Failure "current-channel-worker-recovery summary missing direct status probe proof" }

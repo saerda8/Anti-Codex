@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Repeated current-channel worker failure now stops same-channel retries
+
+- Task: after checkpoint `6174000`, rerun the exposed MiMoCode read-only recovery probe before any worker implementation dispatch.
+- Result: `mimocode_wait_for_job` for job `mcw_mr3wr6bu_ns6x36` returned `Transport closed`; same-channel `node_repl` returned `CURRENT_CHANNEL_GENERIC_MCP_OK_AFTER_MIMOCODE_REPROBE_20260703`. Recovery now reports `repeatedCurrentChannelWorkerFailure:true`, `failedObservationCount:8`, `okObservationCount:0`, and `sameChannelRetryRecommended:false`.
+- Cause classification: current Codex-channel worker namespace remains unrecovered while generic MCP and direct worker probes stay healthy.
+- Rule change: stop same-channel worker retries after repeated read-only failures; use a fresh/reloaded Codex channel and require one successful read-only worker status/get/wait response before dispatching implementation workers.
+
 ### 2026-07-03 - Exposed MiMoCode read-only probe still transport-closed
 
 - Task: try the current exposed-first recovery candidate before any worker dispatch.

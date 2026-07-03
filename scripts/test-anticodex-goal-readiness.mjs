@@ -163,6 +163,20 @@ const currentChannelCheckedAtMs = Date.parse(String(currentChannelWorkerTranspor
 const currentChannelWorkerTransportAgeMs = Number.isFinite(currentChannelCheckedAtMs) ? Math.max(0, startedAt - currentChannelCheckedAtMs) : null;
 const currentChannelWorkerTransportFresh = Number.isFinite(currentChannelWorkerTransportAgeMs)
   && currentChannelWorkerTransportAgeMs <= currentChannelWorkerTransportMaxAgeMs;
+const currentChannelRepeatedFailureAudit = currentChannelWorkerRecovery.repeatedFailureAudit && typeof currentChannelWorkerRecovery.repeatedFailureAudit === "object"
+  ? {
+    threshold: Number(currentChannelWorkerRecovery.repeatedFailureAudit.threshold || 0),
+    failedObservationCount: Number(currentChannelWorkerRecovery.repeatedFailureAudit.failedObservationCount || 0),
+    okObservationCount: Number(currentChannelWorkerRecovery.repeatedFailureAudit.okObservationCount || 0),
+    failedWorkerPrefixCount: Number(currentChannelWorkerRecovery.repeatedFailureAudit.failedWorkerPrefixCount || 0),
+    failedWorkerPrefixes: Array.isArray(currentChannelWorkerRecovery.repeatedFailureAudit.failedWorkerPrefixes)
+      ? currentChannelWorkerRecovery.repeatedFailureAudit.failedWorkerPrefixes.map(String).filter(Boolean)
+      : [],
+    repeatedCurrentChannelWorkerFailure: currentChannelWorkerRecovery.repeatedFailureAudit.repeatedCurrentChannelWorkerFailure === true,
+    sameChannelRetryRecommended: currentChannelWorkerRecovery.repeatedFailureAudit.sameChannelRetryRecommended === true,
+    recommendedAction: String(currentChannelWorkerRecovery.repeatedFailureAudit.recommendedAction || ""),
+  }
+  : null;
 const workerTaskSmoke = workerMcpTaskSmokeReport.report || {};
 const workerTaskSmokeResults = Array.isArray(workerTaskSmoke.results) ? workerTaskSmoke.results : [];
 const workerTaskSmokePassedWorkers = workerTaskSmokeResults
@@ -292,6 +306,7 @@ const workerTransportRecoveryReadiness = {
   currentChannelWorkerObservationCount: workerMcp.currentChannelWorkerObservationCount,
   currentChannelWorkerTransportFailedCount: workerMcp.currentChannelWorkerTransportFailedCount,
   currentChannelWorkerTransportFailedTools: workerMcp.currentChannelWorkerTransportFailedTools,
+  repeatedFailureAudit: currentChannelRepeatedFailureAudit,
   currentChannelGenericMcpStatus: workerMcp.currentChannelGenericMcpStatus,
   currentChannelSplitObserved: workerMcp.currentChannelSplitObserved,
   directProbeOk: workerMcp.currentChannelDirectProbeOk || workerMcp.serverProbeReportOk,
@@ -305,6 +320,12 @@ const workerTransportRecoveryReadiness = {
     ? [
       "dispatch only a narrow worker task after normal scope checks",
     ]
+    : currentChannelRepeatedFailureAudit?.repeatedCurrentChannelWorkerFailure
+      ? [
+        "stop same-channel worker retries",
+        "reload Codex MCP/session or open a fresh channel",
+        currentChannelReadOnlyProbeInstruction,
+      ]
     : [
       "reload Codex MCP/session or open a fresh channel",
       directWorkerProbeCommand,
