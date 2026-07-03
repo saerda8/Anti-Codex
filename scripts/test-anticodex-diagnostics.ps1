@@ -2348,6 +2348,35 @@ function Test-GoalUnblockPackageSummaryEvidence {
     }
 }
 
+function Test-FreshChannelWorkerProofKitSummaryEvidence {
+    param($FreshChannelWorkerProofKitSummary)
+    if (-not $FreshChannelWorkerProofKitSummary) {
+        Add-Failure "diagnostic reports summary missing latest-fresh-channel-worker-proof-kit.json"
+        return
+    }
+
+    $evidence = $FreshChannelWorkerProofKitSummary.freshChannelWorkerProofKitEvidence
+    if (-not $evidence) {
+        Add-Failure "fresh-channel-worker-proof-kit summary missing freshChannelWorkerProofKitEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "fresh-channel-worker-proof-kit") { Add-Failure "fresh-channel-worker-proof-kit summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "fresh-channel-worker-proof-kit summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "fresh-channel-worker-proof-kit summary used real traffic" }
+    if ($evidence.startsWorkerImplementation -ne $false) { Add-Failure "fresh-channel-worker-proof-kit summary starts worker implementation" }
+    if ($evidence.allowImplementationDispatchBeforeReadOnlySuccess -ne $false) { Add-Failure "fresh-channel-worker-proof-kit summary allows dispatch too early" }
+    if ($evidence.workerTransportOkCriterion -ne $true) { Add-Failure "fresh-channel-worker-proof-kit summary missing worker success criterion" }
+    if ($evidence.genericMcpControlOkCriterion -ne $true) { Add-Failure "fresh-channel-worker-proof-kit summary missing generic MCP criterion" }
+    if ($evidence.recordedByTransportReportCriterion -ne $true) { Add-Failure "fresh-channel-worker-proof-kit summary missing record criterion" }
+    if ([int]$evidence.recommendedReadOnlyProbeCount -lt 3) { Add-Failure "fresh-channel-worker-proof-kit summary probe count too low" }
+    if ([string]$evidence.recommendedFirstReadOnlyProbeTool -ne "mimocode_wait_for_job") { Add-Failure "fresh-channel-worker-proof-kit summary first probe mismatch" }
+    if (-not ([string]$evidence.recordSuccessCommand).Contains("record-anticodex-current-channel-worker-transport.mjs")) { Add-Failure "fresh-channel-worker-proof-kit summary record command missing" }
+    if (-not ([string]$evidence.postSuccessValidationCommand).Contains("test-anticodex-current-channel-worker-recovery")) { Add-Failure "fresh-channel-worker-proof-kit summary post-success command missing" }
+    if (-not ([string]$evidence.goalValidationCommand).Contains("test-anticodex-goal-readiness")) { Add-Failure "fresh-channel-worker-proof-kit summary goal command missing" }
+    if ([int]$evidence.forbiddenBeforeSuccessCount -lt 3) { Add-Failure "fresh-channel-worker-proof-kit summary forbidden-before-success list too short" }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -2366,6 +2395,7 @@ function Test-ReportsSummary {
     $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
     $goalUnblockPackageSummary = @($summary | Where-Object { $_.file -eq "latest-goal-unblock-package.json" } | Select-Object -First 1)[0]
+    $freshChannelWorkerProofKitSummary = @($summary | Where-Object { $_.file -eq "latest-fresh-channel-worker-proof-kit.json" } | Select-Object -First 1)[0]
     $cliTransportBoundarySummary = @($summary | Where-Object { $_.file -eq "latest-cli-transport-boundary.json" } | Select-Object -First 1)[0]
     $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
@@ -2429,6 +2459,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $desktopTaskSuiteSummary) { Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary }
     if ($RequireReleaseReady -or $goalReadinessSummary) { Test-GoalReadinessSummaryEvidence $goalReadinessSummary }
     if ($RequireReleaseReady -or $goalUnblockPackageSummary) { Test-GoalUnblockPackageSummaryEvidence $goalUnblockPackageSummary }
+    if ($RequireReleaseReady -or $freshChannelWorkerProofKitSummary) { Test-FreshChannelWorkerProofKitSummaryEvidence $freshChannelWorkerProofKitSummary }
     if ($RequireReleaseReady -or $cliTransportBoundarySummary) { Test-CliTransportBoundarySummaryEvidence $cliTransportBoundarySummary }
     if ($RequireReleaseReady -or $longTaskLandingMatrixSummary) { Test-LongTaskLandingMatrixSummaryEvidence $longTaskLandingMatrixSummary }
     if ($RequireReleaseReady -or $agenticCapabilityMatrixSummary) { Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary }
@@ -2834,6 +2865,8 @@ function Test-DiagnosticBundle {
         Test-GoalReadinessSummaryEvidence $goalReadinessSummary
         $goalUnblockPackageSummary = @($summary | Where-Object { $_.file -eq "latest-goal-unblock-package.json" } | Select-Object -First 1)[0]
         Test-GoalUnblockPackageSummaryEvidence $goalUnblockPackageSummary
+        $freshChannelWorkerProofKitSummary = @($summary | Where-Object { $_.file -eq "latest-fresh-channel-worker-proof-kit.json" } | Select-Object -First 1)[0]
+        Test-FreshChannelWorkerProofKitSummaryEvidence $freshChannelWorkerProofKitSummary
         $cliTransportBoundarySummary = @($summary | Where-Object { $_.file -eq "latest-cli-transport-boundary.json" } | Select-Object -First 1)[0]
         Test-CliTransportBoundarySummaryEvidence $cliTransportBoundarySummary
         $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]

@@ -221,6 +221,7 @@ const isMissingHistoryReport = report?.reportName === "missing-history" || /late
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
 const isGoalUnblockPackageReport = report?.reportName === "goal-unblock-package" || /latest-goal-unblock-package\.json$/i.test(path);
+const isFreshChannelWorkerProofKitReport = report?.reportName === "fresh-channel-worker-proof-kit" || /latest-fresh-channel-worker-proof-kit\.json$/i.test(path);
 const isCliTransportBoundaryReport = report?.reportName === "cli-transport-boundary" || /latest-cli-transport-boundary\.json$/i.test(path);
 const isLongTaskLandingMatrixReport = report?.reportName === "long-task-landing-matrix" || /latest-long-task-landing-matrix\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
@@ -520,6 +521,24 @@ const summary = {
     externalMcpIdentityContractAccepted: boolField(report.externalMcpIdentityHandoff || {}, "contractAccepted"),
     externalMcpIdentityManagedByAntiCodex: boolField(report.externalMcpIdentityHandoff || {}, "managedByAntiCodex"),
     machineReadableNextActionIds: Array.isArray(report.machineReadableNextActions) ? asStringArray(report.machineReadableNextActions.map((item) => item?.id)) : [],
+  } : null,
+  freshChannelWorkerProofKitEvidence: isFreshChannelWorkerProofKitReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    startsWorkerImplementation: boolField(report, "startsWorkerImplementation"),
+    allowImplementationDispatchBeforeReadOnlySuccess: boolField(report, "allowImplementationDispatchBeforeReadOnlySuccess"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    workerTransportOkCriterion: boolField(report.requiredSuccessCriteria || {}, "workerTransportOk"),
+    genericMcpControlOkCriterion: boolField(report.requiredSuccessCriteria || {}, "genericMcpControlOk"),
+    recordedByTransportReportCriterion: boolField(report.requiredSuccessCriteria || {}, "recordedByTransportReport"),
+    recommendedReadOnlyProbeCount: Array.isArray(report.recommendedReadOnlyProbes) ? report.recommendedReadOnlyProbes.length : 0,
+    recommendedFirstReadOnlyProbeTool: asString(report.recommendedFirstReadOnlyProbe?.statusTool),
+    recordSuccessCommand: asString(report.recordSuccessCommand),
+    postSuccessValidationCommand: asString(report.postSuccessValidationCommand),
+    goalValidationCommand: asString(report.goalValidationCommand),
+    forbiddenBeforeSuccessCount: Array.isArray(report.forbiddenBeforeSuccess) ? report.forbiddenBeforeSuccess.length : 0,
   } : null,
   actions: has(report, "actions") ? asStringArray(report.actions) : [],
   managerButtonOk: managerButton ? boolField(managerButton, "ok") : null,

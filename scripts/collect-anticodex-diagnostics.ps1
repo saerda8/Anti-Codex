@@ -252,6 +252,7 @@ function Read-JsonSummary {
             desktopTaskSuiteEvidence = $json.desktopTaskSuiteEvidence
             goalReadinessEvidence = $json.goalReadinessEvidence
             goalUnblockPackageEvidence = $json.goalUnblockPackageEvidence
+            freshChannelWorkerProofKitEvidence = $json.freshChannelWorkerProofKitEvidence
             cliTransportBoundaryEvidence = $json.cliTransportBoundaryEvidence
             longTaskLandingMatrixEvidence = $json.longTaskLandingMatrixEvidence
             agenticCapabilityMatrixEvidence = $json.agenticCapabilityMatrixEvidence
@@ -446,6 +447,7 @@ $latestReports = @(
     "latest-native-codex-parity-task-matrix.json",
     "latest-goal-readiness.json",
     "latest-goal-unblock-package.json",
+    "latest-fresh-channel-worker-proof-kit.json",
     "latest-agentic-capability-matrix.json",
     "latest-real-task-coverage-roadmap.json",
     "latest-real-approval-plan.json",

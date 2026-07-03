@@ -118,6 +118,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-required-real-traffic-sequence.ps1",
   "scripts/test-anticodex-approved-real-run-sequence.mjs",
   "scripts/build-anticodex-goal-unblock-package.mjs",
+  "scripts/build-anticodex-fresh-channel-worker-proof-kit.mjs",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
@@ -178,6 +179,7 @@ const gateDefinitions = [
   { id: "realApprovalPlan", group: "no-traffic", file: "latest-real-approval-plan.json", requiredForRelease: true, requireRealApprovalPlanSemantics: true },
   { id: "goalReadiness", group: "no-traffic", file: "latest-goal-readiness.json", requiredForRelease: true, requireGoalReadinessSemantics: true },
   { id: "goalUnblockPackage", group: "no-traffic", file: "latest-goal-unblock-package.json", requiredForRelease: true, requireGoalUnblockPackageSemantics: true },
+  { id: "freshChannelWorkerProofKit", group: "no-traffic", file: "latest-fresh-channel-worker-proof-kit.json", requiredForRelease: true, requireFreshChannelWorkerProofKitSemantics: true },
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
   { id: "goalRealRunReadiness", group: "no-traffic", file: "latest-goal-real-run-readiness.json", requiredForRelease: true, requireGoalRealRunReadinessSemantics: true },
   { id: "approvedRealRunSequence", group: "no-traffic", file: "latest-approved-real-run-sequence.json", requiredForRelease: true, requireApprovedRealRunSequenceSemantics: true },
@@ -1542,6 +1544,24 @@ function summarizeGate(definition) {
         else if (!String(actionEntry.owner || "")) semanticFailures.push(`goal_unblock_package_action_owner_missing:${actionId}`);
       }
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_unblock_package_failures");
+    }
+    if (definition.requireFreshChannelWorkerProofKitSemantics) {
+      const probes = Array.isArray(report.recommendedReadOnlyProbes) ? report.recommendedReadOnlyProbes : [];
+      const criteria = report.requiredSuccessCriteria && typeof report.requiredSuccessCriteria === "object" ? report.requiredSuccessCriteria : {};
+      if (report.reportName !== "fresh-channel-worker-proof-kit") semanticFailures.push("fresh_worker_proof_kit_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("fresh_worker_proof_kit_requested_real_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("fresh_worker_proof_kit_used_real_traffic");
+      if (report.startsWorkerImplementation !== false) semanticFailures.push("fresh_worker_proof_kit_starts_worker");
+      if (report.allowImplementationDispatchBeforeReadOnlySuccess !== false) semanticFailures.push("fresh_worker_proof_kit_allows_dispatch_too_early");
+      if (criteria.workerTransportOk !== true) semanticFailures.push("fresh_worker_proof_kit_worker_success_criterion_missing");
+      if (criteria.genericMcpControlOk !== true) semanticFailures.push("fresh_worker_proof_kit_generic_mcp_criterion_missing");
+      if (criteria.recordedByTransportReport !== true) semanticFailures.push("fresh_worker_proof_kit_record_criterion_missing");
+      if (probes.length < 3) semanticFailures.push("fresh_worker_proof_kit_probe_count");
+      if (String(report.recommendedFirstReadOnlyProbe?.statusTool || "") !== "mimocode_wait_for_job") semanticFailures.push("fresh_worker_proof_kit_first_probe");
+      if (!String(report.recordSuccessCommand || "").includes("record-anticodex-current-channel-worker-transport.mjs")) semanticFailures.push("fresh_worker_proof_kit_record_command_missing");
+      if (!String(report.postSuccessValidationCommand || "").includes("test-anticodex-current-channel-worker-recovery")) semanticFailures.push("fresh_worker_proof_kit_post_success_command_missing");
+      if (!String(report.goalValidationCommand || "").includes("test-anticodex-goal-readiness")) semanticFailures.push("fresh_worker_proof_kit_goal_command_missing");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("fresh_worker_proof_kit_failures");
     }
     if (definition.requireToolLoopSemantics) {
       const finalText = String(report.final_text || "");
@@ -2908,6 +2928,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["realApprovalPlan", "no-traffic-local", "node scripts\\test-anticodex-real-approval-plan.mjs"],
   ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
   ["goalUnblockPackage", "no-traffic-local", "node scripts\\build-anticodex-goal-unblock-package.mjs"],
+  ["freshChannelWorkerProofKit", "no-traffic-local", "node scripts\\build-anticodex-fresh-channel-worker-proof-kit.mjs"],
   ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
   ["goalRealRunReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-real-run-readiness.mjs"],
   ["approvedRealRunSequence", "no-traffic-local", "node scripts\\test-anticodex-approved-real-run-sequence.mjs"],
