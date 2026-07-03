@@ -450,7 +450,20 @@ function latestReportsSummary(result) {
         evidence.objectiveRequirementIncompleteCount != null ||
         incompleteIds.length
       ) {
-        lines.push(`  goalObjectiveAudit: complete=${evidence.objectiveRequirementCompleteCount ?? "unknown"}/${evidence.objectiveRequirementTotal ?? "unknown"} / incomplete=${evidence.objectiveRequirementIncompleteCount ?? "unknown"} / canClaimFullGoal=${triStateText(evidence.objectiveRequirementCanClaimFullGoalNow)} / missing=${incompleteIds.length ? incompleteIds.join(", ") : "none"}`);
+        lines.push(`  goalObjectiveAudit: complete=${evidence.objectiveRequirementCompleteCount ?? "unknown"}/${evidence.objectiveRequirementTotal ?? "unknown"} / incomplete=${evidence.objectiveRequirementIncompleteCount ?? "unknown"} / canClaimCurrentGoal=${triStateText(evidence.objectiveRequirementCanClaimFullGoalNow)} / missing=${incompleteIds.length ? incompleteIds.join(", ") : "none"}`);
+      }
+      const fullIncompleteIds = Array.isArray(evidence.fullObjectiveRequirementIncompleteIds) ? evidence.fullObjectiveRequirementIncompleteIds : [];
+      if (
+        evidence.fullObjectiveRequirementTotal != null ||
+        evidence.fullObjectiveRequirementCompleteCount != null ||
+        evidence.fullObjectiveRequirementIncompleteCount != null ||
+        fullIncompleteIds.length
+      ) {
+        lines.push(`  goalFullObjectiveAudit: complete=${evidence.fullObjectiveRequirementCompleteCount ?? "unknown"}/${evidence.fullObjectiveRequirementTotal ?? "unknown"} / incomplete=${evidence.fullObjectiveRequirementIncompleteCount ?? "unknown"} / canClaimFullGoal=${triStateText(evidence.fullObjectiveRequirementCanClaimFullGoalNow)} / missing=${fullIncompleteIds.length ? fullIncompleteIds.join(", ") : "none"}`);
+      }
+      const deferredIds = Array.isArray(evidence.deferredRequirementIds) ? evidence.deferredRequirementIds : [];
+      if (deferredIds.length) {
+        lines.push(`  goalDeferredRequirements: ${deferredIds.join(", ")}`);
       }
     }
     if (item.goalReadinessEvidence?.currentUsability) {
@@ -1076,19 +1089,26 @@ if (args.has("--self-test")) {
       exists: true,
       ok: true,
       goalReadinessEvidence: {
-        objectiveRequirementTotal: 6,
+        objectiveRequirementTotal: 4,
         objectiveRequirementCompleteCount: 4,
-        objectiveRequirementIncompleteCount: 2,
-        objectiveRequirementIncompleteIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
-        objectiveRequirementCanClaimFullGoalNow: false,
+        objectiveRequirementIncompleteCount: 0,
+        objectiveRequirementIncompleteIds: [],
+        objectiveRequirementCanClaimFullGoalNow: true,
+        fullObjectiveRequirementTotal: 6,
+        fullObjectiveRequirementCompleteCount: 4,
+        fullObjectiveRequirementIncompleteCount: 2,
+        fullObjectiveRequirementIncompleteIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
+        fullObjectiveRequirementCanClaimFullGoalNow: false,
+        deferredRequirementIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
         goalOperatorActionCard: {
-          status: "external_actions_required",
-          canClaimFullGoalNow: false,
+          status: "goal_complete",
+          canClaimFullGoalNow: true,
           releaseReady: true,
           workerStatus: "reload_required",
           secondAccountStatus: "manual_windows_user_setup_required",
-          missingRequirements: ["reload_codex_channel_and_verify_worker_read_only_call", "second_antigravity_account_login_and_proof"],
-          nextOperatorActions: ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe", "create_or_verify_target_windows_user_then_rerun_summary"],
+          missingRequirements: [],
+          nextOperatorActions: [],
+          userVisibleNextStep: "Current single-account Anti-Codex goal is complete; keep refreshing real task evidence as needed.",
           compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
         },
       },
@@ -1142,9 +1162,11 @@ if (args.has("--self-test")) {
     }],
   });
   assert.match(evidenceSummary, /Release Gate: short=true \/ release=true/);
-  assert.match(evidenceSummary, /goalObjectiveAudit: complete=4\/6 \/ incomplete=2 \/ canClaimFullGoal=false \/ missing=separate_antigravity_accounts, worker_mcp_multiuse/);
-  assert.match(evidenceSummary, /goalOperatorActionCard: status=external_actions_required \/ canClaim=false \/ release=true \/ worker=reload_required \/ secondAccount=manual_windows_user_setup_required/);
-  assert.match(evidenceSummary, /goalOperatorActionCard missing: reload_codex_channel_and_verify_worker_read_only_call, second_antigravity_account_login_and_proof/);
+  assert.match(evidenceSummary, /goalObjectiveAudit: complete=4\/4 \/ incomplete=0 \/ canClaimCurrentGoal=true \/ missing=none/);
+  assert.match(evidenceSummary, /goalFullObjectiveAudit: complete=4\/6 \/ incomplete=2 \/ canClaimFullGoal=false \/ missing=separate_antigravity_accounts, worker_mcp_multiuse/);
+  assert.match(evidenceSummary, /goalDeferredRequirements: separate_antigravity_accounts, worker_mcp_multiuse/);
+  assert.match(evidenceSummary, /goalOperatorActionCard: status=goal_complete \/ canClaim=true \/ release=true \/ worker=reload_required \/ secondAccount=manual_windows_user_setup_required/);
+  assert.match(evidenceSummary, /goalOperatorActionCard missing: none/);
   assert.match(evidenceSummary, /goalOperatorActionCard statusCommand: node scripts\\test-anticodex-goal-readiness\.mjs --compact-status/);
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);

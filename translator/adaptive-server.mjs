@@ -3059,6 +3059,17 @@ function latestManagerReportItem(label, fileName) {
             goalComplete: report.goalComplete === true,
             blockerCount: Array.isArray(report.blockers) ? report.blockers.length : null,
             blockers: Array.isArray(report.blockers) ? report.blockers.map((item) => shortSafeText(item || "", "")).filter(Boolean).slice(0, 12) : [],
+            objectiveRequirementTotal: report.objectiveRequirementSummary && Number.isFinite(Number(report.objectiveRequirementSummary.total)) ? Number(report.objectiveRequirementSummary.total) : null,
+            objectiveRequirementCompleteCount: report.objectiveRequirementSummary && Number.isFinite(Number(report.objectiveRequirementSummary.completeCount)) ? Number(report.objectiveRequirementSummary.completeCount) : null,
+            objectiveRequirementIncompleteCount: report.objectiveRequirementSummary && Number.isFinite(Number(report.objectiveRequirementSummary.incompleteCount)) ? Number(report.objectiveRequirementSummary.incompleteCount) : null,
+            objectiveRequirementIncompleteIds: report.objectiveRequirementSummary && Array.isArray(report.objectiveRequirementSummary.incompleteRequirementIds) ? report.objectiveRequirementSummary.incompleteRequirementIds.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            objectiveRequirementCanClaimFullGoalNow: report.objectiveRequirementSummary?.canClaimFullGoalNow === true,
+            fullObjectiveRequirementTotal: report.fullObjectiveRequirementSummary && Number.isFinite(Number(report.fullObjectiveRequirementSummary.total)) ? Number(report.fullObjectiveRequirementSummary.total) : null,
+            fullObjectiveRequirementCompleteCount: report.fullObjectiveRequirementSummary && Number.isFinite(Number(report.fullObjectiveRequirementSummary.completeCount)) ? Number(report.fullObjectiveRequirementSummary.completeCount) : null,
+            fullObjectiveRequirementIncompleteCount: report.fullObjectiveRequirementSummary && Number.isFinite(Number(report.fullObjectiveRequirementSummary.incompleteCount)) ? Number(report.fullObjectiveRequirementSummary.incompleteCount) : null,
+            fullObjectiveRequirementIncompleteIds: report.fullObjectiveRequirementSummary && Array.isArray(report.fullObjectiveRequirementSummary.incompleteRequirementIds) ? report.fullObjectiveRequirementSummary.incompleteRequirementIds.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
+            fullObjectiveRequirementCanClaimFullGoalNow: report.fullObjectiveRequirementSummary?.canClaimFullGoalNow === true,
+            deferredRequirementIds: report.deferredObjectiveRequirementSummary && Array.isArray(report.deferredObjectiveRequirementSummary.deferredRequirementIds) ? report.deferredObjectiveRequirementSummary.deferredRequirementIds.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
             nextRequiredUserAction: shortSafeText(report.nextRequiredUserAction || "", ""),
             goalOperatorActionCard: report.goalOperatorActionCard && typeof report.goalOperatorActionCard === "object" ? {
                 status: shortSafeText(report.goalOperatorActionCard.status || "", ""),
@@ -4768,6 +4779,19 @@ function latestReportsSummary(result){
         ].slice(0,3);
         if(runtimeSamples.length) lines.push("  installedRuntime drift: "+runtimeSamples.join(", "));
       }
+    }
+    if(item.goalReadinessEvidence){
+      const evidence=item.goalReadinessEvidence;
+      const incompleteIds=Array.isArray(evidence.objectiveRequirementIncompleteIds)?evidence.objectiveRequirementIncompleteIds:[];
+      if(evidence.objectiveRequirementTotal!=null||evidence.objectiveRequirementCompleteCount!=null||evidence.objectiveRequirementIncompleteCount!=null||incompleteIds.length){
+        lines.push("  goalObjectiveAudit: complete="+(evidence.objectiveRequirementCompleteCount??"unknown")+"/"+(evidence.objectiveRequirementTotal??"unknown")+" / incomplete="+(evidence.objectiveRequirementIncompleteCount??"unknown")+" / canClaimCurrentGoal="+(evidence.objectiveRequirementCanClaimFullGoalNow?"true":"false")+" / missing="+(incompleteIds.length?incompleteIds.join(", "):"none"));
+      }
+      const fullIncompleteIds=Array.isArray(evidence.fullObjectiveRequirementIncompleteIds)?evidence.fullObjectiveRequirementIncompleteIds:[];
+      if(evidence.fullObjectiveRequirementTotal!=null||evidence.fullObjectiveRequirementCompleteCount!=null||evidence.fullObjectiveRequirementIncompleteCount!=null||fullIncompleteIds.length){
+        lines.push("  goalFullObjectiveAudit: complete="+(evidence.fullObjectiveRequirementCompleteCount??"unknown")+"/"+(evidence.fullObjectiveRequirementTotal??"unknown")+" / incomplete="+(evidence.fullObjectiveRequirementIncompleteCount??"unknown")+" / canClaimFullGoal="+(evidence.fullObjectiveRequirementCanClaimFullGoalNow?"true":"false")+" / missing="+(fullIncompleteIds.length?fullIncompleteIds.join(", "):"none"));
+      }
+      const deferredIds=Array.isArray(evidence.deferredRequirementIds)?evidence.deferredRequirementIds:[];
+      if(deferredIds.length) lines.push("  goalDeferredRequirements: "+deferredIds.join(", "));
     }
     if(item.goalReadinessEvidence?.goalOperatorActionCard){
       const card=item.goalReadinessEvidence.goalOperatorActionCard;
