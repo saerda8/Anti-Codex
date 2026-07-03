@@ -13035,6 +13035,7 @@ test("optional and special latest reports stay visible without becoming release-
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
   const workerTaskSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-worker-mcp-task-smoke.mjs"), "utf8");
   const workerRecovery = readFileSync(resolve(root, "scripts", "test-anticodex-current-channel-worker-recovery.mjs"), "utf8");
+  const recordCurrentTransport = readFileSync(resolve(root, "scripts", "record-anticodex-current-channel-worker-transport.mjs"), "utf8");
   const optionalReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*false[^}]*\}/g), (match) => match[1]))).sort();
   const specialReports = [
     "latest-antigravity-cli-profile-prepare.json",
@@ -13206,6 +13207,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /currentChannelWorkerDispatchBlocked/);
   assert.match(summarizer, /currentChannelWorkerDispatchUsable/);
   assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
+  assert.match(recordCurrentTransport, /mergedLatestWorkerObservations/);
+  assert.match(recordCurrentTransport, /replaceLatestTransportReport/);
+  assert.match(recordCurrentTransport, /latestTransportReport/);
   assert.match(summarizer, /currentChannelWorkerRecoveryEvidence/);
   assert.match(summarizer, /directStatusProbeOk/);
   assert.match(summarizer, /directStatusProbeStatusCallOkCount/);

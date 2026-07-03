@@ -83,6 +83,24 @@ function makeWorkerObservation(workerTool, workerStatus, workerDetail = "") {
   return observation.workerTool ? observation : null;
 }
 
+function normalizeWorkerObservations(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((item) => makeWorkerObservation(item?.workerTool, item?.workerStatus, item?.workerDetail))
+    .filter(Boolean);
+}
+
+function dedupeWorkerObservations(values) {
+  const seen = new Set();
+  const deduped = [];
+  for (const item of values) {
+    const key = [item.workerTool, item.workerStatus, item.workerDetail].join("\0");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
 function uniqueStrings(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
@@ -101,26 +119,41 @@ function main() {
       "  --expected-worker-prefix kilo",
       "  --generic-mcp-tool node_repl --generic-mcp-status ok",
       "  [--worker-detail TEXT] [--generic-mcp-detail TEXT]",
+      "  [--replace-latest]",
     ].join("\n"));
     return;
   }
 
   const reportRoot = resolve(argValue("--report-root", DEFAULT_REPORT_ROOT));
+  const latestTransportPath = resolve(reportRoot, "latest-current-channel-worker-transport.json");
+  const latestTransport = readJsonIfPresent(latestTransportPath);
   const probePath = resolve(reportRoot, argValue("--direct-probe-report", DEFAULT_PROBE_REPORT));
   const directProbe = readJsonIfPresent(probePath);
+  const replaceLatest = hasArg("--replace-latest");
   const workerStatus = normalizeStatus(argValue("--worker-status", "unknown"));
   const genericMcpStatus = normalizeStatus(argValue("--generic-mcp-status", "unknown"));
   const workerTool = argValue("--worker-tool", "");
   const genericMcpTool = argValue("--generic-mcp-tool", "");
-  const workerObservations = [
+  const inputWorkerObservations = [
     ...argValues("--worker-observation").map(parseWorkerObservation),
     makeWorkerObservation(workerTool, workerStatus, argValue("--worker-detail", "")),
   ].filter(Boolean);
+  const latestWorkerObservations = replaceLatest ? [] : normalizeWorkerObservations(latestTransport.report?.workerObservations);
+  const inputHasHealthyWorker = inputWorkerObservations.some((item) => item.workerTransportOk);
+  const mergedLatestWorkerObservations =
+    latestWorkerObservations.length > inputWorkerObservations.length && !inputHasHealthyWorker;
+  const workerObservations = mergedLatestWorkerObservations
+    ? dedupeWorkerObservations([...inputWorkerObservations, ...latestWorkerObservations])
+    : inputWorkerObservations;
   const expectedWorkerPrefixes = uniqueStrings([
     ...argValues("--expected-worker-prefix"),
     ...argValue("--expected-worker-prefixes", "").split(","),
+    ...(replaceLatest ? [] : (Array.isArray(latestTransport.report?.expectedWorkerPrefixes) ? latestTransport.report.expectedWorkerPrefixes : [])),
   ]);
-  const exposedWorkerTools = uniqueStrings(argValues("--exposed-worker-tool"));
+  const exposedWorkerTools = uniqueStrings([
+    ...argValues("--exposed-worker-tool"),
+    ...(replaceLatest ? [] : (Array.isArray(latestTransport.report?.exposedWorkerTools) ? latestTransport.report.exposedWorkerTools : [])),
+  ]);
   const observedWorkerPrefixes = uniqueStrings(workerObservations.map((item) => workerPrefixFromTool(item.workerTool)));
   const exposedWorkerPrefixes = uniqueStrings(exposedWorkerTools.map(workerPrefixFromTool));
   const missingExpectedWorkerPrefixes = expectedWorkerPrefixes.length
@@ -154,6 +187,15 @@ function main() {
     workerTransportFailed,
     workerObservations,
     workerObservationCount: workerObservations.length,
+    inputWorkerObservationCount: inputWorkerObservations.length,
+    mergedLatestWorkerObservations,
+    replaceLatestTransportReport: replaceLatest,
+    latestTransportReport: {
+      path: latestTransportPath,
+      present: latestTransport.present === true,
+      parseable: latestTransport.parseable === true,
+      workerObservationCount: latestTransport.parseable ? Number(latestTransport.report?.workerObservationCount || 0) : 0,
+    },
     workerTransportOkCount,
     workerTransportFailedCount,
     workerTransportOkTools: workerObservations.filter((item) => item.workerTransportOk).map((item) => item.workerTool),
