@@ -159,7 +159,7 @@ if (!hasCustomPrompt && taskMode === "web-search") {
   promptText = `Search the web for recent Codex updates, answer briefly in Chinese with source URLs, and put ${marker} on its own final line.`;
 }
 if (!hasCustomPrompt && taskMode === "free-chat") {
-  promptText = `用中文简短回答：如果 Anti-Codex 是 Codex 客户端接入另一个模型，正常小任务应该怎么判断是否跑通？最后单独一行写 ${marker}。`;
+  promptText = `用中文简短回答：只说判断标准，不要声称你正在或已经执行文件、命令或搜索。如果 Anti-Codex 是 Codex 客户端接入另一个模型，正常小任务应该怎么判断是否跑通？最后单独一行写 ${marker}。`;
 }
 if (!hasCustomPrompt && taskMode === "local-project") {
   promptText = `Create a very small local HTML report in ${artifactDir}. Use PowerShell file commands to create exactly these files: index.html, README.md, done.txt. Do not inspect Antigravity brain, transcript, history, or log folders. index.html must be a simple offline page with one heading, one status paragraph, and the exact marker ${marker}. README.md must describe the files. done.txt must contain exactly ${marker}. Verify the files exist and done.txt exactly matches the marker, then reply with ${marker}.`;
