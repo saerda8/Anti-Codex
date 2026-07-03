@@ -1,6 +1,6 @@
 (() => {
   const VERSION = "native-panel-v99";
-  const SUMMARY_VERSION = "latest-reports-evidence-v2";
+  const SUMMARY_VERSION = "latest-reports-evidence-v3";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
   const TRAFFIC_NOTICE_ID = "anticodex-traffic-notice";
@@ -1076,6 +1076,18 @@
         const evidence = item.workerMcpSourceHygieneEvidence;
         lines.push(`  workerMcpSourceHygiene: passed=${evidence.passedWorkerCount ?? "unknown"}/${evidence.workerCount ?? "unknown"} / failed=${Array.isArray(evidence.failedWorkers) ? evidence.failedWorkers.length : "unknown"} / nul=${Array.isArray(evidence.nulByteWorkers) ? evidence.nulByteWorkers.length : "unknown"} / syntaxFailed=${Array.isArray(evidence.syntaxFailedWorkers) ? evidence.syntaxFailedWorkers.length : "unknown"}`);
         if (Array.isArray(evidence.failedWorkers) && evidence.failedWorkers.length) lines.push(`  workerMcpSourceHygiene failed: ${evidence.failedWorkers.slice(0, 6).join(", ")}`);
+      }
+      if (item.goalReadinessEvidence) {
+        const evidence = item.goalReadinessEvidence;
+        const incompleteIds = Array.isArray(evidence.objectiveRequirementIncompleteIds) ? evidence.objectiveRequirementIncompleteIds : [];
+        if (
+          evidence.objectiveRequirementTotal != null ||
+          evidence.objectiveRequirementCompleteCount != null ||
+          evidence.objectiveRequirementIncompleteCount != null ||
+          incompleteIds.length
+        ) {
+          lines.push(`  goalObjectiveAudit: complete=${evidence.objectiveRequirementCompleteCount ?? "unknown"}/${evidence.objectiveRequirementTotal ?? "unknown"} / incomplete=${evidence.objectiveRequirementIncompleteCount ?? "unknown"} / canClaimFullGoal=${triStateText(evidence.objectiveRequirementCanClaimFullGoalNow)} / missing=${incompleteIds.length ? incompleteIds.join(", ") : "none"}`);
+        }
       }
       if (item.goalReadinessEvidence?.goalOperatorActionCard) {
         const card = item.goalReadinessEvidence.goalOperatorActionCard;

@@ -441,6 +441,18 @@ function latestReportsSummary(result) {
       lines.push(`  workerMcpSourceHygiene: passed=${evidence.passedWorkerCount ?? "unknown"}/${evidence.workerCount ?? "unknown"} / failed=${Array.isArray(evidence.failedWorkers) ? evidence.failedWorkers.length : "unknown"} / nul=${Array.isArray(evidence.nulByteWorkers) ? evidence.nulByteWorkers.length : "unknown"} / syntaxFailed=${Array.isArray(evidence.syntaxFailedWorkers) ? evidence.syntaxFailedWorkers.length : "unknown"}`);
       if (Array.isArray(evidence.failedWorkers) && evidence.failedWorkers.length) lines.push(`  workerMcpSourceHygiene failed: ${evidence.failedWorkers.slice(0, 6).join(", ")}`);
     }
+    if (item.goalReadinessEvidence) {
+      const evidence = item.goalReadinessEvidence;
+      const incompleteIds = Array.isArray(evidence.objectiveRequirementIncompleteIds) ? evidence.objectiveRequirementIncompleteIds : [];
+      if (
+        evidence.objectiveRequirementTotal != null ||
+        evidence.objectiveRequirementCompleteCount != null ||
+        evidence.objectiveRequirementIncompleteCount != null ||
+        incompleteIds.length
+      ) {
+        lines.push(`  goalObjectiveAudit: complete=${evidence.objectiveRequirementCompleteCount ?? "unknown"}/${evidence.objectiveRequirementTotal ?? "unknown"} / incomplete=${evidence.objectiveRequirementIncompleteCount ?? "unknown"} / canClaimFullGoal=${triStateText(evidence.objectiveRequirementCanClaimFullGoalNow)} / missing=${incompleteIds.length ? incompleteIds.join(", ") : "none"}`);
+      }
+    }
     if (item.goalReadinessEvidence?.goalOperatorActionCard) {
       const card = item.goalReadinessEvidence.goalOperatorActionCard;
       lines.push(`  goalOperatorActionCard: status=${card.status || "unknown"} / canClaim=${card.canClaimFullGoalNow ? "true" : "false"} / release=${card.releaseReady ? "true" : "false"} / worker=${card.workerStatus || "unknown"} / secondAccount=${card.secondAccountStatus || "unknown"}`);
@@ -1036,6 +1048,26 @@ if (args.has("--self-test")) {
       ],
       installedRuntimeEvidence: { satisfied: false, sourceFileCount: 58, installedRuntimeFileCount: 58, sourceFingerprint: "abcdef012345", installedRuntimeFingerprint: "abcdef012345", sourceMtimeMax: "2026-06-24T01:02:03.000Z", installedRuntimeMtimeMax: "2026-06-24T01:03:04.000Z", missingSourceFiles: ["scripts/a.ps1"], missingInstalledRuntimeFiles: ["scripts/b.ps1"], mismatchedRuntimeFiles: ["scripts/c.ps1"] },
     }, {
+      label: "Goal Readiness",
+      exists: true,
+      ok: true,
+      goalReadinessEvidence: {
+        objectiveRequirementTotal: 6,
+        objectiveRequirementCompleteCount: 4,
+        objectiveRequirementIncompleteCount: 2,
+        objectiveRequirementIncompleteIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
+        objectiveRequirementCanClaimFullGoalNow: false,
+        goalOperatorActionCard: {
+          status: "external_actions_required",
+          canClaimFullGoalNow: false,
+          releaseReady: true,
+          workerStatus: "reload_required",
+          secondAccountStatus: "manual_windows_user_setup_required",
+          missingRequirements: ["reload_codex_channel_and_verify_worker_read_only_call", "second_antigravity_account_login_and_proof"],
+          nextOperatorActions: ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe", "create_or_verify_target_windows_user_then_rerun_summary"],
+        },
+      },
+    }, {
       label: "\u6a21\u578b\u601d\u8003\u9884\u7b97",
       exists: true,
       ok: true,
@@ -1085,6 +1117,9 @@ if (args.has("--self-test")) {
     }],
   });
   assert.match(evidenceSummary, /Release Gate: short=true \/ release=true/);
+  assert.match(evidenceSummary, /goalObjectiveAudit: complete=4\/6 \/ incomplete=2 \/ canClaimFullGoal=false \/ missing=separate_antigravity_accounts, worker_mcp_multiuse/);
+  assert.match(evidenceSummary, /goalOperatorActionCard: status=external_actions_required \/ canClaim=false \/ release=true \/ worker=reload_required \/ secondAccount=manual_windows_user_setup_required/);
+  assert.match(evidenceSummary, /goalOperatorActionCard missing: reload_codex_channel_and_verify_worker_read_only_call, second_antigravity_account_login_and_proof/);
   assert.match(evidenceSummary, /optionalRealTraffic: strict=true \/ ready=false/);
   assert.match(evidenceSummary, /optionalRealTrafficFailures: realThirdPartyProviderOptional/);
   assert.match(evidenceSummary, /Release groups: cold req 0\/0 opt 0\/1 missingOpt=coldRelaunch/);
