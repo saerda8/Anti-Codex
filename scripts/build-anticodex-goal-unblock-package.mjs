@@ -71,6 +71,7 @@ function asString(value) {
 
 const goalFile = readReport("latest-goal-readiness.json");
 const workerRecoveryFile = readReport("latest-current-channel-worker-recovery.json");
+const workerTransportFile = readReport("latest-current-channel-worker-transport.json");
 const secondSummaryFile = readReport("latest-second-account-readiness-summary.json");
 const postLoginProofFile = readReport("latest-second-account-post-login-proof.json");
 const externalMcpIdentityFile = readReport("latest-external-mcp-identity-contract.json");
@@ -79,6 +80,7 @@ const releaseGatesFile = readReport("latest-release-gates.json");
 const goal = goalFile.report || {};
 const goalCard = goal.goalOperatorActionCard || {};
 const workerRecovery = workerRecoveryFile.report || {};
+const workerTransport = workerTransportFile.report || {};
 const secondSummary = secondSummaryFile.report || {};
 const postLoginProof = postLoginProofFile.report || {};
 const postLoginCard = postLoginProof.operatorActionCard || {};
@@ -105,6 +107,12 @@ const effectiveMcpAccountIdPresent = checklist.effectiveMcpAccountIdPresent === 
 
 const freshChannelWorkerProof = {
   status: asString(workerRecovery.status || goal.currentChannelWorkerTransportStatus || ""),
+  latestTransportCheckedAt: asString(workerTransport.checkedAt || ""),
+  workerObservationCount: Number(workerTransport.workerObservationCount || workerRecovery.currentChannelWorkerObservationCount || 0),
+  workerTransportFailedCount: Number(workerTransport.workerTransportFailedCount || workerRecovery.currentChannelWorkerTransportFailedCount || 0),
+  workerTransportOkCount: Number(workerTransport.workerTransportOkCount || 0),
+  genericMcpControlOk: workerTransport.genericMcpControlOk === true || workerRecovery.currentChannelGenericMcpStatus === "ok",
+  directProbeOk: workerTransport.directProbeReport?.ok === true || workerRecovery.directProbeOk === true,
   requiresFreshCodexChannel: goalCard.requiresFreshCodexChannel === true || workerRecovery.requiresCodexMcpReload === true,
   requiresFreshReadOnlyProbe: workerRecovery.requiresFreshReadOnlyProbe === true || goal.workerTransportRecoveryReadiness?.requiresFreshReadOnlyProbe === true,
   canDispatchCurrentChannelWorkers: workerRecovery.canDispatchCurrentChannelWorkers === true || goal.currentChannelWorkerCanDispatch === true,
@@ -193,6 +201,7 @@ const machineReadableNextActions = [
 const failures = [];
 if (!goalFile.present || !goalFile.parseable) failures.push("goal_readiness_report_missing_or_unparseable");
 if (!workerRecoveryFile.present || !workerRecoveryFile.parseable) failures.push("worker_recovery_report_missing_or_unparseable");
+if (!workerTransportFile.present || !workerTransportFile.parseable) failures.push("worker_transport_report_missing_or_unparseable");
 if (!secondSummaryFile.present || !secondSummaryFile.parseable) failures.push("second_account_summary_missing_or_unparseable");
 if (!postLoginProofFile.present || !postLoginProofFile.parseable) failures.push("second_account_post_login_proof_missing_or_unparseable");
 if (!externalMcpIdentityFile.present || !externalMcpIdentityFile.parseable) failures.push("external_mcp_identity_contract_missing_or_unparseable");
@@ -205,6 +214,11 @@ if (!blockers.includes("second_antigravity_account_real_proof_missing")) failure
 if (!freshChannelWorkerProof.requiresFreshCodexChannel) failures.push("fresh_channel_requirement_missing");
 if (!freshChannelWorkerProof.requiresFreshReadOnlyProbe) failures.push("fresh_read_only_probe_requirement_missing");
 if (!freshChannelWorkerProof.recordCommand) failures.push("worker_recovery_record_command_missing");
+if (!freshChannelWorkerProof.latestTransportCheckedAt) failures.push("worker_transport_checked_at_missing");
+if (freshChannelWorkerProof.workerObservationCount < 3) failures.push("worker_transport_observation_count_too_low");
+if (freshChannelWorkerProof.workerTransportFailedCount < 3) failures.push("worker_transport_failed_count_too_low");
+if (freshChannelWorkerProof.genericMcpControlOk !== true) failures.push("worker_transport_generic_mcp_control_missing");
+if (freshChannelWorkerProof.directProbeOk !== true) failures.push("worker_transport_direct_probe_missing");
 if (!secondAccountProof.windowsUser) failures.push("second_account_windows_user_missing");
 if (!secondAccountProof.postLoginProofCommand) failures.push("second_account_post_login_command_missing");
 if (!externalMcpIdentityHandoff.contractAccepted) failures.push("external_mcp_identity_contract_not_accepted");

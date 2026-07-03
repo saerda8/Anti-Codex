@@ -2324,6 +2324,12 @@ function Test-GoalUnblockPackageSummaryEvidence {
     if ($evidence.freshChannelWorkerRequiresFreshCodexChannel -ne $true) { Add-Failure "goal-unblock-package summary missing fresh channel requirement" }
     if ($evidence.freshChannelWorkerRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-unblock-package summary missing fresh read-only probe requirement" }
     if ($evidence.freshChannelWorkerSameChannelRetryRecommended -ne $false) { Add-Failure "goal-unblock-package summary still recommends same-channel retry" }
+    if (-not ([string]$evidence.freshChannelWorkerLatestTransportCheckedAt).StartsWith("20")) { Add-Failure "goal-unblock-package summary missing fresh worker transport timestamp" }
+    if ([int]$evidence.freshChannelWorkerObservationCount -lt 3) { Add-Failure "goal-unblock-package summary worker observation count too low" }
+    if ([int]$evidence.freshChannelWorkerTransportFailedCount -lt 3) { Add-Failure "goal-unblock-package summary worker failed count too low" }
+    if ([int]$evidence.freshChannelWorkerTransportOkCount -ne 0) { Add-Failure "goal-unblock-package summary worker ok count unexpected" }
+    if ($evidence.freshChannelWorkerGenericMcpControlOk -ne $true) { Add-Failure "goal-unblock-package summary missing generic MCP control proof" }
+    if ($evidence.freshChannelWorkerDirectProbeOk -ne $true) { Add-Failure "goal-unblock-package summary missing direct worker probe proof" }
     if ([string]$evidence.freshChannelWorkerFirstProbeTool -ne "mimocode_wait_for_job") { Add-Failure "goal-unblock-package summary first probe mismatch" }
     if (-not ([string]$evidence.freshChannelWorkerRecordCommand).Contains("record-anticodex-current-channel-worker-transport.mjs")) { Add-Failure "goal-unblock-package summary worker record command missing" }
     if ($evidence.secondAccountRequiresUserPresence -ne $true) { Add-Failure "goal-unblock-package summary missing second-account user presence" }

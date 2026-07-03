@@ -1517,6 +1517,12 @@ function summarizeGate(definition) {
       if (workerProof.requiresFreshCodexChannel !== true) semanticFailures.push("goal_unblock_package_worker_fresh_channel_missing");
       if (workerProof.requiresFreshReadOnlyProbe !== true) semanticFailures.push("goal_unblock_package_worker_read_only_missing");
       if (workerProof.sameChannelRetryRecommended !== false) semanticFailures.push("goal_unblock_package_worker_same_channel_retry");
+      if (!String(workerProof.latestTransportCheckedAt || "").startsWith("20")) semanticFailures.push("goal_unblock_package_worker_checked_at_missing");
+      if (Number(workerProof.workerObservationCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_observation_count_low");
+      if (Number(workerProof.workerTransportFailedCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_failed_count_low");
+      if (Number(workerProof.workerTransportOkCount || 0) !== 0) semanticFailures.push("goal_unblock_package_worker_ok_count_unexpected");
+      if (workerProof.genericMcpControlOk !== true) semanticFailures.push("goal_unblock_package_worker_generic_mcp_missing");
+      if (workerProof.directProbeOk !== true) semanticFailures.push("goal_unblock_package_worker_direct_probe_missing");
       if (!String(workerProof.recordCommand || "").includes("record-anticodex-current-channel-worker-transport.mjs")) semanticFailures.push("goal_unblock_package_worker_record_command_missing");
       if (String(workerProof.recommendedFirstReadOnlyProbe?.statusTool || "") !== "mimocode_wait_for_job") semanticFailures.push("goal_unblock_package_worker_first_probe");
       if (secondProof.requiresUserPresence !== true) semanticFailures.push("goal_unblock_package_second_account_user_presence_missing");

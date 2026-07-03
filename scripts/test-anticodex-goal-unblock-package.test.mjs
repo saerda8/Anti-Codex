@@ -40,6 +40,12 @@ test("goal unblock package is a no-traffic machine-readable handoff for the two 
   assert.equal(report.freshChannelWorkerProof?.requiresFreshCodexChannel, true);
   assert.equal(report.freshChannelWorkerProof?.requiresFreshReadOnlyProbe, true);
   assert.equal(report.freshChannelWorkerProof?.sameChannelRetryRecommended, false);
+  assert.match(report.freshChannelWorkerProof?.latestTransportCheckedAt || "", /^20/);
+  assert.equal(report.freshChannelWorkerProof?.workerObservationCount >= 3, true);
+  assert.equal(report.freshChannelWorkerProof?.workerTransportFailedCount >= 3, true);
+  assert.equal(report.freshChannelWorkerProof?.workerTransportOkCount, 0);
+  assert.equal(report.freshChannelWorkerProof?.genericMcpControlOk, true);
+  assert.equal(report.freshChannelWorkerProof?.directProbeOk, true);
   assert.equal(report.freshChannelWorkerProof?.recommendedFirstReadOnlyProbe?.statusTool, "mimocode_wait_for_job");
   assert.match(report.freshChannelWorkerProof?.recordCommand || "", /record-anticodex-current-channel-worker-transport\.mjs/);
 

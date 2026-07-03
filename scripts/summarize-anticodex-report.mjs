@@ -20,6 +20,12 @@ function asStringArray(value) {
   return [String(value)];
 }
 
+function numberField(object, key) {
+  if (!object || !has(object, key)) return null;
+  const value = Number(object[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
 function asShortString(value, maxLength = 256) {
   const text = asString(value || "");
   if (!text) return "";
@@ -495,6 +501,12 @@ const summary = {
     freshChannelWorkerRequiresFreshCodexChannel: boolField(report.freshChannelWorkerProof || {}, "requiresFreshCodexChannel"),
     freshChannelWorkerRequiresFreshReadOnlyProbe: boolField(report.freshChannelWorkerProof || {}, "requiresFreshReadOnlyProbe"),
     freshChannelWorkerSameChannelRetryRecommended: boolField(report.freshChannelWorkerProof || {}, "sameChannelRetryRecommended"),
+    freshChannelWorkerLatestTransportCheckedAt: asString(report.freshChannelWorkerProof?.latestTransportCheckedAt),
+    freshChannelWorkerObservationCount: numberField(report.freshChannelWorkerProof || {}, "workerObservationCount"),
+    freshChannelWorkerTransportFailedCount: numberField(report.freshChannelWorkerProof || {}, "workerTransportFailedCount"),
+    freshChannelWorkerTransportOkCount: numberField(report.freshChannelWorkerProof || {}, "workerTransportOkCount"),
+    freshChannelWorkerGenericMcpControlOk: boolField(report.freshChannelWorkerProof || {}, "genericMcpControlOk"),
+    freshChannelWorkerDirectProbeOk: boolField(report.freshChannelWorkerProof || {}, "directProbeOk"),
     freshChannelWorkerFirstProbeTool: asString(report.freshChannelWorkerProof?.recommendedFirstReadOnlyProbe?.statusTool),
     freshChannelWorkerRecordCommand: asString(report.freshChannelWorkerProof?.recordCommand),
     secondAccountRequiresUserPresence: boolField(report.secondAccountProof || {}, "requiresUserPresence"),
