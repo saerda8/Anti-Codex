@@ -2060,9 +2060,8 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     $expectedWorkerPrefixes = @(As-FlatArray $evidence.expectedWorkerPrefixes | ForEach-Object { [string]$_ })
     $exposedWorkerPrefixes = @(As-FlatArray $evidence.exposedWorkerPrefixes | ForEach-Object { [string]$_ })
     $observedWorkerPrefixes = @(As-FlatArray $evidence.observedWorkerPrefixes | ForEach-Object { [string]$_ })
+    $missingExpectedWorkerPrefixes = @(As-FlatArray $evidence.missingExpectedWorkerPrefixes | ForEach-Object { [string]$_ })
     if ($expectedWorkerPrefixes.Count -lt 7) { Add-Failure "current-channel-worker-transport summary missing expected worker prefix inventory" }
-    if ($exposedWorkerPrefixes.Count -lt 7) { Add-Failure "current-channel-worker-transport summary missing exposed worker prefix inventory" }
-    if (@(As-FlatArray $evidence.missingExpectedWorkerPrefixes).Count -ne 0) { Add-Failure "current-channel-worker-transport summary has missing expected worker prefixes" }
     if (-not [string]$evidence.genericMcpTool) { Add-Failure "current-channel-worker-transport summary missing generic MCP tool" }
     if ($evidence.genericMcpStatus -ne "ok") { Add-Failure "current-channel-worker-transport summary generic MCP control failed" }
     if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-transport summary missing generic MCP control proof" }
@@ -2084,6 +2083,7 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
         if ([int]$evidence.workerObservationCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker observation count too low" }
         if ([int]$evidence.workerTransportFailedCount -lt 3) { Add-Failure "current-channel-worker-transport summary worker failed count too low" }
         if ($observedWorkerPrefixes.Count -lt 3) { Add-Failure "current-channel-worker-transport summary missing observed worker prefix inventory" }
+        if ($exposedWorkerPrefixes.Count -lt 1) { Add-Failure "current-channel-worker-transport summary missing failed-state exposed worker prefix inventory" }
         Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary" -Tools $transportFailedTools
         if ($evidence.workerStatus -ne "transport_closed") { Add-Failure "current-channel-worker-transport summary worker failure status mismatch" }
         if ($evidence.splitObserved -ne $true) { Add-Failure "current-channel-worker-transport summary did not prove split" }
@@ -2094,6 +2094,8 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
         if ([int]$evidence.workerTransportOkCount -lt 1) { Add-Failure "current-channel-worker-transport summary healthy worker ok count too low" }
         if ($transportOkTools.Count -lt 1) { Add-Failure "current-channel-worker-transport summary missing healthy worker ok tool" }
         if ($observedWorkerPrefixes.Count -lt 1) { Add-Failure "current-channel-worker-transport summary missing healthy observed worker prefix" }
+        if ($exposedWorkerPrefixes.Count -lt 7) { Add-Failure "current-channel-worker-transport summary missing healthy exposed worker prefix inventory" }
+        if ($missingExpectedWorkerPrefixes.Count -ne 0) { Add-Failure "current-channel-worker-transport summary healthy state has missing expected worker prefixes" }
         if ($evidence.currentChannelWorkerDispatchUsable -ne $true) { Add-Failure "current-channel-worker-transport summary did not mark healthy worker dispatch usable" }
     }
 }

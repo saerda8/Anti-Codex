@@ -845,6 +845,7 @@ function managerSummary(action, payload) {
       `\u5f53\u524d\u9891\u9053\uff1a${result.status || "unknown"} / \u53ef\u6d3e\u5de5=${triStateText(result.canDispatchCurrentChannelWorkers)}`,
       `\u76f4\u63a5 worker \u68c0\u67e5\uff1aserver ${evidence.directProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"} / status ${evidence.directStatusProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"}`,
       Array.isArray(evidence.workerTransportFailedTools) && evidence.workerTransportFailedTools.length ? `\u5931\u8d25\u5de5\u5177\uff1a${evidence.workerTransportFailedTools.slice(0, 6).join(", ")}` : "",
+      Array.isArray(evidence.missingExpectedWorkerPrefixes) && evidence.missingExpectedWorkerPrefixes.length ? `\u672a\u66b4\u9732 worker\uff1a${evidence.missingExpectedWorkerPrefixes.slice(0, 6).join(", ")}` : "",
       result.operatorActionCard?.userVisibleNextStep ? `\u4e0b\u4e00\u6b65\uff1a${result.operatorActionCard.userVisibleNextStep}` : "",
       failureSummaryLine(result),
     ].filter(Boolean).join("\n");

@@ -13172,6 +13172,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerRecovery, /canDispatchCurrentChannelWorkers/);
   assert.match(workerRecovery, /postReloadAcceptanceCriteria/);
   assert.match(workerRecovery, /--compact/);
+  assert.match(workerRecovery, /missingExpectedWorkerPrefixes/);
+  assert.match(workerRecovery, /exposedButUntestedWorkerPrefixes/);
   assert.match(workerRecovery, /operatorActionCard/);
   assert.match(workerRecovery, /safeToStartImplementationWorker/);
   assert.doesNotMatch(workerRecovery, /start_implementation/);
@@ -13260,6 +13262,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary worker observation count too low/);
   assert.match(diagnostics, /current-channel-worker-transport summary healthy worker ok count too low/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing healthy worker ok tool/);
+  assert.match(diagnostics, /current-channel-worker-transport summary missing healthy exposed worker prefix inventory/);
+  assert.match(diagnostics, /current-channel-worker-transport summary healthy state has missing expected worker prefixes/);
+  assert.match(diagnostics, /current-channel-worker-transport summary missing failed-state exposed worker prefix inventory/);
   assert.match(diagnostics, /Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary"/);
   assert.match(diagnostics, /distinct failed worker namespace count too low/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
