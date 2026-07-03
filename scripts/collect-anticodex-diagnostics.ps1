@@ -251,6 +251,7 @@ function Read-JsonSummary {
             installedOverallEvidence = $json.installedOverallEvidence
             desktopTaskSuiteEvidence = $json.desktopTaskSuiteEvidence
             goalReadinessEvidence = $json.goalReadinessEvidence
+            goalUnblockPackageEvidence = $json.goalUnblockPackageEvidence
             cliTransportBoundaryEvidence = $json.cliTransportBoundaryEvidence
             longTaskLandingMatrixEvidence = $json.longTaskLandingMatrixEvidence
             agenticCapabilityMatrixEvidence = $json.agenticCapabilityMatrixEvidence
@@ -266,6 +267,7 @@ function Read-JsonSummary {
             workerMcpTaskSmokeEvidence = $json.workerMcpTaskSmokeEvidence
             workerMcpProjectSmokeEvidence = $json.workerMcpProjectSmokeEvidence
             currentChannelWorkerTransportEvidence = $json.currentChannelWorkerTransportEvidence
+            currentChannelWorkerRecoveryEvidence = $json.currentChannelWorkerRecoveryEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
             stabilitySoakEvidence = $json.stabilitySoakEvidence
             state = $json.state
@@ -443,6 +445,7 @@ $latestReports = @(
     "latest-long-task-landing-matrix.json",
     "latest-native-codex-parity-task-matrix.json",
     "latest-goal-readiness.json",
+    "latest-goal-unblock-package.json",
     "latest-agentic-capability-matrix.json",
     "latest-real-task-coverage-roadmap.json",
     "latest-real-approval-plan.json",

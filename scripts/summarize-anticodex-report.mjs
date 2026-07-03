@@ -214,6 +214,7 @@ const isLogDbGuardReport = report?.reportName === "log-db-guard" || /latest-log-
 const isMissingHistoryReport = report?.reportName === "missing-history" || /latest-missing-history\.json$/i.test(path);
 const isAccountProxyReport = report?.reportName === "account-proxy-readiness" || /latest-account-proxy-readiness\.json$/i.test(path);
 const isGoalReadinessReport = report?.reportName === "goal-readiness" || /latest-goal-readiness\.json$/i.test(path);
+const isGoalUnblockPackageReport = report?.reportName === "goal-unblock-package" || /latest-goal-unblock-package\.json$/i.test(path);
 const isCliTransportBoundaryReport = report?.reportName === "cli-transport-boundary" || /latest-cli-transport-boundary\.json$/i.test(path);
 const isLongTaskLandingMatrixReport = report?.reportName === "long-task-landing-matrix" || /latest-long-task-landing-matrix\.json$/i.test(path);
 const isAgenticCapabilityMatrixReport = report?.reportName === "agentic-capability-matrix" || /latest-agentic-capability-matrix\.json$/i.test(path);
@@ -476,6 +477,38 @@ const summary = {
   skipFullRegression: boolField(report, "skipFullRegression"),
   failureCount,
   elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
+  goalUnblockPackageEvidence: isGoalUnblockPackageReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    changedSystem: boolField(report, "changedSystem"),
+    createdUser: boolField(report, "createdUser"),
+    startedLogin: boolField(report, "startedLogin"),
+    capturesPassword: boolField(report, "capturesPassword"),
+    storesPassword: boolField(report, "storesPassword"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    canClaimFullGoalNow: boolField(report, "canClaimFullGoalNow"),
+    releaseReady: boolField(report, "releaseReady"),
+    remainingObjectiveRequirementIds: Array.isArray(report.remainingObjectiveRequirementIds) ? asStringArray(report.remainingObjectiveRequirementIds) : [],
+    blockers: Array.isArray(report.blockers) ? asStringArray(report.blockers) : [],
+    freshChannelWorkerRequiresFreshCodexChannel: boolField(report.freshChannelWorkerProof || {}, "requiresFreshCodexChannel"),
+    freshChannelWorkerRequiresFreshReadOnlyProbe: boolField(report.freshChannelWorkerProof || {}, "requiresFreshReadOnlyProbe"),
+    freshChannelWorkerSameChannelRetryRecommended: boolField(report.freshChannelWorkerProof || {}, "sameChannelRetryRecommended"),
+    freshChannelWorkerFirstProbeTool: asString(report.freshChannelWorkerProof?.recommendedFirstReadOnlyProbe?.statusTool),
+    freshChannelWorkerRecordCommand: asString(report.freshChannelWorkerProof?.recordCommand),
+    secondAccountRequiresUserPresence: boolField(report.secondAccountProof || {}, "requiresUserPresence"),
+    secondAccountWindowsUser: asString(report.secondAccountProof?.windowsUser),
+    secondAccountTargetUserExists: boolField(report.secondAccountProof || {}, "targetUserExists"),
+    secondAccountSafeToAskUserForSecondAccountLogin: boolField(report.secondAccountProof || {}, "safeToAskUserForSecondAccountLogin"),
+    secondAccountPostLoginProofStatus: asString(report.secondAccountProof?.postLoginProofStatus),
+    secondAccountEffectiveAntiCodexAccountIdPresent: boolField(report.secondAccountProof || {}, "effectiveAntiCodexAccountIdPresent"),
+    secondAccountEffectiveMcpAccountIdPresent: boolField(report.secondAccountProof || {}, "effectiveMcpAccountIdPresent"),
+    externalMcpIdentityContractReportPresent: boolField(report.externalMcpIdentityHandoff || {}, "contractReportPresent"),
+    externalMcpIdentityContractAccepted: boolField(report.externalMcpIdentityHandoff || {}, "contractAccepted"),
+    externalMcpIdentityManagedByAntiCodex: boolField(report.externalMcpIdentityHandoff || {}, "managedByAntiCodex"),
+    machineReadableNextActionIds: Array.isArray(report.machineReadableNextActions) ? asStringArray(report.machineReadableNextActions.map((item) => item?.id)) : [],
+  } : null,
   actions: has(report, "actions") ? asStringArray(report.actions) : [],
   managerButtonOk: managerButton ? boolField(managerButton, "ok") : null,
   managerButtonResults,

@@ -117,6 +117,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-real-approval-plan.mjs",
   "scripts/test-anticodex-required-real-traffic-sequence.ps1",
   "scripts/test-anticodex-approved-real-run-sequence.mjs",
+  "scripts/build-anticodex-goal-unblock-package.mjs",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
@@ -176,6 +177,7 @@ const gateDefinitions = [
   { id: "nativeCodexParityTaskMatrix", group: "no-traffic", file: "latest-native-codex-parity-task-matrix.json", requiredForRelease: true, requireNativeCodexParityTaskMatrixSemantics: true },
   { id: "realApprovalPlan", group: "no-traffic", file: "latest-real-approval-plan.json", requiredForRelease: true, requireRealApprovalPlanSemantics: true },
   { id: "goalReadiness", group: "no-traffic", file: "latest-goal-readiness.json", requiredForRelease: true, requireGoalReadinessSemantics: true },
+  { id: "goalUnblockPackage", group: "no-traffic", file: "latest-goal-unblock-package.json", requiredForRelease: true, requireGoalUnblockPackageSemantics: true },
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
   { id: "goalRealRunReadiness", group: "no-traffic", file: "latest-goal-real-run-readiness.json", requiredForRelease: true, requireGoalRealRunReadinessSemantics: true },
   { id: "approvedRealRunSequence", group: "no-traffic", file: "latest-approved-real-run-sequence.json", requiredForRelease: true, requireApprovedRealRunSequenceSemantics: true },
@@ -1486,6 +1488,54 @@ function summarizeGate(definition) {
       if (Number(secondSummary.failureCount || 0) !== 0) semanticFailures.push("goal_readiness_second_account_readiness_summary_failures");
       if (typeof report.nextRequiredUserAction !== "string" || !report.nextRequiredUserAction) semanticFailures.push("goal_readiness_next_user_action_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_readiness_failures");
+    }
+    if (definition.requireGoalUnblockPackageSemantics) {
+      const blockers = Array.isArray(report.blockers) ? report.blockers.map(String) : [];
+      const remaining = Array.isArray(report.remainingObjectiveRequirementIds) ? report.remainingObjectiveRequirementIds.map(String) : [];
+      const workerProof = report.freshChannelWorkerProof && typeof report.freshChannelWorkerProof === "object" ? report.freshChannelWorkerProof : {};
+      const secondProof = report.secondAccountProof && typeof report.secondAccountProof === "object" ? report.secondAccountProof : {};
+      const externalHandoff = report.externalMcpIdentityHandoff && typeof report.externalMcpIdentityHandoff === "object" ? report.externalMcpIdentityHandoff : {};
+      const actions = Array.isArray(report.machineReadableNextActions) ? report.machineReadableNextActions : [];
+      if (report.reportName !== "goal-unblock-package") semanticFailures.push("goal_unblock_package_report_name");
+      if (report.requestedRealTraffic !== false) semanticFailures.push("goal_unblock_package_requested_real_traffic");
+      if (report.usedRealTraffic !== false) semanticFailures.push("goal_unblock_package_used_real_traffic");
+      if (report.changedSystem !== false) semanticFailures.push("goal_unblock_package_changed_system");
+      if (report.createdUser !== false) semanticFailures.push("goal_unblock_package_created_user");
+      if (report.startedLogin !== false) semanticFailures.push("goal_unblock_package_started_login");
+      if (report.capturesPassword !== false) semanticFailures.push("goal_unblock_package_captures_password");
+      if (report.storesPassword !== false) semanticFailures.push("goal_unblock_package_stores_password");
+      if (report.behaviorCovered !== true) semanticFailures.push("goal_unblock_package_behavior_not_covered");
+      if (report.coverageKind !== "goal-unblock-package-report-only") semanticFailures.push("goal_unblock_package_coverage_kind");
+      if (report.canClaimFullGoalNow !== false) semanticFailures.push("goal_unblock_package_claims_goal");
+      if (report.releaseReady !== true) semanticFailures.push("goal_unblock_package_release_not_ready");
+      for (const expected of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
+        if (!remaining.includes(expected)) semanticFailures.push(`goal_unblock_package_remaining_missing:${expected}`);
+      }
+      for (const expected of ["current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing"]) {
+        if (!blockers.includes(expected)) semanticFailures.push(`goal_unblock_package_blocker_missing:${expected}`);
+      }
+      if (workerProof.requiresFreshCodexChannel !== true) semanticFailures.push("goal_unblock_package_worker_fresh_channel_missing");
+      if (workerProof.requiresFreshReadOnlyProbe !== true) semanticFailures.push("goal_unblock_package_worker_read_only_missing");
+      if (workerProof.sameChannelRetryRecommended !== false) semanticFailures.push("goal_unblock_package_worker_same_channel_retry");
+      if (!String(workerProof.recordCommand || "").includes("record-anticodex-current-channel-worker-transport.mjs")) semanticFailures.push("goal_unblock_package_worker_record_command_missing");
+      if (String(workerProof.recommendedFirstReadOnlyProbe?.statusTool || "") !== "mimocode_wait_for_job") semanticFailures.push("goal_unblock_package_worker_first_probe");
+      if (secondProof.requiresUserPresence !== true) semanticFailures.push("goal_unblock_package_second_account_user_presence_missing");
+      if (String(secondProof.windowsUser || "") !== ".\\AntiCodexModel") semanticFailures.push("goal_unblock_package_second_account_user");
+      if (secondProof.targetUserExists !== false) semanticFailures.push("goal_unblock_package_second_account_target_exists");
+      if (secondProof.safeToAskUserForSecondAccountLogin !== false) semanticFailures.push("goal_unblock_package_second_account_login_too_early");
+      if (String(secondProof.postLoginProofStatus || "") !== "blocked_before_login") semanticFailures.push("goal_unblock_package_second_account_status");
+      if (secondProof.effectiveAntiCodexAccountIdPresent !== true) semanticFailures.push("goal_unblock_package_anticodex_id_missing");
+      if (secondProof.effectiveMcpAccountIdPresent !== false) semanticFailures.push("goal_unblock_package_mcp_id_should_be_external");
+      if (externalHandoff.contractReportPresent !== true) semanticFailures.push("goal_unblock_package_external_contract_missing");
+      if (externalHandoff.contractAccepted !== true) semanticFailures.push("goal_unblock_package_external_contract_not_accepted");
+      if (externalHandoff.managedByAntiCodex !== false) semanticFailures.push("goal_unblock_package_external_contract_managed_by_anticodex");
+      if (actions.length < 4) semanticFailures.push("goal_unblock_package_action_count");
+      for (const actionId of ["fresh_channel_worker_read_only_probe", "create_or_verify_second_windows_user", "external_mcp_account_identity_report", "approved_second_account_post_login_proof"]) {
+        const actionEntry = actions.find((item) => String(item?.id || "") === actionId);
+        if (!actionEntry) semanticFailures.push(`goal_unblock_package_action_missing:${actionId}`);
+        else if (!String(actionEntry.owner || "")) semanticFailures.push(`goal_unblock_package_action_owner_missing:${actionId}`);
+      }
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("goal_unblock_package_failures");
     }
     if (definition.requireToolLoopSemantics) {
       const finalText = String(report.final_text || "");
@@ -2851,6 +2901,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["nativeCodexParityTaskMatrix", "no-traffic-local", "node scripts\\test-anticodex-native-codex-parity-tasks.mjs"],
   ["realApprovalPlan", "no-traffic-local", "node scripts\\test-anticodex-real-approval-plan.mjs"],
   ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
+  ["goalUnblockPackage", "no-traffic-local", "node scripts\\build-anticodex-goal-unblock-package.mjs"],
   ["requiredRealTrafficSequence", "no-traffic-local", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-required-real-traffic-sequence.ps1"],
   ["goalRealRunReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-real-run-readiness.mjs"],
   ["approvedRealRunSequence", "no-traffic-local", "node scripts\\test-anticodex-approved-real-run-sequence.mjs"],

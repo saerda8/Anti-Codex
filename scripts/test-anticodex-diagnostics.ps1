@@ -2288,6 +2288,60 @@ function Test-CurrentChannelWorkerRecoverySummaryEvidence {
     }
 }
 
+function Test-GoalUnblockPackageSummaryEvidence {
+    param($GoalUnblockPackageSummary)
+    if (-not $GoalUnblockPackageSummary) {
+        Add-Failure "diagnostic reports summary missing latest-goal-unblock-package.json"
+        return
+    }
+
+    $evidence = $GoalUnblockPackageSummary.goalUnblockPackageEvidence
+    if (-not $evidence) {
+        Add-Failure "goal-unblock-package summary missing goalUnblockPackageEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "goal-unblock-package") { Add-Failure "goal-unblock-package summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "goal-unblock-package summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "goal-unblock-package summary used real traffic" }
+    if ($evidence.changedSystem -ne $false) { Add-Failure "goal-unblock-package summary changed system" }
+    if ($evidence.createdUser -ne $false) { Add-Failure "goal-unblock-package summary created user" }
+    if ($evidence.startedLogin -ne $false) { Add-Failure "goal-unblock-package summary started login" }
+    if ($evidence.capturesPassword -ne $false) { Add-Failure "goal-unblock-package summary captures password" }
+    if ($evidence.storesPassword -ne $false) { Add-Failure "goal-unblock-package summary stores password" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "goal-unblock-package summary behavior not covered" }
+    if ($evidence.coverageKind -ne "goal-unblock-package-report-only") { Add-Failure "goal-unblock-package summary coverage kind mismatch" }
+    if ($evidence.canClaimFullGoalNow -ne $false) { Add-Failure "goal-unblock-package summary claims full goal" }
+    if ($evidence.releaseReady -ne $true) { Add-Failure "goal-unblock-package summary release not ready" }
+    $remainingIds = @(As-FlatArray $evidence.remainingObjectiveRequirementIds | ForEach-Object { [string]$_ })
+    foreach ($requiredId in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
+        if ($remainingIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing remaining requirement: $requiredId" }
+    }
+    $blockers = @(As-FlatArray $evidence.blockers | ForEach-Object { [string]$_ })
+    foreach ($requiredBlocker in @("current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing")) {
+        if ($blockers -notcontains $requiredBlocker) { Add-Failure "goal-unblock-package summary missing blocker: $requiredBlocker" }
+    }
+    if ($evidence.freshChannelWorkerRequiresFreshCodexChannel -ne $true) { Add-Failure "goal-unblock-package summary missing fresh channel requirement" }
+    if ($evidence.freshChannelWorkerRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-unblock-package summary missing fresh read-only probe requirement" }
+    if ($evidence.freshChannelWorkerSameChannelRetryRecommended -ne $false) { Add-Failure "goal-unblock-package summary still recommends same-channel retry" }
+    if ([string]$evidence.freshChannelWorkerFirstProbeTool -ne "mimocode_wait_for_job") { Add-Failure "goal-unblock-package summary first probe mismatch" }
+    if (-not ([string]$evidence.freshChannelWorkerRecordCommand).Contains("record-anticodex-current-channel-worker-transport.mjs")) { Add-Failure "goal-unblock-package summary worker record command missing" }
+    if ($evidence.secondAccountRequiresUserPresence -ne $true) { Add-Failure "goal-unblock-package summary missing second-account user presence" }
+    if ([string]$evidence.secondAccountWindowsUser -ne ".\AntiCodexModel") { Add-Failure "goal-unblock-package summary second-account Windows user mismatch" }
+    if ($evidence.secondAccountTargetUserExists -ne $false) { Add-Failure "goal-unblock-package summary target user unexpectedly exists" }
+    if ($evidence.secondAccountSafeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "goal-unblock-package summary asks login too early" }
+    if ([string]$evidence.secondAccountPostLoginProofStatus -ne "blocked_before_login") { Add-Failure "goal-unblock-package summary post-login status mismatch" }
+    if ($evidence.secondAccountEffectiveAntiCodexAccountIdPresent -ne $true) { Add-Failure "goal-unblock-package summary missing Anti-Codex account id suggestion" }
+    if ($evidence.secondAccountEffectiveMcpAccountIdPresent -ne $false) { Add-Failure "goal-unblock-package summary should not invent MCP account id" }
+    if ($evidence.externalMcpIdentityContractReportPresent -ne $true) { Add-Failure "goal-unblock-package summary missing external MCP identity contract" }
+    if ($evidence.externalMcpIdentityContractAccepted -ne $true) { Add-Failure "goal-unblock-package summary external MCP identity not accepted" }
+    if ($evidence.externalMcpIdentityManagedByAntiCodex -ne $false) { Add-Failure "goal-unblock-package summary external MCP identity managed by Anti-Codex" }
+    $actionIds = @(As-FlatArray $evidence.machineReadableNextActionIds | ForEach-Object { [string]$_ })
+    foreach ($actionId in @("fresh_channel_worker_read_only_probe", "create_or_verify_second_windows_user", "external_mcp_account_identity_report", "approved_second_account_post_login_proof")) {
+        if ($actionIds -notcontains $actionId) { Add-Failure "goal-unblock-package summary missing action: $actionId" }
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -2305,6 +2359,7 @@ function Test-ReportsSummary {
     $refreshFeaturesSummary = @($summary | Where-Object { $_.file -eq "latest-refresh-features.json" } | Select-Object -First 1)[0]
     $desktopTaskSuiteSummary = @($summary | Where-Object { $_.file -eq "latest-desktop-task-suite.json" } | Select-Object -First 1)[0]
     $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
+    $goalUnblockPackageSummary = @($summary | Where-Object { $_.file -eq "latest-goal-unblock-package.json" } | Select-Object -First 1)[0]
     $cliTransportBoundarySummary = @($summary | Where-Object { $_.file -eq "latest-cli-transport-boundary.json" } | Select-Object -First 1)[0]
     $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
     $agenticCapabilityMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-agentic-capability-matrix.json" } | Select-Object -First 1)[0]
@@ -2367,6 +2422,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $refreshFeaturesSummary) { Test-RefreshFeaturesSummarySupportEvidence $refreshFeaturesSummary }
     if ($RequireReleaseReady -or $desktopTaskSuiteSummary) { Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary }
     if ($RequireReleaseReady -or $goalReadinessSummary) { Test-GoalReadinessSummaryEvidence $goalReadinessSummary }
+    if ($RequireReleaseReady -or $goalUnblockPackageSummary) { Test-GoalUnblockPackageSummaryEvidence $goalUnblockPackageSummary }
     if ($RequireReleaseReady -or $cliTransportBoundarySummary) { Test-CliTransportBoundarySummaryEvidence $cliTransportBoundarySummary }
     if ($RequireReleaseReady -or $longTaskLandingMatrixSummary) { Test-LongTaskLandingMatrixSummaryEvidence $longTaskLandingMatrixSummary }
     if ($RequireReleaseReady -or $agenticCapabilityMatrixSummary) { Test-AgenticCapabilityMatrixSummaryEvidence $agenticCapabilityMatrixSummary }
@@ -2770,6 +2826,8 @@ function Test-DiagnosticBundle {
         Test-DesktopTaskSuiteSummaryEvidence $desktopTaskSuiteSummary
         $goalReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-goal-readiness.json" } | Select-Object -First 1)[0]
         Test-GoalReadinessSummaryEvidence $goalReadinessSummary
+        $goalUnblockPackageSummary = @($summary | Where-Object { $_.file -eq "latest-goal-unblock-package.json" } | Select-Object -First 1)[0]
+        Test-GoalUnblockPackageSummaryEvidence $goalUnblockPackageSummary
         $cliTransportBoundarySummary = @($summary | Where-Object { $_.file -eq "latest-cli-transport-boundary.json" } | Select-Object -First 1)[0]
         Test-CliTransportBoundarySummaryEvidence $cliTransportBoundarySummary
         $longTaskLandingMatrixSummary = @($summary | Where-Object { $_.file -eq "latest-long-task-landing-matrix.json" } | Select-Object -First 1)[0]
