@@ -1,6 +1,7 @@
 # Anti-Codex Core Stability Plan
 
 ## Current Status
+- Current Manager mojibake visibility: `managerMojibakeContractsOk` is now surfaced through source-preflight summaries, diagnostics, and the live `/diagnostics` sourcePreflight payload, not only the raw source-preflight JSON. This makes the Manager Chinese-label guard release-readable and operator-visible.
 - Current Manager mojibake guard: source preflight now includes `managerMojibakeContracts`, which checks Manager visible labels such as worker transport status, second-account status, and limited-model display through UTF-8-safe Unicode construction. This protects the user-facing Anti-Codex Manager path from regressing into garbled Chinese labels.
 - Current roadmap summary guard: `summarize-anticodex-report.mjs` now carries `maxAgeHours`, `canonicalReleaseMaxAgeHours`, `customFreshnessReportOnly`, and `canonicalLatest` in `realTaskCoverageRoadmapEvidence`. Custom freshness probes such as the one-hour roadmap can be surfaced in Manager/diagnostics without being mistaken for the canonical 24-hour release report.
 - Current roadmap freshness guard: `test-anticodex-real-task-coverage-roadmap.mjs --max-age-hours <non-24>` now writes a separate custom-freshness latest report such as `latest-real-task-coverage-roadmap-max-age-1.json` instead of overwriting release canonical `latest-real-task-coverage-roadmap.json`. Default 24-hour runs still write canonical latest for release gates. This prevents exploratory one-hour checks from temporarily making release gates red.

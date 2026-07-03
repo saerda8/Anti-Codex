@@ -635,6 +635,7 @@ const summary = {
     };
   })(),
   localConnectorVerifierOk: checkOk("localConnectorVerifier"),
+  managerMojibakeContractsOk: checkOk("managerMojibakeContracts"),
   publicDocumentationOk: checkOk("publicDocumentation"),
   publicDocumentationClientCopySyncContractOk: report.reportName === "source-preflight"
     ? publicDocumentationAssertionOk("README.md", "client-copy-sync-contract") && publicDocumentationAssertionOk("README_EN.md", "client-copy-sync-contract")

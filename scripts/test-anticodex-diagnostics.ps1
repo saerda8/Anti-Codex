@@ -3013,6 +3013,7 @@ function Test-DiagnosticBundle {
                 if (-not [string]$dualLanesContract.accountIsolationCaveat) { Add-Failure "source-preflight summary dual account lanes missing isolation caveat" }
             }
             if ($sourcePreflightSummary.localConnectorVerifierOk -ne $true) { Add-Failure "source-preflight summary missing local connector verifier success" }
+            if ($sourcePreflightSummary.managerMojibakeContractsOk -ne $true) { Add-Failure "source-preflight summary missing Manager mojibake contract success" }
             if ($sourcePreflightSummary.publicDocumentationOk -ne $true) { Add-Failure "source-preflight summary missing public documentation success" }
             if ($sourcePreflightSummary.publicDocumentationClientCopySyncContractOk -ne $true) { Add-Failure "source-preflight summary missing client-copy public documentation contract success" }
             if ($sourcePreflightSummary.translatorRegressionOk -ne $true) { Add-Failure "source-preflight summary missing translator regression success" }
@@ -3973,6 +3974,7 @@ if ($diagnostics) {
             if (-not [string]$isolationContract.accountIsolationCaveat) { Add-Failure "diagnostics source preflight isolation profile missing isolation caveat" }
         }
         if (-not (Has-Property $sourcePreflight "localConnectorVerifierOk")) { Add-Failure "diagnostics source preflight missing local connector verifier result" }
+        if (-not (Has-Property $sourcePreflight "managerMojibakeContractsOk")) { Add-Failure "diagnostics source preflight missing Manager mojibake contract result" }
         if (-not (Has-Property $sourcePreflight "publicDocumentationOk")) { Add-Failure "diagnostics source preflight missing public documentation result" }
         if (-not (Has-Property $sourcePreflight "publicDocumentationClientCopySyncContractOk")) { Add-Failure "diagnostics source preflight missing client-copy public documentation contract result" }
         if (-not (Has-Property $sourcePreflight "translatorRegressionOk")) { Add-Failure "diagnostics source preflight missing translator regression result" }

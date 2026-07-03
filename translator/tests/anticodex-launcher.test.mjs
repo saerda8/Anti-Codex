@@ -3689,6 +3689,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
           accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
         } },
         localConnectorVerifier: { ok: true },
+        managerMojibakeContracts: { ok: true },
         publicDocumentation: {
           ok: true,
           assertions: [
@@ -3732,6 +3733,7 @@ test("report summarizer surfaces source preflight profile storage evidence", () 
       accountIsolationCaveat: "no real dual-account proof; only AppData isolation verified",
     });
     assert.equal(summary.localConnectorVerifierOk, true);
+    assert.equal(summary.managerMojibakeContractsOk, true);
     assert.equal(summary.publicDocumentationOk, true);
     assert.equal(summary.publicDocumentationClientCopySyncContractOk, true);
     assert.equal(summary.translatorRegressionOk, true);
@@ -8734,6 +8736,9 @@ test("Anti-Codex ships a read-only diagnostics verifier", () => {
   assert.match(diagnostics, /accountIsolationCaveat/);
   assert.match(diagnostics, /profile prepare is not real dual-account proof/);
   assert.match(diagnostics, /localConnectorVerifierOk/);
+  assert.match(diagnostics, /managerMojibakeContractsOk/);
+  assert.match(diagnostics, /source-preflight summary missing Manager mojibake contract success/);
+  assert.match(diagnostics, /diagnostics source preflight missing Manager mojibake contract result/);
   assert.match(diagnostics, /publicDocumentationOk/);
   assert.match(diagnostics, /publicDocumentationClientCopySyncContractOk/);
   assert.match(diagnostics, /source-preflight summary missing client-copy public documentation contract success/);
