@@ -1388,6 +1388,7 @@ const summary = {
     desktopAgenticTasksProven: boolField(report.proven || {}, "desktopAgenticTasks"),
     agenticCapabilityMatrixProven: boolField(report.proven || {}, "agenticCapabilityMatrix"),
     realTaskCoverageRoadmapProven: boolField(report.proven || {}, "realTaskCoverageRoadmap"),
+    longTaskLandingMatrixProven: boolField(report.proven || {}, "longTaskLandingMatrix"),
     realApprovalPlanProven: boolField(report.proven || {}, "realApprovalPlan"),
     releaseShortPathProven: boolField(report.proven || {}, "releaseShortPath"),
     secondAccountLoginEntrypointProven: boolField(report.proven || {}, "secondAccountLoginEntrypoint"),

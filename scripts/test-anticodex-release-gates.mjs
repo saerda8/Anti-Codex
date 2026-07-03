@@ -1305,6 +1305,7 @@ function summarizeGate(definition) {
       const releaseGateStatus = report.releaseGateStatus && typeof report.releaseGateStatus === "object" ? report.releaseGateStatus : {};
       const worker = report.workerMcp && typeof report.workerMcp === "object" ? report.workerMcp : {};
       const roadmap = report.realTaskCoverageRoadmap && typeof report.realTaskCoverageRoadmap === "object" ? report.realTaskCoverageRoadmap : {};
+      const longTaskLanding = report.longTaskLandingMatrix && typeof report.longTaskLandingMatrix === "object" ? report.longTaskLandingMatrix : {};
       const approval = report.realApprovalPlan && typeof report.realApprovalPlan === "object" ? report.realApprovalPlan : {};
       const account = report.antigravityAccountIsolation && typeof report.antigravityAccountIsolation === "object" ? report.antigravityAccountIsolation : {};
       const entrypoint = report.secondAccountLoginEntrypoint && typeof report.secondAccountLoginEntrypoint === "object" ? report.secondAccountLoginEntrypoint : {};
@@ -1367,7 +1368,7 @@ function summarizeGate(definition) {
       for (const requiredAuditId of ["codex_client_copy", "antigravity_model_text", "separate_antigravity_accounts", "worker_mcp_multiuse", "real_long_tasks_with_results", "native_codex_like_agentic_experience"]) {
         if (!objectiveRequirementAudit.some((item) => String(item?.id || "") === requiredAuditId)) semanticFailures.push(`goal_readiness_objective_requirement_audit_missing:${requiredAuditId}`);
       }
-      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "secondAccountReadinessSummary", "accountIsolationPreparedOnly"]) {
+      for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "longTaskLandingMatrix", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "secondAccountReadinessSummary", "accountIsolationPreparedOnly"]) {
         if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
       }
       if (Number(worker.passedServerCount || 0) < requiredWorkerServers.length) semanticFailures.push("goal_readiness_worker_mcp_passed_count");
@@ -1419,6 +1420,9 @@ function summarizeGate(definition) {
       if (Array.isArray(roadmap.missingResultProofTasks) && roadmap.missingResultProofTasks.length > 0) semanticFailures.push("goal_readiness_result_proof_missing");
       if (roadmap.resultProofComplete !== true) semanticFailures.push("goal_readiness_result_proof_missing");
       if (blockers.includes("real_task_result_proof_missing")) semanticFailures.push("goal_readiness_result_proof_blocker_present");
+      if (longTaskLanding.longTaskLandingComplete !== true) semanticFailures.push("goal_readiness_long_task_landing_incomplete");
+      if (Number(longTaskLanding.landedLongTaskCount || 0) < 7) semanticFailures.push("goal_readiness_long_task_landing_count");
+      if (Array.isArray(longTaskLanding.failedLongTaskModes) && longTaskLanding.failedLongTaskModes.length > 0) semanticFailures.push("goal_readiness_long_task_landing_failed_modes");
       if (roadmap.approvalRequiredForRefresh === true) {
         if (!Array.isArray(roadmap.uniqueRefreshTasks) || roadmap.uniqueRefreshTasks.length < 1) semanticFailures.push("goal_readiness_refresh_tasks_missing");
         if (roadmap.minimalRefreshCommandPresent !== true) semanticFailures.push("goal_readiness_refresh_command_missing");

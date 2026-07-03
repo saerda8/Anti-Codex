@@ -67,6 +67,7 @@ const mcpSkills = readReport("latest-mcp-skills.json");
 const desktopSuite = readReport("latest-desktop-task-suite.json");
 const capabilityMatrixReport = readReport("latest-agentic-capability-matrix.json");
 const realTaskCoverageRoadmapReport = readReport("latest-real-task-coverage-roadmap.json");
+const longTaskLandingMatrixReport = readReport("latest-long-task-landing-matrix.json");
 const realApprovalPlanReport = readReport("latest-real-approval-plan.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
 const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
@@ -409,6 +410,30 @@ const realTaskCoverageRoadmap = {
     refreshTasks: Array.isArray(item?.refreshTasks) ? item.refreshTasks.map(String) : [],
     approvalRequiredForRefresh: item?.approvalRequiredForRefresh === true,
   })),
+};
+
+const longTaskLanding = longTaskLandingMatrixReport.report || {};
+const longTaskLandingFailedModes = Array.isArray(longTaskLanding.failedLongTaskModes)
+  ? longTaskLanding.failedLongTaskModes.map(String).filter(Boolean)
+  : [];
+const longTaskLandingRequiredModes = Array.isArray(longTaskLanding.requiredLongTaskModes)
+  ? longTaskLanding.requiredLongTaskModes.map(String).filter(Boolean)
+  : [];
+const longTaskLandingMatrix = {
+  reportPresent: longTaskLandingMatrixReport.present,
+  reportOk: longTaskLanding.ok === true,
+  coverageKind: String(longTaskLanding.coverageKind || ""),
+  requestedRealTraffic: longTaskLanding.requestedRealTraffic === true,
+  usedRealTraffic: longTaskLanding.usedRealTraffic === true,
+  longTaskLandingComplete: longTaskLanding.longTaskLandingComplete === true,
+  codexClientCopy: longTaskLanding.codexClientCopy === true,
+  antigravityModelTextOnly: longTaskLanding.antigravityModelTextOnly === true,
+  requiredLongTaskModes: longTaskLandingRequiredModes,
+  longTaskCount: Number(longTaskLanding.longTaskCount || 0),
+  landedLongTaskCount: Number(longTaskLanding.landedLongTaskCount || 0),
+  failedLongTaskModes: longTaskLandingFailedModes,
+  pendingRealTaskModes: Array.isArray(longTaskLanding.pendingRealTaskModes) ? longTaskLanding.pendingRealTaskModes.map(String).filter(Boolean) : [],
+  pendingRealTaskScenarios: Array.isArray(longTaskLanding.pendingRealTaskScenarios) ? longTaskLanding.pendingRealTaskScenarios.map(String).filter(Boolean) : [],
 };
 
 const approvalPlan = realApprovalPlanReport.report || {};
@@ -762,6 +787,16 @@ const proven = {
     && realTaskCoverageRoadmap.missingProfiles.length === 0
     && realTaskCoverageRoadmap.artifactProofComplete
     && realTaskCoverageRoadmap.resultProofComplete,
+  longTaskLandingMatrix: longTaskLandingMatrix.reportOk
+    && longTaskLandingMatrix.coverageKind === "long-task-landing-matrix-report-only"
+    && longTaskLandingMatrix.requestedRealTraffic === false
+    && longTaskLandingMatrix.usedRealTraffic === false
+    && longTaskLandingMatrix.longTaskLandingComplete
+    && longTaskLandingMatrix.codexClientCopy
+    && longTaskLandingMatrix.antigravityModelTextOnly
+    && longTaskLandingMatrix.requiredLongTaskModes.length >= 7
+    && longTaskLandingMatrix.landedLongTaskCount >= longTaskLandingMatrix.requiredLongTaskModes.length
+    && longTaskLandingMatrix.failedLongTaskModes.length === 0,
   realApprovalPlan: realApprovalPlan.reportOk
     && realApprovalPlan.coverageKind === "real-approval-plan-report-only"
     && realApprovalPlan.requestedRealTraffic === false
@@ -867,6 +902,7 @@ if (!workerMcp.currentChannelWorkerDispatchUsable) blockers.push("current_channe
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
+if (!proven.longTaskLandingMatrix) blockers.push("long_task_landing_matrix_missing_or_invalid");
 if (!realTaskCoverageRoadmap.artifactProofComplete) blockers.push("real_task_artifact_proof_missing");
 if (!realTaskCoverageRoadmap.resultProofComplete) blockers.push("real_task_result_proof_missing");
 if (!proven.realApprovalPlan) blockers.push("real_approval_plan_missing_or_invalid");
@@ -884,6 +920,7 @@ const goalComplete = proven.codexClientCopy
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
   && proven.realTaskCoverageRoadmap
+  && proven.longTaskLandingMatrix
   && proven.realApprovalPlan
   && proven.secondAccountLoginEntrypoint
   && proven.secondAccountReadinessSummary
@@ -967,10 +1004,11 @@ const objectiveRequirementAudit = [
   objectiveRequirement(
     "real_long_tasks_with_results",
     "Visible real long tasks land concrete files, tests, CLI output, reports, and final markers",
-    proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap,
+    proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.longTaskLandingMatrix,
     [
       `selected agentic tasks: ${desktopAgenticTasks.selectedTasks.join(",")}`,
       `capability count: ${agenticCapabilityMatrix.okCapabilityCount}/${agenticCapabilityMatrix.capabilityCount}`,
+      `long task landing: ${longTaskLandingMatrix.landedLongTaskCount}/${longTaskLandingMatrix.longTaskCount}`,
       `artifact proof complete: ${realTaskCoverageRoadmap.artifactProofComplete}`,
       `result proof complete: ${realTaskCoverageRoadmap.resultProofComplete}`,
     ],
@@ -978,6 +1016,7 @@ const objectiveRequirementAudit = [
       ...(!proven.desktopAgenticTasks ? ["desktop agentic task suite incomplete or stale"] : []),
       ...(!proven.agenticCapabilityMatrix ? ["agentic capability matrix incomplete or stale"] : []),
       ...(!proven.realTaskCoverageRoadmap ? ["real task coverage roadmap incomplete"] : []),
+      ...(!proven.longTaskLandingMatrix ? ["long-task landing matrix incomplete"] : []),
     ],
   ),
   objectiveRequirement(
@@ -985,17 +1024,20 @@ const objectiveRequirementAudit = [
     "Anti-Codex behaves like native Codex for complex agentic work, not just text replies",
     proven.desktopAgenticTasks
       && proven.agenticCapabilityMatrix
+      && proven.longTaskLandingMatrix
       && realTaskCoverageRoadmap.artifactProofComplete
       && realTaskCoverageRoadmap.resultProofComplete
       && releaseGateStatus.releaseReady,
     [
       `agentic task suite fresh: ${desktopAgenticTasks.realTaskEvidenceFresh}`,
       `real task profiles complete: ${realTaskCoverageRoadmap.completeProfiles.join(",")}`,
+      `long task process quality complete: ${longTaskLandingMatrix.longTaskLandingComplete}`,
       `release ready: ${releaseGateStatus.releaseReady}`,
       `missing required release reports: ${releaseGateStatus.missingRequired.join(",")}`,
     ],
     [
       ...(!desktopAgenticTasks.realTaskEvidenceFresh ? ["real desktop task evidence stale"] : []),
+      ...(!proven.longTaskLandingMatrix ? ["long-task process quality matrix incomplete"] : []),
       ...(!realTaskCoverageRoadmap.artifactProofComplete ? ["artifact proof incomplete"] : []),
       ...(!realTaskCoverageRoadmap.resultProofComplete ? ["result proof incomplete"] : []),
       ...(!releaseGateStatus.releaseReady ? ["release gates not ready"] : []),
@@ -1076,7 +1118,7 @@ const goalOperatorActionCard = {
 };
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.secondAccountPostLoginProof && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.longTaskLandingMatrix && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.secondAccountPostLoginProof && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -1112,6 +1154,7 @@ const payload = {
   desktopAgenticTasks,
   agenticCapabilityMatrix,
   realTaskCoverageRoadmap,
+  longTaskLandingMatrix,
   realApprovalPlan,
   antigravityAccountIsolation,
   secondAccountLoginEntrypoint,
