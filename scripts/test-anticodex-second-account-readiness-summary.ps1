@@ -233,7 +233,7 @@ $operatorActionCard = [ordered]@{
     } else {
         "Rerun goal readiness."
     }
-    noTrafficStatusCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-second-account-readiness-summary.ps1 -WindowsUser $WindowsUser"
+    noTrafficStatusCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-second-account-readiness-summary.ps1 -WindowsUser $WindowsUser -Compact"
     approvedLoginCommandTemplate = if ($entrypoint) { [string]$entrypoint.approvedLoginCommandTemplate } else { "" }
     postLoginProofCommandTemplate = if ($entrypoint) { [string]$entrypoint.postLoginProofCommandTemplate } else { "" }
 }

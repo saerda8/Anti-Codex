@@ -3,7 +3,8 @@
 param(
     [string]$WindowsUser = ".\AntiCodexModel",
     [string]$StateRoot = "",
-    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [switch]$Compact
 )
 
 Set-StrictMode -Version Latest
@@ -185,5 +186,38 @@ $report = [ordered]@{
     elapsedMs = $elapsedMs
 }
 $report["report"] = Save-AccountIsolationStatusReport -Report $report
-$report | ConvertTo-Json -Depth 20 -Compress
+if ($Compact) {
+    [ordered]@{
+        ok = $report["ok"]
+        reportName = $report["reportName"]
+        noTraffic = $report["noTraffic"]
+        usedRealTraffic = $report["usedRealTraffic"]
+        changedSystem = $false
+        createdUser = $false
+        startedLogin = $false
+        capturesPassword = $false
+        storesPassword = $false
+        windowsUser = $report["windowsUser"]
+        completionState = $report["completionState"]
+        credentialBoundary = $report["credentialBoundary"]
+        targetUserExists = $report["targetUserExists"]
+        targetWindowsUserSid = $report["targetWindowsUserSid"]
+        targetUserSidMatchesCurrentUser = $report["targetUserSidMatchesCurrentUser"]
+        targetUserIdentityBoundaryOk = $report["targetUserIdentityBoundaryOk"]
+        readyForInteractiveLogin = $report["readyForInteractiveLogin"]
+        safeToAskUserForSecondAccountLogin = $report["safeToAskUserForSecondAccountLogin"]
+        canProceedToInteractiveLogin = $report["canProceedToInteractiveLogin"]
+        readinessBlockingReason = $report["readinessBlockingReason"]
+        operatorBlockingStage = $report["operatorBlockingStage"]
+        operatorNextStep = $report["operatorNextStep"]
+        loginVerified = $report["loginVerified"]
+        separateAccountVerified = $report["separateAccountVerified"]
+        releaseAcceptableAccountProof = $report["releaseAcceptableAccountProof"]
+        failures = $report["failures"]
+        warnings = $report["warnings"]
+        report = $report["report"]
+    } | ConvertTo-Json -Depth 8 -Compress
+} else {
+    $report | ConvertTo-Json -Depth 20 -Compress
+}
 if ($failures.Count -gt 0) { exit 1 }

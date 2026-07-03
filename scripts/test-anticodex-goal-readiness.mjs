@@ -767,7 +767,7 @@ const goalOperatorActionCard = {
         : "Rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
   workerRecoveryCommand: currentChannelRecoveryRecordCommand,
-  secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1",
+  secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1 -Compact",
 };
 
 const payload = {

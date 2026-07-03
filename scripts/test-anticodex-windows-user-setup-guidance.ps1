@@ -69,9 +69,9 @@ $manualSetupCommandHint = if ($targetUserExists -eq $false) {
     "verify the separate Windows user manually, then rerun this guidance"
 }
 $postManualSetupValidationCommands = @(
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-windows-user-account-prepare.ps1 -WindowsUser .\AntiCodexModel",
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\AntiCodexModel",
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\AntiCodexModel"
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-windows-user-account-prepare.ps1 -WindowsUser .\AntiCodexModel -Compact",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\AntiCodexModel -Compact",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\AntiCodexModel -Compact"
 )
 $postManualSetupRequiredReadyFields = @(
     "targetUserExists:true",
