@@ -7938,6 +7938,9 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /\$checks\["publicDocumentation"\] = Test-PublicDocumentationContracts/);
   assert.match(preflight, /function Test-ManagerBridgeSelfTest/);
   assert.match(preflight, /\$checks\["managerBridgeSelfTest"\] = Test-ManagerBridgeSelfTest/);
+  assert.match(preflight, /function Test-ManagerMojibakeContracts/);
+  assert.match(preflight, /\$checks\["managerMojibakeContracts"\] = Test-ManagerMojibakeContracts/);
+  assert.match(preflight, /manager-visible-labels-readable/);
   assert.match(preflight, /docs\\ADAPTIVE_ONE_API_STACK\.md/);
   assert.match(preflight, /docs\\marketing\\video-script\.md/);
   assert.match(preflight, /antigravity-entitlement-model-text/);

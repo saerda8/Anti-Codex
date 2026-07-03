@@ -906,6 +906,54 @@ function Test-AgenticReportNameContracts {
     }
 }
 
+function Test-ManagerMojibakeContracts {
+    $assertions = New-Object System.Collections.Generic.List[object]
+
+    function Add-ManagerMojibakeAssertion {
+        param(
+            [string]$Name,
+            [bool]$Ok
+        )
+        $assertions.Add([pscustomobject]@{ name = $Name; ok = $Ok }) | Out-Null
+        if (-not $Ok) { Add-Failure "manager mojibake contract failed: $Name" }
+    }
+
+    $server = Read-TextSafe (Join-Path $SourceRoot "translator\adaptive-server.mjs")
+    $inject = Read-TextSafe (Join-Path $SourceRoot "scripts\anticodex-manager-inject.js")
+    $managerHtmlStart = $server.IndexOf("function anticodexManagerHtml()", [StringComparison]::Ordinal)
+    $managerHtmlEnd = if ($managerHtmlStart -ge 0) { $server.IndexOf("function localFeatureSummary", $managerHtmlStart, [StringComparison]::Ordinal) } else { -1 }
+    $managerServerSource = if ($managerHtmlStart -ge 0 -and $managerHtmlEnd -gt $managerHtmlStart) {
+        $server.Substring($managerHtmlStart, $managerHtmlEnd - $managerHtmlStart)
+    } else {
+        ""
+    }
+    $managerVisibleSource = @($managerServerSource, $inject) -join "`n"
+    $workerLabel = "Worker " + [string]::Concat([char[]]@(0x901a, 0x9053, 0x72b6, 0x6001, 0xff08, 0x4e0d, 0x6d3e, 0x5de5, 0xff09))
+    $secondAccountLabel = [string]::Concat([char[]]@(0x7b2c, 0x4e8c, 0x8d26, 0x53f7, 0x72b6, 0x6001, 0x68c0, 0x67e5, 0xff08, 0x4e0d, 0x767b, 0x5f55, 0xff09))
+    $limitedModelLabel = [string]::Concat([char[]]@(0x53d7, 0x9650, 0x6a21, 0x578b))
+    $replacementChar = [string][char]0xfffd
+    $garbledKun = [string][char]0x951f
+
+    Add-ManagerMojibakeAssertion -Name "manager-visible-labels-readable" -Ok (
+        $server.Contains($workerLabel) -and
+        $server.Contains($secondAccountLabel) -and
+        $server.Contains($limitedModelLabel) -and
+        $inject.Contains("\u901a\u9053\u72b6\u6001") -and
+        $inject.Contains("\u53d7\u9650\u6a21\u578b")
+    )
+    Add-ManagerMojibakeAssertion -Name "manager-visible-labels-not-mojibake" -Ok (
+        -not $managerVisibleSource.Contains($replacementChar) -and
+        -not $managerVisibleSource.Contains($garbledKun)
+    )
+
+    $assertionItems = @($assertions.ToArray())
+    $failedCount = @($assertionItems | Where-Object { $_.ok -ne $true }).Count
+    return [pscustomobject]@{
+        ok = ($failedCount -eq 0)
+        assertions = $assertionItems
+    }
+}
+
 function Test-PublicDocumentationContracts {
     $assertions = New-Object System.Collections.Generic.List[object]
 
@@ -1068,6 +1116,7 @@ try {
     $checks["antigravityCliWindowsUserLoginDryRun"] = Test-AntigravityCliWindowsUserLoginDryRun
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["agenticReportNameContracts"] = Test-AgenticReportNameContracts
+    $checks["managerMojibakeContracts"] = Test-ManagerMojibakeContracts
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
     $checks["diffWhitespace"] = Test-GitDiffCheck
