@@ -9299,11 +9299,18 @@ function localProjectToolMarkupExampleForBody(body) {
         "- Do not hand-write partial JSON, do not list the directory first, and do not inspect history/transcripts/logs.",
         "- The helper command writes all seven required files, runs node:test, runs the CLI, and prints the marker.",
     ] : [];
+    const multiTurnProjectInstructions = requirement.multiTurnProject ? [
+        "- Multi-turn project task: copy the exact PowerShell command below as the first tool action.",
+        "- Do not read the terminal, list the directory, inspect project state, or produce repeated progress lines before that tool call.",
+        "- If the marker ends with _FIRST, this command creates the first-turn project files, runs node:test, runs the CLI, reads done.txt, and prints the first marker.",
+        "- If the marker does not end with _FIRST, this command updates the same project, creates followup.txt and CHANGELOG.md, runs node:test, runs the CLI, reads marker files, and prints the final marker.",
+    ] : [];
     return [
         "",
         "Exact local-file tool-call pattern for this task:",
         "- If the user requested a visible progress line before tool use, output that one required line, then the XML tool call.",
         ...complexProjectInstructions,
+        ...multiTurnProjectInstructions,
         "- For this task, a valid first assistant response shape is:",
         "阶段1：准备创建文件",
         `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${command}</parameter></invoke></tool_calls>`,

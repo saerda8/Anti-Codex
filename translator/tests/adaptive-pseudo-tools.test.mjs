@@ -4305,6 +4305,30 @@ test("coding project local artifact requests include a word-tally CLI example", 
   assert.doesNotMatch(body.messages[0].content, /index\.html/);
 });
 
+test("multi-turn project local artifact requests require the first tool call to write files", () => {
+  const marker = "UI_MULTI_TURN_PROJECT_SMOKE_1234567890_FIRST";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请在 C:\\Temp\\desktop-visible-multi-turn-project\\run 里创建 package.json、word-tally.mjs、word-tally.test.mjs、done.txt。done.txt 必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, { allowTools: true });
+
+  assert.match(body.messages[0].content, /Exact local-file tool-call pattern/);
+  assert.match(body.messages[0].content, /Multi-turn project task: copy the exact PowerShell command below as the first tool action/);
+  assert.match(body.messages[0].content, /Do not read the terminal, list the directory, inspect project state, or produce repeated progress lines before that tool call/);
+  assert.match(body.messages[0].content, /word-tally\.mjs/);
+  assert.match(body.messages[0].content, /node --test word-tally\.test\.mjs/);
+  assert.match(body.messages[0].content, /Get-Content done\.txt/);
+  assert.match(body.messages[0].content, new RegExp(marker));
+});
+
 test("report-site local artifact requests include a report-site tool example", () => {
   const marker = "UI_REPORT_SITE_SMOKE_1234567890";
   const body = responsesToChatBody({
