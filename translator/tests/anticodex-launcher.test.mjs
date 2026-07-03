@@ -13153,6 +13153,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerRecovery, /usedRealTraffic: false/);
   assert.match(workerRecovery, /latest-current-channel-worker-transport\.json/);
   assert.match(workerRecovery, /latest-worker-mcp-server-probe\.json/);
+  assert.match(workerRecovery, /latest-worker-mcp-status-probe\.json/);
+  assert.match(workerRecovery, /directWorkerStatusProbe/);
   assert.match(workerRecovery, /canDispatchCurrentChannelWorkers/);
   assert.match(workerRecovery, /postReloadAcceptanceCriteria/);
   assert.match(workerRecovery, /operatorActionCard/);
@@ -13205,6 +13207,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /currentChannelWorkerDispatchUsable/);
   assert.match(summarizer, /readOnlyProbeRequiredBeforeDispatch/);
   assert.match(summarizer, /currentChannelWorkerRecoveryEvidence/);
+  assert.match(summarizer, /directStatusProbeOk/);
+  assert.match(summarizer, /directStatusProbeStatusCallOkCount/);
   assert.match(summarizer, /safeToStartImplementationWorker/);
   assert.match(summarizer, /postReloadAcceptanceCriteria/);
   assert.match(summarizer, /workerTransportRecoveryOk/);
@@ -13239,6 +13243,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /distinct failed worker namespace count too low/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
   assert.match(diagnostics, /current-channel-worker-transport summary unexpectedly marked worker dispatch usable/);
+  assert.match(diagnostics, /current-channel-worker-recovery summary missing direct status probe proof/);
+  assert.match(diagnostics, /current-channel-worker-recovery summary missing direct status probe acceptance criterion/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
   assert.match(diagnostics, /goal-readiness summary missing worker transport reload requirement/);
   assert.match(diagnostics, /goal-readiness summary operator action card missing/);

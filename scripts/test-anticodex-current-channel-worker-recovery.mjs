@@ -17,7 +17,7 @@ if (args.has("--help") || args.has("-h")) {
     "Usage: node scripts/test-anticodex-current-channel-worker-recovery.mjs",
     "  [--report-root PATH] [--max-age-ms N]",
     "",
-    "Reads latest-current-channel-worker-transport.json and latest-worker-mcp-server-probe.json.",
+    "Reads current-channel transport plus direct worker server/status probe reports.",
     "Writes latest-current-channel-worker-recovery.json without traffic or worker dispatch.",
   ].join("\n"));
   process.exit(0);
@@ -70,8 +70,10 @@ function deriveWorkerPrefixes(tools) {
 
 const transportFile = readReport("latest-current-channel-worker-transport.json");
 const probeFile = readReport("latest-worker-mcp-server-probe.json");
+const statusProbeFile = readReport("latest-worker-mcp-status-probe.json");
 const transport = transportFile.report || {};
 const directProbe = probeFile.report || {};
+const statusProbe = statusProbeFile.report || {};
 const checkedAtMs = Date.parse(String(transport.checkedAt || ""));
 const transportAgeMs = Number.isFinite(checkedAtMs) ? Math.max(0, startedAt - checkedAtMs) : null;
 const transportFresh = Number.isFinite(transportAgeMs) && transportAgeMs <= maxAgeMs;
@@ -81,6 +83,14 @@ const failedWorkerPrefixes = deriveWorkerPrefixes(failedTools);
 const okWorkerPrefixes = deriveWorkerPrefixes(okTools);
 
 const directProbeOk = directProbe.ok === true;
+const directStatusProbeOk = statusProbe.ok === true
+  && statusProbe.usedRealTraffic === false
+  && Number(statusProbe.statusCallOkCount || 0) >= 6
+  && Array.isArray(statusProbe.failedWorkers)
+  && statusProbe.failedWorkers.length === 0
+  && statusProbe.antigravitySkippedForAccountIsolation === true
+  && typeof statusProbe.currentChannelCaveat === "string"
+  && statusProbe.currentChannelCaveat.trim().length > 0;
 const genericMcpOk = transport.genericMcpControlOk === true && String(transport.genericMcpStatus || "") === "ok";
 const currentWorkerOk = transport.workerTransportOk === true && transport.currentChannelWorkerDispatchUsable === true;
 const canDispatchCurrentChannelWorkers = Boolean(
@@ -101,6 +111,7 @@ if (!transportFresh) missingRequirements.push("fresh_current_channel_worker_read
 if (!currentWorkerOk) missingRequirements.push("successful_current_channel_worker_read_only_call");
 if (!genericMcpOk) missingRequirements.push("same_channel_generic_mcp_ok");
 if (!(transport.directProbeReport?.ok === true || directProbeOk)) missingRequirements.push("direct_worker_server_probe_ok");
+if (!directStatusProbeOk) missingRequirements.push("direct_worker_status_probe_ok");
 
 const status = canDispatchCurrentChannelWorkers
   ? "ready_to_dispatch"
@@ -149,17 +160,28 @@ const payload = {
     directProbeOk: transport.directProbeReport?.ok === true || directProbeOk,
     directProbePassedServerCount: Number(transport.directProbeReport?.passedServerCount || directProbe.passedServerCount || 0),
     directProbeCodexSessionTransportStatus: String(transport.directProbeReport?.codexSessionTransportStatus || directProbe.codexSessionTransportStatus || ""),
+    directStatusProbeReportPresent: statusProbeFile.present,
+    directStatusProbeReportParseable: statusProbeFile.parseable,
+    directStatusProbeOk,
+    directStatusProbeStatusCallOkCount: Number(statusProbe.statusCallOkCount || 0),
+    directStatusProbeStatusCallOkWorkers: asStringArray(statusProbe.statusCallOkWorkers),
+    directStatusProbeFailedWorkers: asStringArray(statusProbe.failedWorkers),
+    directStatusProbeSkippedWorkers: asStringArray(statusProbe.skippedWorkers),
+    directStatusProbeAntigravitySkippedForAccountIsolation: statusProbe.antigravitySkippedForAccountIsolation === true,
+    directStatusProbeCurrentChannelCaveatPresent: typeof statusProbe.currentChannelCaveat === "string" && statusProbe.currentChannelCaveat.trim().length > 0,
   },
   postReloadAcceptanceCriteria: [
     "run a current-channel read-only worker get_job/wait/status call",
     "record it with record-anticodex-current-channel-worker-transport.mjs using worker-status ok",
     "same-channel generic MCP control must be ok",
     "direct worker server probe must be ok",
+    "direct worker status probe must be ok",
     "latest transport report must be fresh",
     "canDispatchCurrentChannelWorkers must be true before starting implementation workers",
   ],
   commands: {
     directWorkerProbe: "node scripts\\probe-anticodex-worker-mcp-servers.mjs",
+    directWorkerStatusProbe: "node scripts\\test-anticodex-worker-mcp-status-probe.mjs --timeout-ms 30000",
     recordSuccess: "node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool <worker_read_tool> --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok",
     goalReadiness: "node scripts\\test-anticodex-goal-readiness.mjs",
     recoveryReadiness: "node scripts\\test-anticodex-current-channel-worker-recovery.mjs",

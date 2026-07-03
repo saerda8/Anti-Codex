@@ -2084,6 +2084,39 @@ function Test-CurrentChannelWorkerTransportSummaryEvidence {
     }
 }
 
+function Test-CurrentChannelWorkerRecoverySummaryEvidence {
+    param($CurrentChannelWorkerRecoverySummary)
+    if (-not $CurrentChannelWorkerRecoverySummary) {
+        Add-Failure "diagnostic reports summary missing latest-current-channel-worker-recovery.json"
+        return
+    }
+
+    $evidence = $CurrentChannelWorkerRecoverySummary.currentChannelWorkerRecoveryEvidence
+    if (-not $evidence) {
+        Add-Failure "current-channel-worker-recovery summary missing currentChannelWorkerRecoveryEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "current-channel-worker-recovery") { Add-Failure "current-channel-worker-recovery summary reportName mismatch" }
+    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "current-channel-worker-recovery summary requested real traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "current-channel-worker-recovery summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "current-channel-worker-recovery summary behavior not covered" }
+    if ($evidence.coverageKind -ne "current-channel-worker-recovery-report-only") { Add-Failure "current-channel-worker-recovery summary coverage kind mismatch" }
+    if ($evidence.requiresCodexMcpReload -ne $true) { Add-Failure "current-channel-worker-recovery summary missing reload requirement" }
+    if ($evidence.requiresFreshReadOnlyProbe -ne $true) { Add-Failure "current-channel-worker-recovery summary missing fresh read-only probe requirement" }
+    if ($evidence.currentChannelWorkerDispatchUsable -ne $false) { Add-Failure "current-channel-worker-recovery summary unexpectedly marks dispatch usable" }
+    if ($evidence.genericMcpControlOk -ne $true) { Add-Failure "current-channel-worker-recovery summary missing generic MCP proof" }
+    if ($evidence.directProbeOk -ne $true) { Add-Failure "current-channel-worker-recovery summary missing direct server probe proof" }
+    if ($evidence.directStatusProbeOk -ne $true) { Add-Failure "current-channel-worker-recovery summary missing direct status probe proof" }
+    if ([int]$evidence.directStatusProbeStatusCallOkCount -lt 6) { Add-Failure "current-channel-worker-recovery summary direct status probe count too low" }
+    if (@(As-FlatArray $evidence.directStatusProbeFailedWorkers).Count -ne 0) { Add-Failure "current-channel-worker-recovery summary has failed direct status probe workers" }
+    if ($evidence.directStatusProbeAntigravitySkippedForAccountIsolation -ne $true) { Add-Failure "current-channel-worker-recovery summary missing Antigravity account-isolation skip" }
+    if ($evidence.directStatusProbeCurrentChannelCaveatPresent -ne $true) { Add-Failure "current-channel-worker-recovery summary missing current-channel caveat" }
+    if (@(As-FlatArray $evidence.postReloadAcceptanceCriteria | Where-Object { [string]$_ -match "direct worker status probe" }).Count -lt 1) {
+        Add-Failure "current-channel-worker-recovery summary missing direct status probe acceptance criterion"
+    }
+}
+
 function Test-ReportsSummary {
     param(
         [Parameter(Mandatory = $true)][string]$SummaryPath,
@@ -2115,6 +2148,7 @@ function Test-ReportsSummary {
     $workerMcpTaskSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-task-smoke.json" } | Select-Object -First 1)[0]
     $workerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
+    $currentChannelWorkerRecoverySummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-recovery.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     $secondAccountPostLoginProofSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-post-login-proof.json" } | Select-Object -First 1)[0]
@@ -2175,6 +2209,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $workerMcpTaskSmokeSummary) { Test-WorkerMcpTaskSmokeSummaryEvidence $workerMcpTaskSmokeSummary }
     if ($RequireReleaseReady -or $workerMcpProjectSmokeSummary) { Test-WorkerMcpProjectSmokeSummaryEvidence $workerMcpProjectSmokeSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }
+    if ($RequireReleaseReady -or $currentChannelWorkerRecoverySummary) { Test-CurrentChannelWorkerRecoverySummaryEvidence $currentChannelWorkerRecoverySummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($RequireReleaseReady -or $secondAccountPostLoginProofSummary) { Test-SecondAccountPostLoginProofEvidence $secondAccountPostLoginProofSummary }

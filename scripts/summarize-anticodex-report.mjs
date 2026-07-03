@@ -2096,6 +2096,13 @@ const summary = {
     exposedButUntestedWorkerPrefixes: Array.isArray(report.currentEvidence?.exposedButUntestedWorkerPrefixes) ? asStringArray(report.currentEvidence.exposedButUntestedWorkerPrefixes) : [],
     genericMcpControlOk: boolField(report.currentEvidence || {}, "genericMcpControlOk"),
     directProbeOk: boolField(report.currentEvidence || {}, "directProbeOk"),
+    directStatusProbeOk: boolField(report.currentEvidence || {}, "directStatusProbeOk"),
+    directStatusProbeStatusCallOkCount: report.currentEvidence && has(report.currentEvidence, "directStatusProbeStatusCallOkCount") ? report.currentEvidence.directStatusProbeStatusCallOkCount : null,
+    directStatusProbeStatusCallOkWorkers: Array.isArray(report.currentEvidence?.directStatusProbeStatusCallOkWorkers) ? asStringArray(report.currentEvidence.directStatusProbeStatusCallOkWorkers) : [],
+    directStatusProbeFailedWorkers: Array.isArray(report.currentEvidence?.directStatusProbeFailedWorkers) ? asStringArray(report.currentEvidence.directStatusProbeFailedWorkers) : [],
+    directStatusProbeSkippedWorkers: Array.isArray(report.currentEvidence?.directStatusProbeSkippedWorkers) ? asStringArray(report.currentEvidence.directStatusProbeSkippedWorkers) : [],
+    directStatusProbeAntigravitySkippedForAccountIsolation: boolField(report.currentEvidence || {}, "directStatusProbeAntigravitySkippedForAccountIsolation"),
+    directStatusProbeCurrentChannelCaveatPresent: boolField(report.currentEvidence || {}, "directStatusProbeCurrentChannelCaveatPresent"),
     postReloadAcceptanceCriteria: Array.isArray(report.postReloadAcceptanceCriteria) ? asStringArray(report.postReloadAcceptanceCriteria) : [],
     operatorActionCard: report.operatorActionCard && typeof report.operatorActionCard === "object" ? {
       status: asString(report.operatorActionCard.status),
