@@ -751,7 +751,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /managerOpenedNewPage/);
   }
   assert.match(managerInject, /native-panel-v99/);
-  assert.match(managerInject, /latest-reports-evidence-v2/);
+  assert.match(managerInject, /latest-reports-evidence-v4/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
   assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
   assert.match(syncReadiness, /native-panel-v99/);
@@ -925,6 +925,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "syncReadiness",
     "updateCheck",
     "viewLatestReports",
+    "workerTransportStatus",
   ].sort());
   assert.deepEqual(highImpactManagerActions.sort(), [
     "fastOverallNoTraffic",
@@ -1404,6 +1405,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerBridge, /result\.shortBudgetMode \?/);
   assert.match(managerInject, /r\.shortBudgetMode \?/);
   assert.match(managerBridge, /viewLatestReports/);
+  assert.match(managerBridge, /action === "workerTransportStatus"/);
+  assert.match(managerBridge, /Worker \\u901a\\u9053\\u72b6\\u6001/);
+  assert.match(managerInject, /action === "workerTransportStatus"/);
+  assert.match(managerInject, /Worker \\u901a\\u9053\\u72b6\\u6001/);
   assert.match(managerBridge, /if \(action === "syncReadiness"\) return \[[\s\S]{0,220}failureSummaryLine\(result\)/);
   assert.match(managerBridge, /\\u6700\\u65b0\\u62a5\\u544a/);
   assert.match(managerBridge, /\\u5386\\u53f2\\u62a5\\u544a/);
@@ -1435,6 +1440,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(server, /function managerActionLabel/);
   assert.match(server, /accountSwitch/);
   assert.match(server, /open-antigravity-account-switch\.ps1/);
+  assert.match(server, /workerTransportStatus:\s*\{[\s\S]*?test-anticodex-current-channel-worker-recovery\.ps1/);
+  assert.match(server, /data-action="workerTransportStatus" data-manager-action="workerTransportStatus"/);
+  assert.match(server, /payload\?\.action==="workerTransportStatus"/);
   assert.match(server, /managerPanelSnapshotPayload/);
   assert.match(server, /function isValidJsonpCallbackName/);
   assert.ok(
@@ -1523,6 +1531,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "updateCheck",
     "upstreamConfig",
     "viewLatestReports",
+    "workerTransportStatus",
   ].sort());
   assert.match(html, /data-action-group="daily"/);
   assert.match(html, /data-action-group="high-impact"/);
@@ -12653,7 +12662,9 @@ test("Anti-Codex completes verified desktop artifact tool loops without reopenin
   assert.match(server, /function deterministicArtifactToolCallCompletion/);
   assert.match(server, /Anti-Codex artifact marker verification/);
   assert.match(server, /requirement\.complexProject[\s\S]*?complexProjectArtifactSafetyPowerShell/);
-  assert.match(server, /if \(!\(requirement\.reportSite \|\| requirement\.complexProject\)\) return null/);
+  assert.match(server, /if \(!requirement\?\.marker \|\| !requirement\?\.targetPath\) return null/);
+  assert.match(server, /if \(requestNeedsModelLedLocalArtifactWork\(originalRequest\) \|\| requestNeedsModelLedLocalArtifactWork\(chatBody\)\)/);
+  assert.match(server, /if \(!\(requirement\.reportSite && !requirement\.complexProject && !requirement\.autonomousReasoning\)\) return null/);
   assert.match(server, /requirement\.agenticStepFlow[\s\S]*?Anti-Codex agentic step-flow verified[\s\S]*?Verified staged files and marker-scoped tool output/);
   assert.match(server, /function appendAgenticStepFlowArtifactRewrite/);
   assert.match(server, /Anti-Codex agentic step-flow exact artifact normalization/);
