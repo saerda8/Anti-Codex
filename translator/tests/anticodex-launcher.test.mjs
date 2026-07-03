@@ -104,6 +104,12 @@ function listWindowsProcesses() {
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
+test("generated desktop repo-multi fixture stays ignored", () => {
+  const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
+
+  assert.match(gitignore, /^scripts\/fixtures\/desktop-coworker-project\/$/m);
+});
+
 test("Antigravity idle lock reap is allowed while later requests are queued", () => {
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   assert.match(server, /function releaseIdleAntigravitySessionLockIfSafe/);
