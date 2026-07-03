@@ -877,6 +877,35 @@ function Test-TranslatorRegression {
     }
 }
 
+function Test-AgenticReportNameContracts {
+    $script = Join-Path $SourceRoot "scripts\test-anticodex-agentic-capability-matrix.mjs"
+    $text = Read-TextSafe $script
+    $assertions = New-Object System.Collections.Generic.List[object]
+
+    function Add-AgenticReportNameAssertion {
+        param(
+            [string]$Name,
+            [bool]$Ok
+        )
+        $assertions.Add([pscustomobject]@{ name = $Name; ok = $Ok }) | Out-Null
+        if (-not $Ok) { Add-Failure "agentic report-name contract failed: $Name" }
+    }
+
+    Add-AgenticReportNameAssertion -Name "script-readable" -Ok ([bool]$text)
+    Add-AgenticReportNameAssertion -Name "canonical-autonomous-file" -Ok ($text -match '"latest-ui-autonomous-reasoning-smoke\.json"')
+    Add-AgenticReportNameAssertion -Name "canonical-agentic-step-file" -Ok ($text -match '"latest-ui-agentic-step-flow-smoke\.json"')
+    Add-AgenticReportNameAssertion -Name "canonical-autonomous-report-name" -Ok ($text -match '"ui-autonomous-reasoning-smoke"')
+    Add-AgenticReportNameAssertion -Name "canonical-agentic-step-report-name" -Ok ($text -match '"ui-agentic-step-flow-smoke"')
+    Add-AgenticReportNameAssertion -Name "no-stale-model-specific-report-aliases" -Ok ($text -notmatch 'latest-ui-(autonomous-reasoning|agentic-step-flow)-smoke-model-gemini-3-5-flash-low\.json|ui-(autonomous-reasoning|agentic-step-flow)-smoke-model-gemini-3-5-flash-low')
+
+    $assertionItems = @($assertions.ToArray())
+    $failedCount = @($assertionItems | Where-Object { $_.ok -ne $true }).Count
+    return [pscustomobject]@{
+        ok = ($failedCount -eq 0)
+        assertions = $assertionItems
+    }
+}
+
 function Test-PublicDocumentationContracts {
     $assertions = New-Object System.Collections.Generic.List[object]
 
@@ -1038,6 +1067,7 @@ try {
     $checks["antigravityCliProfilePrepareRejectsDefaultChild"] = Test-AntigravityCliProfilePrepareRejectsDefaultChild
     $checks["antigravityCliWindowsUserLoginDryRun"] = Test-AntigravityCliWindowsUserLoginDryRun
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
+    $checks["agenticReportNameContracts"] = Test-AgenticReportNameContracts
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
     $checks["diffWhitespace"] = Test-GitDiffCheck
