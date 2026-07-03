@@ -13086,6 +13086,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /toolCountByServer/);
   assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
   assert.match(goalReadiness, /serverProbeReportPresent/);
+  assert.match(goalReadiness, /statusProbeReportPresent/);
+  assert.match(goalReadiness, /statusProbeStatusCallOkCount/);
+  assert.match(goalReadiness, /statusProbeAntigravitySkippedForAccountIsolation/);
   assert.match(goalReadiness, /directProbePassedServerCount/);
   assert.match(goalReadiness, /directProbeMissingWaitToolServers/);
   assert.match(goalReadiness, /codexSessionTransportStatus/);
@@ -13172,6 +13175,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
   assert.match(summarizer, /workerMcpSourceHygieneEvidence/);
   assert.match(summarizer, /workerMcpStatusProbeEvidence/);
+  assert.match(summarizer, /workerMcpStatusProbeReportOk/);
   assert.match(summarizer, /statusCallOkWorkers/);
   assert.match(summarizer, /antigravitySkippedForAccountIsolation/);
   assert.match(summarizer, /currentChannelCaveat/);
@@ -13224,6 +13228,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /diagnostic reports summary missing latest-current-channel-worker-transport\.json/);
   assert.match(diagnostics, /worker-mcp-server-probe summary missing workerMcpServerProbeEvidence/);
   assert.match(diagnostics, /worker-mcp-status-probe summary missing workerMcpStatusProbeEvidence/);
+  assert.match(diagnostics, /goal-readiness summary missing worker MCP status probe ok evidence/);
   assert.match(diagnostics, /worker-mcp-status-probe summary missing current-channel caveat/);
   assert.match(diagnostics, /worker-mcp-task-smoke summary missing workerMcpTaskSmokeEvidence/);
   assert.match(diagnostics, /worker-mcp-project-smoke summary missing workerMcpProjectSmokeEvidence/);

@@ -72,6 +72,7 @@ const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity
 const secondAccountReadinessSummaryReport = readReport("latest-second-account-readiness-summary.json");
 const releaseGates = readReport("latest-release-gates.json");
 const workerMcpServerProbeReport = readReport("latest-worker-mcp-server-probe.json");
+const workerMcpStatusProbeReport = readReport("latest-worker-mcp-status-probe.json");
 const workerMcpTaskSmokeReport = readReport("latest-worker-mcp-task-smoke.json");
 const workerMcpProjectSmokeReport = readReport("latest-worker-mcp-project-smoke.json");
 const currentChannelWorkerTransportReport = readReport("latest-current-channel-worker-transport.json");
@@ -101,6 +102,7 @@ const workerToolCountByServer = Object.fromEntries(
 );
 const incompleteWorkerToolCountServers = requiredWorkerMcpServers.filter((server) => workerToolCountByServer[server] < 1);
 const workerServerProbe = workerMcpServerProbeReport.report || {};
+const workerStatusProbe = workerMcpStatusProbeReport.report || {};
 const currentChannelWorkerTransport = currentChannelWorkerTransportReport.report || {};
 const currentChannelWorkerObservations = Array.isArray(currentChannelWorkerTransport.workerObservations)
   ? currentChannelWorkerTransport.workerObservations.map((item) => ({
@@ -163,6 +165,16 @@ const workerMcp = {
   directProbeMissingServers: Array.isArray(workerServerProbe.missingServers) ? workerServerProbe.missingServers.map(String).filter(Boolean) : [],
   directProbeMissingStartToolServers: Array.isArray(workerServerProbe.missingStartToolServers) ? workerServerProbe.missingStartToolServers.map(String).filter(Boolean) : [],
   directProbeMissingWaitToolServers: Array.isArray(workerServerProbe.missingWaitToolServers) ? workerServerProbe.missingWaitToolServers.map(String).filter(Boolean) : [],
+  statusProbeReportPresent: workerMcpStatusProbeReport.present,
+  statusProbeReportOk: workerStatusProbe.ok === true,
+  statusProbeUsedRealTraffic: workerStatusProbe.usedRealTraffic === true,
+  statusProbeCoverageKind: String(workerStatusProbe.coverageKind || ""),
+  statusProbeStatusCallOkCount: Number(workerStatusProbe.statusCallOkCount || 0),
+  statusProbeStatusCallOkWorkers: Array.isArray(workerStatusProbe.statusCallOkWorkers) ? workerStatusProbe.statusCallOkWorkers.map(String).filter(Boolean) : [],
+  statusProbeFailedWorkers: Array.isArray(workerStatusProbe.failedWorkers) ? workerStatusProbe.failedWorkers.map(String).filter(Boolean) : [],
+  statusProbeSkippedWorkers: Array.isArray(workerStatusProbe.skippedWorkers) ? workerStatusProbe.skippedWorkers.map(String).filter(Boolean) : [],
+  statusProbeAntigravitySkippedForAccountIsolation: workerStatusProbe.antigravitySkippedForAccountIsolation === true,
+  statusProbeCurrentChannelCaveatPresent: typeof workerStatusProbe.currentChannelCaveat === "string" && workerStatusProbe.currentChannelCaveat.trim().length > 0,
   codexSessionTransportStatus: String(workerServerProbe.codexSessionTransportStatus || "unknown"),
   currentChannelTransportProven: workerServerProbe.codexSessionTransportStatus === "verified-by-current-channel",
   currentChannelWorkerTransportReportPresent: currentChannelWorkerTransportReport.present,

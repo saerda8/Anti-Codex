@@ -1112,6 +1112,18 @@ function Test-GoalReadinessSummaryEvidence {
         }
     }
     if (@(As-FlatArray $evidence.workerMcpIncompleteToolCountServers).Count -ne 0) { Add-Failure "goal-readiness summary has incomplete worker MCP tool counts" }
+    if ($evidence.workerMcpStatusProbeReportOk -ne $true) { Add-Failure "goal-readiness summary missing worker MCP status probe ok evidence" }
+    if ($evidence.workerMcpStatusProbeUsedRealTraffic -ne $false) { Add-Failure "goal-readiness summary worker MCP status probe used real traffic" }
+    if ($evidence.workerMcpStatusProbeCoverageKind -ne "worker-mcp-direct-status-call-no-traffic") { Add-Failure "goal-readiness summary worker MCP status probe coverage kind mismatch" }
+    if ([int]$evidence.workerMcpStatusProbeStatusCallOkCount -lt 6) { Add-Failure "goal-readiness summary worker MCP status probe ok count too low" }
+    $goalStatusProbeWorkers = @(As-FlatArray $evidence.workerMcpStatusProbeStatusCallOkWorkers | ForEach-Object { [string]$_ })
+    foreach ($requiredWorker in @("mimo-claude-coworker", "mimocode-worker", "kilo-worker", "opencode-worker", "deepseek-code-worker", "deveco-code-worker")) {
+        if ($goalStatusProbeWorkers -notcontains $requiredWorker) { Add-Failure "goal-readiness summary missing worker MCP status probe worker $requiredWorker" }
+    }
+    if (@(As-FlatArray $evidence.workerMcpStatusProbeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary has failed worker MCP status probe workers" }
+    if (@(As-FlatArray $evidence.workerMcpStatusProbeSkippedWorkers | Where-Object { [string]$_ -eq "antigravity-code-worker" }).Count -lt 1) { Add-Failure "goal-readiness summary missing Antigravity worker MCP status probe skip" }
+    if ($evidence.workerMcpStatusProbeAntigravitySkippedForAccountIsolation -ne $true) { Add-Failure "goal-readiness summary missing status probe Antigravity account-isolation skip" }
+    if ($evidence.workerMcpStatusProbeCurrentChannelCaveatPresent -ne $true) { Add-Failure "goal-readiness summary missing status probe current-channel caveat" }
     if ($evidence.workerMcpTaskSmokeReportOk -ne $true) { Add-Failure "goal-readiness summary missing worker MCP task smoke ok evidence" }
     if ($evidence.workerMcpTaskSmokeUsedRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing worker MCP task smoke real-traffic evidence" }
     if ($evidence.workerMcpTaskSmokeAntigravityExcluded -ne $true) { Add-Failure "goal-readiness summary worker MCP task smoke did not exclude Antigravity" }
