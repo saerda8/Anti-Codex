@@ -186,6 +186,7 @@ test("translator health separates process health from Antigravity account readin
     accountTrafficDiagnosis: null,
     accountTrafficStatus: null,
     accountTrafficRetryable: null,
+    accountTrafficModel: null,
     accountTrafficMessage: "",
     accountTrafficSuggestedAction: "",
     accountTrafficLastFailureAt: null,
@@ -608,7 +609,7 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(Object.hasOwn(payload.paths, "sharedCodexHome"), true);
   assert.equal(payload.modelRoutes.latest.internalModel, "MODEL_PLACEHOLDER_M20");
   assert.equal(payload.toolBridge.mode, "codex-owned-tools-model-only");
-  assert.equal(payload.nativeToolCapability.transport, "cli");
+  assert.equal(payload.nativeToolCapability.transport, "desktop-cascade");
   assert.equal(payload.nativeToolCapability.acceptsExternalToolDefinitions, false);
   assert.equal(payload.nativeToolCapability.externalToolDefinitionsUsable, false);
   assert.equal(payload.nativeToolCapability.nativeBridgeDefaultEnabled, false);
@@ -652,7 +653,7 @@ test("diagnostics payload summarizes state without prompt text", () => {
   assert.equal(["fresh", "stale", "missing", "invalid"].includes(payload.localFeatures.snapshotStatus.state), true);
   assert.equal(typeof payload.antigravityRetries.count, "number");
   assert.equal(payload.antigravityRetries.latest, null);
-  assert.equal(payload.toolBridge.transport, "cli");
+  assert.equal(payload.toolBridge.transport, "desktop-cascade");
   assert.equal(payload.toolBridge.localAdapter, "codex-owned-tools-model-only");
   assert.equal(payload.toolBridge.nativeAntigravityToolEvents, false);
   assert.equal(payload.toolBridge.acceptsExternalToolDefinitions, false);
@@ -682,7 +683,7 @@ test("diagnostics exposes the model-only default and keeps native bridge opt-in"
   });
 
   assert.equal(payload.toolBridge.mode, "codex-owned-tools-model-only");
-  assert.equal(payload.toolBridge.transport, "cli");
+  assert.equal(payload.toolBridge.transport, "desktop-cascade");
   assert.equal(payload.nativeToolCapability.codexToolBridge, "codex-owned-tools-model-only");
   assert.equal(payload.nativeToolCapability.permissionPromptsDisabled, true);
   assert.equal(payload.nativeToolCapability.nativeMcpPermissionMode, "disabled-with-native-bridge");

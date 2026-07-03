@@ -14226,7 +14226,7 @@ test("agentic release gates require visible staged tool loop proof", () => {
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
 
   assert.match(capabilityMatrix, /visible_staged_tool_loop/);
-  assert.match(capabilityMatrix, /latest-ui-agentic-step-flow-smoke-model-gemini-3-5-flash-low\.json/);
+  assert.match(capabilityMatrix, /latest-ui-agentic-step-flow-smoke\.json/);
   assert.match(capabilityMatrix, /stagedToolLoopProof/);
   assert.match(capabilityMatrix, /modelLedExecution/);
   assert.match(capabilityMatrix, /artifactGuardUsed/);
