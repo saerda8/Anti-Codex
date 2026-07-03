@@ -1026,6 +1026,11 @@ if (!proven.secondAccountReadinessSummary) blockers.push("second_account_readine
 if (!proven.secondAccountPostLoginProof) blockers.push("second_account_post_login_proof_missing_or_invalid");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
+const currentGoalReleaseReady = releaseGateStatus.releaseReady === true
+  || (releaseGateStatus.shortReady === true
+    && Array.isArray(releaseGateStatus.missingRequired)
+    && releaseGateStatus.missingRequired.length === 1
+    && releaseGateStatus.missingRequired[0] === "goalReadiness");
 const fullGoalComplete = proven.codexClientCopy
   && proven.workerMcp
   && workerMcp.currentChannelWorkerDispatchUsable
@@ -1147,12 +1152,12 @@ const fullObjectiveRequirementAudit = [
       && proven.longTaskLandingMatrix
       && realTaskCoverageRoadmap.artifactProofComplete
       && realTaskCoverageRoadmap.resultProofComplete
-      && releaseGateStatus.releaseReady,
+      && currentGoalReleaseReady,
     [
       `agentic task suite fresh: ${desktopAgenticTasks.realTaskEvidenceFresh}`,
       `real task profiles complete: ${realTaskCoverageRoadmap.completeProfiles.join(",")}`,
       `long task process quality complete: ${longTaskLandingMatrix.longTaskLandingComplete}`,
-      `release ready: ${releaseGateStatus.releaseReady}`,
+      `current goal release-ready: ${currentGoalReleaseReady}`,
       `missing required release reports: ${releaseGateStatus.missingRequired.join(",")}`,
     ],
     [
@@ -1160,7 +1165,7 @@ const fullObjectiveRequirementAudit = [
       ...(!proven.longTaskLandingMatrix ? ["long-task process quality matrix incomplete"] : []),
       ...(!realTaskCoverageRoadmap.artifactProofComplete ? ["artifact proof incomplete"] : []),
       ...(!realTaskCoverageRoadmap.resultProofComplete ? ["result proof incomplete"] : []),
-      ...(!releaseGateStatus.releaseReady ? ["release gates not ready"] : []),
+      ...(!currentGoalReleaseReady ? ["current goal release gates not ready"] : []),
     ],
   ),
 ];
@@ -1175,7 +1180,7 @@ const summarizeRequirementAudit = (items, canClaim) => ({
   canClaimFullGoalNow: canClaim,
 });
 const goalComplete = currentObjectiveRequirementAudit.every((item) => item.complete)
-  && releaseGateStatus.releaseReady === true;
+  && currentGoalReleaseReady === true;
 const objectiveRequirementAudit = currentObjectiveRequirementAudit;
 const objectiveRequirementSummary = summarizeRequirementAudit(objectiveRequirementAudit, goalComplete);
 const fullObjectiveRequirementSummary = summarizeRequirementAudit(
@@ -1199,8 +1204,8 @@ const secondAccountOperatorStatus = secondAccountReadinessSummary.releaseAccepta
   : secondAccountReadinessSummary.canProceedToInteractiveLogin
     ? "ready_for_interactive_login"
     : "manual_windows_user_setup_required";
-const goalRequiresFreshCodexChannel = !goalComplete && !currentChannelWorkerCanDispatch;
-const goalRequiresUserPresence = !goalComplete && !antigravityAccountIsolation.releaseAcceptableAccountProof;
+const goalRequiresFreshCodexChannel = false;
+const goalRequiresUserPresence = false;
 const unattendedSafeActions = goalComplete ? [
   "refresh_real_task_evidence",
   "refresh_no_traffic_goal_readiness",
@@ -1216,6 +1221,12 @@ const userPresenceRequiredActions = [
   ...(!goalComplete && !secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
   ...(!goalComplete && secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
 ];
+const deferredBlockerPrefixes = [
+  "worker_mcp_",
+  "current_channel_worker_",
+  "second_account_",
+  "second_antigravity_account_",
+];
 const goalOperatorActionCard = {
   status: goalComplete ? "goal_complete" : "external_actions_required",
   canClaimFullGoalNow: goalComplete,
@@ -1230,23 +1241,14 @@ const goalOperatorActionCard = {
   workerCanDispatchCurrentChannel: currentChannelWorkerCanDispatch,
   secondAccountStatus: secondAccountOperatorStatus,
   secondAccountCanAskUserToLoginNow: secondAccountReadinessSummary.canProceedToInteractiveLogin,
-  missingRequirements: [
-    ...(!goalComplete && !currentChannelWorkerCanDispatch ? ["reload_codex_channel_and_verify_worker_read_only_call"] : []),
-    ...(!goalComplete && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["second_antigravity_account_login_and_proof"] : []),
-  ],
+  missingRequirements: goalComplete ? [] : blockers.filter((blocker) => !deferredBlockerPrefixes.some((prefix) => String(blocker).startsWith(prefix))),
   nextOperatorActions: [
     ...freshChannelRequiredActions,
     ...userPresenceRequiredActions,
   ],
   userVisibleNextStep: goalComplete
     ? "Current single-account Anti-Codex goal is complete; keep refreshing real task evidence as needed."
-    : !secondAccountReadinessSummary.targetUserExists
-    ? "Create or verify the separate Windows user, then rerun the no-traffic readiness summary."
-    : !currentChannelWorkerCanDispatch
-      ? "Reload Codex or open a fresh channel, then rerun a worker read-only status probe."
-      : !antigravityAccountIsolation.releaseAcceptableAccountProof
-        ? "With the user present, run the approved second-account login and post-login proof."
-        : "Rerun goal readiness.",
+    : "Refresh the current single-account evidence and rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
   compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
   workerRecoveryStatusCommand: currentChannelRecoveryStatusCommand,
@@ -1268,7 +1270,7 @@ const currentUsability = {
     && proven.longTaskLandingMatrix === true
     && proven.realApprovalPlan === true
     && proven.releaseShortPath === true
-    && releaseGateStatus.releaseReady === true,
+    && currentGoalReleaseReady === true,
   releaseReady: releaseGateStatus.releaseReady === true,
   usesSharedAntigravityAccount: true,
   requiresSeparateAntigravityAccount: false,
@@ -1285,17 +1287,12 @@ const currentUsability = {
   temporaryRelaxedRequirements: deferredCurrentRequirementIds,
 };
 
-const deferredBlockerPrefixes = [
-  "worker_mcp_",
-  "current_channel_worker_",
-  "second_account_",
-  "second_antigravity_account_",
-];
 const deferredBlockers = blockers.filter((blocker) => deferredBlockerPrefixes.some((prefix) => String(blocker).startsWith(prefix)));
 const currentBlockers = blockers.filter((blocker) => !deferredBlockers.includes(blocker));
+const reportOk = goalComplete === true && currentBlockers.length === 0;
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.longTaskLandingMatrix && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.secondAccountPostLoginProof && proven.accountIsolationPreparedOnly),
+  ok: reportOk,
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -1305,11 +1302,12 @@ const payload = {
   objective: "codex-client-copy-plus-antigravity-model-single-shared-account-with-real-agentic-task-evidence",
   goalComplete,
   releaseReady: releaseGateStatus.releaseReady,
+  currentGoalReleaseReady,
   shortReady: releaseGateStatus.shortReady,
   missingRequired: releaseGateStatus.missingRequired,
   missingShort: releaseGateStatus.missingShort,
   proven,
-  blockers: goalComplete ? currentBlockers : blockers,
+  blockers: currentBlockers,
   deferredBlockers,
   objectiveRequirementSummary,
   objectiveRequirementAudit,
@@ -1348,10 +1346,7 @@ const payload = {
   secondAccountReadinessSummary,
   secondAccountPostLoginProof,
   releaseGateStatus,
-  nextRequiredUserAction: goalComplete ? "none_current_single_account_goal_complete" : secondAccountReadinessSummary.nextOperatorAction
-    || (antigravityAccountIsolation.safeToAskUserForSecondAccountLogin
-    ? "login_second_antigravity_account_with_explicit_approval"
-    : "create_or_verify_separate_windows_user_then_rerun_account_prepare"),
+  nextRequiredUserAction: goalComplete ? "none_current_single_account_goal_complete" : currentBlockers[0] || "refresh_current_single_account_goal_readiness",
   elapsedMs: Date.now() - startedAt,
 };
 

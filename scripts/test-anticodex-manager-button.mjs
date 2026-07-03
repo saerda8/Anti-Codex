@@ -96,6 +96,13 @@ function isFailureText(text) {
   return text.includes(FAILURE_TEXT) || text.includes("\u9700\u8981\u5904\u7406") || /timed out|bridge failed|Action bridge failed/i.test(text);
 }
 
+function isActionFailureText(actionName, text) {
+  if (actionName === "viewLatestReports") {
+    return text.includes(FAILURE_TEXT) || /timed out|bridge failed|Action bridge failed/i.test(text);
+  }
+  return isFailureText(text);
+}
+
 function isUiOnlySmokeText(text) {
   const value = String(text || "");
   return value.includes("ui-only manager button smoke") || value.includes("ui-only-manager-button");
@@ -299,6 +306,38 @@ function managerSummaryFromActionPayload(actionName, payload) {
       `\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a${capabilities.callableState || "checked"}`,
     ].join("\n") + note;
   }
+  if (actionName === "diagnosticsBundle") {
+    const unwrapped = result?.result && typeof result.result === "object" ? result.result : result;
+    return [
+      `\u8bca\u65ad\u5305\uff1a${(unwrapped.ok ?? payload?.ok) === false ? "\u5931\u8d25" : "\u5df2\u751f\u6210"}`,
+      unwrapped.zipPath ? `ZIP\uff1a${unwrapped.zipPath}` : "",
+      unwrapped.bundleRoot ? `\u76ee\u5f55\uff1a${unwrapped.bundleRoot}` : "",
+      (!unwrapped.zipPath && !unwrapped.bundleRoot && payload?.ok !== false) ? "\u76ee\u5f55\uff1a\u672a\u8fd4\u56de" : "",
+    ].filter(Boolean).join("\n");
+  }
+  if (actionName === "viewLatestReports") {
+    const reports = Array.isArray(result.reports) ? result.reports : [];
+    const lines = reports.length ? [
+      `\u62a5\u544a\u76ee\u5f55\uff1a${result.reportRoot || "\u672a\u77e5"}`,
+      `\u5df2\u627e\u5230\uff1a${result.existingCount ?? reports.filter((item) => item.exists).length} \u4efd`,
+    ] : ["\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"];
+    for (const item of reports.slice(0, 80)) {
+      const passed = item.effectiveOk !== null && item.effectiveOk !== undefined ? item.effectiveOk : item.ok;
+      const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
+      lines.push(`${item.label}\uff1a${status}`);
+      if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) {
+        lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
+      }
+      if (item.sourcePreflightEvidence?.publicDocumentationOk !== undefined) {
+        lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.sourcePreflightEvidence.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
+      }
+      if (item.missingHistoryEvidence) {
+        lines.push(`  \u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a${item.missingHistoryEvidence.status === 410 ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
+        lines.push("  \u6587\u4ef6\uff1alatest-missing-history.json");
+      }
+    }
+    return lines.join("\n");
+  }
   if (payload?.message) return String(payload.message);
   return `${actionName}: ${payload?.ok === false ? "failed" : "ok"}`;
 }
@@ -321,8 +360,11 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n  \u516c\u5f00\u6587\u6863\uff1a\u901a\u8fc7"), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u9700\u5904\u7406\n  \u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406"), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a2 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7\n  \u6587\u4ef6\uff1aC:\\tmp\\latest-missing-history.json"), true);
+  assert.equal(isActionFailureText("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u9a8c\u6536\uff1a\u9700\u8981\u5904\u7406"), false);
+  assert.equal(hasActionSpecificResult("viewLatestReports", managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6e90\u7801\u9884\u68c0", exists: true, ok: true, sourcePreflightEvidence: { publicDocumentationOk: true } }] } })), true);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1a\u5931\u8d25"), false);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1aZIP \u5df2\u751f\u6210"), true);
+  assert.equal(hasActionSpecificResult("diagnosticsBundle", managerSummaryFromActionPayload("diagnosticsBundle", { ok: true, result: { ok: true } })), true);
   assert.equal(isUiOnlySmokeText("\u8bf4\u660e\uff1aui-only manager button smoke"), true);
   assert.ok(uiOnlyBridgeSource("mcpSkills", true).includes("__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__"));
   console.log(JSON.stringify({ ok: true, selfTest: true }));
@@ -879,14 +921,14 @@ async function runManagerActionBatch(actions) {
         && latest.disabled !== true;
       const visibleFinished = !latest.disabled
         && !isRunningText(text)
-        && !isFailureText(text)
+        && !isActionFailureText(actionName, text)
         && isFinishedText(text)
         && (uiOnlyMode || !isUiOnlySmokeText(text))
         && hasActionSpecificResult(actionName, text);
       const uiOnlyFinished = uiOnlyMode
         && !latest.disabled
         && !isRunningText(text)
-        && !isFailureText(text)
+        && !isActionFailureText(actionName, text)
         && isFinishedText(text)
         && hasActionSpecificResult(actionName, text);
       const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
@@ -924,14 +966,14 @@ async function runManagerActionBatch(actions) {
       && latest.disabled !== true;
     const visibleFinished = !latest.disabled
       && !isRunningText(text)
-      && !isFailureText(text)
+      && !isActionFailureText(actionName, text)
       && isFinishedText(text)
       && (uiOnlyMode || !isUiOnlySmokeText(text))
       && hasActionSpecificResult(actionName, text);
     const uiOnlyFinished = uiOnlyMode
       && !latest.disabled
       && !isRunningText(text)
-      && !isFailureText(text)
+      && !isActionFailureText(actionName, text)
       && isFinishedText(text)
       && hasActionSpecificResult(actionName, text);
     const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
@@ -941,7 +983,7 @@ async function runManagerActionBatch(actions) {
       && initial.closeUpperCenterHitsButton === true
       && initial.closeLowerCenterHitsButton === true
       && initial.actionCenterHitsButton === true
-      && (uiOnlyFinished ? true : isFastMode ? !isFailureText(text) : (latest.lastOk !== false && visibleFinished));
+      && (uiOnlyFinished ? true : isFastMode ? !isActionFailureText(actionName, text) : (latest.lastOk !== false && visibleFinished));
     results[actionName] = {
       ok,
       port,

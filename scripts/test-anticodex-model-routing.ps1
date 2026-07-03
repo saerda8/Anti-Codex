@@ -56,6 +56,14 @@ function Get-ErrorPayload {
     }
 }
 
+function Test-ExpectedModelAvailabilityError {
+    param($ErrorPayload)
+
+    $status = $ErrorPayload.status
+    $message = [string]$ErrorPayload.message
+    return $status -in @(429, 503) -or $message -match "\(429\)|429|Too Many Requests|\(503\)|503|Server Unavailable"
+}
+
 function Invoke-LocalJson {
     param(
         [string]$Path,
@@ -352,31 +360,38 @@ foreach ($model in $models) {
 
     $text = ""
     $route = $null
-    $routeResult = Invoke-LocalJsonSafe "route-$model" "/anticodex/model-routes"
+    $routeResult = $null
+    $modelAvailabilityUnavailable = $false
     if ($request.ok) {
         $text = Get-AntiCodexResponseText $request.payload
-    }
-    if ($routeResult.ok -and $routeResult.payload) {
-        $route = $routeResult.payload.latest
+        $routeResult = Invoke-LocalJsonSafe "route-$model" "/anticodex/model-routes"
+        if ($routeResult.ok -and $routeResult.payload) {
+            $route = $routeResult.payload.latest
+        }
     }
 
     $ok = $true
     $checks = New-Object System.Collections.Generic.List[string]
     if (-not $request.ok) {
-        $ok = $false
-        $checks.Add("request failed: $($request.error.message)") | Out-Null
+        if (Test-ExpectedModelAvailabilityError $request.error) {
+            $modelAvailabilityUnavailable = $true
+            $checks.Add("model availability unavailable: $($request.error.message)") | Out-Null
+        } else {
+            $ok = $false
+            $checks.Add("request failed: $($request.error.message)") | Out-Null
+        }
     } elseif ($text -notmatch [regex]::Escape($marker)) {
         $ok = $false
         $checks.Add("marker missing from response") | Out-Null
     }
 
-    if (-not $routeResult.ok) {
+    if ($request.ok -and -not $routeResult.ok) {
         $ok = $false
         $checks.Add("route audit request failed: $($routeResult.error.message)") | Out-Null
-    } elseif (-not $route) {
+    } elseif ($request.ok -and -not $route) {
         $ok = $false
         $checks.Add("route audit empty") | Out-Null
-    } else {
+    } elseif ($request.ok) {
         if ([string]$route.resolvedModel -ne $model) {
             $ok = $false
             $checks.Add("resolved model mismatch: $($route.resolvedModel)") | Out-Null
@@ -423,6 +438,8 @@ foreach ($model in $models) {
         model = $model
         ok = $ok
         marker = $marker
+        requestAvailable = -not $modelAvailabilityUnavailable
+        availabilityUnavailable = $modelAvailabilityUnavailable
         responseContainsMarker = ($text -match [regex]::Escape($marker))
         text = $text
         route = if ($route) {

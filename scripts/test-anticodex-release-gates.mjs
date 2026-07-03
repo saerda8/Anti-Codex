@@ -2515,14 +2515,28 @@ function summarizeGate(definition) {
     }
     if (definition.requireModelRoutingSemantics) {
       const results = Array.isArray(report.results) ? report.results : [];
-      if (report.skipRequests !== true) semanticFailures.push("model_routing_skip_requests_not_true");
+      const skipRequestsMode = report.skipRequests === true;
+      const realRequestMode = report.skipRequests === false;
       if (Number(report.modelCount || 0) < 1) semanticFailures.push("model_routing_model_count");
       if (!Array.isArray(report.models) || report.models.length < Number(report.modelCount || 0)) semanticFailures.push("model_routing_models_missing");
       if (!report.mode) semanticFailures.push("model_routing_mode_missing");
       if (results.length < Number(report.modelCount || 0)) semanticFailures.push("model_routing_results_missing");
       if (results.some((item) => item?.ok !== true)) semanticFailures.push("model_routing_result_not_ok");
-      if (results.some((item) => item?.skippedRequest !== true)) semanticFailures.push("model_routing_result_not_skipped");
-      if (results.some((item) => item?.error)) semanticFailures.push("model_routing_result_error");
+      if (skipRequestsMode) {
+        if (results.some((item) => item?.skippedRequest !== true)) semanticFailures.push("model_routing_result_not_skipped");
+        if (results.some((item) => item?.error)) semanticFailures.push("model_routing_result_error");
+      } else if (realRequestMode) {
+        const availableResults = results.filter((item) => item?.availabilityUnavailable !== true);
+        const unavailableResults = results.filter((item) => item?.availabilityUnavailable === true);
+        if (!availableResults.length) semanticFailures.push("model_routing_no_available_real_request");
+        if (availableResults.some((item) => item?.requestAvailable !== true)) semanticFailures.push("model_routing_available_request_not_marked");
+        if (availableResults.some((item) => item?.responseContainsMarker !== true)) semanticFailures.push("model_routing_available_marker_missing");
+        if (availableResults.some((item) => !item?.route || item.route.resolvedModel !== item.model)) semanticFailures.push("model_routing_available_route_mismatch");
+        if (availableResults.some((item) => item?.error)) semanticFailures.push("model_routing_available_result_error");
+        if (unavailableResults.some((item) => item?.requestAvailable !== false || !item?.error)) semanticFailures.push("model_routing_unavailable_contract");
+      } else {
+        semanticFailures.push("model_routing_mode_unknown");
+      }
     }
     if (definition.requireToolBridgeSemantics) {
       const toolBridge = report.toolBridge || {};
@@ -4232,13 +4246,14 @@ if (args.has("--self-test")) {
       "tool_bridge_owned_tools_enabled",
     ]);
     semanticFailures.modelRouting = assertSemanticFailures("modelRouting", "self-test failed: semantically invalid model-routing report satisfied the gate", [
-      "model_routing_skip_requests_not_true",
       "model_routing_models_missing",
       "model_routing_mode_missing",
       "model_routing_results_missing",
       "model_routing_result_not_ok",
-      "model_routing_result_not_skipped",
-      "model_routing_result_error",
+      "model_routing_available_request_not_marked",
+      "model_routing_available_marker_missing",
+      "model_routing_available_route_mismatch",
+      "model_routing_available_result_error",
     ]);
     semanticFailures.modelThinking = assertSemanticFailures("modelThinking", "self-test failed: semantically invalid model-thinking report satisfied the gate", [
       "model_thinking_actual_count",
