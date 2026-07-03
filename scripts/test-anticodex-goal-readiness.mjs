@@ -116,7 +116,24 @@ const recommendedReadOnlyProbes = Array.isArray(currentChannelWorkerRecovery.rec
     recordCommand: String(item?.recordCommand || ""),
   })).filter((item) => item.worker && item.statusTool && item.jobId)
   : [];
-const recommendedFirstReadOnlyProbe = currentChannelWorkerRecovery.operatorActionCard?.recommendedFirstReadOnlyProbe
+const exposedRecommendedReadOnlyProbes = Array.isArray(currentChannelWorkerRecovery.exposedRecommendedReadOnlyProbes)
+  ? currentChannelWorkerRecovery.exposedRecommendedReadOnlyProbes.map((item) => ({
+    worker: String(item?.worker || ""),
+    statusTool: String(item?.statusTool || ""),
+    jobId: String(item?.jobId || ""),
+    expectedStatus: String(item?.expectedStatus || ""),
+    recordCommand: String(item?.recordCommand || ""),
+  })).filter((item) => item.worker && item.statusTool && item.jobId)
+  : [];
+const recommendedFirstReadOnlyProbe = currentChannelWorkerRecovery.recommendedFirstReadOnlyProbe
+  ? {
+    worker: String(currentChannelWorkerRecovery.recommendedFirstReadOnlyProbe.worker || ""),
+    statusTool: String(currentChannelWorkerRecovery.recommendedFirstReadOnlyProbe.statusTool || ""),
+    jobId: String(currentChannelWorkerRecovery.recommendedFirstReadOnlyProbe.jobId || ""),
+    expectedStatus: String(currentChannelWorkerRecovery.recommendedFirstReadOnlyProbe.expectedStatus || ""),
+    recordCommand: String(currentChannelWorkerRecovery.recommendedFirstReadOnlyProbe.recordCommand || ""),
+  }
+  : currentChannelWorkerRecovery.operatorActionCard?.recommendedFirstReadOnlyProbe
   ? {
     worker: String(currentChannelWorkerRecovery.operatorActionCard.recommendedFirstReadOnlyProbe.worker || ""),
     statusTool: String(currentChannelWorkerRecovery.operatorActionCard.recommendedFirstReadOnlyProbe.statusTool || ""),
@@ -124,7 +141,7 @@ const recommendedFirstReadOnlyProbe = currentChannelWorkerRecovery.operatorActio
     expectedStatus: String(currentChannelWorkerRecovery.operatorActionCard.recommendedFirstReadOnlyProbe.expectedStatus || ""),
     recordCommand: String(currentChannelWorkerRecovery.operatorActionCard.recommendedFirstReadOnlyProbe.recordCommand || ""),
   }
-  : (recommendedReadOnlyProbes[0] || null);
+  : (exposedRecommendedReadOnlyProbes[0] || recommendedReadOnlyProbes[0] || null);
 const currentChannelWorkerObservations = Array.isArray(currentChannelWorkerTransport.workerObservations)
   ? currentChannelWorkerTransport.workerObservations.map((item) => ({
     workerTool: String(item?.workerTool || ""),
@@ -279,6 +296,7 @@ const workerTransportRecoveryReadiness = {
   directProbeOk: workerMcp.currentChannelDirectProbeOk || workerMcp.serverProbeReportOk,
   directProbePassedServerCount: Math.max(workerMcp.currentChannelDirectProbePassedServerCount, workerMcp.directProbePassedServerCount),
   recommendedReadOnlyProbes,
+  exposedRecommendedReadOnlyProbes,
   recommendedFirstReadOnlyProbe,
   operatorRecoveryAction: workerMcp.currentChannelOperatorRecoveryAction || workerMcp.operatorRecoveryAction,
   postReloadVerification: workerMcp.currentChannelPostReloadVerification || workerMcp.postReloadVerification,
@@ -920,6 +938,7 @@ const goalOperatorActionCard = {
   workerRecoveryStatusCommand: currentChannelRecoveryStatusCommand,
   workerRecoveryCommand: recommendedFirstReadOnlyProbe?.recordCommand || currentChannelRecoveryRecordCommand,
   workerRecoveryRecommendedReadOnlyProbes: recommendedReadOnlyProbes,
+  workerRecoveryExposedRecommendedReadOnlyProbes: exposedRecommendedReadOnlyProbes,
   workerRecoveryRecommendedFirstReadOnlyProbe: recommendedFirstReadOnlyProbe,
   secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1 -Compact",
 };

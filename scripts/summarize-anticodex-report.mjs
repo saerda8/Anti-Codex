@@ -1494,6 +1494,13 @@ const summary = {
       expectedStatus: asString(item?.expectedStatus),
       recordCommand: asString(item?.recordCommand),
     })) : [],
+    workerTransportRecoveryExposedRecommendedReadOnlyProbes: report.workerTransportRecoveryReadiness && Array.isArray(report.workerTransportRecoveryReadiness.exposedRecommendedReadOnlyProbes) ? report.workerTransportRecoveryReadiness.exposedRecommendedReadOnlyProbes.map((item) => ({
+      worker: asString(item?.worker),
+      statusTool: asString(item?.statusTool),
+      jobId: asString(item?.jobId),
+      expectedStatus: asString(item?.expectedStatus),
+      recordCommand: asString(item?.recordCommand),
+    })) : [],
     workerTransportRecoveryRecommendedFirstReadOnlyProbe: report.workerTransportRecoveryReadiness?.recommendedFirstReadOnlyProbe && typeof report.workerTransportRecoveryReadiness.recommendedFirstReadOnlyProbe === "object" ? {
       worker: asString(report.workerTransportRecoveryReadiness.recommendedFirstReadOnlyProbe.worker),
       statusTool: asString(report.workerTransportRecoveryReadiness.recommendedFirstReadOnlyProbe.statusTool),
@@ -2163,6 +2170,13 @@ const summary = {
     directStatusProbeCurrentChannelCaveatPresent: boolField(report.currentEvidence || {}, "directStatusProbeCurrentChannelCaveatPresent"),
     postReloadAcceptanceCriteria: Array.isArray(report.postReloadAcceptanceCriteria) ? asStringArray(report.postReloadAcceptanceCriteria) : [],
     recommendedReadOnlyProbes: Array.isArray(report.recommendedReadOnlyProbes) ? report.recommendedReadOnlyProbes.map((item) => ({
+      worker: asString(item?.worker),
+      statusTool: asString(item?.statusTool),
+      jobId: asString(item?.jobId),
+      expectedStatus: asString(item?.expectedStatus),
+      recordCommand: asString(item?.recordCommand),
+    })) : [],
+    exposedRecommendedReadOnlyProbes: Array.isArray(report.exposedRecommendedReadOnlyProbes) ? report.exposedRecommendedReadOnlyProbes.map((item) => ({
       worker: asString(item?.worker),
       statusTool: asString(item?.statusTool),
       jobId: asString(item?.jobId),

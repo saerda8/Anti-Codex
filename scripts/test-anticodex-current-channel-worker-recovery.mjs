@@ -88,6 +88,8 @@ const statusProbeFile = readReport("latest-worker-mcp-status-probe.json");
 const transport = transportFile.report || {};
 const directProbe = probeFile.report || {};
 const statusProbe = statusProbeFile.report || {};
+const exposedWorkerTools = asStringArray(transport.exposedWorkerTools);
+const exposedWorkerToolSet = new Set(exposedWorkerTools);
 const checkedAtMs = Date.parse(String(transport.checkedAt || ""));
 const transportAgeMs = Number.isFinite(checkedAtMs) ? Math.max(0, startedAt - checkedAtMs) : null;
 const transportFresh = Number.isFinite(transportAgeMs) && transportAgeMs <= maxAgeMs;
@@ -106,6 +108,8 @@ const directStatusProbeOk = statusProbe.ok === true
   && typeof statusProbe.currentChannelCaveat === "string"
   && statusProbe.currentChannelCaveat.trim().length > 0;
 const recommendedReadOnlyProbes = recommendedReadOnlyProbesFromStatusProbe(statusProbe);
+const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item) => exposedWorkerToolSet.has(item.statusTool));
+const recommendedFirstReadOnlyProbe = exposedRecommendedReadOnlyProbes[0] || recommendedReadOnlyProbes[0] || null;
 const genericMcpOk = transport.genericMcpControlOk === true && String(transport.genericMcpStatus || "") === "ok";
 const currentWorkerOk = transport.workerTransportOk === true && transport.currentChannelWorkerDispatchUsable === true;
 const canDispatchCurrentChannelWorkers = Boolean(
@@ -164,6 +168,7 @@ const payload = {
     workerTransportOkWorkerPrefixes: okWorkerPrefixes,
     workerTransportFailedWorkerPrefixes: failedWorkerPrefixes,
     expectedWorkerPrefixes: asStringArray(transport.expectedWorkerPrefixes),
+    exposedWorkerTools,
     exposedWorkerPrefixes: asStringArray(transport.exposedWorkerPrefixes),
     observedWorkerPrefixes: asStringArray(transport.observedWorkerPrefixes),
     missingExpectedWorkerPrefixes: asStringArray(transport.missingExpectedWorkerPrefixes),
@@ -196,6 +201,8 @@ const payload = {
     "canDispatchCurrentChannelWorkers must be true before starting implementation workers",
   ],
   recommendedReadOnlyProbes,
+  exposedRecommendedReadOnlyProbes,
+  recommendedFirstReadOnlyProbe,
   commands: {
     directWorkerProbe: "node scripts\\probe-anticodex-worker-mcp-servers.mjs",
     directWorkerStatusProbe: "node scripts\\test-anticodex-worker-mcp-status-probe.mjs --timeout-ms 30000",
@@ -211,7 +218,7 @@ const payload = {
     nextOperatorAction: canDispatchCurrentChannelWorkers
       ? "dispatch_only_a_narrow_worker_task_after_normal_scope_checks"
       : "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe",
-    recommendedFirstReadOnlyProbe: recommendedReadOnlyProbes[0] || null,
+    recommendedFirstReadOnlyProbe,
     userVisibleNextStep: canDispatchCurrentChannelWorkers
       ? "Worker MCP read path is healthy in this channel; start only a narrow worker task first."
       : "Reload Codex or use a fresh channel, then run one read-only worker status check before worker tasks.",
@@ -241,6 +248,7 @@ if (compact) {
     directProbeOk: payload.currentEvidence.directProbeOk,
     directStatusProbeOk: payload.currentEvidence.directStatusProbeOk,
     recommendedReadOnlyProbes: payload.recommendedReadOnlyProbes,
+    exposedRecommendedReadOnlyProbes: payload.exposedRecommendedReadOnlyProbes,
     recommendedFirstReadOnlyProbe: payload.operatorActionCard.recommendedFirstReadOnlyProbe,
     nextOperatorAction: payload.operatorActionCard.nextOperatorAction,
     report,

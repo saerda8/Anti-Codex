@@ -1208,8 +1208,13 @@ function Test-GoalReadinessSummaryEvidence {
     if ($goalRecommendedTools -notcontains "kilo_wait_for_job") { Add-Failure "goal-readiness summary missing Kilo recommended read-only probe" }
     if ($goalRecommendedTools -notcontains "deepseek_wait_for_job") { Add-Failure "goal-readiness summary missing DeepSeek recommended read-only probe" }
     if ($goalRecommendedTools -notcontains "opencode_wait_for_job") { Add-Failure "goal-readiness summary missing OpenCode recommended read-only probe" }
+    $goalExposedRecommendedProbes = @(As-FlatArray $evidence.workerTransportRecoveryExposedRecommendedReadOnlyProbes)
+    if ($goalExposedRecommendedProbes.Count -lt 1) { Add-Failure "goal-readiness summary missing exposed recommended read-only probes" }
+    $goalExposedRecommendedTools = @($goalExposedRecommendedProbes | ForEach-Object { [string]$_.statusTool } | Where-Object { $_ })
     if (-not $evidence.workerTransportRecoveryRecommendedFirstReadOnlyProbe -or -not [string]$evidence.workerTransportRecoveryRecommendedFirstReadOnlyProbe.statusTool) {
         Add-Failure "goal-readiness summary missing first worker recovery recommended read-only probe"
+    } elseif ($goalExposedRecommendedTools.Count -gt 0 -and $goalExposedRecommendedTools -notcontains ([string]$evidence.workerTransportRecoveryRecommendedFirstReadOnlyProbe.statusTool)) {
+        Add-Failure "goal-readiness summary first worker recovery probe is not from exposed candidates"
     }
     if (@(As-FlatArray $evidence.workerTransportRecoveryNextActions).Count -lt 3) { Add-Failure "goal-readiness summary worker transport next actions missing" }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
@@ -2175,8 +2180,13 @@ function Test-CurrentChannelWorkerRecoverySummaryEvidence {
     if ($recommendedTools -notcontains "deepseek_wait_for_job") { Add-Failure "current-channel-worker-recovery summary missing DeepSeek read-only probe candidate" }
     if ($recommendedTools -notcontains "opencode_wait_for_job") { Add-Failure "current-channel-worker-recovery summary missing OpenCode read-only probe candidate" }
     if ($recommendedJobIds.Count -lt $recommendedProbes.Count) { Add-Failure "current-channel-worker-recovery summary has recommended probes without job ids" }
+    $exposedRecommendedProbes = @(As-FlatArray $evidence.exposedRecommendedReadOnlyProbes)
+    if ($exposedRecommendedProbes.Count -lt 1) { Add-Failure "current-channel-worker-recovery summary missing exposed recommended read-only probes" }
+    $exposedRecommendedTools = @($exposedRecommendedProbes | ForEach-Object { [string]$_.statusTool } | Where-Object { $_ })
     if (-not $evidence.operatorActionCard -or -not $evidence.operatorActionCard.recommendedFirstReadOnlyProbe -or -not [string]$evidence.operatorActionCard.recommendedFirstReadOnlyProbe.statusTool) {
         Add-Failure "current-channel-worker-recovery summary missing first recommended read-only probe"
+    } elseif ($exposedRecommendedTools.Count -gt 0 -and $exposedRecommendedTools -notcontains ([string]$evidence.operatorActionCard.recommendedFirstReadOnlyProbe.statusTool)) {
+        Add-Failure "current-channel-worker-recovery summary first recommended probe is not from exposed candidates"
     }
 }
 

@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Recommended DeepSeek read-only probe still transport-closed; prioritize exposed candidates
+
+- Task: use a concrete recommended read-only probe from the current goal action card before any worker dispatch.
+- Result: `deepseek_wait_for_job` for job `dsw_mr3wqqbw_l3huc0` returned `Transport closed`; same-channel `node_repl` returned `CURRENT_CHANNEL_GENERIC_MCP_OK_AFTER_DEEPSEEK_RECOMMENDED_PROBE`. The signed transport/recovery reports now contain 7 failed worker observations. Recovery output now separates `recommendedReadOnlyProbes` from `exposedRecommendedReadOnlyProbes` and picks `recommendedFirstReadOnlyProbe` from exposed tools first; current first choice is `mimocode_wait_for_job` with job `mcw_mr3wr6bu_ns6x36`.
+- Cause classification: current-channel worker transport remains closed. The previous first recommendation could point at a non-exposed MIMO tool; that handoff risk is now reduced.
+- Rule change: when multiple recommended read-only probes exist, try `exposedRecommendedReadOnlyProbes[0]` first. Do not dispatch implementation workers until that or another read-only candidate returns normally in the current channel.
+
 ### 2026-07-03 - Current-channel worker recovery now lists concrete read-only probe candidates
 
 - Task: make the post-reload/fresh-channel worker acceptance step concrete instead of relying on placeholder `<worker_read_tool>` guidance.
