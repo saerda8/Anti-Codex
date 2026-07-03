@@ -25,7 +25,7 @@ const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.l
 const expectedDailyActionIds = [
   "refreshStatus", "refreshModels", "accountSwitch", "accountProxy", "syncReadiness",
   "repairShortcuts", "updateCheck", "sourcePreflight", "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
-  "secondAccountLoginStatus",
+  "workerTransportStatus", "secondAccountLoginStatus",
 ];
 const expectedHighImpactActionIds = [
   "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
@@ -1591,4 +1591,3 @@ const output = {
 console.log(asciiJson(output));
 if (!output.ok) process.exit(1);
 process.exit(0);
-
