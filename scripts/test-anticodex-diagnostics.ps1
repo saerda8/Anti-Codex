@@ -326,22 +326,38 @@ function Test-SecondAccountPostLoginProofEvidence {
     }
 
     if ($evidence.reportName -ne "second-account-post-login-proof") { Add-Failure "second-account post-login proof reportName mismatch" }
-    if ($evidence.noTraffic -ne $true) { Add-Failure "second-account post-login proof not no-traffic" }
-    if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "second-account post-login proof requested real traffic" }
-    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "second-account post-login proof used real traffic" }
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "second-account post-login proof behavior not covered" }
-    if ($evidence.coverageKind -ne "second-account-post-login-proof-dry-run") { Add-Failure "second-account post-login proof coverage kind mismatch" }
     if ($evidence.changedSystem -ne $false) { Add-Failure "second-account post-login proof changed system" }
     if ($evidence.createdUser -ne $false) { Add-Failure "second-account post-login proof created user" }
     if ($evidence.capturesPassword -ne $false) { Add-Failure "second-account post-login proof captures password" }
     if ($evidence.storesPassword -ne $false) { Add-Failure "second-account post-login proof stores password" }
-    if ($evidence.targetUserExists -ne $false) { Add-Failure "second-account post-login proof target user unexpectedly exists in current dry-run" }
-    if ($evidence.safeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "second-account post-login proof allows login too early" }
-    if ($evidence.canRunAfterInteractiveLogin -ne $false) { Add-Failure "second-account post-login proof can run too early" }
-    if ($evidence.willRunRealSmoke -ne $false) { Add-Failure "second-account post-login proof will run real smoke too early" }
-    if ($evidence.loginVerified -ne $false) { Add-Failure "second-account post-login proof claims login verified" }
-    if ($evidence.separateAccountVerified -ne $false) { Add-Failure "second-account post-login proof claims separate account verified" }
-    if ($evidence.releaseAcceptableAccountProof -ne $false) { Add-Failure "second-account post-login proof claims release account proof" }
+    $isDryRun = (
+        $evidence.noTraffic -eq $true -and
+        $evidence.requestedRealTraffic -eq $false -and
+        $evidence.usedRealTraffic -eq $false -and
+        [string]$evidence.coverageKind -eq "second-account-post-login-proof-dry-run" -and
+        $evidence.willRunRealSmoke -eq $false -and
+        $evidence.loginVerified -eq $false -and
+        $evidence.separateAccountVerified -eq $false -and
+        $evidence.releaseAcceptableAccountProof -eq $false
+    )
+    $isRealProof = (
+        $evidence.noTraffic -eq $false -and
+        $evidence.requestedRealTraffic -eq $true -and
+        $evidence.usedRealTraffic -eq $true -and
+        [string]$evidence.coverageKind -eq "second-account-post-login-proof-real-traffic" -and
+        $evidence.willRunRealSmoke -eq $true -and
+        $evidence.loginVerified -eq $true -and
+        $evidence.separateAccountVerified -eq $true -and
+        $evidence.releaseAcceptableAccountProof -eq $true -and
+        $evidence.accountIdentityComparisonPresent -eq $true
+    )
+    if (-not $isDryRun -and -not $isRealProof) { Add-Failure "second-account post-login proof is neither valid dry-run nor valid real proof" }
+    if ($isDryRun) {
+        if ($evidence.targetUserExists -ne $false) { Add-Failure "second-account post-login proof target user unexpectedly exists in current dry-run" }
+        if ($evidence.safeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "second-account post-login proof allows login too early" }
+        if ($evidence.canRunAfterInteractiveLogin -ne $false) { Add-Failure "second-account post-login proof can run too early" }
+    }
     if ([string]$evidence.accountIsolationBoundary -ne "separate-windows-user") { Add-Failure "second-account post-login proof boundary mismatch" }
     $operatorActionCard = $evidence.operatorActionCard
     if (-not $operatorActionCard) { Add-Failure "second-account post-login proof operator action card missing" }
@@ -349,11 +365,11 @@ function Test-SecondAccountPostLoginProofEvidence {
         $missingRequirements = @($operatorActionCard.missingRequirements | ForEach-Object { [string]$_ } | Where-Object { $_ })
         if (-not [string]$operatorActionCard.status) { Add-Failure "second-account post-login proof operator action card status missing" }
         if (-not [string]$operatorActionCard.windowsUser) { Add-Failure "second-account post-login proof operator action card Windows user missing" }
-        if ($operatorActionCard.canRunPostLoginProofNow -ne $false) { Add-Failure "second-account post-login proof operator action card runs too early" }
-        if ($operatorActionCard.targetUserExists -ne $false) { Add-Failure "second-account post-login proof operator action card target user mismatch" }
-        if ($operatorActionCard.canAskUserToLoginNow -ne $false) { Add-Failure "second-account post-login proof operator action card allows login too early" }
-        if ([string]$operatorActionCard.missingRequirement -ne "separate_windows_user_missing") { Add-Failure "second-account post-login proof operator action card missing requirement mismatch" }
-        if ($missingRequirements -notcontains "separate_windows_user_missing") { Add-Failure "second-account post-login proof operator action card missing requirements mismatch" }
+        if ($isDryRun -and $operatorActionCard.canRunPostLoginProofNow -ne $false) { Add-Failure "second-account post-login proof operator action card runs too early" }
+        if ($isDryRun -and $operatorActionCard.targetUserExists -ne $false) { Add-Failure "second-account post-login proof operator action card target user mismatch" }
+        if ($isDryRun -and $operatorActionCard.canAskUserToLoginNow -ne $false) { Add-Failure "second-account post-login proof operator action card allows login too early" }
+        if ($isDryRun -and [string]$operatorActionCard.missingRequirement -ne "separate_windows_user_missing") { Add-Failure "second-account post-login proof operator action card missing requirement mismatch" }
+        if ($isDryRun -and $missingRequirements -notcontains "separate_windows_user_missing") { Add-Failure "second-account post-login proof operator action card missing requirements mismatch" }
         if (-not [string]$operatorActionCard.nextOperatorAction) { Add-Failure "second-account post-login proof operator action card next action missing" }
         if (-not [string]$operatorActionCard.userVisibleNextStep) { Add-Failure "second-account post-login proof operator action card user step missing" }
         if (-not ([string]$operatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "second-account post-login proof operator action card status command missing" }
@@ -1094,6 +1110,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
     if ($evidence.secondAccountLoginEntrypointProven -ne $true) { Add-Failure "goal-readiness summary missing second-account login entrypoint proof" }
     if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
+    if ($evidence.secondAccountPostLoginProofProven -ne $true) { Add-Failure "goal-readiness summary missing second-account post-login proof report proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ([int]$evidence.objectiveRequirementTotal -ne 6) { Add-Failure "goal-readiness summary objective requirement total mismatch" }
     if ([int]$evidence.objectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary objective complete count mismatch" }
@@ -1123,6 +1140,7 @@ function Test-GoalReadinessSummaryEvidence {
         if ($goalNextActions.Count -lt 2) { Add-Failure "goal-readiness summary operator action card next actions missing" }
         if (-not ([string]$goalOperatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-goal-readiness.mjs")) { Add-Failure "goal-readiness summary operator action card no-traffic command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "goal-readiness summary operator action card second-account command missing" }
+        if (-not ([string]$goalOperatorActionCard.secondAccountPostLoginProofCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "goal-readiness summary operator action card second-account post-login proof command missing" }
     }
     if ($evidence.currentChannelWorkerCanDispatch -ne $false) { Add-Failure "goal-readiness summary compact worker dispatch field is not blocked" }
     if ([string]$evidence.currentChannelWorkerTransportStatus -ne "reload_required") { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
@@ -1295,6 +1313,13 @@ function Test-GoalReadinessSummaryEvidence {
     if ([int]$evidence.secondAccountReadinessSummaryStepCount -lt 7) { Add-Failure "goal-readiness summary second-account readiness summary step count too low" }
     if ([int]$evidence.secondAccountReadinessSummaryFailedStepCount -ne 0) { Add-Failure "goal-readiness summary second-account readiness summary has failed steps" }
     if ([int]$evidence.secondAccountReadinessSummaryFailureCount -ne 0) { Add-Failure "goal-readiness summary second-account readiness summary has failures" }
+    if ($evidence.secondAccountPostLoginProofReportName -ne "second-account-post-login-proof") { Add-Failure "goal-readiness summary second-account post-login proof report name mismatch" }
+    if ($evidence.secondAccountPostLoginProofSemanticsValid -ne $true) { Add-Failure "goal-readiness summary second-account post-login proof semantics invalid" }
+    if ($evidence.secondAccountPostLoginProofDryRunValid -ne $true -and $evidence.secondAccountPostLoginProofRealProofValid -ne $true) {
+        Add-Failure "goal-readiness summary second-account post-login proof has no valid mode"
+    }
+    if (-not [string]$evidence.secondAccountPostLoginProofOperatorStatus) { Add-Failure "goal-readiness summary second-account post-login proof operator status missing" }
+    if (-not [string]$evidence.secondAccountPostLoginProofOperatorNextAction) { Add-Failure "goal-readiness summary second-account post-login proof operator next action missing" }
     if (-not [string]$evidence.nextRequiredUserAction) { Add-Failure "goal-readiness summary missing next required user action" }
     if ([int]$evidence.blockerCount -lt 1) { Add-Failure "goal-readiness summary missing blockers" }
     if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }

@@ -50,6 +50,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-03 - Exposed MiMoCode read-only probe still transport-closed
+
+- Task: try the current exposed-first recovery candidate before any worker dispatch.
+- Result: `mimocode_wait_for_job` for job `mcw_mr3wr6bu_ns6x36` returned `Transport closed`; same-channel `node_repl` returned `CURRENT_CHANNEL_GENERIC_MCP_OK_AFTER_MIMOCODE_RECOMMENDED_PROBE`. The signed current-channel transport report now has 8 failed worker observations and zero successful worker observations.
+- Cause classification: current-channel worker namespace transport remains closed. This is still split from generic MCP and direct worker server evidence, which remain healthy.
+- Rule change: do not retry implementation workers from this channel. A fresh/reloaded channel must first get one successful read-only worker status/get/wait response and then record it.
+
 ### 2026-07-03 - Recommended DeepSeek read-only probe still transport-closed; prioritize exposed candidates
 
 - Task: use a concrete recommended read-only probe from the current goal action card before any worker dispatch.

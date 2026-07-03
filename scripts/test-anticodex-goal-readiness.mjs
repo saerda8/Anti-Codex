@@ -71,6 +71,7 @@ const realApprovalPlanReport = readReport("latest-real-approval-plan.json");
 const accountIsolation = readReport("latest-antigravity-account-isolation-status.json");
 const secondAccountLoginEntrypointReport = readReport("latest-second-antigravity-account-login-entrypoint.json");
 const secondAccountReadinessSummaryReport = readReport("latest-second-account-readiness-summary.json");
+const secondAccountPostLoginProofReport = readReport("latest-second-account-post-login-proof.json");
 const releaseGates = readReport("latest-release-gates.json");
 const workerMcpServerProbeReport = readReport("latest-worker-mcp-server-probe.json");
 const workerMcpStatusProbeReport = readReport("latest-worker-mcp-status-probe.json");
@@ -583,6 +584,92 @@ const secondAccountReadinessSummary = {
   failureCount: secondSummaryFailures.length,
 };
 
+const postLoginProof = secondAccountPostLoginProofReport.report || {};
+const postLoginProofOperatorActionCard = postLoginProof.operatorActionCard && typeof postLoginProof.operatorActionCard === "object"
+  ? postLoginProof.operatorActionCard
+  : {};
+const postLoginProofDryRunValid = postLoginProof.reportName === "second-account-post-login-proof"
+  && postLoginProof.noTraffic === true
+  && postLoginProof.requestedRealTraffic === false
+  && postLoginProof.usedRealTraffic === false
+  && postLoginProof.behaviorCovered === true
+  && postLoginProof.coverageKind === "second-account-post-login-proof-dry-run"
+  && postLoginProof.willRunRealSmoke === false
+  && postLoginProof.loginVerified === false
+  && postLoginProof.separateAccountVerified === false
+  && postLoginProof.releaseAcceptableAccountProof === false;
+const postLoginProofRealValid = postLoginProof.reportName === "second-account-post-login-proof"
+  && postLoginProof.noTraffic === false
+  && postLoginProof.requestedRealTraffic === true
+  && postLoginProof.usedRealTraffic === true
+  && postLoginProof.behaviorCovered === true
+  && postLoginProof.coverageKind === "second-account-post-login-proof-real-traffic"
+  && postLoginProof.willRunRealSmoke === true
+  && postLoginProof.loginVerified === true
+  && postLoginProof.separateAccountVerified === true
+  && postLoginProof.releaseAcceptableAccountProof === true
+  && postLoginProof.accountIdentityComparisonPresent === true;
+const secondAccountPostLoginProof = {
+  reportPresent: secondAccountPostLoginProofReport.present,
+  reportOk: postLoginProof.ok === true,
+  reportName: String(postLoginProof.reportName || ""),
+  noTraffic: postLoginProof.noTraffic === true,
+  requestedRealTraffic: postLoginProof.requestedRealTraffic === true,
+  usedRealTraffic: postLoginProof.usedRealTraffic === true,
+  behaviorCovered: postLoginProof.behaviorCovered === true,
+  coverageKind: String(postLoginProof.coverageKind || ""),
+  changedSystem: postLoginProof.changedSystem === true,
+  createdUser: postLoginProof.createdUser === true,
+  capturesPassword: postLoginProof.capturesPassword === true,
+  storesPassword: postLoginProof.storesPassword === true,
+  targetUserExists: postLoginProof.targetUserExists === true,
+  safeToAskUserForSecondAccountLogin: postLoginProof.safeToAskUserForSecondAccountLogin === true,
+  canRunAfterInteractiveLogin: postLoginProof.canRunAfterInteractiveLogin === true,
+  willRunRealSmoke: postLoginProof.willRunRealSmoke === true,
+  loginVerified: postLoginProof.loginVerified === true,
+  separateAccountVerified: postLoginProof.separateAccountVerified === true,
+  releaseAcceptableAccountProof: postLoginProof.releaseAcceptableAccountProof === true,
+  accountIdentityComparisonPresent: postLoginProof.accountIdentityComparisonPresent === true,
+  accountIsolationBoundary: String(postLoginProof.accountIsolationBoundary || ""),
+  accountIsolationCaveat: String(postLoginProof.accountIsolationCaveat || ""),
+  failureCount: Array.isArray(postLoginProof.failures) ? postLoginProof.failures.length : 0,
+  warningCount: Array.isArray(postLoginProof.warnings) ? postLoginProof.warnings.length : 0,
+  proofCommandPreview: String(postLoginProof.proofCommandPreview || ""),
+  operatorActionCard: {
+    status: String(postLoginProofOperatorActionCard.status || ""),
+    windowsUser: String(postLoginProofOperatorActionCard.windowsUser || ""),
+    canRunPostLoginProofNow: postLoginProofOperatorActionCard.canRunPostLoginProofNow === true,
+    targetUserExists: postLoginProofOperatorActionCard.targetUserExists === true,
+    canAskUserToLoginNow: postLoginProofOperatorActionCard.canAskUserToLoginNow === true,
+    confirmInteractiveLoginComplete: postLoginProofOperatorActionCard.confirmInteractiveLoginComplete === true,
+    missingRequirement: String(postLoginProofOperatorActionCard.missingRequirement || ""),
+    missingRequirements: Array.isArray(postLoginProofOperatorActionCard.missingRequirements) ? postLoginProofOperatorActionCard.missingRequirements.map(String).filter(Boolean) : [],
+    readinessBlockingReason: String(postLoginProofOperatorActionCard.readinessBlockingReason || ""),
+    nextOperatorAction: String(postLoginProofOperatorActionCard.nextOperatorAction || ""),
+    userVisibleNextStep: String(postLoginProofOperatorActionCard.userVisibleNextStep || ""),
+    noTrafficStatusCommand: String(postLoginProofOperatorActionCard.noTrafficStatusCommand || ""),
+    proofCommandPreview: String(postLoginProofOperatorActionCard.proofCommandPreview || ""),
+  },
+  dryRunValid: postLoginProofDryRunValid,
+  realProofValid: postLoginProofRealValid,
+  semanticsValid: postLoginProof.reportName === "second-account-post-login-proof"
+    && postLoginProof.ok === true
+    && postLoginProof.changedSystem === false
+    && postLoginProof.createdUser === false
+    && postLoginProof.capturesPassword === false
+    && postLoginProof.storesPassword === false
+    && String(postLoginProof.accountIsolationBoundary || "") === "separate-windows-user"
+    && String(postLoginProof.accountIsolationCaveat || "").length > 0
+    && String(postLoginProof.proofCommandPreview || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
+    && String(postLoginProof.proofCommandPreview || "").includes("-AllowSeparateAccountProof")
+    && String(postLoginProof.proofCommandPreview || "").includes("-WindowsUser")
+    && String(postLoginProofOperatorActionCard.status || "").length > 0
+    && String(postLoginProofOperatorActionCard.windowsUser || "").length > 0
+    && String(postLoginProofOperatorActionCard.nextOperatorAction || "").length > 0
+    && String(postLoginProofOperatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-second-account-post-login-proof.ps1")
+    && (postLoginProofDryRunValid || postLoginProofRealValid),
+};
+
 const gates = releaseGates.report || {};
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
@@ -726,6 +813,7 @@ const proven = {
     && secondAccountReadinessSummary.stepCount >= 7
     && secondAccountReadinessSummary.failedStepCount === 0
     && secondAccountReadinessSummary.failureCount === 0,
+  secondAccountPostLoginProof: secondAccountPostLoginProof.semanticsValid,
   accountIsolationPreparedOnly: antigravityAccountIsolation.reportOk
     && antigravityAccountIsolation.completionState === "blocked_before_interactive_login"
     && antigravityAccountIsolation.safeToAskUserForSecondAccountLogin === false
@@ -765,6 +853,7 @@ for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) bl
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
 if (!proven.secondAccountLoginEntrypoint) blockers.push("second_account_login_entrypoint_missing_or_invalid");
 if (!proven.secondAccountReadinessSummary) blockers.push("second_account_readiness_summary_missing_or_invalid");
+if (!proven.secondAccountPostLoginProof) blockers.push("second_account_post_login_proof_missing_or_invalid");
 if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
 const goalComplete = proven.codexClientCopy
@@ -777,6 +866,7 @@ const goalComplete = proven.codexClientCopy
   && proven.realApprovalPlan
   && proven.secondAccountLoginEntrypoint
   && proven.secondAccountReadinessSummary
+  && proven.secondAccountPostLoginProof
   && realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic.length === 0
   && releaseGateStatus.releaseReady
   && antigravityAccountIsolation.releaseAcceptableAccountProof;
@@ -941,10 +1031,12 @@ const goalOperatorActionCard = {
   workerRecoveryExposedRecommendedReadOnlyProbes: exposedRecommendedReadOnlyProbes,
   workerRecoveryRecommendedFirstReadOnlyProbe: recommendedFirstReadOnlyProbe,
   secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1 -Compact",
+  secondAccountPostLoginProofStatus: secondAccountPostLoginProof.operatorActionCard.status,
+  secondAccountPostLoginProofCommand: secondAccountPostLoginProof.operatorActionCard.noTrafficStatusCommand,
 };
 
 const payload = {
-  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.accountIsolationPreparedOnly),
+  ok: blockers.length === 0 || (proven.codexClientCopy && proven.workerMcp && proven.desktopAgenticTasks && proven.agenticCapabilityMatrix && proven.realTaskCoverageRoadmap && proven.realApprovalPlan && proven.releaseShortPath && proven.secondAccountLoginEntrypoint && proven.secondAccountReadinessSummary && proven.secondAccountPostLoginProof && proven.accountIsolationPreparedOnly),
   reportName: "goal-readiness",
   requestedRealTraffic: false,
   usedRealTraffic: false,
@@ -971,6 +1063,9 @@ const payload = {
   secondAccountOperatorBlockingStage: secondAccountReadinessSummary.operatorBlockingStage,
   secondAccountOperatorNextStep: secondAccountReadinessSummary.operatorNextStep,
   secondAccountNextOperatorAction: secondAccountReadinessSummary.nextOperatorAction,
+  secondAccountPostLoginProofStatus: secondAccountPostLoginProof.operatorActionCard.status,
+  secondAccountPostLoginProofCanRunNow: secondAccountPostLoginProof.operatorActionCard.canRunPostLoginProofNow,
+  secondAccountPostLoginProofNextOperatorAction: secondAccountPostLoginProof.operatorActionCard.nextOperatorAction,
   codexClientCopy,
   workerMcp,
   workerTransportRecoveryReadiness,
@@ -981,6 +1076,7 @@ const payload = {
   antigravityAccountIsolation,
   secondAccountLoginEntrypoint,
   secondAccountReadinessSummary,
+  secondAccountPostLoginProof,
   releaseGateStatus,
   nextRequiredUserAction: secondAccountReadinessSummary.nextOperatorAction
     || (antigravityAccountIsolation.safeToAskUserForSecondAccountLogin

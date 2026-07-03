@@ -2275,19 +2275,29 @@ function summarizeGate(definition) {
     }
     if (definition.requireSecondAccountPostLoginProofSemantics) {
       if (report.reportName !== "second-account-post-login-proof") semanticFailures.push("second_account_post_login_proof_report_name");
-      if (report.noTraffic !== true) semanticFailures.push("second_account_post_login_proof_no_traffic");
-      if (report.requestedRealTraffic !== false) semanticFailures.push("second_account_post_login_proof_requested_real_traffic");
-      if (report.usedRealTraffic !== false) semanticFailures.push("second_account_post_login_proof_used_real_traffic");
       if (report.behaviorCovered !== true) semanticFailures.push("second_account_post_login_proof_behavior_not_covered");
-      if (report.coverageKind !== "second-account-post-login-proof-dry-run") semanticFailures.push("second_account_post_login_proof_coverage_kind");
       if (report.changedSystem !== false) semanticFailures.push("second_account_post_login_proof_changed_system");
       if (report.createdUser !== false) semanticFailures.push("second_account_post_login_proof_created_user");
       if (report.capturesPassword !== false) semanticFailures.push("second_account_post_login_proof_captures_password");
       if (report.storesPassword !== false) semanticFailures.push("second_account_post_login_proof_stores_password");
-      if (report.willRunRealSmoke !== false) semanticFailures.push("second_account_post_login_proof_runs_real_smoke");
-      if (report.loginVerified !== false) semanticFailures.push("second_account_post_login_proof_login_verified");
-      if (report.separateAccountVerified !== false) semanticFailures.push("second_account_post_login_proof_separate_account_verified");
-      if (report.releaseAcceptableAccountProof !== false) semanticFailures.push("second_account_post_login_proof_release_proof_claimed");
+      const postLoginDryRunValid = report.noTraffic === true
+        && report.requestedRealTraffic === false
+        && report.usedRealTraffic === false
+        && report.coverageKind === "second-account-post-login-proof-dry-run"
+        && report.willRunRealSmoke === false
+        && report.loginVerified === false
+        && report.separateAccountVerified === false
+        && report.releaseAcceptableAccountProof === false;
+      const postLoginRealProofValid = report.noTraffic === false
+        && report.requestedRealTraffic === true
+        && report.usedRealTraffic === true
+        && report.coverageKind === "second-account-post-login-proof-real-traffic"
+        && report.willRunRealSmoke === true
+        && report.loginVerified === true
+        && report.separateAccountVerified === true
+        && report.releaseAcceptableAccountProof === true
+        && report.accountIdentityComparisonPresent === true;
+      if (!postLoginDryRunValid && !postLoginRealProofValid) semanticFailures.push("second_account_post_login_proof_invalid_mode");
       if (report.accountIsolationBoundary !== "separate-windows-user") semanticFailures.push("second_account_post_login_proof_boundary");
       if (!String(report.proofCommandPreview || "").includes("test-anticodex-antigravity-cli-real-smoke.ps1")
         || !String(report.proofCommandPreview || "").includes("-AllowSeparateAccountProof")
@@ -2298,11 +2308,11 @@ function summarizeGate(definition) {
         const missingRequirements = Array.isArray(operatorActionCard.missingRequirements) ? operatorActionCard.missingRequirements.map(String) : [];
         if (!String(operatorActionCard.status || "")) semanticFailures.push("second_account_post_login_proof_operator_action_card_status");
         if (!String(operatorActionCard.windowsUser || "")) semanticFailures.push("second_account_post_login_proof_operator_action_card_windows_user");
-        if (operatorActionCard.canRunPostLoginProofNow !== false) semanticFailures.push("second_account_post_login_proof_operator_action_card_runs_too_early");
-        if (operatorActionCard.targetUserExists !== false) semanticFailures.push("second_account_post_login_proof_operator_action_card_target_exists");
-        if (operatorActionCard.canAskUserToLoginNow !== false) semanticFailures.push("second_account_post_login_proof_operator_action_card_login_too_early");
-        if (String(operatorActionCard.missingRequirement || "") !== "separate_windows_user_missing") semanticFailures.push("second_account_post_login_proof_operator_action_card_missing_requirement");
-        if (!missingRequirements.includes("separate_windows_user_missing")) semanticFailures.push("second_account_post_login_proof_operator_action_card_missing_requirements");
+        if (postLoginDryRunValid && operatorActionCard.canRunPostLoginProofNow !== false) semanticFailures.push("second_account_post_login_proof_operator_action_card_runs_too_early");
+        if (postLoginDryRunValid && operatorActionCard.targetUserExists !== false) semanticFailures.push("second_account_post_login_proof_operator_action_card_target_exists");
+        if (postLoginDryRunValid && operatorActionCard.canAskUserToLoginNow !== false) semanticFailures.push("second_account_post_login_proof_operator_action_card_login_too_early");
+        if (postLoginDryRunValid && String(operatorActionCard.missingRequirement || "") !== "separate_windows_user_missing") semanticFailures.push("second_account_post_login_proof_operator_action_card_missing_requirement");
+        if (postLoginDryRunValid && !missingRequirements.includes("separate_windows_user_missing")) semanticFailures.push("second_account_post_login_proof_operator_action_card_missing_requirements");
         if (!String(operatorActionCard.nextOperatorAction || "")) semanticFailures.push("second_account_post_login_proof_operator_action_card_next_action");
         if (!String(operatorActionCard.userVisibleNextStep || "")) semanticFailures.push("second_account_post_login_proof_operator_action_card_user_step");
         if (!String(operatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-second-account-post-login-proof.ps1")) semanticFailures.push("second_account_post_login_proof_operator_action_card_status_command");
