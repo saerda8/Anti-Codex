@@ -2452,6 +2452,10 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(realSmallProject, /if \(-not \$AllowRealTraffic\)/);
   assert.match(realSmallProject, /name\s*=\s*"write_small_project"/);
   assert.match(realSmallProject, /tool_choice\s*=\s*"required"/);
+  assert.match(realSmallProject, /missing_write_small_project_function_call/);
+  assert.match(realSmallProject, /toolCallAttemptCount/);
+  assert.match(realSmallProject, /toolCallRetryReason/);
+  assert.match(realSmallProject, /MUST call write_small_project exactly once as a tool call/);
   assert.match(realSmallProject, /previous_response_id/);
   assert.match(realSmallProject, /function_call_output/);
   assert.match(realSmallProject, /Invoke-SafeSessionResetIfIdle/);
@@ -8034,6 +8038,9 @@ test("Anti-Codex ships a read-only UI state verifier", () => {
 
   assert.match(uiScript, /Runtime\.evaluate/);
   assert.match(uiScript, /Runtime\.terminateExecution/);
+  assert.match(uiScript, /discoverAntiCodexCdpPorts/);
+  assert.match(uiScript, /Get-CimInstance Win32_Process/);
+  assert.match(uiScript, /--remote-debugging-port=\(\\d\+\)/);
   assert.match(uiScript, /const loadedDeadline = Date\.now\(\) \+ \$\{Math\.max\(1000, managerProbeTimeoutMs\)\}/);
   assert.match(uiWrapper, /\[switch\]\$Fast/);
   assert.match(uiWrapper, /\[int\]\$ManagerProbeTimeoutSec = 0/);

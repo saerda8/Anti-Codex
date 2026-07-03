@@ -5,13 +5,15 @@ import crypto from "node:crypto";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
   args.set(process.argv[i], process.argv[i + 1]);
 }
 
-const port = Number(args.get("--port") || process.env.DEEPCODEX_CDP_PORT || 58318);
+const explicitPort = args.get("--port") || process.env.DEEPCODEX_CDP_PORT || "";
+const port = Number(explicitPort || discoverAntiCodexCdpPorts()[0] || 58318);
 const baseUrl = String(args.get("--base-url") || "http://127.0.0.1:8484").replace(/\/$/, "");
 const catalogPath = args.get("--catalog") || "";
 const timeoutMs = Number(args.get("--timeout-ms") || 8000);
@@ -30,6 +32,27 @@ const expectedDailyActionIds = [
 const expectedHighImpactActionIds = [
   "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
+
+function discoverAntiCodexCdpPorts() {
+  if (process.platform !== "win32") return [];
+  try {
+    const output = execFileSync("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "$ErrorActionPreference='SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $_.ProcessName -eq 'Anti-Codex.exe' -and $_.CommandLine -match '--remote-debugging-port=' } | ForEach-Object { $_.CommandLine }",
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    return [...output.matchAll(/--remote-debugging-port=(\d+)/g)]
+      .map((match) => Number(match[1]))
+      .filter((value, index, values) => Number.isFinite(value) && value > 0 && values.indexOf(value) === index);
+  } catch {
+    return [];
+  }
+}
 const mojibakePattern = /(?:缁狅紕鎮妡娣囶喖|濡偓|闁板秶鐤唡閸掗攱|韫囶偊|閺佺繝|娴狅絿鎮妡閼卞﹤|娑撳秳|锟)/;
 const pageStateProbeExpression = `(() => {
   const shortUiText = () => {

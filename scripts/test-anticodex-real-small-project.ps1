@@ -191,6 +191,8 @@ $writtenFiles = @()
 $testRun = $null
 $cliRun = $null
 $cliJson = $null
+$toolCallAttemptCount = 0
+$toolCallRetryReason = ""
 
 try {
     $health = Invoke-RestMethod -Uri "$script:ResolvedBaseUrl/health" -Proxy $null -TimeoutSec 8
@@ -238,6 +240,7 @@ try {
         "Do not answer in natural language before the tool result is returned."
     ) -join "`n"
 
+    $toolCallAttemptCount = 1
     $first = Invoke-ResponsesJson @{
         model = $Model
         stream = $false
@@ -252,6 +255,32 @@ try {
     }
 
     $call = @(Get-ResponseItems $first | Where-Object { $_.type -eq "function_call" -and $_.name -eq "write_small_project" }) | Select-Object -First 1
+    if (-not $call -or -not $call.call_id) {
+        $toolCallRetryReason = "missing_write_small_project_function_call"
+        $toolCallAttemptCount = 2
+        $retryPrompt = @(
+            "MUST call write_small_project exactly once as a tool call. Do not write prose first.",
+            "files must include package.json, word-tally.mjs, and word-tally.test.mjs.",
+            "word-tally.mjs must join command-line arguments into input text and print one JSON line.",
+            "JSON must include ok:true, marker:""$marker"", words, characters, and uniqueWords.",
+            "word-tally.test.mjs must use node:test and assert/strict.",
+            "Tests must cover normal text, case-insensitive uniqueWords, and empty input.",
+            "The marker field must exactly equal $marker."
+        ) -join "`n"
+        $first = Invoke-ResponsesJson @{
+            model = $Model
+            stream = $false
+            store = $true
+            tool_choice = "required"
+            tools = @($projectTool)
+            input = @(@{
+                type = "message"
+                role = "user"
+                content = @(@{ type = "input_text"; text = $retryPrompt })
+            })
+        }
+        $call = @(Get-ResponseItems $first | Where-Object { $_.type -eq "function_call" -and $_.name -eq "write_small_project" }) | Select-Object -First 1
+    }
     if (-not $first.id) { Add-Failure "first response did not contain an id" }
     if (-not $call -or -not $call.call_id) { Add-Failure "first response did not emit write_small_project function_call" }
     $arguments = Read-ToolArguments $call
@@ -321,6 +350,8 @@ try {
         elapsedMs = [int]((Get-Date) - $started).TotalMilliseconds
         first_response_id = if ($first) { [string]$first.id } else { "" }
         call_id = if ($call) { [string]$call.call_id } else { "" }
+        toolCallAttemptCount = $toolCallAttemptCount
+        toolCallRetryReason = $toolCallRetryReason
         marker = $marker
         artifact = [pscustomobject]@{
             directory = $artifactDir
