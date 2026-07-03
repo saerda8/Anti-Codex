@@ -3376,6 +3376,7 @@ function latestManagerReportItem(label, fileName) {
             publicDocumentationClientCopySyncContractOk: Array.isArray(checks.publicDocumentation?.assertions)
                 && checks.publicDocumentation.assertions.some((item) => item?.file === "README.md" && item?.name === "client-copy-sync-contract" && item?.ok === true)
                 && checks.publicDocumentation.assertions.some((item) => item?.file === "README_EN.md" && item?.name === "client-copy-sync-contract" && item?.ok === true),
+            managerMojibakeContractsOk: checks.managerMojibakeContracts?.ok === true,
             translatorRegressionOk: checks.translatorRegression?.ok === true,
             diffWhitespaceOk: checks.diffWhitespace?.ok === true,
             skipFullRegression: report?.skipFullRegression === true,
@@ -4472,7 +4473,7 @@ function latestReportsSummary(result){
     if(item.publicDocumentationOk!==null&&item.publicDocumentationOk!==undefined) lines.push("  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(item.publicDocumentationOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"));
     if(item.sourcePreflightEvidence){
       const evidence=item.sourcePreflightEvidence;
-      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / cliIsolation="+(evidence.antigravityCliIsolationProfileOk?"true":"false")+" / prepare="+(evidence.antigravityCliProfilePrepareOk?"true":"false")+" / rejectDefaultChild="+(evidence.antigravityCliProfilePrepareRejectsDefaultChildOk?"true":"false")+" / winUserLogin="+(evidence.antigravityCliWindowsUserLoginDryRunOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false")+" / clientCopyDocs="+(evidence.publicDocumentationClientCopySyncContractOk?"true":"false"));
+      lines.push("  sourcePreflight: js="+(evidence.javascriptSyntaxOk?"true":"false")+" / ps="+(evidence.powershellSyntaxOk?"true":"false")+" / profile="+(evidence.upstreamProfileStorageOk?"true":"false")+" / cliIsolation="+(evidence.antigravityCliIsolationProfileOk?"true":"false")+" / prepare="+(evidence.antigravityCliProfilePrepareOk?"true":"false")+" / rejectDefaultChild="+(evidence.antigravityCliProfilePrepareRejectsDefaultChildOk?"true":"false")+" / winUserLogin="+(evidence.antigravityCliWindowsUserLoginDryRunOk?"true":"false")+" / localConnector="+(evidence.localConnectorVerifierOk?"true":"false")+" / docs="+(evidence.publicDocumentationOk?"true":"false")+" / clientCopyDocs="+(evidence.publicDocumentationClientCopySyncContractOk?"true":"false")+" / managerLabels="+(evidence.managerMojibakeContractsOk?"true":"false"));
       lines.push("  sourcePreflight: ui="+(evidence.uiStateSelfTestOk?"true":"false")+" / regression="+(evidence.translatorRegressionOk?"true":"false")+" / diff="+(evidence.diffWhitespaceOk?"true":"false")+" / skipFull="+(evidence.skipFullRegression?"true":"false"));
       if(evidence.antigravityCliIsolationProfileContract){
         const c=evidence.antigravityCliIsolationProfileContract;

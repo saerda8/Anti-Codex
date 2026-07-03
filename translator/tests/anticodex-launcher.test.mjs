@@ -1186,6 +1186,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /sourceMtime=/);
   assert.match(managerBridge, /installedRuntime drift:/);
   assert.match(managerInject, /installedRuntime drift:/);
+  assert.match(managerBridge, /managerLabels=/);
+  assert.match(managerInject, /managerLabels=/);
   assert.match(managerBridge, /optionalRealTraffic: strict=/);
   assert.match(managerInject, /optionalRealTraffic: strict=/);
   assert.match(managerBridge, /optionalRealTrafficFailures/);
@@ -2863,6 +2865,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /cliIsolation=/);
   assert.match(server, /prepare=/);
   assert.match(server, /clientCopyDocs=/);
+  assert.match(server, /managerMojibakeContractsOk: checks\.managerMojibakeContracts\?\.ok === true/);
+  assert.match(server, /managerLabels=/);
   assert.match(server, /publicDocumentationFailureCount: fileName === "latest-source-preflight\.json"/);
   assert.match(server, /localConnectorEvidence/);
   assert.match(server, /modelRoutingEvidence/);
