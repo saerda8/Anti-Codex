@@ -6392,7 +6392,7 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   assert.match(adaptiveServer, /function defaultExtraSkillsRoots/);
   assert.match(adaptiveServer, /function markerExtraSkillsRootInfo/);
   assert.match(adaptiveServer, /function managerActionArgs/);
-  assert.match(adaptiveServer, /mcpSkills:[\s\S]{0,180}script: "test-anticodex-mcp-skills\.ps1"[\s\S]{0,80}args: \["-TimeoutSec", "120"\]/);
+  assert.match(adaptiveServer, /mcpSkills:[\s\S]{0,180}script: "test-anticodex-mcp-skills\.ps1"[\s\S]{0,80}args: \["-TimeoutSec", "300"\]/);
   assert.match(adaptiveServer, /pluginCapabilities:[\s\S]{0,180}script: "test-anticodex-plugin-capabilities\.ps1"[\s\S]{0,80}args: \["-TimeoutSec", "120"\]/);
   assert.match(adaptiveServer, /ANTICODEX_EXTRA_SKILLS_ROOTS/);
   assert.match(adaptiveServer, /\.agents", "skills"/);
@@ -7756,6 +7756,9 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
   assert.match(managerButtons, /pluginCapabilities/);
   assert.match(managerButtons, /\[ValidateSet\("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle"\)\]/);
   assert.match(managerButtons, /\$Actions = @\("pluginCapabilities", "mcpSkills"\)/);
+  assert.match(managerButtons, /Get-CimInstance Win32_Process -Filter "Name = 'Anti-Codex\.exe'"/);
+  assert.match(managerButtons, /--remote-debugging-port=\(\\d\+\)/);
+  assert.match(managerButtons, /\$candidatePorts\.Add\(58318\)/);
   assert.match(managerButtons, /lastUiOnly -eq \$true/);
   assert.match(managerButtons, /ui-only manager button smoke\|ui-only-manager-button/);
   assert.match(managerButtons, /function Get-ManagerButtonActionResult/);

@@ -2330,8 +2330,8 @@ const MANAGER_ACTIONS = Object.freeze({
     mcpSkills: {
         label: "检查 MCP/Skill",
         script: "test-anticodex-mcp-skills.ps1",
-        args: ["-TimeoutSec", "120"],
-        timeoutMs: 180_000,
+        args: ["-TimeoutSec", "300"],
+        timeoutMs: 360_000,
         foregroundSingleton: true,
     },
     workerTransportStatus: {

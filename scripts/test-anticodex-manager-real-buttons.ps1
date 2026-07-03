@@ -37,7 +37,20 @@ function Resolve-Node {
 function Resolve-CdpPort {
     param([int]$RequestedPort)
     if ($RequestedPort -gt 0) { return $RequestedPort }
-    foreach ($candidatePort in 58318, 58317) {
+    $candidatePorts = New-Object System.Collections.Generic.List[int]
+    try {
+        $antiCodexProcesses = Get-CimInstance Win32_Process -Filter "Name = 'Anti-Codex.exe'" -ErrorAction Stop
+        foreach ($process in @($antiCodexProcesses)) {
+            $commandLine = [string]$process.CommandLine
+            $match = [regex]::Match($commandLine, "--remote-debugging-port=(\d+)")
+            if ($match.Success) {
+                $candidatePorts.Add([int]$match.Groups[1].Value) | Out-Null
+            }
+        }
+    } catch {}
+    $candidatePorts.Add(58318) | Out-Null
+    $candidatePorts.Add(58317) | Out-Null
+    foreach ($candidatePort in @($candidatePorts | Select-Object -Unique)) {
         try {
             Invoke-RestMethod -Uri "http://127.0.0.1:$candidatePort/json" -Proxy $null -TimeoutSec 2 | Out-Null
             return $candidatePort
