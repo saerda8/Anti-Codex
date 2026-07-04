@@ -1391,7 +1391,8 @@ function summarizeGate(definition) {
         if (freshChannelRequiredActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_action");
         const userPresenceRequiredActions = Array.isArray(goalOperatorActionCard.userPresenceRequiredActions) ? goalOperatorActionCard.userPresenceRequiredActions.map(String) : [];
         if (userPresenceRequiredActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_user_presence_action");
-        if (String(goalOperatorActionCard.workerStatus || "") !== "reload_required") semanticFailures.push("goal_readiness_operator_action_card_worker_status");
+        const acceptableWorkerStatuses = new Set(["reload_required", "fresh_probe_required"]);
+        if (!acceptableWorkerStatuses.has(String(goalOperatorActionCard.workerStatus || ""))) semanticFailures.push("goal_readiness_operator_action_card_worker_status");
         if (goalOperatorActionCard.workerCanDispatchCurrentChannel !== false) semanticFailures.push("goal_readiness_operator_action_card_worker_dispatch");
         if (String(goalOperatorActionCard.secondAccountStatus || "") !== "manual_windows_user_setup_required") semanticFailures.push("goal_readiness_operator_action_card_second_account_status");
         if (goalOperatorActionCard.secondAccountCanAskUserToLoginNow !== false) semanticFailures.push("goal_readiness_operator_action_card_second_account_login_too_early");
