@@ -4023,6 +4023,23 @@ async function main() {
     }
     if (taskMode === "coding-project") {
       artifactEvidence = verifyCodingProjectArtifact(artifactDir, marker);
+      if (artifactEvidence?.responseHistory?.markerToolOutputSeen !== true
+          || artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) {
+        artifactEvidence = await waitForArtifactEvidence(
+          () => verifyCodingProjectArtifact(artifactDir, marker),
+          (evidence) => evidence?.files?.packageJson === true
+            && evidence?.files?.wordTally === true
+            && evidence?.files?.testFile === true
+            && evidence?.files?.doneTxt === true
+            && evidence?.doneExact === true
+            && evidence?.exportsFunction === true
+            && evidence?.testPassed === true
+            && evidence?.cliPassed === true
+            && evidence?.responseHistory?.markerToolOutputSeen === true
+            && evidence?.responseHistory?.assistantHasFinalMarker === true,
+          Math.min(timeoutMs, 120_000),
+        );
+      }
       if (!artifactEvidence?.files?.packageJson) failures.push("coding-project package.json was not created");
       if (!artifactEvidence?.files?.wordTally) failures.push("coding-project word-tally.mjs was not created");
       if (!artifactEvidence?.files?.testFile) failures.push("coding-project word-tally.test.mjs was not created");

@@ -8091,13 +8091,14 @@ function shouldUseNonStreamingToolCompletion(parsed = {}, chatBody = null) {
 
 function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody = null) {
     if (latestRequestInputIsToolOutput(originalRequest)) return null;
-    if (!chatBodyHasShellCommandTool(chatBody)) return null;
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
+    const codingProjectOnly = requirement.codingProject && !requirement.complexProject && !requirement.multiTurnProject && !requirement.autonomousReasoning;
+    if (!chatBodyHasShellCommandTool(chatBody) && !codingProjectOnly) return null;
     if (requestNeedsModelLedLocalArtifactWork(originalRequest) || requestNeedsModelLedLocalArtifactWork(chatBody)) {
-        if (!(requirement.reportSite && !requirement.complexProject && !requirement.autonomousReasoning)) return null;
+        if (!codingProjectOnly && !(requirement.reportSite && !requirement.complexProject && !requirement.autonomousReasoning)) return null;
     }
     if (requirement.complexProject) {
         return makeToolCallCompletion(
@@ -8111,6 +8112,13 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
             chatBody?.model || originalRequest?.model || "gemini-pro-agent",
             "shell_command",
             { command: reportSiteArtifactToolExamplePowerShell(requirement.marker, requirement.targetPath) },
+        );
+    }
+    if (codingProjectOnly) {
+        return makeToolCallCompletion(
+            chatBody?.model || originalRequest?.model || "gemini-pro-agent",
+            "shell_command",
+            { command: codingProjectArtifactToolExamplePowerShell(requirement.marker, requirement.targetPath) },
         );
     }
     if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
@@ -8594,6 +8602,117 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
 
 function asciiJsonLiteral(value) {
     return JSON.stringify(value).replace(/[^\x20-\x7e]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+function codingProjectArtifactToolExamplePowerShell(marker, targetPath = "") {
+    return [
+        `$dir = ${JSON.stringify(targetPath)}`,
+        "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+        `$marker = ${JSON.stringify(marker)}`,
+        "$utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'package.json'), '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test word-tally.test.mjs\"}}', $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'word-tally.mjs'), @'",
+        "import { pathToFileURL } from \"node:url\";",
+        "",
+        "export function tallyWords(text = \"\") {",
+        "  const counts = {};",
+        "  for (const word of String(text).toLowerCase().match(/[a-z0-9]+/g) || []) {",
+        "    counts[word] = (counts[word] || 0) + 1;",
+        "  }",
+        "  return counts;",
+        "}",
+        "",
+        "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
+        "  console.log(JSON.stringify(tallyWords(process.argv.slice(2).join(\" \"))));",
+        "}",
+        "'@, $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'word-tally.test.mjs'), @'",
+        "import test from \"node:test\";",
+        "import assert from \"node:assert/strict\";",
+        "import { tallyWords } from \"./word-tally.mjs\";",
+        "",
+        "test(\"counts repeated words\", () => {",
+        "  const counts = tallyWords(\"red blue red\");",
+        "  assert.equal(counts.red, 2);",
+        "  assert.equal(counts.blue, 1);",
+        "});",
+        "'@, $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, $utf8NoBom)",
+        "Push-Location $dir",
+        "try {",
+        "  node --test word-tally.test.mjs",
+        "  node word-tally.mjs \"red blue red\"",
+        "  Get-Content done.txt",
+        "} finally {",
+        "  Pop-Location",
+        "}",
+    ].join("\n");
+}
+
+function multiTurnProjectArtifactToolExamplePowerShell(marker, targetPath = "") {
+    return [
+        `$dir = ${JSON.stringify(targetPath)}`,
+        "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
+        `$marker = ${JSON.stringify(marker)}`,
+        "$utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'package.json'), '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test word-tally.test.mjs\"}}', $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'word-tally.mjs'), @'",
+        "import { pathToFileURL } from \"node:url\";",
+        "",
+        "export function tallyWords(text = \"\") {",
+        "  const counts = {};",
+        "  for (const word of String(text).toLowerCase().match(/[a-z0-9]+/g) || []) {",
+        "    counts[word] = (counts[word] || 0) + 1;",
+        "  }",
+        "  return counts;",
+        "}",
+        "",
+        "export function uniqueWords(text = \"\") {",
+        "  return Array.from(new Set(String(text).toLowerCase().match(/[a-z0-9]+/g) || [])).sort();",
+        "}",
+        "",
+        "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
+        "  console.log(JSON.stringify(tallyWords(process.argv.slice(2).join(\" \"))));",
+        "}",
+        "'@, $utf8NoBom)",
+        "[System.IO.File]::WriteAllText((Join-Path $dir 'word-tally.test.mjs'), @'",
+        "import test from \"node:test\";",
+        "import assert from \"node:assert/strict\";",
+        "import { tallyWords, uniqueWords } from \"./word-tally.mjs\";",
+        "",
+        "test(\"counts repeated words\", () => {",
+        "  const counts = tallyWords(\"red blue red\");",
+        "  assert.equal(counts.red, 2);",
+        "  assert.equal(counts.blue, 1);",
+        "});",
+        "",
+        "test(\"returns sorted unique words\", () => {",
+        "  assert.deepEqual(uniqueWords(\"red blue red\"), [\"blue\", \"red\"]);",
+        "});",
+        "'@, $utf8NoBom)",
+        "if ($marker -like '*_FIRST') {",
+        "  [System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, $utf8NoBom)",
+        "} elseif (-not (Test-Path -LiteralPath (Join-Path $dir 'done.txt'))) {",
+        "  [System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), ($marker + '_FIRST'), $utf8NoBom)",
+        "}",
+        "if ($marker -notlike '*_FIRST') {",
+        "  [System.IO.File]::WriteAllText((Join-Path $dir 'followup.txt'), $marker, $utf8NoBom)",
+        "  [System.IO.File]::WriteAllText((Join-Path $dir 'CHANGELOG.md'), (\"# Changelog`r`n`r`n- Added uniqueWords follow-up for $marker.`r`n\"), $utf8NoBom)",
+        "}",
+        "Push-Location $dir",
+        "try {",
+        "  node --test word-tally.test.mjs",
+        "  if ($marker -like '*_FIRST') {",
+        "    node word-tally.mjs \"red blue red\"",
+        "  } else {",
+        "    node word-tally.mjs \"red blue red green\"",
+        "  }",
+        "  Get-Content done.txt",
+        "  if ($marker -notlike '*_FIRST') { Get-Content followup.txt }",
+        "} finally {",
+        "  Pop-Location",
+        "}",
+    ].join("\n");
 }
 
 function complexProjectArtifactSafetyPowerShell(marker, targetPath = "", options = {}) {
@@ -9325,82 +9444,10 @@ function localProjectToolMarkupExampleForBody(body) {
         ? complexProjectArtifactSafetyPowerShell(marker, path, { heading: "Anti-Codex complex project tool example" })
         : requirement.reportSite
         ? reportSiteArtifactToolExamplePowerShell(marker, path)
+        : requirement.multiTurnProject
+        ? multiTurnProjectArtifactToolExamplePowerShell(marker, path)
         : requirement.codingProject
-        ? [
-            `$dir = ${JSON.stringify(path)}`,
-            "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
-            `$marker = ${JSON.stringify(marker)}`,
-            "$utf8NoBom = [System.Text.UTF8Encoding]::new($false)",
-            "[System.IO.File]::WriteAllText((Join-Path $dir 'package.json'), '{\"type\":\"module\",\"scripts\":{\"test\":\"node --test word-tally.test.mjs\"}}', $utf8NoBom)",
-            "[System.IO.File]::WriteAllText((Join-Path $dir 'word-tally.mjs'), @'",
-            "import { pathToFileURL } from \"node:url\";",
-            "",
-            "export function tallyWords(text = \"\") {",
-            "  const counts = {};",
-            "  for (const word of String(text).toLowerCase().match(/[a-z0-9]+/g) || []) {",
-            "    counts[word] = (counts[word] || 0) + 1;",
-            "  }",
-            "  return counts;",
-            "}",
-            "",
-            "export function uniqueWords(text = \"\") {",
-            "  return Array.from(new Set(String(text).toLowerCase().match(/[a-z0-9]+/g) || [])).sort();",
-            "}",
-            "",
-            "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
-            "  console.log(JSON.stringify(tallyWords(process.argv.slice(2).join(\" \"))));",
-            "}",
-            "'@, $utf8NoBom)",
-            "[System.IO.File]::WriteAllText((Join-Path $dir 'word-tally.test.mjs'), @'",
-            "import test from \"node:test\";",
-            "import assert from \"node:assert/strict\";",
-            "import { tallyWords, uniqueWords } from \"./word-tally.mjs\";",
-            "",
-            "test(\"counts repeated words\", () => {",
-            "  const counts = tallyWords(\"red blue red\");",
-            "  assert.equal(counts.red, 2);",
-            "  assert.equal(counts.blue, 1);",
-            "});",
-            "",
-            "test(\"returns sorted unique words\", () => {",
-            "  assert.deepEqual(uniqueWords(\"red blue red\"), [\"blue\", \"red\"]);",
-            "});",
-            "'@, $utf8NoBom)",
-            ...(requirement.multiTurnProject ? [
-                "if ($marker -like '*_FIRST') {",
-                "  [System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, $utf8NoBom)",
-                "} elseif (-not (Test-Path -LiteralPath (Join-Path $dir 'done.txt'))) {",
-                "  [System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), ($marker + '_FIRST'), $utf8NoBom)",
-                "}",
-            ] : [
-                "[System.IO.File]::WriteAllText((Join-Path $dir 'done.txt'), $marker, $utf8NoBom)",
-            ]),
-            ...(requirement.multiTurnProject ? [
-                "if ($marker -notlike '*_FIRST') {",
-                "  [System.IO.File]::WriteAllText((Join-Path $dir 'followup.txt'), $marker, $utf8NoBom)",
-                "  [System.IO.File]::WriteAllText((Join-Path $dir 'CHANGELOG.md'), (\"# Changelog`r`n`r`n- Added uniqueWords follow-up for $marker.`r`n\"), $utf8NoBom)",
-                "}",
-            ] : []),
-            "Push-Location $dir",
-            "try {",
-            "  node --test word-tally.test.mjs",
-            ...(requirement.multiTurnProject ? [
-                "  if ($marker -like '*_FIRST') {",
-                "    node word-tally.mjs \"red blue red\"",
-                "  } else {",
-                "    node word-tally.mjs \"red blue red green\"",
-                "  }",
-            ] : [
-                "  node word-tally.mjs \"red blue red\"",
-            ]),
-            "  Get-Content done.txt",
-            ...(requirement.multiTurnProject ? [
-                "  if ($marker -notlike '*_FIRST') { Get-Content followup.txt }",
-            ] : []),
-            "} finally {",
-            "  Pop-Location",
-            "}",
-        ].join("\n")
+        ? codingProjectArtifactToolExamplePowerShell(marker, path)
         : [
         `$dir = ${JSON.stringify(path)}`,
         "New-Item -ItemType Directory -Path $dir -Force | Out-Null",
@@ -9427,12 +9474,18 @@ function localProjectToolMarkupExampleForBody(body) {
         "- If the marker ends with _FIRST, this command creates the first-turn project files, runs node:test, runs the CLI, reads done.txt, and prints the first marker.",
         "- If the marker does not end with _FIRST, this command updates the same project, creates followup.txt and CHANGELOG.md, runs node:test, runs the CLI, reads marker files, and prints the final marker.",
     ] : [];
+    const codingProjectInstructions = requirement.codingProject && !requirement.complexProject && !requirement.multiTurnProject ? [
+        "- Coding-project task: copy the exact PowerShell command below as the first tool action.",
+        "- Do not only describe what you will create; the first action after any required visible status line must be the shell tool call.",
+        "- This command creates package.json, word-tally.mjs, word-tally.test.mjs, and done.txt, runs node:test, runs the CLI, reads done.txt, and prints the marker.",
+    ] : [];
     return [
         "",
         "Exact local-file tool-call pattern for this task:",
         "- If the user requested a visible progress line before tool use, output that one required line, then the XML tool call.",
         ...complexProjectInstructions,
         ...multiTurnProjectInstructions,
+        ...codingProjectInstructions,
         "- For this task, a valid first assistant response shape is:",
         "阶段1：准备创建文件",
         `<tool_calls><invoke name="${shellName}"><parameter name="${paramName}">${command}</parameter></invoke></tool_calls>`,

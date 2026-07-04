@@ -4297,6 +4297,8 @@ test("coding project local artifact requests include a word-tally CLI example", 
   }, { allowTools: true });
 
   assert.match(body.messages[0].content, /Exact local-file tool-call pattern/);
+  assert.match(body.messages[0].content, /Coding-project task: copy the exact PowerShell command below as the first tool action/);
+  assert.match(body.messages[0].content, /Do not only describe what you will create/);
   assert.match(body.messages[0].content, /word-tally\.mjs/);
   assert.match(body.messages[0].content, /export function tallyWords/);
   assert.match(body.messages[0].content, /node --test word-tally\.test\.mjs/);
@@ -5613,7 +5615,7 @@ test("chatToResponsesFormat keeps model-led coding project commands without dete
   assert.doesNotMatch(args.command, /node --test/);
 });
 
-test("local coding project artifact requests are model-led and do not start with deterministic guard", () => {
+test("local coding project artifact requests start with a project tool call without marker guard", () => {
   const request = {
     model: "gemini-pro-agent",
     input: [{
@@ -5629,11 +5631,38 @@ test("local coding project artifact requests are model-led and do not start with
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.equal(completion, null);
+  assert.ok(completion);
+  const call = completion.choices[0].message.tool_calls[0];
+  assert.equal(call.function.name, "shell_command");
+  assert.match(call.function.arguments, /word-tally\.mjs/);
+  assert.match(call.function.arguments, /node --test word-tally\.test\.mjs/);
+  assert.doesNotMatch(call.function.arguments, /Anti-Codex exact artifact marker guard/);
   assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
-test("local coding project artifact requests with Chinese text stay model-led", () => {
+test("local coding project artifact requests work without visible tool-list shape", () => {
+  const marker = "UI_CODING_PROJECT_SMOKE_20260704001";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请在 C:\\Temp\\desktop-visible-coding-project\\run 里创建 package.json、word-tally.mjs、word-tally.test.mjs、done.txt。done.txt 必须只包含 ${marker}。运行 node --test word-tally.test.mjs。`,
+      }],
+    }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  chatBody.tools = [];
+
+  const completion = deterministicArtifactToolCallCompletion(request, chatBody);
+  assert.ok(completion);
+  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
+  assert.match(completion.choices[0].message.tool_calls[0].function.arguments, new RegExp(marker));
+});
+
+test("local coding project artifact requests with Chinese text start with a project tool call", () => {
   const request = {
     model: "gemini-pro-agent",
     input: [{
@@ -5649,7 +5678,9 @@ test("local coding project artifact requests with Chinese text stay model-led", 
   const chatBody = responsesToChatBody(request, { allowTools: true });
 
   const completion = deterministicArtifactToolCallCompletion(request, chatBody);
-  assert.equal(completion, null);
+  assert.ok(completion);
+  assert.equal(completion.choices[0].message.tool_calls[0].function.name, "shell_command");
+  assert.match(completion.choices[0].message.tool_calls[0].function.arguments, /word-tally\.mjs/);
   assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
 });
 
