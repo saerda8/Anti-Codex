@@ -3,7 +3,8 @@ param(
     [string]$BaseUrl = "",
     [int]$TimeoutSec = 60,
     [switch]$VerifyBundle,
-    [string]$VerifyReportsSummary = ""
+    [string]$VerifyReportsSummary = "",
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
 )
 
 $ErrorActionPreference = "Stop"
@@ -4107,6 +4108,11 @@ if ($VerifyBundle -and -not $VerifyReportsSummary) {
 }
 
 $result = [pscustomobject]@{
+    reportName = "diagnostics"
+    noTraffic = $true
+    usedRealTraffic = $false
+    behaviorCovered = $true
+    coverageKind = "diagnostics-no-traffic"
     ok = ($failures.Count -eq 0)
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
@@ -4144,5 +4150,19 @@ $result = [pscustomobject]@{
     bundle = $bundleCheck
 }
 
-$result | ConvertTo-Json -Depth 10 -Compress
+if (-not $VerifyReportsSummary) {
+    $reportStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $reportPaths = [pscustomobject]@{
+        latest = (Join-Path $ReportRoot "latest-diagnostics.json")
+        history = (Join-Path $ReportRoot "$reportStamp-diagnostics.json")
+    }
+    $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
+}
+
+$json = $result | ConvertTo-Json -Depth 10 -Compress
+if (-not $VerifyReportsSummary) {
+    . (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+    Write-AntiCodexJsonReport -LatestPath $result.report.latest -HistoryPath $result.report.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
+}
+$json
 if ($failures.Count -gt 0) { exit 1 }

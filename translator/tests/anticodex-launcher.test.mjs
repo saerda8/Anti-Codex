@@ -15546,7 +15546,12 @@ test("Antigravity CLI profile prepare carries account-lane boundary fields and d
 test("Manager latest reports surface source preflight", () => {
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "test-anticodex-diagnostics.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(diagnostics, /latest-diagnostics\.json/);
+  assert.match(diagnostics, /Write-AntiCodexJsonReport/);
+  assert.match(diagnostics, /reportName\s*=\s*"diagnostics"/);
 
   // sourcePreflight cliIsolation lane must surface role/mcpManagedHere/mcpOwner in every Manager support path
   assert.match(managerBridge, /sourcePreflight cliIsolation lane: role=/);
