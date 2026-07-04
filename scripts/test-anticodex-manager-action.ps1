@@ -98,6 +98,7 @@ $expectedDailyManagerActions = @(
     "mcpSkills",
     "pluginCapabilities",
     "diagnosticsBundle",
+    "workerTransportStatus",
     "secondAccountLoginStatus",
     "viewLatestReports"
 )

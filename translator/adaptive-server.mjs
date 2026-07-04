@@ -2458,7 +2458,8 @@ function parseJsonFromScriptOutput(text = "") {
     return null;
 }
 
-function latestManagerReportItem(label, fileName) {
+function latestManagerReportItem(label, fileName, options = {}) {
+    const deferred = options?.deferred === true;
     const fullPath = ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "reports", fileName) : "";
     const read = fullPath ? readJsonReportIfPresent(fullPath) : { exists: false, parseable: false, value: null, error: "" };
     const integrity = fullPath ? reportIntegrityForPath(fullPath) : { signed: false, valid: null, hash: "", expected: "", sidecar: "", error: "" };
@@ -2884,6 +2885,7 @@ function latestManagerReportItem(label, fileName) {
     return {
         label,
         fileName,
+        deferred,
         exists: read.exists,
         parseable: read.parseable,
         invalid,
@@ -3820,26 +3822,27 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("历史过期恢复", "latest-missing-history.json"),
         latestManagerReportItem("可选真实第三方", "latest-real-third-party-provider.json"),
         latestManagerReportItem("可选回切 Antigravity", "latest-provider-antigravity-return.json"),
-        latestManagerReportItem("独立 Antigravity CLI 准备", "latest-antigravity-cli-profile-prepare.json"),
-        latestManagerReportItem("Antigravity Windows 用户准备", "latest-antigravity-cli-windows-user-readiness.json"),
-        latestManagerReportItem("Windows 隔离用户准备", "latest-windows-user-account-prepare.json"),
-        latestManagerReportItem("Windows 隔离用户指引", "latest-windows-user-setup-guidance.json"),
-        latestManagerReportItem("Windows 隔离用户设置入口", "latest-windows-user-settings-entrypoint.json"),
-        latestManagerReportItem("Antigravity 账号隔离状态", "latest-antigravity-account-isolation-status.json"),
-        latestManagerReportItem("Antigravity 第二账号登录入口", "latest-second-antigravity-account-login-entrypoint.json"),
-        latestManagerReportItem("Antigravity 第二账号总状态", "latest-second-account-readiness-summary.json"),
-        latestManagerReportItem("Antigravity 第二账号登录后证明", "latest-second-account-post-login-proof.json"),
-        latestManagerReportItem("External MCP identity contract", "latest-external-mcp-identity-contract.json"),
-        latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
+        latestManagerReportItem("独立 Antigravity CLI 准备", "latest-antigravity-cli-profile-prepare.json", { deferred: true }),
+        latestManagerReportItem("Antigravity Windows 用户准备", "latest-antigravity-cli-windows-user-readiness.json", { deferred: true }),
+        latestManagerReportItem("Windows 隔离用户准备", "latest-windows-user-account-prepare.json", { deferred: true }),
+        latestManagerReportItem("Windows 隔离用户指引", "latest-windows-user-setup-guidance.json", { deferred: true }),
+        latestManagerReportItem("Windows 隔离用户设置入口", "latest-windows-user-settings-entrypoint.json", { deferred: true }),
+        latestManagerReportItem("Antigravity 账号隔离状态", "latest-antigravity-account-isolation-status.json", { deferred: true }),
+        latestManagerReportItem("Antigravity 第二账号登录入口", "latest-second-antigravity-account-login-entrypoint.json", { deferred: true }),
+        latestManagerReportItem("Antigravity 第二账号总状态", "latest-second-account-readiness-summary.json", { deferred: true }),
+        latestManagerReportItem("Antigravity 第二账号登录后证明", "latest-second-account-post-login-proof.json", { deferred: true }),
+        latestManagerReportItem("External MCP identity contract", "latest-external-mcp-identity-contract.json", { deferred: true }),
+        latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json", { deferred: true }),
     ];
     return {
         ok: true,
         reportRoot: ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "reports") : "",
         reports,
         existingCount: reports.filter((item) => item.exists).length,
-        missingCount: reports.filter((item) => !item.exists).length,
+        missingCount: reports.filter((item) => !item.exists && item.deferred !== true).length,
         invalidCount: reports.filter((item) => item.invalid || (item.exists && item.parseable === false)).length,
-        staleCount: reports.filter((item) => item.exists && item.stale).length,
+        staleCount: reports.filter((item) => item.exists && item.stale && item.deferred !== true).length,
+        deferredCount: reports.filter((item) => item.deferred === true).length,
         staleAfterMs: MANAGER_REPORT_STALE_MS,
     };
 }
@@ -4491,25 +4494,33 @@ function formatReportAge(ageMs){
 function latestReportsSummary(result){
   const reports=Array.isArray(result?.reports)?result.reports:[];
   if(!reports.length) return "\\u8fd8\\u6ca1\\u6709\\u53ef\\u663e\\u793a\\u7684\\u9a8c\\u6536\\u62a5\\u544a\\u3002\\n\\u53ef\\u5148\\u8fd0\\u884c\\u201c\\u5feb\\u901f\\u603b\\u68c0\\u201d\\u6216\\u201c\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u201d\\u751f\\u6210\\u62a5\\u544a\\u3002";
+  const activeReports=reports.filter((item)=>item?.deferred!==true);
+  const deferredReports=reports.filter((item)=>item?.deferred===true);
+  const activeExistingCount=activeReports.filter((item)=>item.exists).length;
+  const activeStaleCount=activeReports.filter((item)=>item.exists&&item.stale).length;
+  const activeMissingCount=activeReports.filter((item)=>!item.exists).length;
   const lines=[
     "\\u62a5\\u544a\\u76ee\\u5f55\\uff1a"+(result.reportRoot||"\\u672a\\u77e5"),
     "\\u5df2\\u627e\\u5230\\uff1a"+(result.existingCount??reports.filter((item)=>item.exists).length)+" \\u4efd"
   ];
-  if(result.staleCount){
-    lines.push("\\u9700\\u91cd\\u8dd1\\uff1a"+result.staleCount+" \\u4efd\\u62a5\\u544a\\u5df2\\u8fc7\\u671f");
+  if(activeStaleCount){
+    lines.push("\\u9700\\u91cd\\u8dd1\\uff1a"+activeStaleCount+" \\u4efd\\u62a5\\u544a\\u5df2\\u8fc7\\u671f");
   }
-  if(result.missingCount){
-    lines.push("\\u672a\\u751f\\u6210\\uff1a"+result.missingCount+" \\u4efd");
+  if(activeMissingCount){
+    lines.push("\\u672a\\u751f\\u6210\\uff1a"+activeMissingCount+" \\u4efd");
+  }
+  if(deferredReports.length){
+    lines.push("\\u5df2\\u5ef6\\u671f/\\u53ef\\u9009\\uff1a"+deferredReports.length+" \\u4efd");
   }
   if(result.invalidCount){
     lines.push("\\u635f\\u574f\\u62a5\\u544a\\uff1a"+result.invalidCount+" \\u4efd\\u65e0\\u6cd5\\u8bfb\\u53d6");
   }
-  if(!(result.existingCount??reports.filter((item)=>item.exists).length)){
+  if(!activeExistingCount&&!deferredReports.length){
     lines.push("\\u63d0\\u793a\\uff1a\\u8bf7\\u5148\\u8fd0\\u884c\\u5feb\\u901f\\u603b\\u68c0\\u3001\\u5b8c\\u6574\\u603b\\u68c0\\u6216\\u7a33\\u5b9a\\u6027\\u5de1\\u68c0\\u3002");
   }
   for(const item of reports){
     const passed=(item.effectiveOk!==null&&item.effectiveOk!==undefined)?item.effectiveOk:item.ok;
-    const status=item.exists?((item.parseable===false||item.invalid)?"\\u62a5\\u544a\\u635f\\u574f":(item.stale?"\\u9700\\u91cd\\u8dd1":(passed?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406"))):"\\u672a\\u751f\\u6210";
+    const status=item.exists?((item.parseable===false||item.invalid)?"\\u62a5\\u544a\\u635f\\u574f":(item.deferred===true&&(item.stale||!passed)?"\\u5df2\\u5ef6\\u671f":(item.stale?"\\u9700\\u91cd\\u8dd1":(passed?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406")))):(item.deferred===true?"\\u5df2\\u5ef6\\u671f":"\\u672a\\u751f\\u6210");
     const elapsed=item.elapsedMs!=null?(" / "+item.elapsedMs+" ms"):"";
     lines.push(item.label+"\\uff1a"+status+elapsed);
     const age=formatReportAge(item.ageMs);

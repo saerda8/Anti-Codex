@@ -283,19 +283,27 @@ function formatReportAge(ageMs) {
 function latestReportsSummary(result) {
   const reports = Array.isArray(result?.reports) ? result.reports : [];
   if (!reports.length) return "\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002\n\u53ef\u5148\u8fd0\u884c\u201c\u5feb\u901f\u603b\u68c0\u201d\u6216\u201c\u7a33\u5b9a\u6027\u5de1\u68c0\u201d\u751f\u6210\u62a5\u544a\u3002";
+  const activeReports = reports.filter((item) => item?.deferred !== true);
+  const deferredReports = reports.filter((item) => item?.deferred === true);
+  const activeExistingCount = activeReports.filter((item) => item.exists).length;
+  const activeStaleCount = activeReports.filter((item) => item.exists && item.stale).length;
+  const activeMissingCount = activeReports.filter((item) => !item.exists).length;
   const lines = [
     `\u62a5\u544a\u76ee\u5f55\uff1a${result.reportRoot || "\u672a\u77e5"}`,
     `\u5df2\u627e\u5230\uff1a${result.existingCount ?? reports.filter((item) => item.exists).length} \u4efd`,
   ];
-  if (result.staleCount) lines.push(`\u9700\u91cd\u8dd1\uff1a${result.staleCount} \u4efd\u62a5\u544a\u5df2\u8fc7\u671f`);
-  if (result.missingCount) lines.push(`\u672a\u751f\u6210\uff1a${result.missingCount} \u4efd`);
+  if (activeStaleCount) lines.push(`\u9700\u91cd\u8dd1\uff1a${activeStaleCount} \u4efd\u62a5\u544a\u5df2\u8fc7\u671f`);
+  if (activeMissingCount) lines.push(`\u672a\u751f\u6210\uff1a${activeMissingCount} \u4efd`);
+  if (deferredReports.length) lines.push(`\u5df2\u5ef6\u671f/\u53ef\u9009\uff1a${deferredReports.length} \u4efd`);
   if (result.invalidCount) lines.push(`\u635f\u574f\u62a5\u544a\uff1a${result.invalidCount} \u4efd\u65e0\u6cd5\u8bfb\u53d6`);
-  if (!(result.existingCount ?? reports.filter((item) => item.exists).length)) {
+  if (!activeExistingCount && !deferredReports.length) {
     lines.push("\u63d0\u793a\uff1a\u8bf7\u5148\u8fd0\u884c\u5feb\u901f\u603b\u68c0\u3001\u5b8c\u6574\u603b\u68c0\u6216\u7a33\u5b9a\u6027\u5de1\u68c0\u3002");
   }
   for (const item of reports) {
     const passed = item.effectiveOk !== null && item.effectiveOk !== undefined ? item.effectiveOk : item.ok;
-    const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
+    const status = item.exists
+      ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.deferred === true && (item.stale || !passed) ? "\u5df2\u5ef6\u671f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))))
+      : (item.deferred === true ? "\u5df2\u5ef6\u671f" : "\u672a\u751f\u6210");
     const elapsed = item.elapsedMs != null ? ` / ${item.elapsedMs} ms` : "";
     lines.push(`${item.label}\uff1a${status}${elapsed}`);
     const age = formatReportAge(item.ageMs);
@@ -1235,6 +1243,18 @@ if (args.has("--self-test")) {
     }],
   });
   assert.match(skippedSummary, /skipped: real traffic opt-in \/ requestedRealTraffic=false \/ coverage=skipped/);
+  const deferredSummary = latestReportsSummary({
+    reports: [{
+      label: "deferred cli",
+      exists: true,
+      ok: true,
+      stale: true,
+      deferred: true,
+    }],
+  });
+  assert.match(deferredSummary, /\u5df2\u5ef6\u671f\/\u53ef\u9009\uff1a1 \u4efd/);
+  assert.match(deferredSummary, /deferred cli\uff1a\u5df2\u5ef6\u671f/);
+  assert.doesNotMatch(deferredSummary, /\u9700\u91cd\u8dd1\uff1a1 \u4efd/);
   assert.match(evidenceSummary, /MCP\/Skill/);
   assert.match(evidenceSummary, /agents 26/);
   assert.match(evidenceSummary, /hashCache=12000\/42/);

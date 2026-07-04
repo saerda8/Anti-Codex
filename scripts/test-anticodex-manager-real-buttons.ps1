@@ -5,7 +5,6 @@ param(
     [string]$RuntimeRoot = $(Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "Anti-Codex\runtime"),
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$CdpPort = 0,
-    [ValidateSet("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")]
     [string[]]$Actions = @("pluginCapabilities", "mcpSkills"),
     [int]$TimeoutSec = 120,
     [int]$MaxAttempts = 2
@@ -236,6 +235,14 @@ $actionList = @($Actions |
     ForEach-Object { $_ -split "," } |
     ForEach-Object { $_.Trim() } |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$allowedActions = @("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")
+$allowedActionSet = @{}
+foreach ($allowedAction in $allowedActions) { $allowedActionSet[$allowedAction] = $true }
+$invalidActions = @($actionList | Where-Object { -not $allowedActionSet.ContainsKey($_) })
+foreach ($invalidAction in $invalidActions) {
+    Add-Failure "unsupported Manager action requested: $invalidAction"
+}
+$actionList = @($actionList | Where-Object { $allowedActionSet.ContainsKey($_) })
 $releaseRequiredActions = @("pluginCapabilities", "mcpSkills")
 $canonicalReleaseReport = $true
 foreach ($requiredAction in $releaseRequiredActions) {

@@ -169,7 +169,7 @@ function Repair-AntiCodexResidualShortcuts {
                 [bool]$root.removeCodexByName -or
                 $isDeepCodexName
             )
-            $action = if ($shouldRemove) { "removed" } else { "reported" }
+            $action = if ($shouldRemove) { "removed" } else { "preserved-native-codex" }
             $error = ""
             if ($shouldRemove) {
                 try {
@@ -204,7 +204,7 @@ function Repair-AntiCodexResidualShortcuts {
 }
 
 $residualShortcutEvidence = @(Repair-AntiCodexResidualShortcuts)
-$residualShortcutFailures = @($residualShortcutEvidence | Where-Object { $_.action -ne "removed" })
+$residualShortcutFailures = @($residualShortcutEvidence | Where-Object { $_.action -ne "removed" -and $_.action -ne "preserved-native-codex" })
 $failures = New-Object System.Collections.Generic.List[string]
 foreach ($path in @($startScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -228,6 +228,7 @@ if ($failures.Count -gt 0) {
         residualShortcutCount = @($residualShortcutEvidence).Count
         removedResidualShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "removed" }).Count
         reportedResidualShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "reported" }).Count
+        preservedNativeCodexShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "preserved-native-codex" }).Count
         failures = $failures.ToArray()
         residualShortcuts = $residualShortcutEvidence
         shortcutEvidence = @()
@@ -310,6 +311,7 @@ $result = [pscustomobject]@{
     residualShortcutCount = @($residualShortcutEvidence).Count
     removedResidualShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "removed" }).Count
     reportedResidualShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "reported" }).Count
+    preservedNativeCodexShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "preserved-native-codex" }).Count
     residualShortcuts = $residualShortcutEvidence
     shortcutEvidence = $shortcutEvidence
     shortcuts = $repaired

@@ -317,13 +317,22 @@ function managerSummaryFromActionPayload(actionName, payload) {
   }
   if (actionName === "viewLatestReports") {
     const reports = Array.isArray(result.reports) ? result.reports : [];
+    const activeReports = reports.filter((item) => item?.deferred !== true);
+    const deferredReports = reports.filter((item) => item?.deferred === true);
+    const activeStaleCount = activeReports.filter((item) => item.exists && item.stale).length;
+    const activeMissingCount = activeReports.filter((item) => !item.exists).length;
     const lines = reports.length ? [
       `\u62a5\u544a\u76ee\u5f55\uff1a${result.reportRoot || "\u672a\u77e5"}`,
       `\u5df2\u627e\u5230\uff1a${result.existingCount ?? reports.filter((item) => item.exists).length} \u4efd`,
     ] : ["\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"];
+    if (activeStaleCount) lines.push(`\u9700\u91cd\u8dd1\uff1a${activeStaleCount} \u4efd\u62a5\u544a\u5df2\u8fc7\u671f`);
+    if (activeMissingCount) lines.push(`\u672a\u751f\u6210\uff1a${activeMissingCount} \u4efd`);
+    if (deferredReports.length) lines.push(`\u5df2\u5ef6\u671f/\u53ef\u9009\uff1a${deferredReports.length} \u4efd`);
     for (const item of reports.slice(0, 80)) {
       const passed = item.effectiveOk !== null && item.effectiveOk !== undefined ? item.effectiveOk : item.ok;
-      const status = item.exists ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))) : "\u672a\u751f\u6210";
+      const status = item.exists
+        ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.deferred === true && (item.stale || !passed) ? "\u5df2\u5ef6\u671f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))))
+        : (item.deferred === true ? "\u5df2\u5ef6\u671f" : "\u672a\u751f\u6210");
       lines.push(`${item.label}\uff1a${status}`);
       if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) {
         lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
@@ -373,6 +382,17 @@ if (args.has("--self-test")) {
   assert.equal(isActionFailureText("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u9a8c\u6536\uff1a\u9700\u8981\u5904\u7406"), false);
   assert.equal(hasActionSpecificResult("viewLatestReports", managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6e90\u7801\u9884\u68c0", exists: true, ok: true, sourcePreflightEvidence: { publicDocumentationOk: true } }] } })), true);
   assert.ok(managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6a21\u578b\u53ef\u7528\u6027", exists: true, ok: true, modelRoutingEvidence: { requestAvailableModels: ["gemini-3.5-flash-low"], availabilityUnavailableModels: ["claude-sonnet-4-6", "gpt-oss-120b-medium"] } }] } }).includes("claude-sonnet-4-6"));
+  const deferredLatestReportsSummary = managerSummaryFromActionPayload("viewLatestReports", {
+    ok: true,
+    result: {
+      reportRoot: "C:\\tmp",
+      existingCount: 1,
+      reports: [{ label: "\u72ec\u7acb Antigravity CLI \u51c6\u5907", exists: true, ok: true, stale: true, deferred: true }],
+    },
+  });
+  assert.match(deferredLatestReportsSummary, /\u5df2\u5ef6\u671f\/\u53ef\u9009\uff1a1 \u4efd/);
+  assert.match(deferredLatestReportsSummary, /\u72ec\u7acb Antigravity CLI \u51c6\u5907\uff1a\u5df2\u5ef6\u671f/);
+  assert.doesNotMatch(deferredLatestReportsSummary, /\u9700\u91cd\u8dd1/);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1a\u5931\u8d25"), false);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1aZIP \u5df2\u751f\u6210"), true);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", managerSummaryFromActionPayload("diagnosticsBundle", { ok: true, result: { ok: true } })), true);

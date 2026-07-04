@@ -719,13 +719,13 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /\\u5237\\u65b0\\u672c\\u5730\\u529f\\u80fd/);
   assert.match(managerInject, /function formatReportAge/);
   assert.match(managerInject, /item\.stale/);
-  assert.match(managerInject, /staleCount/);
+  assert.match(managerInject, /activeStaleCount/);
   assert.match(managerInject, /item\.exists && item\.latestPath/);
   assert.match(managerInject, /\\u9700\\u91cd\\u8dd1/);
   assert.match(managerInject, /\\u8fd8\\u6ca1\\u6709\\u53ef\\u663e\\u793a\\u7684\\u9a8c\\u6536\\u62a5\\u544a/);
   assert.match(managerBridge, /function formatReportAge/);
   assert.match(managerBridge, /item\.stale/);
-  assert.match(managerBridge, /staleCount/);
+  assert.match(managerBridge, /activeStaleCount/);
   assert.match(managerBridge, /item\.exists && item\.latestPath/);
   assert.match(managerBridge, /\\u9700\\u91cd\\u8dd1/);
   assert.match(managerBridge, /\\u8fd8\\u6ca1\\u6709\\u53ef\\u663e\\u793a\\u7684\\u9a8c\\u6536\\u62a5\\u544a/);
@@ -769,12 +769,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v99/);
+  assert.match(managerInject, /native-panel-v100/);
   assert.match(managerInject, /latest-reports-evidence-v4/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
   assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
-  assert.match(syncReadiness, /native-panel-v99/);
-  assert.match(uiState, /native-panel-v99/);
+  assert.match(syncReadiness, /native-panel-v100/);
+  assert.match(uiState, /native-panel-v100/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -855,8 +855,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /if \(item\.exists && item\.latestPath\)/);
   assert.match(managerInject, /function formatReportAge/);
   assert.match(managerInject, /item\.exists && age/);
-  assert.match(managerInject, /result\.staleCount/);
-  assert.match(managerInject, /item\.stale \? "\\u9700\\u91cd\\u8dd1"/);
+  assert.match(managerInject, /activeStaleCount/);
+  assert.match(managerInject, /item\.deferred === true && \(item\.stale \|\| !passed\)/);
   assert.match(managerInject, /function actionProgressStage/);
   assert.match(managerInject, /setInterval\(\(\) =>/);
   assert.match(managerInject, /clearInterval\(progressTimer\)/);
@@ -1030,9 +1030,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v99["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v99"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v99"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v100["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v100"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v100"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -1480,7 +1480,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v99/);
+  assert.match(managerOpenInject, /native-panel-v100/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -1580,8 +1580,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(html, /if\(item\.exists&&item\.latestPath\)/);
   assert.match(html, /function formatReportAge/);
   assert.match(html, /item\.exists&&age/);
-  assert.match(html, /result\.staleCount/);
-  assert.match(html, /item\.stale\?"\\\\u9700\\\\u91cd\\\\u8dd1"/);
+  assert.match(html, /activeStaleCount/);
+  assert.match(html, /item\.deferred===true&&\(item\.stale\|\|!passed\)/);
   assert.match(html, /pendingHighImpactAction/);
   assert.match(html, /data-confirming-high-impact/);
   assert.ok(
@@ -1888,6 +1888,8 @@ test("Anti-Codex shortcut verification records exact targets, names, icons, and 
   assert.match(repairShortcuts, /scriptMatches/);
   assert.match(repairShortcuts, /iconMatches/);
   assert.match(repairShortcuts, /shortcutEvidence/);
+  assert.match(repairShortcuts, /preserved-native-codex/);
+  assert.match(repairShortcuts, /preservedNativeCodexShortcutCount/);
   assert.match(repairShortcuts, /Anti-Codex\.lnk/);
   assert.match(repairShortcuts, /Sync Anti-Codex with Codex\.lnk/);
   assert.match(repairShortcuts, /Rollback Anti-Codex\.lnk/);
@@ -2533,7 +2535,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v99 manager script/);
+  assert.match(manager, /latest native-panel-v100 manager script/);
   assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -7768,7 +7770,9 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
   assert.match(managerButtons, /diagnosticsBundle/);
   assert.match(managerButtons, /mcpSkills/);
   assert.match(managerButtons, /pluginCapabilities/);
-  assert.match(managerButtons, /\[ValidateSet\("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle"\)\]/);
+  assert.doesNotMatch(managerButtons, /\[ValidateSet\("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle"\)\]/);
+  assert.match(managerButtons, /\$allowedActions = @\("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle"\)/);
+  assert.match(managerButtons, /unsupported Manager action requested/);
   assert.match(managerButtons, /\$Actions = @\("pluginCapabilities", "mcpSkills"\)/);
   assert.match(managerButtons, /Get-CimInstance Win32_Process -Filter "Name = 'Anti-Codex\.exe'"/);
   assert.match(managerButtons, /--remote-debugging-port=\(\\d\+\)/);
@@ -12302,6 +12306,7 @@ test("release-required latest reports stay visible in diagnostics, Manager, and 
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const thisFile = readFileSync(new URL(import.meta.url), "utf8");
   const requiredReports = Array.from(new Set(Array.from(releaseGates.matchAll(/\{[^}]*file:\s*"([^"]+\.json)"[^}]*requiredForRelease:\s*true[^}]*\}/g), (match) => match[1]))).sort();
@@ -13118,6 +13123,8 @@ test("optional and special latest reports stay visible without becoming release-
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
   const collector = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+  const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+  const managerButton = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
   const summarizer = readFileSync(resolve(root, "scripts", "summarize-anticodex-report.mjs"), "utf8");
@@ -13157,6 +13164,16 @@ test("optional and special latest reports stay visible without becoming release-
     assert.ok(server.includes(report), `${report} missing from Manager latest reports`);
     assert.ok(installedOverall.includes(report), `${report} missing from installed overall report integrity list`);
   }
+  assert.match(server, /latest-antigravity-cli-profile-prepare\.json", \{ deferred: true \}/);
+  assert.match(server, /latest-antigravity-cli-real-smoke\.json", \{ deferred: true \}/);
+  assert.match(server, /deferredCount/);
+  assert.match(server, /item\.deferred===true/);
+  assert.match(managerInject, /deferredReports/);
+  assert.match(managerInject, /item\.deferred === true/);
+  assert.match(managerInject, /\\u5df2\\u5ef6\\u671f/);
+  assert.match(managerButton, /deferredReports/);
+  assert.match(managerButton, /item\.deferred === true/);
+  assert.match(managerButton, /\\u5df2\\u5ef6\\u671f/);
   assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-worker-mcp-status-probe\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.mjs/);
@@ -15507,15 +15524,15 @@ test("diagnostics/sourcePreflight support path must preserve antigravityCliProfi
   assert.match(server, /sourcePreflight profilePrepare caveat:/);
 });
 
-test("current Manager status uses native-panel-v99 and rejects stale v85/v98 in docs", () => {
+test("current Manager status uses native-panel-v100 and rejects stale v85/v98 in docs", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  // Current Manager status sections must declare native-panel-v99
-  assert.match(currentStatus, /native-panel-v99/);
-  assert.match(handoffCurrentStatus, /native-panel-v99/);
+  // Current Manager status sections must declare native-panel-v100
+  assert.match(currentStatus, /native-panel-v100/);
+  assert.match(handoffCurrentStatus, /native-panel-v100/);
 
   // Stale Manager version wording must not appear in current-status sections
   assert.doesNotMatch(currentStatus, /native-panel-v85/);
