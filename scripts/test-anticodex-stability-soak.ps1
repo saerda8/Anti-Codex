@@ -11,6 +11,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ([System.Net.ServicePointManager]::DefaultConnectionLimit -lt 16) {
+    [System.Net.ServicePointManager]::DefaultConnectionLimit = 16
+}
+
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
@@ -117,6 +121,36 @@ function Invoke-AntiCodexResponse {
     }
 }
 
+function Invoke-AntiCodexCancelResponse {
+    param([string]$ResponseId)
+
+    $cancelRequest = [System.Net.WebRequest]::Create("$BaseUrl/v1/responses/$ResponseId/cancel")
+    $cancelRequest.Method = "POST"
+    $cancelRequest.Proxy = $null
+    $cancelRequest.Timeout = 15000
+    $cancelRequest.ReadWriteTimeout = 15000
+    $cancelRequest.ContentType = "application/json; charset=utf-8"
+    if ($cancelRequest -is [System.Net.HttpWebRequest]) {
+        $cancelRequest.KeepAlive = $false
+    }
+
+    $cancelBytes = [Text.Encoding]::UTF8.GetBytes("{}")
+    $cancelRequest.ContentLength = $cancelBytes.Length
+    $cancelStream = $cancelRequest.GetRequestStream()
+    try {
+        $cancelStream.Write($cancelBytes, 0, $cancelBytes.Length)
+    } finally {
+        $cancelStream.Dispose()
+    }
+
+    $cancelResponse = $null
+    try {
+        $cancelResponse = $cancelRequest.GetResponse()
+    } finally {
+        if ($cancelResponse) { $cancelResponse.Dispose() }
+    }
+}
+
 function Get-AntiCodexResponseText {
     param($Response)
 
@@ -143,6 +177,9 @@ function Invoke-AntiCodexStream {
     $request.Timeout = $RequestTimeoutSec * 1000
     $request.ReadWriteTimeout = $RequestTimeoutSec * 1000
     $request.ContentType = "application/json; charset=utf-8"
+    if ($request -is [System.Net.HttpWebRequest]) {
+        $request.KeepAlive = $false
+    }
     $response = $null
     $reader = $null
     try {
@@ -173,7 +210,7 @@ function Invoke-AntiCodexStream {
             }
             if ($CancelAfterCreated -and $state.responseId -and -not $state.cancelled) {
                 $state.cancelled = $true
-                Invoke-RestMethod -Uri "$BaseUrl/v1/responses/$($state.responseId)/cancel" -Method Post -Body "{}" -ContentType "application/json" -Proxy $null -TimeoutSec 10 | Out-Null
+                Invoke-AntiCodexCancelResponse -ResponseId $state.responseId
                 $events.Add([pscustomobject]@{ event = "response.cancelled"; data = [pscustomobject]@{ response_id = $state.responseId; localCancelAccepted = $true } }) | Out-Null
             }
         }
