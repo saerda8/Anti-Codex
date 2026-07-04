@@ -13,8 +13,12 @@ const defaultReportRoot = process.env.APPDATA
   ? resolve(process.env.APPDATA, "anticodex", "reports")
   : resolve(process.cwd(), ".anticodex-reports");
 const reportRoot = resolve(argValue("--report-root", defaultReportRoot));
-const maxAgeHours = Number(argValue("--max-age-hours", "24"));
-const maxAgeMs = Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? maxAgeHours * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+const canonicalReleaseMaxAgeHours = 24;
+const requestedMaxAgeHours = Number(argValue("--max-age-hours", String(canonicalReleaseMaxAgeHours)));
+const maxAgeHours = Number.isFinite(requestedMaxAgeHours) && requestedMaxAgeHours > 0 ? requestedMaxAgeHours : canonicalReleaseMaxAgeHours;
+const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+const customFreshnessReportOnly = maxAgeHours !== canonicalReleaseMaxAgeHours;
+const safeMaxAgeLabel = String(maxAgeHours).replace(/[^0-9A-Za-z]+/g, "-").replace(/^-|-$/g, "") || String(canonicalReleaseMaxAgeHours);
 const startedAt = Date.now();
 
 const requiredCapabilities = [
@@ -445,6 +449,8 @@ const payload = {
   coverageKind: "agentic-capability-matrix-report-only",
   reportRoot,
   maxAgeHours,
+  canonicalReleaseMaxAgeHours,
+  customFreshnessReportOnly,
   requiredCapabilities,
   complete: missingCapabilities.length === 0,
   fresh: staleCapabilities.length === 0 && suiteEntry.fresh === true,
@@ -461,17 +467,23 @@ const payload = {
 
 function writeReport(payloadToWrite) {
   mkdirSync(reportRoot, { recursive: true });
-  const latest = resolve(reportRoot, "latest-agentic-capability-matrix.json");
+  const canonicalLatest = resolve(reportRoot, "latest-agentic-capability-matrix.json");
+  const latest = customFreshnessReportOnly
+    ? resolve(reportRoot, `latest-agentic-capability-matrix-max-age-${safeMaxAgeLabel}.json`)
+    : canonicalLatest;
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
-  const history = resolve(reportRoot, `${stamp}-agentic-capability-matrix.json`);
-  const body = `${JSON.stringify({ ...payloadToWrite, report: { latest, history } }, null, 2)}\n`;
+  const historySuffix = customFreshnessReportOnly
+    ? `agentic-capability-matrix-max-age-${safeMaxAgeLabel}`
+    : "agentic-capability-matrix";
+  const history = resolve(reportRoot, `${stamp}-${historySuffix}.json`);
+  const body = `${JSON.stringify({ ...payloadToWrite, report: { latest, history, canonicalLatest } }, null, 2)}\n`;
   for (const file of [latest, history]) {
     const temp = `${file}.${process.pid}.tmp`;
     writeFileSync(temp, body, "utf8");
     renameSync(temp, file);
     writeFileSync(`${file}.sha256`, `${createHash("sha256").update(body).digest("hex")}\n`, "ascii");
   }
-  return { latest, history };
+  return { latest, history, canonicalLatest };
 }
 
 const report = writeReport(payload);
