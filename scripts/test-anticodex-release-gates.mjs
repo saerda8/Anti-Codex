@@ -3334,6 +3334,205 @@ if (args.has("--self-test")) {
       "complex-project",
     ];
 
+    function fakeCurrentGoalReadinessReport(workerStatus = "fresh_probe_required") {
+      const workerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
+      const toolCountByServer = Object.fromEntries(workerServers.map((server) => [server, 1]));
+      const currentRequirementIds = ["codex_client_copy", "antigravity_model_text", "real_long_tasks_with_results", "native_codex_like_agentic_experience"];
+      const fullRequirementIds = [...currentRequirementIds, "separate_antigravity_accounts", "worker_mcp_multiuse"];
+      return {
+        ok: true,
+        reportName: "goal-readiness",
+        requestedRealTraffic: false,
+        usedRealTraffic: false,
+        behaviorCovered: true,
+        coverageKind: "goal-readiness-report-only",
+        goalComplete: true,
+        currentUsability: {
+          mode: "shared-account-worker-mcp-disabled",
+          usableNow: true,
+          releaseReady: true,
+          usesSharedAntigravityAccount: true,
+          requiresSeparateAntigravityAccount: false,
+          requiresCurrentChannelWorkerMcp: false,
+          workerMcpTemporarilyDisabled: true,
+          codexClientCopy: true,
+          antigravityModelText: true,
+          codexOwnedTools: true,
+          nativeCodexLikeAgenticEvidence: true,
+          temporaryRelaxedRequirements: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
+          caveat: "deferred worker MCP and second account",
+        },
+        goalOperatorActionCard: {
+          status: "goal_complete",
+          canClaimFullGoalNow: true,
+          releaseReady: true,
+          requiresFreshCodexChannel: false,
+          requiresUserPresence: false,
+          canMakeUnattendedProgress: true,
+          unattendedSafeActions: ["refresh_real_task_evidence", "refresh_no_traffic_goal_readiness"],
+          freshChannelRequiredActions: [],
+          userPresenceRequiredActions: [],
+          workerStatus,
+          workerCanDispatchCurrentChannel: false,
+          secondAccountStatus: "manual_windows_user_setup_required",
+          secondAccountCanAskUserToLoginNow: false,
+          missingRequirements: [],
+          nextOperatorActions: [],
+          noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
+          compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
+          secondAccountStatusCommand: "powershell.exe -File scripts\\test-anticodex-second-account-readiness-summary.ps1",
+        },
+        objectiveRequirementSummary: {
+          total: 4,
+          completeCount: 4,
+          incompleteCount: 0,
+          canClaimFullGoalNow: true,
+          incompleteRequirementIds: [],
+        },
+        objectiveRequirementAudit: currentRequirementIds.map((id) => ({ id, complete: true })),
+        fullObjectiveRequirementSummary: {
+          total: 6,
+          completeCount: 4,
+          incompleteCount: 2,
+          canClaimFullGoalNow: false,
+        },
+        fullObjectiveRequirementAudit: fullRequirementIds.map((id) => ({ id, complete: currentRequirementIds.includes(id) })),
+        deferredObjectiveRequirementSummary: {
+          deferredRequirementIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
+        },
+        proven: {
+          codexClientCopy: true,
+          workerMcp: true,
+          desktopAgenticTasks: true,
+          agenticCapabilityMatrix: true,
+          realTaskCoverageRoadmap: true,
+          longTaskLandingMatrix: true,
+          realApprovalPlan: true,
+          releaseShortPath: true,
+          secondAccountLoginEntrypoint: true,
+          secondAccountReadinessSummary: true,
+          accountIsolationPreparedOnly: true,
+        },
+        workerMcp: {
+          passedServerCount: workerServers.length,
+          toolCountByServer,
+          incompleteToolCountServers: [],
+          taskSmokeReportOk: true,
+          taskSmokeUsedRealTraffic: true,
+          taskSmokeAntigravityExcluded: true,
+          taskSmokePassedWorkerCount: REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS,
+          taskSmokeMissingRequiredWorkers: [],
+          taskSmokeFailedWorkers: [],
+          projectSmokeReportOk: true,
+          projectSmokeScenario: "project",
+          projectSmokeUsedRealTraffic: true,
+          projectSmokeAntigravityExcluded: true,
+          projectSmokePassedWorkerCount: REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS,
+          projectSmokeMissingRequiredWorkers: [],
+          projectSmokeFailedWorkers: [],
+          complexProjectSmokeReportOk: true,
+          complexProjectSmokeScenario: "complex-project",
+          complexProjectSmokeUsedRealTraffic: true,
+          complexProjectSmokeAntigravityExcluded: true,
+          complexProjectSmokePassedWorkerCount: REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS,
+          complexProjectSmokeMissingRequiredWorkers: [],
+          complexProjectSmokeFailedWorkers: [],
+        },
+        releaseGateStatus: {
+          shortReady: true,
+          releaseReady: true,
+          releaseBlockedOnlyByRequiredRealTraffic: false,
+          requiredRealTrafficBlockedGates: [],
+        },
+        realTaskCoverageRoadmap: {
+          missingProfiles: [],
+          artifactProofTaskCount: 9,
+          missingArtifactProofTaskCount: 0,
+          missingArtifactProofTasks: [],
+          artifactProofComplete: true,
+          resultProofTaskCount: 12,
+          missingResultProofTaskCount: 0,
+          missingResultProofTasks: [],
+          resultProofComplete: true,
+          approvalRequiredForRefresh: false,
+        },
+        longTaskLandingMatrix: {
+          longTaskLandingComplete: true,
+          landedLongTaskCount: 7,
+          failedLongTaskModes: [],
+        },
+        realApprovalPlan: {
+          requiredReleaseComplete: true,
+          completedRequiredGateIds: ["accountProxyReadiness", "postVerification"],
+          requiredReleaseRealTrafficActionCount: 0,
+          optionalReleaseRealTrafficActionCount: 3,
+        },
+        antigravityAccountIsolation: {
+          releaseAcceptableAccountProof: false,
+        },
+        secondAccountLoginEntrypoint: {
+          reportName: "second-antigravity-account-login-entrypoint",
+          noTraffic: true,
+          usedRealTraffic: false,
+          coverageKind: "second-account-login-entrypoint-no-traffic",
+          statusOnlyOk: true,
+          missingApprovalBlocked: true,
+          approvedStartBlockedByStatusGate: true,
+          sameWindowsUserTargetBlocked: true,
+          approvedLoginCommandTemplate: "start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\\AntiCodexModel -StartLoginApproval start-separate-windows-user-login",
+          nextNoTrafficStatusCommand: "test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\\AntiCodexModel",
+          postLoginProofCommandTemplate: "test-anticodex-antigravity-cli-real-smoke.ps1 -WindowsUser .\\AntiCodexModel -AllowSeparateAccountProof -SeparateAccountProofApprovalId approval",
+          approvedLoginCommandPresent: true,
+          nextNoTrafficStatusCommandPresent: true,
+          postLoginProofCommandPresent: true,
+          postLoginProofCommandTemplateHasWindowsUser: true,
+          postLoginProofPlanValid: true,
+        },
+        secondAccountReadinessSummary: {
+          reportName: "second-account-readiness-summary",
+          noTraffic: true,
+          usedRealTraffic: false,
+          coverageKind: "second-account-readiness-summary-no-traffic",
+          releaseAcceptableAccountProof: false,
+          goalComplete: false,
+          nextOperatorAction: "create_or_verify_target_windows_user_then_rerun_summary",
+          manualSetupCommandHint: "open Windows Settings users",
+          operatorChecklistStages: ["create_target_windows_user", "windows_user_account_prepare", "account_isolation_status", "second_account_login_entrypoint_with_explicit_approval"],
+          operatorChecklistStartsLoginCount: 1,
+          operatorChecklistUsesRealTrafficCount: 0,
+          accountIsolationCaveat: "not a real account proof",
+          approvedLoginCommandTemplate: "start-anticodex-second-antigravity-account-login.ps1 -StartLoginApproval start-separate-windows-user-login",
+          nextNoTrafficStatusCommand: "test-anticodex-antigravity-account-isolation-status.ps1",
+          postLoginProofCommandTemplate: "test-anticodex-antigravity-cli-real-smoke.ps1 -AllowSeparateAccountProof -SeparateAccountProofApprovalId approval -WindowsUser .\\AntiCodexModel",
+          approvedLoginCommandPresent: true,
+          nextNoTrafficStatusCommandPresent: true,
+          postLoginProofCommandPresent: true,
+          postLoginProofCommandTemplateHasWindowsUser: true,
+          stepCount: 7,
+          failedStepCount: 0,
+          failureCount: 0,
+        },
+        blockers: [],
+        deferredBlockers: ["second_antigravity_account_real_proof_missing"],
+        nextRequiredUserAction: "none_current_single_account_goal_complete",
+        failures: [],
+      };
+    }
+
+    for (const workerStatus of ["fresh_probe_required", "reload_required"]) {
+      writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport(workerStatus));
+      const gate = summarizeGate(gateDefinitions.find((definition) => definition.id === "goalReadiness"));
+      if (gate.satisfied !== true) {
+        throw new Error(`self-test failed: goal-readiness worker status ${workerStatus} should satisfy current scoped goal`);
+      }
+    }
+    writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport("transport_closed"));
+    const invalidWorkerStatusGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "goalReadiness"));
+    if (invalidWorkerStatusGate.satisfied === true || !invalidWorkerStatusGate.semanticFailures.includes("goal_readiness_operator_action_card_worker_status")) {
+      throw new Error("self-test failed: invalid goal-readiness worker status satisfied the current scoped goal");
+    }
+    writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport("fresh_probe_required"));
+
     function fakeRealTaskCoverageRoadmapReport(profileOverrides = {}) {
       const profileNames = ["core", "agentic", "extended", "all"];
       const profiles = profileNames.map((profile) => ({
