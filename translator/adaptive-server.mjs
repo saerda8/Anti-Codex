@@ -3769,6 +3769,8 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Long task landing matrix", "latest-long-task-landing-matrix.json"),
         latestManagerReportItem("Native Codex parity task matrix", "latest-native-codex-parity-task-matrix.json"),
         latestManagerReportItem("Goal readiness", "latest-goal-readiness.json"),
+        latestManagerReportItem("Goal unblock package", "latest-goal-unblock-package.json"),
+        latestManagerReportItem("Fresh-channel worker proof kit", "latest-fresh-channel-worker-proof-kit.json"),
         latestManagerReportItem("Agentic capability matrix", "latest-agentic-capability-matrix.json"),
         latestManagerReportItem("Real task coverage roadmap", "latest-real-task-coverage-roadmap.json"),
         latestManagerReportItem("Real approval plan", "latest-real-approval-plan.json"),
@@ -3827,6 +3829,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Antigravity 第二账号登录入口", "latest-second-antigravity-account-login-entrypoint.json"),
         latestManagerReportItem("Antigravity 第二账号总状态", "latest-second-account-readiness-summary.json"),
         latestManagerReportItem("Antigravity 第二账号登录后证明", "latest-second-account-post-login-proof.json"),
+        latestManagerReportItem("External MCP identity contract", "latest-external-mcp-identity-contract.json"),
         latestManagerReportItem("可选独立 Antigravity CLI", "latest-antigravity-cli-real-smoke.json"),
     ];
     return {

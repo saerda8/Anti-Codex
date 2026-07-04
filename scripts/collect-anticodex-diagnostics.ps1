@@ -501,6 +501,7 @@ $latestReports = @(
     "latest-second-antigravity-account-login-entrypoint.json",
     "latest-second-account-readiness-summary.json",
     "latest-second-account-post-login-proof.json",
+    "latest-external-mcp-identity-contract.json",
     "latest-antigravity-cli-real-smoke.json",
     "latest-manager-real-buttons.json",
     "latest-refresh-features.json",

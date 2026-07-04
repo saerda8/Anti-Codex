@@ -5602,7 +5602,9 @@ test("Anti-Codex ships a repeatable installed stability soak script", () => {
   assert.match(soak, /Get-AntiCodexTranslatorPid/);
   assert.match(soak, /Invoke-AntiCodexResponse/);
   assert.match(soak, /Invoke-AntiCodexStream/);
+  assert.match(soak, /Invoke-AntiCodexCancelResponse/);
   assert.match(soak, /System\.Net\.WebRequest/);
+  assert.match(soak, /KeepAlive\s*=\s*\$false/);
   assert.match(soak, /\$events\.ToArray\(\)/);
   assert.match(soak, /\$turns\.ToArray\(\)/);
   assert.match(soak, /\$failures\.ToArray\(\)/);
@@ -5625,6 +5627,7 @@ test("Anti-Codex ships a repeatable installed stability soak script", () => {
   assert.match(soak, /startReady/);
   assert.match(soak, /endReady/);
   assert.doesNotMatch(soak, /ConvertFrom-Json -Depth/);
+  assert.doesNotMatch(soak, /Invoke-RestMethod[\s\S]{0,160}\/cancel/);
   assert.doesNotMatch(soak, /Stop-Process|Codex\.exe|Antigravity\.exe/);
 });
 
@@ -5638,7 +5641,9 @@ test("Anti-Codex ships a repeatable installed streaming cancellation verifier", 
   assert.match(cancellation, /third-party/);
   assert.match(cancellation, /providerReady/);
   assert.match(cancellation, /accountReady/);
+  assert.match(cancellation, /Invoke-AntiCodexCancelResponse/);
   assert.match(cancellation, /System\.Net\.WebRequest/);
+  assert.match(cancellation, /KeepAlive\s*=\s*\$false/);
   assert.match(cancellation, /\/v1\/responses/);
   assert.match(cancellation, /\/cancel/);
   assert.match(cancellation, /response\.created/);
@@ -5662,6 +5667,7 @@ test("Anti-Codex ships a repeatable installed streaming cancellation verifier", 
   assert.match(cancellation, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
   assert.match(cancellation, /coverageKind\s*=\s*"real-traffic"/);
 
+  assert.doesNotMatch(cancellation, /Invoke-RestMethod[\s\S]{0,160}\/cancel/);
   assert.doesNotMatch(cancellation, /Stop-Process/);
   assert.doesNotMatch(cancellation, /Codex\.exe/);
   assert.doesNotMatch(cancellation, /Antigravity\.exe/);
@@ -6418,8 +6424,10 @@ test("Anti-Codex ships an installed MCP/skills verification script", () => {
   // 鈹€鈹€ Retry safety: backoff is tightly bounded for local transient only 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   assert.match(mcpSkills, /Math\]::Min\(1000,\s*250\s*\*\s*\$attempt\)/,
     "retry backoff must be capped at 1000ms to avoid masking persistent failures");
-  assert.match(mcpSkills, /\[\s*int\s*\]\$TimeoutSec\s*=\s*8/,
-    "each individual request must have a bounded timeout to limit total retry duration");
+  assert.match(mcpSkills, /\[\s*int\s*\]\$TimeoutSec\s*=\s*60/,
+    "top-level verifier budget should allow full MCP and skill parity checks by default");
+  assert.match(mcpSkills, /return \[Math\]::Max\(3, \[Math\]::Min\(15, \[int\]\[Math\]::Floor\(\$TimeoutSec \/ 6\)\)\)/,
+    "each individual request must derive a bounded timeout from the total verifier budget");
 });
 
 test("installed MCP/skills verifier fails on missing shared entries without counting comments or subtables", async () => {
@@ -7768,7 +7776,9 @@ test("Anti-Codex ships a standalone real Manager button gate", () => {
   assert.match(managerButtons, /function Get-ManagerButtonActionResult/);
   assert.match(managerButtons, /\$_ -split ","/);
   assert.match(managerButtons, /latest-\$Name\.json/);
-  assert.match(managerButtons, /New-ReportPaths "manager-real-buttons"/);
+  assert.match(managerButtons, /\$releaseRequiredActions = @\("pluginCapabilities", "mcpSkills"\)/);
+  assert.match(managerButtons, /\$reportName = if \(\$canonicalReleaseReport\) \{ "manager-real-buttons" \} else \{ "manager-real-buttons-partial" \}/);
+  assert.match(managerButtons, /New-ReportPaths \$reportName/);
   assert.match(managerButtons, /Write-AntiCodexJsonReport/);
   assert.match(managerButtons, /UTF8Encoding\]::new\(\$false\)/);
   assert.match(managerButtons, /Resolve-CdpPort/);
@@ -11823,7 +11833,10 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /not managed here/);
   assert.match(releaseGates, /account-identity evidence/);
   assert.match(releaseGates, /requireModelRoutingSemantics/);
-  assert.match(releaseGates, /model_routing_skip_requests_not_true/);
+  assert.match(releaseGates, /const skipRequestsMode = report\.skipRequests === true/);
+  assert.match(releaseGates, /const realRequestMode = report\.skipRequests === false/);
+  assert.match(releaseGates, /model_routing_no_available_real_request/);
+  assert.match(releaseGates, /model_routing_unavailable_contract/);
   assert.match(releaseGates, /model_routing_result_not_skipped/);
   assert.match(releaseGates, /requireModelThinkingSemantics/);
   assert.match(releaseGates, /model_thinking_actual_count/);
@@ -13170,6 +13183,16 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /codexSessionTransportStatus/);
   assert.match(goalReadiness, /currentChannelTransportProven/);
   assert.match(goalReadiness, /latest-current-channel-worker-transport\.json/);
+  assert.match(releaseGates, /latest-goal-unblock-package\.json/);
+  assert.match(releaseGates, /latest-fresh-channel-worker-proof-kit\.json/);
+  assert.match(server, /latest-goal-unblock-package\.json/);
+  assert.match(server, /latest-fresh-channel-worker-proof-kit\.json/);
+  assert.match(installedOverall, /latest-goal-unblock-package\.json/);
+  assert.match(installedOverall, /latest-fresh-channel-worker-proof-kit\.json/);
+  assert.match(releaseGates, /latest-external-mcp-identity-contract\.json/);
+  assert.match(collector, /latest-external-mcp-identity-contract\.json/);
+  assert.match(server, /latest-external-mcp-identity-contract\.json/);
+  assert.match(installedOverall, /latest-external-mcp-identity-contract\.json/);
   assert.match(goalReadiness, /currentChannelWorkerTransportReportOk/);
   assert.match(goalReadiness, /currentChannelSplitObserved/);
   assert.match(goalReadiness, /currentChannelWorkerTransportMaxAgeMs/);
@@ -13223,7 +13246,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerTaskSmoke, /Do not build a file URL by string concatenation/);
   assert.match(workerTaskSmoke, /--help, -h\s+Show this help message without starting workers/);
   assert.match(workerTaskSmoke, /if \(hasArg\("--help"\) \|\| hasArg\("-h"\)\)/);
-  assert.match(workerTaskSmoke, /scenario !== "project"[\s\S]*README\.md/);
+  assert.match(workerTaskSmoke, /scenario === "json"[\s\S]*README\.md/);
   assert.match(workerTaskSmoke, /extraFiles = readdirSync\(workspace/);
   assert.match(workerTaskSmoke, /extraFiles\.length === 0/);
   assert.match(workerRecovery, /reportName: "current-channel-worker-recovery"/);
