@@ -303,6 +303,24 @@ const toolBridge = report && report.toolBridge ? report.toolBridge : null;
 const compatibilityTools = report && report.compatibilityTools ? report.compatibilityTools : null;
 const nativeToolCapability = report && report.nativeToolCapability ? report.nativeToolCapability : null;
 const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
+const topLevelRequestAvailableModels = Array.isArray(report?.requestAvailableModels)
+  ? report.requestAvailableModels.map((item) => asString(item)).filter(Boolean)
+  : [];
+const topLevelAvailabilityUnavailableModels = Array.isArray(report?.availabilityUnavailableModels)
+  ? report.availabilityUnavailableModels.map((item) => asString(item)).filter(Boolean)
+  : [];
+const isModelAvailabilityReport = report?.reportName === "model-availability"
+  || /latest-model-availability\.json$/i.test(path)
+  || topLevelRequestAvailableModels.length > 0
+  || topLevelAvailabilityUnavailableModels.length > 0;
+const hasModelRoutingResultEvidence = modelRoutingResults.some((item) => item
+  && (has(item, "skippedRequest")
+    || has(item, "requestAvailable")
+    || has(item, "availabilityUnavailable")
+    || has(item, "model")
+    || has(item, "resolvedModel")
+    || has(item, "requestedModel")));
+const isModelRoutingReport = report?.reportName === "model-routing" || /latest-model-routing\.json$/i.test(path);
 const thinkingModels = Array.isArray(report?.models) && (has(report, "expectedModelCount") || has(report, "actualModelCount")) ? report.models : [];
 const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
 const sync = report && report.sync ? report.sync : null;
@@ -1310,7 +1328,7 @@ const summary = {
     } : null,
   } : null,
   skipRequests: boolField(report, "skipRequests"),
-  modelRoutingEvidence: has(report, "skipRequests") || modelRoutingResults.length ? {
+  modelRoutingEvidence: has(report, "skipRequests") || isModelRoutingReport || isModelAvailabilityReport || hasModelRoutingResultEvidence ? {
     mode: asString(report.mode),
     providerProtocol: asString(report.providerProtocol),
     providerModel: asString(report.providerModel),
@@ -1319,9 +1337,15 @@ const summary = {
     skippedRequestCount: modelRoutingResults.filter((item) => item && item.skippedRequest === true).length,
     failedResultCount: modelRoutingResults.filter((item) => item && item.ok !== true).length,
     resultErrorCount: modelRoutingResults.filter((item) => item && item.error).length,
-    requestAvailableModels: modelRoutingResults.filter((item) => item && item.requestAvailable === true).map((item) => asString(item.model)).filter(Boolean),
-    availabilityUnavailableModels: modelRoutingResults.filter((item) => item && item.availabilityUnavailable === true).map((item) => asString(item.model)).filter(Boolean),
-    availabilityUnavailableCount: modelRoutingResults.filter((item) => item && item.availabilityUnavailable === true).length,
+    requestAvailableModels: topLevelRequestAvailableModels.length
+      ? topLevelRequestAvailableModels
+      : modelRoutingResults.filter((item) => item && item.requestAvailable === true).map((item) => asString(item.model)).filter(Boolean),
+    availabilityUnavailableModels: topLevelAvailabilityUnavailableModels.length
+      ? topLevelAvailabilityUnavailableModels
+      : modelRoutingResults.filter((item) => item && item.availabilityUnavailable === true).map((item) => asString(item.model)).filter(Boolean),
+    availabilityUnavailableCount: numberField(report, "availabilityUnavailableCount") !== null
+      ? numberField(report, "availabilityUnavailableCount")
+      : modelRoutingResults.filter((item) => item && item.availabilityUnavailable === true).length,
   } : null,
   toolBridgeEvidence: toolBridge || compatibilityTools || nativeToolCapability ? {
     mode: toolBridge && has(toolBridge, "mode") ? asString(toolBridge.mode) : null,

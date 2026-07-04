@@ -2500,6 +2500,24 @@ function latestManagerReportItem(label, fileName) {
     const compatibilityTools = report?.compatibilityTools && typeof report.compatibilityTools === "object" ? report.compatibilityTools : null;
     const nativeToolCapability = report?.nativeToolCapability && typeof report.nativeToolCapability === "object" ? report.nativeToolCapability : null;
     const modelRoutingResults = Array.isArray(report?.results) ? report.results : [];
+    const topLevelRequestAvailableModels = Array.isArray(report?.requestAvailableModels)
+        ? report.requestAvailableModels.map((item) => shortSafeText(item || "", "")).filter(Boolean)
+        : [];
+    const topLevelAvailabilityUnavailableModels = Array.isArray(report?.availabilityUnavailableModels)
+        ? report.availabilityUnavailableModels.map((item) => shortSafeText(item || "", "")).filter(Boolean)
+        : [];
+    const isModelAvailabilityReport = fileName === "latest-model-availability.json"
+        || report?.reportName === "model-availability"
+        || topLevelRequestAvailableModels.length > 0
+        || topLevelAvailabilityUnavailableModels.length > 0;
+    const hasModelRoutingResultEvidence = modelRoutingResults.some((item) => item
+        && (typeof item.skippedRequest === "boolean"
+            || typeof item.requestAvailable === "boolean"
+            || typeof item.availabilityUnavailable === "boolean"
+            || typeof item.model !== "undefined"
+            || typeof item.resolvedModel !== "undefined"
+            || typeof item.requestedModel !== "undefined"));
+    const isModelRoutingReport = fileName === "latest-model-routing.json" || report?.reportName === "model-routing";
     const thinkingModels = Array.isArray(report?.models) && (typeof report?.expectedModelCount !== "undefined" || typeof report?.actualModelCount !== "undefined") ? report.models : [];
     const uiIdleSamples = Array.isArray(report?.samples) ? report.samples : [];
     const sync = report?.sync && typeof report.sync === "object" ? report.sync : null;
@@ -3433,7 +3451,7 @@ function latestManagerReportItem(label, fileName) {
                 : null,
             disclaimer: shortSafeText(report?.disclaimer || "", ""),
         } : null,
-        modelRoutingEvidence: (typeof report?.skipRequests === "boolean" || modelRoutingResults.length) ? {
+        modelRoutingEvidence: (typeof report?.skipRequests === "boolean" || isModelRoutingReport || isModelAvailabilityReport || hasModelRoutingResultEvidence) ? {
             mode: shortSafeText(report?.mode || "", ""),
             providerProtocol: shortSafeText(report?.providerProtocol || "", ""),
             providerModel: shortSafeText(report?.providerModel || "", ""),
@@ -3442,6 +3460,15 @@ function latestManagerReportItem(label, fileName) {
             skippedRequestCount: modelRoutingResults.filter((item) => item?.skippedRequest === true).length,
             failedResultCount: modelRoutingResults.filter((item) => item?.ok !== true).length,
             resultErrorCount: modelRoutingResults.filter((item) => item?.error).length,
+            requestAvailableModels: topLevelRequestAvailableModels.length
+                ? topLevelRequestAvailableModels
+                : modelRoutingResults.filter((item) => item?.requestAvailable === true).map((item) => shortSafeText(item?.model || "", "")).filter(Boolean),
+            availabilityUnavailableModels: topLevelAvailabilityUnavailableModels.length
+                ? topLevelAvailabilityUnavailableModels
+                : modelRoutingResults.filter((item) => item?.availabilityUnavailable === true).map((item) => shortSafeText(item?.model || "", "")).filter(Boolean),
+            availabilityUnavailableCount: Number.isFinite(Number(report?.availabilityUnavailableCount))
+                ? Number(report.availabilityUnavailableCount)
+                : modelRoutingResults.filter((item) => item?.availabilityUnavailable === true).length,
         } : null,
         toolBridgeEvidence: (toolBridge || compatibilityTools || nativeToolCapability) ? {
             mode: shortSafeText(toolBridge?.mode || "", ""),
@@ -3775,6 +3802,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("本地连接器检查", "latest-local-connectors.json"),
         latestManagerReportItem("安装/同步检查", "latest-sync-readiness.json"),
         latestManagerReportItem("模型路由检查", "latest-model-routing.json"),
+        latestManagerReportItem("模型可用性", "latest-model-availability.json"),
         latestManagerReportItem("模型思考预算", "latest-model-thinking.json"),
         latestManagerReportItem("日志库防护", "latest-log-db-guard.json"),
         latestManagerReportItem("后台建议防护", "latest-ambient-suggestions.json"),
@@ -4855,6 +4883,13 @@ function latestReportsSummary(result){
     if(item.modelRoutingEvidence){
       const evidence=item.modelRoutingEvidence;
       lines.push("  modelRouting: mode="+(evidence.mode||"unknown")+" / skipRequests="+(item.skipRequests?"true":"false")+" / results="+(evidence.skippedRequestCount??0)+"/"+(evidence.resultCount??0)+" / failed="+(evidence.failedResultCount??0));
+      if((Array.isArray(evidence.requestAvailableModels)&&evidence.requestAvailableModels.length)
+        || (Array.isArray(evidence.availabilityUnavailableModels)&&evidence.availabilityUnavailableModels.length)
+        || Number(evidence.availabilityUnavailableCount)>0){
+        const available=Array.isArray(evidence.requestAvailableModels)&&evidence.requestAvailableModels.length?evidence.requestAvailableModels.join(", "):"none";
+        const unavailable=Array.isArray(evidence.availabilityUnavailableModels)&&evidence.availabilityUnavailableModels.length?evidence.availabilityUnavailableModels.join(", "):"none";
+        lines.push("  modelRouting availability: available="+available+" / unavailable="+unavailable);
+      }
       if(evidence.providerProtocol||evidence.providerModel||evidence.toolBridgeMode) lines.push("  modelRouting route: protocol="+(evidence.providerProtocol||"native")+" / providerModel="+(evidence.providerModel||"none")+" / toolBridge="+(evidence.toolBridgeMode||"unknown"));
     }
     if(item.modelThinkingEvidence){
@@ -4986,21 +5021,33 @@ function latestReportsSummary(result){
 }
 function ensureLatestReportsEvidenceLines(summary,payload){
   const text=String(summary||"");
-  if(!text||text.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a")) return text;
+  if(!text) return text;
   const candidates=[payload?.result,payload?.result?.result,payload].filter(Boolean);
   const reportPayload=candidates.find((item)=>Array.isArray(item?.reports))||{};
+  let output=text;
+  const modelAvailability=reportPayload.reports?.find((item)=>item?.fileName==="latest-model-availability.json");
+  const availabilityEvidence=modelAvailability?.modelRoutingEvidence||null;
+  if(availabilityEvidence&&!output.includes("modelRouting availability:")
+    && ((Array.isArray(availabilityEvidence.requestAvailableModels)&&availabilityEvidence.requestAvailableModels.length)
+      || (Array.isArray(availabilityEvidence.availabilityUnavailableModels)&&availabilityEvidence.availabilityUnavailableModels.length)
+      || Number(availabilityEvidence.availabilityUnavailableCount)>0)){
+    const available=Array.isArray(availabilityEvidence.requestAvailableModels)&&availabilityEvidence.requestAvailableModels.length?availabilityEvidence.requestAvailableModels.join(", "):"none";
+    const unavailable=Array.isArray(availabilityEvidence.availabilityUnavailableModels)&&availabilityEvidence.availabilityUnavailableModels.length?availabilityEvidence.availabilityUnavailableModels.join(", "):"none";
+    output+="\n  modelRouting availability: available="+available+" / unavailable="+unavailable;
+  }
+  if(output.includes("\\u516c\\u5f00\\u6587\\u6863\\uff1a")) return output;
   const sourcePreflight=reportPayload.reports?.find((item)=>item?.fileName==="latest-source-preflight.json");
   const publicDocumentationOk=sourcePreflight?.publicDocumentationOk;
   const inferredOk=publicDocumentationOk===null||publicDocumentationOk===undefined
-    ? (text.includes("\\u6e90\\u7801\\u9884\\u68c0\\uff1a\\u901a\\u8fc7")?true:null)
+    ? (output.includes("\\u6e90\\u7801\\u9884\\u68c0\\uff1a\\u901a\\u8fc7")?true:null)
     : publicDocumentationOk===true;
-  if(inferredOk===null) return text;
+  if(inferredOk===null) return output;
   const publicDocumentationLine="  \\u516c\\u5f00\\u6587\\u6863\\uff1a"+(inferredOk?"\\u901a\\u8fc7":"\\u9700\\u5904\\u7406");
   if(sourcePreflight?.latestPath){
     const fileLine="  \\u6587\\u4ef6\\uff1a"+sourcePreflight.latestPath;
-    if(text.includes(fileLine)) return text.replace(fileLine,publicDocumentationLine+"\\n"+fileLine);
+    if(output.includes(fileLine)) return output.replace(fileLine,publicDocumentationLine+"\\n"+fileLine);
   }
-  return text+"\\n"+publicDocumentationLine;
+  return output+"\\n"+publicDocumentationLine;
 }
 function actionText(payload){
   const r=payload?.result||{};

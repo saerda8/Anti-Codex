@@ -904,6 +904,7 @@ function Test-ReportEncoding {
         "latest-installed-overall-fast.json",
         "latest-installed-overall.json",
         "latest-model-routing.json",
+        "latest-model-availability.json",
         "latest-model-thinking.json",
         "latest-ambient-suggestions.json",
         "latest-log-db-guard.json",

@@ -507,6 +507,7 @@ $latestReports = @(
     "latest-stability-soak.json",
     "latest-shortcut-repair.json",
     "latest-model-routing.json",
+    "latest-model-availability.json",
     "latest-model-thinking.json",
     "latest-ambient-suggestions.json",
     "latest-log-db-guard.json",

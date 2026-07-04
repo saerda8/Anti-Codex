@@ -464,6 +464,7 @@ foreach ($model in $models) {
 $endedAt = [DateTime]::UtcNow
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    reportName = "model-routing"
     failures = $failures.ToArray()
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
     baseUrl = $BaseUrl
@@ -480,6 +481,31 @@ $result = [pscustomobject]@{
 $reportPaths = New-ReportPaths "model-routing"
 $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths -Force
 Save-JsonReport $reportPaths $result
+
+if (-not $SkipRequests) {
+    $availabilityReport = [pscustomobject]@{
+        ok = ($failures.Count -eq 0)
+        reportName = "model-availability"
+        failures = $failures.ToArray()
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        coverageKind = "real-traffic"
+        elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
+        baseUrl = $BaseUrl
+        mode = $diagnosticMode
+        providerProtocol = $diagnosticProtocol
+        providerModel = $diagnosticModel
+        modelCount = $models.Count
+        models = $models
+        requestAvailableModels = @($results.ToArray() | Where-Object { $_.requestAvailable -eq $true } | ForEach-Object { [string]$_.model })
+        availabilityUnavailableModels = @($results.ToArray() | Where-Object { $_.availabilityUnavailable -eq $true } | ForEach-Object { [string]$_.model })
+        availabilityUnavailableCount = @($results.ToArray() | Where-Object { $_.availabilityUnavailable -eq $true }).Count
+        results = $results.ToArray()
+    }
+    $availabilityReportPaths = New-ReportPaths "model-availability"
+    $availabilityReport | Add-Member -NotePropertyName report -NotePropertyValue $availabilityReportPaths -Force
+    Save-JsonReport $availabilityReportPaths $availabilityReport
+}
 
 $result | ConvertTo-Json -Depth 12 -Compress
 if ($failures.Count -gt 0) { exit 1 }

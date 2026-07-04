@@ -335,6 +335,16 @@ function managerSummaryFromActionPayload(actionName, payload) {
         lines.push(`  \u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a${item.missingHistoryEvidence.status === 410 ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
         lines.push("  \u6587\u4ef6\uff1alatest-missing-history.json");
       }
+      if (item.modelRoutingEvidence) {
+        const evidence = item.modelRoutingEvidence;
+        if ((Array.isArray(evidence.requestAvailableModels) && evidence.requestAvailableModels.length)
+          || (Array.isArray(evidence.availabilityUnavailableModels) && evidence.availabilityUnavailableModels.length)
+          || Number(evidence.availabilityUnavailableCount) > 0) {
+          const available = Array.isArray(evidence.requestAvailableModels) && evidence.requestAvailableModels.length ? evidence.requestAvailableModels.join(", ") : "none";
+          const unavailable = Array.isArray(evidence.availabilityUnavailableModels) && evidence.availabilityUnavailableModels.length ? evidence.availabilityUnavailableModels.join(", ") : "none";
+          lines.push(`  modelRouting availability: available=${available} / unavailable=${unavailable}`);
+        }
+      }
     }
     return lines.join("\n");
   }
@@ -362,6 +372,7 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a2 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7\n  \u6587\u4ef6\uff1aC:\\tmp\\latest-missing-history.json"), true);
   assert.equal(isActionFailureText("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u9a8c\u6536\uff1a\u9700\u8981\u5904\u7406"), false);
   assert.equal(hasActionSpecificResult("viewLatestReports", managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6e90\u7801\u9884\u68c0", exists: true, ok: true, sourcePreflightEvidence: { publicDocumentationOk: true } }] } })), true);
+  assert.ok(managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6a21\u578b\u53ef\u7528\u6027", exists: true, ok: true, modelRoutingEvidence: { requestAvailableModels: ["gemini-3.5-flash-low"], availabilityUnavailableModels: ["claude-sonnet-4-6", "gpt-oss-120b-medium"] } }] } }).includes("claude-sonnet-4-6"));
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1a\u5931\u8d25"), false);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", "\u8bca\u65ad\u5305\uff1aZIP \u5df2\u751f\u6210"), true);
   assert.equal(hasActionSpecificResult("diagnosticsBundle", managerSummaryFromActionPayload("diagnosticsBundle", { ok: true, result: { ok: true } })), true);
