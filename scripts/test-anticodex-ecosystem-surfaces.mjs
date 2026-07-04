@@ -53,6 +53,38 @@ const REQUIRED_REPORTS = [
     },
   },
   {
+    id: "xiaoqiangWorkerProjectSmoke",
+    file: "latest-xiaoqiang-worker-mcp-project-smoke.json",
+    surface: "xiaoqiang-worker-task",
+    maxAgeHours: 24,
+    validate(report, fail) {
+      if (report.ok !== true) fail("xiaoqiang worker project smoke ok=false");
+      if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker project smoke did not use real worker traffic");
+      if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker project smoke coverage kind mismatch");
+      if (report.scenario !== "xiaoqiang-project") fail("xiaoqiang worker project smoke scenario mismatch");
+      if (Number(report.workerCount || 0) !== 3) fail("xiaoqiang worker project smoke worker count mismatch");
+      if (Number(report.passedWorkerCount || 0) !== 3) fail("xiaoqiang worker project smoke passed count mismatch");
+      const failedWorkers = Array.isArray(report.failedWorkers) ? report.failedWorkers : [];
+      if (failedWorkers.length !== 0) fail(`xiaoqiang worker project smoke has failed workers: ${failedWorkers.join(",")}`);
+      const results = Array.isArray(report.results) ? report.results : [];
+      for (const name of ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"]) {
+        const result = results.find((entry) => entry?.worker === name);
+        if (!result) {
+          fail(`xiaoqiang worker project smoke missing ${name}`);
+          continue;
+        }
+        if (result.ok !== true) fail(`xiaoqiang worker project smoke result not ok for ${name}`);
+        if (!result.jobId) fail(`xiaoqiang worker project smoke missing job id for ${name}`);
+        if (result.workspaceVerification?.ok !== true) fail(`xiaoqiang worker project smoke workspace verification failed for ${name}`);
+        if (Array.isArray(result.workspaceVerification?.extraFiles) && result.workspaceVerification.extraFiles.length !== 0) fail(`xiaoqiang worker project smoke extra files for ${name}`);
+        if (result.workspaceVerification?.doneTextMatches !== true) fail(`xiaoqiang worker project smoke done marker mismatch for ${name}`);
+        if (Number(result.workspaceVerification?.testExitCode) !== 0) fail(`xiaoqiang worker project smoke tests failed for ${name}`);
+        if (Number(result.workspaceVerification?.cliExitCode) !== 0) fail(`xiaoqiang worker project smoke CLI failed for ${name}`);
+        if (Number(result.workspaceVerification?.cliJson?.red) !== 2 || Number(result.workspaceVerification?.cliJson?.blue) !== 1) fail(`xiaoqiang worker project smoke CLI JSON mismatch for ${name}`);
+      }
+    },
+  },
+  {
     id: "pluginCapabilities",
     file: "latest-plugin-capabilities.json",
     surface: "plugins-connectors",
