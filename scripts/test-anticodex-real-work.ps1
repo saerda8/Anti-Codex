@@ -18,9 +18,9 @@ if (-not $BaseUrl) {
 $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
 $model = if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.5-flash-low" }
-$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$artifactDir = Join-Path $ReportRoot "real-work\$stamp"
-$artifactFile = Join-Path $artifactDir "anticodex-probe-tool.mjs"
+$stamp = "r$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+$artifactDir = Join-Path $ReportRoot "real-work-artifacts\$stamp"
+$artifactFile = Join-Path $artifactDir "probe.mjs"
 $marker = "REAL_WORK_MARKER_$stamp"
 
 function Add-Failure { param([string]$Message) $failures.Add($Message) | Out-Null }
@@ -81,7 +81,7 @@ function Get-ResponseText {
 function Read-ToolArguments {
     param($Call)
     if (-not $Call -or -not $Call.arguments) { return $null }
-    try { return $Call.arguments | ConvertFrom-Json } catch { Add-Failure "MCP tool arguments are invalid JSON: $($_.Exception.Message)"; return $null }
+    try { return $Call.arguments | ConvertFrom-Json } catch { Add-Failure "function tool arguments are invalid JSON: $($_.Exception.Message)"; return $null }
 }
 
 function Resolve-NodeRuntime {
@@ -151,23 +151,22 @@ try {
         Add-Failure "real node_repl MCP execution failed: $($_.Exception.Message)"
     }
 
-    $probeSource = "console.log(JSON.stringify({ok:true,marker:'$marker',tool:'anticodex-real-work'}));"
     $fileTool = @{
         type = "function"
         name = "create_probe_file"
-        description = "Create a small local probe file for Anti-Codex real-work verification."
+        description = "Return the requested path and marker for a fixed Anti-Codex verification probe."
         parameters = @{
             type = "object"
             properties = @{
-                path = @{ type = "string"; description = "Absolute file path to create." }
-                content = @{ type = "string"; description = "Exact file content." }
+                path = @{ type = "string"; description = "Absolute probe path." }
                 marker = @{ type = "string"; description = "Verification marker." }
             }
-            required = @("path", "content", "marker")
+            required = @("path", "marker")
             additionalProperties = $false
         }
     }
 
+    $probeSource = "console.log(JSON.stringify({ok:true,marker:'$marker',tool:'anticodex-real-work'}));"
     $first = Invoke-AntiCodexResponse @{
         model = $model
         stream = $false
@@ -179,7 +178,7 @@ try {
             role = "user"
             content = @(@{
                 type = "input_text"
-                text = "请调用 create_probe_file 工具恰好一次来创建探针文件。工具结果返回前不要用自然语言回答。path 使用 '$artifactFile'，marker 使用 '$marker'，content 必须完全使用以下内容：$probeSource"
+                text = "请调用 create_probe_file 工具恰好一次。工具结果返回前不要用自然语言回答。path=$artifactFile marker=$marker"
             })
         })
     }
@@ -194,14 +193,11 @@ try {
     if ($arguments -and [string]$arguments.marker -ne $marker) {
         Add-Failure "create_probe_file marker mismatch"
     }
-    if ($arguments -and [string]$arguments.content -ne $probeSource) {
-        Add-Failure "create_probe_file content mismatch"
-    }
 
     $probeRun = $null
-    if ($arguments -and [string]$arguments.path -and [string]$arguments.content) {
+    if ($arguments -and [string]$arguments.path -and [string]$arguments.marker) {
         New-Item -ItemType Directory -Path (Split-Path -Parent ([string]$arguments.path)) -Force | Out-Null
-        [IO.File]::WriteAllText([string]$arguments.path, [string]$arguments.content, [Text.Encoding]::UTF8)
+        [IO.File]::WriteAllText([string]$arguments.path, $probeSource, [Text.Encoding]::UTF8)
         if (-not (Test-Path -LiteralPath $artifactFile -PathType Leaf)) {
             Add-Failure "generated probe file was not created"
         } else {

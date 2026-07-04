@@ -390,8 +390,17 @@ const fs = require("fs");
 const path = require("path");
 const [dir, arrayProperty, kind] = process.argv.slice(2);
 const records = new Map();
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, stableValue(value[key])])
+  );
+}
 function hashItem(item) {
-  return crypto.createHash("sha256").update(JSON.stringify(item)).digest("hex");
+  return crypto.createHash("sha256").update(JSON.stringify(stableValue(item))).digest("hex");
 }
 for (const name of fs.readdirSync(dir)) {
   if (!name.endsWith(".json") || name === ".anticodex-source-manifest.json") continue;
