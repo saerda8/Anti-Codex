@@ -93,6 +93,8 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-manager-button.mjs",
   "scripts/test-anticodex-manager-real-buttons.ps1",
   "scripts/test-anticodex-mcp-skills.ps1",
+  "scripts/test-anticodex-xiaoqiang-mcp.mjs",
+  "scripts/test-anticodex-ecosystem-surfaces.mjs",
   "scripts/probe-anticodex-worker-mcp-servers.mjs",
   "scripts/test-anticodex-worker-mcp-status-probe.mjs",
   "scripts/test-anticodex-mcp-tool-loop.ps1",
@@ -194,6 +196,7 @@ const gateDefinitions = [
   { id: "requiredRealTrafficSequence", group: "no-traffic", file: "latest-required-real-traffic-sequence.json", requiredForRelease: true, requireRequiredRealTrafficSequenceSemantics: true },
   { id: "goalRealRunReadiness", group: "no-traffic", file: "latest-goal-real-run-readiness.json", requiredForRelease: true, requireGoalRealRunReadinessSemantics: true },
   { id: "approvedRealRunSequence", group: "no-traffic", file: "latest-approved-real-run-sequence.json", requiredForRelease: true, requireApprovedRealRunSequenceSemantics: true },
+  { id: "ecosystemSurfaces", group: "no-traffic", file: "latest-ecosystem-surfaces.json", requiredForRelease: true },
 
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },

@@ -977,6 +977,30 @@ $expectedMcpToolNames = @{
         "opencode_tail_job",
         "opencode_wait_for_job"
     )
+    "xiaoqiang1" = @(
+        "deepseek_cancel_job",
+        "deepseek_get_job",
+        "deepseek_implement_in_workspace",
+        "deepseek_start_implementation",
+        "deepseek_tail_job",
+        "deepseek_wait_for_job"
+    )
+    "xiaoqiang2" = @(
+        "deepseek_cancel_job",
+        "deepseek_get_job",
+        "deepseek_implement_in_workspace",
+        "deepseek_start_implementation",
+        "deepseek_tail_job",
+        "deepseek_wait_for_job"
+    )
+    "xiaoqiang3" = @(
+        "deepseek_cancel_job",
+        "deepseek_get_job",
+        "deepseek_implement_in_workspace",
+        "deepseek_start_implementation",
+        "deepseek_tail_job",
+        "deepseek_wait_for_job"
+    )
 }
 
 if ($mcpNames -contains "node_repl") {
@@ -1053,6 +1077,37 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
         }
         Add-Failure "MCP '$mcpName' real stdio tools/list failed: $($_.Exception.Message)"
     }
+}
+
+$expectedXiaoqiangMcpNames = @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")
+$missingXiaoqiangMcpNames = @($expectedXiaoqiangMcpNames | Where-Object { $mcpNames -notcontains $_ })
+$xiaoqiangMcpChecks = @(
+    foreach ($expectedXiaoqiangName in $expectedXiaoqiangMcpNames) {
+        $listCheck = @($mcpListSmokeChecks | Where-Object { $_.server -eq $expectedXiaoqiangName } | Select-Object -First 1)
+        if ($listCheck.Count -gt 0) {
+            [pscustomobject]@{
+                server = $expectedXiaoqiangName
+                present = $true
+                passed = [bool]$listCheck[0].passed
+                toolCount = [int]$listCheck[0].toolCount
+                missingExpectedTools = @($listCheck[0].missingExpectedTools)
+                error = [string]$listCheck[0].error
+            }
+        } else {
+            [pscustomobject]@{
+                server = $expectedXiaoqiangName
+                present = $false
+                passed = $false
+                toolCount = 0
+                missingExpectedTools = @($expectedMcpToolNames[$expectedXiaoqiangName])
+                error = "not checked"
+            }
+        }
+    }
+)
+$xiaoqiangMcpPassed = ($missingXiaoqiangMcpNames.Count -eq 0 -and @($xiaoqiangMcpChecks | Where-Object { -not $_.passed }).Count -eq 0)
+if ($missingXiaoqiangMcpNames.Count -gt 0) {
+    Add-Failure "missing Xiaoqiang MCP servers: $($missingXiaoqiangMcpNames -join ', ')"
 }
 
 $headroomSkillFile = Join-Path (Join-Path $skillsPath "headroom") "SKILL.md"
@@ -1164,6 +1219,13 @@ $result = [pscustomobject]@{
             realCall = $mcpRealSmoke
             realList = @($mcpListSmokeChecks)
         }
+        xiaoqiang = [pscustomobject]@{
+            checked = ($xiaoqiangMcpChecks.Count -gt 0)
+            passed = $xiaoqiangMcpPassed
+            expectedServers = $expectedXiaoqiangMcpNames
+            missingServers = $missingXiaoqiangMcpNames
+            checks = @($xiaoqiangMcpChecks)
+        }
     }
     skills = [pscustomobject]@{
         count = $skillEntries.Count
@@ -1240,6 +1302,8 @@ $consoleResult = [pscustomobject]@{
         smokePassed = $result.mcp.smoke.passed
         realCallPassed = $result.mcp.smoke.realCall.passed
         realListCount = @($mcpListSmokeChecks).Count
+        xiaoqiangPassed = $result.mcp.xiaoqiang.passed
+        xiaoqiangMissingServers = $missingXiaoqiangMcpNames
     }
     skills = [pscustomobject]@{
         count = $skillEntries.Count
