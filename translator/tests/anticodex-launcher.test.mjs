@@ -2595,6 +2595,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /accountTrafficDiagnosis/);
   assert.match(manager, /accountTrafficModel/);
   assert.match(manager, /accountTrafficSuggestedAction/);
+  assert.match(inject, /function trafficSuccessAfterFailure/);
+  assert.match(inject, /trafficSuccessAfterFailure\(health\)\) return ""/);
   assert.match(manager, /\$trafficDiagnosis/);
   assert.match(manager, /quota_or_limit_reached/);
   assert.match(manager, /antigravity_quota_exceeded/);

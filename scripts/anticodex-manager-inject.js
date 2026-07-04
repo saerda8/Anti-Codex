@@ -663,12 +663,21 @@
       || String(health?.accountTrafficType || "") === "antigravity_quota_exceeded";
   }
 
+  function trafficSuccessAfterFailure(health) {
+    const successMs = Date.parse(String(health?.accountTrafficLastSuccessAt || ""));
+    const failureMs = Date.parse(String(health?.accountTrafficLastFailureAt || ""));
+    return Number.isFinite(successMs) && Number.isFinite(failureMs) && successMs > failureMs;
+  }
+
   function trafficNoticeKey(health) {
     const diagnosis = trafficDiagnosis(health);
     if (isQuotaLimitTraffic(health)) return "quota_or_limit_reached";
     if (diagnosis === "account_verification_required" || diagnosis === "account_verification_with_missing_token") return diagnosis;
     if (diagnosis === "antigravity_account_unavailable") return diagnosis;
-    if (health?.accountTrafficRetryable === true || diagnosis === "antigravity_temporarily_unavailable") return "antigravity_temporarily_unavailable";
+    if (health?.accountTrafficRetryable === true || diagnosis === "antigravity_temporarily_unavailable") {
+      if (health?.accountTrafficReady === true || trafficSuccessAfterFailure(health)) return "";
+      return "antigravity_temporarily_unavailable";
+    }
     return "";
   }
 
