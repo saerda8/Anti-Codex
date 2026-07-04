@@ -636,6 +636,11 @@ function latestReportsSummary(result) {
     if (item.modelRoutingEvidence) {
       const evidence = item.modelRoutingEvidence;
       lines.push(`  modelRouting: mode=${evidence.mode || "unknown"} / skipRequests=${item.skipRequests ? "true" : "false"} / results=${evidence.skippedRequestCount ?? 0}/${evidence.resultCount ?? 0} / failed=${evidence.failedResultCount ?? 0}`);
+      if (Array.isArray(evidence.requestAvailableModels) || Array.isArray(evidence.availabilityUnavailableModels)) {
+        const available = Array.isArray(evidence.requestAvailableModels) && evidence.requestAvailableModels.length ? evidence.requestAvailableModels.join(", ") : "none";
+        const unavailable = Array.isArray(evidence.availabilityUnavailableModels) && evidence.availabilityUnavailableModels.length ? evidence.availabilityUnavailableModels.join(", ") : "none";
+        lines.push(`  modelRouting availability: available=${available} / unavailable=${unavailable}`);
+      }
       if (evidence.providerProtocol || evidence.providerModel || evidence.toolBridgeMode) lines.push(`  modelRouting route: protocol=${evidence.providerProtocol || "native"} / providerModel=${evidence.providerModel || "none"} / toolBridge=${evidence.toolBridgeMode || "unknown"}`);
     }
     if (item.modelThinkingEvidence) {

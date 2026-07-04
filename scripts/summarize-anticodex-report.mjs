@@ -1319,6 +1319,9 @@ const summary = {
     skippedRequestCount: modelRoutingResults.filter((item) => item && item.skippedRequest === true).length,
     failedResultCount: modelRoutingResults.filter((item) => item && item.ok !== true).length,
     resultErrorCount: modelRoutingResults.filter((item) => item && item.error).length,
+    requestAvailableModels: modelRoutingResults.filter((item) => item && item.requestAvailable === true).map((item) => asString(item.model)).filter(Boolean),
+    availabilityUnavailableModels: modelRoutingResults.filter((item) => item && item.availabilityUnavailable === true).map((item) => asString(item.model)).filter(Boolean),
+    availabilityUnavailableCount: modelRoutingResults.filter((item) => item && item.availabilityUnavailable === true).length,
   } : null,
   toolBridgeEvidence: toolBridge || compatibilityTools || nativeToolCapability ? {
     mode: toolBridge && has(toolBridge, "mode") ? asString(toolBridge.mode) : null,
