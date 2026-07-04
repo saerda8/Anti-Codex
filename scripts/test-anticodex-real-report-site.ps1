@@ -2,6 +2,7 @@
 param(
     [string]$BaseUrl = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [string]$Model = $(if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.5-flash-low" }),
     [int]$TimeoutSec = 240,
     [switch]$AllowRealTraffic
 )
@@ -14,7 +15,6 @@ $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $marker = "REPORT_SITE_MARKER_$stamp"
 $artifactDir = Join-Path $ReportRoot "real-report-site\$stamp"
 $started = Get-Date
-$testModel = "gemini-3.5-flash-low"
 
 function Add-Failure { param([string]$Message) $failures.Add($Message) | Out-Null }
 
@@ -67,6 +67,24 @@ function Invoke-ResponsesJson {
         -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
         -TimeoutSec $TimeoutSec `
         -Proxy $null
+}
+
+function Invoke-ResponsesJsonWithRetry {
+    param(
+        [hashtable]$Body,
+        [string]$Stage
+    )
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        try { return Invoke-ResponsesJson $Body } catch {
+            $lastError = $_
+            $message = $_.Exception.Message
+            $retryable = $message -match "connection.*closed|ECONNRESET|temporarily unavailable|timeout"
+            if (-not $retryable -or $attempt -ge 2) { throw }
+            Start-Sleep -Seconds 2
+        }
+    }
+    throw $lastError
 }
 
 function Get-ResponseItems {
@@ -143,6 +161,8 @@ $searchText = ""
 $reportText = ""
 $htmlText = ""
 $sourceUrls = @()
+$toolCallAttemptCount = 0
+$toolCallRetryReason = ""
 
 try {
     $health = Invoke-RestMethod -Uri "$script:ResolvedBaseUrl/health" -Proxy $null -TimeoutSec 8
@@ -150,12 +170,12 @@ try {
 
     $searchPrompt = @(
         "Use web_search to research recent OpenAI Codex updates.",
-        "Return a concise Chinese evidence brief with at least three source URLs.",
+        "Return a concise Chinese evidence brief with at least three source URLs. Keep the answer under 1200 characters.",
         "Do not create files yet. Do not say browsing is unavailable unless a real web_search call failed."
     ) -join "`n"
 
-    $search = Invoke-ResponsesJson @{
-        model = $testModel
+    $search = Invoke-ResponsesJsonWithRetry -Stage "search" -Body @{
+        model = $Model
         stream = $false
         store = $true
         input = @(@{
@@ -165,6 +185,7 @@ try {
         })
     }
     $searchText = Get-ResponseText $search
+    if ($searchText.Length -gt 2400) { $searchText = $searchText.Substring(0, 2400) }
     $sourceUrls = @(Get-Urls $searchText)
     if (-not $search.id) { Add-Failure "search response did not contain an id" }
     if ($sourceUrls.Count -lt 3) { Add-Failure "web research did not produce at least three source URLs" }
@@ -175,12 +196,12 @@ try {
     $writeTool = @{
         type = "function"
         name = "write_report_site"
-        description = "Write a Chinese research report and a standalone HTML page."
+        description = "Required artifact writer. Use this tool call, not prose, to write report.md and index.html content."
         parameters = @{
             type = "object"
             properties = @{
-                report_md = @{ type = "string"; description = "Complete UTF-8 markdown content for report.md." }
-                index_html = @{ type = "string"; description = "Complete standalone UTF-8 HTML content for index.html." }
+                report_md = @{ type = "string"; minLength = 200; description = "Complete UTF-8 markdown content for report.md." }
+                index_html = @{ type = "string"; minLength = 300; description = "Complete standalone UTF-8 HTML content for index.html." }
                 marker = @{ type = "string" }
             }
             required = @("report_md", "index_html", "marker")
@@ -192,18 +213,21 @@ try {
         "Evidence from the completed Anti-Codex web research:",
         $searchText,
         "",
-        "Based only on the previous web research, call write_report_site exactly once.",
+        "Based only on the previous web research, emit a write_report_site function_call exactly once.",
+        "This turn is invalid unless the output item type is function_call with name write_report_site.",
         "Use report_md for the complete report.md content and index_html for the complete index.html content.",
         "report_md requirements: Chinese title, three update bullets, each with a raw source URL, a short risk/recommendation section, and marker $marker.",
         "index_html requirements: standalone HTML, Chinese visible content, links to the source URLs, a link to report.md, a compact visual layout, and marker $marker.",
-        "Do not answer in prose before the tool result."
+        "Do not answer in prose. Do not explain. Do not say you will write files. Only call write_report_site."
     ) -join "`n"
 
-    $artifact = Invoke-ResponsesJson @{
-        model = $testModel
+    $forcedToolChoice = @{ type = "function"; function = @{ name = "write_report_site" } }
+    $toolCallAttemptCount = 1
+    $artifact = Invoke-ResponsesJsonWithRetry -Stage "artifact" -Body @{
+        model = $Model
         stream = $false
         store = $true
-        tool_choice = "required"
+        tool_choice = $forcedToolChoice
         tools = @($writeTool)
         input = @(@{
             type = "message"
@@ -213,6 +237,31 @@ try {
     }
 
     $call = @(Get-ResponseItems $artifact | Where-Object { $_.type -eq "function_call" -and $_.name -eq "write_report_site" }) | Select-Object -First 1
+    if (-not $call -or -not $call.call_id) {
+        $toolCallRetryReason = "missing_write_report_site_function_call"
+        $toolCallAttemptCount = 2
+        $retryPrompt = @(
+            "MUST emit a function_call now. The only valid response is write_report_site.",
+            "Do not return markdown prose in the assistant message.",
+            "report_md must be complete Chinese Markdown with marker $marker and these raw source URLs:",
+            ($sourceUrls -join "`n"),
+            "index_html must be complete standalone HTML with Chinese text, a report.md link, the same source URLs, and marker $marker.",
+            "Use the write_report_site tool arguments report_md, index_html, and marker. marker must exactly equal $marker."
+        ) -join "`n"
+        $artifact = Invoke-ResponsesJsonWithRetry -Stage "artifact_retry" -Body @{
+            model = $Model
+            stream = $false
+            store = $true
+            tool_choice = $forcedToolChoice
+            tools = @($writeTool)
+            input = @(@{
+                type = "message"
+                role = "user"
+                content = @(@{ type = "input_text"; text = $retryPrompt })
+            })
+        }
+        $call = @(Get-ResponseItems $artifact | Where-Object { $_.type -eq "function_call" -and $_.name -eq "write_report_site" }) | Select-Object -First 1
+    }
     if (-not $artifact.id) { Add-Failure "artifact response did not contain an id" }
     if (-not $call -or -not $call.call_id) { Add-Failure "artifact response did not emit write_report_site function_call" }
     $arguments = Read-ToolArguments $call
@@ -256,13 +305,15 @@ try {
         behaviorCovered = ($failures.Count -eq 0)
         coverageKind = "real-traffic-report-site"
         failures = @($failures)
-        model = $testModel
+        model = $Model
         baseUrl = $script:ResolvedBaseUrl
         elapsedMs = [int]((Get-Date) - $started).TotalMilliseconds
         marker = $marker
         search_response_id = if ($search) { [string]$search.id } else { "" }
         artifact_response_id = if ($artifact) { [string]$artifact.id } else { "" }
         call_id = if ($call) { [string]$call.call_id } else { "" }
+        toolCallAttemptCount = $toolCallAttemptCount
+        toolCallRetryReason = $toolCallRetryReason
         sourceUrls = @($sourceUrls)
         artifact = [pscustomobject]@{
             directory = $artifactDir
@@ -287,10 +338,12 @@ try {
         behaviorCovered = $false
         coverageKind = "real-traffic-report-site"
         failures = @($failures)
-        model = $testModel
+        model = $Model
         baseUrl = $script:ResolvedBaseUrl
         elapsedMs = [int]((Get-Date) - $started).TotalMilliseconds
         marker = $marker
+        search_response_id = if ($search) { [string]$search.id } else { "" }
+        artifact_response_id = if ($artifact) { [string]$artifact.id } else { "" }
         artifact = [pscustomobject]@{ directory = $artifactDir; files = @($writtenFiles) }
     }
     Save-Report $payload

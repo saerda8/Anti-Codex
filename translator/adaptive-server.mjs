@@ -10771,6 +10771,7 @@ function latestUserTextForInternalWeb(request) {
 function preferredInternalWebToolName(request) {
     const choiceName = request?.tool_choice?.function?.name || request?.tool_choice?.name || "";
     if (choiceName === "web_search" || choiceName === "web_fetch") return choiceName;
+    if (choiceName) return "";
     const text = latestUserTextForInternalWeb(request) || recentUserTextForInternalWeb(request);
     if (!text.trim()) return "";
     if (/https?:\/\/\S+/i.test(text)) return "web_fetch";

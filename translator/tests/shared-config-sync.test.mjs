@@ -54,6 +54,58 @@ test("shared config sync preserves DeepCodex-only plugin registrations", () => {
   assert.match(next, /\[projects\.foo\]\ntrust_level = "trusted"/);
 });
 
+test("shared config sync removes stale local MCP server blocks", () => {
+  const dir = tempDir();
+  const source = path.join(dir, "global.toml");
+  const target = path.join(dir, "deepcodex.toml");
+
+  fs.writeFileSync(source, [
+    'model = "gpt"',
+    "",
+    "[mcp_servers.node_repl]",
+    'command = "node"',
+    "args = []",
+    "",
+    "[mcp_servers.node_repl.env]",
+    'NODE_REPL = "1"',
+    "",
+    "[mcp_servers.shared_worker]",
+    'command = "node"',
+    'args = ["shared.mjs"]',
+    "",
+  ].join("\n"));
+
+  fs.writeFileSync(target, [
+    'model = "deepseek"',
+    "",
+    "[mcp_servers.stale_worker]",
+    'command = "node"',
+    'args = ["missing.mjs"]',
+    "",
+    "[mcp_servers.stale_worker.env]",
+    'OLD = "1"',
+    "",
+    "[mcp_servers.stale_worker.tools.old_call]",
+    "enabled = true",
+    "",
+    "[mcp_servers.node_repl]",
+    'command = "old-node"',
+    "",
+    "[features]",
+    "web_search = true",
+    "",
+  ].join("\n"));
+
+  execFileSync(process.execPath, [syncSharedConfig, source, target]);
+  const next = fs.readFileSync(target, "utf8");
+
+  assert.doesNotMatch(next, /\[mcp_servers\.stale_worker\]/);
+  assert.doesNotMatch(next, /\[mcp_servers\.stale_worker\.env\]/);
+  assert.doesNotMatch(next, /\[mcp_servers\.stale_worker\.tools\.old_call\]/);
+  assert.match(next, /\[mcp_servers\.node_repl\]\ncommand = "node"\nargs = \[\]/);
+  assert.match(next, /\[mcp_servers\.shared_worker\]\ncommand = "node"\nargs = \["shared\.mjs"\]/);
+});
+
 test("DeepCodex-only plugin registrations are written back to current and global config", () => {
   const dir = tempDir();
   const current = path.join(dir, "current.toml");

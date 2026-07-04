@@ -35,6 +35,10 @@ function isShared(block) {
   return Boolean(block.header && sharedSectionRe.test(block.header));
 }
 
+function isMcpBlock(block) {
+  return Boolean(block.header?.startsWith("[mcp_servers."));
+}
+
 function parseTomlStringArray(value) {
   const raw = String(value || "").trim();
   if (!raw.startsWith("[") || !raw.endsWith("]")) return null;
@@ -142,8 +146,9 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
     .map(normalizeWindowsMcpShim)
     .map(normalizeMissingWindowsMcpCommand);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
+  const sourceHasMcpBlocks = sourceShared.some(isMcpBlock);
   const keptTargetBlocks = targetBlocks.filter(
-    (block) => !isShared(block) || !sourceHeaders.has(block.header)
+    (block) => !isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block)))
   );
   return [...keptTargetBlocks, ...sourceShared];
 }

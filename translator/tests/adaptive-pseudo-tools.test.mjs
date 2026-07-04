@@ -5105,6 +5105,28 @@ test("plain web searches can still use deterministic internal web summaries", ()
   assert.equal(shouldUseDeterministicInternalWebSearchResponse(request), true);
 });
 
+test("specific non-web tool choice is not preempted by URL-bearing artifact text", () => {
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Create report.md from https://developers.openai.com/codex/changelog and call write_report_site exactly once.",
+      }],
+    }],
+    tool_choice: { type: "function", function: { name: "write_report_site" } },
+    tools: [
+      { type: "function", function: { name: "write_report_site", parameters: { type: "object" } } },
+      { type: "function", function: { name: "web_fetch", parameters: { type: "object" } } },
+    ],
+  };
+
+  assert.equal(requestNeedsInternalWebTools(request), false);
+  assert.equal(shouldUseDeterministicInternalWebSearchResponse(request), false);
+});
+
 test("complex project web prefetch keeps external Codex tools for model-led work", async () => {
   const originalTool = globalThis.__DEEPCODEX_TEST_EXEC_INTERNAL_TOOL__;
   const userText = "Search the web for recent Codex updates, then create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt in C:\\Temp\\desktop-visible-complex-project\\run. done.txt must contain UI_COMPLEX_PROJECT_SMOKE_20260701.";

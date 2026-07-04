@@ -294,15 +294,37 @@ function Get-McpServerNamesFromToml {
     param([string]$Text)
     if (-not $Text) { return @() }
     return @([regex]::Matches($Text, "(?m)^\s*\[mcp_servers\.([^\]]+)\]") |
-        ForEach-Object { $_.Groups[1].Value } |
+        ForEach-Object { Normalize-McpServerName $_.Groups[1].Value } |
         Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
         Sort-Object -Unique)
+}
+
+function Normalize-McpServerName {
+    param([string]$Name)
+    if (-not $Name) { return "" }
+    $trimmed = $Name.Trim()
+    if ($trimmed.StartsWith('"') -and $trimmed.EndsWith('"') -and $trimmed.Length -ge 2) {
+        try {
+            return [System.Text.RegularExpressions.Regex]::Unescape($trimmed.Substring(1, $trimmed.Length - 2))
+        } catch {
+            return $trimmed.Substring(1, $trimmed.Length - 2)
+        }
+    }
+    return $trimmed
+}
+
+function Get-McpTomlKeyPattern {
+    param([string]$Name)
+    if (-not $Name) { return "" }
+    $barePattern = [regex]::Escape($Name)
+    $quotedPattern = '"' + [regex]::Escape($Name.Replace('\', '\\').Replace('"', '\"')) + '"'
+    return "(?:$barePattern|$quotedPattern)"
 }
 
 function Get-McpSectionText {
     param([string]$Text, [string]$Name)
     if (-not $Text -or -not $Name) { return "" }
-    $namePattern = [regex]::Escape($Name)
+    $namePattern = Get-McpTomlKeyPattern $Name
     $match = [regex]::Match($Text, "(?ms)^\s*\[mcp_servers\.$namePattern\]\s*(.*?)(?=^\s*\[|\z)")
     if ($match.Success) { return $match.Groups[1].Value }
     return ""
@@ -311,7 +333,7 @@ function Get-McpSectionText {
 function Get-McpNestedSectionText {
     param([string]$Text, [string]$Name, [string]$Child)
     if (-not $Text -or -not $Name -or -not $Child) { return "" }
-    $namePattern = [regex]::Escape($Name)
+    $namePattern = Get-McpTomlKeyPattern $Name
     $childPattern = [regex]::Escape($Child)
     $match = [regex]::Match($Text, "(?ms)^\s*\[mcp_servers\.$namePattern\.$childPattern\]\s*(.*?)(?=^\s*\[|\z)")
     if ($match.Success) { return $match.Groups[1].Value }
@@ -456,7 +478,7 @@ function Resolve-NodeRuntime {
 }
 
 function Get-McpSmokeTimeoutMs {
-    return [Math]::Max(3000, [Math]::Min(8000, $TimeoutSec * 1000))
+    return [Math]::Max(3000, [Math]::Min(20000, [int][Math]::Floor($TimeoutSec * 1000 / 3)))
 }
 
 function Limit-TextForError {
@@ -466,6 +488,22 @@ function Limit-TextForError {
     return $Text.Substring(0, $MaxLength) + "...(truncated)"
 }
 
+function ConvertTo-ProcessArgument {
+    param([AllowNull()][string]$Argument)
+    if ($null -eq $Argument) { return '""' }
+    $arg = [string]$Argument
+    if ($arg.Length -eq 0) { return '""' }
+    if ($arg -notmatch '[\s"]') { return $arg }
+    $escaped = $arg -replace '(\\*)"', '$1$1\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
+function Join-ProcessArguments {
+    param([string[]]$Arguments)
+    return (@($Arguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join " ")
+}
+
 function Invoke-NodeJsonWithProcessTimeout {
     param(
         [string]$NodePath,
@@ -473,14 +511,22 @@ function Invoke-NodeJsonWithProcessTimeout {
         [int]$ProcessTimeoutMs,
         [string]$Description
     )
-    $tempRoot = Join-Path $StateRoot "tmp"
-    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-    $stamp = [guid]::NewGuid().ToString("N")
-    $stdoutPath = Join-Path $tempRoot "mcp-smoke-$stamp.out"
-    $stderrPath = Join-Path $tempRoot "mcp-smoke-$stamp.err"
     $process = $null
     try {
-        $process = Start-Process -FilePath $NodePath -ArgumentList $Arguments -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $NodePath
+        $startInfo.Arguments = Join-ProcessArguments $Arguments
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) {
+            throw "$Description process failed to start"
+        }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
         $completed = $process.WaitForExit([Math]::Max(1000, $ProcessTimeoutMs))
         if (-not $completed) {
             try {
@@ -493,8 +539,9 @@ function Invoke-NodeJsonWithProcessTimeout {
             }
             throw "$Description process timed out after $ProcessTimeoutMs ms"
         }
-        $stdout = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { Get-Content -LiteralPath $stdoutPath -Raw } else { "" }
-        $stderr = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { Get-Content -LiteralPath $stderrPath -Raw } else { "" }
+        $process.WaitForExit()
+        $stdout = [string]$stdoutTask.GetAwaiter().GetResult()
+        $stderr = [string]$stderrTask.GetAwaiter().GetResult()
         $parsed = $null
         if ($stdout.Trim()) {
             try {
@@ -514,7 +561,7 @@ function Invoke-NodeJsonWithProcessTimeout {
         if ($null -ne $parsed) { return $parsed }
         return ($stdout | ConvertFrom-Json -ErrorAction Stop)
     } finally {
-        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+        if ($process) { $process.Dispose() }
     }
 }
 
@@ -604,7 +651,7 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
     Add-Failure "installed config.toml missing: $configPath"
 } else {
     try {
-        $configText = Get-Content -LiteralPath $configPath -Raw
+        $configText = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
         if ($configText -notmatch "\[mcp_servers\]") { Add-Failure "config.toml missing [mcp_servers]" }
         if ($configText -notmatch "\[mcp_servers\.node_repl\]") { Add-Failure "config.toml missing node_repl MCP server" }
         if ($configText -match "chatgpt\.com/(auth|login)") { Add-Failure "config.toml contains ChatGPT login route" }
@@ -818,7 +865,7 @@ if ($configText) {
     $sharedConfigText = ""
     if (Test-Path -LiteralPath $sharedConfigPath -PathType Leaf) {
         try {
-            $sharedConfigText = Get-Content -LiteralPath $sharedConfigPath -Raw
+            $sharedConfigText = Get-Content -LiteralPath $sharedConfigPath -Raw -Encoding UTF8
             $sharedMcpNames = @(Get-McpServerNamesFromToml $sharedConfigText)
             $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
             $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
@@ -852,8 +899,7 @@ if ($configText) {
         }
     }
     foreach ($mcpName in $mcpNames) {
-        $sectionMatch = [regex]::Match($configText, "(?ms)^\[mcp_servers\.$([regex]::Escape($mcpName))\]\s*(.*?)(?=^\[|\z)")
-        $section = if ($sectionMatch.Success) { $sectionMatch.Groups[1].Value } else { "" }
+        $section = Get-McpSectionText $configText $mcpName
         $commandMatch = [regex]::Match($section, "(?m)^\s*command\s*=\s*['""]([^'""]+)['""]")
         $argsMatch = [regex]::Match($section, "(?m)^\s*args\s*=\s*\[(.*?)\]")
         $commandValue = if ($commandMatch.Success) { $commandMatch.Groups[1].Value } else { "" }

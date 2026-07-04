@@ -144,9 +144,23 @@ function Get-McpServerNamesFromToml {
     param([string]$Text)
     if (-not $Text) { return @() }
     return @([regex]::Matches($Text, "(?m)^\s*\[mcp_servers\.([^\]]+)\]") |
-        ForEach-Object { $_.Groups[1].Value } |
+        ForEach-Object { Normalize-McpServerName $_.Groups[1].Value } |
         Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
         Sort-Object -Unique)
+}
+
+function Normalize-McpServerName {
+    param([string]$Name)
+    if (-not $Name) { return "" }
+    $trimmed = $Name.Trim()
+    if ($trimmed.StartsWith('"') -and $trimmed.EndsWith('"') -and $trimmed.Length -ge 2) {
+        try {
+            return [System.Text.RegularExpressions.Regex]::Unescape($trimmed.Substring(1, $trimmed.Length - 2))
+        } catch {
+            return $trimmed.Substring(1, $trimmed.Length - 2)
+        }
+    }
+    return $trimmed
 }
 
 function Get-LinkTargetValue {
@@ -386,6 +400,22 @@ if ($VerifyOnly) {
     } catch {
         Add-Failure "sidecar refresh failed: $($_.Exception.Message)"
     }
+    try {
+        $sourceConfig = Join-Path $SharedCodexHome "config.toml"
+        $targetConfig = Join-Path $CodexHome "config.toml"
+        if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
+            $finalConfigSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig)
+            if ($finalConfigSyncSummary) {
+                if ($configSyncSummary) {
+                    $configSyncSummary = "$configSyncSummary; final-resync: $finalConfigSyncSummary"
+                } else {
+                    $configSyncSummary = "final-resync: $finalConfigSyncSummary"
+                }
+            }
+        }
+    } catch {
+        Add-Failure "final shared config refresh failed: $($_.Exception.Message)"
+    }
 }
 
 $configPath = Join-Path $CodexHome "config.toml"
@@ -398,7 +428,7 @@ if (-not $VerifyOnly) {
 }
 $configText = ""
 if (Test-Path -LiteralPath $configPath -PathType Leaf) {
-    $configText = Get-Content -LiteralPath $configPath -Raw
+    $configText = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
 } else {
     Add-Failure "config.toml missing after refresh"
 }
