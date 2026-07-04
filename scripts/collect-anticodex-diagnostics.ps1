@@ -487,6 +487,7 @@ $latestReports = @(
     "latest-plugin-capabilities.json",
     "latest-local-connectors.json",
     "latest-release-gates.json",
+    "latest-translator-recovery.json",
     "latest-cold-relaunch.json",
     "latest-third-party-provider.json",
     "latest-missing-history.json",

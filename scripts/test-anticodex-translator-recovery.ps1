@@ -2,23 +2,57 @@
 param(
     [string]$BaseUrl = "",
     [string]$RuntimeRoot = $(Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "Anti-Codex\runtime"),
+    [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$TimeoutSec = 8
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "anticodex-report-io.ps1")
+
 $totalStopwatch = [Diagnostics.Stopwatch]::StartNew()
-$totalBudgetMs = 25000
+$totalBudgetMs = [Math]::Max(25000, ([Math]::Max(1, $TimeoutSec) * 1000) + 15000)
 $phaseTimings = [ordered]@{}
 
-if (-not $BaseUrl) {
-    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
-}
-
 $failures = New-Object System.Collections.Generic.List[string]
+$warnings = New-Object System.Collections.Generic.List[string]
+$launcherTimedOut = $false
+$launcherStdoutTail = ""
+$launcherStderrTail = ""
 
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
+}
+
+function Add-Warning {
+    param([string]$Message)
+    $warnings.Add($Message) | Out-Null
+}
+
+function New-ReportPaths {
+    param([string]$Name)
+    New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    return [pscustomobject]@{
+        latest = (Join-Path $ReportRoot "latest-$Name.json")
+        history = (Join-Path $ReportRoot "$stamp-$Name.json")
+    }
+}
+
+function Save-RecoveryReport {
+    param($Paths, $Payload)
+    $json = $Payload | ConvertTo-Json -Depth 8 -Compress
+    Write-AntiCodexJsonReport -LatestPath $Paths.latest -HistoryPath $Paths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
+    return $json
+}
+
+if (-not $BaseUrl) {
+    try {
+        $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+    } catch {
+        Add-Failure "base URL resolution failed: $($_.Exception.Message)"
+        $BaseUrl = "http://127.0.0.1:0"
+    }
 }
 
 function Has-Property {
@@ -92,7 +126,13 @@ $codexHome = Join-Path $stateRoot "codex-home-deepseek-app"
 $globalCodexHome = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) ".codex"
 $globalConfig = Join-Path $globalCodexHome "config.toml"
 $globalConfigBefore = Get-FileSnapshot $globalConfig
-$baseUri = [Uri]$BaseUrl
+$baseUri = $null
+try {
+    $baseUri = [Uri]$BaseUrl
+} catch {
+    Add-Failure "base URL is not a valid URI: $BaseUrl"
+    $baseUri = [Uri]"http://127.0.0.1:0"
+}
 
 if (-not (Test-Path -LiteralPath $startScript -PathType Leaf)) {
     Add-Failure "runtime start-deepcodex.ps1 missing: $startScript"
@@ -133,7 +173,10 @@ if (-not (Test-Path -LiteralPath $startScript -PathType Leaf)) {
         }
         if (-not $launcherProc.HasExited) {
             try { $launcherProc.Kill() } catch {}
-            Add-Failure "translator-only launcher timed out after $launcherTimeoutMs ms; stdout=$(Get-ShortFileText $launcherStdout); stderr=$(Get-ShortFileText $launcherStderr)"
+            $launcherTimedOut = $true
+            $launcherStdoutTail = Get-ShortFileText $launcherStdout
+            $launcherStderrTail = Get-ShortFileText $launcherStderr
+            Add-Warning "translator-only launcher timed out after $launcherTimeoutMs ms but follow-up endpoint checks determine recovery status; stdout=$launcherStdoutTail; stderr=$launcherStderrTail"
         } elseif ($launcherProc.ExitCode -ne 0) {
             Add-Failure "translator-only launcher exited with code $($launcherProc.ExitCode); stdout=$(Get-ShortFileText $launcherStdout); stderr=$(Get-ShortFileText $launcherStderr)"
         }
@@ -206,12 +249,23 @@ $totalStopwatch.Stop()
 $phaseTimings.totalElapsedMs = [int]$totalStopwatch.ElapsedMilliseconds
 
 $result = [pscustomobject]@{
+    reportName = "translator-recovery"
     ok = ($failures.Count -eq 0)
     failures = $failures.ToArray()
+    warnings = $warnings.ToArray()
+    noTraffic = $true
+    usedRealTraffic = $false
+    behaviorCovered = ($failures.Count -eq 0)
+    coverageKind = "translator-recovery-no-traffic"
     baseUrl = $BaseUrl
     runtimeRoot = $runtimeRootFull
     totalElapsedMs = [int]$totalStopwatch.ElapsedMilliseconds
     phaseTimings = [pscustomobject]$phaseTimings
+    launcher = [pscustomobject]@{
+        timedOut = $launcherTimedOut
+        stdoutTail = [string]$launcherStdoutTail
+        stderrTail = [string]$launcherStderrTail
+    }
     health = [pscustomobject]@{
         ok = if ($health) { $health.ok } else { $false }
         upstream = if ($health) { $health.upstream } else { $null }
@@ -230,7 +284,10 @@ $result = [pscustomobject]@{
     }
 }
 
-$result | ConvertTo-Json -Depth 8 -Compress
+$reportPaths = New-ReportPaths "translator-recovery"
+$result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths -Force
+$json = Save-RecoveryReport $reportPaths $result
+Write-Output $json
 if ($failures.Count -gt 0) { exit 1 }
 
 

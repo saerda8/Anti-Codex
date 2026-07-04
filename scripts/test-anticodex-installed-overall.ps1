@@ -959,6 +959,7 @@ function Test-ReportEncoding {
         "latest-plugin-capabilities.json",
         "latest-local-connectors.json",
         "latest-release-gates.json",
+        "latest-translator-recovery.json",
         "latest-cold-relaunch.json",
         "latest-real-third-party-provider.json",
         "latest-provider-antigravity-return.json",
