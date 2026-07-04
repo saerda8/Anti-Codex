@@ -906,6 +906,42 @@ function Test-AgenticReportNameContracts {
     }
 }
 
+function Test-ManagerRealButtonsReportContract {
+    $script = Join-Path $SourceRoot "scripts\test-anticodex-manager-real-buttons.ps1"
+    $text = Read-TextSafe $script
+    $assertions = New-Object System.Collections.Generic.List[object]
+
+    function Add-ManagerRealButtonsAssertion {
+        param(
+            [string]$Name,
+            [bool]$Ok
+        )
+        $assertions.Add([pscustomobject]@{ name = $Name; ok = $Ok }) | Out-Null
+        if (-not $Ok) { Add-Failure "manager real-buttons report contract failed: $Name" }
+    }
+
+    Add-ManagerRealButtonsAssertion -Name "script-readable" -Ok ([bool]$text)
+    Add-ManagerRealButtonsAssertion -Name "release-required-actions-explicit" -Ok (
+        $text -match '\$releaseRequiredActions\s*=\s*@\("pluginCapabilities",\s*"mcpSkills"\)'
+    )
+    Add-ManagerRealButtonsAssertion -Name "partial-report-name-present" -Ok (
+        $text -match 'manager-real-buttons-partial'
+    )
+    Add-ManagerRealButtonsAssertion -Name "canonical-release-report-flag-present" -Ok (
+        $text -match 'canonicalReleaseReport'
+    )
+    Add-ManagerRealButtonsAssertion -Name "canonical-report-only-when-required-actions-present" -Ok (
+        $text -match '\$reportName\s*=\s*if\s*\(\$canonicalReleaseReport\)\s*\{\s*"manager-real-buttons"\s*\}\s*else\s*\{\s*"manager-real-buttons-partial"\s*\}'
+    )
+
+    $assertionItems = @($assertions.ToArray())
+    $failedCount = @($assertionItems | Where-Object { $_.ok -ne $true }).Count
+    return [pscustomobject]@{
+        ok = ($failedCount -eq 0)
+        assertions = $assertionItems
+    }
+}
+
 function Test-ManagerMojibakeContracts {
     $assertions = New-Object System.Collections.Generic.List[object]
 
@@ -1116,6 +1152,7 @@ try {
     $checks["antigravityCliWindowsUserLoginDryRun"] = Test-AntigravityCliWindowsUserLoginDryRun
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["agenticReportNameContracts"] = Test-AgenticReportNameContracts
+    $checks["managerRealButtonsReportContract"] = Test-ManagerRealButtonsReportContract
     $checks["managerMojibakeContracts"] = Test-ManagerMojibakeContracts
     $checks["publicDocumentation"] = Test-PublicDocumentationContracts
     $checks["translatorRegression"] = Test-TranslatorRegression
@@ -1130,6 +1167,7 @@ $elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
 $antigravityCliProfilePrepareOk = $false
 $antigravityCliDualAccountLanesOk = $false
 $antigravityCliWindowsUserLoginDryRunOk = $false
+$managerRealButtonsReportContractOk = $false
 if ($checks["antigravityCliDualAccountLanes"]) {
     $antigravityCliDualAccountLanesOk = [bool]$checks["antigravityCliDualAccountLanes"].ok
 }
@@ -1138,6 +1176,9 @@ if ($checks["antigravityCliProfilePrepare"]) {
 }
 if ($checks["antigravityCliWindowsUserLoginDryRun"]) {
     $antigravityCliWindowsUserLoginDryRunOk = [bool]$checks["antigravityCliWindowsUserLoginDryRun"].ok
+}
+if ($checks["managerRealButtonsReportContract"]) {
+    $managerRealButtonsReportContractOk = [bool]$checks["managerRealButtonsReportContract"].ok
 }
 $report = [ordered]@{
     ok = ($failures.Count -eq 0)
@@ -1149,6 +1190,7 @@ $report = [ordered]@{
     antigravityCliDualAccountLanesOk = $antigravityCliDualAccountLanesOk
     antigravityCliProfilePrepareOk = $antigravityCliProfilePrepareOk
     antigravityCliWindowsUserLoginDryRunOk = $antigravityCliWindowsUserLoginDryRunOk
+    managerRealButtonsReportContractOk = $managerRealButtonsReportContractOk
     sourceRoot = Normalize-Path $SourceRoot
     startedAt = $startedAt.ToString("o")
     elapsedMs = $elapsedMs

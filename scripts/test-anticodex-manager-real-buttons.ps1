@@ -236,6 +236,14 @@ $actionList = @($Actions |
     ForEach-Object { $_ -split "," } |
     ForEach-Object { $_.Trim() } |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$releaseRequiredActions = @("pluginCapabilities", "mcpSkills")
+$canonicalReleaseReport = $true
+foreach ($requiredAction in $releaseRequiredActions) {
+    if ($actionList -notcontains $requiredAction) {
+        $canonicalReleaseReport = $false
+    }
+}
+$reportName = if ($canonicalReleaseReport) { "manager-real-buttons" } else { "manager-real-buttons-partial" }
 if ($actionList.Count -lt 1) {
     Add-Failure "no Manager actions requested"
 }
@@ -291,7 +299,9 @@ if ($actionList.Count -gt 0) {
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
-    reportName = "manager-real-buttons"
+    reportName = $reportName
+    canonicalReleaseReport = $canonicalReleaseReport
+    releaseRequiredActions = $releaseRequiredActions
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
     runtimeRoot = $runtimeRootFull
@@ -306,7 +316,7 @@ $result = [pscustomobject]@{
     tail = $tail
 }
 
-$reportPaths = New-ReportPaths "manager-real-buttons"
+$reportPaths = New-ReportPaths $reportName
 $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
 Save-JsonReport $reportPaths $result
 $result | ConvertTo-Json -Depth 14 -Compress
