@@ -4247,6 +4247,16 @@ async function main() {
     }
   }
 
+  if (taskMode === "agentic-step-flow") {
+    const artifactFailures = collectAgenticStepFlowFailures(artifactEvidence);
+    pushUniqueFailures(failures, artifactFailures);
+    if (artifactFailures.length === 0) {
+      const effectiveFailures = filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, artifactEvidence);
+      failures.length = 0;
+      failures.push(...effectiveFailures);
+    }
+  }
+
   const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
   const idleResult = inLoopIdleDiagnostics
     ? { diagnostics: inLoopIdleDiagnostics, lastError: null }

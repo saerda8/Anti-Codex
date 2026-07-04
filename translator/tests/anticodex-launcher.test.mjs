@@ -12521,6 +12521,7 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /const uiMarkerFailures = failures\.filter\(\(failure\) => \/assistant reply marker was not observed\/i\.test/);
   assert.match(verifier, /const repairableFailures = Array\.from\(new Set\(\[\.\.\.artifactFailures, \.\.\.agenticFailures, \.\.\.uiMarkerFailures\]\)\)/);
   assert.match(verifier, /if \(repairableFailures\.length > 0\)/);
+  assert.match(verifier, /if \(taskMode === "agentic-step-flow"\) \{[\s\S]*?const artifactFailures = collectAgenticStepFlowFailures\(artifactEvidence\);[\s\S]*?filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion\(failures, artifactEvidence\)/);
   assert.match(verifier, /report-site repair-step/);
   assert.match(verifier, /complex-project repair-step/);
   assert.match(verifier, /sources\.json must be written as UTF-8 without BOM/);
