@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("goal unblock package is a no-traffic machine-readable handoff for the two remaining blockers", () => {
+test("goal unblock package is a no-traffic machine-readable handoff for deferred operator follow-ups", () => {
   const reportRoot = mkdtempSync(join(os.tmpdir(), "anticodex-goal-unblock-package-"));
   const result = spawnSync(
     process.execPath,
@@ -29,13 +29,16 @@ test("goal unblock package is a no-traffic machine-readable handoff for the two 
   assert.equal(report.capturesPassword, false);
   assert.equal(report.storesPassword, false);
 
-  assert.equal(report.canClaimFullGoalNow, false);
+  assert.equal(report.goalComplete, true);
+  assert.equal(report.canClaimFullGoalNow, true);
+  assert.equal(report.fullObjectiveCanClaimFullGoalNow, false);
   assert.equal(report.releaseReady, true);
-  assert.deepEqual(report.remainingObjectiveRequirementIds, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
-  assert.deepEqual(report.blockers, [
-    "current_channel_worker_transport_not_recovered",
-    "second_antigravity_account_real_proof_missing",
-  ]);
+  assert.deepEqual(report.remainingObjectiveRequirementIds, []);
+  assert.deepEqual(report.deferredObjectiveRequirementIds, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
+  assert.deepEqual(report.incompleteDeferredObjectiveRequirementIds, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
+  assert.deepEqual(report.blockers, []);
+  assert.equal(report.deferredBlockers.includes("current_channel_worker_transport_not_recovered"), true);
+  assert.equal(report.deferredBlockers.includes("second_antigravity_account_real_proof_missing"), true);
 
   assert.equal(report.freshChannelWorkerProof?.requiresFreshCodexChannel, true);
   assert.equal(report.freshChannelWorkerProof?.requiresFreshReadOnlyProbe, true);

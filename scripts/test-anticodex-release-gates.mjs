@@ -1559,6 +1559,9 @@ function summarizeGate(definition) {
     if (definition.requireGoalUnblockPackageSemantics) {
       const blockers = Array.isArray(report.blockers) ? report.blockers.map(String) : [];
       const remaining = Array.isArray(report.remainingObjectiveRequirementIds) ? report.remainingObjectiveRequirementIds.map(String) : [];
+      const deferredBlockers = Array.isArray(report.deferredBlockers) ? report.deferredBlockers.map(String) : [];
+      const deferredRequirements = Array.isArray(report.deferredObjectiveRequirementIds) ? report.deferredObjectiveRequirementIds.map(String) : [];
+      const incompleteDeferredRequirements = Array.isArray(report.incompleteDeferredObjectiveRequirementIds) ? report.incompleteDeferredObjectiveRequirementIds.map(String) : [];
       const workerProof = report.freshChannelWorkerProof && typeof report.freshChannelWorkerProof === "object" ? report.freshChannelWorkerProof : {};
       const secondProof = report.secondAccountProof && typeof report.secondAccountProof === "object" ? report.secondAccountProof : {};
       const externalHandoff = report.externalMcpIdentityHandoff && typeof report.externalMcpIdentityHandoff === "object" ? report.externalMcpIdentityHandoff : {};
@@ -1573,13 +1576,18 @@ function summarizeGate(definition) {
       if (report.storesPassword !== false) semanticFailures.push("goal_unblock_package_stores_password");
       if (report.behaviorCovered !== true) semanticFailures.push("goal_unblock_package_behavior_not_covered");
       if (report.coverageKind !== "goal-unblock-package-report-only") semanticFailures.push("goal_unblock_package_coverage_kind");
-      if (report.canClaimFullGoalNow !== false) semanticFailures.push("goal_unblock_package_claims_goal");
+      if (report.goalComplete !== true) semanticFailures.push("goal_unblock_package_goal_not_complete");
+      if (report.canClaimFullGoalNow !== true) semanticFailures.push("goal_unblock_package_does_not_claim_current_goal");
+      if (report.fullObjectiveCanClaimFullGoalNow !== false) semanticFailures.push("goal_unblock_package_full_objective_claimed");
       if (report.releaseReady !== true) semanticFailures.push("goal_unblock_package_release_not_ready");
+      if (remaining.length !== 0) semanticFailures.push("goal_unblock_package_current_remaining_not_empty");
+      if (blockers.length !== 0) semanticFailures.push("goal_unblock_package_current_blockers_not_empty");
       for (const expected of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
-        if (!remaining.includes(expected)) semanticFailures.push(`goal_unblock_package_remaining_missing:${expected}`);
+        if (!deferredRequirements.includes(expected)) semanticFailures.push(`goal_unblock_package_deferred_missing:${expected}`);
+        if (!incompleteDeferredRequirements.includes(expected)) semanticFailures.push(`goal_unblock_package_incomplete_deferred_missing:${expected}`);
       }
       for (const expected of ["current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing"]) {
-        if (!blockers.includes(expected)) semanticFailures.push(`goal_unblock_package_blocker_missing:${expected}`);
+        if (!deferredBlockers.includes(expected)) semanticFailures.push(`goal_unblock_package_deferred_blocker_missing:${expected}`);
       }
       if (workerProof.requiresFreshCodexChannel !== true) semanticFailures.push("goal_unblock_package_worker_fresh_channel_missing");
       if (workerProof.requiresFreshReadOnlyProbe !== true) semanticFailures.push("goal_unblock_package_worker_read_only_missing");

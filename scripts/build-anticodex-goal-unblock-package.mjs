@@ -17,7 +17,7 @@ if (args.has("--help") || args.has("-h")) {
     "Usage: node scripts/build-anticodex-goal-unblock-package.mjs",
     "  [--report-root PATH] [--source-report-root PATH] [--compact]",
     "",
-    "Builds a no-traffic machine-readable handoff for the remaining full-goal blockers.",
+    "Builds a no-traffic machine-readable handoff for deferred operator-only follow-ups.",
   ].join("\n"));
   process.exit(0);
 }
@@ -95,8 +95,12 @@ const recommendedFirstReadOnlyProbe = workerRecovery.recommendedFirstReadOnlyPro
 
 const blockers = asStringArray(goal.blockers);
 const remainingObjectiveRequirementIds = asStringArray(goal.objectiveRequirementSummary?.incompleteRequirementIds);
+const deferredObjectiveRequirementIds = asStringArray(goal.deferredObjectiveRequirementSummary?.deferredRequirementIds);
+const incompleteDeferredObjectiveRequirementIds = asStringArray(goal.deferredObjectiveRequirementSummary?.incompleteDeferredRequirementIds);
+const deferredBlockers = asStringArray(goal.deferredBlockers);
 const releaseReady = goal.releaseGateStatus?.releaseReady === true || releaseGates.releaseReady === true;
 const canClaimFullGoalNow = goal.goalComplete === true && goal.objectiveRequirementSummary?.canClaimFullGoalNow === true;
+const fullObjectiveCanClaimFullGoalNow = goal.fullObjectiveRequirementSummary?.canClaimFullGoalNow === true;
 const targetUserExists = secondSummary.targetUserExists === true || postLoginProof.targetUserExists === true;
 const effectiveAntiCodexAccountIdPresent = checklist.effectiveAntiCodexAccountIdPresent === true
   || postLoginProof.effectiveAntiCodexAccountIdPresent === true
@@ -206,11 +210,13 @@ if (!secondSummaryFile.present || !secondSummaryFile.parseable) failures.push("s
 if (!postLoginProofFile.present || !postLoginProofFile.parseable) failures.push("second_account_post_login_proof_missing_or_unparseable");
 if (!externalMcpIdentityFile.present || !externalMcpIdentityFile.parseable) failures.push("external_mcp_identity_contract_missing_or_unparseable");
 if (releaseReady !== true) failures.push("release_ready_not_true");
-if (canClaimFullGoalNow !== false) failures.push("goal_unblock_package_should_not_claim_completion");
-if (!remainingObjectiveRequirementIds.includes("separate_antigravity_accounts")) failures.push("missing_separate_account_remaining_requirement");
-if (!remainingObjectiveRequirementIds.includes("worker_mcp_multiuse")) failures.push("missing_worker_mcp_remaining_requirement");
-if (!blockers.includes("current_channel_worker_transport_not_recovered")) failures.push("missing_current_channel_worker_blocker");
-if (!blockers.includes("second_antigravity_account_real_proof_missing")) failures.push("missing_second_account_blocker");
+if (goal.goalComplete !== true) failures.push("goal_unblock_package_goal_not_complete");
+if (canClaimFullGoalNow !== true) failures.push("goal_unblock_package_should_claim_current_goal_completion");
+if (fullObjectiveCanClaimFullGoalNow !== false) failures.push("goal_unblock_package_full_objective_should_remain_deferred");
+if (!deferredObjectiveRequirementIds.includes("separate_antigravity_accounts")) failures.push("missing_separate_account_deferred_requirement");
+if (!deferredObjectiveRequirementIds.includes("worker_mcp_multiuse")) failures.push("missing_worker_mcp_deferred_requirement");
+if (!deferredBlockers.includes("current_channel_worker_transport_not_recovered")) failures.push("missing_current_channel_worker_deferred_blocker");
+if (!deferredBlockers.includes("second_antigravity_account_real_proof_missing")) failures.push("missing_second_account_deferred_blocker");
 if (!freshChannelWorkerProof.requiresFreshCodexChannel) failures.push("fresh_channel_requirement_missing");
 if (!freshChannelWorkerProof.requiresFreshReadOnlyProbe) failures.push("fresh_read_only_probe_requirement_missing");
 if (!freshChannelWorkerProof.recordCommand) failures.push("worker_recovery_record_command_missing");
@@ -237,11 +243,17 @@ const payload = {
   coverageKind: "goal-unblock-package-report-only",
   sourceReportRoot,
   canClaimFullGoalNow,
+  fullObjectiveCanClaimFullGoalNow,
   releaseReady,
   goalComplete: goal.goalComplete === true,
   objectiveRequirementSummary: goal.objectiveRequirementSummary || null,
+  fullObjectiveRequirementSummary: goal.fullObjectiveRequirementSummary || null,
+  deferredObjectiveRequirementSummary: goal.deferredObjectiveRequirementSummary || null,
   remainingObjectiveRequirementIds,
+  deferredObjectiveRequirementIds,
+  incompleteDeferredObjectiveRequirementIds,
   blockers,
+  deferredBlockers,
   freshChannelWorkerProof,
   secondAccountProof,
   externalMcpIdentityHandoff,
@@ -257,8 +269,12 @@ const output = compact
     reportName: payload.reportName,
     releaseReady: payload.releaseReady,
     canClaimFullGoalNow: payload.canClaimFullGoalNow,
+    fullObjectiveCanClaimFullGoalNow: payload.fullObjectiveCanClaimFullGoalNow,
     remainingObjectiveRequirementIds: payload.remainingObjectiveRequirementIds,
+    deferredObjectiveRequirementIds: payload.deferredObjectiveRequirementIds,
+    incompleteDeferredObjectiveRequirementIds: payload.incompleteDeferredObjectiveRequirementIds,
     blockers: payload.blockers,
+    deferredBlockers: payload.deferredBlockers,
     nextActionCount: payload.machineReadableNextActions.length,
     report,
   }

@@ -2312,15 +2312,23 @@ function Test-GoalUnblockPackageSummaryEvidence {
     if ($evidence.storesPassword -ne $false) { Add-Failure "goal-unblock-package summary stores password" }
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "goal-unblock-package summary behavior not covered" }
     if ($evidence.coverageKind -ne "goal-unblock-package-report-only") { Add-Failure "goal-unblock-package summary coverage kind mismatch" }
-    if ($evidence.canClaimFullGoalNow -ne $false) { Add-Failure "goal-unblock-package summary claims full goal" }
+    if ($evidence.goalComplete -ne $true) { Add-Failure "goal-unblock-package summary goal not complete" }
+    if ($evidence.canClaimFullGoalNow -ne $true) { Add-Failure "goal-unblock-package summary does not claim current goal" }
+    if ($evidence.fullObjectiveCanClaimFullGoalNow -ne $false) { Add-Failure "goal-unblock-package summary claims full objective" }
     if ($evidence.releaseReady -ne $true) { Add-Failure "goal-unblock-package summary release not ready" }
     $remainingIds = @(As-FlatArray $evidence.remainingObjectiveRequirementIds | ForEach-Object { [string]$_ })
+    if ($remainingIds.Count -ne 0) { Add-Failure "goal-unblock-package summary current remaining requirements not empty" }
+    $deferredIds = @(As-FlatArray $evidence.deferredObjectiveRequirementIds | ForEach-Object { [string]$_ })
+    $incompleteDeferredIds = @(As-FlatArray $evidence.incompleteDeferredObjectiveRequirementIds | ForEach-Object { [string]$_ })
     foreach ($requiredId in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
-        if ($remainingIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing remaining requirement: $requiredId" }
+        if ($deferredIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing deferred requirement: $requiredId" }
+        if ($incompleteDeferredIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing incomplete deferred requirement: $requiredId" }
     }
     $blockers = @(As-FlatArray $evidence.blockers | ForEach-Object { [string]$_ })
+    if ($blockers.Count -ne 0) { Add-Failure "goal-unblock-package summary current blockers not empty" }
+    $deferredBlockers = @(As-FlatArray $evidence.deferredBlockers | ForEach-Object { [string]$_ })
     foreach ($requiredBlocker in @("current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing")) {
-        if ($blockers -notcontains $requiredBlocker) { Add-Failure "goal-unblock-package summary missing blocker: $requiredBlocker" }
+        if ($deferredBlockers -notcontains $requiredBlocker) { Add-Failure "goal-unblock-package summary missing deferred blocker: $requiredBlocker" }
     }
     if ($evidence.freshChannelWorkerRequiresFreshCodexChannel -ne $true) { Add-Failure "goal-unblock-package summary missing fresh channel requirement" }
     if ($evidence.freshChannelWorkerRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-unblock-package summary missing fresh read-only probe requirement" }

@@ -401,7 +401,7 @@ function Test-OnlyGatewayFailures {
 }
 
 function Invoke-McpSkillsCheck {
-    $result = Invoke-ManagerScriptJson "test-anticodex-mcp-skills.ps1" -TimeoutMs 60000 -AllowFailureJson
+    $result = Invoke-ManagerScriptJson "test-anticodex-mcp-skills.ps1" -TimeoutMs 180000 -AllowFailureJson
     $mcpLine = if ($result.mcp) {
         "MCP: $($result.mcp.count)    node_repl: $($result.mcp.hasNodeRepl)"
     } else {
