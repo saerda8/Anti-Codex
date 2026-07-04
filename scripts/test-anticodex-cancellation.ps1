@@ -8,6 +8,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ([System.Net.ServicePointManager]::DefaultConnectionLimit -lt 16) {
+    [System.Net.ServicePointManager]::DefaultConnectionLimit = 16
+}
+
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
@@ -87,6 +91,42 @@ function Save-JsonReport {
     Write-AntiCodexJsonReport -LatestPath $Paths.latest -HistoryPath $Paths.history -Json $json -Encoding $utf8NoBom
 }
 
+function Invoke-AntiCodexCancelResponse {
+    param([string]$Uri)
+
+    $cancelRequest = [System.Net.WebRequest]::Create($Uri)
+    $cancelRequest.Method = "POST"
+    $cancelRequest.Proxy = $null
+    $cancelRequest.Timeout = 15000
+    $cancelRequest.ReadWriteTimeout = 15000
+    $cancelRequest.ContentType = "application/json; charset=utf-8"
+    if ($cancelRequest -is [System.Net.HttpWebRequest]) {
+        $cancelRequest.KeepAlive = $false
+    }
+
+    $cancelBytes = [Text.Encoding]::UTF8.GetBytes("{}")
+    $cancelRequest.ContentLength = $cancelBytes.Length
+    $cancelStream = $cancelRequest.GetRequestStream()
+    try {
+        $cancelStream.Write($cancelBytes, 0, $cancelBytes.Length)
+    } finally {
+        $cancelStream.Dispose()
+    }
+
+    $cancelResponse = $null
+    $cancelReader = $null
+    try {
+        $cancelResponse = $cancelRequest.GetResponse()
+        $cancelReader = [IO.StreamReader]::new($cancelResponse.GetResponseStream(), [Text.Encoding]::UTF8)
+        $cancelText = $cancelReader.ReadToEnd()
+        if (-not $cancelText) { return $null }
+        return $cancelText | ConvertFrom-Json
+    } finally {
+        if ($cancelReader) { $cancelReader.Dispose() }
+        if ($cancelResponse) { $cancelResponse.Dispose() }
+    }
+}
+
 $failures = New-Object System.Collections.Generic.List[string]
 
 $preHealth = Invoke-AntiCodexHealth
@@ -103,6 +143,9 @@ $request.Proxy = $null
 $request.Timeout = $TimeoutSec * 1000
 $request.ReadWriteTimeout = $TimeoutSec * 1000
 $request.ContentType = "application/json; charset=utf-8"
+if ($request -is [System.Net.HttpWebRequest]) {
+    $request.KeepAlive = $false
+}
 
 $body = @{
     model = $Model
@@ -153,7 +196,7 @@ try {
                     $responseId = [string]$evt.data.response.id
                     $cancelSent = $true
                     try {
-                        $cancelResult = Invoke-RestMethod -Uri "$BaseUrl/v1/responses/$responseId/cancel" -Method Post -Body "{}" -ContentType "application/json" -Proxy $null -TimeoutSec 10
+                        $cancelResult = Invoke-AntiCodexCancelResponse -Uri "$BaseUrl/v1/responses/$responseId/cancel"
                     } catch {
                         $cancelResult = [pscustomobject]@{ error = $_.Exception.Message }
                         $failures.Add("Cancel API request failed: $($_.Exception.Message)")
