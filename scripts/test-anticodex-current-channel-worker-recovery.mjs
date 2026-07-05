@@ -82,12 +82,34 @@ function recommendedReadOnlyProbesFromStatusProbe(report) {
     }));
 }
 
+function recommendedReadOnlyProbesFromXiaoqiangLedger(report) {
+  const statusJobIds = Array.isArray(report?.fourWorkerProjectProof?.statusJobIds)
+    ? report.fourWorkerProjectProof.statusJobIds
+    : [];
+  return statusJobIds
+    .filter((item) => item?.worker && item?.jobId)
+    .map((item) => {
+      const worker = String(item.worker || "");
+      const exposedWorkerTool = `${worker}_get_job`;
+      return {
+        worker,
+        statusTool: "xiaoqiang_get_job",
+        exposedWorkerTool,
+        jobId: String(item.jobId || ""),
+        expectedStatus: "completed",
+        recordCommand: `node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool ${exposedWorkerTool} --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok`,
+      };
+    });
+}
+
 const transportFile = readReport("latest-current-channel-worker-transport.json");
 const probeFile = readReport("latest-worker-mcp-server-probe.json");
 const statusProbeFile = readReport("latest-worker-mcp-status-probe.json");
+const xiaoqiangLedgerFile = readReport("latest-xiaoqiang-usage-ledger.json");
 const transport = transportFile.report || {};
 const directProbe = probeFile.report || {};
 const statusProbe = statusProbeFile.report || {};
+const xiaoqiangLedger = xiaoqiangLedgerFile.report || {};
 const exposedWorkerTools = asStringArray(transport.exposedWorkerTools);
 const exposedWorkerToolSet = new Set(exposedWorkerTools);
 const checkedAtMs = Date.parse(String(transport.checkedAt || ""));
@@ -107,8 +129,15 @@ const directStatusProbeOk = statusProbe.ok === true
   && statusProbe.antigravitySkippedForAccountIsolation === true
   && typeof statusProbe.currentChannelCaveat === "string"
   && statusProbe.currentChannelCaveat.trim().length > 0;
-const recommendedReadOnlyProbes = recommendedReadOnlyProbesFromStatusProbe(statusProbe);
-const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item) => exposedWorkerToolSet.has(item.statusTool));
+const recommendedReadOnlyProbes = [
+  ...recommendedReadOnlyProbesFromXiaoqiangLedger(xiaoqiangLedger),
+  ...recommendedReadOnlyProbesFromStatusProbe(statusProbe),
+];
+const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item) =>
+  exposedWorkerToolSet.has(item.statusTool)
+  || exposedWorkerToolSet.has(item.exposedWorkerTool)
+  || asStringArray(transport.exposedWorkerPrefixes).includes(item.worker)
+);
 const recommendedFirstReadOnlyProbe = exposedRecommendedReadOnlyProbes[0] || recommendedReadOnlyProbes[0] || null;
 const genericMcpOk = transport.genericMcpControlOk === true && String(transport.genericMcpStatus || "") === "ok";
 const currentWorkerOk = transport.workerTransportOk === true && transport.currentChannelWorkerDispatchUsable === true;
@@ -210,6 +239,9 @@ const payload = {
     directStatusProbeSkippedWorkers: asStringArray(statusProbe.skippedWorkers),
     directStatusProbeAntigravitySkippedForAccountIsolation: statusProbe.antigravitySkippedForAccountIsolation === true,
     directStatusProbeCurrentChannelCaveatPresent: typeof statusProbe.currentChannelCaveat === "string" && statusProbe.currentChannelCaveat.trim().length > 0,
+    xiaoqiangLedgerReportPresent: xiaoqiangLedgerFile.present,
+    xiaoqiangLedgerReportParseable: xiaoqiangLedgerFile.parseable,
+    xiaoqiangLedgerOk: xiaoqiangLedger.ok === true,
   },
   postReloadAcceptanceCriteria: [
     "run a current-channel read-only worker get_job/wait/status call",
