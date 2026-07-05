@@ -71,7 +71,11 @@ function Assert-DistinctWorkerTransportFailures {
         "kilo",
         "mimo",
         "mimocode",
-        "opencode"
+        "opencode",
+        "xiaoqiang1",
+        "xiaoqiang2",
+        "xiaoqiang3",
+        "xiaoqiang4"
     )
     $flatTools = @(As-FlatArray $Tools | ForEach-Object { [string]$_ } | Where-Object { $_ })
     $distinctTools = @($flatTools | Select-Object -Unique)
@@ -1169,7 +1173,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ([int]$evidence.fullObjectiveRequirementTotal -ne 6) { Add-Failure "goal-readiness summary full objective requirement total mismatch" }
     if ([int]$evidence.fullObjectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary full objective complete count mismatch" }
     if ([int]$evidence.fullObjectiveRequirementIncompleteCount -ne 2) { Add-Failure "goal-readiness summary full objective incomplete count mismatch" }
-    if ($evidence.fullObjectiveRequirementCanClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary full objective audit claims full goal" }
+    if ($evidence.fullObjectiveRequirementCanClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary unexpectedly claims goal complete" }
     $objectiveIncompleteIds = @(As-FlatArray $evidence.fullObjectiveRequirementIncompleteIds | ForEach-Object { [string]$_ })
     foreach ($expectedIncompleteObjective in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
         if ($objectiveIncompleteIds -notcontains $expectedIncompleteObjective) { Add-Failure "goal-readiness summary objective audit missing incomplete requirement: $expectedIncompleteObjective" }

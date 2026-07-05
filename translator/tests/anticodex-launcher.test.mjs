@@ -13480,6 +13480,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /currentChannelWorkerRecoveryEvidence/);
   assert.match(summarizer, /directStatusProbeOk/);
   assert.match(summarizer, /directStatusProbeStatusCallOkCount/);
+  assert.match(summarizer, /exposedWorkerTool/);
   assert.match(summarizer, /safeToStartImplementationWorker/);
   assert.match(summarizer, /postReloadAcceptanceCriteria/);
   assert.match(summarizer, /workerTransportRecoveryOk/);
@@ -13518,6 +13519,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-transport summary missing failed-state exposed worker prefix inventory/);
   assert.match(diagnostics, /Assert-DistinctWorkerTransportFailures -Label "current-channel-worker-transport summary"/);
   assert.match(diagnostics, /distinct failed worker namespace count too low/);
+  assert.match(diagnostics, /xiaoqiang4/);
   assert.match(diagnostics, /current-channel-worker-transport summary did not block worker dispatch/);
   assert.match(diagnostics, /current-channel-worker-transport summary unexpectedly marked worker dispatch usable/);
   assert.match(diagnostics, /current-channel-worker-recovery summary missing direct status probe proof/);

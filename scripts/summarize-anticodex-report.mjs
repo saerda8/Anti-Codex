@@ -2626,6 +2626,7 @@ const summary = {
     recommendedReadOnlyProbes: Array.isArray(report.recommendedReadOnlyProbes) ? report.recommendedReadOnlyProbes.map((item) => ({
       worker: asString(item?.worker),
       statusTool: asString(item?.statusTool),
+      exposedWorkerTool: asString(item?.exposedWorkerTool),
       jobId: asString(item?.jobId),
       expectedStatus: asString(item?.expectedStatus),
       recordCommand: asString(item?.recordCommand),
@@ -2633,6 +2634,7 @@ const summary = {
     exposedRecommendedReadOnlyProbes: Array.isArray(report.exposedRecommendedReadOnlyProbes) ? report.exposedRecommendedReadOnlyProbes.map((item) => ({
       worker: asString(item?.worker),
       statusTool: asString(item?.statusTool),
+      exposedWorkerTool: asString(item?.exposedWorkerTool),
       jobId: asString(item?.jobId),
       expectedStatus: asString(item?.expectedStatus),
       recordCommand: asString(item?.recordCommand),
@@ -2648,6 +2650,7 @@ const summary = {
       recommendedFirstReadOnlyProbe: report.operatorActionCard.recommendedFirstReadOnlyProbe && typeof report.operatorActionCard.recommendedFirstReadOnlyProbe === "object" ? {
         worker: asString(report.operatorActionCard.recommendedFirstReadOnlyProbe.worker),
         statusTool: asString(report.operatorActionCard.recommendedFirstReadOnlyProbe.statusTool),
+        exposedWorkerTool: asString(report.operatorActionCard.recommendedFirstReadOnlyProbe.exposedWorkerTool),
         jobId: asString(report.operatorActionCard.recommendedFirstReadOnlyProbe.jobId),
         expectedStatus: asString(report.operatorActionCard.recommendedFirstReadOnlyProbe.expectedStatus),
         recordCommand: asString(report.operatorActionCard.recommendedFirstReadOnlyProbe.recordCommand),
