@@ -182,6 +182,58 @@ function asRealMiniToolEvidence(report) {
   };
 }
 
+function asRealWorkEvidence(report) {
+  if (report?.reportName !== "real-work") return null;
+  const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+  const executor = report.executor && typeof report.executor === "object" ? report.executor : {};
+  const realMcp = executor.realMcp && typeof executor.realMcp === "object" ? executor.realMcp : {};
+  const finalText = String(report.final_text || "");
+  return {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind || ""),
+    model: asString(report.model || ""),
+    firstResponseId: asString(report.first_response_id || ""),
+    callId: asString(report.call_id || ""),
+    artifactExists: boolField(artifact, "exists"),
+    artifactRan: boolField(artifact, "ran"),
+    artifactMarkerMatched: boolField(artifact, "markerMatched"),
+    executorTool: asString(executor.tool || ""),
+    executorRealFileWrite: boolField(executor, "realFileWrite"),
+    executorRealMcpOk: boolField(realMcp, "ok"),
+    executorRealMcpMarkerObserved: boolField(realMcp, "markerObserved"),
+    finalTextConfirmsFileOk: finalText.includes("FILE_OK"),
+    finalTextHasChinese: /[\u4e00-\u9fff]/.test(finalText),
+    localRequestEvidencePresent: report.usedRealTraffic === true && !!report.first_response_id,
+    externalQuotaDecrementProven: false,
+    externalQuotaEvidence: "not_collected",
+  };
+}
+
+function asRealSmallProjectEvidence(report) {
+  if (report?.reportName !== "real-small-project") return null;
+  const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+  const finalText = String(report.final_text || "");
+  return {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind || ""),
+    model: asString(report.model || ""),
+    firstResponseId: asString(report.first_response_id || ""),
+    callId: asString(report.call_id || ""),
+    artifactTestPassed: boolField(artifact, "testPassed"),
+    artifactCliPassed: boolField(artifact, "cliPassed"),
+    artifactMarkerMatched: boolField(artifact, "markerMatched"),
+    finalTextConfirmsSmallProjectOk: finalText.includes("SMALL_PROJECT_OK"),
+    finalTextHasChinese: /[\u4e00-\u9fff]/.test(finalText),
+    localRequestEvidencePresent: report.usedRealTraffic === true && !!report.first_response_id,
+    externalQuotaDecrementProven: false,
+    externalQuotaEvidence: "not_collected",
+  };
+}
+
 function asRepoMultiSettleEvidence(value) {
   if (!value || typeof value !== "object") return null;
   return {
@@ -547,6 +599,8 @@ const summary = {
   failureCount,
   elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
   realMiniToolEvidence: asRealMiniToolEvidence(report),
+  realWorkEvidence: asRealWorkEvidence(report),
+  realSmallProjectEvidence: asRealSmallProjectEvidence(report),
   goalUnblockPackageEvidence: isGoalUnblockPackageReport ? {
     reportName: asString(report.reportName),
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

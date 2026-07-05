@@ -4134,6 +4134,97 @@ test("report summarizer surfaces real-mini-tool local request evidence without c
   }
 });
 
+test("report summarizer surfaces real work evidence without claiming quota decrement", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-real-work-summarizer-"));
+  const realWorkPath = resolve(tempRoot, "latest-real-work.json");
+  const smallProjectPath = resolve(tempRoot, "latest-real-small-project.json");
+  try {
+    writeFileSync(realWorkPath, JSON.stringify({
+      ok: true,
+      reportName: "real-work",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      model: "gemini-3.5-flash-low",
+      first_response_id: "chatcmpl_real_work_123",
+      call_id: "pseudo_real_work_456",
+      artifact: {
+        directory: "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\real-work-artifacts\\secret",
+        file: "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\real-work-artifacts\\secret\\probe.mjs",
+        exists: true,
+        ran: true,
+        markerMatched: true,
+      },
+      executor: {
+        tool: "create_probe_file",
+        realFileWrite: true,
+        realMcp: {
+          ok: true,
+          markerObserved: true,
+          text: "MCP_OK_REAL_WORK_MARKER_secret",
+        },
+      },
+      final_text: "已确认 FILE_OK REAL_WORK_MARKER_secret",
+    }), "utf8");
+    writeFileSync(smallProjectPath, JSON.stringify({
+      ok: true,
+      reportName: "real-small-project",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic-small-project",
+      model: "gemini-3.5-flash-low",
+      first_response_id: "chatcmpl_small_project_123",
+      call_id: "pseudo_small_project_456",
+      artifact: {
+        directory: "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\real-small-project\\secret",
+        files: ["package.json", "word-tally.mjs", "word-tally.test.mjs"],
+        testPassed: true,
+        cliPassed: true,
+        markerMatched: true,
+      },
+      final_text: "已确认 SMALL_PROJECT_OK SMALL_PROJECT_MARKER_secret",
+    }), "utf8");
+
+    const realWorkResult = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), realWorkPath], { encoding: "utf8" });
+    assert.equal(realWorkResult.status, 0, realWorkResult.stderr || realWorkResult.stdout);
+    const realWorkSummary = JSON.parse(realWorkResult.stdout);
+    assert.equal(realWorkSummary.realWorkEvidence.firstResponseId, "chatcmpl_real_work_123");
+    assert.equal(realWorkSummary.realWorkEvidence.callId, "pseudo_real_work_456");
+    assert.equal(realWorkSummary.realWorkEvidence.artifactExists, true);
+    assert.equal(realWorkSummary.realWorkEvidence.artifactRan, true);
+    assert.equal(realWorkSummary.realWorkEvidence.artifactMarkerMatched, true);
+    assert.equal(realWorkSummary.realWorkEvidence.executorTool, "create_probe_file");
+    assert.equal(realWorkSummary.realWorkEvidence.executorRealFileWrite, true);
+    assert.equal(realWorkSummary.realWorkEvidence.executorRealMcpOk, true);
+    assert.equal(realWorkSummary.realWorkEvidence.executorRealMcpMarkerObserved, true);
+    assert.equal(realWorkSummary.realWorkEvidence.finalTextConfirmsFileOk, true);
+    assert.equal(realWorkSummary.realWorkEvidence.finalTextHasChinese, true);
+    assert.equal(realWorkSummary.realWorkEvidence.localRequestEvidencePresent, true);
+    assert.equal(realWorkSummary.realWorkEvidence.externalQuotaDecrementProven, false);
+    assert.equal(realWorkSummary.realWorkEvidence.externalQuotaEvidence, "not_collected");
+    assert.doesNotMatch(JSON.stringify(realWorkSummary.realWorkEvidence), /real-work-artifacts|probe\.mjs|REAL_WORK_MARKER_secret|MCP_OK_REAL_WORK_MARKER_secret/);
+
+    const smallProjectResult = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), smallProjectPath], { encoding: "utf8" });
+    assert.equal(smallProjectResult.status, 0, smallProjectResult.stderr || smallProjectResult.stdout);
+    const smallProjectSummary = JSON.parse(smallProjectResult.stdout);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.firstResponseId, "chatcmpl_small_project_123");
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.callId, "pseudo_small_project_456");
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.artifactTestPassed, true);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.artifactCliPassed, true);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.artifactMarkerMatched, true);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.finalTextConfirmsSmallProjectOk, true);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.finalTextHasChinese, true);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.localRequestEvidencePresent, true);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.externalQuotaDecrementProven, false);
+    assert.equal(smallProjectSummary.realSmallProjectEvidence.externalQuotaEvidence, "not_collected");
+    assert.doesNotMatch(JSON.stringify(smallProjectSummary.realSmallProjectEvidence), /real-small-project|word-tally|SMALL_PROJECT_MARKER_secret/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("report summarizer surfaces real Manager button evidence", () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-manager-buttons-summarizer-"));
   const reportPath = resolve(tempRoot, "latest-manager-real-buttons.json");
