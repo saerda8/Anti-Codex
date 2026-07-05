@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getCodexMcpServerDefinition, runRealMcpListSmoke } from "./anticodex-real-mcp-smoke.mjs";
 
-const DEFAULT_SERVERS = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"];
+const DEFAULT_SERVERS = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4"];
 const EXPECTED_TOOLS = [
   "xiaoqiang_implement_in_workspace",
   "xiaoqiang_get_job",
@@ -42,7 +42,7 @@ function printHelp() {
     "Usage: node scripts/test-anticodex-xiaoqiang-mcp.mjs [options]",
     "",
     "Options:",
-    "  --servers a,b,c       MCP server names to verify (default: xiaoqiang1,xiaoqiang2,xiaoqiang3).",
+    "  --servers a,b,c       MCP server names to verify (default: xiaoqiang1,xiaoqiang2,xiaoqiang3,xiaoqiang4).",
     "  --install-root PATH   Anti-Codex install root.",
     "  --state-root PATH     Anti-Codex state root.",
     "  --codex-cli PATH      Patched Codex CLI path.",

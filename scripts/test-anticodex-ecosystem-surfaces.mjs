@@ -5,6 +5,8 @@ import os from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+const XIAOQIANG_WORKERS = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4"];
+
 const REQUIRED_REPORTS = [
   {
     id: "refreshFeatures",
@@ -43,7 +45,7 @@ const REQUIRED_REPORTS = [
       if (report.ok !== true) fail("xiaoqiang-mcp ok=false");
       if (report.noTraffic !== true || report.usedRealTraffic !== false) fail("xiaoqiang-mcp traffic semantics mismatch");
       const servers = Array.isArray(report.servers) ? report.servers : [];
-      for (const name of ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"]) {
+      for (const name of XIAOQIANG_WORKERS) {
         if (!servers.includes(name)) fail(`xiaoqiang-mcp missing ${name}`);
       }
       for (const result of Array.isArray(report.results) ? report.results : []) {
@@ -62,12 +64,12 @@ const REQUIRED_REPORTS = [
       if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker project smoke did not use real worker traffic");
       if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker project smoke coverage kind mismatch");
       if (report.scenario !== "xiaoqiang-project") fail("xiaoqiang worker project smoke scenario mismatch");
-      if (Number(report.workerCount || 0) !== 3) fail("xiaoqiang worker project smoke worker count mismatch");
-      if (Number(report.passedWorkerCount || 0) !== 3) fail("xiaoqiang worker project smoke passed count mismatch");
+      if (Number(report.workerCount || 0) !== XIAOQIANG_WORKERS.length) fail("xiaoqiang worker project smoke worker count mismatch");
+      if (Number(report.passedWorkerCount || 0) !== XIAOQIANG_WORKERS.length) fail("xiaoqiang worker project smoke passed count mismatch");
       const failedWorkers = Array.isArray(report.failedWorkers) ? report.failedWorkers : [];
       if (failedWorkers.length !== 0) fail(`xiaoqiang worker project smoke has failed workers: ${failedWorkers.join(",")}`);
       const results = Array.isArray(report.results) ? report.results : [];
-      for (const name of ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"]) {
+      for (const name of XIAOQIANG_WORKERS) {
         const result = results.find((entry) => entry?.worker === name);
         if (!result) {
           fail(`xiaoqiang worker project smoke missing ${name}`);

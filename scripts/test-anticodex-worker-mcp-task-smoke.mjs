@@ -21,6 +21,7 @@ const WORKERS = {
   xiaoqiang1: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
   xiaoqiang2: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
   xiaoqiang3: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
+  xiaoqiang4: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
 };
 
 function argValue(name, fallback = "") {

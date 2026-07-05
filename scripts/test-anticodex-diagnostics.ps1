@@ -2150,12 +2150,13 @@ function Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence {
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary behavior not covered" }
     if ($evidence.coverageKind -ne "worker-mcp-real-task-smoke") { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary coverage kind mismatch" }
     if ($evidence.antigravityWorkerExcluded -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary did not exclude Antigravity worker" }
-    if ([int]$evidence.workerCount -ne 3) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary worker count mismatch" }
-    if ([int]$evidence.passedWorkerCount -ne 3) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary passed worker count mismatch" }
+    $requiredXiaoqiangProjectWorkers = @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4")
+    if ([int]$evidence.workerCount -ne $requiredXiaoqiangProjectWorkers.Count) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary worker count mismatch" }
+    if ([int]$evidence.passedWorkerCount -ne $requiredXiaoqiangProjectWorkers.Count) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary passed worker count mismatch" }
     if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary has failed workers" }
-    if ($results.Count -ne 3) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary result count mismatch" }
+    if ($results.Count -ne $requiredXiaoqiangProjectWorkers.Count) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary result count mismatch" }
     $passedWorkerNames = @($results | Where-Object { $_.ok -eq $true } | ForEach-Object { [string]$_.worker })
-    foreach ($requiredWorker in @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")) {
+    foreach ($requiredWorker in $requiredXiaoqiangProjectWorkers) {
         if ($passedWorkerNames -notcontains $requiredWorker) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary missing required worker $requiredWorker" }
     }
     foreach ($entry in $results) {

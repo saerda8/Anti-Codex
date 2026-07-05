@@ -478,7 +478,7 @@ function Resolve-NodeRuntime {
 }
 
 function Get-McpSmokeTimeoutMs {
-    return [Math]::Max(3000, [Math]::Min(20000, [int][Math]::Floor($TimeoutSec * 1000 / 3)))
+    return [Math]::Max(3000, [Math]::Min(60000, [int][Math]::Floor($TimeoutSec * 1000 / 6)))
 }
 
 function Limit-TextForError {
@@ -1001,6 +1001,14 @@ $expectedMcpToolNames = @{
         "xiaoqiang_tail_job",
         "xiaoqiang_wait_for_job"
     )
+    "xiaoqiang4" = @(
+        "xiaoqiang_cancel_job",
+        "xiaoqiang_get_job",
+        "xiaoqiang_implement_in_workspace",
+        "xiaoqiang_start_implementation",
+        "xiaoqiang_tail_job",
+        "xiaoqiang_wait_for_job"
+    )
 }
 
 if ($mcpNames -contains "node_repl") {
@@ -1079,7 +1087,7 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
     }
 }
 
-$expectedXiaoqiangMcpNames = @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")
+$expectedXiaoqiangMcpNames = @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4")
 $missingXiaoqiangMcpNames = @($expectedXiaoqiangMcpNames | Where-Object { $mcpNames -notcontains $_ })
 $xiaoqiangMcpChecks = @(
     foreach ($expectedXiaoqiangName in $expectedXiaoqiangMcpNames) {
