@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v100";
+  const VERSION = "native-panel-v101";
   const SUMMARY_VERSION = "latest-reports-evidence-v4";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -176,6 +176,21 @@
       node.append(child.nodeType ? child : document.createTextNode(String(child)));
     }
     return node;
+  }
+
+  function closestEventElement(event, selector) {
+    const target = event?.target;
+    const direct = target?.closest?.(selector);
+    if (direct) return direct;
+    const parent = target?.parentElement || (target?.parentNode?.nodeType === 1 ? target.parentNode : null);
+    const fromParent = parent?.closest?.(selector);
+    if (fromParent) return fromParent;
+    for (const item of event?.composedPath?.() || []) {
+      if (item?.matches?.(selector)) return item;
+      const found = item?.closest?.(selector);
+      if (found) return found;
+    }
+    return null;
   }
 
   function colorTheme(color) {
@@ -750,33 +765,40 @@
     notice.querySelectorAll(".anticodex-notice-actions button").forEach((button) => {
       button.style.cssText = "min-height:30px;padding:5px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.42);background:rgba(255,255,255,.16);color:#fff;cursor:pointer";
     });
-    notice.addEventListener("click", (event) => {
-      if (event.target?.closest?.("button")) return;
-      openManager();
-    });
-    notice.querySelector('[data-anticodex-notice-action="open"]')?.addEventListener("click", (event) => {
+    async function runNoticeAction(actionButton, event) {
       event.stopPropagation();
-      openManager();
-    });
-    notice.querySelector('[data-anticodex-notice-action="retry"]')?.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const button = event.currentTarget;
-      const previous = button.textContent;
-      button.disabled = true;
-      button.textContent = "\u68c0\u67e5\u4e2d...";
-      try {
-        await openManager();
-        await runActionViaBridge("accountProxy");
-        await load({ updateResult: false });
-      } finally {
-        button.disabled = false;
-        button.textContent = previous || "\u91cd\u65b0\u68c0\u67e5";
+      event.preventDefault();
+      const action = actionButton?.getAttribute("data-anticodex-notice-action") || "";
+      if (action === "open") {
+        openManager();
+        return;
       }
-    });
-    notice.querySelector('[data-anticodex-notice-action="dismiss"]')?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      window.__ANTICODEX_DISMISSED_TRAFFIC_NOTICE__ = signature;
-      notice.remove();
+      if (action === "dismiss") {
+        window.__ANTICODEX_DISMISSED_TRAFFIC_NOTICE__ = signature;
+        notice.remove();
+        return;
+      }
+      if (action === "retry") {
+        const previous = actionButton.textContent;
+        actionButton.disabled = true;
+        actionButton.textContent = "\u68c0\u67e5\u4e2d...";
+        try {
+          await openManager();
+          await runActionViaBridge("accountProxy");
+          await load({ updateResult: false });
+        } finally {
+          actionButton.disabled = false;
+          actionButton.textContent = previous || "\u91cd\u65b0\u68c0\u67e5";
+        }
+      }
+    }
+    notice.addEventListener("click", (event) => {
+      const actionButton = closestEventElement(event, "[data-anticodex-notice-action]");
+      if (actionButton) {
+        void runNoticeAction(actionButton, event);
+        return;
+      }
+      openManager();
     });
     document.body?.append(notice);
   }
@@ -1985,7 +2007,7 @@
     panel.append(style, head, actions, grid, card("\u68c0\u67e5\u7ed3\u679c", resultBody));
     root.append(panel);
     root.addEventListener("click", (event) => {
-      if (event.target?.closest?.("[data-anticodex-close]")) {
+      if (closestEventElement(event, "[data-anticodex-close]")) {
         event.preventDefault();
         event.stopPropagation();
         removeManager();
