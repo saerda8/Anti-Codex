@@ -1006,6 +1006,47 @@ function projectionItems(payload, key = "") {
     return [];
 }
 
+function latestRefreshFeatureSnapshotOverride({ currentSource, maxAgeHours }) {
+    if (!ANTICODEX_STATE_ROOT || !currentSource?.sourceFingerprint) return null;
+    const reportPath = resolvePath(ANTICODEX_STATE_ROOT, "reports", "latest-refresh-features.json");
+    const report = readJsonIfPresent(reportPath);
+    if (report?.reportName !== "refresh-features" || report.ok !== true || report.verifyOnly !== true) return null;
+    const sourceSnapshot = report.sourceSnapshot && typeof report.sourceSnapshot === "object" ? report.sourceSnapshot : null;
+    const reportFingerprint = String(sourceSnapshot?.fingerprint || "");
+    const currentFingerprint = String(currentSource.sourceFingerprint || "");
+    const fingerprintMatches = reportFingerprint === currentFingerprint
+        || (reportFingerprint && currentFingerprint && reportFingerprint.startsWith(currentFingerprint));
+    if (!fingerprintMatches) return null;
+    const startedAt = String(report.startedAt || "");
+    const startedAtMs = Date.parse(startedAt);
+    const ageHours = Number.isFinite(startedAtMs) ? Math.max(0, (Date.now() - startedAtMs) / 3_600_000) : null;
+    if (Number.isFinite(ageHours) && ageHours > maxAgeHours) return null;
+    const guidance = report.guidance && typeof report.guidance === "object" ? report.guidance : {};
+    const guidanceClean = Object.values(guidance).every((entry) => !entry || entry.contentMatches === true);
+    const connectorClean = report.connectorParity?.contentMatches === true;
+    const appToolClean = report.appToolParity?.contentMatches === true;
+    const skillsClean = Array.isArray(report.skills?.missingExpected)
+        && report.skills.missingExpected.length === 0
+        && Array.isArray(report.skills?.changedExpected)
+        && report.skills.changedExpected.length === 0;
+    if (!connectorClean || !appToolClean || !skillsClean || !guidanceClean) return null;
+    return {
+        fileName: "latest-refresh-features.json",
+        reportName: "refresh-features",
+        ok: true,
+        verifyOnly: true,
+        startedAt: startedAt || null,
+        ageHours,
+        sourceFingerprint: sourceSnapshot.fingerprint,
+        sourceMtimeMax: sourceSnapshot.sourceMtimeMax || null,
+        sourceFileCount: Number.isFinite(Number(sourceSnapshot.fileCount)) ? Number(sourceSnapshot.fileCount) : null,
+        connectorContentMatches: true,
+        appToolContentMatches: true,
+        skillsContentMatches: true,
+        guidanceContentMatches: true,
+    };
+}
+
 function localFeatureSummary({ includeProjection = false } = {}) {
     const codexHome = process.env.CODEX_HOME_DIR || process.env.CODEX_HOME || (ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "codex-home-deepseek-app") : "");
     const sharedCodexHome = process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || "";
@@ -1045,6 +1086,17 @@ function localFeatureSummary({ includeProjection = false } = {}) {
         : (snapshotAgeHours > snapshotMaxAgeHours
             ? "age"
             : (sourceFingerprintMatches === false ? "source_changed" : "unknown"));
+    const refreshReportOverride = latestRefreshFeatureSnapshotOverride({
+        currentSource: snapshotSource,
+        maxAgeHours: snapshotMaxAgeHours,
+    });
+    const effectiveSnapshotState = refreshReportOverride ? "fresh" : snapshotState;
+    const effectiveSnapshotAgeHours = refreshReportOverride ? refreshReportOverride.ageHours : snapshotAgeHours;
+    const effectiveSnapshotUpdatedAt = refreshReportOverride ? refreshReportOverride.startedAt : (snapshotMarkerValid ? snapshotMarker.updatedAt : null);
+    const effectiveSourceMtimeMax = refreshReportOverride?.sourceMtimeMax || snapshotMarker?.sourceMtimeMax || null;
+    const effectiveSourceFingerprintPresent = refreshReportOverride ? true : sourceFingerprintPresent;
+    const effectiveSourceFingerprintComparable = refreshReportOverride ? true : sourceFingerprintComparable;
+    const effectiveSourceFingerprintMatches = refreshReportOverride ? true : sourceFingerprintMatches;
     const readableSkillNames = skillNames.filter((name) => existsSync(resolvePath(skillsPath, name, "SKILL.md")));
     const installedPlugins = includeProjection
         ? projectionItems(localBackendApiResponse("GET", "/backend-api/ps/plugins/installed"))
@@ -1101,20 +1153,23 @@ function localFeatureSummary({ includeProjection = false } = {}) {
         },
         snapshotStatus: {
             present: Boolean(snapshotMarker),
-            state: snapshotState,
-            stale: snapshotState !== "fresh",
-            updatedAt: snapshotMarkerValid ? snapshotMarker.updatedAt : null,
-            ageHours: snapshotAgeHours,
+            state: effectiveSnapshotState,
+            stale: effectiveSnapshotState !== "fresh",
+            updatedAt: effectiveSnapshotUpdatedAt,
+            ageHours: effectiveSnapshotAgeHours,
             maxAgeHours: snapshotMaxAgeHours,
-            sourceMtimeMax: snapshotMarker?.sourceMtimeMax || null,
+            sourceMtimeMax: effectiveSourceMtimeMax,
             currentSourceMtimeMax: snapshotSource?.sourceMtimeMax || null,
             extraSkillsRoots: extraSkillsRootInfo.roots,
             agentsSkillsPath: extraSkillsRootInfo.agentsSkillsPath,
             extraSkillsRootsSource: extraSkillsRootInfo.source,
-            sourceFingerprintPresent,
-            sourceFingerprintComparable,
-            sourceFingerprintMatches,
-            staleReason: snapshotStaleReason,
+            sourceFingerprintPresent: effectiveSourceFingerprintPresent,
+            sourceFingerprintComparable: effectiveSourceFingerprintComparable,
+            sourceFingerprintMatches: effectiveSourceFingerprintMatches,
+            staleReason: refreshReportOverride ? null : snapshotStaleReason,
+            startupSnapshotState: snapshotState,
+            startupSnapshotStaleReason: snapshotStaleReason,
+            refreshReportOverride,
         },
         capabilityTiers: {
             skills: {

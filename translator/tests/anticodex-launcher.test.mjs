@@ -5369,6 +5369,8 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   assert.match(returnBlock, /sourceFingerprintComparable/);
   assert.match(returnBlock, /sourceFingerprintMatches/);
   assert.match(returnBlock, /staleReason/);
+  assert.match(returnBlock, /startupSnapshotState/);
+  assert.match(returnBlock, /refreshReportOverride/);
   assert.match(returnBlock, /count/);
   assert.match(returnBlock, /names/);
 });
