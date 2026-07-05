@@ -476,7 +476,8 @@ function latestReportsSummary(result) {
     }
     if (item.goalReadinessEvidence?.currentUsability) {
       const usability = item.goalReadinessEvidence.currentUsability;
-      lines.push(`  currentUsability: usable=${usability.usableNow ? "true" : "false"} / mode=${usability.mode || "unknown"} / sharedAccount=${usability.usesSharedAntigravityAccount ? "true" : "false"} / workerMcpDisabled=${usability.workerMcpTemporarilyDisabled ? "true" : "false"} / fullGoal=${item.goalReadinessEvidence.goalComplete ? "true" : "false"}`);
+      const fullGoalComplete = item.goalReadinessEvidence.fullObjectiveRequirementCanClaimFullGoalNow === true;
+      lines.push(`  currentUsability: usable=${usability.usableNow ? "true" : "false"} / mode=${usability.mode || "unknown"} / sharedAccount=${usability.usesSharedAntigravityAccount ? "true" : "false"} / workerMcpDisabled=${usability.workerMcpTemporarilyDisabled ? "true" : "false"} / currentGoal=${item.goalReadinessEvidence.goalComplete ? "true" : "false"} / fullGoal=${fullGoalComplete ? "true" : "false"}`);
     }
     if (item.goalReadinessEvidence?.goalOperatorActionCard) {
       const card = item.goalReadinessEvidence.goalOperatorActionCard;
@@ -1102,6 +1103,7 @@ if (args.has("--self-test")) {
       exists: true,
       ok: true,
       goalReadinessEvidence: {
+        goalComplete: true,
         objectiveRequirementTotal: 4,
         objectiveRequirementCompleteCount: 4,
         objectiveRequirementIncompleteCount: 0,
@@ -1113,15 +1115,24 @@ if (args.has("--self-test")) {
         fullObjectiveRequirementIncompleteIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
         fullObjectiveRequirementCanClaimFullGoalNow: false,
         deferredRequirementIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
+        currentUsability: {
+          usableNow: true,
+          mode: "shared-account-worker-mcp-disabled",
+          usesSharedAntigravityAccount: true,
+          workerMcpTemporarilyDisabled: true,
+        },
         goalOperatorActionCard: {
           status: "goal_complete",
           canClaimFullGoalNow: true,
+          currentGoalComplete: true,
+          fullGoalComplete: false,
+          fullGoalMissingRequirements: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
           releaseReady: true,
           workerStatus: "reload_required",
           secondAccountStatus: "manual_windows_user_setup_required",
           missingRequirements: [],
           nextOperatorActions: [],
-          userVisibleNextStep: "Current single-account Anti-Codex goal is complete; keep refreshing real task evidence as needed.",
+          userVisibleNextStep: "Current single-account Anti-Codex scope is complete; full goal still requires worker transport recovery and second-account proof.",
           compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
         },
       },
@@ -1178,6 +1189,7 @@ if (args.has("--self-test")) {
   assert.match(evidenceSummary, /goalObjectiveAudit: complete=4\/4 \/ incomplete=0 \/ canClaimCurrentGoal=true \/ missing=none/);
   assert.match(evidenceSummary, /goalFullObjectiveAudit: complete=4\/6 \/ incomplete=2 \/ canClaimFullGoal=false \/ missing=separate_antigravity_accounts, worker_mcp_multiuse/);
   assert.match(evidenceSummary, /goalDeferredRequirements: separate_antigravity_accounts, worker_mcp_multiuse/);
+  assert.match(evidenceSummary, /currentUsability: usable=true \/ mode=shared-account-worker-mcp-disabled \/ sharedAccount=true \/ workerMcpDisabled=true \/ currentGoal=true \/ fullGoal=false/);
   assert.match(evidenceSummary, /goalOperatorActionCard: status=goal_complete \/ canClaim=true \/ release=true \/ worker=reload_required \/ secondAccount=manual_windows_user_setup_required/);
   assert.match(evidenceSummary, /goalOperatorActionCard missing: none/);
   assert.match(evidenceSummary, /goalOperatorActionCard statusCommand: node scripts\\test-anticodex-goal-readiness\.mjs --compact-status/);

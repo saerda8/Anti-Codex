@@ -43,6 +43,12 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
     "worker_mcp_multiuse",
   ]);
   assert.equal(report.fullObjectiveRequirementSummary?.canClaimFullGoalNow, false);
+  assert.equal(report.goalOperatorActionCard?.currentGoalComplete, true);
+  assert.equal(report.goalOperatorActionCard?.fullGoalComplete, false);
+  assert.deepEqual(report.goalOperatorActionCard?.fullGoalMissingRequirements, [
+    "separate_antigravity_accounts",
+    "worker_mcp_multiuse",
+  ]);
   assert.match(report.goalOperatorActionCard?.compactStatusCommand || "", /--compact-status/);
 });
 
@@ -59,7 +65,10 @@ test("goal readiness compact-status is short and carries operator status", () =>
   assert.equal(status.releaseReady, true);
   assert.equal(status.shortReady, true);
   assert.equal(status.goalComplete, true);
+  assert.equal(status.currentGoalComplete, true);
+  assert.equal(status.fullGoalComplete, false);
   assert.deepEqual(status.incompleteRequirements, []);
+  assert.deepEqual(status.fullIncompleteRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
   assert.deepEqual(status.deferredRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
   assert.match(status.currentChannelWorkerTransportStatus, /reload_required|fresh_probe_required|dispatch_ready/);
   assert.equal(status.currentChannelWorkerCanDispatch, false);

@@ -66,6 +66,7 @@ function writeReport(payload) {
 function compactGoalReadinessStatus(payload) {
   const currentUsability = payload?.currentUsability && typeof payload.currentUsability === "object" ? payload.currentUsability : {};
   const objectiveSummary = payload?.objectiveRequirementSummary && typeof payload.objectiveRequirementSummary === "object" ? payload.objectiveRequirementSummary : {};
+  const fullObjectiveSummary = payload?.fullObjectiveRequirementSummary && typeof payload.fullObjectiveRequirementSummary === "object" ? payload.fullObjectiveRequirementSummary : {};
   const operatorCard = payload?.goalOperatorActionCard && typeof payload.goalOperatorActionCard === "object" ? payload.goalOperatorActionCard : {};
   return {
     ok: payload?.ok === true,
@@ -75,9 +76,14 @@ function compactGoalReadinessStatus(payload) {
     releaseReady: payload?.releaseReady === true,
     shortReady: payload?.shortReady === true,
     goalComplete: payload?.goalComplete === true,
+    currentGoalComplete: payload?.goalComplete === true,
+    fullGoalComplete: fullObjectiveSummary.canClaimFullGoalNow === true,
     completeRequirements: Number.isFinite(Number(objectiveSummary.completeCount)) ? Number(objectiveSummary.completeCount) : 0,
     totalRequirements: Number.isFinite(Number(objectiveSummary.total)) ? Number(objectiveSummary.total) : 0,
     incompleteRequirements: Array.isArray(objectiveSummary.incompleteRequirementIds) ? objectiveSummary.incompleteRequirementIds : [],
+    fullCompleteRequirements: Number.isFinite(Number(fullObjectiveSummary.completeCount)) ? Number(fullObjectiveSummary.completeCount) : 0,
+    fullTotalRequirements: Number.isFinite(Number(fullObjectiveSummary.total)) ? Number(fullObjectiveSummary.total) : 0,
+    fullIncompleteRequirements: Array.isArray(fullObjectiveSummary.incompleteRequirementIds) ? fullObjectiveSummary.incompleteRequirementIds : [],
     deferredRequirements: Array.isArray(payload?.deferredObjectiveRequirementSummary?.deferredRequirementIds)
       ? payload.deferredObjectiveRequirementSummary.deferredRequirementIds
       : [],
@@ -1230,6 +1236,9 @@ const deferredBlockerPrefixes = [
 const goalOperatorActionCard = {
   status: goalComplete ? "goal_complete" : "external_actions_required",
   canClaimFullGoalNow: goalComplete,
+  currentGoalComplete: goalComplete,
+  fullGoalComplete: fullObjectiveRequirementSummary.canClaimFullGoalNow === true,
+  fullGoalMissingRequirements: fullObjectiveRequirementSummary.incompleteRequirementIds,
   releaseReady: releaseGateStatus.releaseReady,
   requiresFreshCodexChannel: goalRequiresFreshCodexChannel,
   requiresUserPresence: goalRequiresUserPresence,
@@ -1247,7 +1256,7 @@ const goalOperatorActionCard = {
     ...userPresenceRequiredActions,
   ],
   userVisibleNextStep: goalComplete
-    ? "Current single-account Anti-Codex goal is complete; keep refreshing real task evidence as needed."
+    ? "Current single-account Anti-Codex scope is complete; full goal still requires worker transport recovery and second-account proof."
     : "Refresh the current single-account evidence and rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
   compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
