@@ -32,3 +32,9 @@ For current UI desktop tasks, `modelRequestPayloadObserved:true` is required. `m
 ## Guardrail
 
 Do not use artifact creation alone as quota proof. For desktop UI gates, require `modelRequestPayloadObserved:true` or a new route. For hard billing/route proof, prefer fresh `/anticodex/model-routes` ids from a direct real-traffic verifier.
+
+## Billing Dashboard Caveat
+
+This audit does not prove that an external quota or billing dashboard decremented. It proves only local Anti-Codex request evidence: a current report, a current model route entry, and a successful model/tool response. If the provider dashboard remains unchanged, record that as unresolved billing-surface evidence instead of treating local route success as quota-decrement proof.
+
+Fresh check at local time 2026-07-06 04:00 produced `latest-real-mini-tool.json` with `first_response_id:"chatcmpl_092593444a0341a29fd6a33839a79ac9"` and route entries at `2026-07-05T20:00:29.402Z` / `2026-07-05T20:00:39.049Z`. This is current local route evidence, not external quota evidence.

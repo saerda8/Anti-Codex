@@ -32,6 +32,13 @@ const REQUIRED_DOCS = [
 ];
 const REQUIRED_FAILED_JOB_IDS = ["xqw_mr7thgfo_d32uga", "xqw_mr7thq3o_915pb8"];
 const REQUIRED_SUCCESS_JOB_IDS = REQUIRED_DOCS.map((doc) => doc.successJobId);
+const REQUIRED_FOUR_WORKER_PROJECT_PROOF = [
+  { worker: "xiaoqiang1", jobId: "xqw_mr827db3_uu3kmt" },
+  { worker: "xiaoqiang2", jobId: "xqw_mr818o4v_nc4767" },
+  { worker: "xiaoqiang3", jobId: "xqw_mr81ur4n_0asegt" },
+  { worker: "xiaoqiang4", jobId: "xqw_mr821q8h_uhxspf" },
+];
+const XIAOQIANG_PROJECT_REPORT = "latest-xiaoqiang-worker-mcp-project-smoke.json";
 
 function parseArgs() {
   const args = new Map();
@@ -40,7 +47,7 @@ function parseArgs() {
     if (key === "--help" || key === "-h") {
       console.log(`Usage: node scripts/test-anticodex-xiaoqiang-usage-ledger.mjs [options]
 
-Verifies the no-traffic documentation ledger for forced xiaoqiang1/2/3 usage evidence.
+Verifies the no-traffic documentation ledger for forced xiaoqiang1/2/3/4 usage evidence.
 
 Options:
   --repo-root <path>      Repository root to inspect (default: current working directory)
@@ -65,6 +72,15 @@ function readText(repoRoot, relativePath) {
   const filePath = resolve(repoRoot, relativePath);
   if (!existsSync(filePath)) return { ok: false, filePath, text: "" };
   return { ok: true, filePath, text: readFileSync(filePath, "utf8") };
+}
+
+function readJson(filePath) {
+  if (!existsSync(filePath)) return { ok: false, exists: false, filePath, value: null, error: "" };
+  try {
+    return { ok: true, exists: true, filePath, value: JSON.parse(readFileSync(filePath, "utf8")), error: "" };
+  } catch (error) {
+    return { ok: false, exists: true, filePath, value: null, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function writeTextAtomic(filePath, text, encoding = "utf8") {
@@ -139,6 +155,19 @@ function main() {
     }
   }
 
+  const fourWorkerStatusEvidence = REQUIRED_FOUR_WORKER_PROJECT_PROOF.map((expected) => ({
+    ...expected,
+    presentInStatus: authoritativeStatusText.includes(expected.jobId) && authoritativeStatusText.includes(expected.worker),
+  }));
+  for (const evidence of fourWorkerStatusEvidence) {
+    if (!evidence.presentInStatus) {
+      addFailure(failures, "four_worker_project_job_id_missing", `Missing four-worker xiaoqiang project proof for ${evidence.worker} job ${evidence.jobId}.`, {
+        worker: evidence.worker,
+        jobId: evidence.jobId,
+      });
+    }
+  }
+
   const docEvidence = REQUIRED_DOCS.map((doc) => {
     const source = readText(repoRoot, doc.path);
     const markerPresent = source.text.includes(doc.marker);
@@ -172,6 +201,88 @@ function main() {
     return evidence;
   });
 
+  const projectReportPath = join(reportRoot, XIAOQIANG_PROJECT_REPORT);
+  const projectReport = readJson(projectReportPath);
+  const projectResults = Array.isArray(projectReport.value?.results) ? projectReport.value.results : [];
+  const projectResultEvidence = REQUIRED_FOUR_WORKER_PROJECT_PROOF.map((expected) => {
+    const result = projectResults.find((candidate) => candidate?.worker === expected.worker) || null;
+    const cliJson = result?.workspaceVerification?.cliJson || {};
+    const evidence = {
+      ...expected,
+      present: Boolean(result),
+      ok: result?.ok === true,
+      jobIdMatches: result?.jobId === expected.jobId,
+      terminalCompleted: result?.terminalStatus === "completed",
+      markerPresent: typeof result?.marker === "string" && result.marker.length > 0,
+      workspaceVerificationOk: result?.workspaceVerification?.ok === true,
+      doneTextMatches: result?.workspaceVerification?.doneTextMatches === true,
+      testPassed: Number(result?.workspaceVerification?.testExitCode) === 0,
+      cliPassed: Number(result?.workspaceVerification?.cliExitCode) === 0,
+      cliJsonMatches: Number(cliJson.red) === 2 && Number(cliJson.blue) === 1,
+    };
+    if (!evidence.present) {
+      addFailure(failures, "four_worker_project_result_missing", `Missing xiaoqiang-project result for ${expected.worker}.`, { worker: expected.worker });
+      return evidence;
+    }
+    for (const [key, passed] of Object.entries({
+      ok: evidence.ok,
+      jobIdMatches: evidence.jobIdMatches,
+      terminalCompleted: evidence.terminalCompleted,
+      markerPresent: evidence.markerPresent,
+      workspaceVerificationOk: evidence.workspaceVerificationOk,
+      doneTextMatches: evidence.doneTextMatches,
+      testPassed: evidence.testPassed,
+      cliPassed: evidence.cliPassed,
+      cliJsonMatches: evidence.cliJsonMatches,
+    })) {
+      if (!passed) {
+        addFailure(failures, "four_worker_project_result_invalid", `Invalid xiaoqiang-project result for ${expected.worker}: ${key}.`, {
+          worker: expected.worker,
+          jobId: expected.jobId,
+          field: key,
+        });
+      }
+    }
+    return evidence;
+  });
+
+  const fourWorkerProjectProof = {
+    reportPath: projectReportPath,
+    reportExists: projectReport.exists,
+    reportParseable: projectReport.ok,
+    reportError: projectReport.error,
+    reportName: projectReport.value?.reportName || "",
+    scenario: projectReport.value?.scenario || "",
+    requestedRealTraffic: projectReport.value?.requestedRealTraffic === true,
+    usedRealTraffic: projectReport.value?.usedRealTraffic === true,
+    workerCount: Number(projectReport.value?.workerCount || 0),
+    passedWorkerCount: Number(projectReport.value?.passedWorkerCount || 0),
+    failedWorkers: Array.isArray(projectReport.value?.failedWorkers) ? projectReport.value.failedWorkers : [],
+    statusJobIds: fourWorkerStatusEvidence,
+    results: projectResultEvidence,
+  };
+  if (!projectReport.exists) {
+    addFailure(failures, "four_worker_project_report_missing", `Missing ${XIAOQIANG_PROJECT_REPORT} in the report root.`, { reportPath: projectReportPath });
+  } else if (!projectReport.ok) {
+    addFailure(failures, "four_worker_project_report_unparseable", `Could not parse ${XIAOQIANG_PROJECT_REPORT}.`, { reportPath: projectReportPath, error: projectReport.error });
+  } else {
+    if (projectReport.value?.reportName !== "xiaoqiang-worker-mcp-project-smoke") {
+      addFailure(failures, "four_worker_project_report_name", "Unexpected xiaoqiang project proof report name.", { reportName: projectReport.value?.reportName || "" });
+    }
+    if (projectReport.value?.scenario !== "xiaoqiang-project") {
+      addFailure(failures, "four_worker_project_scenario", "Xiaoqiang project proof did not use the xiaoqiang-project scenario.", { scenario: projectReport.value?.scenario || "" });
+    }
+    if (Number(projectReport.value?.workerCount || 0) !== 4 || Number(projectReport.value?.passedWorkerCount || 0) !== 4) {
+      addFailure(failures, "four_worker_project_count", "Xiaoqiang project proof did not pass exactly 4/4 workers.", {
+        workerCount: Number(projectReport.value?.workerCount || 0),
+        passedWorkerCount: Number(projectReport.value?.passedWorkerCount || 0),
+      });
+    }
+    if (Array.isArray(projectReport.value?.failedWorkers) && projectReport.value.failedWorkers.length > 0) {
+      addFailure(failures, "four_worker_project_failed_workers", "Xiaoqiang project proof contains failed workers.", { failedWorkers: projectReport.value.failedWorkers });
+    }
+  }
+
   const payload = {
     ok: failures.length === 0,
     reportName: REPORT_NAME,
@@ -185,6 +296,7 @@ function main() {
     requiredFailedJobIds: failedJobEvidence,
     requiredSuccessJobIds: successfulJobEvidence,
     auditDocs: docEvidence,
+    fourWorkerProjectProof,
     failures,
     elapsedMs: Date.now() - startedAt,
   };
