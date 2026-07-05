@@ -1433,41 +1433,47 @@ function summarizeGate(definition) {
       for (const expectedDeferred of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
         if (!deferredRequirementIds.includes(expectedDeferred)) semanticFailures.push(`goal_readiness_deferred_requirement_missing:${expectedDeferred}`);
       }
+      const workerMcpDeferredForCurrentGoal = deferredRequirementIds.includes("worker_mcp_multiuse")
+        && currentUsability?.requiresCurrentChannelWorkerMcp === false
+        && currentUsability?.workerMcpTemporarilyDisabled === true;
       if (objectiveRequirementAudit.length !== 4) semanticFailures.push("goal_readiness_objective_requirement_audit_count");
       if (fullObjectiveRequirementAudit.length !== 6) semanticFailures.push("goal_readiness_full_objective_requirement_audit_count");
       for (const requiredAuditId of ["codex_client_copy", "antigravity_model_text", "real_long_tasks_with_results", "native_codex_like_agentic_experience"]) {
         if (!objectiveRequirementAudit.some((item) => String(item?.id || "") === requiredAuditId)) semanticFailures.push(`goal_readiness_objective_requirement_audit_missing:${requiredAuditId}`);
       }
       for (const proof of ["codexClientCopy", "workerMcp", "desktopAgenticTasks", "agenticCapabilityMatrix", "realTaskCoverageRoadmap", "longTaskLandingMatrix", "realApprovalPlan", "releaseShortPath", "secondAccountLoginEntrypoint", "secondAccountReadinessSummary", "accountIsolationPreparedOnly"]) {
+        if (proof === "workerMcp" && workerMcpDeferredForCurrentGoal) continue;
         if (proven[proof] !== true) semanticFailures.push(`goal_readiness_${proof}_not_proven`);
       }
-      if (Number(worker.passedServerCount || 0) < requiredWorkerServers.length) semanticFailures.push("goal_readiness_worker_mcp_passed_count");
-      const toolCountByServer = worker.toolCountByServer && typeof worker.toolCountByServer === "object" ? worker.toolCountByServer : {};
-      for (const server of requiredWorkerServers) {
-        if (Number(toolCountByServer[server] || 0) < 1) semanticFailures.push(`goal_readiness_worker_mcp_tool_count:${server}`);
+      if (!workerMcpDeferredForCurrentGoal) {
+        if (Number(worker.passedServerCount || 0) < requiredWorkerServers.length) semanticFailures.push("goal_readiness_worker_mcp_passed_count");
+        const toolCountByServer = worker.toolCountByServer && typeof worker.toolCountByServer === "object" ? worker.toolCountByServer : {};
+        for (const server of requiredWorkerServers) {
+          if (Number(toolCountByServer[server] || 0) < 1) semanticFailures.push(`goal_readiness_worker_mcp_tool_count:${server}`);
+        }
+        if (Array.isArray(worker.incompleteToolCountServers) && worker.incompleteToolCountServers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_tool_count_incomplete");
+        if (blockers.includes("worker_mcp_tool_count_incomplete")) semanticFailures.push("goal_readiness_worker_mcp_tool_count_blocker_present");
+        if (worker.taskSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_not_ok");
+        if (worker.taskSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_real_traffic_missing");
+        if (worker.taskSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_antigravity_not_excluded");
+        if (Number(worker.taskSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_passed_count");
+        if (Array.isArray(worker.taskSmokeMissingRequiredWorkers) && worker.taskSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_missing_required_workers");
+        if (Array.isArray(worker.taskSmokeFailedWorkers) && worker.taskSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_failed_workers");
+        if (worker.projectSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_not_ok");
+        if (worker.projectSmokeScenario !== "project") semanticFailures.push("goal_readiness_worker_mcp_project_smoke_scenario");
+        if (worker.projectSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_real_traffic_missing");
+        if (worker.projectSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_antigravity_not_excluded");
+        if (Number(worker.projectSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_passed_count");
+        if (Array.isArray(worker.projectSmokeMissingRequiredWorkers) && worker.projectSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_missing_required_workers");
+        if (Array.isArray(worker.projectSmokeFailedWorkers) && worker.projectSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_failed_workers");
+        if (worker.complexProjectSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_not_ok");
+        if (worker.complexProjectSmokeScenario !== "complex-project") semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_scenario");
+        if (worker.complexProjectSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_real_traffic_missing");
+        if (worker.complexProjectSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_antigravity_not_excluded");
+        if (Number(worker.complexProjectSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_passed_count");
+        if (Array.isArray(worker.complexProjectSmokeMissingRequiredWorkers) && worker.complexProjectSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_missing_required_workers");
+        if (Array.isArray(worker.complexProjectSmokeFailedWorkers) && worker.complexProjectSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_failed_workers");
       }
-      if (Array.isArray(worker.incompleteToolCountServers) && worker.incompleteToolCountServers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_tool_count_incomplete");
-      if (blockers.includes("worker_mcp_tool_count_incomplete")) semanticFailures.push("goal_readiness_worker_mcp_tool_count_blocker_present");
-      if (worker.taskSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_not_ok");
-      if (worker.taskSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_real_traffic_missing");
-      if (worker.taskSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_antigravity_not_excluded");
-      if (Number(worker.taskSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_passed_count");
-      if (Array.isArray(worker.taskSmokeMissingRequiredWorkers) && worker.taskSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_missing_required_workers");
-      if (Array.isArray(worker.taskSmokeFailedWorkers) && worker.taskSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_task_smoke_failed_workers");
-      if (worker.projectSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_not_ok");
-      if (worker.projectSmokeScenario !== "project") semanticFailures.push("goal_readiness_worker_mcp_project_smoke_scenario");
-      if (worker.projectSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_real_traffic_missing");
-      if (worker.projectSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_antigravity_not_excluded");
-      if (Number(worker.projectSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_passed_count");
-      if (Array.isArray(worker.projectSmokeMissingRequiredWorkers) && worker.projectSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_missing_required_workers");
-      if (Array.isArray(worker.projectSmokeFailedWorkers) && worker.projectSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_project_smoke_failed_workers");
-      if (worker.complexProjectSmokeReportOk !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_not_ok");
-      if (worker.complexProjectSmokeScenario !== "complex-project") semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_scenario");
-      if (worker.complexProjectSmokeUsedRealTraffic !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_real_traffic_missing");
-      if (worker.complexProjectSmokeAntigravityExcluded !== true) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_antigravity_not_excluded");
-      if (Number(worker.complexProjectSmokePassedWorkerCount || 0) < REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_passed_count");
-      if (Array.isArray(worker.complexProjectSmokeMissingRequiredWorkers) && worker.complexProjectSmokeMissingRequiredWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_missing_required_workers");
-      if (Array.isArray(worker.complexProjectSmokeFailedWorkers) && worker.complexProjectSmokeFailedWorkers.length > 0) semanticFailures.push("goal_readiness_worker_mcp_complex_project_smoke_failed_workers");
       if (releaseGateStatus.shortReady !== true) semanticFailures.push("goal_readiness_short_not_ready");
       for (const gateId of ["accountProxyReadiness", "postVerification"]) {
         if (requiredReleaseComplete) {
@@ -3017,6 +3023,7 @@ const noTrafficEvidenceRefreshOrder = [
   ["realTaskCoverageRoadmap", "no-traffic-local", "node scripts\\test-anticodex-real-task-coverage-roadmap.mjs"],
   ["nativeCodexParityTaskMatrix", "no-traffic-local", "node scripts\\test-anticodex-native-codex-parity-tasks.mjs"],
   ["realApprovalPlan", "no-traffic-local", "node scripts\\test-anticodex-real-approval-plan.mjs"],
+  ["ecosystemSurfaces", "no-traffic-local", "node scripts\\test-anticodex-ecosystem-surfaces.mjs"],
   ["goalReadiness", "no-traffic-local", "node scripts\\test-anticodex-goal-readiness.mjs"],
   ["goalUnblockPackage", "no-traffic-local", "node scripts\\build-anticodex-goal-unblock-package.mjs"],
   ["freshChannelWorkerProofKit", "no-traffic-local", "node scripts\\build-anticodex-fresh-channel-worker-proof-kit.mjs"],

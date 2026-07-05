@@ -85,6 +85,43 @@ const REQUIRED_REPORTS = [
     },
   },
   {
+    id: "xiaoqiangWorkerComplexProjectSmoke",
+    file: "latest-worker-mcp-complex-project-smoke.json",
+    surface: "xiaoqiang-worker-task",
+    maxAgeHours: 24,
+    validate(report, fail) {
+      if (report.ok !== true) fail("xiaoqiang worker complex project smoke ok=false");
+      if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker complex project smoke did not use real worker traffic");
+      if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker complex project smoke coverage kind mismatch");
+      if (report.scenario !== "complex-project") fail("xiaoqiang worker complex project smoke scenario mismatch");
+      if (Number(report.workerCount || 0) !== 3) fail("xiaoqiang worker complex project smoke worker count mismatch");
+      if (Number(report.passedWorkerCount || 0) !== 3) fail("xiaoqiang worker complex project smoke passed count mismatch");
+      const failedWorkers = Array.isArray(report.failedWorkers) ? report.failedWorkers : [];
+      if (failedWorkers.length !== 0) fail(`xiaoqiang worker complex project smoke has failed workers: ${failedWorkers.join(",")}`);
+      const results = Array.isArray(report.results) ? report.results : [];
+      for (const name of ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"]) {
+        const result = results.find((entry) => entry?.worker === name);
+        if (!result) {
+          fail(`xiaoqiang worker complex project smoke missing ${name}`);
+          continue;
+        }
+        if (result.ok !== true) fail(`xiaoqiang worker complex project smoke result not ok for ${name}`);
+        if (!result.jobId) fail(`xiaoqiang worker complex project smoke missing job id for ${name}`);
+        const verification = result.workspaceVerification || {};
+        if (verification.ok !== true) fail(`xiaoqiang worker complex project smoke workspace verification failed for ${name}`);
+        if (!Array.isArray(verification.missingFiles) || verification.missingFiles.length !== 0) fail(`xiaoqiang worker complex project smoke missing files for ${name}`);
+        if (Array.isArray(verification.extraFiles) && verification.extraFiles.length !== 0) fail(`xiaoqiang worker complex project smoke extra files for ${name}`);
+        if (verification.doneTextMatches !== true) fail(`xiaoqiang worker complex project smoke done marker mismatch for ${name}`);
+        if (verification.sourcesOk !== true) fail(`xiaoqiang worker complex project smoke sources invalid for ${name}`);
+        if (Number(verification.testExitCode) !== 0) fail(`xiaoqiang worker complex project smoke tests failed for ${name}`);
+        if (Number(verification.cliExitCode) !== 0) fail(`xiaoqiang worker complex project smoke CLI failed for ${name}`);
+        if (Number(verification.cliJson?.sourceCount || 0) !== 3) fail(`xiaoqiang worker complex project smoke CLI JSON source count mismatch for ${name}`);
+        if (verification.reportOk !== true) fail(`xiaoqiang worker complex project smoke report invalid for ${name}`);
+        if (verification.htmlOk !== true) fail(`xiaoqiang worker complex project smoke HTML invalid for ${name}`);
+      }
+    },
+  },
+  {
     id: "pluginCapabilities",
     file: "latest-plugin-capabilities.json",
     surface: "plugins-connectors",
@@ -248,7 +285,7 @@ function main() {
       maxAgeHours,
       ok: reportFailures.length === 0,
       failures: reportFailures,
-      workerFailureDetails: spec.id === "xiaoqiangWorkerProjectSmoke" ? compactWorkerFailureDetails(report) : [],
+      workerFailureDetails: ["xiaoqiangWorkerProjectSmoke", "xiaoqiangWorkerComplexProjectSmoke"].includes(spec.id) ? compactWorkerFailureDetails(report) : [],
     });
     failures.push(...reportFailures);
   }
