@@ -215,6 +215,7 @@ function Read-JsonSummary {
             antigravityCliWindowsUserLoginDryRunOk = $json.antigravityCliWindowsUserLoginDryRunOk
             antigravityCliWindowsUserLoginDryRunContract = $json.antigravityCliWindowsUserLoginDryRunContract
             localConnectorVerifierOk = $json.localConnectorVerifierOk
+            managerMojibakeContractsOk = $json.managerMojibakeContractsOk
             publicDocumentationOk = $json.publicDocumentationOk
             publicDocumentationClientCopySyncContractOk = $json.publicDocumentationClientCopySyncContractOk
             translatorRegressionOk = $json.translatorRegressionOk
@@ -267,6 +268,7 @@ function Read-JsonSummary {
             workerMcpStatusProbeEvidence = $json.workerMcpStatusProbeEvidence
             workerMcpTaskSmokeEvidence = $json.workerMcpTaskSmokeEvidence
             workerMcpProjectSmokeEvidence = $json.workerMcpProjectSmokeEvidence
+            workerMcpComplexProjectSmokeEvidence = $json.workerMcpComplexProjectSmokeEvidence
             currentChannelWorkerTransportEvidence = $json.currentChannelWorkerTransportEvidence
             currentChannelWorkerRecoveryEvidence = $json.currentChannelWorkerRecoveryEvidence
             coldRelaunchEvidence = $json.coldRelaunchEvidence
@@ -459,6 +461,7 @@ $latestReports = @(
     "latest-worker-mcp-status-probe.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
+    "latest-worker-mcp-complex-project-smoke.json",
     "latest-current-channel-worker-transport.json",
     "latest-current-channel-worker-recovery.json",
     "latest-conversation-hygiene.json",

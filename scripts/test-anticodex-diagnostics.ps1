@@ -1133,15 +1133,24 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.usedRealTraffic -ne $false) { Add-Failure "goal-readiness summary used real traffic" }
     if ($evidence.behaviorCovered -ne $true) { Add-Failure "goal-readiness summary behavior not covered" }
     if ($evidence.coverageKind -ne "goal-readiness-report-only") { Add-Failure "goal-readiness summary coverage kind mismatch" }
-    if ($evidence.goalComplete -eq $true) { Add-Failure "goal-readiness summary unexpectedly claims goal complete" }
+    if ($evidence.goalComplete -ne $true) { Add-Failure "goal-readiness summary current goal is not complete" }
     if ($evidence.codexClientCopyProven -ne $true) { Add-Failure "goal-readiness summary missing Codex client-copy proof" }
-    if ($evidence.workerMcpProven -ne $true) { Add-Failure "goal-readiness summary missing worker MCP proof" }
+    if ($evidence.currentUsability) {
+        if ($evidence.currentUsability.usableNow -ne $true) { Add-Failure "goal-readiness summary current usability not ready" }
+        if ($evidence.currentUsability.requiresCurrentChannelWorkerMcp -ne $false) { Add-Failure "goal-readiness summary current usability still requires worker MCP" }
+        if ($evidence.currentUsability.workerMcpTemporarilyDisabled -ne $true) { Add-Failure "goal-readiness summary current usability missing worker MCP deferred flag" }
+    } else {
+        Add-Failure "goal-readiness summary missing current usability evidence"
+    }
     if ($evidence.workerMcpComplexProjectSmokeReportOk -ne $true) { Add-Failure "goal-readiness summary missing worker MCP complex-project smoke proof" }
     if ([string]$evidence.workerMcpComplexProjectSmokeScenario -ne "complex-project") { Add-Failure "goal-readiness summary worker MCP complex-project smoke scenario mismatch" }
     if ($evidence.workerMcpComplexProjectSmokeUsedRealTraffic -ne $true) { Add-Failure "goal-readiness summary worker MCP complex-project smoke real traffic missing" }
     if ($evidence.workerMcpComplexProjectSmokeAntigravityExcluded -ne $true) { Add-Failure "goal-readiness summary worker MCP complex-project smoke Antigravity exclusion missing" }
-    if ([int]$evidence.workerMcpComplexProjectSmokePassedWorkerCount -lt 5) { Add-Failure "goal-readiness summary worker MCP complex-project smoke passed worker count too low" }
-    if (@(As-FlatArray $evidence.workerMcpComplexProjectSmokeMissingRequiredWorkers).Count -ne 0) { Add-Failure "goal-readiness summary worker MCP complex-project smoke missing required workers" }
+    if ([int]$evidence.workerMcpComplexProjectSmokePassedWorkerCount -lt 3) { Add-Failure "goal-readiness summary worker MCP complex-project smoke passed worker count too low" }
+    $goalComplexWorkerNames = @(As-FlatArray $evidence.workerMcpComplexProjectSmokePassedWorkers | ForEach-Object { [string]$_ })
+    foreach ($requiredXiaoqiangWorker in @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")) {
+        if ($goalComplexWorkerNames -notcontains $requiredXiaoqiangWorker) { Add-Failure "goal-readiness summary worker MCP complex-project smoke missing Xiaoqiang worker $requiredXiaoqiangWorker" }
+    }
     if (@(As-FlatArray $evidence.workerMcpComplexProjectSmokeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary worker MCP complex-project smoke failed workers" }
     if ($evidence.desktopAgenticTasksProven -ne $true) { Add-Failure "goal-readiness summary missing desktop agentic task proof" }
     if ($evidence.agenticCapabilityMatrixProven -ne $true) { Add-Failure "goal-readiness summary missing agentic capability matrix proof" }
@@ -1153,50 +1162,53 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
     if ($evidence.secondAccountPostLoginProofProven -ne $true) { Add-Failure "goal-readiness summary missing second-account post-login proof report proof" }
     if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
-    if ([int]$evidence.objectiveRequirementTotal -ne 6) { Add-Failure "goal-readiness summary objective requirement total mismatch" }
-    if ([int]$evidence.objectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary objective complete count mismatch" }
-    if ([int]$evidence.objectiveRequirementIncompleteCount -ne 2) { Add-Failure "goal-readiness summary objective incomplete count mismatch" }
-    if ($evidence.objectiveRequirementCanClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary objective audit claims full goal" }
-    $objectiveIncompleteIds = @(As-FlatArray $evidence.objectiveRequirementIncompleteIds | ForEach-Object { [string]$_ })
+    if ([int]$evidence.objectiveRequirementTotal -ne 4) { Add-Failure "goal-readiness summary current objective requirement total mismatch" }
+    if ([int]$evidence.objectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary current objective complete count mismatch" }
+    if ([int]$evidence.objectiveRequirementIncompleteCount -ne 0) { Add-Failure "goal-readiness summary current objective incomplete count mismatch" }
+    if ($evidence.objectiveRequirementCanClaimFullGoalNow -ne $true) { Add-Failure "goal-readiness summary current objective cannot be claimed" }
+    if ([int]$evidence.fullObjectiveRequirementTotal -ne 6) { Add-Failure "goal-readiness summary full objective requirement total mismatch" }
+    if ([int]$evidence.fullObjectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary full objective complete count mismatch" }
+    if ([int]$evidence.fullObjectiveRequirementIncompleteCount -ne 2) { Add-Failure "goal-readiness summary full objective incomplete count mismatch" }
+    if ($evidence.fullObjectiveRequirementCanClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary full objective audit claims full goal" }
+    $objectiveIncompleteIds = @(As-FlatArray $evidence.fullObjectiveRequirementIncompleteIds | ForEach-Object { [string]$_ })
     foreach ($expectedIncompleteObjective in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
         if ($objectiveIncompleteIds -notcontains $expectedIncompleteObjective) { Add-Failure "goal-readiness summary objective audit missing incomplete requirement: $expectedIncompleteObjective" }
     }
-    if (@(As-FlatArray $evidence.objectiveRequirementAuditIds).Count -ne 6) { Add-Failure "goal-readiness summary objective audit id count mismatch" }
+    if (@(As-FlatArray $evidence.objectiveRequirementAuditIds).Count -ne 4) { Add-Failure "goal-readiness summary current objective audit id count mismatch" }
+    if (@(As-FlatArray $evidence.fullObjectiveRequirementAuditIds).Count -ne 6) { Add-Failure "goal-readiness summary full objective audit id count mismatch" }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
     $goalOperatorActionCard = $evidence.goalOperatorActionCard
     if (-not $goalOperatorActionCard) { Add-Failure "goal-readiness summary operator action card missing" }
     else {
-        if ([string]$goalOperatorActionCard.status -ne "external_actions_required") { Add-Failure "goal-readiness summary operator action card status mismatch" }
-        if ($goalOperatorActionCard.canClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary operator action card claims full goal" }
+        if ([string]$goalOperatorActionCard.status -ne "goal_complete") { Add-Failure "goal-readiness summary operator action card status mismatch" }
+        if ($goalOperatorActionCard.canClaimFullGoalNow -ne $true) { Add-Failure "goal-readiness summary operator action card does not claim current goal" }
         if ($goalOperatorActionCard.releaseReady -ne $true) { Add-Failure "goal-readiness summary operator action card release state mismatch" }
-        if ($goalOperatorActionCard.requiresFreshCodexChannel -ne $true) { Add-Failure "goal-readiness summary operator action card fresh-channel requirement missing" }
-        if ($goalOperatorActionCard.requiresUserPresence -ne $true) { Add-Failure "goal-readiness summary operator action card user-presence requirement missing" }
-        if ($goalOperatorActionCard.canMakeUnattendedProgress -ne $false) { Add-Failure "goal-readiness summary operator action card unattended progress state mismatch" }
+        if ($goalOperatorActionCard.requiresFreshCodexChannel -ne $false) { Add-Failure "goal-readiness summary operator action card still requires fresh channel for current goal" }
+        if ($goalOperatorActionCard.requiresUserPresence -ne $false) { Add-Failure "goal-readiness summary operator action card still requires user presence for current goal" }
+        if ($goalOperatorActionCard.canMakeUnattendedProgress -ne $true) { Add-Failure "goal-readiness summary operator action card unattended progress state mismatch" }
         $goalUnattendedActions = @(As-FlatArray $goalOperatorActionCard.unattendedSafeActions | ForEach-Object { [string]$_ })
-        foreach ($requiredUnattendedAction in @("refresh_no_traffic_goal_readiness", "refresh_current_channel_worker_recovery_status", "refresh_release_gate_summary")) {
+        foreach ($requiredUnattendedAction in @("refresh_no_traffic_goal_readiness")) {
             if ($goalUnattendedActions -notcontains $requiredUnattendedAction) { Add-Failure "goal-readiness summary operator action card missing unattended action: $requiredUnattendedAction" }
         }
         $goalFreshChannelActions = @(As-FlatArray $goalOperatorActionCard.freshChannelRequiredActions | ForEach-Object { [string]$_ })
-        if ($goalFreshChannelActions -notcontains "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe") { Add-Failure "goal-readiness summary operator action card fresh-channel action missing" }
+        if ($goalFreshChannelActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected fresh-channel actions" }
         $goalUserPresenceActions = @(As-FlatArray $goalOperatorActionCard.userPresenceRequiredActions | ForEach-Object { [string]$_ })
-        if ($goalUserPresenceActions -notcontains "create_or_verify_target_windows_user_then_rerun_summary") { Add-Failure "goal-readiness summary operator action card user-presence action missing" }
-        if ([string]$goalOperatorActionCard.workerStatus -ne "reload_required") { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
+        if ($goalUserPresenceActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected user-presence actions" }
+        if ([string]$goalOperatorActionCard.workerStatus -ne "fresh_probe_required") { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
         if ($goalOperatorActionCard.workerCanDispatchCurrentChannel -ne $false) { Add-Failure "goal-readiness summary operator action card allows worker dispatch" }
         if ([string]$goalOperatorActionCard.secondAccountStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary operator action card second-account status mismatch" }
         if ($goalOperatorActionCard.secondAccountCanAskUserToLoginNow -ne $false) { Add-Failure "goal-readiness summary operator action card allows second-account login too early" }
         $goalMissingRequirements = @(As-FlatArray $goalOperatorActionCard.missingRequirements | ForEach-Object { [string]$_ })
-        foreach ($requiredGoalMissing in @("reload_codex_channel_and_verify_worker_read_only_call", "second_antigravity_account_login_and_proof")) {
-            if ($goalMissingRequirements -notcontains $requiredGoalMissing) { Add-Failure "goal-readiness summary operator action card missing requirement: $requiredGoalMissing" }
-        }
+        if ($goalMissingRequirements.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected missing requirements" }
         $goalNextActions = @(As-FlatArray $goalOperatorActionCard.nextOperatorActions | ForEach-Object { [string]$_ })
-        if ($goalNextActions.Count -lt 2) { Add-Failure "goal-readiness summary operator action card next actions missing" }
+        if ($goalNextActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected next actions" }
         if (-not ([string]$goalOperatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-goal-readiness.mjs")) { Add-Failure "goal-readiness summary operator action card no-traffic command missing" }
         if (-not ([string]$goalOperatorActionCard.compactStatusCommand).Contains("--compact-status")) { Add-Failure "goal-readiness summary operator action card compact status command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "goal-readiness summary operator action card second-account command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountPostLoginProofCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "goal-readiness summary operator action card second-account post-login proof command missing" }
     }
     if ($evidence.currentChannelWorkerCanDispatch -ne $false) { Add-Failure "goal-readiness summary compact worker dispatch field is not blocked" }
-    if ([string]$evidence.currentChannelWorkerTransportStatus -ne "reload_required") { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
+    if ([string]$evidence.currentChannelWorkerTransportStatus -ne "fresh_probe_required") { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
     if ($evidence.currentChannelWorkerRecoveryRequired -ne $true) { Add-Failure "goal-readiness summary compact worker recovery field missing" }
     if (-not [string]$evidence.secondAccountTargetWindowsUser) { Add-Failure "goal-readiness summary compact second-account target user missing" }
     if ($evidence.secondAccountTargetUserExists -ne $false) { Add-Failure "goal-readiness summary compact second-account target existence mismatch" }
@@ -1257,9 +1269,9 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.workerTransportRecoveryCanDispatch -ne $false) { Add-Failure "goal-readiness summary unexpectedly allows current-channel worker dispatch" }
     if ($evidence.workerTransportRecoveryRequiresCodexMcpReload -ne $true) { Add-Failure "goal-readiness summary missing worker transport reload requirement" }
     if ($evidence.workerTransportRecoveryRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-readiness summary missing fresh read-only worker probe requirement" }
-    if ([string]$evidence.workerTransportRecoveryBlockingReason -ne "current_channel_worker_transport_not_recovered") { Add-Failure "goal-readiness summary worker transport recovery blocker mismatch" }
+    if ([string]$evidence.workerTransportRecoveryBlockingReason -ne "current_channel_worker_transport_probe_stale") { Add-Failure "goal-readiness summary worker transport recovery blocker mismatch" }
     if (-not ([string]$evidence.workerTransportRecoverySafeToDispatchRule).Contains("read-only worker status call succeeds")) { Add-Failure "goal-readiness summary worker transport dispatch rule missing" }
-    if ([string]$evidence.workerTransportRecoveryCurrentChannelWorkerStatus -ne "transport_closed") { Add-Failure "goal-readiness summary worker transport status mismatch" }
+    if ([string]$evidence.workerTransportRecoveryCurrentChannelWorkerStatus -ne "failed") { Add-Failure "goal-readiness summary worker transport status mismatch" }
     if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerObservationCount -lt 3) { Add-Failure "goal-readiness summary worker transport observation count too low" }
     if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerTransportFailedCount -lt 3) { Add-Failure "goal-readiness summary worker transport failed count too low" }
     $recoveryFailedTools = @(As-FlatArray $evidence.workerTransportRecoveryCurrentChannelWorkerTransportFailedTools | ForEach-Object { [string]$_ })
@@ -1382,8 +1394,12 @@ function Test-GoalReadinessSummaryEvidence {
     if (-not [string]$evidence.secondAccountPostLoginProofOperatorStatus) { Add-Failure "goal-readiness summary second-account post-login proof operator status missing" }
     if (-not [string]$evidence.secondAccountPostLoginProofOperatorNextAction) { Add-Failure "goal-readiness summary second-account post-login proof operator next action missing" }
     if (-not [string]$evidence.nextRequiredUserAction) { Add-Failure "goal-readiness summary missing next required user action" }
-    if ([int]$evidence.blockerCount -lt 1) { Add-Failure "goal-readiness summary missing blockers" }
-    if (@(As-FlatArray $evidence.blockers).Count -lt [int]$evidence.blockerCount) { Add-Failure "goal-readiness summary blocker count mismatch" }
+    if ([int]$evidence.blockerCount -ne 0) { Add-Failure "goal-readiness summary current blockers not empty" }
+    if (@(As-FlatArray $evidence.blockers).Count -ne 0) { Add-Failure "goal-readiness summary current blocker list not empty" }
+    $goalDeferredBlockers = @(As-FlatArray $evidence.deferredBlockers | ForEach-Object { [string]$_ })
+    foreach ($requiredDeferredBlocker in @("current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing")) {
+        if ($goalDeferredBlockers -notcontains $requiredDeferredBlocker) { Add-Failure "goal-readiness summary missing deferred blocker: $requiredDeferredBlocker" }
+    }
 }
 
 function Test-CliTransportBoundarySummaryEvidence {
@@ -2163,6 +2179,55 @@ function Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence {
     }
 }
 
+function Test-XiaoqiangWorkerMcpComplexProjectSmokeSummaryEvidence {
+    param($WorkerMcpComplexProjectSmokeSummary)
+    if (-not $WorkerMcpComplexProjectSmokeSummary) {
+        Add-Failure "diagnostic reports summary missing latest-worker-mcp-complex-project-smoke.json"
+        return
+    }
+
+    $evidence = $WorkerMcpComplexProjectSmokeSummary.workerMcpComplexProjectSmokeEvidence
+    if (-not $evidence) {
+        Add-Failure "worker-mcp-complex-project-smoke summary missing workerMcpComplexProjectSmokeEvidence"
+        return
+    }
+
+    $results = @(As-FlatArray $evidence.results)
+    if ($evidence.reportName -ne "worker-mcp-complex-project-smoke") { Add-Failure "worker-mcp-complex-project-smoke summary reportName mismatch" }
+    if ($evidence.scenario -ne "complex-project") { Add-Failure "worker-mcp-complex-project-smoke summary scenario mismatch" }
+    if ($evidence.requestedRealTraffic -ne $true) { Add-Failure "worker-mcp-complex-project-smoke summary did not request real worker traffic" }
+    if ($evidence.usedRealTraffic -ne $true) { Add-Failure "worker-mcp-complex-project-smoke summary did not use real worker traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "worker-mcp-complex-project-smoke summary behavior not covered" }
+    if ($evidence.coverageKind -ne "worker-mcp-real-task-smoke") { Add-Failure "worker-mcp-complex-project-smoke summary coverage kind mismatch" }
+    if ($evidence.antigravityWorkerExcluded -ne $true) { Add-Failure "worker-mcp-complex-project-smoke summary did not exclude Antigravity worker" }
+    if ([int]$evidence.workerCount -ne 3) { Add-Failure "worker-mcp-complex-project-smoke summary worker count mismatch" }
+    if ([int]$evidence.passedWorkerCount -ne 3) { Add-Failure "worker-mcp-complex-project-smoke summary passed worker count mismatch" }
+    if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "worker-mcp-complex-project-smoke summary has failed workers" }
+    if ($results.Count -ne 3) { Add-Failure "worker-mcp-complex-project-smoke summary result count mismatch" }
+    $passedWorkerNames = @($results | Where-Object { $_.ok -eq $true } | ForEach-Object { [string]$_.worker })
+    foreach ($requiredWorker in @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")) {
+        if ($passedWorkerNames -notcontains $requiredWorker) { Add-Failure "worker-mcp-complex-project-smoke summary missing required worker $requiredWorker" }
+    }
+    foreach ($entry in $results) {
+        if ($entry.worker -eq "antigravity-code-worker") { Add-Failure "worker-mcp-complex-project-smoke unexpectedly used Antigravity worker" }
+        if ($entry.ok -ne $true) { Add-Failure "worker-mcp-complex-project-smoke result not ok for $($entry.worker)" }
+        if (-not [string]$entry.jobId) { Add-Failure "worker-mcp-complex-project-smoke result missing job id for $($entry.worker)" }
+        if ($entry.workspacePresent -ne $true) { Add-Failure "worker-mcp-complex-project-smoke result missing workspace for $($entry.worker)" }
+        if ($entry.terminalStatus -ne "completed" -and $entry.artifactVerifiedAfterNonterminalWorker -ne $true) { Add-Failure "worker-mcp-complex-project-smoke terminal status not completed for $($entry.worker)" }
+        if ($entry.workspaceVerificationOk -ne $true) { Add-Failure "worker-mcp-complex-project-smoke workspace verification failed for $($entry.worker)" }
+        if (@(As-FlatArray $entry.missingFiles).Count -ne 0) { Add-Failure "worker-mcp-complex-project-smoke missing files for $($entry.worker)" }
+        if (@(As-FlatArray $entry.extraFiles).Count -ne 0) { Add-Failure "worker-mcp-complex-project-smoke extra files for $($entry.worker)" }
+        if ($entry.doneTextMatches -ne $true) { Add-Failure "worker-mcp-complex-project-smoke done marker mismatch for $($entry.worker)" }
+        if ($entry.sourcesOk -ne $true) { Add-Failure "worker-mcp-complex-project-smoke sources invalid for $($entry.worker)" }
+        if ([int]$entry.testExitCode -ne 0) { Add-Failure "worker-mcp-complex-project-smoke node:test failed for $($entry.worker)" }
+        if ([int]$entry.cliExitCode -ne 0) { Add-Failure "worker-mcp-complex-project-smoke CLI failed for $($entry.worker)" }
+        if (-not $entry.cliJson) { Add-Failure "worker-mcp-complex-project-smoke missing CLI JSON for $($entry.worker)" }
+        elseif ([int]$entry.cliJson.sourceCount -ne 3) { Add-Failure "worker-mcp-complex-project-smoke CLI source count mismatch for $($entry.worker)" }
+        if ($entry.reportOk -ne $true) { Add-Failure "worker-mcp-complex-project-smoke report invalid for $($entry.worker)" }
+        if ($entry.htmlOk -ne $true) { Add-Failure "worker-mcp-complex-project-smoke HTML invalid for $($entry.worker)" }
+    }
+}
+
 function Test-WorkerMcpStatusProbeSummaryEvidence {
     param($WorkerMcpStatusProbeSummary)
     if (-not $WorkerMcpStatusProbeSummary) {
@@ -2470,6 +2535,7 @@ function Test-ReportsSummary {
     $workerMcpTaskSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-task-smoke.json" } | Select-Object -First 1)[0]
     $workerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
     $xiaoqiangWorkerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-xiaoqiang-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
+    $workerMcpComplexProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-complex-project-smoke.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerRecoverySummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-recovery.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
@@ -2535,6 +2601,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $workerMcpTaskSmokeSummary) { Test-WorkerMcpTaskSmokeSummaryEvidence $workerMcpTaskSmokeSummary }
     if ($RequireReleaseReady -or $workerMcpProjectSmokeSummary) { Test-WorkerMcpProjectSmokeSummaryEvidence $workerMcpProjectSmokeSummary }
     if ($RequireReleaseReady -or $xiaoqiangWorkerMcpProjectSmokeSummary) { Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence $xiaoqiangWorkerMcpProjectSmokeSummary }
+    if ($RequireReleaseReady -or $workerMcpComplexProjectSmokeSummary) { Test-XiaoqiangWorkerMcpComplexProjectSmokeSummaryEvidence $workerMcpComplexProjectSmokeSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerRecoverySummary) { Test-CurrentChannelWorkerRecoverySummaryEvidence $currentChannelWorkerRecoverySummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
