@@ -238,6 +238,7 @@ const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isWorkerMcpComplexProjectSmokeReport = report?.reportName === "worker-mcp-complex-project-smoke" || /latest-worker-mcp-complex-project-smoke\.json$/i.test(path);
 const isXiaoqiangWorkerMcpProjectSmokeReport = report?.reportName === "xiaoqiang-worker-mcp-project-smoke" || /latest-xiaoqiang-worker-mcp-project-smoke\.json$/i.test(path);
+const isXiaoqiangUsageLedgerReport = report?.reportName === "xiaoqiang-usage-ledger" || /latest-xiaoqiang-usage-ledger\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
 const isCurrentChannelWorkerRecoveryReport = report?.reportName === "current-channel-worker-recovery" || /latest-current-channel-worker-recovery\.json$/i.test(path);
 const isConversationHygieneReport = report?.reportName === "conversation-hygiene" || /latest-conversation-hygiene\.json$/i.test(path);
@@ -2282,6 +2283,42 @@ const summary = {
       cliExitCode: has(result?.workspaceVerification || {}, "cliExitCode") ? result.workspaceVerification.cliExitCode : null,
       cliJson: result?.workspaceVerification?.cliJson && typeof result.workspaceVerification.cliJson === "object" ? result.workspaceVerification.cliJson : null,
     })).filter((result) => result.worker) : [],
+  } : null,
+  xiaoqiangUsageLedgerEvidence: isXiaoqiangUsageLedgerReport ? {
+    reportName: asString(report.reportName),
+    noTraffic: boolField(report, "noTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    repoRootPresent: typeof report.repoRoot === "string" && report.repoRoot.trim().length > 0,
+    checkedStatusFiles: Array.isArray(report.checkedStatusFiles) ? report.checkedStatusFiles.map((entry) => ({
+      path: asString(entry?.path),
+      exists: boolField(entry || {}, "exists"),
+      bytes: has(entry || {}, "bytes") ? entry.bytes : null,
+    })).filter((entry) => entry.path).slice(0, 8) : [],
+    requiredFailedJobIds: Array.isArray(report.requiredFailedJobIds) ? report.requiredFailedJobIds.map((entry) => ({
+      jobId: asString(entry?.jobId),
+      presentInStatus: boolField(entry || {}, "presentInStatus"),
+    })).filter((entry) => entry.jobId).slice(0, 16) : [],
+    requiredSuccessJobIds: Array.isArray(report.requiredSuccessJobIds) ? report.requiredSuccessJobIds.map((entry) => ({
+      jobId: asString(entry?.jobId),
+      presentInStatus: boolField(entry || {}, "presentInStatus"),
+    })).filter((entry) => entry.jobId).slice(0, 16) : [],
+    auditDocs: Array.isArray(report.auditDocs) ? report.auditDocs.map((entry) => ({
+      id: asString(entry?.id),
+      path: asString(entry?.path),
+      exists: boolField(entry || {}, "exists"),
+      marker: asString(entry?.marker),
+      markerPresent: boolField(entry || {}, "markerPresent"),
+      statusJobId: asString(entry?.statusJobId),
+      keywordPresent: boolField(entry || {}, "keywordPresent"),
+      matchedKeyword: asString(entry?.matchedKeyword),
+      bytes: has(entry || {}, "bytes") ? entry.bytes : null,
+    })).filter((entry) => entry.id || entry.path).slice(0, 16) : [],
+    failures: Array.isArray(report.failures) ? report.failures.map((failure) => asShortString(failure, 256)).slice(0, 16) : [],
+    reportLatestPresent: typeof report.report?.latest === "string" && report.report.latest.trim().length > 0,
+    reportHistoryPresent: typeof report.report?.history === "string" && report.report.history.trim().length > 0,
   } : null,
   xiaoqiangWorkerMcpProjectSmokeEvidence: isXiaoqiangWorkerMcpProjectSmokeReport ? {
     reportName: asString(report.reportName),

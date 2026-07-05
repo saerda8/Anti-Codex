@@ -2179,6 +2179,45 @@ function Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence {
     }
 }
 
+function Test-XiaoqiangUsageLedgerSummaryEvidence {
+    param($XiaoqiangUsageLedgerSummary)
+    if (-not $XiaoqiangUsageLedgerSummary) { return }
+
+    $evidence = $XiaoqiangUsageLedgerSummary.xiaoqiangUsageLedgerEvidence
+    if (-not $evidence) {
+        Add-Failure "xiaoqiang usage ledger summary missing xiaoqiangUsageLedgerEvidence"
+        return
+    }
+
+    if ($evidence.reportName -ne "xiaoqiang-usage-ledger") { Add-Failure "xiaoqiang usage ledger summary reportName mismatch" }
+    if ($evidence.noTraffic -ne $true) { Add-Failure "xiaoqiang usage ledger summary not marked no-traffic" }
+    if ($evidence.usedRealTraffic -ne $false) { Add-Failure "xiaoqiang usage ledger summary used real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "xiaoqiang usage ledger summary behavior not covered" }
+    if ($evidence.coverageKind -ne "xiaoqiang-forced-usage-doc-ledger-no-traffic") { Add-Failure "xiaoqiang usage ledger summary coverage kind mismatch" }
+    if ($evidence.repoRootPresent -ne $true) { Add-Failure "xiaoqiang usage ledger summary missing repo root presence flag" }
+    if ($evidence.reportLatestPresent -ne $true) { Add-Failure "xiaoqiang usage ledger summary missing latest report pointer" }
+    if ($evidence.reportHistoryPresent -ne $true) { Add-Failure "xiaoqiang usage ledger summary missing history report pointer" }
+    if (@(As-FlatArray $evidence.checkedStatusFiles).Count -lt 2) { Add-Failure "xiaoqiang usage ledger summary checked status files too low" }
+    if (@(As-FlatArray $evidence.requiredFailedJobIds).Count -lt 2) { Add-Failure "xiaoqiang usage ledger summary failed job ids too low" }
+    if (@(As-FlatArray $evidence.requiredSuccessJobIds).Count -lt 3) { Add-Failure "xiaoqiang usage ledger summary success job ids too low" }
+    if (@(As-FlatArray $evidence.auditDocs).Count -lt 3) { Add-Failure "xiaoqiang usage ledger summary audit docs too low" }
+    foreach ($entry in @(As-FlatArray $evidence.requiredFailedJobIds)) {
+        if (-not [string]$entry.jobId) { Add-Failure "xiaoqiang usage ledger failed job entry missing job id" }
+        if ($entry.presentInStatus -ne $true) { Add-Failure "xiaoqiang usage ledger failed job id missing from status: $($entry.jobId)" }
+    }
+    foreach ($entry in @(As-FlatArray $evidence.requiredSuccessJobIds)) {
+        if (-not [string]$entry.jobId) { Add-Failure "xiaoqiang usage ledger success job entry missing job id" }
+        if ($entry.presentInStatus -ne $true) { Add-Failure "xiaoqiang usage ledger success job id missing from status: $($entry.jobId)" }
+    }
+    foreach ($entry in @(As-FlatArray $evidence.auditDocs)) {
+        if ($entry.exists -ne $true) { Add-Failure "xiaoqiang usage ledger audit doc missing: $($entry.path)" }
+        if ($entry.markerPresent -ne $true) { Add-Failure "xiaoqiang usage ledger audit doc marker missing: $($entry.path)" }
+        if ($entry.keywordPresent -ne $true) { Add-Failure "xiaoqiang usage ledger audit doc keyword missing: $($entry.path)" }
+        if (-not [string]$entry.statusJobId) { Add-Failure "xiaoqiang usage ledger audit doc status job missing: $($entry.path)" }
+    }
+    if (@(As-FlatArray $evidence.failures).Count -ne 0) { Add-Failure "xiaoqiang usage ledger summary has failures" }
+}
+
 function Test-XiaoqiangWorkerMcpComplexProjectSmokeSummaryEvidence {
     param($WorkerMcpComplexProjectSmokeSummary)
     if (-not $WorkerMcpComplexProjectSmokeSummary) {
@@ -2536,6 +2575,7 @@ function Test-ReportsSummary {
     $workerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
     $xiaoqiangWorkerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-xiaoqiang-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
     $workerMcpComplexProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-complex-project-smoke.json" } | Select-Object -First 1)[0]
+    $xiaoqiangUsageLedgerSummary = @($summary | Where-Object { $_.file -eq "latest-xiaoqiang-usage-ledger.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerRecoverySummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-recovery.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
@@ -2602,6 +2642,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $workerMcpProjectSmokeSummary) { Test-WorkerMcpProjectSmokeSummaryEvidence $workerMcpProjectSmokeSummary }
     if ($RequireReleaseReady -or $xiaoqiangWorkerMcpProjectSmokeSummary) { Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence $xiaoqiangWorkerMcpProjectSmokeSummary }
     if ($RequireReleaseReady -or $workerMcpComplexProjectSmokeSummary) { Test-XiaoqiangWorkerMcpComplexProjectSmokeSummaryEvidence $workerMcpComplexProjectSmokeSummary }
+    if ($xiaoqiangUsageLedgerSummary) { Test-XiaoqiangUsageLedgerSummaryEvidence $xiaoqiangUsageLedgerSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerRecoverySummary) { Test-CurrentChannelWorkerRecoverySummaryEvidence $currentChannelWorkerRecoverySummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }
