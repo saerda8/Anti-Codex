@@ -156,6 +156,32 @@ function asUiModelRouteEvidence(report) {
   };
 }
 
+function asRealMiniToolEvidence(report) {
+  if (report?.reportName !== "real-mini-tool") return null;
+  const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+  const executor = report.executor && typeof report.executor === "object" ? report.executor : {};
+  const finalText = String(report.final_text || "");
+  return {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind || ""),
+    model: asString(report.model || ""),
+    firstResponseId: asString(report.first_response_id || ""),
+    callId: asString(report.call_id || ""),
+    artifactExists: boolField(artifact, "exists"),
+    artifactRan: boolField(artifact, "ran"),
+    artifactMarkerMatched: boolField(artifact, "markerMatched"),
+    executorTool: asString(executor.tool || ""),
+    executorRealFileWrite: boolField(executor, "realFileWrite"),
+    finalTextConfirmsCliOk: finalText.includes("CLI_OK"),
+    finalTextHasChinese: /[\u4e00-\u9fff]/.test(finalText),
+    localRequestEvidencePresent: report.usedRealTraffic === true && !!report.first_response_id,
+    externalQuotaDecrementProven: false,
+    externalQuotaEvidence: "not_collected",
+  };
+}
+
 function asRepoMultiSettleEvidence(value) {
   if (!value || typeof value !== "object") return null;
   return {
@@ -520,6 +546,7 @@ const summary = {
   skipFullRegression: boolField(report, "skipFullRegression"),
   failureCount,
   elapsedMs: has(report, "elapsedMs") ? report.elapsedMs : null,
+  realMiniToolEvidence: asRealMiniToolEvidence(report),
   goalUnblockPackageEvidence: isGoalUnblockPackageReport ? {
     reportName: asString(report.reportName),
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

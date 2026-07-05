@@ -4080,6 +4080,60 @@ test("report summarizer surfaces account proxy readiness evidence without identi
   }
 });
 
+test("report summarizer surfaces real-mini-tool local request evidence without claiming quota decrement", () => {
+  const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-real-mini-tool-summarizer-"));
+  const reportPath = resolve(tempRoot, "latest-real-mini-tool.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({
+      ok: true,
+      reportName: "real-mini-tool",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "real-traffic",
+      model: "gemini-3.5-flash-low",
+      elapsedMs: 20455,
+      first_response_id: "chatcmpl_test_123",
+      call_id: "pseudo_call_456",
+      artifact: {
+        directory: "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-mini-tool-secret",
+        file: "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-mini-tool-secret\\text-stats-cli.js",
+        exists: true,
+        ran: true,
+        markerMatched: true,
+      },
+      executor: {
+        tool: "create_mini_tool",
+        realFileWrite: true,
+      },
+      final_text: "已确认 CLI_OK MINI_TOOL_MARKER_20260706-042506",
+    }), "utf8");
+    const result = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), reportPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.realMiniToolEvidence.requestedRealTraffic, true);
+    assert.equal(summary.realMiniToolEvidence.usedRealTraffic, true);
+    assert.equal(summary.realMiniToolEvidence.behaviorCovered, true);
+    assert.equal(summary.realMiniToolEvidence.coverageKind, "real-traffic");
+    assert.equal(summary.realMiniToolEvidence.model, "gemini-3.5-flash-low");
+    assert.equal(summary.realMiniToolEvidence.firstResponseId, "chatcmpl_test_123");
+    assert.equal(summary.realMiniToolEvidence.callId, "pseudo_call_456");
+    assert.equal(summary.realMiniToolEvidence.artifactExists, true);
+    assert.equal(summary.realMiniToolEvidence.artifactRan, true);
+    assert.equal(summary.realMiniToolEvidence.artifactMarkerMatched, true);
+    assert.equal(summary.realMiniToolEvidence.executorTool, "create_mini_tool");
+    assert.equal(summary.realMiniToolEvidence.executorRealFileWrite, true);
+    assert.equal(summary.realMiniToolEvidence.finalTextConfirmsCliOk, true);
+    assert.equal(summary.realMiniToolEvidence.finalTextHasChinese, true);
+    assert.equal(summary.realMiniToolEvidence.localRequestEvidencePresent, true);
+    assert.equal(summary.realMiniToolEvidence.externalQuotaDecrementProven, false);
+    assert.equal(summary.realMiniToolEvidence.externalQuotaEvidence, "not_collected");
+    assert.doesNotMatch(JSON.stringify(summary.realMiniToolEvidence), /Temp|text-stats-cli|MINI_TOOL_MARKER/);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("report summarizer surfaces real Manager button evidence", () => {
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-manager-buttons-summarizer-"));
   const reportPath = resolve(tempRoot, "latest-manager-real-buttons.json");
