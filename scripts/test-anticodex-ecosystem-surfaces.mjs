@@ -62,6 +62,7 @@ const REQUIRED_REPORTS = [
     validate(report, fail) {
       if (report.ok !== true) fail("xiaoqiang worker project smoke ok=false");
       if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker project smoke did not use real worker traffic");
+      if (report.externalQuotaDecrementProven === true) fail("xiaoqiang worker project smoke claimed external quota decrement");
       if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker project smoke coverage kind mismatch");
       if (report.scenario !== "xiaoqiang-project") fail("xiaoqiang worker project smoke scenario mismatch");
       if (Number(report.workerCount || 0) !== XIAOQIANG_WORKERS.length) fail("xiaoqiang worker project smoke worker count mismatch");
@@ -94,6 +95,7 @@ const REQUIRED_REPORTS = [
     validate(report, fail) {
       if (report.ok !== true) fail("xiaoqiang worker complex project smoke ok=false");
       if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker complex project smoke did not use real worker traffic");
+      if (report.externalQuotaDecrementProven === true) fail("xiaoqiang worker complex project smoke claimed external quota decrement");
       if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker complex project smoke coverage kind mismatch");
       if (report.scenario !== "complex-project") fail("xiaoqiang worker complex project smoke scenario mismatch");
       if (Number(report.workerCount || 0) !== 3) fail("xiaoqiang worker complex project smoke worker count mismatch");
@@ -287,6 +289,9 @@ function main() {
       maxAgeHours,
       ok: reportFailures.length === 0,
       failures: reportFailures,
+      localReportFreshnessOnly: ["xiaoqiangWorkerProjectSmoke", "xiaoqiangWorkerComplexProjectSmoke"].includes(spec.id),
+      externalQuotaDecrementProven: report?.externalQuotaDecrementProven === true,
+      externalQuotaEvidence: typeof report?.externalQuotaEvidence === "string" ? report.externalQuotaEvidence : "not_collected",
       workerFailureDetails: ["xiaoqiangWorkerProjectSmoke", "xiaoqiangWorkerComplexProjectSmoke"].includes(spec.id) ? compactWorkerFailureDetails(report) : [],
     });
     failures.push(...reportFailures);
