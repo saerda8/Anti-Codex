@@ -49,6 +49,12 @@ test("goal readiness separates current Anti-Codex usability from optional accoun
     "separate_antigravity_accounts",
     "worker_mcp_multiuse",
   ]);
+  assert.equal(report.fullGoalRequiresFreshCodexChannel, true);
+  assert.equal(report.fullGoalRequiresUserPresence, true);
+  assert.deepEqual(report.nextFullGoalActions, [
+    "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe",
+    "create_or_verify_target_windows_user_then_rerun_second_account_proof",
+  ]);
   assert.match(report.goalOperatorActionCard?.compactStatusCommand || "", /--compact-status/);
 });
 
@@ -69,6 +75,12 @@ test("goal readiness compact-status is short and carries operator status", () =>
   assert.equal(status.fullGoalComplete, false);
   assert.deepEqual(status.incompleteRequirements, []);
   assert.deepEqual(status.fullIncompleteRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
+  assert.equal(status.fullGoalRequiresFreshCodexChannel, true);
+  assert.equal(status.fullGoalRequiresUserPresence, true);
+  assert.deepEqual(status.nextFullGoalActions, [
+    "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe",
+    "create_or_verify_target_windows_user_then_rerun_second_account_proof",
+  ]);
   assert.deepEqual(status.deferredRequirements, ["separate_antigravity_accounts", "worker_mcp_multiuse"]);
   assert.match(status.currentChannelWorkerTransportStatus, /reload_required|fresh_probe_required|dispatch_ready/);
   assert.equal(status.currentChannelWorkerCanDispatch, false);

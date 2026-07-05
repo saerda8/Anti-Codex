@@ -93,6 +93,9 @@ function compactGoalReadinessStatus(payload) {
     secondAccountOperatorStatus: typeof payload?.secondAccountOperatorStatus === "string" ? payload.secondAccountOperatorStatus : "",
     secondAccountTargetWindowsUser: typeof payload?.secondAccountTargetWindowsUser === "string" ? payload.secondAccountTargetWindowsUser : "",
     nextRequiredUserAction: typeof payload?.nextRequiredUserAction === "string" ? payload.nextRequiredUserAction : "",
+    nextFullGoalActions: Array.isArray(payload?.nextFullGoalActions) ? payload.nextFullGoalActions : [],
+    fullGoalRequiresFreshCodexChannel: payload?.fullGoalRequiresFreshCodexChannel === true,
+    fullGoalRequiresUserPresence: payload?.fullGoalRequiresUserPresence === true,
     canMakeUnattendedProgress: operatorCard.canMakeUnattendedProgress === true,
   };
 }
@@ -1193,6 +1196,13 @@ const fullObjectiveRequirementSummary = summarizeRequirementAudit(
   fullObjectiveRequirementAudit,
   fullObjectiveRequirementAudit.every((item) => item.complete) && fullGoalComplete,
 );
+const fullGoalMissingRequirementIds = fullObjectiveRequirementSummary.incompleteRequirementIds;
+const fullGoalRequiresFreshCodexChannel = fullGoalMissingRequirementIds.includes("worker_mcp_multiuse") && currentChannelWorkerCanDispatch !== true;
+const fullGoalRequiresUserPresence = fullGoalMissingRequirementIds.includes("separate_antigravity_accounts") && antigravityAccountIsolation.releaseAcceptableAccountProof !== true;
+const nextFullGoalActions = [
+  ...(fullGoalRequiresFreshCodexChannel ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
+  ...(fullGoalRequiresUserPresence ? ["create_or_verify_target_windows_user_then_rerun_second_account_proof"] : []),
+];
 const deferredObjectiveRequirementSummary = {
   total: deferredObjectiveRequirementAudit.length,
   deferredRequirementIds: deferredObjectiveRequirementAudit.map((item) => item.id),
@@ -1356,6 +1366,9 @@ const payload = {
   secondAccountPostLoginProof,
   releaseGateStatus,
   nextRequiredUserAction: goalComplete ? "none_current_single_account_goal_complete" : currentBlockers[0] || "refresh_current_single_account_goal_readiness",
+  nextFullGoalActions,
+  fullGoalRequiresFreshCodexChannel,
+  fullGoalRequiresUserPresence,
   elapsedMs: Date.now() - startedAt,
 };
 
