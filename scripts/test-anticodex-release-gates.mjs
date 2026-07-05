@@ -289,6 +289,15 @@ function loadSignedJson(filePath) {
   return readSignedJsonWithRetry(filePath).report;
 }
 
+function uiReportHasNewModelRoute(report) {
+  const evidence = report?.modelRouteEvidence && typeof report.modelRouteEvidence === "object" ? report.modelRouteEvidence : {};
+  return Number(evidence.newRouteCount || 0) > 0;
+}
+
+function uiReportHasModelRequestEvidence(report) {
+  return report?.modelRequestPayloadObserved === true || uiReportHasNewModelRoute(report);
+}
+
 function syncReadinessFullEnough(report) {
   return !!report
     && report.reportName === "sync-readiness"
@@ -674,6 +683,7 @@ function summarizeGate(definition) {
       if (report.usedRealTraffic !== true) semanticFailures.push("ui_chat_smoke_real_traffic_missing");
       if (report.behaviorCovered !== true) semanticFailures.push("ui_chat_smoke_behavior_not_covered");
       if (report.coverageKind !== "desktop-ui-real-traffic") semanticFailures.push("ui_chat_smoke_coverage_kind");
+      if (!uiReportHasModelRequestEvidence(report)) semanticFailures.push("ui_chat_smoke_model_request_missing");
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("ui_chat_smoke_failures");
       if (!marker || Number(report.markerCount || 0) < 2 || !lastSample.includes(marker)) semanticFailures.push("ui_chat_smoke_marker_missing");
       if (report.clicked !== true) semanticFailures.push("ui_chat_smoke_not_sent");
@@ -695,6 +705,7 @@ function summarizeGate(definition) {
       if (report.usedRealTraffic !== true) semanticFailures.push(`${prefix}_real_traffic_missing`);
       if (report.behaviorCovered !== true) semanticFailures.push(`${prefix}_behavior_not_covered`);
       if (report.coverageKind !== "desktop-ui-real-traffic") semanticFailures.push(`${prefix}_coverage_kind`);
+      if (!uiReportHasModelRequestEvidence(report)) semanticFailures.push(`${prefix}_model_request_missing`);
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push(`${prefix}_failures`);
       if (spec.requirePromptLanguage && report.promptLanguage !== spec.requirePromptLanguage) semanticFailures.push(`${prefix}_prompt_language`);
       if (spec.requireFollowupPromptLanguage && report.followupPromptLanguage !== spec.requireFollowupPromptLanguage) semanticFailures.push(`${prefix}_followup_prompt_language`);
@@ -5049,6 +5060,7 @@ if (args.has("--self-test")) {
       "ui_chat_smoke_real_traffic_missing",
       "ui_chat_smoke_behavior_not_covered",
       "ui_chat_smoke_coverage_kind",
+      "ui_chat_smoke_model_request_missing",
       "ui_chat_smoke_failures",
       "ui_chat_smoke_marker_missing",
       "ui_chat_smoke_not_sent",
@@ -5063,6 +5075,7 @@ if (args.has("--self-test")) {
       "ui_web_search_smoke_real_traffic_missing",
       "ui_web_search_smoke_behavior_not_covered",
       "ui_web_search_smoke_coverage_kind",
+      "ui_web_search_smoke_model_request_missing",
       "ui_web_search_smoke_failures",
       "ui_web_search_smoke_marker_missing",
       "ui_web_search_smoke_not_sent",
@@ -5078,6 +5091,7 @@ if (args.has("--self-test")) {
       "ui_local_project_smoke_real_traffic_missing",
       "ui_local_project_smoke_behavior_not_covered",
       "ui_local_project_smoke_coverage_kind",
+      "ui_local_project_smoke_model_request_missing",
       "ui_local_project_smoke_failures",
       "ui_local_project_smoke_marker_missing",
       "ui_local_project_smoke_not_sent",
@@ -5096,6 +5110,7 @@ if (args.has("--self-test")) {
       "ui_coding_project_smoke_real_traffic_missing",
       "ui_coding_project_smoke_behavior_not_covered",
       "ui_coding_project_smoke_coverage_kind",
+      "ui_coding_project_smoke_model_request_missing",
       "ui_coding_project_smoke_failures",
       "ui_coding_project_smoke_prompt_language",
       "ui_coding_project_smoke_marker_missing",
@@ -5119,6 +5134,7 @@ if (args.has("--self-test")) {
       "ui_multi_turn_project_smoke_real_traffic_missing",
       "ui_multi_turn_project_smoke_behavior_not_covered",
       "ui_multi_turn_project_smoke_coverage_kind",
+      "ui_multi_turn_project_smoke_model_request_missing",
       "ui_multi_turn_project_smoke_failures",
       "ui_multi_turn_project_smoke_prompt_language",
       "ui_multi_turn_project_smoke_followup_prompt_language",
@@ -5149,6 +5165,7 @@ if (args.has("--self-test")) {
       "ui_repo_file_edit_smoke_real_traffic_missing",
       "ui_repo_file_edit_smoke_behavior_not_covered",
       "ui_repo_file_edit_smoke_coverage_kind",
+      "ui_repo_file_edit_smoke_model_request_missing",
       "ui_repo_file_edit_smoke_failures",
       "ui_repo_file_edit_smoke_not_sent",
       "ui_repo_file_edit_smoke_composer_not_cleared",
@@ -5168,6 +5185,7 @@ if (args.has("--self-test")) {
       "ui_repo_multi_file_edit_smoke_real_traffic_missing",
       "ui_repo_multi_file_edit_smoke_behavior_not_covered",
       "ui_repo_multi_file_edit_smoke_coverage_kind",
+      "ui_repo_multi_file_edit_smoke_model_request_missing",
       "ui_repo_multi_file_edit_smoke_failures",
       "ui_repo_multi_file_edit_smoke_not_sent",
       "ui_repo_multi_file_edit_smoke_composer_not_cleared",
@@ -5203,6 +5221,25 @@ if (args.has("--self-test")) {
       usedRealTraffic: true,
       behaviorCovered: true,
       coverageKind: "desktop-ui-real-traffic",
+      modelRouteEvidence: {
+        newRouteCount: 1,
+        latest: {
+          requestId: "chatcmpl_valid_ui_repo_multi",
+          status: "success",
+          transport: "desktop-cascade",
+          requestedModel: "gemini-3.5-flash-low",
+          resolvedModel: "gemini-3.5-flash-low",
+        },
+        routes: [
+          {
+            requestId: "chatcmpl_valid_ui_repo_multi",
+            status: "success",
+            transport: "desktop-cascade",
+            requestedModel: "gemini-3.5-flash-low",
+            resolvedModel: "gemini-3.5-flash-low",
+          },
+        ],
+      },
       failures: [],
       clicked: true,
       composerCleared: true,
@@ -5238,6 +5275,7 @@ if (args.has("--self-test")) {
       "ui_complex_project_smoke_real_traffic_missing",
       "ui_complex_project_smoke_behavior_not_covered",
       "ui_complex_project_smoke_coverage_kind",
+      "ui_complex_project_smoke_model_request_missing",
       "ui_complex_project_smoke_failures",
       "ui_complex_project_smoke_marker_missing",
       "ui_complex_project_smoke_not_sent",
@@ -5273,6 +5311,7 @@ if (args.has("--self-test")) {
       "ui_report_site_smoke_real_traffic_missing",
       "ui_report_site_smoke_behavior_not_covered",
       "ui_report_site_smoke_coverage_kind",
+      "ui_report_site_smoke_model_request_missing",
       "ui_report_site_smoke_failures",
       "ui_report_site_smoke_marker_missing",
       "ui_report_site_smoke_not_sent",

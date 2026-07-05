@@ -528,8 +528,12 @@ function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
   return [`desktop task did not route through required model ${expected.join(" / ")}; observed ${compactActual}`];
 }
 
-function desktopRealTrafficObserved(modelRouteEvidence, diagnostics) {
+function desktopRealTrafficObserved(modelRouteEvidence) {
   if (Number(modelRouteEvidence?.newRouteCount || 0) > 0) return true;
+  return false;
+}
+
+function desktopRequestPayloadObserved(diagnostics) {
   const ws = diagnostics?.responsesWebSocket || null;
   const payload = ws?.lastClientPayload || null;
   const relay = ws?.lastRelay || null;
@@ -537,6 +541,16 @@ function desktopRealTrafficObserved(modelRouteEvidence, diagnostics) {
   if (Number(payload?.inputItems || 0) > 0) return true;
   if (Number(relay?.textDeltaChars || 0) > 0) return true;
   if (Array.isArray(relay?.toolCallNames) && relay.toolCallNames.length > 0) return true;
+  return false;
+}
+
+function modelRequestPayloadObserved(diagnostics, turns = []) {
+  if (desktopRequestPayloadObserved(diagnostics)) return true;
+  for (const turn of turns.filter(Boolean)) {
+    if (desktopRequestPayloadObserved(turn?.inLoopIdleDiagnostics)) return true;
+    const submit = turn?.submitEvidence || null;
+    if (submit?.realSubmit?.ok === true || submit?.retryRealSubmit?.ok === true) return true;
+  }
   return false;
 }
 
@@ -3032,6 +3046,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     }
     if (submitSucceeded) {
       const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
+      submitEvidence.realSubmit = realSubmit;
       if (realSubmit.ok !== true) {
         submitEvidence.emptyPrewarmRetry = realSubmit;
         submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
@@ -3470,13 +3485,19 @@ async function main() {
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
       modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
       failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
+      const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
+      const observedRequestPayload = modelRequestPayloadObserved(diagnostics, [turn1, turn2]);
+      const observedRealTraffic = observedModelRoute || observedRequestPayload;
+      if (!observedRequestPayload) failures.push("desktop submit did not produce a model request payload");
       const payload = {
         ok: failures.length === 0,
         reportName,
         requestedRealTraffic: true,
-        usedRealTraffic: true,
+        usedRealTraffic: observedRealTraffic,
+        modelRouteObserved: observedModelRoute,
+        modelRequestPayloadObserved: observedRequestPayload,
         behaviorCovered: true,
-        coverageKind: "desktop-ui-real-traffic",
+        coverageKind: observedRealTraffic ? "desktop-ui-real-traffic" : "desktop-ui-submit-without-request",
         taskMode,
         promptText,
         promptLanguage,
@@ -3610,13 +3631,19 @@ async function main() {
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
       modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
       failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
+      const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
+      const observedRequestPayload = modelRequestPayloadObserved(diagnostics, [turn1, turn2]);
+      const observedRealTraffic = observedModelRoute || observedRequestPayload;
+      if (!observedRequestPayload) failures.push("desktop submit did not produce a model request payload");
       const payload = {
         ok: failures.length === 0,
         reportName,
         requestedRealTraffic: true,
-        usedRealTraffic: true,
+        usedRealTraffic: observedRealTraffic,
+        modelRouteObserved: observedModelRoute,
+        modelRequestPayloadObserved: observedRequestPayload,
         behaviorCovered: true,
-        coverageKind: "desktop-ui-real-traffic",
+        coverageKind: observedRealTraffic ? "desktop-ui-real-traffic" : "desktop-ui-submit-without-request",
         taskMode,
         promptText,
         requiredModel: requiredModel || null,
@@ -4304,13 +4331,17 @@ async function main() {
     failures.length = 0;
     failures.push(...complexProjectEffectiveFailures);
   }
-  const observedRealTraffic = desktopRealTrafficObserved(modelRouteEvidence, diagnostics);
-  if (!observedRealTraffic) failures.push("desktop submit did not produce a model request payload");
+  const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
+  const observedRequestPayload = desktopRequestPayloadObserved(diagnostics);
+  const observedRealTraffic = observedModelRoute || observedRequestPayload;
+  if (!observedRequestPayload) failures.push("desktop submit did not produce a model request payload");
   const payload = {
     ok: failures.length === 0,
     reportName,
     requestedRealTraffic: true,
     usedRealTraffic: observedRealTraffic,
+    modelRouteObserved: observedModelRoute,
+    modelRequestPayloadObserved: observedRequestPayload,
     behaviorCovered: true,
     coverageKind: observedRealTraffic ? "desktop-ui-real-traffic" : "desktop-ui-submit-without-request",
     taskMode,

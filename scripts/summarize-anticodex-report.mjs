@@ -141,6 +141,21 @@ function boolField(object, key) {
   return has(object, key) ? !!object[key] : null;
 }
 
+function asUiModelRouteEvidence(report) {
+  const evidence = report?.modelRouteEvidence && typeof report.modelRouteEvidence === "object" ? report.modelRouteEvidence : {};
+  const latest = evidence.latest && typeof evidence.latest === "object" ? evidence.latest : {};
+  return {
+    modelRouteNewRouteCount: numberField(evidence, "newRouteCount"),
+    modelRouteRequestId: asString(latest.requestId || ""),
+    modelRouteStatus: asString(latest.status || ""),
+    modelRouteTransport: asString(latest.transport || ""),
+    modelRouteRequestedModel: asString(latest.requestedModel || ""),
+    modelRouteResolvedModel: asString(latest.resolvedModel || ""),
+    modelRouteObserved: boolField(report, "modelRouteObserved"),
+    modelRequestPayloadObserved: boolField(report, "modelRequestPayloadObserved"),
+  };
+}
+
 function asRepoMultiSettleEvidence(value) {
   if (!value || typeof value !== "object") return null;
   return {
@@ -719,6 +734,7 @@ const summary = {
   uiChatSmokeEvidence: isUiChatSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -732,6 +748,7 @@ const summary = {
   uiWebSearchSmokeEvidence: isUiWebSearchSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -745,6 +762,7 @@ const summary = {
   uiLocalProjectEvidence: isUiLocalProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -762,6 +780,7 @@ const summary = {
   uiCodingProjectEvidence: isUiCodingProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -781,6 +800,7 @@ const summary = {
   uiMultiTurnProjectEvidence: isUiMultiTurnProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -805,6 +825,7 @@ const summary = {
   uiRepoFileEditEvidence: isUiRepoFileEditSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -823,6 +844,7 @@ const summary = {
   uiRepoMultiFileEditEvidence: isUiRepoMultiFileEditSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -853,6 +875,7 @@ const summary = {
   uiComplexProjectEvidence: isUiComplexProjectSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
@@ -878,6 +901,7 @@ const summary = {
   uiReportSiteEvidence: isUiReportSiteSmokeReport ? {
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),
     usedRealTraffic: boolField(report, "usedRealTraffic"),
+    ...asUiModelRouteEvidence(report),
     behaviorCovered: boolField(report, "behaviorCovered"),
     coverageKind: asString(report.coverageKind),
     clicked: boolField(report, "clicked"),
