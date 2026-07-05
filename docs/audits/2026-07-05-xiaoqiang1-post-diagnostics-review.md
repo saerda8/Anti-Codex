@@ -1,0 +1,32 @@
+# Xiaoqiang1 Post Diagnostics Review
+
+- Scope: post-diagnostics review for the xiaoqiang1 complex worker proof.
+- Source summarizer: `scripts/summarize-anticodex-report.mjs`.
+- Source diagnostics: `scripts/test-anticodex-diagnostics.ps1`.
+- Target report: `latest-worker-mcp-complex-project-smoke.json`.
+- The summarizer recognizes that file as the worker MCP complex project smoke report.
+- It emits `workerMcpComplexProjectSmokeEvidence` only for that report kind.
+- The evidence preserves `reportName` and expects `worker-mcp-complex-project-smoke`.
+- The evidence preserves `scenario` and expects `complex-project`.
+- It carries `requestedRealTraffic`, `usedRealTraffic`, and `behaviorCovered`.
+- It records `coverageKind` for the real worker task smoke coverage.
+- It records `antigravityWorkerExcluded` to prove Antigravity was not used.
+- It records `workerCount` and `passedWorkerCount` for the three-worker proof.
+- It records `failedWorkers` so diagnostics can reject hidden failures.
+- It maps each result with `worker`, `ok`, `jobId`, and workspace presence.
+- It maps terminal details through `terminalStatus` and `terminalFailureReason`.
+- It maps workspace checks including `missingFiles`, `extraFiles`, and `doneTextMatches`.
+- It preserves CLI verification through `cliExitCode` and nested `cliJson`.
+- The PowerShell diagnostics require the summary entry for `latest-worker-mcp-complex-project-smoke.json`.
+- They fail if `workerMcpComplexProjectSmokeEvidence` is absent.
+- They require `workerCount` to equal 3 and `passedWorkerCount` to equal 3.
+- They require passed workers to include `xiaoqiang1`, `xiaoqiang2`, and `xiaoqiang3`.
+- They reject `antigravity-code-worker` in the complex project smoke results.
+- They require every result to be ok, have a job id, and have workspace verification ok.
+- They require no missing files, no extra files, and a matching done marker.
+- They require `sourcesOk`, `reportOk`, and `htmlOk` to be true for each worker.
+- They require `testExitCode` and `cliExitCode` to be zero.
+- They require each `cliJson.sourceCount` to equal 3.
+- This makes the diagnostics enforce both summary shape and real artifact content.
+- Check command: `node --check scripts/summarize-anticodex-report.mjs`.
+XQ1_POST_DIAGNOSTICS_REVIEW_DONE
