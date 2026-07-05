@@ -160,6 +160,25 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
+function compactWorkerFailureDetails(report) {
+  if (!report || !Array.isArray(report.results)) return [];
+  return report.results
+    .filter((result) => result && result.ok !== true)
+    .map((result) => ({
+      worker: result.worker || "",
+      jobId: result.jobId || "",
+      terminalStatus: result.terminalStatus || "",
+      terminalFailureReason: result.terminalFailureReason || "",
+      terminalErrorSummary: result.terminalErrorSummary || "",
+      missingFiles: Array.isArray(result.workspaceVerification?.missingFiles)
+        ? result.workspaceVerification.missingFiles
+        : [],
+      changedFilesSoFar: Array.isArray(result.waitSnapshots) && result.waitSnapshots.length
+        ? result.waitSnapshots[result.waitSnapshots.length - 1]?.changedFilesSoFar ?? null
+        : null,
+    }));
+}
+
 function stamp() {
   return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
 }
@@ -229,6 +248,7 @@ function main() {
       maxAgeHours,
       ok: reportFailures.length === 0,
       failures: reportFailures,
+      workerFailureDetails: spec.id === "xiaoqiangWorkerProjectSmoke" ? compactWorkerFailureDetails(report) : [],
     });
     failures.push(...reportFailures);
   }

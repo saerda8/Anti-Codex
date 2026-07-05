@@ -978,28 +978,28 @@ $expectedMcpToolNames = @{
         "opencode_wait_for_job"
     )
     "xiaoqiang1" = @(
-        "deepseek_cancel_job",
-        "deepseek_get_job",
-        "deepseek_implement_in_workspace",
-        "deepseek_start_implementation",
-        "deepseek_tail_job",
-        "deepseek_wait_for_job"
+        "xiaoqiang_cancel_job",
+        "xiaoqiang_get_job",
+        "xiaoqiang_implement_in_workspace",
+        "xiaoqiang_start_implementation",
+        "xiaoqiang_tail_job",
+        "xiaoqiang_wait_for_job"
     )
     "xiaoqiang2" = @(
-        "deepseek_cancel_job",
-        "deepseek_get_job",
-        "deepseek_implement_in_workspace",
-        "deepseek_start_implementation",
-        "deepseek_tail_job",
-        "deepseek_wait_for_job"
+        "xiaoqiang_cancel_job",
+        "xiaoqiang_get_job",
+        "xiaoqiang_implement_in_workspace",
+        "xiaoqiang_start_implementation",
+        "xiaoqiang_tail_job",
+        "xiaoqiang_wait_for_job"
     )
     "xiaoqiang3" = @(
-        "deepseek_cancel_job",
-        "deepseek_get_job",
-        "deepseek_implement_in_workspace",
-        "deepseek_start_implementation",
-        "deepseek_tail_job",
-        "deepseek_wait_for_job"
+        "xiaoqiang_cancel_job",
+        "xiaoqiang_get_job",
+        "xiaoqiang_implement_in_workspace",
+        "xiaoqiang_start_implementation",
+        "xiaoqiang_tail_job",
+        "xiaoqiang_wait_for_job"
     )
 }
 

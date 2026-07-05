@@ -7,9 +7,9 @@ import { getCodexMcpServerDefinition, runRealMcpListSmoke } from "./anticodex-re
 
 const DEFAULT_SERVERS = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"];
 const EXPECTED_TOOLS = [
-  "deepseek_implement_in_workspace",
-  "deepseek_get_job",
-  "deepseek_wait_for_job",
+  "xiaoqiang_implement_in_workspace",
+  "xiaoqiang_get_job",
+  "xiaoqiang_wait_for_job",
 ];
 
 function argValue(name, fallback = "") {

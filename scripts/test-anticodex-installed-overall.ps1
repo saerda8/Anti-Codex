@@ -934,6 +934,7 @@ function Test-ReportEncoding {
         "latest-worker-mcp-status-probe.json",
         "latest-worker-mcp-task-smoke.json",
         "latest-worker-mcp-project-smoke.json",
+        "latest-xiaoqiang-worker-mcp-project-smoke.json",
         "latest-current-channel-worker-transport.json",
         "latest-current-channel-worker-recovery.json",
         "latest-ui-chat-smoke.json",

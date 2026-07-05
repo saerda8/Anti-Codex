@@ -236,6 +236,7 @@ const isWorkerMcpSourceHygieneReport = report?.reportName === "worker-mcp-source
 const isWorkerMcpStatusProbeReport = report?.reportName === "worker-mcp-status-probe" || /latest-worker-mcp-status-probe\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
+const isXiaoqiangWorkerMcpProjectSmokeReport = report?.reportName === "xiaoqiang-worker-mcp-project-smoke" || /latest-xiaoqiang-worker-mcp-project-smoke\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
 const isCurrentChannelWorkerRecoveryReport = report?.reportName === "current-channel-worker-recovery" || /latest-current-channel-worker-recovery\.json$/i.test(path);
 const isConversationHygieneReport = report?.reportName === "conversation-hygiene" || /latest-conversation-hygiene\.json$/i.test(path);
@@ -2270,6 +2271,39 @@ const summary = {
       elapsedMs: has(result || {}, "elapsedMs") ? result.elapsedMs : null,
       terminalStatus: asString(result?.terminalStatus),
       terminalFailureReason: asString(result?.terminalFailureReason),
+      terminalErrorSummary: asString(result?.terminalErrorSummary),
+      artifactVerifiedAfterNonterminalWorker: boolField(result || {}, "artifactVerifiedAfterNonterminalWorker"),
+      workspaceVerificationOk: boolField(result?.workspaceVerification || {}, "ok"),
+      missingFiles: Array.isArray(result?.workspaceVerification?.missingFiles) ? asStringArray(result.workspaceVerification.missingFiles) : [],
+      extraFiles: Array.isArray(result?.workspaceVerification?.extraFiles) ? asStringArray(result.workspaceVerification.extraFiles) : [],
+      doneTextMatches: boolField(result?.workspaceVerification || {}, "doneTextMatches"),
+      testExitCode: has(result?.workspaceVerification || {}, "testExitCode") ? result.workspaceVerification.testExitCode : null,
+      cliExitCode: has(result?.workspaceVerification || {}, "cliExitCode") ? result.workspaceVerification.cliExitCode : null,
+      cliJson: result?.workspaceVerification?.cliJson && typeof result.workspaceVerification.cliJson === "object" ? result.workspaceVerification.cliJson : null,
+    })).filter((result) => result.worker) : [],
+  } : null,
+  xiaoqiangWorkerMcpProjectSmokeEvidence: isXiaoqiangWorkerMcpProjectSmokeReport ? {
+    reportName: asString(report.reportName),
+    scenario: asString(report.scenario),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    antigravityWorkerExcluded: boolField(report, "antigravityWorkerExcluded"),
+    workerCount: has(report, "workerCount") ? report.workerCount : null,
+    passedWorkerCount: has(report, "passedWorkerCount") ? report.passedWorkerCount : null,
+    failedWorkers: Array.isArray(report.failedWorkers) ? asStringArray(report.failedWorkers) : [],
+    results: Array.isArray(report.results) ? report.results.map((result) => ({
+      worker: asString(result?.worker),
+      ok: boolField(result || {}, "ok"),
+      jobId: asString(result?.jobId),
+      marker: asString(result?.marker),
+      workspacePresent: typeof result?.workspace === "string" && result.workspace.trim().length > 0,
+      elapsedMs: has(result || {}, "elapsedMs") ? result.elapsedMs : null,
+      terminalStatus: asString(result?.terminalStatus),
+      terminalFailureReason: asString(result?.terminalFailureReason),
+      terminalErrorSummary: asString(result?.terminalErrorSummary),
       artifactVerifiedAfterNonterminalWorker: boolField(result || {}, "artifactVerifiedAfterNonterminalWorker"),
       workspaceVerificationOk: boolField(result?.workspaceVerification || {}, "ok"),
       missingFiles: Array.isArray(result?.workspaceVerification?.missingFiles) ? asStringArray(result.workspaceVerification.missingFiles) : [],

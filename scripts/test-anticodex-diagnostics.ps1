@@ -2113,6 +2113,56 @@ function Test-WorkerMcpProjectSmokeSummaryEvidence {
     }
 }
 
+function Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence {
+    param($XiaoqiangWorkerMcpProjectSmokeSummary)
+    if (-not $XiaoqiangWorkerMcpProjectSmokeSummary) {
+        Add-Failure "diagnostic reports summary missing latest-xiaoqiang-worker-mcp-project-smoke.json"
+        return
+    }
+
+    $evidence = $XiaoqiangWorkerMcpProjectSmokeSummary.xiaoqiangWorkerMcpProjectSmokeEvidence
+    if (-not $evidence) {
+        Add-Failure "xiaoqiang-worker-mcp-project-smoke summary missing xiaoqiangWorkerMcpProjectSmokeEvidence"
+        return
+    }
+
+    $results = @(As-FlatArray $evidence.results)
+    if ($evidence.reportName -ne "xiaoqiang-worker-mcp-project-smoke") { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary reportName mismatch" }
+    if ($evidence.scenario -ne "xiaoqiang-project") { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary scenario mismatch" }
+    if ($evidence.requestedRealTraffic -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary did not request real worker traffic" }
+    if ($evidence.usedRealTraffic -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary did not use real worker traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary behavior not covered" }
+    if ($evidence.coverageKind -ne "worker-mcp-real-task-smoke") { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary coverage kind mismatch" }
+    if ($evidence.antigravityWorkerExcluded -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary did not exclude Antigravity worker" }
+    if ([int]$evidence.workerCount -ne 3) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary worker count mismatch" }
+    if ([int]$evidence.passedWorkerCount -ne 3) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary passed worker count mismatch" }
+    if (@(As-FlatArray $evidence.failedWorkers).Count -ne 0) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary has failed workers" }
+    if ($results.Count -ne 3) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary result count mismatch" }
+    $passedWorkerNames = @($results | Where-Object { $_.ok -eq $true } | ForEach-Object { [string]$_.worker })
+    foreach ($requiredWorker in @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")) {
+        if ($passedWorkerNames -notcontains $requiredWorker) { Add-Failure "xiaoqiang-worker-mcp-project-smoke summary missing required worker $requiredWorker" }
+    }
+    foreach ($entry in $results) {
+        if ($entry.worker -eq "antigravity-code-worker") { Add-Failure "xiaoqiang-worker-mcp-project-smoke unexpectedly used Antigravity worker" }
+        if ($entry.ok -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke result not ok for $($entry.worker)" }
+        if (-not [string]$entry.jobId) { Add-Failure "xiaoqiang-worker-mcp-project-smoke result missing job id for $($entry.worker)" }
+        if (-not [string]$entry.marker) { Add-Failure "xiaoqiang-worker-mcp-project-smoke result missing marker for $($entry.worker)" }
+        if ($entry.workspacePresent -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke result missing workspace for $($entry.worker)" }
+        if ($entry.terminalStatus -ne "completed" -and $entry.artifactVerifiedAfterNonterminalWorker -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke terminal status not completed for $($entry.worker)" }
+        if ($entry.workspaceVerificationOk -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke workspace verification failed for $($entry.worker)" }
+        if (@(As-FlatArray $entry.missingFiles).Count -ne 0) { Add-Failure "xiaoqiang-worker-mcp-project-smoke missing files for $($entry.worker)" }
+        if (@(As-FlatArray $entry.extraFiles).Count -ne 0) { Add-Failure "xiaoqiang-worker-mcp-project-smoke extra files for $($entry.worker)" }
+        if ($entry.doneTextMatches -ne $true) { Add-Failure "xiaoqiang-worker-mcp-project-smoke done marker mismatch for $($entry.worker)" }
+        if ([int]$entry.testExitCode -ne 0) { Add-Failure "xiaoqiang-worker-mcp-project-smoke node:test failed for $($entry.worker)" }
+        if ([int]$entry.cliExitCode -ne 0) { Add-Failure "xiaoqiang-worker-mcp-project-smoke CLI failed for $($entry.worker)" }
+        if (-not $entry.cliJson) { Add-Failure "xiaoqiang-worker-mcp-project-smoke missing CLI JSON for $($entry.worker)" }
+        else {
+            if ([int]$entry.cliJson.red -ne 2) { Add-Failure "xiaoqiang-worker-mcp-project-smoke CLI red count mismatch for $($entry.worker)" }
+            if ([int]$entry.cliJson.blue -ne 1) { Add-Failure "xiaoqiang-worker-mcp-project-smoke CLI blue count mismatch for $($entry.worker)" }
+        }
+    }
+}
+
 function Test-WorkerMcpStatusProbeSummaryEvidence {
     param($WorkerMcpStatusProbeSummary)
     if (-not $WorkerMcpStatusProbeSummary) {
@@ -2419,6 +2469,7 @@ function Test-ReportsSummary {
     $workerMcpStatusProbeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-status-probe.json" } | Select-Object -First 1)[0]
     $workerMcpTaskSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-task-smoke.json" } | Select-Object -First 1)[0]
     $workerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
+    $xiaoqiangWorkerMcpProjectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-xiaoqiang-worker-mcp-project-smoke.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerTransportSummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-transport.json" } | Select-Object -First 1)[0]
     $currentChannelWorkerRecoverySummary = @($summary | Where-Object { $_.file -eq "latest-current-channel-worker-recovery.json" } | Select-Object -First 1)[0]
     $secondAccountLoginEntrypointSummary = @($summary | Where-Object { $_.file -eq "latest-second-antigravity-account-login-entrypoint.json" } | Select-Object -First 1)[0]
@@ -2483,6 +2534,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $workerMcpStatusProbeSummary) { Test-WorkerMcpStatusProbeSummaryEvidence $workerMcpStatusProbeSummary }
     if ($RequireReleaseReady -or $workerMcpTaskSmokeSummary) { Test-WorkerMcpTaskSmokeSummaryEvidence $workerMcpTaskSmokeSummary }
     if ($RequireReleaseReady -or $workerMcpProjectSmokeSummary) { Test-WorkerMcpProjectSmokeSummaryEvidence $workerMcpProjectSmokeSummary }
+    if ($RequireReleaseReady -or $xiaoqiangWorkerMcpProjectSmokeSummary) { Test-XiaoqiangWorkerMcpProjectSmokeSummaryEvidence $xiaoqiangWorkerMcpProjectSmokeSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerTransportSummary) { Test-CurrentChannelWorkerTransportSummaryEvidence $currentChannelWorkerTransportSummary }
     if ($RequireReleaseReady -or $currentChannelWorkerRecoverySummary) { Test-CurrentChannelWorkerRecoverySummaryEvidence $currentChannelWorkerRecoverySummary }
     if ($RequireReleaseReady -or $secondAccountLoginEntrypointSummary) { Test-SecondAccountLoginEntrypointSummaryEvidence $secondAccountLoginEntrypointSummary }

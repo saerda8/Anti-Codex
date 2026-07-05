@@ -18,9 +18,9 @@ const WORKERS = {
   "opencode-worker": { start: "opencode_start_implementation", wait: "opencode_wait_for_job", timeoutMs: 240000 },
   "deepseek-code-worker": { start: "deepseek_start_implementation", wait: "deepseek_wait_for_job", timeoutMs: 240000 },
   "deveco-code-worker": { start: "deveco_start_implementation", wait: "deveco_wait_for_job", timeoutMs: 300000 },
-  xiaoqiang1: { start: "deepseek_start_implementation", wait: "deepseek_wait_for_job", timeoutMs: 240000 },
-  xiaoqiang2: { start: "deepseek_start_implementation", wait: "deepseek_wait_for_job", timeoutMs: 240000 },
-  xiaoqiang3: { start: "deepseek_start_implementation", wait: "deepseek_wait_for_job", timeoutMs: 240000 },
+  xiaoqiang1: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
+  xiaoqiang2: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
+  xiaoqiang3: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
 };
 
 function argValue(name, fallback = "") {
@@ -473,6 +473,23 @@ function isExplicitFailureStatus(status) {
   return ["failed", "error", "cancelled", "canceled", "timeout"].includes(String(status || "").toLowerCase());
 }
 
+function extractWorkerErrorSummary(terminal) {
+  const candidates = [
+    terminal?.error,
+    terminal?.result?.failure_reason,
+    terminal?.failure_reason,
+    terminal?.worker?.stderr_tail,
+    terminal?.worker?.stdout_tail,
+    terminal?.result?.worker?.stderr_tail,
+    terminal?.result?.worker?.stdout_tail,
+  ].filter((value) => typeof value === "string" && value.trim());
+  const combined = candidates.join("\n");
+  const apiError = combined.match(/API Error:[^\r\n]+/);
+  const configError = combined.match(/配置错误:[^\r\n"]+/);
+  const firstLine = combined.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+  return String(apiError?.[0] || configError?.[0] || firstLine).slice(0, 500);
+}
+
 async function runWorker(workerName, options) {
   const def = WORKERS[workerName];
   if (!def) throw new Error(`Unsupported worker for task smoke: ${workerName}`);
@@ -568,6 +585,7 @@ async function runWorker(workerName, options) {
     elapsedMs: Date.now() - startedAt,
     terminalStatus: terminalStatus || "unknown",
     terminalFailureReason: terminal?.result?.failure_reason || terminal?.failure_reason || terminal?.error || "",
+    terminalErrorSummary: extractWorkerErrorSummary(terminal),
     artifactVerifiedAfterNonterminalWorker,
     waitSnapshots,
     workspaceVerification,

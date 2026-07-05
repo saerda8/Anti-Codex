@@ -292,15 +292,31 @@ $startArgs = @(
     "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
     "-File", "`"$startDeepCodex`""
 )
-$watchProc = Start-Process -FilePath powershell.exe `
-    -ArgumentList $startArgs `
-    -RedirectStandardOutput $launcherOutLog `
-    -RedirectStandardError $launcherErrLog `
-    -WindowStyle Hidden -PassThru
+$watchProc = $null
+try {
+    $watchProc = Start-Process -FilePath powershell.exe `
+        -ArgumentList $startArgs `
+        -RedirectStandardOutput $launcherOutLog `
+        -RedirectStandardError $launcherErrLog `
+        -WindowStyle Hidden -PassThru
+} catch {
+    Write-Warning "Background PowerShell launch was denied: $($_.Exception.Message)"
+    Write-Warning "Retrying Anti-Codex launch through cmd.exe start fallback."
+    $cmdArgs = @(
+        "/d", "/c", "start", '""', "/min",
+        "powershell.exe",
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "`"$startDeepCodex`""
+    )
+    $cmdProc = Start-Process -FilePath cmd.exe -ArgumentList $cmdArgs -WindowStyle Hidden -PassThru
+    $watchProc = $cmdProc
+}
 Write-Host ""
 Write-Host "=================================================="
 Write-Host "  Anti-Codex launched successfully!"
-Write-Host "  Background watcher PID: $($watchProc.Id)"
+if ($watchProc) {
+    Write-Host "  Background watcher PID: $($watchProc.Id)"
+}
 Write-Host "=================================================="
 Write-Host ""
 Write-Host "You may close this window. Anti-Codex will continue"
