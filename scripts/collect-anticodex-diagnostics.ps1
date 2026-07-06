@@ -462,6 +462,7 @@ $latestReports = @(
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
     "latest-worker-mcp-complex-project-smoke.json",
+    "latest-xiaoqiang-current-channel-live-proof.json",
     "latest-xiaoqiang-usage-ledger.json",
     "latest-current-channel-worker-transport.json",
     "latest-current-channel-worker-recovery.json",

@@ -127,6 +127,7 @@ const freshChannelWorkerProof = {
   recordCommand: asString(recommendedFirstReadOnlyProbe?.recordCommand || goalCard.workerRecoveryCommand || ""),
   proofReport: "latest-current-channel-worker-recovery.json",
 };
+const workerRecoveryStillRequired = freshChannelWorkerProof.canDispatchCurrentChannelWorkers !== true;
 
 const secondAccountProof = {
   requiresUserPresence: goalCard.requiresUserPresence === true || targetUserExists !== true,
@@ -159,7 +160,7 @@ const externalMcpIdentityHandoff = {
 };
 
 const machineReadableNextActions = [
-  {
+  ...(workerRecoveryStillRequired ? [{
     id: "fresh_channel_worker_read_only_probe",
     owner: "fresh-codex-channel",
     reason: "current channel worker calls repeatedly returned Transport closed",
@@ -169,7 +170,17 @@ const machineReadableNextActions = [
     requiresRealTraffic: false,
     startsLogin: false,
     changesSystem: false,
-  },
+  }] : [{
+    id: "dispatch_scoped_worker_task_after_read_only_success",
+    owner: "current-codex-channel",
+    reason: "current channel worker read-only proof is healthy",
+    command: freshChannelWorkerProof.statusCommand,
+    recordCommand: freshChannelWorkerProof.recordCommand,
+    proofReport: freshChannelWorkerProof.proofReport,
+    requiresRealTraffic: false,
+    startsLogin: false,
+    changesSystem: false,
+  }]),
   {
     id: "create_or_verify_second_windows_user",
     owner: "user",
@@ -215,14 +226,15 @@ if (canClaimFullGoalNow !== true) failures.push("goal_unblock_package_should_cla
 if (fullObjectiveCanClaimFullGoalNow !== false) failures.push("goal_unblock_package_full_objective_should_remain_deferred");
 if (!deferredObjectiveRequirementIds.includes("separate_antigravity_accounts")) failures.push("missing_separate_account_deferred_requirement");
 if (!deferredObjectiveRequirementIds.includes("worker_mcp_multiuse")) failures.push("missing_worker_mcp_deferred_requirement");
-if (!deferredBlockers.includes("current_channel_worker_transport_not_recovered")) failures.push("missing_current_channel_worker_deferred_blocker");
+if (workerRecoveryStillRequired && !deferredBlockers.includes("current_channel_worker_transport_not_recovered")) failures.push("missing_current_channel_worker_deferred_blocker");
 if (!deferredBlockers.includes("second_antigravity_account_real_proof_missing")) failures.push("missing_second_account_deferred_blocker");
-if (!freshChannelWorkerProof.requiresFreshCodexChannel) failures.push("fresh_channel_requirement_missing");
-if (!freshChannelWorkerProof.requiresFreshReadOnlyProbe) failures.push("fresh_read_only_probe_requirement_missing");
+if (workerRecoveryStillRequired && !freshChannelWorkerProof.requiresFreshCodexChannel) failures.push("fresh_channel_requirement_missing");
+if (workerRecoveryStillRequired && !freshChannelWorkerProof.requiresFreshReadOnlyProbe) failures.push("fresh_read_only_probe_requirement_missing");
 if (!freshChannelWorkerProof.recordCommand) failures.push("worker_recovery_record_command_missing");
 if (!freshChannelWorkerProof.latestTransportCheckedAt) failures.push("worker_transport_checked_at_missing");
 if (freshChannelWorkerProof.workerObservationCount < 3) failures.push("worker_transport_observation_count_too_low");
-if (freshChannelWorkerProof.workerTransportFailedCount < 3) failures.push("worker_transport_failed_count_too_low");
+if (workerRecoveryStillRequired && freshChannelWorkerProof.workerTransportFailedCount < 3) failures.push("worker_transport_failed_count_too_low");
+if (!workerRecoveryStillRequired && freshChannelWorkerProof.workerTransportOkCount < 1) failures.push("worker_transport_ok_count_too_low");
 if (freshChannelWorkerProof.genericMcpControlOk !== true) failures.push("worker_transport_generic_mcp_control_missing");
 if (freshChannelWorkerProof.directProbeOk !== true) failures.push("worker_transport_direct_probe_missing");
 if (!secondAccountProof.windowsUser) failures.push("second_account_windows_user_missing");

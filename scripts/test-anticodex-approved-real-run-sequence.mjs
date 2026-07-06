@@ -14,7 +14,6 @@ for (let i = 2; i < process.argv.length; i += 1) {
 
 const startedAt = Date.now();
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
-const EXPECTED_REAL_TASK_MODES = ["web-search", "free-chat"];
 const BASE_REQUIRED_RELEASE_GATES = ["accountProxyReadiness", "postVerification"];
 
 function readReport(fileName) {
@@ -74,6 +73,9 @@ const pendingRealTaskScenarios = asObjectArray(readiness.pendingRealTaskScenario
 })).filter((item) => item.taskMode);
 const uniqueRefreshTasks = asStringArray(readiness.uniqueRefreshTasks);
 const realTaskRefreshNeeded = readiness.realTaskRefreshNeeded === true;
+const expectedRealTaskModes = realTaskRefreshNeeded
+  ? (uniqueRefreshTasks.length > 0 ? uniqueRefreshTasks : pendingRealTaskScenarios.map((item) => item.taskMode))
+  : [];
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const completedRequiredGateIds = asStringArray(sequence.completedRequiredGateIds);
 const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
@@ -154,7 +156,7 @@ const approvedRealRunSequence = [
       highImpact: true,
       failFastIfNotReady: true,
       expectedReport: "latest-desktop-task-suite.json",
-      evidence: ["web-search", "free-chat", "usedRealTraffic"],
+      evidence: [...expectedRealTaskModes, "usedRealTraffic"],
     }),
   ] : []),
   ...(requiredReleaseActionStages.length > 0 ? requiredReleaseActionStages : [
@@ -200,7 +202,7 @@ for (const source of [readinessReport, approvalReport, sequenceReport, releaseRe
 for (const sourceReport of [readiness, approval, sequence]) {
   if (sourceReport.requestedRealTraffic !== false || sourceReport.usedRealTraffic !== false) failures.push(`${sourceReport.reportName || "source"}_not_no_traffic`);
 }
-for (const taskMode of realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : []) {
+for (const taskMode of expectedRealTaskModes) {
   if (!uniqueRefreshTasks.includes(taskMode)) failures.push(`missing_real_task:${taskMode}`);
   const scenario = pendingRealTaskScenarios.find((item) => item.taskMode === taskMode);
   if (!scenario) failures.push(`missing_real_task_scenario:${taskMode}`);
@@ -219,7 +221,7 @@ for (const gateId of (requiredGateIds.length > 0 ? requiredGateIds : BASE_REQUIR
   }
 }
 if (!optionalActionsSeparated) failures.push("optional_actions_mixed_into_required_sequence");
-if (realTaskRefreshNeeded && (!realTaskCommand.includes("--allow-real-traffic") || !realTaskCommand.includes("web-search,free-chat"))) failures.push("real_task_refresh_command_not_concrete");
+if (realTaskRefreshNeeded && (!realTaskCommand.includes("--allow-real-traffic") || expectedRealTaskModes.some((taskMode) => !realTaskCommand.includes(taskMode)))) failures.push("real_task_refresh_command_not_concrete");
 if (!loginCommand.includes("-StartLoginApproval start-separate-windows-user-login")) failures.push("login_command_missing_approval_token");
 if (!loginCommand.includes("-WindowsUser")) failures.push("login_command_missing_windows_user");
 if (accountProofCommand && !accountProofCommand.includes("SeparateAccountProofApprovalId")) failures.push("account_proof_command_missing_approval_id");
@@ -256,7 +258,7 @@ const payload = {
   explicitApprovalStageCount: approvedRealRunSequence.filter((item) => item.requiresExplicitUserApproval).length,
   realTrafficStageCount: approvedRealRunSequence.filter((item) => item.requiresRealTraffic).length,
   startsLoginStageCount: approvedRealRunSequence.filter((item) => item.startsLogin).length,
-  requiredRealTaskModes: realTaskRefreshNeeded ? EXPECTED_REAL_TASK_MODES : [],
+  requiredRealTaskModes: expectedRealTaskModes,
   pendingRealTaskScenarios,
   requiredReleaseGateIds: requiredGateIds.length > 0 ? requiredGateIds : BASE_REQUIRED_RELEASE_GATES,
   requiredActionIds,

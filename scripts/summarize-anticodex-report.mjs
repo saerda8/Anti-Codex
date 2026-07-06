@@ -331,6 +331,7 @@ const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isWorkerMcpComplexProjectSmokeReport = report?.reportName === "worker-mcp-complex-project-smoke" || /latest-worker-mcp-complex-project-smoke\.json$/i.test(path);
 const isXiaoqiangWorkerMcpProjectSmokeReport = report?.reportName === "xiaoqiang-worker-mcp-project-smoke" || /latest-xiaoqiang-worker-mcp-project-smoke\.json$/i.test(path);
+const isXiaoqiangCurrentChannelLiveProofReport = report?.reportName === "xiaoqiang-current-channel-live-proof" || /latest-xiaoqiang-current-channel-live-proof\.json$/i.test(path);
 const isXiaoqiangUsageLedgerReport = report?.reportName === "xiaoqiang-usage-ledger" || /latest-xiaoqiang-usage-ledger\.json$/i.test(path);
 const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || /latest-current-channel-worker-transport\.json$/i.test(path);
 const isCurrentChannelWorkerRecoveryReport = report?.reportName === "current-channel-worker-recovery" || /latest-current-channel-worker-recovery\.json$/i.test(path);
@@ -2457,6 +2458,36 @@ const summary = {
     failures: Array.isArray(report.failures) ? report.failures.map((failure) => asShortString(failure, 256)).slice(0, 16) : [],
     reportLatestPresent: typeof report.report?.latest === "string" && report.report.latest.trim().length > 0,
     reportHistoryPresent: typeof report.report?.history === "string" && report.report.history.trim().length > 0,
+  } : null,
+  xiaoqiangCurrentChannelLiveProofEvidence: isXiaoqiangCurrentChannelLiveProofReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    realTrafficEvidenceKind: asString(report.realTrafficEvidenceKind || "local-worker-task"),
+    externalQuotaDecrementProven: report.externalQuotaDecrementProven === true,
+    externalQuotaEvidence: asString(report.externalQuotaEvidence || "not_collected"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    workerCount: has(report, "workerCount") ? report.workerCount : null,
+    passedWorkerCount: has(report, "passedWorkerCount") ? report.passedWorkerCount : null,
+    initialJobIds: report.initialJobIds && typeof report.initialJobIds === "object" ? Object.fromEntries(Object.entries(report.initialJobIds).map(([key, value]) => [key, asString(value)])) : {},
+    repairJobIds: report.repairJobIds && typeof report.repairJobIds === "object" ? Object.fromEntries(Object.entries(report.repairJobIds).map(([key, value]) => [key, asString(value)])) : {},
+    results: Array.isArray(report.results) ? report.results.map((entry) => ({
+      worker: asString(entry?.worker),
+      jobId: asString(entry?.jobId),
+      repairJobId: asString(entry?.repairJobId),
+      workspacePresent: boolField(entry || {}, "workspacePresent"),
+      fileCount: has(entry || {}, "fileCount") ? entry.fileCount : null,
+      missingFiles: Array.isArray(entry?.missingFiles) ? asStringArray(entry.missingFiles) : [],
+      extraFiles: Array.isArray(entry?.extraFiles) ? asStringArray(entry.extraFiles) : [],
+      doneTextMatches: boolField(entry || {}, "doneTextMatches"),
+      testExitCode: has(entry || {}, "testExitCode") ? entry.testExitCode : null,
+      cliExitCode: has(entry || {}, "cliExitCode") ? entry.cliExitCode : null,
+      cliStdoutMatches: boolField(entry || {}, "cliStdoutMatches"),
+      ok: boolField(entry || {}, "ok"),
+    })).filter((entry) => entry.worker).slice(0, 8) : [],
+    failures: Array.isArray(report.failures) ? report.failures.map((failure) => asShortString(failure, 256)).slice(0, 16) : [],
   } : null,
   xiaoqiangWorkerMcpProjectSmokeEvidence: isXiaoqiangWorkerMcpProjectSmokeReport ? {
     reportName: asString(report.reportName),

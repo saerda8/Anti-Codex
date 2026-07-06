@@ -79,6 +79,7 @@ $requiredSourceFiles = @(
     "scripts\build-anticodex-goal-unblock-package.mjs",
     "scripts\build-anticodex-fresh-channel-worker-proof-kit.mjs",
     "scripts\test-anticodex-worker-mcp-task-smoke.mjs",
+    "scripts\test-anticodex-xiaoqiang-current-channel-live-proof.mjs",
     "scripts\test-anticodex-xiaoqiang-usage-ledger.mjs",
     "scripts\test-anticodex-mcp-tool-loop.ps1",
     "scripts\test-anticodex-missing-history.mjs",

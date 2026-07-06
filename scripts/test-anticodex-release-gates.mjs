@@ -1031,7 +1031,8 @@ function summarizeGate(definition) {
       if (report.separateAccountVerified === true) semanticFailures.push("goal_real_run_readiness_separate_account_claimed");
       if (report.releaseAcceptableAccountProof === true) semanticFailures.push("goal_real_run_readiness_release_account_proof_claimed");
       if (report.realTaskRefreshNeeded === true) {
-        for (const taskMode of ["web-search", "free-chat"]) {
+        if (refreshTasks.length < 1) semanticFailures.push("goal_real_run_readiness_refresh_tasks_missing");
+        for (const taskMode of refreshTasks) {
           if (!refreshTasks.includes(taskMode)) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_task_missing`);
           const scenario = refreshScenarios.find((item) => String(item?.taskMode || "") === taskMode);
           if (!scenario) {
@@ -1110,7 +1111,8 @@ function summarizeGate(definition) {
       if (Number(report.startsLoginStageCount || 0) !== 1 || loginStages.length !== 1) semanticFailures.push("approved_real_run_sequence_login_stage_count");
       if (Number(report.explicitApprovalStageCount || 0) < realStages.length) semanticFailures.push("approved_real_run_sequence_approval_stage_count");
       if (realTaskRefreshNeeded) {
-        for (const taskMode of ["web-search", "free-chat"]) {
+        if (requiredTaskModes.length < 1) semanticFailures.push("approved_real_run_sequence_task_modes_missing");
+        for (const taskMode of requiredTaskModes) {
           if (!requiredTaskModes.includes(taskMode)) semanticFailures.push(`approved_real_run_sequence_${taskMode.replaceAll("-", "_")}_task_missing`);
           const scenario = scenarios.find((item) => String(item?.taskMode || "") === taskMode);
           if (!scenario) {
@@ -1175,7 +1177,9 @@ function summarizeGate(definition) {
       for (const toolMode of ["tool-loop", "mcp-tool-loop", "custom-tool-loop"]) {
         if (!toolTaskModes.includes(toolMode)) semanticFailures.push(`native_codex_parity_task_matrix_${toolMode.replaceAll("-", "_")}_missing`);
       }
-      for (const taskMode of ["web-search", "free-chat"]) {
+      const expectedPendingRefreshTaskModes = report.realTrafficStillRequired === true ? pendingRefreshTaskModes : [];
+      if (report.realTrafficStillRequired === true && expectedPendingRefreshTaskModes.length < 1) semanticFailures.push("native_codex_parity_task_matrix_pending_task_modes_missing");
+      for (const taskMode of expectedPendingRefreshTaskModes) {
         if (report.realTrafficStillRequired === true && !pendingRefreshTaskModes.includes(taskMode)) semanticFailures.push("native_codex_parity_task_matrix_pending_task_modes_missing");
         const scenario = pendingRealTaskScenarios.find((item) => String(item?.taskMode || "") === taskMode);
         if (report.realTrafficStillRequired === true && !scenario) semanticFailures.push(`native_codex_parity_task_matrix_${taskMode.replaceAll("-", "_")}_scenario_missing`);
@@ -1588,6 +1592,7 @@ function summarizeGate(definition) {
       const secondProof = report.secondAccountProof && typeof report.secondAccountProof === "object" ? report.secondAccountProof : {};
       const externalHandoff = report.externalMcpIdentityHandoff && typeof report.externalMcpIdentityHandoff === "object" ? report.externalMcpIdentityHandoff : {};
       const actions = Array.isArray(report.machineReadableNextActions) ? report.machineReadableNextActions : [];
+      const workerRecoveryStillRequired = workerProof.canDispatchCurrentChannelWorkers !== true;
       if (report.reportName !== "goal-unblock-package") semanticFailures.push("goal_unblock_package_report_name");
       if (report.requestedRealTraffic !== false) semanticFailures.push("goal_unblock_package_requested_real_traffic");
       if (report.usedRealTraffic !== false) semanticFailures.push("goal_unblock_package_used_real_traffic");
@@ -1608,20 +1613,26 @@ function summarizeGate(definition) {
         if (!deferredRequirements.includes(expected)) semanticFailures.push(`goal_unblock_package_deferred_missing:${expected}`);
         if (!incompleteDeferredRequirements.includes(expected)) semanticFailures.push(`goal_unblock_package_incomplete_deferred_missing:${expected}`);
       }
-      for (const expected of ["current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing"]) {
+      const expectedDeferredBlockers = [
+        ...(workerRecoveryStillRequired ? ["current_channel_worker_transport_not_recovered"] : []),
+        "second_antigravity_account_real_proof_missing",
+      ];
+      for (const expected of expectedDeferredBlockers) {
         if (!deferredBlockers.includes(expected)) semanticFailures.push(`goal_unblock_package_deferred_blocker_missing:${expected}`);
       }
-      if (workerProof.requiresFreshCodexChannel !== true) semanticFailures.push("goal_unblock_package_worker_fresh_channel_missing");
-      if (workerProof.requiresFreshReadOnlyProbe !== true) semanticFailures.push("goal_unblock_package_worker_read_only_missing");
-      if (workerProof.sameChannelRetryRecommended !== false) semanticFailures.push("goal_unblock_package_worker_same_channel_retry");
+      if (workerRecoveryStillRequired && workerProof.requiresFreshCodexChannel !== true) semanticFailures.push("goal_unblock_package_worker_fresh_channel_missing");
+      if (workerRecoveryStillRequired && workerProof.requiresFreshReadOnlyProbe !== true) semanticFailures.push("goal_unblock_package_worker_read_only_missing");
+      if (workerRecoveryStillRequired && workerProof.sameChannelRetryRecommended !== false) semanticFailures.push("goal_unblock_package_worker_same_channel_retry");
+      if (!workerRecoveryStillRequired && workerProof.sameChannelRetryRecommended !== true) semanticFailures.push("goal_unblock_package_worker_same_channel_retry_missing");
       if (!String(workerProof.latestTransportCheckedAt || "").startsWith("20")) semanticFailures.push("goal_unblock_package_worker_checked_at_missing");
       if (Number(workerProof.workerObservationCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_observation_count_low");
-      if (Number(workerProof.workerTransportFailedCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_failed_count_low");
-      if (Number(workerProof.workerTransportOkCount || 0) !== 0) semanticFailures.push("goal_unblock_package_worker_ok_count_unexpected");
+      if (workerRecoveryStillRequired && Number(workerProof.workerTransportFailedCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_failed_count_low");
+      if (workerRecoveryStillRequired && Number(workerProof.workerTransportOkCount || 0) !== 0) semanticFailures.push("goal_unblock_package_worker_ok_count_unexpected");
+      if (!workerRecoveryStillRequired && Number(workerProof.workerTransportOkCount || 0) < 1) semanticFailures.push("goal_unblock_package_worker_ok_count_low");
       if (workerProof.genericMcpControlOk !== true) semanticFailures.push("goal_unblock_package_worker_generic_mcp_missing");
       if (workerProof.directProbeOk !== true) semanticFailures.push("goal_unblock_package_worker_direct_probe_missing");
       if (!String(workerProof.recordCommand || "").includes("record-anticodex-current-channel-worker-transport.mjs")) semanticFailures.push("goal_unblock_package_worker_record_command_missing");
-      if (String(workerProof.recommendedFirstReadOnlyProbe?.statusTool || "") !== "mimocode_wait_for_job") semanticFailures.push("goal_unblock_package_worker_first_probe");
+      if (!String(workerProof.recommendedFirstReadOnlyProbe?.statusTool || "")) semanticFailures.push("goal_unblock_package_worker_first_probe");
       if (secondProof.requiresUserPresence !== true) semanticFailures.push("goal_unblock_package_second_account_user_presence_missing");
       if (String(secondProof.windowsUser || "") !== ".\\AntiCodexModel") semanticFailures.push("goal_unblock_package_second_account_user");
       if (secondProof.targetUserExists !== false) semanticFailures.push("goal_unblock_package_second_account_target_exists");
@@ -1633,7 +1644,13 @@ function summarizeGate(definition) {
       if (externalHandoff.contractAccepted !== true) semanticFailures.push("goal_unblock_package_external_contract_not_accepted");
       if (externalHandoff.managedByAntiCodex !== false) semanticFailures.push("goal_unblock_package_external_contract_managed_by_anticodex");
       if (actions.length < 4) semanticFailures.push("goal_unblock_package_action_count");
-      for (const actionId of ["fresh_channel_worker_read_only_probe", "create_or_verify_second_windows_user", "external_mcp_account_identity_report", "approved_second_account_post_login_proof"]) {
+      const expectedActionIds = [
+        workerRecoveryStillRequired ? "fresh_channel_worker_read_only_probe" : "dispatch_scoped_worker_task_after_read_only_success",
+        "create_or_verify_second_windows_user",
+        "external_mcp_account_identity_report",
+        "approved_second_account_post_login_proof",
+      ];
+      for (const actionId of expectedActionIds) {
         const actionEntry = actions.find((item) => String(item?.id || "") === actionId);
         if (!actionEntry) semanticFailures.push(`goal_unblock_package_action_missing:${actionId}`);
         else if (!String(actionEntry.owner || "")) semanticFailures.push(`goal_unblock_package_action_owner_missing:${actionId}`);
@@ -1652,7 +1669,7 @@ function summarizeGate(definition) {
       if (criteria.genericMcpControlOk !== true) semanticFailures.push("fresh_worker_proof_kit_generic_mcp_criterion_missing");
       if (criteria.recordedByTransportReport !== true) semanticFailures.push("fresh_worker_proof_kit_record_criterion_missing");
       if (probes.length < 3) semanticFailures.push("fresh_worker_proof_kit_probe_count");
-      if (String(report.recommendedFirstReadOnlyProbe?.statusTool || "") !== "mimocode_wait_for_job") semanticFailures.push("fresh_worker_proof_kit_first_probe");
+      if (!String(report.recommendedFirstReadOnlyProbe?.statusTool || "")) semanticFailures.push("fresh_worker_proof_kit_first_probe");
       if (!String(report.recordSuccessCommand || "").includes("record-anticodex-current-channel-worker-transport.mjs")) semanticFailures.push("fresh_worker_proof_kit_record_command_missing");
       if (!String(report.postSuccessValidationCommand || "").includes("test-anticodex-current-channel-worker-recovery")) semanticFailures.push("fresh_worker_proof_kit_post_success_command_missing");
       if (!String(report.goalValidationCommand || "").includes("test-anticodex-goal-readiness")) semanticFailures.push("fresh_worker_proof_kit_goal_command_missing");
@@ -4535,8 +4552,6 @@ if (args.has("--self-test")) {
       "native_codex_parity_task_matrix_research_group_missing",
       "native_codex_parity_task_matrix_tool_loop_missing",
       "native_codex_parity_task_matrix_pending_task_modes_missing",
-      "native_codex_parity_task_matrix_web_search_scenario_missing",
-      "native_codex_parity_task_matrix_free_chat_scenario_missing",
       "native_codex_parity_task_matrix_minimal_refresh_command_args_missing",
       "native_codex_parity_task_matrix_codex_tools_missing",
       "native_codex_parity_task_matrix_model_text_boundary_missing",
@@ -4580,8 +4595,7 @@ if (args.has("--self-test")) {
       "goal_real_run_readiness_account_blocking_reason_missing",
       "goal_real_run_readiness_separate_account_claimed",
       "goal_real_run_readiness_release_account_proof_claimed",
-      "goal_real_run_readiness_web_search_task_missing",
-      "goal_real_run_readiness_free_chat_task_missing",
+      "goal_real_run_readiness_coding_project_scenario_missing",
       "goal_real_run_readiness_missing_task_scenarios",
       "goal_real_run_readiness_refresh_command_missing",
       "goal_real_run_readiness_real_task_refresh_stage_missing",
@@ -4634,8 +4648,7 @@ if (args.has("--self-test")) {
       "approved_real_run_sequence_stage_count",
       "approved_real_run_sequence_real_stage_count",
       "approved_real_run_sequence_login_stage_count",
-      "approved_real_run_sequence_web_search_task_missing",
-      "approved_real_run_sequence_free_chat_task_missing",
+      "approved_real_run_sequence_coding_project_scenario_missing",
       "approved_real_run_sequence_accountProxyReadiness_gate_missing",
       "approved_real_run_sequence_accountProxyReadiness_action_missing",
       "approved_real_run_sequence_accountProxyReadiness_blocked_gate_missing",
