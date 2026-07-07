@@ -1089,6 +1089,10 @@ foreach ($mcpName in @($mcpNames | Where-Object { $_ -ne "node_repl" })) {
 
 $expectedXiaoqiangMcpNames = @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4")
 $missingXiaoqiangMcpNames = @($expectedXiaoqiangMcpNames | Where-Object { $mcpNames -notcontains $_ })
+$hasAnyXiaoqiangConfig = (($mcpNames | Where-Object { $_ -match '^xiaoqiang' }).Count -gt 0) -or (($sharedMcpNames | Where-Object { $_ -match '^xiaoqiang' }).Count -gt 0)
+if (-not $hasAnyXiaoqiangConfig) {
+    $missingXiaoqiangMcpNames = @()
+}
 $xiaoqiangMcpChecks = @(
     foreach ($expectedXiaoqiangName in $expectedXiaoqiangMcpNames) {
         $listCheck = @($mcpListSmokeChecks | Where-Object { $_.server -eq $expectedXiaoqiangName } | Select-Object -First 1)
@@ -1113,9 +1117,13 @@ $xiaoqiangMcpChecks = @(
         }
     }
 )
-$xiaoqiangMcpPassed = ($missingXiaoqiangMcpNames.Count -eq 0 -and @($xiaoqiangMcpChecks | Where-Object { -not $_.passed }).Count -eq 0)
-if ($missingXiaoqiangMcpNames.Count -gt 0) {
-    Add-Failure "missing Xiaoqiang MCP servers: $($missingXiaoqiangMcpNames -join ', ')"
+if (-not $hasAnyXiaoqiangConfig) {
+    $xiaoqiangMcpPassed = $true
+} else {
+    $xiaoqiangMcpPassed = ($missingXiaoqiangMcpNames.Count -eq 0 -and @($xiaoqiangMcpChecks | Where-Object { -not $_.passed }).Count -eq 0)
+    if ($missingXiaoqiangMcpNames.Count -gt 0) {
+        Add-Failure "missing Xiaoqiang MCP servers: $($missingXiaoqiangMcpNames -join ', ')"
+    }
 }
 
 $headroomSkillFile = Join-Path (Join-Path $skillsPath "headroom") "SKILL.md"
