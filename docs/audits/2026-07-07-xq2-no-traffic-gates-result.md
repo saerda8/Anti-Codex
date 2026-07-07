@@ -1,0 +1,101 @@
+# XQ2 No-Traffic Gates Result
+
+- Prior xq2 job: `xqw_mrau1tfw_fvwt07`.
+- Terminal status: failed by worker contract, reason `no_code_changed`.
+- Interpretation: the job produced no accepted workspace artifact, so it is not accepted as gate evidence.
+- Main-agent boundary: main agent will not fill in missing gate results manually.
+- Next required action: rerun no-traffic gate commands through a Xiaoqiang worker with a mandatory artifact write after each command.
+
+## Refresh attempt 2026-07-08
+
+- Command: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-anticodex-external-mcp-identity-contract.ps1`
+  - Execution note: direct Bash invocation with an unquoted backslash path was shell-mangled once and failed before script execution; rerun with the same Windows script path quoted for Bash execution.
+  - Exit status: 0.
+  - ok field: true.
+  - noTraffic: true.
+  - requestedRealTraffic: false.
+  - usedRealTraffic: false.
+  - changedSystem: false.
+  - createdUser: false.
+  - capturesPassword: false.
+  - storesPassword: false.
+  - behaviorCovered: true.
+  - coverageKind: external-mcp-identity-contract-no-traffic.
+  - externalMcpIdentityAccepted: true.
+  - mcpAccountIdFromExternalReport: true.
+  - effectiveMcpAccountIdPresent: true.
+  - mcpAccountLaneManagedByAntiCodex: false.
+  - mcpAccountRequiredSource: external-mcp-antigravity-account.
+  - operatorIdentityInputsClear: true.
+  - failures: none.
+  - elapsedMs: 1662.
+  - Report path latest: `C:\Users\XD\AppData\Roaming\anticodex\reports\latest-external-mcp-identity-contract.json`.
+  - Report path history: `C:\Users\XD\AppData\Roaming\anticodex\reports\20260708-000403-external-mcp-identity-contract.json`.
+  - Remaining blocker: none for this no-traffic gate.
+- Command: `node scripts\test-anticodex-long-task-landing-matrix.mjs`
+  - Execution note: direct Bash invocation with an unquoted backslash path was shell-mangled once and failed before script execution; rerun with the same Windows script path quoted for Bash execution.
+  - Exit status: 0.
+  - ok field: true.
+  - requestedRealTraffic: false.
+  - usedRealTraffic: false.
+  - behaviorCovered: true.
+  - coverageKind: long-task-landing-matrix-report-only.
+  - reportRoot: `C:\Users\XD\AppData\Roaming\anticodex\reports`.
+  - maxAgeHours: 24.
+  - longTaskLandingComplete: true.
+  - codexClientCopy: true.
+  - antigravityModelTextOnly: true.
+  - longTaskCount: 7.
+  - landedLongTaskCount: 7.
+  - failedLongTaskModes: none.
+  - agenticCapabilityMatrixPresent: true.
+  - agenticCapabilityMatrixComplete: true.
+  - realTaskCoverageRoadmapPresent: true.
+  - realTaskCoverageRoadmapCompleteProfiles: core, agentic, extended, all.
+  - broaderRealTrafficStillRequired: false.
+  - pendingRealTaskModes: none.
+  - pendingRealTaskScenarios: none.
+  - minimalRefreshCommand: empty.
+  - failures: none.
+  - elapsedMs: 15.
+  - Report path latest: `C:\Users\XD\AppData\Roaming\anticodex\reports\latest-long-task-landing-matrix.json`.
+  - Report path history: `C:\Users\XD\AppData\Roaming\anticodex\reports\20260707-160410-long-task-landing-matrix.json`.
+  - Remaining blocker: none for this no-traffic gate.
+- Command: `node scripts\test-anticodex-real-approval-plan.mjs`
+  - Exit status: 0.
+  - ok field: true.
+  - requestedRealTraffic: false.
+  - usedRealTraffic: false.
+  - behaviorCovered: true.
+  - coverageKind: real-approval-plan-report-only.
+  - reportRoot: `C:\Users\XD\AppData\Roaming\anticodex\reports`.
+  - sourceReports present and parseable: realTaskCoverageRoadmap, goalReadiness, releaseGates, accountIsolation, secondAccountLoginEntrypoint.
+  - realTaskRefresh needed: false.
+  - realTaskRefresh requiresRealTraffic: false.
+  - realTaskRefresh blockedUntilExplicitUserApproval: false.
+  - releaseRealTrafficGates needed: false.
+  - requiredGateIds: accountProxyReadiness, postVerification.
+  - completedGateIds: accountProxyReadiness, postVerification.
+  - requiredReleaseComplete: false.
+  - requiredReleaseRealTrafficActionCount: 0.
+  - optionalReleaseRealTrafficActionCount: 6.
+  - releaseBlockedOnlyByRequiredRealTraffic: false.
+  - accountIsolation completionState: blocked_before_interactive_login.
+  - accountIsolation readinessBlockingReason: target_windows_user_missing.
+  - targetUserExists: false.
+  - safeToAskUserForSecondAccountLogin: false.
+  - safeToStartLogin: false.
+  - releaseAcceptableAccountProof: false.
+  - accountSetupBlocked: true.
+  - requiresSeparateWindowsUser: true.
+  - preLoginChecklistComplete: true.
+  - preLoginChecklistCount: 3.
+  - blockedUntilExplicitUserApprovalCount: 2.
+  - requiresRealTrafficCount: 1.
+  - operatorSetupBlockedCount: 3.
+  - nextNoTrafficAction: create_or_verify_target_windows_user_then_rerun_account_prepare.
+  - failures: none reported by top-level result.
+  - elapsedMs: 6.
+  - Report path latest: `C:\Users\XD\AppData\Roaming\anticodex\reports\latest-real-approval-plan.json`.
+  - Report path history: `C:\Users\XD\AppData\Roaming\anticodex\reports\20260707-160413-real-approval-plan.json`.
+  - Remaining blocker: no blocker for this no-traffic gate; approval plan still records operator setup blocker `target_windows_user_missing` before interactive login or real-traffic identity proof.
