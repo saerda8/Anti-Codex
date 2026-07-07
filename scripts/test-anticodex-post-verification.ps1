@@ -4,10 +4,75 @@ param(
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$TimeoutMinutes = 10,
     [int]$PollSeconds = 15,
-    [switch]$OpenAntigravityOnVerification
+    [switch]$OpenAntigravityOnVerification,
+    [switch]$SelfTestRunspaceFallback
 )
 
 $ErrorActionPreference = "Stop"
+
+function Add-RunspaceScriptArguments {
+    param(
+        [Parameter(Mandatory = $true)][System.Management.Automation.PowerShell]$PowerShell,
+        [string[]]$Arguments = @()
+    )
+
+    for ($i = 0; $i -lt $Arguments.Count; $i++) {
+        $argument = [string]$Arguments[$i]
+        if ($argument.StartsWith("-")) {
+            $name = $argument.TrimStart("-")
+            $hasValue = ($i + 1) -lt $Arguments.Count -and -not ([string]$Arguments[$i + 1]).StartsWith("-")
+            if ($hasValue) {
+                [void]$PowerShell.AddParameter($name, $Arguments[$i + 1])
+                $i++
+            } else {
+                [void]$PowerShell.AddParameter($name)
+            }
+        } else {
+            [void]$PowerShell.AddArgument($argument)
+        }
+    }
+}
+
+if ($SelfTestRunspaceFallback) {
+    $ps = [PowerShell]::Create()
+    try {
+        [void]$ps.AddScript(@'
+param(
+    [string]$BaseUrl,
+    [switch]$AllowUnready,
+    [Parameter(ValueFromRemainingArguments = $true)][object[]]$Remaining
+)
+[pscustomobject]@{
+    BaseUrl = $BaseUrl
+    AllowUnready = [bool]$AllowUnready
+    RemainingCount = if ($null -eq $Remaining) { 0 } else { @($Remaining).Count }
+}
+'@)
+        Add-RunspaceScriptArguments -PowerShell $ps -Arguments @("-BaseUrl", "http://127.0.0.1:8484", "-AllowUnready")
+        $result = @($ps.Invoke()) | Select-Object -Last 1
+        if ($ps.HadErrors) { throw (($ps.Streams.Error | ForEach-Object { [string]$_ }) -join "; ") }
+
+        $ok = ($result.BaseUrl -eq "http://127.0.0.1:8484" -and $result.AllowUnready -eq $true -and $result.RemainingCount -eq 0)
+        [pscustomobject]@{
+            ok = $ok
+            usedRealTraffic = $false
+            diagnosis = if ($ok) { "runspace_fallback_named_param_binding_ok" } else { "runspace_fallback_named_param_binding_failed" }
+            observed = $result
+        } | ConvertTo-Json -Compress
+        if (-not $ok) { exit 1 }
+        exit 0
+    } catch {
+        [pscustomobject]@{
+            ok = $false
+            usedRealTraffic = $false
+            diagnosis = "runspace_fallback_self_test_error"
+            error = $_.Exception.Message
+        } | ConvertTo-Json -Compress
+        exit 1
+    } finally {
+        $ps.Dispose()
+    }
+}
 
 $startedAt = [DateTime]::UtcNow
 $scriptRoot = Split-Path -Parent $PSCommandPath
@@ -95,9 +160,35 @@ function Invoke-JsonScript {
         return [pscustomobject]@{ ok = $false; failures = @("$Name script missing"); diagnosis = "script_missing" }
     }
 
-    $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
-    $output = @(& $powerShellBin -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    $output = @()
+    $exitCode = 0
+    try {
+        $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
+        $output = @(& $powerShellBin -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } catch {
+        $childError = $_.Exception.Message
+        $ps = [PowerShell]::Create()
+        try {
+            [void]$ps.AddCommand($ScriptPath)
+            Add-RunspaceScriptArguments -PowerShell $ps -Arguments $Arguments
+            $output = @($ps.Invoke())
+            if ($ps.HadErrors) {
+                $output += @($ps.Streams.Error | ForEach-Object { [string]$_ })
+                $exitCode = 1
+            }
+        } catch {
+            Add-Failure "$Name could not run after nested PowerShell failed: $childError; fallback: $($_.Exception.Message)"
+            return [pscustomobject]@{
+                ok = $false
+                exitCode = 1
+                failures = @("$Name could not run after nested PowerShell failed")
+                tail = @($childError, $_.Exception.Message)
+            }
+        } finally {
+            $ps.Dispose()
+        }
+    }
     $lines = @($output | ForEach-Object { [string]$_ })
     $jsonLine = @($lines | Where-Object { $_.TrimStart().StartsWith("{") } | Select-Object -Last 1)
 
