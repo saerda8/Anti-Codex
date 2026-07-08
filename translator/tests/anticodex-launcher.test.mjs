@@ -13464,6 +13464,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /artifactVerifiedAfterNonterminalWorker/);
   assert.match(summarizer, /extraFiles/);
   assert.match(summarizer, /currentChannelWorkerTransportEvidence/);
+  assert.match(summarizer, /currentChannelWorkerTransportEffectiveOk/);
+  assert.match(summarizer, /currentChannelWorkerRecoveryEffectiveOk/);
   assert.match(summarizer, /splitObserved/);
   assert.match(summarizer, /workerObservations/);
   assert.match(summarizer, /workerObservationCount/);
@@ -13493,6 +13495,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /exposedButUntestedWorkerPrefixes/);
   assert.match(summarizer, /workerTransportRecoveryDirectWorkerProbeCommand/);
   assert.match(summarizer, /workerTransportRecoveryCurrentChannelRecoveryRecordCommand/);
+  assert.match(server, /isCurrentChannelWorkerTransportReport/);
+  assert.match(server, /currentChannelWorkerTransportEffectiveOk/);
+  assert.match(server, /currentChannelWorkerRecoveryEffectiveOk/);
   assert.match(summarizer, /goalOperatorActionCard/);
   assert.match(summarizer, /workerRecoveryStatusCommand/);
   assert.match(summarizer, /workerRecoveryCommand/);
@@ -14481,6 +14486,7 @@ test("release gates require structured provider save and restart continuity evid
   assert.match(releaseGates, /fifthOpenAiToolEvidence/);
   assert.match(releaseGates, /sixthOpenAiToolEvidence/);
 });
+
 
 test("agentic release gates require visible staged tool loop proof", () => {
   const capabilityMatrix = readFileSync(resolve(root, "scripts", "test-anticodex-agentic-capability-matrix.mjs"), "utf8");
