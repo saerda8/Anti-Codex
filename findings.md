@@ -1866,3 +1866,9 @@
 - Synthetic tests that dispatch directly on the button can miss the real bug. Manager button verification now sends an actual CDP mouse press/release to the close-label center and requires the overlay to close and reopen.
 - After a Codex restart, same-channel `node_repl` worked but Antigravity `health`, MIMO `start`, and OpenCode sync implementation all returned `Transport closed` before a result/job id. Direct stdio `tools/list` remained 7/7 healthy, Antigravity direct `health` returned ready, and MIMO direct `get_job` returned normally. Treat this as current Codex worker-namespace transport failure, not worker server, account, key, or Anti-Codex product failure.
 - `test-anticodex-current-channel-worker-recovery.mjs` must not recommend sealed Xiaoqiang probes from stale ledgers. Only include Xiaoqiang recommendations when the active direct probe or exposed current-channel tools show Xiaoqiang is actually configured.
+
+## 2026-07-09 Cold Relaunch Fallback
+
+- `test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch` can stop Anti-Codex successfully and then fail to relaunch it when this Codex-hosted PowerShell session denies `Start-Process powershell.exe` with `Access is denied`. This leaves Anti-Codex down until the installed `start-anticodex.ps1` is invoked through its existing `cmd.exe start` fallback.
+- The cold relaunch verifier now mirrors that fallback: first try the hidden PowerShell launcher, then use `cmd.exe /d /c start ... powershell.exe -File <start-anticodex.ps1>` and record `launcher.mode`. The verified recovery report used `cmd-start-fallback`, restored one Anti-Codex main process plus one translator, kept original Codex PIDs unchanged, and passed health in about 24 seconds.
+- Lesson: for restart-class checks, a failed launcher is product-impacting even when the bug is in the verifier. Always restore `/health` before moving on, then rerun release gates and runtime sync.

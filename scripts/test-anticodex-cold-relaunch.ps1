@@ -157,6 +157,7 @@ $originalCodexStopTargetIntersection = @()
 $launcherProc = $null
 $launcherOutPath = ""
 $launcherErrPath = ""
+$launcherMode = ""
 
 function Get-AntiCodexProcessSnapshot {
     $main = New-Object System.Collections.Generic.List[object]
@@ -288,9 +289,22 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
             -RedirectStandardOutput $launcherOutPath `
             -RedirectStandardError $launcherErrPath `
             -WindowStyle Hidden -PassThru
+        $launcherMode = "powershell-start-process"
     } catch {
-        $launched = $false
-        Add-Failure "failed to launch Anti-Codex: $($_.Exception.Message)"
+        $powerShellLaunchError = $_.Exception.Message
+        try {
+            $cmdArgs = @(
+                "/d", "/c", "start", '""', "/min",
+                "powershell.exe",
+                "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", "`"$startAntiCodex`""
+            )
+            $launcherProc = Start-Process -FilePath cmd.exe -ArgumentList $cmdArgs -WindowStyle Hidden -PassThru
+            $launcherMode = "cmd-start-fallback"
+        } catch {
+            $launched = $false
+            Add-Failure "failed to launch Anti-Codex: $powerShellLaunchError; cmd fallback failed: $($_.Exception.Message)"
+        }
     }
     $stages.Add((New-Stage "launch-anticodex" $stageStarted $launched "start-anticodex.ps1 dispatched")) | Out-Null
     Save-Progress "launched-anticodex"
@@ -395,6 +409,7 @@ $result = [pscustomobject]@{
     }
     launcher = [pscustomobject]@{
         started = [bool]$launcherProc
+        mode = $launcherMode
         pid = if ($launcherProc) { [int]$launcherProc.Id } else { $null }
         hasExited = $launcherHasExited
         exitCode = $launcherExitCode
