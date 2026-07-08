@@ -2223,3 +2223,4 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - MCP/skills passed with `ok:true`, `failureCount:0`.
 - Ecosystem surfaces passed with `requiredSurfaceCount:4`, `passedReportCount:6`, `totalReportCount:6`, and release gates remained green.
 - Visible desktop UI `local-project` passed with marker `UI_LOCAL_PROJECT_20260708_2309`, real traffic, three expected files, exact done marker, and final assistant marker. This proves desktop Anti-Codex task execution in addition to the earlier backend mini-tool proof.
+- Worker attempts: OpenCode transport closed, CodeBuddy `cbw_mrc8ymje_ecbizm` failed `no_code_changed`, and Agnes `agw_mrc8z6sy_pcco5a` completed the side-path review file after main-agent rewrite.
