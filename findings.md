@@ -1845,3 +1845,10 @@
 - Agnes remained callable and returned job ids. Job `agw_mrc97r79_kzr9w7` produced the intended review file but terminal-failed after a second Agnes job was mistakenly started in the same worktree; this is a coordination failure, not product evidence.
 - Job `agw_mrc981ou_r5a7hy` completed but its generated `codebuddy`-named file was rejected because it was actually Agnes output and contained unverified claims. Delete mislabeled worker artifacts rather than laundering them into evidence.
 - Rule reinforced: do not start a second edit-capable worker in the same worktree while the first is running, even when the intended output files differ. If this happens, inspect `git status`, file contents, checks, and discard any polluted or mislabeled artifact.
+
+## 2026-07-09 Regular MCP Refresh and Worker Availability
+
+- Current no-traffic product surfaces are healthy: UI state, source preflight, refresh-features VerifyOnly, plugin capabilities, MCP/skills, and ecosystem surfaces all passed.
+- MCP/skills now reports 10 active regular MCP servers and no active Xiaoqiang dispatch set; keep Xiaoqiang sealed unless the user explicitly restores them in config and opens a fresh channel.
+- CodeBuddy `cbw_mrc9oced_fpa7c5` again failed as `no_code_changed`, while Kilo and OpenCode returned `Transport closed`. Treat these as worker availability/transport issues, not product failures.
+- Agnes `agw_mrcap9fq_2y9zzz` remains usable for small scoped docs output and produced `docs/audits/2026-07-09-agnes-regular-mcp-refresh.md`; still review its output before citing it.

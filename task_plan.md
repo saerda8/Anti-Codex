@@ -2232,3 +2232,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Agnes job `agw_mrc97r79_kzr9w7` wrote `docs/audits/2026-07-08-agnes-current-status-review.md` but was terminal-failed because a second Agnes job was incorrectly started in the same worktree. The main agent reviewed and kept only the corrected Agnes review file.
 - Accidental second Agnes job `agw_mrc981ou_r5a7hy` completed a mislabeled `codebuddy` side file, but that file was rejected and deleted after review because it was not CodeBuddy evidence and overstated transport health.
 - Current accepted conclusion remains: Anti-Codex has fresh local model/tool and visible UI task evidence, but no local report proves external provider quota decrement; xiaoqiang workers remain sealed by current policy.
+
+## 2026-07-09 Regular MCP No-Traffic Refresh
+
+- Fresh no-traffic checks passed: UI state, source preflight with full regression skipped, refresh-features `-VerifyOnly`, plugin capabilities, MCP/skills, and ecosystem surfaces.
+- MCP/skills currently reports the active configured MCP set as 10 regular servers: Agnes, Antigravity, CodeBuddy, DeepSeek, DevEco, Kilo, MIMO Claude Coworker, MiMoCode, node_repl, and OpenCode. Xiaoqiang workers are sealed and not part of the active set.
+- CodeBuddy job `cbw_mrc9oced_fpa7c5` started but failed `no_code_changed`; Kilo and OpenCode start calls returned `Transport closed`.
+- Agnes job `agw_mrcap9fq_2y9zzz` completed and wrote `docs/audits/2026-07-09-agnes-regular-mcp-refresh.md`; main-agent review confirmed the file is ASCII-only and limited to the requested audit note.
