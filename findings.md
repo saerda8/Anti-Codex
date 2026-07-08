@@ -1872,3 +1872,9 @@
 - `test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch` can stop Anti-Codex successfully and then fail to relaunch it when this Codex-hosted PowerShell session denies `Start-Process powershell.exe` with `Access is denied`. This leaves Anti-Codex down until the installed `start-anticodex.ps1` is invoked through its existing `cmd.exe start` fallback.
 - The cold relaunch verifier now mirrors that fallback: first try the hidden PowerShell launcher, then use `cmd.exe /d /c start ... powershell.exe -File <start-anticodex.ps1>` and record `launcher.mode`. The verified recovery report used `cmd-start-fallback`, restored one Anti-Codex main process plus one translator, kept original Codex PIDs unchanged, and passed health in about 24 seconds.
 - Lesson: for restart-class checks, a failed launcher is product-impacting even when the bug is in the verifier. Always restore `/health` before moving on, then rerun release gates and runtime sync.
+
+## 2026-07-09 Optional Provider Return Refresh
+
+- After the required and passive release gates were green, `test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic -TimeoutSec 180` passed in about 18.5 seconds. It used a real Antigravity return turn on `gemini-3.5-flash-low`, preserved provider history across save, restart, provider switch, OpenAI-compatible to Anthropic switch, and reverse switch, and recorded `missingMarkerCount:0`.
+- Release gates then reduced optional gaps from three to two: `providerAntigravityReturnOptional` is now satisfied; only the external real-provider key path and independent Antigravity CLI account proof remain optional/unattended blockers.
+- Do not run `realThirdPartyProviderOptional` without an explicit API key env var supplied by the user, and do not run `antigravityCliRealSmokeOptional` without a real target Windows user plus separate-account proof identifiers.
