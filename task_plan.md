@@ -2239,3 +2239,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - MCP/skills currently reports the active configured MCP set as 10 regular servers: Agnes, Antigravity, CodeBuddy, DeepSeek, DevEco, Kilo, MIMO Claude Coworker, MiMoCode, node_repl, and OpenCode. Xiaoqiang workers are sealed and not part of the active set.
 - CodeBuddy job `cbw_mrc9oced_fpa7c5` started but failed `no_code_changed`; Kilo and OpenCode start calls returned `Transport closed`.
 - Agnes job `agw_mrcap9fq_2y9zzz` completed and wrote `docs/audits/2026-07-09-agnes-regular-mcp-refresh.md`; main-agent review confirmed the file is ASCII-only and limited to the requested audit note.
+
+## 2026-07-09 Date-Rollover Release Gate Refresh
+
+- A fresh release-gate summary after midnight was red only because `thirdPartyProvider` and `logDbGuard` reports crossed the freshness window; health still reported account ready and 8 models.
+- Refreshed `test-anticodex-third-party-provider.mjs` and `protect-anticodex-log-db.mjs --status`; both passed and release gates returned to `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`, `damagedReports:[]`.
+- DevEco was attempted during the Beijing 00:00-06:00 window but returned `Transport closed` before job id.
+- Agnes job `agw_mrcauptl_jkxdaa` completed `docs/audits/2026-07-09-agnes-release-gate-refresh.md`; main-agent review confirmed ASCII-only, docs-only scope.

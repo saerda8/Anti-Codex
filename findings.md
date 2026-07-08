@@ -1852,3 +1852,10 @@
 - MCP/skills now reports 10 active regular MCP servers and no active Xiaoqiang dispatch set; keep Xiaoqiang sealed unless the user explicitly restores them in config and opens a fresh channel.
 - CodeBuddy `cbw_mrc9oced_fpa7c5` again failed as `no_code_changed`, while Kilo and OpenCode returned `Transport closed`. Treat these as worker availability/transport issues, not product failures.
 - Agnes `agw_mrcap9fq_2y9zzz` remains usable for small scoped docs output and produced `docs/audits/2026-07-09-agnes-regular-mcp-refresh.md`; still review its output before citing it.
+
+## 2026-07-09 Date-Rollover Gate Freshness
+
+- If release gates turn red just after midnight with stale `thirdPartyProvider` or `logDbGuard`, first run the report-only refresh commands from `releaseGateFailureReasons`; this is freshness drift, not necessarily product breakage.
+- The accepted refresh path is `node scripts/test-anticodex-third-party-provider.mjs --report-root "$env:APPDATA\anticodex\reports"` plus `node scripts/protect-anticodex-log-db.mjs --status --report-root "$env:APPDATA\anticodex\reports"`, then rerun release gates.
+- DevEco can still return `Transport closed` even in its allowed night window; classify that as current-channel worker transport failure and continue with another regular MCP.
+- Agnes `agw_mrcauptl_jkxdaa` produced the accepted release-gate refresh note; do not infer provider quota decrement from this local no-traffic refresh.
