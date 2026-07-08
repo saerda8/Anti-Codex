@@ -51,6 +51,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-08 - Agnes report-directory parameter and no-change failure
+
+- Task: repair no-traffic goal/report false reds after Xiaoqiang was sealed.
+- Result: the first Agnes dispatch was rejected before launch because an AppData reports path was passed as a worker path parameter outside `cwd`. The retry launched as `agw_mrb7agqp_0xsyuj` but exited nonzero with zero file changes and no checks.
+- Cause classification: first attempt was a directory-boundary parameter error; second attempt was external worker/no-change failure, not Anti-Codex product evidence.
+- Rule change: do not pass AppData report roots through worker `allowed_dirs` or `generated_paths` when the tool enforces `cwd` boundaries. If Agnes exits nonzero with no changes on a scoped implementation task, record the job id and switch to another suitable MCP with a narrowed task.
+
 ### 2026-07-04 - Resumed-channel worker read-only probes still transport-closed
 
 - Task: after the long-running goal was resumed, verify whether worker namespaces became usable before allowing any implementation worker dispatch.
