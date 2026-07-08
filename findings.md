@@ -1822,3 +1822,11 @@
 - Agnes job `agw_mrc1ccig_39ohyq` completed and wrote `docs/audits/2026-07-08-regular-worker-progress-status-agnes.md`; the first output was mojibake and was rewritten by the main agent as an ASCII review record after direct inspection.
 - `goalUnblockPackage` was missing from no-traffic self-cycle filters in dependent goal reports. Adding it to `goal-readiness`, `goal-real-run-readiness`, and `approved-real-run-sequence`, then refreshing `required-real-traffic-sequence`, cleared the false no-traffic release-gate cycle.
 - After runtime sync, compact release gates reported `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`. Optional real-provider and provider-to-Antigravity checks remain opt-in only.
+
+## 2026-07-08 Fresh Anti-Codex Real Mini Tool Proof
+
+- A fresh `test-anticodex-real-mini-tool.ps1 -AllowRealTraffic -TimeoutSec 90` run completed in 31824 ms with `ok:true`, `usedRealTraffic:true`, model `gemini-3.5-flash-low`, response id `chatcmpl_ac995415b1c444a3a2711b6fad5b5b8f`, and tool call id `pseudo_1783522682733_0`.
+- The run created and executed the local mini-tool artifact, and matched marker `MINI_TOOL_MARKER_20260708-225744`.
+- `/anticodex/model-routes` contained the same response id at `2026-07-08T14:58:02.730Z`, transport `desktop-cascade`, requested/resolved model `gemini-3.5-flash-low`, status `success`.
+- This proves fresh local Anti-Codex model-route/tool execution for this turn. It still does not prove provider-side quota or billing decrement without provider dashboard/API/billing evidence.
+- Agnes job `agw_mrc7ddd4_4hecas` completed a docs-side review file for this evidence boundary; the initial output was mojibake and was rewritten by the main agent as ASCII after direct inspection.

@@ -2209,3 +2209,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - `goalUnblockPackage` was added to the self-cycle filters for dependent goal reports, stale `required-real-traffic-sequence` was refreshed, and installed runtime sync passed with gateway health ok, 8 models, and account ready.
 - Current release gates are green: `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`.
 - Kilo still returned `Transport closed`; Agnes job `agw_mrc1ccig_39ohyq` completed a docs-side review, so regular MCP dispatch is partially usable in this channel.
+
+## 2026-07-08 Fresh Real Mini Tool Proof
+
+- Fresh Anti-Codex `real-mini-tool` ran with real traffic and passed: `ok:true`, `usedRealTraffic:true`, response id `chatcmpl_ac995415b1c444a3a2711b6fad5b5b8f`, marker `MINI_TOOL_MARKER_20260708-225744`.
+- The model-route ledger contains the same response id at `2026-07-08T14:58:02.730Z`, transport `desktop-cascade`, status `success`.
+- This is current local Anti-Codex model/tool evidence only; it still does not prove external provider quota decrement.
+- Agnes job `agw_mrc7ddd4_4hecas` produced a docs-side review of the evidence boundary, then the main agent rewrote it as ASCII after finding mojibake.
