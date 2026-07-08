@@ -2933,10 +2933,22 @@ function latestManagerReportItem(label, fileName, options = {}) {
         composerCleared: optionalBool(report?.composerCleared),
         sessionLockClear: optionalBool(report?.sessionLockClear),
     } : null;
+    const isCurrentChannelWorkerTransportReport = report?.reportName === "current-channel-worker-transport" || fileName === "latest-current-channel-worker-transport.json";
+    const isCurrentChannelWorkerRecoveryReport = report?.reportName === "current-channel-worker-recovery" || fileName === "latest-current-channel-worker-recovery.json";
     const rawOk = !invalid && report?.ok === true;
+    const currentChannelWorkerTransportEffectiveOk = isCurrentChannelWorkerTransportReport
+        ? rawOk && report?.workerTransportOk === true && report?.currentChannelWorkerDispatchUsable === true
+        : null;
+    const currentChannelWorkerRecoveryEffectiveOk = isCurrentChannelWorkerRecoveryReport
+        ? rawOk && report?.canDispatchCurrentChannelWorkers === true
+        : null;
     const effectiveOk = isReleaseGateReport
         ? rawOk && report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
-        : rawOk;
+        : isCurrentChannelWorkerTransportReport
+            ? currentChannelWorkerTransportEffectiveOk
+            : isCurrentChannelWorkerRecoveryReport
+                ? currentChannelWorkerRecoveryEffectiveOk
+                : rawOk;
     return {
         label,
         fileName,

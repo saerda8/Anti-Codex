@@ -360,6 +360,19 @@ const isAntigravityCliRealSmokeReport = report?.reportName === "antigravity-cli-
 const releaseGateEffectiveOk = isReleaseGateReport
   ? report?.releaseReady === true && (!Array.isArray(report?.damagedReports) || report.damagedReports.length === 0)
   : null;
+const currentChannelWorkerTransportEffectiveOk = isCurrentChannelWorkerTransportReport
+  ? report?.ok === true && report?.workerTransportOk === true && report?.currentChannelWorkerDispatchUsable === true
+  : null;
+const currentChannelWorkerRecoveryEffectiveOk = isCurrentChannelWorkerRecoveryReport
+  ? report?.ok === true && report?.canDispatchCurrentChannelWorkers === true
+  : null;
+const effectiveOk = isReleaseGateReport
+  ? releaseGateEffectiveOk
+  : isCurrentChannelWorkerTransportReport
+    ? currentChannelWorkerTransportEffectiveOk
+    : isCurrentChannelWorkerRecoveryReport
+      ? currentChannelWorkerRecoveryEffectiveOk
+      : (has(report, "ok") ? report.ok : null);
 const multiTurnHistory = report && report.multiTurnHistory ? report.multiTurnHistory : null;
 const toolHistory = multiTurnHistory && multiTurnHistory.toolHistory ? multiTurnHistory.toolHistory : null;
 const structuralEvidence = toolHistory && toolHistory.structuralEvidence ? toolHistory.structuralEvidence : null;
@@ -589,7 +602,7 @@ function emptyArrayField(object, key) {
 
 const summary = {
   ok: has(report, "ok") ? report.ok : null,
-  effectiveOk: isReleaseGateReport ? releaseGateEffectiveOk : (has(report, "ok") ? report.ok : null),
+  effectiveOk,
   reportName: has(report, "reportName") ? asString(report.reportName) : null,
   noTraffic: boolField(report, "noTraffic"),
   usedRealTraffic: boolField(report, "usedRealTraffic"),

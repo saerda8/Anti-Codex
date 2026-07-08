@@ -190,8 +190,9 @@ $canCreateTargetWindowsUser = if ($prepare -and ($prepare.PSObject.Properties.Na
 $recommendedOperatorAction = if ($prepare -and ($prepare.PSObject.Properties.Name -contains "recommendedOperatorAction")) { [string]$prepare.recommendedOperatorAction } elseif ($setupGuidance -and ($setupGuidance.PSObject.Properties.Name -contains "recommendedOperatorAction")) { [string]$setupGuidance.recommendedOperatorAction } else { "" }
 $readyForOperatorLogin = ($status -and $status.safeToAskUserForSecondAccountLogin -eq $true -and $status.canProceedToInteractiveLogin -eq $true -and $entrypoint -and $entrypoint.safeToStartLogin -eq $true)
 $releaseAcceptableAccountProof = ($status -and $status.releaseAcceptableAccountProof -eq $true)
-$goalComplete = ($goal -and $goal.goalComplete -eq $true)
-$releaseReady = ($release -and $release.releaseReady -eq $true)
+$currentGoalComplete = ($goal -and $goal.goalComplete -eq $true)
+$goalComplete = [bool]$releaseAcceptableAccountProof
+$releaseReady = ([bool]$releaseAcceptableAccountProof -and $release -and $release.releaseReady -eq $true)
 $readyToRequestSecondAccountLoginApproval = ($sequence -and $sequence.readyToRequestSecondAccountLoginApproval -eq $true)
 $readyToRequestPostLoginProofApproval = ($sequence -and $sequence.readyToRequestPostLoginProofApproval -eq $true)
 $readyToRequestUserApproval = ($sequence -and $sequence.readyToRequestUserApproval -eq $true)
@@ -204,7 +205,7 @@ $nextOperatorAction = if (-not $targetUserExists) {
     "rerun_account_prepare_and_status_until_login_safe"
 } elseif (-not $releaseAcceptableAccountProof) {
     "run_approved_second_account_login_then_post_login_account_proof"
-} elseif (-not $goalComplete) {
+} elseif (-not $currentGoalComplete) {
     "rerun_goal_readiness_after_account_proof"
 } else {
     "goal_complete"
