@@ -60,7 +60,7 @@ const goal = goalReport.report || {};
 const release = releaseReport.report || {};
 const account = accountReport.report || {};
 const secondAccountLoginEntrypoint = secondAccountLoginEntrypointReport.report || {};
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalUnblockPackage", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 
 const uniqueRefreshTasks = asArray(roadmap.uniqueRefreshTasks);
 const pendingRealTaskScenarios = asObjectArray(roadmap.pendingRealTaskScenarios)

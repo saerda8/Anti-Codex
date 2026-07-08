@@ -2201,3 +2201,11 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - 2026-07-07 worker proof-kit cleanup: `latest-fresh-channel-worker-proof-kit.json` now passes with xiaoqiang1 as the recommended read-only probe, and release gates no longer require the obsolete `mimocode_wait_for_job` first probe. The release gate missing list is now focused on stale Anti-Codex real-task/model-traffic reports and dependent no-traffic rollups.
 - 2026-07-07 approved real-run sequence cleanup: `test-anticodex-approved-real-run-sequence.mjs` now derives required real task modes from goal-run readiness instead of hardcoding `web-search,free-chat`. The current required task refresh set is `complex-project,autonomous-reasoning,agentic-step-flow,free-chat`, matching the roadmap and avoiding stale web-search refresh requirements.
 - 2026-07-07 release-gate dynamic task cleanup: release-gate semantic checks for `goalRealRunReadiness`, `approvedRealRunSequence`, and `nativeCodexParityTaskMatrix` now validate the pending task modes reported by the current no-traffic reports instead of assuming `web-search,free-chat`. This cleared the false web-search blocker; release readiness remains blocked by stale real-traffic reports and dependent rollups.
+
+## 2026-07-08 Regular MCP / No-Traffic Closure
+
+- Four Xiaoqiang workers remain sealed by current policy; regular MCP workers are the default active worker set.
+- Ecosystem surfaces now rely on regular MCP registration and support reports instead of fresh Xiaoqiang-required evidence.
+- `goalUnblockPackage` was added to the self-cycle filters for dependent goal reports, stale `required-real-traffic-sequence` was refreshed, and installed runtime sync passed with gateway health ok, 8 models, and account ready.
+- Current release gates are green: `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`.
+- Kilo still returned `Transport closed`; Agnes job `agw_mrc1ccig_39ohyq` completed a docs-side review, so regular MCP dispatch is partially usable in this channel.

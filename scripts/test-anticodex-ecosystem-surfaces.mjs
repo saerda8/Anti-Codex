@@ -5,7 +5,7 @@ import os from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const XIAOQIANG_WORKERS = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4"];
+const REGULAR_MCP_MIN_COUNT = 10; // 9 regular workers plus node_repl.
 
 const REQUIRED_REPORTS = [
   {
@@ -30,99 +30,9 @@ const REQUIRED_REPORTS = [
     validate(report, fail) {
       if (report.ok !== true) fail("mcp-skills ok=false");
       if (report.mcp?.smoke?.passed !== true) fail("mcp-skills smoke not passed");
-      if (report.mcp?.xiaoqiang?.passed !== true) fail("mcp-skills xiaoqiang summary not passed");
-      if (Number(report.mcp?.count || 0) < 11) fail("mcp-skills MCP count below expected 11");
+      if (Number(report.mcp?.count || 0) < REGULAR_MCP_MIN_COUNT) fail(`mcp-skills MCP count below expected ${REGULAR_MCP_MIN_COUNT}`);
       if (Number(report.skills?.count || 0) < 1) fail("mcp-skills missing skill inventory");
       if (report.skills?.smoke?.readable !== true) fail("mcp-skills skill smoke not readable");
-    },
-  },
-  {
-    id: "xiaoqiangMcp",
-    file: "latest-xiaoqiang-mcp.json",
-    surface: "xiaoqiang-mcp",
-    maxAgeHours: 24,
-    validate(report, fail) {
-      if (report.ok !== true) fail("xiaoqiang-mcp ok=false");
-      if (report.noTraffic !== true || report.usedRealTraffic !== false) fail("xiaoqiang-mcp traffic semantics mismatch");
-      const servers = Array.isArray(report.servers) ? report.servers : [];
-      for (const name of XIAOQIANG_WORKERS) {
-        if (!servers.includes(name)) fail(`xiaoqiang-mcp missing ${name}`);
-      }
-      for (const result of Array.isArray(report.results) ? report.results : []) {
-        if (result.ok !== true) fail(`xiaoqiang-mcp server failed: ${result.serverName || "unknown"}`);
-        if (Number(result.toolCount || 0) < 3) fail(`xiaoqiang-mcp tool count low: ${result.serverName || "unknown"}`);
-      }
-    },
-  },
-  {
-    id: "xiaoqiangWorkerProjectSmoke",
-    file: "latest-xiaoqiang-worker-mcp-project-smoke.json",
-    surface: "xiaoqiang-worker-task",
-    maxAgeHours: 24,
-    validate(report, fail) {
-      if (report.ok !== true) fail("xiaoqiang worker project smoke ok=false");
-      if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker project smoke did not use real worker traffic");
-      if (report.externalQuotaDecrementProven === true) fail("xiaoqiang worker project smoke claimed external quota decrement");
-      if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker project smoke coverage kind mismatch");
-      if (report.scenario !== "xiaoqiang-project") fail("xiaoqiang worker project smoke scenario mismatch");
-      if (Number(report.workerCount || 0) !== XIAOQIANG_WORKERS.length) fail("xiaoqiang worker project smoke worker count mismatch");
-      if (Number(report.passedWorkerCount || 0) !== XIAOQIANG_WORKERS.length) fail("xiaoqiang worker project smoke passed count mismatch");
-      const failedWorkers = Array.isArray(report.failedWorkers) ? report.failedWorkers : [];
-      if (failedWorkers.length !== 0) fail(`xiaoqiang worker project smoke has failed workers: ${failedWorkers.join(",")}`);
-      const results = Array.isArray(report.results) ? report.results : [];
-      for (const name of XIAOQIANG_WORKERS) {
-        const result = results.find((entry) => entry?.worker === name);
-        if (!result) {
-          fail(`xiaoqiang worker project smoke missing ${name}`);
-          continue;
-        }
-        if (result.ok !== true) fail(`xiaoqiang worker project smoke result not ok for ${name}`);
-        if (!result.jobId) fail(`xiaoqiang worker project smoke missing job id for ${name}`);
-        if (result.workspaceVerification?.ok !== true) fail(`xiaoqiang worker project smoke workspace verification failed for ${name}`);
-        if (Array.isArray(result.workspaceVerification?.extraFiles) && result.workspaceVerification.extraFiles.length !== 0) fail(`xiaoqiang worker project smoke extra files for ${name}`);
-        if (result.workspaceVerification?.doneTextMatches !== true) fail(`xiaoqiang worker project smoke done marker mismatch for ${name}`);
-        if (Number(result.workspaceVerification?.testExitCode) !== 0) fail(`xiaoqiang worker project smoke tests failed for ${name}`);
-        if (Number(result.workspaceVerification?.cliExitCode) !== 0) fail(`xiaoqiang worker project smoke CLI failed for ${name}`);
-        if (Number(result.workspaceVerification?.cliJson?.red) !== 2 || Number(result.workspaceVerification?.cliJson?.blue) !== 1) fail(`xiaoqiang worker project smoke CLI JSON mismatch for ${name}`);
-      }
-    },
-  },
-  {
-    id: "xiaoqiangWorkerComplexProjectSmoke",
-    file: "latest-worker-mcp-complex-project-smoke.json",
-    surface: "xiaoqiang-worker-task",
-    maxAgeHours: 24,
-    validate(report, fail) {
-      if (report.ok !== true) fail("xiaoqiang worker complex project smoke ok=false");
-      if (report.requestedRealTraffic !== true || report.usedRealTraffic !== true) fail("xiaoqiang worker complex project smoke did not use real worker traffic");
-      if (report.externalQuotaDecrementProven === true) fail("xiaoqiang worker complex project smoke claimed external quota decrement");
-      if (report.coverageKind !== "worker-mcp-real-task-smoke") fail("xiaoqiang worker complex project smoke coverage kind mismatch");
-      if (report.scenario !== "complex-project") fail("xiaoqiang worker complex project smoke scenario mismatch");
-      if (Number(report.workerCount || 0) !== 3) fail("xiaoqiang worker complex project smoke worker count mismatch");
-      if (Number(report.passedWorkerCount || 0) !== 3) fail("xiaoqiang worker complex project smoke passed count mismatch");
-      const failedWorkers = Array.isArray(report.failedWorkers) ? report.failedWorkers : [];
-      if (failedWorkers.length !== 0) fail(`xiaoqiang worker complex project smoke has failed workers: ${failedWorkers.join(",")}`);
-      const results = Array.isArray(report.results) ? report.results : [];
-      for (const name of ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3"]) {
-        const result = results.find((entry) => entry?.worker === name);
-        if (!result) {
-          fail(`xiaoqiang worker complex project smoke missing ${name}`);
-          continue;
-        }
-        if (result.ok !== true) fail(`xiaoqiang worker complex project smoke result not ok for ${name}`);
-        if (!result.jobId) fail(`xiaoqiang worker complex project smoke missing job id for ${name}`);
-        const verification = result.workspaceVerification || {};
-        if (verification.ok !== true) fail(`xiaoqiang worker complex project smoke workspace verification failed for ${name}`);
-        if (!Array.isArray(verification.missingFiles) || verification.missingFiles.length !== 0) fail(`xiaoqiang worker complex project smoke missing files for ${name}`);
-        if (Array.isArray(verification.extraFiles) && verification.extraFiles.length !== 0) fail(`xiaoqiang worker complex project smoke extra files for ${name}`);
-        if (verification.doneTextMatches !== true) fail(`xiaoqiang worker complex project smoke done marker mismatch for ${name}`);
-        if (verification.sourcesOk !== true) fail(`xiaoqiang worker complex project smoke sources invalid for ${name}`);
-        if (Number(verification.testExitCode) !== 0) fail(`xiaoqiang worker complex project smoke tests failed for ${name}`);
-        if (Number(verification.cliExitCode) !== 0) fail(`xiaoqiang worker complex project smoke CLI failed for ${name}`);
-        if (Number(verification.cliJson?.sourceCount || 0) !== 3) fail(`xiaoqiang worker complex project smoke CLI JSON source count mismatch for ${name}`);
-        if (verification.reportOk !== true) fail(`xiaoqiang worker complex project smoke report invalid for ${name}`);
-        if (verification.htmlOk !== true) fail(`xiaoqiang worker complex project smoke HTML invalid for ${name}`);
-      }
     },
   },
   {
@@ -289,10 +199,10 @@ function main() {
       maxAgeHours,
       ok: reportFailures.length === 0,
       failures: reportFailures,
-      localReportFreshnessOnly: ["xiaoqiangWorkerProjectSmoke", "xiaoqiangWorkerComplexProjectSmoke"].includes(spec.id),
+      localReportFreshnessOnly: false,
       externalQuotaDecrementProven: report?.externalQuotaDecrementProven === true,
       externalQuotaEvidence: typeof report?.externalQuotaEvidence === "string" ? report.externalQuotaEvidence : "not_collected",
-      workerFailureDetails: ["xiaoqiangWorkerProjectSmoke", "xiaoqiangWorkerComplexProjectSmoke"].includes(spec.id) ? compactWorkerFailureDetails(report) : [],
+      workerFailureDetails: spec.surface === "agent-workers" ? compactWorkerFailureDetails(report) : [],
     });
     failures.push(...reportFailures);
   }

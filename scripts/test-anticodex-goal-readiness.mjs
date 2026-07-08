@@ -818,7 +818,7 @@ const secondAccountPostLoginProof = {
 };
 
 const gates = releaseGates.report || {};
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalUnblockPackage", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const rawMissingRequired = Array.isArray(gates.missingRequired) ? gates.missingRequired.map(String) : [];
 const rawMissingShort = Array.isArray(gates.missingShort) ? gates.missingShort.map(String) : [];
 const rawDamagedReports = Array.isArray(gates.damagedReports) ? gates.damagedReports.map(String) : [];

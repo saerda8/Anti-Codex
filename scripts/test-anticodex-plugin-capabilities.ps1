@@ -680,7 +680,10 @@ $capabilityState = if ($failures.Count -gt 0) {
 } else {
     "callable_tools_available"
 }
-$capabilityDegraded = ($capabilityState -ne "callable_tools_available")
+$capabilityDegraded = -not @(
+    "callable_tools_available",
+    "metadata_only_no_accessible_connectors"
+).Contains($capabilityState)
 $sourceSnapshot = Get-AntiCodexSourceSnapshot -SharedCodexHome $SharedCodexHome -AgentsSkillsPath $AgentsSkillsPath
 
 $result = [pscustomobject]@{

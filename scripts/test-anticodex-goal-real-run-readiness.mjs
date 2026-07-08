@@ -75,7 +75,7 @@ const approvedSequenceBlockingStages = asStringArray(approvedSequence.blockingSt
 if (approvedSequenceBlockingStages.length === 0 && approvedSequenceAccountReadinessBlockingReason) {
   approvedSequenceBlockingStages.push(approvedSequenceAccountReadinessBlockingReason);
 }
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalUnblockPackage", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const requiredRealTrafficBlockedGates = asStringArray(release.requiredRealTrafficBlockedGates);
 const effectiveReleaseReady = release.releaseReady === true

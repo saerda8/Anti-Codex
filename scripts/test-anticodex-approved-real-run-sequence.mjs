@@ -82,7 +82,7 @@ const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const optionalActionIds = asStringArray(sequence.optionalActionIds);
 const requiredGateIds = asStringArray(sequence.requiredGateIds);
 const requiredBlockedGates = asStringArray(readiness.requiredRealTrafficBlockedGates);
-const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
+const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalUnblockPackage", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const effectiveReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const effectiveReleaseReady = release.releaseReady === true
   || (release.shortReady === true && effectiveReleaseMissing.length === 0 && requiredBlockedGates.length === 0);
