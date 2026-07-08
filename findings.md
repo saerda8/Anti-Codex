@@ -1830,3 +1830,10 @@
 - `/anticodex/model-routes` contained the same response id at `2026-07-08T14:58:02.730Z`, transport `desktop-cascade`, requested/resolved model `gemini-3.5-flash-low`, status `success`.
 - This proves fresh local Anti-Codex model-route/tool execution for this turn. It still does not prove provider-side quota or billing decrement without provider dashboard/API/billing evidence.
 - Agnes job `agw_mrc7ddd4_4hecas` completed a docs-side review file for this evidence boundary; the initial output was mojibake and was rewritten by the main agent as ASCII after direct inspection.
+
+## 2026-07-08 Plugin/MCP Refresh and Visible UI Local Project
+
+- Plugin capability verification first failed on shared connector cache drift: `asdk_app_69b805aa29548191a69d8621e75d6d19` existed in shared source but was missing from the Anti-Codex local connector cache. A mistaken `refresh-anticodex-local-features.ps1 -TimeoutSec 180` call failed because the script has no `-TimeoutSec` parameter; this was command misuse, not a product failure.
+- A full local feature refresh then returned `ok:false` with `local snapshot refresh reported failure`, but follow-up `refresh-anticodex-local-features.ps1 -VerifyOnly` returned `ok:true`; treat the full refresh failure as the known Windows lock/return-code path when verify-only proves parity.
+- After the refresh, plugin capabilities passed, MCP/skills passed with `ok:true` and `failureCount:0`, ecosystem surfaces passed with `requiredSurfaceCount:4`, `passedReportCount:6`, `totalReportCount:6`, and release gates stayed `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`.
+- A visible desktop UI `local-project` smoke passed with marker `UI_LOCAL_PROJECT_20260708_2309` in 118810 ms. It used real traffic, observed model request payload evidence, created `index.html`, `README.md`, and `done.txt`, matched the marker exactly, and left the session lock clear. `modelRouteObserved:false` remains a known distinction for UI websocket evidence; it does not invalidate the file/task proof, but route-ledger proof remains stronger when needed.

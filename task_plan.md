@@ -2216,3 +2216,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - The model-route ledger contains the same response id at `2026-07-08T14:58:02.730Z`, transport `desktop-cascade`, status `success`.
 - This is current local Anti-Codex model/tool evidence only; it still does not prove external provider quota decrement.
 - Agnes job `agw_mrc7ddd4_4hecas` produced a docs-side review of the evidence boundary, then the main agent rewrote it as ASCII after finding mojibake.
+
+## 2026-07-08 Plugin/MCP and Visible UI Refresh
+
+- Plugin connector drift was repaired through local feature refresh plus `-VerifyOnly`; plugin capabilities then passed.
+- MCP/skills passed with `ok:true`, `failureCount:0`.
+- Ecosystem surfaces passed with `requiredSurfaceCount:4`, `passedReportCount:6`, `totalReportCount:6`, and release gates remained green.
+- Visible desktop UI `local-project` passed with marker `UI_LOCAL_PROJECT_20260708_2309`, real traffic, three expected files, exact done marker, and final assistant marker. This proves desktop Anti-Codex task execution in addition to the earlier backend mini-tool proof.
