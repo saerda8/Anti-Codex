@@ -1859,3 +1859,10 @@
 - The accepted refresh path is `node scripts/test-anticodex-third-party-provider.mjs --report-root "$env:APPDATA\anticodex\reports"` plus `node scripts/protect-anticodex-log-db.mjs --status --report-root "$env:APPDATA\anticodex\reports"`, then rerun release gates.
 - DevEco can still return `Transport closed` even in its allowed night window; classify that as current-channel worker transport failure and continue with another regular MCP.
 - Agnes `agw_mrcauptl_jkxdaa` produced the accepted release-gate refresh note; do not infer provider quota decrement from this local no-traffic refresh.
+
+## 2026-07-09 Manager Close Label and Worker Transport Regression
+
+- The Manager close button must not render `CLOSE_TEXT` as a real button text node or child label. A visible `::after` label with `pointer-events:none` keeps the button accessible through `aria-label` while preventing the Chinese glyph layer from blocking hover/click hit testing.
+- Synthetic tests that dispatch directly on the button can miss the real bug. Manager button verification now sends an actual CDP mouse press/release to the close-label center and requires the overlay to close and reopen.
+- After a Codex restart, same-channel `node_repl` worked but Antigravity `health`, MIMO `start`, and OpenCode sync implementation all returned `Transport closed` before a result/job id. Direct stdio `tools/list` remained 7/7 healthy, Antigravity direct `health` returned ready, and MIMO direct `get_job` returned normally. Treat this as current Codex worker-namespace transport failure, not worker server, account, key, or Anti-Codex product failure.
+- `test-anticodex-current-channel-worker-recovery.mjs` must not recommend sealed Xiaoqiang probes from stale ledgers. Only include Xiaoqiang recommendations when the active direct probe or exposed current-channel tools show Xiaoqiang is actually configured.

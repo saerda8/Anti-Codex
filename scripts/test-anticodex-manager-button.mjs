@@ -784,6 +784,42 @@ async function evaluate(expression, timeout = 8000) {
   return message.result?.result?.value || {};
 }
 
+async function verifyCloseButtonActualMouseClick() {
+  const probe = await evaluate(`(async () => {
+    if (typeof window.__ANTICODEX_OPEN_MANAGER__ !== "function") return { ok: false, error: "open manager missing" };
+    if (!document.querySelector("#anticodex-manager-overlay")) await window.__ANTICODEX_OPEN_MANAGER__();
+    const overlay = document.querySelector("#anticodex-manager-overlay");
+    const closeButton = overlay?.querySelector('[data-anticodex-close="true"]');
+    const rect = closeButton?.getBoundingClientRect?.();
+    if (!overlay || !closeButton || !rect) return { ok: false, error: "close button missing" };
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const target = document.elementFromPoint(x, y);
+    const hasTextNode = Array.from(closeButton.childNodes || []).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+    return {
+      ok: !!target?.closest?.('[data-anticodex-close="true"]') && !hasTextNode,
+      error: hasTextNode ? "close button still has a text-node hit layer" : "",
+      x,
+      y,
+      target: target?.tagName || "",
+      text: closeButton.textContent || closeButton.getAttribute("aria-label") || "",
+      hasTextNode,
+    };
+  })()`, 3500);
+  if (!probe.ok) return { ...probe, ok: false, phase: "preclick" };
+  await ws.call(id++, "Input.dispatchMouseEvent", { type: "mouseMoved", x: probe.x, y: probe.y, button: "none", buttons: 0 }, 2500);
+  await ws.call(id++, "Input.dispatchMouseEvent", { type: "mousePressed", x: probe.x, y: probe.y, button: "left", buttons: 1, clickCount: 1 }, 2500);
+  await ws.call(id++, "Input.dispatchMouseEvent", { type: "mouseReleased", x: probe.x, y: probe.y, button: "left", buttons: 0, clickCount: 1 }, 2500);
+  await sleep(120);
+  const closed = await evaluate(`(() => ({ closed: !document.querySelector("#anticodex-manager-overlay") }))()`, 2500);
+  if (!closed.closed) return { ...probe, ok: false, phase: "actual-click", error: "close button actual mouse click did not close overlay" };
+  const reopened = await evaluate(`(async () => {
+    await window.__ANTICODEX_OPEN_MANAGER__?.();
+    return { reopened: !!document.querySelector("#anticodex-manager-overlay") };
+  })()`, 3500);
+  return { ...probe, ok: reopened.reopened === true, phase: reopened.reopened ? "actual-click" : "reopen", reopened: reopened.reopened === true };
+}
+
 async function drainManagerActionQueue() {
   const drainedPayloads = {};
   const queued = await evaluate(`(() => {
@@ -827,6 +863,15 @@ async function runManagerActionBatch(actions) {
   const results = {};
   for (const actionName of actions) {
     const safeActionName = JSON.stringify(actionName);
+    const closeActualMouse = await verifyCloseButtonActualMouseClick().catch((error) => ({
+      ok: false,
+      error: error?.message || String(error),
+      phase: "actual-click-exception",
+    }));
+    if (!closeActualMouse.ok) {
+      results[actionName] = { ok: false, error: "close button actual mouse click failed", closeActualMouse };
+      continue;
+    }
     const initial = await evaluate(`
 (async () => {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -898,6 +943,8 @@ async function runManagerActionBatch(actions) {
   };
 })()
 `, 12000);
+    initial.closeActualMouseOk = closeActualMouse.ok;
+    initial.closeActualMouse = closeActualMouse;
 
     let latest = initial;
     const deadline = Date.now() + timeoutMs;

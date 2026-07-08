@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v102";
+  const VERSION = "native-panel-v103";
   const SUMMARY_VERSION = "latest-reports-evidence-v4";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -1956,7 +1956,8 @@
       .anticodex-panel{width:min(1080px,96vw);height:min(840px,92vh);overflow:auto;border-radius:14px;background:var(--ac-bg);border:1px solid var(--ac-line-strong);box-shadow:0 28px 90px var(--ac-shadow);padding:20px}
       .anticodex-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;padding:2px 2px 0}
       .anticodex-head h1{font-size:20px;line-height:1.3;letter-spacing:-.2px;margin:0 0 5px;font-weight:650}.anticodex-head p{margin:0;color:var(--ac-muted);font-size:12px}
-      .anticodex-close{appearance:none;border:1px solid var(--ac-line);border-radius:9px;min-width:88px;width:88px;min-height:44px;height:48px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;background:var(--ac-raised);color:var(--ac-text);cursor:pointer;touch-action:manipulation;position:relative;z-index:2;pointer-events:auto;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;user-select:none;flex:0 0 auto;overflow:hidden}
+      .anticodex-close{appearance:none;border:1px solid var(--ac-line);border-radius:9px;min-width:88px;width:88px;min-height:44px;height:48px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;background:var(--ac-raised);color:transparent;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;pointer-events:auto;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;user-select:none;flex:0 0 auto;overflow:hidden}
+      .anticodex-close::after{content:attr(aria-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ac-text);pointer-events:none}
       .anticodex-close:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}.anticodex-close:active{background:var(--ac-close-active)}.anticodex-close:focus-visible{outline:2px solid var(--ac-focus);outline-offset:2px}
       .anticodex-actions{display:grid;gap:10px;margin:0 0 14px}
       .anticodex-action-section{border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-surface);padding:13px 14px 14px}
@@ -1981,7 +1982,7 @@
       el("h1", { text: MANAGER_LABEL }),
       el("p", { text: "\u5185\u7f6e\u9762\u677f\uff1a\u4e0d\u8d70 ChatGPT \u767b\u5f55\uff0c\u4e0d\u6d88\u8017\u6a21\u578b\u6d41\u91cf\u3002" }),
     ]);
-    const close = el("button", { className: "anticodex-close", type: "button", "data-anticodex-close": "true", "aria-label": CLOSE_TEXT, text: CLOSE_TEXT });
+    const close = el("button", { className: "anticodex-close", type: "button", "data-anticodex-close": "true", "aria-label": CLOSE_TEXT });
     const closeManagerFromEvent = (event) => {
       event.preventDefault();
       event.stopPropagation();

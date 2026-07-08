@@ -119,6 +119,16 @@ const failedTools = asStringArray(transport.workerTransportFailedTools);
 const okTools = asStringArray(transport.workerTransportOkTools);
 const failedWorkerPrefixes = deriveWorkerPrefixes(failedTools);
 const okWorkerPrefixes = deriveWorkerPrefixes(okTools);
+const directProbeServerNames = new Set(
+  (Array.isArray(directProbe.servers) ? directProbe.servers : [])
+    .map((item) => String(item?.name || ""))
+    .filter(Boolean)
+);
+const xiaoqiangConfigured = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4"].some((name) =>
+  directProbeServerNames.has(name)
+  || exposedWorkerToolSet.has(`${name}_get_job`)
+  || asStringArray(transport.exposedWorkerPrefixes).includes(name)
+);
 
 const directProbeOk = directProbe.ok === true;
 const directStatusProbeOk = statusProbe.ok === true
@@ -130,7 +140,7 @@ const directStatusProbeOk = statusProbe.ok === true
   && typeof statusProbe.currentChannelCaveat === "string"
   && statusProbe.currentChannelCaveat.trim().length > 0;
 const recommendedReadOnlyProbes = [
-  ...recommendedReadOnlyProbesFromXiaoqiangLedger(xiaoqiangLedger),
+  ...(xiaoqiangConfigured ? recommendedReadOnlyProbesFromXiaoqiangLedger(xiaoqiangLedger) : []),
   ...recommendedReadOnlyProbesFromStatusProbe(statusProbe),
 ];
 const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item) =>
