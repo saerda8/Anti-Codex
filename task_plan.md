@@ -2224,3 +2224,11 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Ecosystem surfaces passed with `requiredSurfaceCount:4`, `passedReportCount:6`, `totalReportCount:6`, and release gates remained green.
 - Visible desktop UI `local-project` passed with marker `UI_LOCAL_PROJECT_20260708_2309`, real traffic, three expected files, exact done marker, and final assistant marker. This proves desktop Anti-Codex task execution in addition to the earlier backend mini-tool proof.
 - Worker attempts: OpenCode transport closed, CodeBuddy `cbw_mrc8ymje_ecbizm` failed `no_code_changed`, and Agnes `agw_mrc8z6sy_pcco5a` completed the side-path review file after main-agent rewrite.
+
+## 2026-07-08 Current-Channel Regular Worker Reprobe
+
+- No-traffic baselines stayed green: health/account ready, UI state, source preflight, installed overall fast, and compact release gates.
+- Same-turn regular worker starts for MIMO, DeepSeek, Antigravity, and MiMoCode all failed before job id with `Transport closed`; classify these as current-channel worker transport failures, not Anti-Codex product failures.
+- Agnes job `agw_mrc97r79_kzr9w7` wrote `docs/audits/2026-07-08-agnes-current-status-review.md` but was terminal-failed because a second Agnes job was incorrectly started in the same worktree. The main agent reviewed and kept only the corrected Agnes review file.
+- Accidental second Agnes job `agw_mrc981ou_r5a7hy` completed a mislabeled `codebuddy` side file, but that file was rejected and deleted after review because it was not CodeBuddy evidence and overstated transport health.
+- Current accepted conclusion remains: Anti-Codex has fresh local model/tool and visible UI task evidence, but no local report proves external provider quota decrement; xiaoqiang workers remain sealed by current policy.
