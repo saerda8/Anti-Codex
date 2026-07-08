@@ -139,6 +139,12 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   if (!/function closestEventElement/.test(injectSource) || !/target\?\.parentNode\?\.nodeType === 1/.test(injectSource) || !/composedPath\?\.\(\)/.test(injectSource)) {
     failures.push("in-app manager lacks robust text-node click hit testing");
   }
+  if (!/function closestEventElementOrPoint/.test(injectSource) || !/eventPointInsideElement/.test(injectSource) || !/closestEventElementOrPoint\(event, "\[data-anticodex-close\]", root\)/.test(injectSource)) {
+    failures.push("in-app manager close button lacks coordinate fallback for label hit testing");
+  }
+  if (!/"data-anticodex-close": "true"[\s\S]{0,140}text: CLOSE_TEXT/.test(injectSource) || /el\("span", \{ text: CLOSE_TEXT \}\)/.test(injectSource)) {
+    failures.push("in-app manager close button is not using the same direct text pattern as other buttons");
+  }
   if (!/closestEventElement\(event, "\[data-anticodex-notice-action\]"\)/.test(injectSource) || !/runNoticeAction\(actionButton, event\)/.test(injectSource)) {
     failures.push("traffic notice buttons do not delegate clicks through their text labels");
   }
@@ -959,7 +965,7 @@ try {
   } catch (error) {
     selectedContextProbe = { error: String(error?.message || error) };
   }
-  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v101"
+  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v102"
     && selectedContextProbe?.hasOpen === true
     && managerPage?.hasManagerActionEndpoint === true
     && managerPage?.hasManagerActionToken === true
@@ -998,7 +1004,7 @@ try {
     }), managerProbeTimeoutMs);
     for (let attempt = 0; attempt < 40; attempt++) {
       const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v101"
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v102"
       )`, {
         returnByValue: true,
         awaitPromise: false,
@@ -1069,13 +1075,13 @@ try {
       skippedDeepProbe: true,
       hasFunction: selectedContextProbe?.hasOpen === true,
       version: selectedContextProbe?.version || "",
-      installed: selectedContextProbe?.version === "native-panel-v101",
+      installed: selectedContextProbe?.version === "native-panel-v102",
       hasButton: selectedContextProbe?.hasButton === true,
       buttonText: selectedContextProbe?.buttonText || "",
       coveredBy: "fast-ui-state",
     };
     if (!managerOverlay.hasFunction) failures.push("in-app manager function is not injected");
-    if (managerOverlay.version !== "native-panel-v101") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v101`);
+    if (managerOverlay.version !== "native-panel-v102") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v102`);
     if (managerOverlay.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
@@ -1184,9 +1190,16 @@ try {
         }))
         : [];
       const closeHitGridAll = closeHitSamples.length === 9 && closeHitSamples.every((sample) => sample.hitsButton);
-      const closedByButton = closeCenterHitsButton;
-      const reopenedOverlay = overlay;
-      const reopened = opened;
+      const closeLabelHasChildLayer = !!close?.querySelector("*");
+      close?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, view: window, button: 0, clientX: closeCenterX, clientY: closeCenterY }));
+      close?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window, button: 0, clientX: closeCenterX, clientY: closeCenterY }));
+      const closedByLabelText = !closeLabelHasChildLayer && !document.getElementById("anticodex-manager-overlay");
+      if (closedByLabelText) {
+        await waitForProbe(Promise.resolve().then(() => window.__ANTICODEX_OPEN_MANAGER__()), 2500);
+      }
+      const closedByButton = closeCenterHitsButton && closedByLabelText;
+      const reopenedOverlay = document.getElementById("anticodex-manager-overlay");
+      const reopened = !!reopenedOverlay;
       const managerReadableText = () => Array.from(reopenedOverlay?.querySelectorAll(".anticodex-head,.anticodex-actions,.anticodex-grid,.anticodex-result") || [])
         .map((node) => node.textContent || "")
         .join("\\n");
@@ -1358,7 +1371,7 @@ try {
         buttonLabel: button?.getAttribute("aria-label") || "",
         opened,
         ariaLabel: overlay?.getAttribute("aria-label") || "",
-        closeText: close?.textContent || "",
+        closeText: close?.textContent || close?.getAttribute("aria-label") || "",
         headingText: heading?.textContent || "",
         actionCount: actionButtons.length,
         dailyActionIds,
@@ -1388,6 +1401,8 @@ try {
         hasActionResultMarker,
         hasAccountSwitchAction,
         closeCenterHitsButton,
+        closeLabelHasChildLayer,
+        closedByLabelText,
         closeHitGridAll,
         closeHitSamples,
         closeWidth: closeRect?.width || 0,
@@ -1454,13 +1469,13 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (selectedContextProbe?.version === "native-panel-v101") {
+    if (selectedContextProbe?.version === "native-panel-v102") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",
         hasFunction: selectedContextProbe?.hasOpen === true,
         version: selectedContextProbe?.version || "",
-        installed: selectedContextProbe?.version === "native-panel-v101",
+        installed: selectedContextProbe?.version === "native-panel-v102",
         hasButton: selectedContextProbe?.hasButton === true,
         buttonText: selectedContextProbe?.buttonText || "",
         coveredBy: "context-probe-and-manager-page",
@@ -1483,7 +1498,7 @@ try {
     failures.push(`manager opened a separate page target: ${managerPageTargets.map((item) => item.url).join(", ")}`);
   }
   if (!managerOverlay?.hasFunction) failures.push("in-app manager function is not injected");
-  if (managerOverlay?.version !== "native-panel-v101") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v101`);
+  if (managerOverlay?.version !== "native-panel-v102") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v102`);
   if (!managerOverlay?.installed) failures.push("in-app manager install flag is not set");
   const managerOverlayDynamicUnavailable = managerOverlay?.dynamicProbeUnavailable === true;
   if (managerOverlayDynamicUnavailable) {
@@ -1497,6 +1512,7 @@ try {
   if (managerOverlay?.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
   if (!managerOverlay?.opened) failures.push("in-app manager overlay did not open");
   if (!managerOverlay?.closeCenterHitsButton) failures.push("in-app manager close button center point does not hit the close button");
+  if (managerOverlay?.closeLabelHasChildLayer) failures.push("in-app manager close button label still has a child hit-test layer");
   if (!managerOverlay?.closeHitGridAll) failures.push(`in-app manager close button full hit grid is incomplete: ${JSON.stringify(managerOverlay?.closeHitSamples || [])}`);
   if ((managerOverlay?.closeHeight || 0) < 44) failures.push(`in-app manager close button height is ${managerOverlay?.closeHeight || 0}, expected at least 44`);
   if ((managerOverlay?.reopenedCloseHeight || 0) < 44) failures.push(`in-app manager reopened close button height is ${managerOverlay?.reopenedCloseHeight || 0}, expected at least 44`);
@@ -1506,7 +1522,7 @@ try {
     if ((managerOverlay?.disabledDuringAction || 0) < (managerOverlay?.actionCount || 0)) failures.push(`in-app manager disabled ${managerOverlay?.disabledDuringAction || 0}/${managerOverlay?.actionCount || 0} action buttons during action`);
     if (managerOverlay?.runningMarkerDuringAction !== "refreshStatus") failures.push(`in-app manager running marker is '${managerOverlay?.runningMarkerDuringAction || ""}'`);
   }
-  if (!managerOverlay?.closedByButton) failures.push("in-app manager close button did not close the overlay");
+  if (!managerOverlay?.closedByButton) failures.push("in-app manager close button did not close from the label text area");
   if (!managerOverlay?.reopened) failures.push("in-app manager overlay did not reopen after close-button verification");
   if (!managerOverlay?.removed) failures.push("in-app manager overlay did not cleanly close after verification");
   if (managerOverlay?.ariaLabel !== "Anti-Codex \u7ba1\u7406") failures.push(`in-app manager aria label is '${managerOverlay?.ariaLabel || ""}'`);

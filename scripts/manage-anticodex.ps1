@@ -764,7 +764,7 @@ function Open-AntiCodexManagerPanel {
             if ((Test-Path -LiteralPath $injector -PathType Leaf) -and (Test-Path -LiteralPath $managerInject -PathType Leaf) -and (Test-Path -LiteralPath $opener -PathType Leaf)) {
                 $previousManagerApi = $env:ANTICODEX_MANAGER_API
                 $env:ANTICODEX_MANAGER_API = $baseUrl
-                    # Step 1: inject the latest native-panel-v101 manager script
+                    # Step 1: inject the latest native-panel-v102 manager script
                 $installOutput = @(& $node $injector "$port" $managerInject 2>&1)
                 $installExitCode = $LASTEXITCODE
                 if ($installExitCode -eq 0) {
