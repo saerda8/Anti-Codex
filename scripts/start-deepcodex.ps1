@@ -2220,12 +2220,13 @@ try {
                     try { [void](Wait-AntiCodexChildProcess -Process $codexProc -TimeoutMs 2000) } catch {}
                     if ($codexProc.HasExited -and $codexProc.ExitCode -ne 0) {
                         Write-LifecycleLog "Window disappeared before a non-zero process exit (ExitCode: $($codexProc.ExitCode))."
+                    } elseif (-not $codexProc.HasExited) {
+                        Write-LifecycleLog "Main window handle disappeared while the process is still alive; clearing the stale handle."
+                        $mainWindowHandle = [IntPtr]::Zero
+                        continue
                     } else {
                         Write-Host "Anti-Codex main window closed; stopping background processes."
                         Write-LifecycleLog "Normal window close detected."
-                        if (-not $codexProc.HasExited) {
-                            try { Stop-Process -Id $codexProc.Id -Force -ErrorAction SilentlyContinue } catch {}
-                        }
                         $normalClose = $true
                     }
                     break

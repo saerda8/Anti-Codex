@@ -2312,3 +2312,11 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Fresh diagnostics passed with `ok:true`, `failures:[]`, local `codexHome` isolated under `%APPDATA%\\anticodex`, and `sharedCodexHome:"C:\\Users\\XD\\.codex"`.
 - Manager latest reports now shows `Diagnostics: passed`; remaining expected action items are `Codex app-server freshness`, `Current-channel worker transport`, and `Current-channel worker recovery`.
 - Release gates remain green: `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`, with installed runtime fingerprint satisfied after sync.
+
+## 2026-07-09 Current Launcher Repair Status
+
+- Current-channel worker MCP has recovered in the fresh channel: read-only MIMO returned normally and the recovery report says workers can be dispatched. Do not use Xiaoqiang workers.
+- Launcher/install fixes are in progress: the install path no longer spawns a nested PowerShell for icon patching, and the desktop launcher no longer treats a transient missing window handle as a normal close while the process is alive.
+- Fresh Anti-Codex real UI chat already passed after the repair. Before closing this item, rerun runtime sync, UI state, manager close-button real mouse click, worker recovery, core task rollup, release gates, and `git diff --check`.
+- Status cleanup is now included: update checks clear stale running sync operations only after the active host is actually synced and guardrails pass. Current Manager latest reports shows Diagnostics, Codex app-server freshness, Current-channel worker transport, and Current-channel worker recovery as passed.
+- Verification completed for this slice: runtime sync, update-status contract tests, UI state, Manager real close click, diagnostics, app-server freshness, worker recovery, desktop core rollup, real-task roadmap, release gates, and `git diff --check` passed.

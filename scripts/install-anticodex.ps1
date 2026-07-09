@@ -207,10 +207,7 @@ function Install-AntiCodexHostIcon {
     if (-not (Test-Path -LiteralPath $PATCH_EXE_ICON_SCRIPT -PathType Leaf)) {
         throw "Anti-Codex icon patcher is missing: $PATCH_EXE_ICON_SCRIPT"
     }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $PATCH_EXE_ICON_SCRIPT -ExePath $ExePath -IconPath $icon | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Anti-Codex executable icon patch failed."
-    }
+    & $PATCH_EXE_ICON_SCRIPT -ExePath $ExePath -IconPath $icon | Out-Null
     try { & ie4uinit.exe -show | Out-Null } catch {}
 }
 

@@ -152,6 +152,81 @@ test("RED: update check preserves an existing running operation", () => {
   }
 });
 
+test("update check clears stale running operation when active host is already synced", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-stale-running-"));
+  try {
+    const sourceRoot = resolve(tempDir, "source");
+    const installRoot = resolve(tempDir, "install");
+    const stateRoot = resolve(tempDir, "state");
+    const activeRoot = resolve(installRoot, "codex-patched-app");
+    const fileContents = {
+      antiCodexExe: "same-host",
+      appAsar: "patched-asar",
+      codexCli: "same-cli",
+      hostIcon: "fake-icon",
+      trayIcon: "fake-tray-icon",
+      appRootIcon: "fake-root-icon",
+    };
+    fs.mkdirSync(resolve(sourceRoot, "resources"), { recursive: true });
+    fs.mkdirSync(resolve(activeRoot, "resources"), { recursive: true });
+    fs.mkdirSync(stateRoot, { recursive: true });
+    fs.writeFileSync(resolve(sourceRoot, "Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(sourceRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(activeRoot, "Anti-Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), fileContents.appAsar);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "resources", "icon.ico"), fileContents.hostIcon);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
+    fs.writeFileSync(resolve(activeRoot, "icon.ico"), fileContents.appRootIcon);
+    fs.writeFileSync(resolve(installRoot, "codex-patched-app.ok"), JSON.stringify({
+      schema: "anticodex-host-manifest-v1",
+      source: {
+        packageName: "explicit",
+        packageVersion: "test-version",
+        codexHost: sha256(fileContents.antiCodexExe),
+        codexCli: sha256(fileContents.codexCli),
+      },
+      files: {
+        antiCodexExe: sha256(fileContents.antiCodexExe),
+        appAsar: sha256(fileContents.appAsar),
+        codexCli: sha256(fileContents.codexCli),
+        hostIcon: sha256(fileContents.hostIcon),
+        trayIcon: sha256(fileContents.trayIcon),
+        appRootIcon: sha256(fileContents.appRootIcon),
+      },
+    }));
+    fs.writeFileSync(resolve(stateRoot, "update-status.json"), JSON.stringify({
+      updateNeeded: false,
+      operation: {
+        state: "running",
+        stage: "feature_refresh",
+        updatedAt: "2001-01-01T00:00:00.000Z",
+        rollbackAvailable: true,
+      },
+    }));
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
+      "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot,
+    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+
+    if (result.status !== 0) {
+      throw new Error(`PowerShell exited code ${result.status}\nSTDERR: ${result.stderr}\nSTDOUT: ${result.stdout}`);
+    }
+
+    const parsed = JSON.parse(result.stdout.trim());
+    const persisted = JSON.parse(fs.readFileSync(resolve(stateRoot, "update-status.json"), "utf8"));
+    assert.equal(parsed.updateNeeded, false);
+    assert.equal(parsed.operation?.state, "succeeded");
+    assert.equal(parsed.operation?.stage, "complete");
+    assert.equal(persisted.operation?.state, "succeeded");
+    assert.equal(persisted.operation?.stage, "complete");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("RED: update check reports version drift and brand/icon protection guardrails", () => {
   const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-drift-"));
   try {

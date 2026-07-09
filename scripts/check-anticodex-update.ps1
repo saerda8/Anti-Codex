@@ -77,6 +77,26 @@ function Read-ActiveHostManifest {
     }
 }
 
+function Test-StaleRunningUpdateOperation {
+    param(
+        [object]$Operation,
+        [int]$MaxAgeMinutes = 15
+    )
+
+    if ((Get-ObjectPropertyValue -InputObject $Operation -Name "state") -ne "running") {
+        return $false
+    }
+    $updatedAtText = [string](Get-ObjectPropertyValue -InputObject $Operation -Name "updatedAt")
+    if ([string]::IsNullOrWhiteSpace($updatedAtText)) {
+        return $false
+    }
+    $updatedAt = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse($updatedAtText, [ref]$updatedAt)) {
+        return $false
+    }
+    return ([DateTimeOffset]::UtcNow - $updatedAt).TotalMinutes -ge $MaxAgeMinutes
+}
+
 function Test-AntiCodexIconPalette {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -269,6 +289,16 @@ $reason = if (-not $source) {
     "active_host_guardrail_failed"
 } else {
     "up_to_date"
+}
+
+if (-not $NoPersist -and
+    $driftState -eq "synced" -and
+    $updateNeeded -ne $true -and
+    $activeGuardrails.ok -eq $true -and
+    (Test-StaleRunningUpdateOperation -Operation $existingOperation)) {
+    $rollbackAvailable = [bool](Get-ObjectPropertyValue -InputObject $existingOperation -Name "rollbackAvailable")
+    Set-AntiCodexUpdateOperation -State "succeeded" -Stage "complete" -Message "Anti-Codex is synced; cleared a stale running sync operation." -RollbackAvailable $rollbackAvailable -StateRoot $StateRoot
+    $existingOperation = (Get-AntiCodexUpdateStatus -StateRoot $StateRoot).operation
 }
 
 $syncLauncher = Join-Path $InstallRoot "runtime\scripts\sync-anticodex-launcher.ps1"
