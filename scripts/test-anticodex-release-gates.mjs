@@ -1415,7 +1415,7 @@ function summarizeGate(definition) {
         const workerCanDispatchCurrentChannel = goalOperatorActionCard.workerCanDispatchCurrentChannel === true;
         const workerStatusMatchesDispatchState = workerCanDispatchCurrentChannel
           ? workerStatus === "dispatch_ready"
-          : new Set(["reload_required", "fresh_probe_required"]).has(workerStatus);
+          : new Set(["reload_required", "fresh_probe_required", "partial_transport_failure"]).has(workerStatus);
         if (!workerStatusMatchesDispatchState) semanticFailures.push("goal_readiness_operator_action_card_worker_status");
         if (workerCanDispatchCurrentChannel !== (workerStatus === "dispatch_ready")) semanticFailures.push("goal_readiness_operator_action_card_worker_dispatch");
         if (String(goalOperatorActionCard.secondAccountStatus || "") !== "manual_windows_user_setup_required") semanticFailures.push("goal_readiness_operator_action_card_second_account_status");
@@ -3582,7 +3582,7 @@ if (args.has("--self-test")) {
       };
     }
 
-    for (const workerStatus of ["fresh_probe_required", "reload_required"]) {
+    for (const workerStatus of ["fresh_probe_required", "reload_required", "partial_transport_failure"]) {
       writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport(workerStatus));
       const gate = summarizeGate(gateDefinitions.find((definition) => definition.id === "goalReadiness"));
       if (gate.satisfied !== true) {

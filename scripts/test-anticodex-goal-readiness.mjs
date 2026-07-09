@@ -63,6 +63,10 @@ function writeReport(payload) {
   return { latest, history };
 }
 
+function isFailedWorkerStatus(status) {
+  return ["transport_closed", "error", "failed", "timeout"].includes(String(status || "").trim().toLowerCase());
+}
+
 function compactGoalReadinessStatus(payload) {
   const currentUsability = payload?.currentUsability && typeof payload.currentUsability === "object" ? payload.currentUsability : {};
   const objectiveSummary = payload?.objectiveRequirementSummary && typeof payload.objectiveRequirementSummary === "object" ? payload.objectiveRequirementSummary : {};
@@ -296,6 +300,18 @@ const workerMcp = {
   currentChannelWorkerStatus: String(currentChannelWorkerTransport.workerStatus || ""),
   currentChannelWorkerTransportOk: currentChannelWorkerTransport.workerTransportOk === true,
   currentChannelWorkerTransportFailed: currentChannelWorkerTransport.workerTransportFailed === true,
+  currentChannelLatestWorkerFailureIsCurrent: String(currentChannelWorkerTransport.workerTool || "").length > 0
+    && isFailedWorkerStatus(currentChannelWorkerTransport.workerStatus),
+  currentChannelLatestWorkerTool: String(currentChannelWorkerTransport.workerTool || ""),
+  currentChannelLatestWorkerStatus: String(currentChannelWorkerTransport.workerStatus || ""),
+  currentChannelCurrentFailedWorkerTools: String(currentChannelWorkerTransport.workerTool || "").length > 0
+    && isFailedWorkerStatus(currentChannelWorkerTransport.workerStatus)
+    ? [String(currentChannelWorkerTransport.workerTool || "")]
+    : [],
+  currentChannelCurrentFailureHiddenByHistoricalOk: String(currentChannelWorkerTransport.workerTool || "").length > 0
+    && isFailedWorkerStatus(currentChannelWorkerTransport.workerStatus)
+    && currentChannelWorkerTransport.mergedLatestWorkerObservations === true
+    && Number(currentChannelWorkerTransport.workerTransportOkCount || 0) > 0,
   currentChannelWorkerObservations,
   currentChannelWorkerObservationCount: Number(currentChannelWorkerTransport.workerObservationCount || currentChannelWorkerObservations.length),
   currentChannelWorkerTransportOkCount: Number(currentChannelWorkerTransport.workerTransportOkCount || currentChannelWorkerObservations.filter((item) => item.workerTransportOk).length),
@@ -356,12 +372,19 @@ const workerMcp = {
 
 const currentChannelWorkerCanDispatch = workerMcp.currentChannelWorkerDispatchUsable
   && workerMcp.currentChannelWorkerTransportFresh
-  && workerMcp.currentChannelWorkerTransportOk;
+  && workerMcp.currentChannelWorkerTransportOk
+  && !workerMcp.currentChannelLatestWorkerFailureIsCurrent;
+const canDispatchUnaffectedCurrentChannelWorkers = workerMcp.currentChannelWorkerDispatchUsable
+  && workerMcp.currentChannelWorkerTransportFresh
+  && workerMcp.currentChannelWorkerTransportOk
+  && workerMcp.currentChannelWorkerTransportOkCount > 0;
 const workerTransportRecoveryReadiness = {
   ok: currentChannelWorkerCanDispatch,
   canDispatchCurrentChannelWorkers: currentChannelWorkerCanDispatch,
+  canDispatchUnaffectedCurrentChannelWorkers,
   requiresCodexMcpReload: !currentChannelWorkerCanDispatch,
-  requiresFreshReadOnlyProbe: !currentChannelWorkerCanDispatch,
+  requiresFreshReadOnlyProbe: !currentChannelWorkerCanDispatch || workerMcp.currentChannelLatestWorkerFailureIsCurrent,
+  requiresFailedWorkerFreshReadOnlyProbe: workerMcp.currentChannelLatestWorkerFailureIsCurrent,
   currentChannelReadOnlyProbeInstruction,
   directWorkerProbeCommand,
   currentChannelRecoveryRecordCommand,
@@ -375,6 +398,8 @@ const workerTransportRecoveryReadiness = {
   currentChannelWorkerObservationCount: workerMcp.currentChannelWorkerObservationCount,
   currentChannelWorkerTransportFailedCount: workerMcp.currentChannelWorkerTransportFailedCount,
   currentChannelWorkerTransportFailedTools: workerMcp.currentChannelWorkerTransportFailedTools,
+  currentChannelCurrentFailedWorkerTools: workerMcp.currentChannelCurrentFailedWorkerTools,
+  currentChannelCurrentFailureHiddenByHistoricalOk: workerMcp.currentChannelCurrentFailureHiddenByHistoricalOk,
   repeatedFailureAudit: currentChannelRepeatedFailureAudit,
   currentChannelGenericMcpStatus: workerMcp.currentChannelGenericMcpStatus,
   currentChannelSplitObserved: workerMcp.currentChannelSplitObserved,
@@ -1020,7 +1045,8 @@ if (workerMcp.complexProjectSmokePassedWorkerCount < minTaskSmokePassedWorkers) 
 if (workerMcp.complexProjectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_complex_project_smoke_missing_required_worker");
 if (workerMcp.complexProjectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_complex_project_smoke_failed_workers");
 if (!workerMcp.currentChannelWorkerTransportFresh) blockers.push("current_channel_worker_transport_probe_stale");
-if (!workerMcp.currentChannelWorkerDispatchUsable) blockers.push("current_channel_worker_transport_not_recovered");
+if (!currentChannelWorkerCanDispatch) blockers.push("current_channel_worker_transport_not_recovered");
+if (workerMcp.currentChannelLatestWorkerFailureIsCurrent) blockers.push("current_channel_worker_latest_tool_failed");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
@@ -1042,7 +1068,7 @@ const currentGoalReleaseReady = releaseGateStatus.releaseReady === true
     && releaseGateStatus.missingRequired[0] === "goalReadiness");
 const fullGoalComplete = proven.codexClientCopy
   && proven.workerMcp
-  && workerMcp.currentChannelWorkerDispatchUsable
+  && currentChannelWorkerCanDispatch
   && workerMcp.currentChannelWorkerTransportFresh
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
@@ -1212,6 +1238,8 @@ const deferredObjectiveRequirementSummary = {
 
 const currentChannelWorkerTransportStatus = currentChannelWorkerCanDispatch
   ? "dispatch_ready"
+  : workerMcp.currentChannelLatestWorkerFailureIsCurrent && canDispatchUnaffectedCurrentChannelWorkers
+    ? "partial_transport_failure"
   : workerMcp.currentChannelWorkerTransportFresh
     ? "reload_required"
     : "fresh_probe_required";

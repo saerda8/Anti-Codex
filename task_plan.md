@@ -2260,3 +2260,9 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Refreshed `test-anticodex-third-party-provider.mjs` and `protect-anticodex-log-db.mjs --status`; both passed and release gates returned to `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`, `damagedReports:[]`.
 - DevEco was attempted during the Beijing 00:00-06:00 window but returned `Transport closed` before job id.
 - Agnes job `agw_mrcauptl_jkxdaa` completed `docs/audits/2026-07-09-agnes-release-gate-refresh.md`; main-agent review confirmed ASCII-only, docs-only scope.
+
+## 2026-07-09 Current-Channel Transport False-Green Fix
+
+- Antigravity and Kilo implementation starts in this same channel returned `Transport closed`; direct worker stdio probes stayed healthy. Treat this as current Codex worker MCP transport failure, not local worker-server failure.
+- Recovery/goal/release scripts now distinguish current failed worker tools from historical successful observations. `partial_transport_failure` is allowed for the current single-account release scope, but full-goal readiness keeps `worker_mcp_multiuse` incomplete until a fresh current-channel read-only worker probe succeeds.
+- Current release scope is green after runtime sync and serial goal/release refresh: `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`. Full goal remains 4/6 with `separate_antigravity_accounts` and `worker_mcp_multiuse` incomplete.

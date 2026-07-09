@@ -69,6 +69,10 @@ function deriveWorkerPrefixes(tools) {
   return [...new Set(tools.map((tool) => String(tool).split("_")[0]).filter(Boolean))];
 }
 
+function isFailedWorkerStatus(status) {
+  return ["transport_closed", "error", "failed", "timeout"].includes(String(status || "").trim().toLowerCase());
+}
+
 function recommendedReadOnlyProbesFromStatusProbe(report) {
   const results = Array.isArray(report?.results) ? report.results : [];
   return results
@@ -119,6 +123,14 @@ const failedTools = asStringArray(transport.workerTransportFailedTools);
 const okTools = asStringArray(transport.workerTransportOkTools);
 const failedWorkerPrefixes = deriveWorkerPrefixes(failedTools);
 const okWorkerPrefixes = deriveWorkerPrefixes(okTools);
+const latestWorkerTool = String(transport.workerTool || "");
+const latestWorkerStatus = String(transport.workerStatus || "");
+const latestWorkerFailureIsCurrent = latestWorkerTool.length > 0 && isFailedWorkerStatus(latestWorkerStatus);
+const currentFailedWorkerTools = latestWorkerFailureIsCurrent ? [latestWorkerTool] : [];
+const currentFailedWorkerPrefixes = deriveWorkerPrefixes(currentFailedWorkerTools);
+const currentFailureHiddenByHistoricalOk = latestWorkerFailureIsCurrent
+  && transport.mergedLatestWorkerObservations === true
+  && okTools.length > 0;
 const directProbeServerNames = new Set(
   (Array.isArray(directProbe.servers) ? directProbe.servers : [])
     .map((item) => String(item?.name || ""))
@@ -151,12 +163,14 @@ const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item)
 const recommendedFirstReadOnlyProbe = exposedRecommendedReadOnlyProbes[0] || recommendedReadOnlyProbes[0] || null;
 const genericMcpOk = transport.genericMcpControlOk === true && String(transport.genericMcpStatus || "") === "ok";
 const currentWorkerOk = transport.workerTransportOk === true && transport.currentChannelWorkerDispatchUsable === true;
+const canDispatchUnaffectedCurrentChannelWorkers = Boolean(currentWorkerOk && genericMcpOk && okTools.length > 0);
 const canDispatchCurrentChannelWorkers = Boolean(
   transportFile.present
     && transportFile.parseable
     && transport.ok === true
     && transportFresh
     && currentWorkerOk
+    && !latestWorkerFailureIsCurrent
     && genericMcpOk
     && (transport.directProbeReport?.ok === true || directProbeOk),
 );
@@ -167,12 +181,15 @@ if (transportFile.present && !transportFile.parseable) missingRequirements.push(
 if (transportFile.parseable && transport.ok !== true) missingRequirements.push("current_channel_worker_transport_report_not_ok");
 if (!transportFresh) missingRequirements.push("fresh_current_channel_worker_read_only_probe");
 if (!currentWorkerOk) missingRequirements.push("successful_current_channel_worker_read_only_call");
+if (latestWorkerFailureIsCurrent) missingRequirements.push("fresh_read_only_probe_for_current_failed_worker_tool");
 if (!genericMcpOk) missingRequirements.push("same_channel_generic_mcp_ok");
 if (!(transport.directProbeReport?.ok === true || directProbeOk)) missingRequirements.push("direct_worker_server_probe_ok");
 if (!directStatusProbeOk) missingRequirements.push("direct_worker_status_probe_ok");
 
 const status = canDispatchCurrentChannelWorkers
   ? "ready_to_dispatch"
+  : latestWorkerFailureIsCurrent && canDispatchUnaffectedCurrentChannelWorkers
+    ? "partial_transport_failure"
   : transportFile.present && transportFile.parseable
     ? "reload_required"
     : "missing_evidence";
@@ -188,6 +205,9 @@ const repeatedFailureAudit = {
   okObservationCount: okTools.length,
   failedWorkerPrefixCount: failedWorkerPrefixes.length,
   failedWorkerPrefixes,
+  currentFailedWorkerPrefixCount: currentFailedWorkerPrefixes.length,
+  currentFailedWorkerPrefixes,
+  currentFailureHiddenByHistoricalOk,
   genericMcpControlOk: genericMcpOk,
   directWorkerProbeOk: directProbeOk,
   repeatedCurrentChannelWorkerFailure,
@@ -207,8 +227,10 @@ const payload = {
   checkedAt: new Date(startedAt).toISOString(),
   status,
   canDispatchCurrentChannelWorkers,
+  canDispatchUnaffectedCurrentChannelWorkers,
   requiresCodexMcpReload: !canDispatchCurrentChannelWorkers,
-  requiresFreshReadOnlyProbe: !canDispatchCurrentChannelWorkers,
+  requiresFreshReadOnlyProbe: !canDispatchCurrentChannelWorkers || latestWorkerFailureIsCurrent,
+  requiresFailedWorkerFreshReadOnlyProbe: latestWorkerFailureIsCurrent,
   missingRequirements,
   repeatedFailureAudit,
   currentEvidence: {
@@ -225,8 +247,14 @@ const payload = {
     currentChannelWorkerDispatchBlocked: transport.currentChannelWorkerDispatchBlocked === true,
     workerTransportOkTools: okTools,
     workerTransportFailedTools: failedTools,
+    latestWorkerTool,
+    latestWorkerStatus,
+    latestWorkerFailureIsCurrent,
+    currentFailedWorkerTools,
     workerTransportOkWorkerPrefixes: okWorkerPrefixes,
     workerTransportFailedWorkerPrefixes: failedWorkerPrefixes,
+    currentFailedWorkerPrefixes,
+    currentFailureHiddenByHistoricalOk,
     expectedWorkerPrefixes: asStringArray(transport.expectedWorkerPrefixes),
     exposedWorkerTools,
     exposedWorkerPrefixes: asStringArray(transport.exposedWorkerPrefixes),
@@ -259,6 +287,7 @@ const payload = {
     "same-channel generic MCP control must be ok",
     "direct worker server probe must be ok",
     "direct worker status probe must be ok",
+    "any current failed worker tool must be followed by a fresh read-only success or a Codex MCP reload",
     "use one recommendedReadOnlyProbes entry from the latest direct status probe as the first fresh-channel worker read-only call",
     "latest transport report must be fresh",
     "canDispatchCurrentChannelWorkers must be true before starting implementation workers",
@@ -276,18 +305,25 @@ const payload = {
   operatorActionCard: {
     status,
     canDispatchCurrentChannelWorkers,
+    canDispatchUnaffectedCurrentChannelWorkers,
     safeToStartImplementationWorker: canDispatchCurrentChannelWorkers,
+    safeToStartUnaffectedImplementationWorker: canDispatchUnaffectedCurrentChannelWorkers,
+    failedCurrentWorkerToolsRequireProbe: currentFailedWorkerTools,
     repeatedCurrentChannelWorkerFailure,
     sameChannelRetryRecommended: repeatedFailureAudit.sameChannelRetryRecommended,
     missingRequirements,
     nextOperatorAction: canDispatchCurrentChannelWorkers
       ? "dispatch_only_a_narrow_worker_task_after_normal_scope_checks"
+      : latestWorkerFailureIsCurrent && canDispatchUnaffectedCurrentChannelWorkers
+        ? "rerun_failed_worker_read_only_probe_or_reload_before_dispatching_that_worker"
       : repeatedCurrentChannelWorkerFailure
         ? "stop_same_channel_worker_retries_and_use_fresh_channel_or_reload"
       : "reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe",
     recommendedFirstReadOnlyProbe,
     userVisibleNextStep: canDispatchCurrentChannelWorkers
       ? "Worker MCP read path is healthy in this channel; start only a narrow worker task first."
+      : latestWorkerFailureIsCurrent && canDispatchUnaffectedCurrentChannelWorkers
+        ? "Some worker MCP tools are healthy, but the latest failed worker tool must pass a fresh read-only probe or Codex MCP reload before that worker is used."
       : repeatedCurrentChannelWorkerFailure
         ? "Stop retrying worker tools in this channel; reload Codex or use a fresh channel, then run one read-only worker status check."
       : "Reload Codex or use a fresh channel, then run one read-only worker status check before worker tasks.",
@@ -303,11 +339,14 @@ if (compact) {
     usedRealTraffic: payload.usedRealTraffic,
     status: payload.status,
     canDispatchCurrentChannelWorkers: payload.canDispatchCurrentChannelWorkers,
+    canDispatchUnaffectedCurrentChannelWorkers: payload.canDispatchUnaffectedCurrentChannelWorkers,
     requiresCodexMcpReload: payload.requiresCodexMcpReload,
     requiresFreshReadOnlyProbe: payload.requiresFreshReadOnlyProbe,
+    requiresFailedWorkerFreshReadOnlyProbe: payload.requiresFailedWorkerFreshReadOnlyProbe,
     missingRequirements: payload.missingRequirements,
     repeatedFailureAudit: payload.repeatedFailureAudit,
     workerTransportFailedTools: payload.currentEvidence.workerTransportFailedTools,
+    currentFailedWorkerTools: payload.currentEvidence.currentFailedWorkerTools,
     workerTransportOkTools: payload.currentEvidence.workerTransportOkTools,
     expectedWorkerPrefixes: payload.currentEvidence.expectedWorkerPrefixes,
     exposedWorkerPrefixes: payload.currentEvidence.exposedWorkerPrefixes,
