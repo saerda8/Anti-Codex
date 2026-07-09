@@ -3006,6 +3006,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(server, /latest-codex-responses\.json/);
   assert.match(server, /latest-real-work\.json/);
   assert.match(server, /latest-real-small-project\.json/);
+  assert.match(server, /latest-antigravity-worker-direct-smoke\.json/);
   assert.match(server, /latest-native-tool-loop\.json/);
   assert.match(server, /latest-native-multi-tool-loop\.json/);
   assert.match(server, /latest-mcp-tool-loop\.json/);
@@ -3158,6 +3159,7 @@ test("Anti-Codex ships a privacy-safe diagnostic bundle collector", () => {
   assert.match(collector, /latest-real-work\.json/);
   assert.match(collector, /latest-real-mini-tool\.json/);
   assert.match(collector, /latest-real-small-project\.json/);
+  assert.match(collector, /latest-antigravity-worker-direct-smoke\.json/);
   assert.match(collector, /latest-native-tool-loop\.json/);
   assert.match(collector, /latest-tool-loop\.json/);
   assert.match(collector, /latest-native-multi-tool-loop\.json/);
@@ -4138,6 +4140,7 @@ test("report summarizer surfaces real work evidence without claiming quota decre
   const tempRoot = mkdtempSync(resolve(os.tmpdir(), "anticodex-real-work-summarizer-"));
   const realWorkPath = resolve(tempRoot, "latest-real-work.json");
   const smallProjectPath = resolve(tempRoot, "latest-real-small-project.json");
+  const antigravityWorkerPath = resolve(tempRoot, "latest-antigravity-worker-direct-smoke.json");
   try {
     writeFileSync(realWorkPath, JSON.stringify({
       ok: true,
@@ -4186,6 +4189,26 @@ test("report summarizer surfaces real work evidence without claiming quota decre
       },
       final_text: "已确认 SMALL_PROJECT_OK SMALL_PROJECT_MARKER_secret",
     }), "utf8");
+    writeFileSync(antigravityWorkerPath, JSON.stringify({
+      ok: true,
+      reportName: "antigravity-worker-direct-smoke",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "direct-antigravity-worker-same-account-real-traffic",
+      accountLaneRole: "same-account-antigravity-worker-proof",
+      separateAccountVerified: false,
+      countsAsSecondAccountProof: false,
+      model: "flash",
+      jobId: "ag-test-job",
+      marker: "ANTIGRAVITY_DIRECT_WORKER_MARKER_test",
+      terminalStatus: "completed",
+      artifact: {
+        proofPath: "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\antigravity-worker-direct\\secret\\antigravity-worker-proof.txt",
+        proofExists: true,
+        proofTextMatches: true,
+      },
+    }), "utf8");
 
     const realWorkResult = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), realWorkPath], { encoding: "utf8" });
     assert.equal(realWorkResult.status, 0, realWorkResult.stderr || realWorkResult.stdout);
@@ -4220,6 +4243,21 @@ test("report summarizer surfaces real work evidence without claiming quota decre
     assert.equal(smallProjectSummary.realSmallProjectEvidence.externalQuotaDecrementProven, false);
     assert.equal(smallProjectSummary.realSmallProjectEvidence.externalQuotaEvidence, "not_collected");
     assert.doesNotMatch(JSON.stringify(smallProjectSummary.realSmallProjectEvidence), /real-small-project|word-tally|SMALL_PROJECT_MARKER_secret/);
+
+    const antigravityWorkerResult = spawnSync(process.execPath, [resolve(root, "scripts", "summarize-anticodex-report.mjs"), antigravityWorkerPath], { encoding: "utf8" });
+    assert.equal(antigravityWorkerResult.status, 0, antigravityWorkerResult.stderr || antigravityWorkerResult.stdout);
+    const antigravityWorkerSummary = JSON.parse(antigravityWorkerResult.stdout);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.jobId, "ag-test-job");
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.usedRealTraffic, true);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.terminalStatus, "completed");
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.artifactProofExists, true);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.artifactProofTextMatches, true);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.localRequestEvidencePresent, true);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.sameAccountOnly, true);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.separateAccountVerified, false);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.countsAsSecondAccountProof, false);
+    assert.equal(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence.externalQuotaDecrementProven, false);
+    assert.doesNotMatch(JSON.stringify(antigravityWorkerSummary.antigravityWorkerDirectSmokeEvidence), /antigravity-worker-direct|proof\.txt|AppData/);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -5280,6 +5318,7 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(reportSigner, /dryRun: !write/);
   assert.match(reportSigner, /latest-post-verification\.json/);
   assert.match(reportSigner, /latest-real-work\.json/);
+  assert.match(reportSigner, /latest-antigravity-worker-direct-smoke\.json/);
   const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
   assert.match(installedOverall, /latest-release-gates\.json/);
   assert.match(installedOverall, /latest-cold-relaunch\.json/);
@@ -5291,6 +5330,7 @@ test("Anti-Codex core reports are written as UTF-8 without BOM for Node readers"
   assert.match(installedOverall, /latest-real-work\.json/);
   assert.match(installedOverall, /latest-real-mini-tool\.json/);
   assert.match(installedOverall, /latest-real-small-project\.json/);
+  assert.match(installedOverall, /latest-antigravity-worker-direct-smoke\.json/);
   assert.match(installedOverall, /latest-native-multi-tool-loop\.json/);
   assert.match(installedOverall, /latest-custom-tool-loop\.json/);
   assert.match(installedOverall, /latest-cancellation\.json/);
@@ -13295,6 +13335,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-worker-mcp-status-probe.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
+    "latest-antigravity-worker-direct-smoke.json",
   ];
 
   assert.deepEqual(optionalReports, [

@@ -64,6 +64,7 @@ const defaultReports = [
   "latest-real-mini-tool.json",
   "latest-real-work.json",
   "latest-real-small-project.json",
+  "latest-antigravity-worker-direct-smoke.json",
   "latest-stability-soak.json",
 ];
 const reportNames = names.length > 0 ? names : defaultReports;

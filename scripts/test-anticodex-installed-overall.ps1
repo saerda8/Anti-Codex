@@ -949,6 +949,7 @@ function Test-ReportEncoding {
         "latest-real-work.json",
         "latest-real-mini-tool.json",
         "latest-real-small-project.json",
+        "latest-antigravity-worker-direct-smoke.json",
         "latest-native-tool-loop.json",
         "latest-tool-loop.json",
         "latest-native-multi-tool-loop.json",

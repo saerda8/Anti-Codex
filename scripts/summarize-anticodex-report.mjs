@@ -234,6 +234,31 @@ function asRealSmallProjectEvidence(report) {
   };
 }
 
+function asAntigravityWorkerDirectSmokeEvidence(report) {
+  if (report?.reportName !== "antigravity-worker-direct-smoke") return null;
+  const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+  return {
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind || ""),
+    accountLaneRole: asString(report.accountLaneRole || ""),
+    separateAccountVerified: boolField(report, "separateAccountVerified"),
+    countsAsSecondAccountProof: boolField(report, "countsAsSecondAccountProof"),
+    model: asString(report.model || ""),
+    jobId: asString(report.jobId || ""),
+    marker: asString(report.marker || ""),
+    terminalStatus: asString(report.terminalStatus || ""),
+    terminalError: asString(report.terminalError || ""),
+    artifactProofExists: boolField(artifact, "proofExists"),
+    artifactProofTextMatches: boolField(artifact, "proofTextMatches"),
+    localRequestEvidencePresent: report.usedRealTraffic === true && !!report.jobId,
+    sameAccountOnly: report.separateAccountVerified === false && report.countsAsSecondAccountProof === false,
+    externalQuotaDecrementProven: false,
+    externalQuotaEvidence: "not_collected",
+  };
+}
+
 function asRepoMultiSettleEvidence(value) {
   if (!value || typeof value !== "object") return null;
   return {
@@ -615,6 +640,7 @@ const summary = {
   realMiniToolEvidence: asRealMiniToolEvidence(report),
   realWorkEvidence: asRealWorkEvidence(report),
   realSmallProjectEvidence: asRealSmallProjectEvidence(report),
+  antigravityWorkerDirectSmokeEvidence: asAntigravityWorkerDirectSmokeEvidence(report),
   goalUnblockPackageEvidence: isGoalUnblockPackageReport ? {
     reportName: asString(report.reportName),
     requestedRealTraffic: boolField(report, "requestedRealTraffic"),

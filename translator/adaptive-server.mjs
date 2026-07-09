@@ -3865,6 +3865,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("真实工作任务", "latest-real-work.json"),
         latestManagerReportItem("真实小工具任务", "latest-real-mini-tool.json"),
         latestManagerReportItem("真实小项目任务", "latest-real-small-project.json"),
+        latestManagerReportItem("Antigravity direct worker smoke", "latest-antigravity-worker-direct-smoke.json"),
         latestManagerReportItem("原生工具链", "latest-native-tool-loop.json"),
         latestManagerReportItem("兼容工具链", "latest-tool-loop.json"),
         latestManagerReportItem("MCP 工具链", "latest-mcp-tool-loop.json"),

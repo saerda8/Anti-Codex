@@ -415,6 +415,48 @@ function Test-ExternalMcpIdentityContractSummaryEvidence {
     if (@(As-FlatArray $ExternalMcpIdentityContractSummary.failures).Count -ne 0) { Add-Failure "external MCP identity contract has failures" }
 }
 
+function Test-AntigravityWorkerDirectSmokeSummaryEvidence {
+    param($AntigravityWorkerDirectSmokeSummary)
+
+    if (-not $AntigravityWorkerDirectSmokeSummary) {
+        return
+    }
+
+    if ($AntigravityWorkerDirectSmokeSummary.reportName -ne "antigravity-worker-direct-smoke") {
+        Add-Failure "Antigravity worker direct smoke reportName mismatch"
+    }
+    $evidence = $AntigravityWorkerDirectSmokeSummary.antigravityWorkerDirectSmokeEvidence
+    if (-not $evidence) {
+        Add-Failure "Antigravity worker direct smoke missing structured evidence"
+        return
+    }
+
+    if ($AntigravityWorkerDirectSmokeSummary.skipped -eq $true) {
+        if ($evidence.requestedRealTraffic -ne $false) { Add-Failure "Antigravity worker direct smoke skipped report requested real traffic" }
+        if ($evidence.usedRealTraffic -ne $false) { Add-Failure "Antigravity worker direct smoke skipped report used real traffic" }
+        if ($evidence.behaviorCovered -ne $false) { Add-Failure "Antigravity worker direct smoke skipped report covered behavior" }
+        if ($evidence.coverageKind -ne "skipped-no-real-traffic") { Add-Failure "Antigravity worker direct smoke skipped coverage kind mismatch" }
+        return
+    }
+
+    if ($AntigravityWorkerDirectSmokeSummary.ok -ne $true) { Add-Failure "Antigravity worker direct smoke ok=false" }
+    if ($evidence.requestedRealTraffic -ne $true) { Add-Failure "Antigravity worker direct smoke did not request real traffic" }
+    if ($evidence.usedRealTraffic -ne $true) { Add-Failure "Antigravity worker direct smoke did not use real traffic" }
+    if ($evidence.behaviorCovered -ne $true) { Add-Failure "Antigravity worker direct smoke did not cover behavior" }
+    if ($evidence.coverageKind -ne "direct-antigravity-worker-same-account-real-traffic") { Add-Failure "Antigravity worker direct smoke coverage kind mismatch" }
+    if ($evidence.accountLaneRole -ne "same-account-antigravity-worker-proof") { Add-Failure "Antigravity worker direct smoke account lane role mismatch" }
+    if ($evidence.separateAccountVerified -ne $false) { Add-Failure "Antigravity worker direct smoke must not claim separate-account proof" }
+    if ($evidence.countsAsSecondAccountProof -ne $false) { Add-Failure "Antigravity worker direct smoke counted as second-account proof" }
+    if ($evidence.sameAccountOnly -ne $true) { Add-Failure "Antigravity worker direct smoke same-account guard missing" }
+    if (-not [string]$evidence.jobId) { Add-Failure "Antigravity worker direct smoke missing job id" }
+    if (-not [string]$evidence.marker) { Add-Failure "Antigravity worker direct smoke missing marker" }
+    if ($evidence.terminalStatus -ne "completed") { Add-Failure "Antigravity worker direct smoke terminal status mismatch" }
+    if ($evidence.artifactProofExists -ne $true) { Add-Failure "Antigravity worker direct smoke proof artifact missing" }
+    if ($evidence.artifactProofTextMatches -ne $true) { Add-Failure "Antigravity worker direct smoke proof marker mismatch" }
+    if ($evidence.localRequestEvidencePresent -ne $true) { Add-Failure "Antigravity worker direct smoke missing local request evidence" }
+    if ($evidence.externalQuotaDecrementProven -ne $false) { Add-Failure "Antigravity worker direct smoke claims external quota decrement proof" }
+}
+
 function Get-NonNegativeIntProperty {
     param(
         $Value,
@@ -2590,6 +2632,7 @@ function Test-ReportsSummary {
     $secondAccountReadinessSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-readiness-summary.json" } | Select-Object -First 1)[0]
     $secondAccountPostLoginProofSummary = @($summary | Where-Object { $_.file -eq "latest-second-account-post-login-proof.json" } | Select-Object -First 1)[0]
     $externalMcpIdentityContractSummary = @($summary | Where-Object { $_.file -eq "latest-external-mcp-identity-contract.json" } | Select-Object -First 1)[0]
+    $antigravityWorkerDirectSmokeSummary = @($summary | Where-Object { $_.file -eq "latest-antigravity-worker-direct-smoke.json" } | Select-Object -First 1)[0]
     if (-not $releaseGatesSummary) {
         Add-Failure "reports summary missing latest-release-gates.json"
     } else {
@@ -2657,6 +2700,7 @@ function Test-ReportsSummary {
     if ($RequireReleaseReady -or $secondAccountReadinessSummary) { Test-SecondAccountReadinessSummaryEvidence $secondAccountReadinessSummary }
     if ($RequireReleaseReady -or $secondAccountPostLoginProofSummary) { Test-SecondAccountPostLoginProofEvidence $secondAccountPostLoginProofSummary }
     if ($RequireReleaseReady -or $externalMcpIdentityContractSummary) { Test-ExternalMcpIdentityContractSummaryEvidence $externalMcpIdentityContractSummary }
+    Test-AntigravityWorkerDirectSmokeSummaryEvidence $antigravityWorkerDirectSmokeSummary
     if ($localConnectorsSummary) {
         if ($localConnectorsSummary.ok -ne $true) { Add-Failure "local connector summary ok=false" }
         if ($localConnectorsSummary.reportName -ne "local-connectors") { Add-Failure "local connector summary missing reportName" }

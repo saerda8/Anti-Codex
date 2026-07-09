@@ -234,6 +234,7 @@ function Read-JsonSummary {
             uiRepoMultiFileEditEvidence = $json.uiRepoMultiFileEditEvidence
             uiComplexProjectEvidence = $json.uiComplexProjectEvidence
             uiReportSiteEvidence = $json.uiReportSiteEvidence
+            antigravityWorkerDirectSmokeEvidence = $json.antigravityWorkerDirectSmokeEvidence
             antigravityCliProfilePrepareEvidence = $json.antigravityCliProfilePrepareEvidence
             antigravityCliDualAccountLanesEvidence = $json.antigravityCliDualAccountLanesEvidence
             antigravityCliWindowsUserReadinessEvidence = $json.antigravityCliWindowsUserReadinessEvidence
@@ -479,6 +480,7 @@ $latestReports = @(
     "latest-real-work.json",
     "latest-real-mini-tool.json",
     "latest-real-small-project.json",
+    "latest-antigravity-worker-direct-smoke.json",
     "latest-native-tool-loop.json",
     "latest-tool-loop.json",
     "latest-native-multi-tool-loop.json",
