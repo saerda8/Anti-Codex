@@ -51,6 +51,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-09 - OpenCode complex-project no-output failure after current-channel recovery
+
+- Task: refresh the direct regular-worker `complex-project` smoke after Xiaoqiang was sealed.
+- Result: MIMO, MiMoCode, Kilo, and DeepSeek completed valid isolated complex projects. OpenCode returned job id `ocw_mrcw1yxt_gpaozg`, but finished `caller_timeout_no_valid_changes` with no events, logs, session id, stdout/stderr, or changed files.
+- Cause classification: worker/model no-output failure for this task shape. This is not the old current-channel `Transport closed` state, because the job started and current-channel `opencode_get_job` later returned the terminal status normally.
+- Rule change: after OpenCode starts a job but produces no events/logs/files, do not count it as current-channel transport failure. Retry only with a materially smaller one-output task or switch to another regular worker; keep the failed OpenCode lane visible as full worker MCP evidence instead of blocking the current shared-account usability goal.
+
 ### 2026-07-08 - Agnes report-directory parameter and no-change failure
 
 - Task: repair no-traffic goal/report false reds after Xiaoqiang was sealed.

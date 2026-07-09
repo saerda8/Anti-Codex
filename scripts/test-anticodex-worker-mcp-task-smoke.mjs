@@ -500,6 +500,7 @@ async function runWorker(workerName, options) {
   const marker = `WORKER_MCP_TASK_SMOKE_${Date.now()}`;
   const workspace = makeWorkspace(workerName, options.workspaceRoot, options.scenario);
   const timeoutMs = Number(options.timeoutMs || def.timeoutMs);
+  const rpcTimeoutMs = Math.min(Math.max(config.startupTimeoutMs, 120000), Math.max(timeoutMs, 120000));
   const workerArgs = buildWorkerArgs(workerName, workspace, marker, timeoutMs, options.scenario);
   const transport = new StdioClientTransport({
     command: config.command,
@@ -517,10 +518,10 @@ async function runWorker(workerName, options) {
   let terminal = null;
   const waitSnapshots = [];
   try {
-    await withTimeout(client.connect(transport), config.startupTimeoutMs, `${workerName} connect`);
+    await withTimeout(client.connect(transport), rpcTimeoutMs, `${workerName} connect`);
     const started = await withTimeout(
-      client.callTool({ name: def.start, arguments: workerArgs }),
-      60000,
+      client.callTool({ name: def.start, arguments: workerArgs }, undefined, { timeout: rpcTimeoutMs }),
+      rpcTimeoutMs,
       `${workerName} start`,
     );
     jobId = extractJobId(started);
@@ -539,8 +540,8 @@ async function runWorker(workerName, options) {
             include_events: false,
             include_logs: false,
           },
-        }),
-        60000,
+        }, undefined, { timeout: rpcTimeoutMs }),
+        rpcTimeoutMs,
         `${workerName} wait`,
       );
       const data = parseContentJson(waited);
