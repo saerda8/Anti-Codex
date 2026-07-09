@@ -1934,3 +1934,11 @@
 - Antigravity completed and produced `proof.json` with marker `ANTIGRAVITY_CURRENT_CHANNEL_PROOF_20260709`. MiMoCode produced `proof.json` with marker `MIMOCODE_CURRENT_CHANNEL_PROOF_20260709`; its internal validation reported `checks_failed`, but host-side Node validation passed against the actual file content.
 - OpenCode, Kilo, MIMO, and DeepSeek accepted jobs but timed out with no valid changes. Agnes accepted a job and exited nonzero with no changes. CodeBuddy accepted a job and failed `no_code_changed`. Classify these as worker/model/no-output task failures for this tiny isolated task, not current-channel MCP transport failures.
 - Host verification command over the two produced files passed: `antigravity:ok:ANTIGRAVITY_CURRENT_CHANNEL_PROOF_20260709` and `mimocode:ok:MIMOCODE_CURRENT_CHANNEL_PROOF_20260709`.
+
+## 2026-07-09 Regular Worker Diversity Completion
+
+- The required regular worker smoke diversity was refreshed with Xiaoqiang still sealed and Antigravity excluded from these MCP task-smoke reports by design.
+- `worker-mcp-task-smoke` now passes 5/5 regular code workers in the `json` scenario: MIMO `dsw_mrcz1vs8_odi00e`, MiMoCode `mcw_mrcz6owz_y89kgd`, Kilo `klw_mrcz9d6v_r9hbuv`, OpenCode `ocw_mrczeih8_l9t68t`, and DeepSeek `dsw_mrczjczn_ku6r7f`.
+- `worker-mcp-project-smoke` now passes 5/5 in the `project` scenario: MIMO `dsw_mrczn8dw_tywfaa`, MiMoCode `mcw_mrczplie_95xpfz`, Kilo `klw_mrczsz9h_a54lge`, OpenCode `ocw_mrczu2by_a4i2s3`, and DeepSeek `dsw_mrczutvx_67oc37`; host verification reran tests and CLI output for every worker.
+- `worker-mcp-complex-project-smoke` now passes 5/5 after an OpenCode-only merge refresh with job `ocw_mrczvzio_bbby02`; the existing MIMO, MiMoCode, Kilo, and DeepSeek complex-project results remained valid, and the merged report has no failed workers.
+- This closes the `worker_mcp_multiuse` full-goal requirement in goal-readiness. Full-goal status now has 5/6 requirements complete and only `separate_antigravity_accounts` incomplete. Release gates required a validator fix because they had hardcoded the old 4/6 full-objective count; after syncing runtime and rerunning goal readiness serially, release gates returned `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`.

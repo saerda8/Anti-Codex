@@ -1445,9 +1445,15 @@ function summarizeGate(definition) {
       }
       if (!fullObjectiveRequirementSummary) semanticFailures.push("goal_readiness_full_objective_requirement_summary_missing");
       else {
+        const fullRequirementCompleteCount = fullObjectiveRequirementAudit.filter((item) => item?.complete === true).length;
+        const fullRequirementIncompleteCount = fullObjectiveRequirementAudit.filter((item) => item?.complete !== true).length;
+        const fullIncompleteRequirementIds = Array.isArray(fullObjectiveRequirementSummary.incompleteRequirementIds)
+          ? fullObjectiveRequirementSummary.incompleteRequirementIds.map(String)
+          : [];
         if (Number(fullObjectiveRequirementSummary.total || 0) !== 6) semanticFailures.push("goal_readiness_full_objective_requirement_total");
-        if (Number(fullObjectiveRequirementSummary.completeCount || 0) !== 4) semanticFailures.push("goal_readiness_full_objective_requirement_complete_count");
-        if (Number(fullObjectiveRequirementSummary.incompleteCount || 0) !== 2) semanticFailures.push("goal_readiness_full_objective_requirement_incomplete_count");
+        if (Number(fullObjectiveRequirementSummary.completeCount || 0) !== fullRequirementCompleteCount) semanticFailures.push("goal_readiness_full_objective_requirement_complete_count");
+        if (Number(fullObjectiveRequirementSummary.incompleteCount || 0) !== fullRequirementIncompleteCount) semanticFailures.push("goal_readiness_full_objective_requirement_incomplete_count");
+        if (!fullIncompleteRequirementIds.includes("separate_antigravity_accounts")) semanticFailures.push("goal_readiness_full_objective_requirement_missing_separate_account");
         if (fullObjectiveRequirementSummary.canClaimFullGoalNow !== false) semanticFailures.push("goal_readiness_full_objective_requirement_claims_goal");
       }
       for (const expectedDeferred of ["separate_antigravity_accounts", "worker_mcp_multiuse"]) {
@@ -3444,13 +3450,18 @@ if (args.has("--self-test")) {
         objectiveRequirementAudit: currentRequirementIds.map((id) => ({ id, complete: true })),
         fullObjectiveRequirementSummary: {
           total: 6,
-          completeCount: 4,
-          incompleteCount: 2,
+          completeCount: 5,
+          incompleteCount: 1,
+          incompleteRequirementIds: ["separate_antigravity_accounts"],
           canClaimFullGoalNow: false,
         },
-        fullObjectiveRequirementAudit: fullRequirementIds.map((id) => ({ id, complete: currentRequirementIds.includes(id) })),
+        fullObjectiveRequirementAudit: fullRequirementIds.map((id) => ({
+          id,
+          complete: currentRequirementIds.includes(id) || id === "worker_mcp_multiuse",
+        })),
         deferredObjectiveRequirementSummary: {
           deferredRequirementIds: ["separate_antigravity_accounts", "worker_mcp_multiuse"],
+          incompleteDeferredRequirementIds: ["separate_antigravity_accounts"],
         },
         proven: {
           codexClientCopy: true,

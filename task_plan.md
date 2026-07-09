@@ -2247,6 +2247,13 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - OpenCode, Kilo, MIMO, DeepSeek, Agnes, and CodeBuddy accepted jobs but did not produce valid changes in this tiny proof task. Treat this as worker/model/no-output behavior, not current-channel transport failure.
 - Xiaoqiang remained sealed. DevEco was skipped because this run was outside its default 00:00-06:00 Beijing dispatch window.
 
+## 2026-07-09 Regular Worker Diversity Completion
+
+- The regular worker MCP diversity evidence was refreshed with real worker traffic and isolated temp workspaces. `json`, `project`, and `complex-project` reports now each pass 5/5 regular code workers: MIMO, MiMoCode, Kilo, OpenCode, and DeepSeek. Xiaoqiang remains sealed; Antigravity is intentionally excluded from these worker task-smoke reports.
+- The old complex-project blocker was OpenCode; a targeted OpenCode complex-project merge run passed with job `ocw_mrczvzio_bbby02`, completing the merged 5/5 report.
+- Goal readiness now reports full objective progress as 5/6 complete. `worker_mcp_multiuse` is complete; only `separate_antigravity_accounts` remains incomplete because the target Windows user `.\\AntiCodexModel` does not exist and requires manual account setup/login.
+- Release-gate validation was updated to derive full-objective complete/incomplete counts from the requirement audit instead of hardcoding the older 4 complete / 2 incomplete state. Runtime was synced with `-NoRestart`, then goal readiness and release gates returned green for the current release scope.
+
 ## 2026-07-09 Date-Rollover Release Gate Refresh
 
 - A fresh release-gate summary after midnight was red only because `thirdPartyProvider` and `logDbGuard` reports crossed the freshness window; health still reported account ready and 8 models.
