@@ -140,8 +140,7 @@ function main() {
   ].filter(Boolean);
   const latestWorkerObservations = replaceLatest ? [] : normalizeWorkerObservations(latestTransport.report?.workerObservations);
   const inputHasHealthyWorker = inputWorkerObservations.some((item) => item.workerTransportOk);
-  const mergedLatestWorkerObservations =
-    latestWorkerObservations.length > inputWorkerObservations.length && !inputHasHealthyWorker;
+  const mergedLatestWorkerObservations = latestWorkerObservations.length > 0 && !inputHasHealthyWorker;
   const workerObservations = mergedLatestWorkerObservations
     ? dedupeWorkerObservations([...inputWorkerObservations, ...latestWorkerObservations])
     : inputWorkerObservations;
@@ -164,8 +163,9 @@ function main() {
   const primaryObservation = workerObservations[0] || makeWorkerObservation(workerTool, workerStatus, argValue("--worker-detail", "")) || {};
   const workerTransportOkCount = workerObservations.filter((item) => item.workerTransportOk).length;
   const workerTransportFailedCount = workerObservations.filter((item) => item.workerTransportFailed).length;
-  const workerTransportOk = workerTransportOkCount > 0;
-  const workerTransportFailed = workerTransportFailedCount > 0 && workerTransportOkCount === 0;
+  const workerTransportOk = primaryObservation.workerTransportOk === true;
+  const workerTransportFailed = primaryObservation.workerTransportFailed === true;
+  const workerTransportAnyOk = workerTransportOkCount > 0;
   const genericMcpControlOk = genericMcpStatus === "ok";
   const splitObserved = workerTransportFailedCount > 0 && genericMcpControlOk && directProbeOk;
   const currentChannelWorkerDispatchBlocked = !workerTransportOk;
@@ -200,8 +200,9 @@ function main() {
     workerTransportFailedCount,
     workerTransportOkTools: workerObservations.filter((item) => item.workerTransportOk).map((item) => item.workerTool),
     workerTransportFailedTools: workerObservations.filter((item) => item.workerTransportFailed).map((item) => item.workerTool),
-    workerTransportAnyOk: workerTransportOkCount > 0,
+    workerTransportAnyOk,
     workerTransportAllFailed: workerObservations.length > 0 && workerTransportFailedCount === workerObservations.length,
+    currentFailureHiddenByHistoricalOk: workerTransportFailed && mergedLatestWorkerObservations && workerTransportAnyOk,
     expectedWorkerPrefixes,
     exposedWorkerTools,
     exposedWorkerToolCount: exposedWorkerTools.length,
@@ -231,10 +232,10 @@ function main() {
     interpretation: splitObserved
       ? "worker namespace transport is failing in the current Codex channel while generic MCP and direct worker server probe are healthy"
       : "current-channel worker transport is not proven split; inspect worker/generic/direct statuses before dispatching worker jobs",
-    operatorRecoveryAction: workerTransportOk
+    operatorRecoveryAction: currentChannelWorkerDispatchUsable
       ? "current-channel worker read path is healthy; a narrow worker task can be dispatched after normal scope checks"
       : "reload Codex MCP/session or open a fresh channel, then rerun a read-only worker status check before dispatching worker jobs",
-    postReloadVerification: workerTransportOk
+    postReloadVerification: currentChannelWorkerDispatchUsable
       ? "keep the successful read-only worker status report as dispatch evidence before starting implementation work"
       : "after reload or a fresh channel, run one read-only worker get_job/wait/list status check; only dispatch if workerTransportOk is true",
   };
