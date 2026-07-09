@@ -73,6 +73,10 @@ function isFailedWorkerStatus(status) {
   return ["transport_closed", "error", "failed", "timeout"].includes(String(status || "").trim().toLowerCase());
 }
 
+function isFailedWorkerObservation(item) {
+  return item && String(item.workerTool || "").trim().length > 0 && isFailedWorkerStatus(item.workerStatus);
+}
+
 function recommendedReadOnlyProbesFromStatusProbe(report) {
   const results = Array.isArray(report?.results) ? report.results : [];
   return results
@@ -125,8 +129,20 @@ const failedWorkerPrefixes = deriveWorkerPrefixes(failedTools);
 const okWorkerPrefixes = deriveWorkerPrefixes(okTools);
 const latestWorkerTool = String(transport.workerTool || "");
 const latestWorkerStatus = String(transport.workerStatus || "");
-const latestWorkerFailureIsCurrent = latestWorkerTool.length > 0 && isFailedWorkerStatus(latestWorkerStatus);
-const currentFailedWorkerTools = latestWorkerFailureIsCurrent ? [latestWorkerTool] : [];
+const workerObservations = Array.isArray(transport.workerObservations)
+  ? transport.workerObservations.filter((item) => item && typeof item === "object")
+  : [];
+const inputWorkerObservationCount = Math.max(0, Number(transport.inputWorkerObservationCount || 0));
+const currentWorkerObservations = inputWorkerObservationCount > 0
+  ? workerObservations.slice(0, inputWorkerObservationCount)
+  : latestWorkerTool
+    ? [{ workerTool: latestWorkerTool, workerStatus: latestWorkerStatus }]
+    : [];
+const currentFailedWorkerTools = [...new Set(currentWorkerObservations
+  .filter(isFailedWorkerObservation)
+  .map((item) => String(item.workerTool || "").trim())
+  .filter(Boolean))];
+const latestWorkerFailureIsCurrent = currentFailedWorkerTools.length > 0;
 const currentFailedWorkerPrefixes = deriveWorkerPrefixes(currentFailedWorkerTools);
 const currentFailureHiddenByHistoricalOk = latestWorkerFailureIsCurrent
   && transport.mergedLatestWorkerObservations === true
@@ -257,6 +273,8 @@ const payload = {
     workerTransportFailedTools: failedTools,
     latestWorkerTool,
     latestWorkerStatus,
+    inputWorkerObservationCount,
+    currentWorkerObservations,
     latestWorkerFailureIsCurrent,
     currentFailedWorkerTools,
     workerTransportOkWorkerPrefixes: okWorkerPrefixes,

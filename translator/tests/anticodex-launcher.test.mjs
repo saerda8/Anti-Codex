@@ -13469,6 +13469,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerRecovery, /--compact/);
   assert.match(workerRecovery, /missingExpectedWorkerPrefixes/);
   assert.match(workerRecovery, /exposedButUntestedWorkerPrefixes/);
+  assert.match(workerRecovery, /inputWorkerObservationCount/);
+  assert.match(workerRecovery, /currentWorkerObservations/);
+  assert.match(workerRecovery, /workerObservations\.slice\(0, inputWorkerObservationCount\)/);
   assert.match(workerRecovery, /operatorActionCard/);
   assert.match(workerRecovery, /safeToStartImplementationWorker/);
   assert.doesNotMatch(workerRecovery, /start_implementation/);
