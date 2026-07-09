@@ -1049,7 +1049,7 @@ function latestRefreshFeatureSnapshotOverride({ currentSource, maxAgeHours }) {
 
 function localFeatureSummary({ includeProjection = false } = {}) {
     const codexHome = process.env.CODEX_HOME_DIR || process.env.CODEX_HOME || (ANTICODEX_STATE_ROOT ? resolvePath(ANTICODEX_STATE_ROOT, "codex-home-deepseek-app") : "");
-    const sharedCodexHome = process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || "";
+    const sharedCodexHome = effectiveSharedCodexHome(codexHome) || "";
     const skillsPath = codexHome ? resolvePath(codexHome, "skills") : "";
     const connectorCachePath = codexHome ? resolvePath(codexHome, "cache", "codex_app_directory") : "";
     const appToolsCachePath = codexHome ? resolvePath(codexHome, "cache", "codex_apps_tools") : "";
@@ -1331,6 +1331,8 @@ function diagnosticsPayload({
     const accountTracking = ANTIGRAVITY_ACCOUNT_TRACKER.getSnapshot();
     const longTasks = longTaskSummary({ postVerification, updateStatus });
     const idleSessionReap = antigravity ? releaseIdleAntigravitySessionLockIfSafe("diagnostics_idle_reap") : { attempted: false };
+    const diagnosticsCodexHome = process.env.CODEX_HOME || process.env.CODEX_HOME_DIR || null;
+    const diagnosticsSharedCodexHome = effectiveSharedCodexHome(diagnosticsCodexHome || "") || null;
     return {
         ok: true,
         object: "anticodex.diagnostics",
@@ -1349,8 +1351,8 @@ function diagnosticsPayload({
         health,
         paths: {
             stateRoot: ANTICODEX_STATE_ROOT || null,
-            codexHome: process.env.CODEX_HOME || process.env.CODEX_HOME_DIR || null,
-            sharedCodexHome: process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || null,
+            codexHome: diagnosticsCodexHome,
+            sharedCodexHome: diagnosticsSharedCodexHome,
             profile: PROFILE_PATH || null,
             modelCatalog: ANTIGRAVITY_MODEL_CATALOG_PATH || null,
             responseHistory: RESPONSE_HISTORY_PATH || null,
@@ -3920,6 +3922,14 @@ function latestManagerReportsPayload() {
         deferredCount: reports.filter((item) => item.deferred === true).length,
         staleAfterMs: MANAGER_REPORT_STALE_MS,
     };
+}
+
+function effectiveSharedCodexHome(codexHome = "") {
+    const explicitSharedHome = process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || "";
+    if (explicitSharedHome) return explicitSharedHome;
+    const markerPath = codexHome ? resolvePath(codexHome, ".anticodex-startup-snapshots-ready.json") : "";
+    const marker = readJsonIfPresent(markerPath);
+    return typeof marker?.sharedCodexHome === "string" && marker.sharedCodexHome.length > 0 ? marker.sharedCodexHome : "";
 }
 
 function psSingleQuoted(value) {

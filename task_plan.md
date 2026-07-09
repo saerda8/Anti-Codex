@@ -2305,3 +2305,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Current single-account release scope stays green: `goalComplete:true`, `usableNow:true`, `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`. Full goal remains blocked by current-channel worker dispatch and second-account proof.
 - Fresh current-channel read-only probes still failed: `mimo_get_job dsw_mr3wn5f0_kiniqh` and `antigravity_get_job ag-e519ae01-462b-4843-bbdc-fa0bf87e84b3` returned `Transport closed`. Recovery remains `reload_required` and `canDispatchCurrentChannelWorkers:false`.
 - Manager close-button regression still passes on `native-panel-v103` with real mouse click hit testing (`closeHitAreaOk:true`); the close button must keep the pseudo-text approach and real-click verifier.
+
+## 2026-07-09 Diagnostics Shared Home Fallback
+
+- Diagnostics no longer reports `sharedCodexHome:null` when the environment variable is absent but the startup snapshot marker records the shared Codex home. The server now falls back to `.anticodex-startup-snapshots-ready.json`.
+- Fresh diagnostics passed with `ok:true`, `failures:[]`, local `codexHome` isolated under `%APPDATA%\\anticodex`, and `sharedCodexHome:"C:\\Users\\XD\\.codex"`.
+- Manager latest reports now shows `Diagnostics: passed`; remaining expected action items are `Codex app-server freshness`, `Current-channel worker transport`, and `Current-channel worker recovery`.
+- Release gates remain green: `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`, with installed runtime fingerprint satisfied after sync.

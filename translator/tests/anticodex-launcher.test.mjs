@@ -5359,6 +5359,9 @@ test("diagnostics payload includes localFeatures with skills/mcp/snapshots struc
   const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const diagnosticsFunc = server.match(/function diagnosticsPayload\(\{[\s\S]*?return \{[\s\S]*?\n    \};/)?.[0];
   assert.ok(diagnosticsFunc, "missing diagnosticsPayload return");
+  assert.match(server, /function effectiveSharedCodexHome/);
+  assert.match(server, /\.anticodex-startup-snapshots-ready\.json/);
+  assert.match(diagnosticsFunc, /sharedCodexHome:\s*diagnosticsSharedCodexHome/);
   assert.match(diagnosticsFunc, /localFeatures:\s*fast\s*\?\s*\{\s*skipped:\s*true,\s*reason:\s*"fast_diagnostics"\s*\}\s*:\s*localFeatureSummary\(\{\s*includeProjection:\s*true\s*\}\)/);
   assert.match(diagnosticsFunc, /logDbGuard:\s*fast\s*\?\s*\{\s*skipped:\s*true,\s*reason:\s*"fast_diagnostics"\s*\}\s*:\s*logDbGuardStatus\(\)/);
   assert.match(diagnosticsFunc, /installedChecks/);
