@@ -1637,7 +1637,9 @@ function summarizeGate(definition) {
       if (!String(workerProof.latestTransportCheckedAt || "").startsWith("20")) semanticFailures.push("goal_unblock_package_worker_checked_at_missing");
       if (Number(workerProof.workerObservationCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_observation_count_low");
       if (workerRecoveryStillRequired && Number(workerProof.workerTransportFailedCount || 0) < 3) semanticFailures.push("goal_unblock_package_worker_failed_count_low");
-      if (workerRecoveryStillRequired && Number(workerProof.workerTransportOkCount || 0) !== 0) semanticFailures.push("goal_unblock_package_worker_ok_count_unexpected");
+      const historicalOkHiddenByCurrentFailure = workerProof.namespaceWideRepeatedWorkerFailure === true
+        && workerProof.currentFailureHiddenByHistoricalOk === true;
+      if (workerRecoveryStillRequired && Number(workerProof.workerTransportOkCount || 0) !== 0 && !historicalOkHiddenByCurrentFailure) semanticFailures.push("goal_unblock_package_worker_ok_count_unexpected");
       if (!workerRecoveryStillRequired && Number(workerProof.workerTransportOkCount || 0) < 1) semanticFailures.push("goal_unblock_package_worker_ok_count_low");
       if (workerProof.genericMcpControlOk !== true) semanticFailures.push("goal_unblock_package_worker_generic_mcp_missing");
       if (workerProof.directProbeOk !== true) semanticFailures.push("goal_unblock_package_worker_direct_probe_missing");

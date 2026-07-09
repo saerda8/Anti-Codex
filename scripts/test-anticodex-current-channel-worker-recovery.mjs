@@ -194,9 +194,16 @@ const status = canDispatchCurrentChannelWorkers
     ? "reload_required"
     : "missing_evidence";
 const repeatedFailureThreshold = 3;
+const namespaceWideRepeatedWorkerFailure = !canDispatchCurrentChannelWorkers
+  && failedTools.length >= repeatedFailureThreshold
+  && failedWorkerPrefixes.length >= 2
+  && latestWorkerFailureIsCurrent
+  && currentFailureHiddenByHistoricalOk
+  && genericMcpOk
+  && directProbeOk;
 const repeatedCurrentChannelWorkerFailure = !canDispatchCurrentChannelWorkers
   && failedTools.length >= repeatedFailureThreshold
-  && okTools.length === 0
+  && (okTools.length === 0 || namespaceWideRepeatedWorkerFailure)
   && genericMcpOk
   && directProbeOk;
 const repeatedFailureAudit = {
@@ -205,6 +212,7 @@ const repeatedFailureAudit = {
   okObservationCount: okTools.length,
   failedWorkerPrefixCount: failedWorkerPrefixes.length,
   failedWorkerPrefixes,
+  namespaceWideRepeatedWorkerFailure,
   currentFailedWorkerPrefixCount: currentFailedWorkerPrefixes.length,
   currentFailedWorkerPrefixes,
   currentFailureHiddenByHistoricalOk,

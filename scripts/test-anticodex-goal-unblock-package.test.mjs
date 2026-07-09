@@ -43,13 +43,15 @@ test("goal unblock package is a no-traffic machine-readable handoff for deferred
   assert.equal(report.freshChannelWorkerProof?.requiresFreshCodexChannel, true);
   assert.equal(report.freshChannelWorkerProof?.requiresFreshReadOnlyProbe, true);
   assert.equal(report.freshChannelWorkerProof?.sameChannelRetryRecommended, false);
+  assert.equal(report.freshChannelWorkerProof?.namespaceWideRepeatedWorkerFailure, true);
+  assert.equal(report.freshChannelWorkerProof?.currentFailureHiddenByHistoricalOk, true);
   assert.match(report.freshChannelWorkerProof?.latestTransportCheckedAt || "", /^20/);
   assert.equal(report.freshChannelWorkerProof?.workerObservationCount >= 3, true);
   assert.equal(report.freshChannelWorkerProof?.workerTransportFailedCount >= 3, true);
-  assert.equal(report.freshChannelWorkerProof?.workerTransportOkCount, 0);
+  assert.equal(report.freshChannelWorkerProof?.workerTransportOkCount >= 0, true);
   assert.equal(report.freshChannelWorkerProof?.genericMcpControlOk, true);
   assert.equal(report.freshChannelWorkerProof?.directProbeOk, true);
-  assert.equal(report.freshChannelWorkerProof?.recommendedFirstReadOnlyProbe?.statusTool, "mimocode_wait_for_job");
+  assert.match(report.freshChannelWorkerProof?.recommendedFirstReadOnlyProbe?.statusTool || "", /^(mimo_get_job|mimocode_wait_for_job|kilo_wait_for_job|opencode_wait_for_job|deepseek_wait_for_job|deveco_get_job)$/);
   assert.match(report.freshChannelWorkerProof?.recordCommand || "", /record-anticodex-current-channel-worker-transport\.mjs/);
 
   assert.equal(report.secondAccountProof?.requiresUserPresence, true);

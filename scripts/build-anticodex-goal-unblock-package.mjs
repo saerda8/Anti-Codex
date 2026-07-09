@@ -122,6 +122,8 @@ const freshChannelWorkerProof = {
   canDispatchCurrentChannelWorkers: workerRecovery.canDispatchCurrentChannelWorkers === true || goal.currentChannelWorkerCanDispatch === true,
   sameChannelRetryRecommended: workerRecovery.repeatedFailureAudit?.sameChannelRetryRecommended === true,
   repeatedCurrentChannelWorkerFailure: workerRecovery.repeatedFailureAudit?.repeatedCurrentChannelWorkerFailure === true,
+  namespaceWideRepeatedWorkerFailure: workerRecovery.repeatedFailureAudit?.namespaceWideRepeatedWorkerFailure === true,
+  currentFailureHiddenByHistoricalOk: workerRecovery.repeatedFailureAudit?.currentFailureHiddenByHistoricalOk === true,
   recommendedFirstReadOnlyProbe,
   statusCommand: asString(goalCard.workerRecoveryStatusCommand || "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-current-channel-worker-recovery.ps1 -Compact"),
   recordCommand: asString(recommendedFirstReadOnlyProbe?.recordCommand || goalCard.workerRecoveryCommand || ""),
