@@ -73,6 +73,7 @@ $requiredSourceFiles = @(
     "scripts\probe-anticodex-worker-mcp-servers.mjs",
     "scripts\test-anticodex-worker-mcp-source-hygiene.mjs",
     "scripts\test-anticodex-worker-mcp-status-probe.mjs",
+    "scripts\test-anticodex-worker-process-hygiene.mjs",
     "scripts\record-anticodex-current-channel-worker-transport.mjs",
     "scripts\test-anticodex-current-channel-worker-recovery.mjs",
     "scripts\test-anticodex-current-channel-worker-recovery.ps1",
@@ -310,6 +311,71 @@ function Wait-AntiCodexSessionLock {
     return [pscustomobject]@{ present = $false; diagnostics = $lastDiagnostics }
 }
 
+function Set-AntiCodexTranslatorRestartEnvironment {
+    param([System.Diagnostics.ProcessStartInfo]$ProcessStartInfo)
+
+    $stateRoot = Join-Path $env:APPDATA "anticodex"
+    $codexHome = Join-Path $stateRoot "codex-home-deepseek-app"
+    $projectsRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "deepcodex"
+    $port = 8484
+    try {
+        if ($BaseUrl) { $port = ([Uri]$BaseUrl).Port }
+    } catch {}
+
+    $ProcessStartInfo.EnvironmentVariables["DEEPCODEX_STATE_ROOT"] = $stateRoot
+    $ProcessStartInfo.EnvironmentVariables["CODEX_HOME_DIR"] = $codexHome
+    $ProcessStartInfo.EnvironmentVariables["CODEX_HOME"] = $codexHome
+    $ProcessStartInfo.EnvironmentVariables["DEEPCODEX_PROJECTS_ROOT"] = $projectsRoot
+    $ProcessStartInfo.EnvironmentVariables["TRANSLATOR_PORT"] = [string]$port
+    $ProcessStartInfo.EnvironmentVariables["TRANSLATOR_URL"] = $BaseUrl
+    $ProcessStartInfo.EnvironmentVariables["ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER"] = "1"
+    $ProcessStartInfo.EnvironmentVariables["ANTICODEX_TRANSLATOR_RESTART_LOCK_PATH"] = $translatorRestartLockPath
+    $ProcessStartInfo.EnvironmentVariables["ANTICODEX_ACTIVE_UPSTREAM"] = "antigravity"
+    $ProcessStartInfo.EnvironmentVariables["TRANSLATOR_UPSTREAM_MODE"] = "antigravity"
+    $ProcessStartInfo.EnvironmentVariables["ANTICODEX_ANTIGRAVITY_TRANSPORT"] = "desktop-cascade"
+    $ProcessStartInfo.EnvironmentVariables["ANTICODEX_NATIVE_TOOL_BRIDGE"] = "0"
+
+    $profileScript = Join-Path $targetRuntimeFull "scripts\anticodex-upstream-profile.ps1"
+    if (-not (Test-Path -LiteralPath $profileScript -PathType Leaf)) { return }
+    try {
+        $runtimeProfile = & $profileScript -Action GetRuntime -StateRoot $stateRoot | ConvertFrom-Json
+        if ($runtimeProfile -and $runtimeProfile.mode -eq "third-party") {
+            $ProcessStartInfo.EnvironmentVariables["ANTICODEX_ACTIVE_UPSTREAM"] = "third-party"
+            $ProcessStartInfo.EnvironmentVariables["TRANSLATOR_UPSTREAM_MODE"] = "chat"
+            $ProcessStartInfo.EnvironmentVariables["UPSTREAM_PROTOCOL"] = [string]$runtimeProfile.protocol
+            $ProcessStartInfo.EnvironmentVariables["UPSTREAM_URL"] = [string]$runtimeProfile.baseUrl
+            $ProcessStartInfo.EnvironmentVariables["UPSTREAM_MODEL"] = [string]$runtimeProfile.model
+            if ($runtimeProfile.apiKey) {
+                $ProcessStartInfo.EnvironmentVariables["UPSTREAM_API_KEY"] = [string]$runtimeProfile.apiKey
+            }
+            return
+        }
+        $cli = $runtimeProfile.antigravityCli
+        if ($cli -and $cli.profileRoot) {
+            $ProcessStartInfo.EnvironmentVariables["ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT"] = [string]$cli.profileRoot
+        }
+        if ($cli -and $cli.strictWindowsAppDataIsolation -eq $true) {
+            $ProcessStartInfo.EnvironmentVariables["ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA"] = "1"
+        }
+    } catch {}
+}
+
+function Start-AntiCodexTranslatorDirect {
+    $runtimeBin = Join-Path (Split-Path -Parent $targetRuntimeFull) "bin\deepcodex-translator.exe"
+    if (-not (Test-Path -LiteralPath $runtimeBin -PathType Leaf)) {
+        $runtimeBin = (Get-Command "node.exe" -ErrorAction Stop).Source
+    }
+    $serverScript = Join-Path $targetRuntimeFull "translator\adaptive-server.mjs"
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $runtimeBin
+    $psi.WorkingDirectory = $targetRuntimeFull
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.Arguments = "`"$serverScript`""
+    Set-AntiCodexTranslatorRestartEnvironment $psi
+    return [System.Diagnostics.Process]::Start($psi)
+}
+
 Test-AntiCodexJavaScriptSyntax `
     -Path (Join-Path $sourceRootFull "translator\adaptive-server.mjs") `
     -Label "source translator\adaptive-server.mjs"
@@ -339,42 +405,48 @@ $stoppedTranslatorCount = 0
 $stoppedExtraTranslatorCount = 0
 $launchExitCode = $null
 if (-not $NoRestart) {
-    New-Item -ItemType Directory -Path $antiCodexStateRoot -Force | Out-Null
-    [IO.File]::WriteAllText($translatorRestartLockPath, "sync-anticodex-runtime restart in progress $([DateTime]::UtcNow.ToString("o"))", [Text.Encoding]::UTF8)
-    $translatorRestartLockCreated = $true
-    $env:ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER = "1"
-    $stoppedTranslatorCount = Stop-AntiCodexTranslator
-    Start-Sleep -Milliseconds 500
-    $healthAfterSupervisor = Wait-AntiCodexHealth -Seconds ([Math]::Min(15, [Math]::Max(5, $TimeoutSec)))
-    if (-not $healthAfterSupervisor) {
-        $startScript = Join-Path $targetRuntimeFull "scripts\start-deepcodex.ps1"
-        $powerShell = (Get-Command "powershell.exe" -ErrorAction Stop).Source
-        $proc = Start-Process -FilePath $powerShell `
-            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $startScript, "-TranslatorOnly") `
-            -WindowStyle Hidden `
-            -PassThru
-        [void]$proc.Handle
-        $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(5, $TimeoutSec))
-        $restartHealthy = $false
-        while ([DateTime]::UtcNow -lt $deadline) {
-            if (Wait-AntiCodexHealth -Seconds 1) {
-                $restartHealthy = $true
-                break
+    try {
+        New-Item -ItemType Directory -Path $antiCodexStateRoot -Force | Out-Null
+        [IO.File]::WriteAllText($translatorRestartLockPath, "sync-anticodex-runtime restart in progress $([DateTime]::UtcNow.ToString("o"))", [Text.Encoding]::UTF8)
+        $translatorRestartLockCreated = $true
+        $env:ANTICODEX_TRANSLATOR_RESTART_LOCK_OWNER = "1"
+        $stoppedTranslatorCount = Stop-AntiCodexTranslator
+        Start-Sleep -Milliseconds 500
+        $healthAfterSupervisor = Wait-AntiCodexHealth -Seconds ([Math]::Min(15, [Math]::Max(5, $TimeoutSec)))
+        if (-not $healthAfterSupervisor) {
+            $proc = Start-AntiCodexTranslatorDirect
+            if (-not $proc) {
+                throw "Anti-Codex translator direct restart did not return a process."
             }
-            if ($proc.HasExited) { break }
-            Start-Sleep -Milliseconds 200
-            try { $proc.Refresh() } catch {}
+            [void]$proc.Handle
+            $restartHealthy = $false
+            $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(5, $TimeoutSec))
+            while ([DateTime]::UtcNow -lt $deadline) {
+                if (Wait-AntiCodexHealth -Seconds 1) {
+                    $restartHealthy = $true
+                    break
+                }
+                if ($proc.HasExited) { break }
+                Start-Sleep -Milliseconds 200
+                try { $proc.Refresh() } catch {}
+            }
+            if (-not $restartHealthy -and -not $proc.HasExited) {
+                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+                throw "Anti-Codex translator direct restart timed out."
+            }
+            $launchExitCode = if ($restartHealthy) { 0 } else { [int]$proc.ExitCode }
+            if (-not $restartHealthy -and $launchExitCode -ne 0) {
+                throw "Anti-Codex translator direct restart failed with exit code $launchExitCode."
+            }
+        } else {
+            $launchExitCode = 0
         }
-        if (-not $restartHealthy -and -not $proc.HasExited) {
-            try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
-            throw "Anti-Codex translator-only restart timed out."
+    } catch {
+        if ($translatorRestartLockCreated) {
+            Remove-Item -LiteralPath $translatorRestartLockPath -Force -ErrorAction SilentlyContinue
+            $translatorRestartLockCreated = $false
         }
-        $launchExitCode = if ($restartHealthy) { 0 } else { [int]$proc.ExitCode }
-        if (-not $restartHealthy -and $launchExitCode -ne 0) {
-            throw "Anti-Codex translator-only restart failed with exit code $launchExitCode."
-        }
-    } else {
-        $launchExitCode = 0
+        throw
     }
 }
 

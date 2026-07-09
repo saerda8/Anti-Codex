@@ -352,6 +352,7 @@ const isApprovedRealRunSequenceReport = report?.reportName === "approved-real-ru
 const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-probe" || /latest-worker-mcp-server-probe\.json$/i.test(path);
 const isWorkerMcpSourceHygieneReport = report?.reportName === "worker-mcp-source-hygiene" || /latest-worker-mcp-source-hygiene\.json$/i.test(path);
 const isWorkerMcpStatusProbeReport = report?.reportName === "worker-mcp-status-probe" || /latest-worker-mcp-status-probe\.json$/i.test(path);
+const isWorkerProcessHygieneReport = report?.reportName === "worker-process-hygiene" || /latest-worker-process-hygiene\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isWorkerMcpComplexProjectSmokeReport = report?.reportName === "worker-mcp-complex-project-smoke" || /latest-worker-mcp-complex-project-smoke\.json$/i.test(path);
@@ -2374,6 +2375,29 @@ const summary = {
       dataKeys: Array.isArray(result?.dataKeys) ? asStringArray(result.dataKeys) : [],
       elapsedMs: has(result || {}, "elapsedMs") ? result.elapsedMs : null,
     })).filter((result) => result.worker) : [],
+  } : null,
+  workerProcessHygieneEvidence: isWorkerProcessHygieneReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    processQueryOk: boolField(report, "processQueryOk"),
+    workerProcessHygieneOk: boolField(report, "workerProcessHygieneOk"),
+    workerProcessCount: has(report, "workerProcessCount") ? report.workerProcessCount : null,
+    duplicateWorkerProcessCount: has(report, "duplicateWorkerProcessCount") ? report.duplicateWorkerProcessCount : null,
+    codexWorkerProcessCount: has(report, "codexWorkerProcessCount") ? report.codexWorkerProcessCount : null,
+    anticodexWorkerProcessCount: has(report, "anticodexWorkerProcessCount") ? report.anticodexWorkerProcessCount : null,
+    appServerCount: has(report, "appServerCount") ? report.appServerCount : null,
+    duplicateWorkerServers: Array.isArray(report.duplicateWorkerServers) ? report.duplicateWorkerServers.map((item) => ({
+      serverName: asString(item?.serverName),
+      parentPid: has(item || {}, "parentPid") ? item.parentPid : null,
+      parentKind: asString(item?.parentKind),
+      count: has(item || {}, "count") ? item.count : null,
+    })).filter((item) => item.serverName).slice(0, 32) : [],
+    interpretation: asString(report.interpretation),
+    operatorAction: asString(report.operatorAction),
   } : null,
   workerMcpTaskSmokeEvidence: isWorkerMcpTaskSmokeReport ? {
     reportName: asString(report.reportName),

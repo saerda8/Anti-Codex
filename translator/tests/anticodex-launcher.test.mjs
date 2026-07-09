@@ -13333,6 +13333,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-worker-mcp-server-probe.json",
     "latest-worker-mcp-source-hygiene.json",
     "latest-worker-mcp-status-probe.json",
+    "latest-worker-process-hygiene.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
     "latest-antigravity-worker-direct-smoke.json",
@@ -13365,6 +13366,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(managerButton, /\\u5df2\\u5ef6\\u671f/);
   assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-worker-mcp-status-probe\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-worker-process-hygiene\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.ps1/);
   assert.match(summarizer, /goalReadinessEvidence/);
@@ -13482,6 +13484,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(collector, /latest-worker-mcp-server-probe\.json/);
   assert.match(collector, /latest-worker-mcp-source-hygiene\.json/);
   assert.match(collector, /latest-worker-mcp-status-probe\.json/);
+  assert.match(collector, /latest-worker-process-hygiene\.json/);
   assert.match(collector, /latest-worker-mcp-task-smoke\.json/);
   assert.match(collector, /latest-worker-mcp-project-smoke\.json/);
   assert.match(collector, /latest-current-channel-worker-transport\.json/);
@@ -13495,6 +13498,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /workerMcpServerProbeEvidence/);
   assert.match(summarizer, /workerMcpSourceHygieneEvidence/);
   assert.match(summarizer, /workerMcpStatusProbeEvidence/);
+  assert.match(summarizer, /workerProcessHygieneEvidence/);
+  assert.match(summarizer, /duplicateWorkerProcessCount/);
   assert.match(summarizer, /workerMcpStatusProbeReportOk/);
   assert.match(summarizer, /statusCallOkWorkers/);
   assert.match(summarizer, /antigravitySkippedForAccountIsolation/);
