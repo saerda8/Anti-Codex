@@ -2240,6 +2240,13 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - CodeBuddy job `cbw_mrc9oced_fpa7c5` started but failed `no_code_changed`; Kilo and OpenCode start calls returned `Transport closed`.
 - Agnes job `agw_mrcap9fq_2y9zzz` completed and wrote `docs/audits/2026-07-09-agnes-regular-mcp-refresh.md`; main-agent review confirmed the file is ASCII-only and limited to the requested audit note.
 
+## 2026-07-09 Current-Channel Regular Worker Multiuse Recheck
+
+- After the Codex restart, eight regular worker implementation starts returned job ids instead of `Transport closed`: Antigravity `ag-62e6779c-bd3b-4aa8-a920-255415c664e9`, OpenCode `ocw_mrcynmfx_33hdin`, Kilo `klw_mrcyntod_r77ab7`, Agnes `agw_mrcyo6lj_ecqlew`, MIMO `dsw_mrcyoi29_tnbwyc`, DeepSeek `dsw_mrcyoo7m_kue0u0`, MiMoCode `mcw_mrcyoy91_afxh7s`, and CodeBuddy `cbw_mrcyp643_8o6dwg`.
+- The jobs ran in isolated temp directories, not the shared repo. Antigravity completed with the expected marker, and MiMoCode wrote the expected marker file; host-side validation passed for both files.
+- OpenCode, Kilo, MIMO, DeepSeek, Agnes, and CodeBuddy accepted jobs but did not produce valid changes in this tiny proof task. Treat this as worker/model/no-output behavior, not current-channel transport failure.
+- Xiaoqiang remained sealed. DevEco was skipped because this run was outside its default 00:00-06:00 Beijing dispatch window.
+
 ## 2026-07-09 Date-Rollover Release Gate Refresh
 
 - A fresh release-gate summary after midnight was red only because `thirdPartyProvider` and `logDbGuard` reports crossed the freshness window; health still reported account ready and 8 models.

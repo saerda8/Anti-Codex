@@ -1926,3 +1926,11 @@
 - `test-anticodex-long-task-landing-matrix.mjs` refreshed `latest-long-task-landing-matrix.json` with 7/7 required long-task modes landed.
 - A bounded full model availability refresh then passed in 97103 ms with `MaxModels 8` and `RequestTimeoutSec 60`; all eight current models returned exact markers and route success, including Gemini, Claude, and GPT-OSS lanes, with `availabilityUnavailableCount:0`.
 - The Manager latest-report action on `native-panel-v103` then showed no required `needs rerun` entries; `Worker MCP task smoke`, `Worker MCP project smoke`, `Long task landing matrix`, `Shortcut repair`, `Model routing`, `Model availability`, `Goal readiness`, `Release Gate summary`, and `Manager real button` all displayed as passing.
+
+## 2026-07-09 Current-Channel Regular Worker Multiuse Recheck
+
+- After the Codex restart, the current channel exposed and accepted implementation starts for eight regular workers without `Transport closed`: Antigravity `ag-62e6779c-bd3b-4aa8-a920-255415c664e9`, OpenCode `ocw_mrcynmfx_33hdin`, Kilo `klw_mrcyntod_r77ab7`, Agnes `agw_mrcyo6lj_ecqlew`, MIMO `dsw_mrcyoi29_tnbwyc`, DeepSeek `dsw_mrcyoo7m_kue0u0`, MiMoCode `mcw_mrcyoy91_afxh7s`, and CodeBuddy `cbw_mrcyp643_8o6dwg`.
+- Each worker was isolated under `C:\Users\XD\AppData\Local\Temp\anticodex-current-channel-worker-proof-20260709\<worker>` to avoid shared-worktree contamination. Xiaoqiang workers remained sealed and DevEco was not dispatched because this was outside the Beijing 00:00-06:00 default window.
+- Antigravity completed and produced `proof.json` with marker `ANTIGRAVITY_CURRENT_CHANNEL_PROOF_20260709`. MiMoCode produced `proof.json` with marker `MIMOCODE_CURRENT_CHANNEL_PROOF_20260709`; its internal validation reported `checks_failed`, but host-side Node validation passed against the actual file content.
+- OpenCode, Kilo, MIMO, and DeepSeek accepted jobs but timed out with no valid changes. Agnes accepted a job and exited nonzero with no changes. CodeBuddy accepted a job and failed `no_code_changed`. Classify these as worker/model/no-output task failures for this tiny isolated task, not current-channel MCP transport failures.
+- Host verification command over the two produced files passed: `antigravity:ok:ANTIGRAVITY_CURRENT_CHANNEL_PROOF_20260709` and `mimocode:ok:MIMOCODE_CURRENT_CHANNEL_PROOF_20260709`.
