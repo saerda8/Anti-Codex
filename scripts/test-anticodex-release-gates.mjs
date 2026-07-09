@@ -701,6 +701,15 @@ function summarizeGate(definition) {
       const sessionLock = report.antigravitySessionLock && typeof report.antigravitySessionLock === "object" ? report.antigravitySessionLock : {};
       const artifact = report.artifactEvidence && typeof report.artifactEvidence === "object" ? report.artifactEvidence : {};
       const files = artifact.files && typeof artifact.files === "object" ? artifact.files : {};
+      const artifactResponseHistory = artifact.responseHistory && typeof artifact.responseHistory === "object" ? artifact.responseHistory : {};
+      const taskMarkerObserved = Boolean(
+        marker
+        && (
+          Number(report.answerMarkerCount || 0) >= 1
+          || report.responseHistoryMarkerSeen === true
+          || artifactResponseHistory.assistantHasFinalMarker === true
+        )
+      );
       if (report.reportName !== spec.reportName) semanticFailures.push(`${prefix}_report_name`);
       if (report.taskMode !== spec.taskMode) semanticFailures.push(`${prefix}_task_mode`);
       if (report.requestedRealTraffic !== true) semanticFailures.push(`${prefix}_real_traffic_not_requested`);
@@ -711,7 +720,7 @@ function summarizeGate(definition) {
       if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push(`${prefix}_failures`);
       if (spec.requirePromptLanguage && report.promptLanguage !== spec.requirePromptLanguage) semanticFailures.push(`${prefix}_prompt_language`);
       if (spec.requireFollowupPromptLanguage && report.followupPromptLanguage !== spec.requireFollowupPromptLanguage) semanticFailures.push(`${prefix}_followup_prompt_language`);
-      if (!spec.markerOptional && (!marker || Number(report.answerMarkerCount || 0) < 1)) semanticFailures.push(`${prefix}_marker_missing`);
+      if (!spec.markerOptional && !taskMarkerObserved) semanticFailures.push(`${prefix}_marker_missing`);
       if (report.clicked !== true) semanticFailures.push(`${prefix}_not_sent`);
       if (report.composerCleared !== true) semanticFailures.push(`${prefix}_composer_not_cleared`);
       if (report.activeReconnectSeen === true) semanticFailures.push(`${prefix}_active_reconnect_seen`);
