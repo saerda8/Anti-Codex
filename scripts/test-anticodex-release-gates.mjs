@@ -169,6 +169,7 @@ const gateDefinitions = [
   { id: "realThirdPartyProviderOptional", group: "optional-real-traffic", file: "latest-real-third-party-provider.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
   { id: "providerAntigravityReturnOptional", group: "optional-real-traffic", file: "latest-provider-antigravity-return.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
   { id: "antigravityCliRealSmokeOptional", group: "optional-real-traffic", file: "latest-antigravity-cli-real-smoke.json", requiredForRelease: false, requireOptionalRealTrafficSemantics: true },
+  { id: "antigravityWorkerDirectSmokeOptional", group: "optional-real-traffic", file: "latest-antigravity-worker-direct-smoke.json", requiredForRelease: false, requireAntigravityWorkerDirectSmokeSemantics: true },
 
   { id: "installedOverallNoTraffic", group: "no-traffic", file: "latest-installed-overall.json", requiredForRelease: true, requireInstalledOverallSemantics: true, expectedFast: false, expectedReportName: "installed-overall", expectedCoverageKind: "installed-no-traffic" },
   { id: "modelRouting", group: "no-traffic", file: "latest-model-routing.json", requiredForRelease: true, requireModelRoutingSemantics: true },
@@ -1978,6 +1979,25 @@ function summarizeGate(definition) {
         }
       }
     }
+    if (definition.requireAntigravityWorkerDirectSmokeSemantics && present) {
+      const artifact = report.artifact && typeof report.artifact === "object" ? report.artifact : {};
+      const snapshots = Array.isArray(report.snapshots) ? report.snapshots : [];
+      const hasCompletedSnapshot = snapshots.some((item) => ["completed", "succeeded", "success"].includes(String(item?.status || "").toLowerCase()));
+      if (report.reportName !== "antigravity-worker-direct-smoke") semanticFailures.push("antigravity_worker_direct_smoke_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("antigravity_worker_direct_smoke_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("antigravity_worker_direct_smoke_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("antigravity_worker_direct_smoke_behavior_not_covered");
+      if (report.coverageKind !== "direct-antigravity-worker-same-account-real-traffic") semanticFailures.push("antigravity_worker_direct_smoke_coverage_kind");
+      if (report.accountLaneRole !== "same-account-antigravity-worker-proof") semanticFailures.push("antigravity_worker_direct_smoke_account_lane_role");
+      if (report.separateAccountVerified !== false) semanticFailures.push("antigravity_worker_direct_smoke_separate_account_claim");
+      if (report.countsAsSecondAccountProof !== false) semanticFailures.push("antigravity_worker_direct_smoke_second_account_claim");
+      if (!String(report.jobId || "").trim()) semanticFailures.push("antigravity_worker_direct_smoke_job_id_missing");
+      if (!String(report.marker || "").trim()) semanticFailures.push("antigravity_worker_direct_smoke_marker_missing");
+      if (report.terminalStatus !== "completed" && !hasCompletedSnapshot) semanticFailures.push("antigravity_worker_direct_smoke_terminal_status");
+      if (artifact.proofExists !== true) semanticFailures.push("antigravity_worker_direct_smoke_proof_missing");
+      if (artifact.proofTextMatches !== true) semanticFailures.push("antigravity_worker_direct_smoke_proof_marker_mismatch");
+      if (report.externalQuotaDecrementProven === true) semanticFailures.push("antigravity_worker_direct_smoke_external_quota_claim");
+    }
     if (definition.group === "no-traffic") {
       if (report.usedRealTraffic === true) semanticFailures.push("expected_no_real_traffic");
       if (report.behaviorCovered === false) semanticFailures.push("expected_behavior_covered");
@@ -2976,6 +2996,9 @@ function gateGuidance(gate) {
   if (gate?.id === "antigravityCliRealSmokeOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_antigravity_cli_real_smoke_required: Anti-Codex only verifies its model-text lane/profile; MCP Antigravity account lane is externally managed/not managed here; same-Windows-user profile/AppData isolation is insufficient; separate account proof requires a separate Windows user or official independent credential store plus explicit account-identity evidence. Run only with explicit user approval and no Antigravity Desktop/coworker dependency.";
   }
+  if (gate?.id === "antigravityWorkerDirectSmokeOptional" && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
+    return "optional_antigravity_worker_direct_smoke_required: direct same-account Antigravity worker proof is stale or missing; run only with explicit user approval because it consumes Antigravity quota and does not prove second-account isolation or external quota decrement.";
+  }
   if (actions.some((item) => item.id === "stabilitySoak") && failedReasons.some((reason) => reason === "stale_report" || reason === "missing_report" || reason === "ok_false" || reason === "semantic_failures")) {
     return "optional_stability_soak_required: optional soak evidence is stale; run only with explicit user approval because it uses the local gateway, real traffic, and a longer stability window.";
   }
@@ -3022,6 +3045,7 @@ const optionalEvidenceRefreshOrder = [
   ["realThirdPartyProviderOptional", "optional-real-provider", "node scripts/test-anticodex-real-third-party-provider.mjs --allow-real-traffic --protocol <openai-compatible|anthropic> --base-url <provider-url> --model <model> --api-key-env <ENV_VAR_WITH_API_KEY>", { requiresRealTraffic: true, highImpact: true }],
   ["providerAntigravityReturnOptional", "optional-antigravity-return", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-provider-antigravity-return.ps1 -AllowRealTraffic", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["antigravityCliRealSmokeOptional", "optional-antigravity-cli-real-smoke", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-cli-real-smoke.ps1 -AllowRealTraffic -WindowsUser <target-windows-user> -ProfileRoot <isolated-antigravity-cli-profile> -StrictWindowsAppDataIsolation -AccountIsolationBoundary <separate-windows-user|official-independent-credential-store> -AllowSeparateAccountProof -AntiCodexAccountId <anticodex-account-id-or-fingerprint> -McpAccountId <mcp-account-id-or-fingerprint> -SeparateAccountProofApprovalId <explicit-user-approval-id>", { requiresRealTraffic: true, highImpact: true }],
+  ["antigravityWorkerDirectSmokeOptional", "optional-antigravity-worker-direct-smoke", "node scripts\\test-anticodex-antigravity-worker-direct-smoke.mjs --allow-real-traffic --model flash --timeout-ms 180000", { requiresRealTraffic: true, highImpact: true }],
   ["stabilitySoak", "optional-stability-soak", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-stability-soak.ps1 -DurationSec 180", { requiresGatewayStart: true, requiresRealTraffic: true, highImpact: true }],
   ["coldRelaunch", "optional-cold-relaunch", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-cold-relaunch.ps1 -ConfirmRelaunch", { requiresGatewayStart: true, highImpact: true }],
 ];
@@ -5759,6 +5783,46 @@ if (args.has("--self-test")) {
     semanticFailures.antigravityCliRealSmokeFalseWithIdentityEvidence = assertSemanticFailures("antigravityCliRealSmokeOptional", "self-test failed: optional Antigravity CLI real-smoke report with separateAccountVerified=false but identity evidence present satisfied the gate", [
       "optional_antigravity_cli_real_smoke_identity_evidence_without_verification",
     ]);
+    writeFakeLatestReport("latest-antigravity-worker-direct-smoke.json", {
+      ok: true,
+      reportName: "antigravity-worker-direct-smoke",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "direct-antigravity-worker-same-account-real-traffic",
+      accountLaneRole: "same-account-antigravity-worker-proof",
+      separateAccountVerified: true,
+      countsAsSecondAccountProof: true,
+      jobId: "ag-self-test",
+      marker: "ANTIGRAVITY_DIRECT_WORKER_MARKER_self_test",
+      terminalStatus: "completed",
+      artifact: { proofExists: true, proofTextMatches: true },
+      externalQuotaDecrementProven: true,
+    });
+    semanticFailures.antigravityWorkerDirectSmokeBoundary = assertSemanticFailures("antigravityWorkerDirectSmokeOptional", "self-test failed: direct Antigravity worker smoke with second-account/quota claims satisfied the gate", [
+      "antigravity_worker_direct_smoke_separate_account_claim",
+      "antigravity_worker_direct_smoke_second_account_claim",
+      "antigravity_worker_direct_smoke_external_quota_claim",
+    ]);
+    writeFakeLatestReport("latest-antigravity-worker-direct-smoke.json", {
+      ok: true,
+      reportName: "antigravity-worker-direct-smoke",
+      requestedRealTraffic: true,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "direct-antigravity-worker-same-account-real-traffic",
+      accountLaneRole: "same-account-antigravity-worker-proof",
+      separateAccountVerified: false,
+      countsAsSecondAccountProof: false,
+      jobId: "ag-self-test",
+      marker: "ANTIGRAVITY_DIRECT_WORKER_MARKER_self_test",
+      terminalStatus: "completed",
+      artifact: { proofExists: true, proofTextMatches: true },
+    });
+    const antigravityWorkerDirectSmokeValidGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "antigravityWorkerDirectSmokeOptional"));
+    if (antigravityWorkerDirectSmokeValidGate.satisfied !== true) {
+      throw new Error("self-test failed: valid direct Antigravity worker smoke did not satisfy the gate");
+    }
     semanticFailures.mcpSkills = assertSemanticFailures("mcpSkills", "self-test failed: semantically invalid MCP/Skill report satisfied the gate", [
       "mcp_skills_missing_shared_mcp",
       "mcp_skills_extra_local_mcp",

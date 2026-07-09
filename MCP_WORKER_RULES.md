@@ -51,6 +51,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-09 - Restarted channel still closes MIMO and Antigravity worker reads
+
+- Task: after the user restarted Codex, verify the new channel worker namespace before dispatching more worker implementation tasks.
+- Result: read-only MIMO `mimo_get_job dsw_mr3wn5f0_kiniqh` and read-only Antigravity `antigravity_get_job ag-e519ae01-462b-4843-bbdc-fa0bf87e84b3` both returned `Transport closed` immediately. Generic `node_repl` returned `NODE_REPL_OK_20260709`.
+- Cause classification: current Codex worker namespace transport failure. This is not evidence that Anti-Codex runtime, direct worker stdio servers, local worker accounts, or the Antigravity direct worker proof are broken.
+- Rule change: do not dispatch implementation workers from the current Codex worker namespace until one read-only worker call returns normally in this channel. Continue no-traffic local validation and direct stdio worker proof paths when needed.
+
 ### 2026-07-09 - OpenCode direct smoke recovered after timeout and git-spawn hardening
 
 - Task: retest OpenCode direct `json` worker smoke after the user approved using real worker quota and after current-channel transport recovered.

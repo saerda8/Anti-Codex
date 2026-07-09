@@ -13340,6 +13340,7 @@ test("optional and special latest reports stay visible without becoming release-
 
   assert.deepEqual(optionalReports, [
     "latest-antigravity-cli-real-smoke.json",
+    "latest-antigravity-worker-direct-smoke.json",
     "latest-cold-relaunch.json",
     "latest-native-multi-tool-loop.json",
     "latest-native-tool-loop.json",
