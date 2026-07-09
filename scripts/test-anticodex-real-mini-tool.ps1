@@ -117,6 +117,8 @@ if (-not $lock.acquired) {
 }
 
 $cliResult = $null
+$first = $null
+$call = $null
 $second = $null
 $finalText = ""
 
@@ -267,7 +269,37 @@ console.log(JSON.stringify({ lines, words, chars: input.length, marker: "$marker
     $result | ConvertTo-Json -Depth 14 -Compress
     if ($failures.Count -gt 0) { exit 1 }
 } catch {
-    Write-Error ("Anti-Codex real mini tool verification failed: " + $_.Exception.Message)
+    $message = $_.Exception.Message
+    Add-Failure "real mini tool verification exception: $message"
+    $result = [pscustomobject]@{
+        ok = $false
+        reportName = "real-mini-tool"
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        behaviorCovered = $false
+        coverageKind = "real-traffic"
+        failures = $failures.ToArray()
+        model = $model
+        elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+        first_response_id = if ($first) { $first.id } else { $null }
+        call_id = if ($call) { $call.call_id } else { $null }
+        artifact = [pscustomobject]@{
+            directory = $tempDir
+            file = $artifactFile
+            exists = Test-Path -LiteralPath $artifactFile -PathType Leaf
+            ran = $null -ne $cliResult
+            markerMatched = if ($cliResult) { [string]$cliResult.marker -eq $marker } else { $false }
+        }
+        executor = [pscustomobject]@{
+            tool = "create_mini_tool"
+            realFileWrite = Test-Path -LiteralPath $artifactFile -PathType Leaf
+        }
+        final_text = $finalText
+        error = $message
+    }
+    Save-Report $result
+    $result | ConvertTo-Json -Depth 14 -Compress
+    Write-Error ("Anti-Codex real mini tool verification failed: " + $message)
     exit 1
 } finally {
     if ($tempDir -and (Test-Path -LiteralPath $tempDir)) {

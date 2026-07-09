@@ -2441,6 +2441,8 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(miniTool, /usedRealTraffic\s*=\s*\$true/);
   assert.match(miniTool, /behaviorCovered\s*=\s*\(\$failures\.Count -eq 0\)/);
   assert.match(miniTool, /coverageKind\s*=\s*"real-traffic"/);
+  assert.match(miniTool, /real mini tool verification exception: \$message/);
+  assert.match(miniTool, /Save-Report \$result[\s\S]*?Write-Error/);
   assert.match(realWork, /请调用 create_probe_file/);
   assert.match(realWork, /\\u4e00-\\u9fff/);
   assert.match(realWork, /reportName\s*=\s*"real-work"/);
