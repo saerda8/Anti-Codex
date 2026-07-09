@@ -2413,6 +2413,8 @@ function Test-CurrentChannelWorkerRecoverySummaryEvidence {
         if ([int]$evidence.repeatedFailureAudit.failedObservationCount -lt 3) { Add-Failure "current-channel-worker-recovery repeated failure count too low" }
         $historicalOkHiddenByCurrentFailure = $evidence.repeatedFailureAudit.namespaceWideRepeatedWorkerFailure -eq $true -and $evidence.repeatedFailureAudit.currentFailureHiddenByHistoricalOk -eq $true
         if ([int]$evidence.repeatedFailureAudit.okObservationCount -ne 0 -and -not $historicalOkHiddenByCurrentFailure) { Add-Failure "current-channel-worker-recovery repeated failure ok count mismatch" }
+        if ($evidence.repeatedFailureAudit.namespaceWideRepeatedWorkerFailure -ne $true) { Add-Failure "current-channel-worker-recovery namespace-wide repeated failure flag missing" }
+        if ($evidence.repeatedFailureAudit.currentFailureHiddenByHistoricalOk -ne $true) { Add-Failure "current-channel-worker-recovery current failure hidden-by-history flag missing" }
         if ($evidence.repeatedFailureAudit.repeatedCurrentChannelWorkerFailure -ne $true) { Add-Failure "current-channel-worker-recovery repeated failure flag missing" }
         if ($evidence.repeatedFailureAudit.sameChannelRetryRecommended -ne $false) { Add-Failure "current-channel-worker-recovery still recommends same-channel retry" }
         if ([string]$evidence.repeatedFailureAudit.recommendedAction -ne "stop_same_channel_worker_retries_and_use_fresh_channel_or_reload") { Add-Failure "current-channel-worker-recovery repeated failure action mismatch" }

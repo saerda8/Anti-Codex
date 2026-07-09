@@ -70,6 +70,59 @@ function asciiJson(value, spaces = 0) {
   });
 }
 
+function shortText(value, maxLength = 900) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}...`;
+}
+
+function compactManagerButtonRecord(record) {
+  const result = record?.result || {};
+  return {
+    ok: record?.ok === true,
+    action: result.action,
+    version: result.version,
+    lastAction: result.lastAction,
+    lastOk: result.lastOk,
+    lastPending: result.lastPending,
+    pendingCount: result.pendingCount,
+    queueLength: result.queueLength,
+    disabled: result.disabled,
+    closeHitAreaOk: result.closeHitAreaOk ?? result.initial?.closeHitAreaOk,
+    managerOpenedNewPage: record?.managerOpenedNewPage,
+    text: shortText(result.text),
+    lastSummary: shortText(result.lastSummary),
+    error: result.error || result.initial?.error || null,
+  };
+}
+
+function compactManagerButtonOutput(output) {
+  if (!compact) return output;
+  if (output?.results && typeof output.results === "object") {
+    const results = {};
+    for (const [name, record] of Object.entries(output.results)) {
+      results[name] = compactManagerButtonRecord(record);
+    }
+    return {
+      ok: output.ok,
+      port: output.port,
+      target: output.target ? { title: output.target.title, url: output.target.url } : null,
+      actions: output.actions,
+      results,
+      durationMs: output.durationMs,
+    };
+  }
+  return {
+    ok: output?.ok,
+    port: output?.port,
+    target: output?.target ? { title: output.target.title, url: output.target.url } : null,
+    result: compactManagerButtonRecord(output),
+    managerOpenedNewPage: output?.managerOpenedNewPage,
+    pageTargetCountBeforeManagerOpen: output?.pageTargetCountBeforeManagerOpen,
+    pageTargetCountAfterManagerOpen: output?.pageTargetCountAfterManagerOpen,
+  };
+}
+
 const RUNNING_TEXT = "\u6b63\u5728\u8fd0\u884c";
 const FAILURE_TEXT = "\u8fd0\u884c\u5931\u8d25";
 const REFRESHED_TEXT = "\u72b6\u6001\u5df2\u5237\u65b0";
@@ -86,6 +139,7 @@ const FINISHED_HINTS = [
   "\u5b8c\u6210",
   "\u8fd8\u6ca1\u6709",
   "\u9700\u8981\u5904\u7406",
+  "\u9700\u8981\u91cd\u8f7d",
 ];
 
 function isRunningText(text) {
@@ -97,7 +151,7 @@ function isFailureText(text) {
 }
 
 function isActionFailureText(actionName, text) {
-  if (actionName === "viewLatestReports") {
+  if (actionName === "viewLatestReports" || actionName === "workerTransportStatus") {
     return text.includes(FAILURE_TEXT) || /timed out|bridge failed|Action bridge failed/i.test(text);
   }
   return isFailureText(text);
@@ -156,6 +210,7 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "sourcePreflight") return text.includes("\u6e90\u7801\u9884\u68c0") && text.includes("\u8017\u65f6");
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
+  if (actionName === "workerTransportStatus") return text.includes("Worker \u901a\u9053\u72b6\u6001") && text.includes("\u5f53\u524d\u9891\u9053") && text.includes("\u4e0b\u4e00\u6b65");
   if (actionName === "secondAccountLoginStatus") return text.includes("\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5") && (text.includes("\u901a\u8fc7") || text.includes("\u9700\u8981\u5904\u7406"));
   if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1") && text.includes("sourceSnapshot: files=");
   if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55"));
@@ -297,6 +352,18 @@ function managerSummaryFromActionPayload(actionName, payload) {
       result.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${operatorStepDisplayText(result.operatorNextStep)}` : "",
     ].filter(Boolean).join("\n");
   }
+  if (actionName === "workerTransportStatus") {
+    const evidence = result.currentEvidence || {};
+    const triState = result.canDispatchCurrentChannelWorkers === true ? "true" : result.canDispatchCurrentChannelWorkers === false ? "false" : "unknown";
+    return [
+      `Worker \u901a\u9053\u72b6\u6001\uff1a${result.canDispatchCurrentChannelWorkers ? "\u53ef\u6d3e\u5de5" : "\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053"}`,
+      `\u5f53\u524d\u9891\u9053\uff1a${result.status || "unknown"} / \u53ef\u6d3e\u5de5=${triState}`,
+      `\u76f4\u63a5 worker \u68c0\u67e5\uff1aserver ${evidence.directProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"} / status ${evidence.directStatusProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"}`,
+      Array.isArray(evidence.workerTransportFailedTools) && evidence.workerTransportFailedTools.length ? `\u5931\u8d25\u5de5\u5177\uff1a${evidence.workerTransportFailedTools.slice(0, 6).join(", ")}` : "",
+      Array.isArray(evidence.missingExpectedWorkerPrefixes) && evidence.missingExpectedWorkerPrefixes.length ? `\u672a\u66b4\u9732 worker\uff1a${evidence.missingExpectedWorkerPrefixes.slice(0, 6).join(", ")}` : "",
+      result.operatorActionCard?.userVisibleNextStep ? `\u4e0b\u4e00\u6b65\uff1a${result.operatorActionCard.userVisibleNextStep}` : "",
+    ].filter(Boolean).join("\n");
+  }
   if (actionName === "pluginCapabilities") {
     const capabilities = result.capabilities || {};
     const note = capabilities.appToolsNote ? `\n\u8bf4\u660e\uff1a${capabilities.appToolsNote}` : "";
@@ -380,6 +447,10 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u9700\u5904\u7406\n  \u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406"), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a2 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7\n  \u6587\u4ef6\uff1aC:\\tmp\\latest-missing-history.json"), true);
   assert.equal(isActionFailureText("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u9a8c\u6536\uff1a\u9700\u8981\u5904\u7406"), false);
+  const workerTransportNeedsReload = "Worker \u901a\u9053\u72b6\u6001\uff1a\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053\n\u5f53\u524d\u9891\u9053\uff1areload_required / \u53ef\u6d3e\u5de5=false\n\u4e0b\u4e00\u6b65\uff1aStop retrying worker tools in this channel; reload Codex or use a fresh channel.";
+  assert.equal(hasActionSpecificResult("workerTransportStatus", workerTransportNeedsReload), true);
+  assert.equal(isActionFailureText("workerTransportStatus", workerTransportNeedsReload), false);
+  assert.equal(hasActionSpecificResult("workerTransportStatus", managerSummaryFromActionPayload("workerTransportStatus", { ok: true, result: { status: "reload_required", canDispatchCurrentChannelWorkers: false, currentEvidence: { directProbeOk: true, directStatusProbeOk: true }, operatorActionCard: { userVisibleNextStep: "Stop retrying worker tools in this channel; reload Codex or use a fresh channel." } } })), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6e90\u7801\u9884\u68c0", exists: true, ok: true, sourcePreflightEvidence: { publicDocumentationOk: true } }] } })), true);
   assert.ok(managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6a21\u578b\u53ef\u7528\u6027", exists: true, ok: true, modelRoutingEvidence: { requestAvailableModels: ["gemini-3.5-flash-low"], availabilityUnavailableModels: ["claude-sonnet-4-6", "gpt-oss-120b-medium"] } }] } }).includes("claude-sonnet-4-6"));
   const deferredLatestReportsSummary = managerSummaryFromActionPayload("viewLatestReports", {
@@ -1090,7 +1161,7 @@ if (actions.length > 1) {
   const output = await runManagerActionBatch(actions);
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
-  console.log(asciiJson(output, compact ? 0 : 2));
+  console.log(asciiJson(compactManagerButtonOutput(output), compact ? 0 : 2));
   if (!output.ok) process.exit(1);
   process.exit(0);
 }
@@ -1339,6 +1410,7 @@ if (simulatePendingReopen) {
 }
 
 let latest = initial;
+let actionSnapshot = null;
 const deadline = Date.now() + timeoutMs;
 let drainedPayloads = await drainManagerActionQueue();
 const initialUiOnlyFinished = uiOnlyMode
@@ -1377,7 +1449,13 @@ while (initial.ok && Date.now() < deadline) {
       text: result?.textContent || lastActionResult?.managerSummary || "",
     };
   })()`, remainingActionTimeoutMs());
-  const latestText = latest.text || "";
+  const latestText = latest.lastSummary || latest.text || "";
+  if (latest.lastAction === action && hasActionSpecificResult(action, latestText)) {
+    actionSnapshot = {
+      ...latest,
+      text: latestText,
+    };
+  }
   const actionSettled = latest.lastAction === action
     && Number(latest.pendingCount || 0) === 0
     && Number(latest.queueLength || 0) === 0;
@@ -1431,7 +1509,16 @@ await evaluate(`(() => {
 
 const drainedPayload = drainedPayloads[action];
 const drainedText = drainedPayload ? managerSummaryFromActionPayload(action, drainedPayload) : "";
-const text = drainedPayload?.ok !== false && drainedText ? drainedText : (latest.text || "");
+if (actionSnapshot && latest.lastAction !== action) {
+  latest = {
+    ...latest,
+    ...actionSnapshot,
+  };
+}
+const fallbackActionText = actionSnapshot?.text || latest.lastSummary || latest.text || "";
+const text = drainedPayload?.ok !== false && drainedText && hasActionSpecificResult(action, drainedText)
+  ? drainedText
+  : fallbackActionText;
 const uiOnlyFinished = uiOnlyMode
   && !latest.disabled
   && !isRunningText(text)
@@ -1441,6 +1528,8 @@ const uiOnlyFinished = uiOnlyMode
 const actionStarted = Boolean(initial.ok)
   && ((uiOnlyMode && initialUiOnlyFinished)
     || uiOnlyFinished
+    || latest.lastAction === action
+    || Boolean(drainedPayload)
     || initial.busyAttr === "true"
     || initial.runningMarker === action
     || initial.disabledCount >= initial.actionCount
@@ -1481,5 +1570,5 @@ const output = {
   pageTargetCountBeforeManagerOpen: pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length,
   pageTargetCountAfterManagerOpen: pageTargetsAfterManagerOpen.filter((item) => item?.type === "page").length,
 };
-console.log(asciiJson(output, compact ? 0 : 2));
+console.log(asciiJson(compactManagerButtonOutput(output), compact ? 0 : 2));
 if (!ok) process.exit(1);
