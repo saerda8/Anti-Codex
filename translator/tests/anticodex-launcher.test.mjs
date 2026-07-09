@@ -14661,6 +14661,10 @@ test("provider history can opt in to one real Antigravity return turn", () => {
   assert.match(wrapper, /requestedRealTraffic = \$RequestedRealTraffic/);
   assert.match(wrapper, /\$failures = if \(\$Ok\) \{ \[string\[\]\]@\(\) \} else \{ \[string\[\]\]@\(\$Reason\) \}/);
   assert.match(wrapper, /failures = @\(\$failures\)/);
+  assert.match(wrapper, /function Test-LatestReportWrittenAfterStart/);
+  assert.match(wrapper, /function Write-FailureReport/);
+  assert.match(wrapper, /provider-to-Antigravity verifier exited with code \$exitCode before writing a fresh report/);
+  assert.match(wrapper, /provider-to-Antigravity wrapper exception: \$message/);
   assert.match(wrapper, /Write-SkipReport "another Anti-Codex real Antigravity verification is already running" \$true \$true \$false/);
   assert.match(wrapper, /behaviorCovered\s*=\s*\$false/);
   assert.match(wrapper, /Enter-AntiCodexRealTrafficLock/);
