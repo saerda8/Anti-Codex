@@ -51,6 +51,13 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-09 - OpenCode direct smoke recovered after timeout and git-spawn hardening
+
+- Task: retest OpenCode direct `json` worker smoke after the user approved using real worker quota and after current-channel transport recovered.
+- Result: job `ocw_mrcxw29q_0r3jph` completed in 184318 ms with a valid marker JSON artifact. The terminal result still reported `caller_timeout_after_valid_changes`, but host workspace verification passed, so this is valid slow-worker evidence rather than `Transport closed`.
+- Cause classification: OpenCode can be slow enough that SDK initialize/start/wait calls need the full worker timeout budget. The worker source also needed Windows hardening so executable discovery does not accept directories when preparing `git` on PATH.
+- Rule change: pass the expanded timeout into `client.connect` and do not cap RPC timeout below the worker timeout. For OpenCode on Windows, executable discovery must confirm `stat.isFile()` before returning a PATH candidate.
+
 ### 2026-07-09 - OpenCode complex-project no-output failure after current-channel recovery
 
 - Task: refresh the direct regular-worker `complex-project` smoke after Xiaoqiang was sealed.
