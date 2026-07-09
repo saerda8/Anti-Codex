@@ -1240,22 +1240,33 @@ function Test-GoalReadinessSummaryEvidence {
         if ($goalFreshChannelActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected fresh-channel actions" }
         $goalUserPresenceActions = @(As-FlatArray $goalOperatorActionCard.userPresenceRequiredActions | ForEach-Object { [string]$_ })
         if ($goalUserPresenceActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected user-presence actions" }
-        if ([string]$goalOperatorActionCard.workerStatus -ne "fresh_probe_required") { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
+        if (@("fresh_probe_required", "reload_required") -notcontains [string]$goalOperatorActionCard.workerStatus) { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
         if ($goalOperatorActionCard.workerCanDispatchCurrentChannel -ne $false) { Add-Failure "goal-readiness summary operator action card allows worker dispatch" }
+        if ($null -eq $goalOperatorActionCard.staleOrUnrefreshedAppServerLikely) { Add-Failure "goal-readiness summary missing app-server freshness evidence" }
+        if ($goalOperatorActionCard.staleOrUnrefreshedAppServerLikely -ne $evidence.staleOrUnrefreshedAppServerLikely) { Add-Failure "goal-readiness summary app-server freshness evidence mismatch" }
+        if ($goalOperatorActionCard.staleOrUnrefreshedAppServerLikely -eq $true -and -not $goalOperatorActionCard.activeAppServerPid) { Add-Failure "goal-readiness summary missing active app-server pid" }
         if ([string]$goalOperatorActionCard.secondAccountStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary operator action card second-account status mismatch" }
         if ($goalOperatorActionCard.secondAccountCanAskUserToLoginNow -ne $false) { Add-Failure "goal-readiness summary operator action card allows second-account login too early" }
         $goalMissingRequirements = @(As-FlatArray $goalOperatorActionCard.missingRequirements | ForEach-Object { [string]$_ })
         if ($goalMissingRequirements.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected missing requirements" }
         $goalNextActions = @(As-FlatArray $goalOperatorActionCard.nextOperatorActions | ForEach-Object { [string]$_ })
-        if ($goalNextActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected next actions" }
+        if ($goalNextActions.Count -gt 1) { Add-Failure "goal-readiness summary operator action card has unexpected next actions" }
+        if ($evidence.staleOrUnrefreshedAppServerLikely -eq $true -and $goalNextActions -notcontains "fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe") { Add-Failure "goal-readiness summary operator action card missing app-server refresh action" }
         if (-not ([string]$goalOperatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-goal-readiness.mjs")) { Add-Failure "goal-readiness summary operator action card no-traffic command missing" }
         if (-not ([string]$goalOperatorActionCard.compactStatusCommand).Contains("--compact-status")) { Add-Failure "goal-readiness summary operator action card compact status command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "goal-readiness summary operator action card second-account command missing" }
         if (-not ([string]$goalOperatorActionCard.secondAccountPostLoginProofCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "goal-readiness summary operator action card second-account post-login proof command missing" }
     }
     if ($evidence.currentChannelWorkerCanDispatch -ne $false) { Add-Failure "goal-readiness summary compact worker dispatch field is not blocked" }
-    if ([string]$evidence.currentChannelWorkerTransportStatus -ne "fresh_probe_required") { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
+    if (@("fresh_probe_required", "reload_required") -notcontains [string]$evidence.currentChannelWorkerTransportStatus) { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
     if ($evidence.currentChannelWorkerRecoveryRequired -ne $true) { Add-Failure "goal-readiness summary compact worker recovery field missing" }
+    if ($evidence.codexAppServerFreshnessReportPresent -ne $true) { Add-Failure "goal-readiness summary missing app-server freshness report" }
+    if ($null -eq $evidence.staleOrUnrefreshedAppServerLikely) { Add-Failure "goal-readiness summary missing app-server freshness evidence" }
+    if ($evidence.staleOrUnrefreshedAppServerLikely -eq $true) {
+        if ($evidence.fullGoalRequiresFreshCodexAppServer -ne $true) { Add-Failure "goal-readiness summary missing full-goal app-server refresh requirement" }
+        if (-not $evidence.activeDesktopAppServerPid) { Add-Failure "goal-readiness summary missing active app-server pid" }
+        if (-not ([string]$evidence.staleAppServerOperatorAction).Contains("Codex")) { Add-Failure "goal-readiness summary missing stale app-server operator action" }
+    }
     if (-not [string]$evidence.secondAccountTargetWindowsUser) { Add-Failure "goal-readiness summary compact second-account target user missing" }
     if ($evidence.secondAccountTargetUserExists -ne $false) { Add-Failure "goal-readiness summary compact second-account target existence mismatch" }
     if ($evidence.secondAccountOperatorStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary compact second-account operator status mismatch" }
@@ -1315,7 +1326,7 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.workerTransportRecoveryCanDispatch -ne $false) { Add-Failure "goal-readiness summary unexpectedly allows current-channel worker dispatch" }
     if ($evidence.workerTransportRecoveryRequiresCodexMcpReload -ne $true) { Add-Failure "goal-readiness summary missing worker transport reload requirement" }
     if ($evidence.workerTransportRecoveryRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-readiness summary missing fresh read-only worker probe requirement" }
-    if ([string]$evidence.workerTransportRecoveryBlockingReason -ne "current_channel_worker_transport_probe_stale") { Add-Failure "goal-readiness summary worker transport recovery blocker mismatch" }
+    if (@("current_channel_worker_transport_probe_stale", "current_channel_worker_transport_not_recovered") -notcontains [string]$evidence.workerTransportRecoveryBlockingReason) { Add-Failure "goal-readiness summary worker transport recovery blocker mismatch" }
     if (-not ([string]$evidence.workerTransportRecoverySafeToDispatchRule).Contains("read-only worker status call succeeds")) { Add-Failure "goal-readiness summary worker transport dispatch rule missing" }
     if ([string]$evidence.workerTransportRecoveryCurrentChannelWorkerStatus -ne "failed") { Add-Failure "goal-readiness summary worker transport status mismatch" }
     if ([int]$evidence.workerTransportRecoveryCurrentChannelWorkerObservationCount -lt 3) { Add-Failure "goal-readiness summary worker transport observation count too low" }

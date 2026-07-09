@@ -3167,6 +3167,11 @@ function latestManagerReportItem(label, fileName, options = {}) {
                 releaseReady: report.goalOperatorActionCard.releaseReady === true,
                 workerStatus: shortSafeText(report.goalOperatorActionCard.workerStatus || "", ""),
                 workerCanDispatchCurrentChannel: report.goalOperatorActionCard.workerCanDispatchCurrentChannel === true,
+                staleOrUnrefreshedAppServerLikely: report.goalOperatorActionCard.staleOrUnrefreshedAppServerLikely === true,
+                appServerFreshnessOk: report.goalOperatorActionCard.appServerFreshnessOk === true,
+                activeAppServerPid: Number.isFinite(Number(report.goalOperatorActionCard.activeAppServerPid)) ? Number(report.goalOperatorActionCard.activeAppServerPid) : null,
+                activeAppServerParentPid: Number.isFinite(Number(report.goalOperatorActionCard.activeAppServerParentPid)) ? Number(report.goalOperatorActionCard.activeAppServerParentPid) : null,
+                activeAppServerCreationDateUtc: shortSafeText(report.goalOperatorActionCard.activeAppServerCreationDateUtc || "", ""),
                 secondAccountStatus: shortSafeText(report.goalOperatorActionCard.secondAccountStatus || "", ""),
                 secondAccountCanAskUserToLoginNow: report.goalOperatorActionCard.secondAccountCanAskUserToLoginNow === true,
                 missingRequirements: Array.isArray(report.goalOperatorActionCard.missingRequirements) ? report.goalOperatorActionCard.missingRequirements.map((item) => shortSafeText(item || "", "")).filter(Boolean) : [],
@@ -4911,6 +4916,9 @@ function latestReportsSummary(result){
     if(item.goalReadinessEvidence?.goalOperatorActionCard){
       const card=item.goalReadinessEvidence.goalOperatorActionCard;
       lines.push("  goalOperatorActionCard: status="+(card.status||"unknown")+" / canClaim="+(card.canClaimFullGoalNow?"true":"false")+" / release="+(card.releaseReady?"true":"false")+" / worker="+(card.workerStatus||"unknown")+" / secondAccount="+(card.secondAccountStatus||"unknown"));
+      if(card.staleOrUnrefreshedAppServerLikely===true||card.activeAppServerPid){
+        lines.push("  goalAppServer: stale="+(card.staleOrUnrefreshedAppServerLikely?"true":"false")+" / pid="+(card.activeAppServerPid??"unknown")+" / parent="+(card.activeAppServerParentPid??"unknown"));
+      }
       lines.push("  goalOperatorActionCard missing: "+(Array.isArray(card.missingRequirements)&&card.missingRequirements.length?card.missingRequirements.join(", "):"none"));
       lines.push("  goalOperatorActionCard next: "+(Array.isArray(card.nextOperatorActions)&&card.nextOperatorActions.length?card.nextOperatorActions.join(" -> "):card.userVisibleNextStep||"unknown"));
       if(card.workerRecoveryStatusCommand) lines.push("  goalOperatorActionCard worker status: "+card.workerRecoveryStatusCommand);

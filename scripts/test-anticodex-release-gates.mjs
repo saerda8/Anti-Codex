@@ -1424,7 +1424,11 @@ function summarizeGate(definition) {
         const cardMissingRequirements = Array.isArray(goalOperatorActionCard.missingRequirements) ? goalOperatorActionCard.missingRequirements.map(String) : [];
         if (cardMissingRequirements.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_missing_requirement");
         const cardNextActions = Array.isArray(goalOperatorActionCard.nextOperatorActions) ? goalOperatorActionCard.nextOperatorActions.map(String) : [];
-        if (cardNextActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_next_actions");
+        const allowedFullGoalAppServerAction = report.fullGoalRequiresFreshCodexAppServer === true
+          && goalOperatorActionCard.staleOrUnrefreshedAppServerLikely === true
+          && cardNextActions.length === 1
+          && cardNextActions[0] === "fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe";
+        if (cardNextActions.length !== 0 && !allowedFullGoalAppServerAction) semanticFailures.push("goal_readiness_operator_action_card_next_actions");
       if (!String(goalOperatorActionCard.noTrafficStatusCommand || "").includes("test-anticodex-goal-readiness.mjs")) semanticFailures.push("goal_readiness_operator_action_card_status_command");
       if (!String(goalOperatorActionCard.compactStatusCommand || "").includes("--compact-status")) semanticFailures.push("goal_readiness_operator_action_card_compact_status_command");
       if (!String(goalOperatorActionCard.secondAccountStatusCommand || "").includes("test-anticodex-second-account-readiness-summary.ps1")) semanticFailures.push("goal_readiness_operator_action_card_second_account_command");

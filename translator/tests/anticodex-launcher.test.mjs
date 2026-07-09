@@ -13588,6 +13588,10 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /current-channel-worker-recovery summary missing direct status probe acceptance criterion/);
   assert.match(diagnostics, /current-channel-worker-transport summary missing read-only pre-dispatch probe requirement/);
   assert.match(diagnostics, /goal-readiness summary missing worker transport reload requirement/);
+  assert.match(goalReadiness, /latest-codex-appserver-freshness\.json/);
+  assert.match(goalReadiness, /staleOrUnrefreshedAppServerLikely/);
+  assert.match(goalReadiness, /fullGoalRequiresFreshCodexAppServer/);
+  assert.match(diagnostics, /goal-readiness summary missing app-server freshness evidence/);
   assert.match(diagnostics, /goal-readiness summary operator action card missing/);
   assert.match(diagnostics, /goal-readiness summary worker transport observation count too low/);
   assert.match(diagnostics, /Assert-DistinctWorkerTransportFailures -Label "goal-readiness summary worker transport"/);

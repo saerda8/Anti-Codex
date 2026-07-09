@@ -99,6 +99,7 @@ function compactGoalReadinessStatus(payload) {
     nextRequiredUserAction: typeof payload?.nextRequiredUserAction === "string" ? payload.nextRequiredUserAction : "",
     nextFullGoalActions: Array.isArray(payload?.nextFullGoalActions) ? payload.nextFullGoalActions : [],
     fullGoalRequiresFreshCodexChannel: payload?.fullGoalRequiresFreshCodexChannel === true,
+    fullGoalRequiresFreshCodexAppServer: payload?.fullGoalRequiresFreshCodexAppServer === true,
     fullGoalRequiresUserPresence: payload?.fullGoalRequiresUserPresence === true,
     canMakeUnattendedProgress: operatorCard.canMakeUnattendedProgress === true,
   };
@@ -123,6 +124,7 @@ const workerMcpProjectSmokeReport = readReport("latest-worker-mcp-project-smoke.
 const workerMcpComplexProjectSmokeReport = readReport("latest-worker-mcp-complex-project-smoke.json");
 const currentChannelWorkerTransportReport = readReport("latest-current-channel-worker-transport.json");
 const currentChannelWorkerRecoveryReport = readReport("latest-current-channel-worker-recovery.json");
+const codexAppServerFreshnessReport = readReport("latest-codex-appserver-freshness.json");
 
 const sync = syncReadiness.report || {};
 const clientSyncContract = sync.clientSyncContract || {};
@@ -152,6 +154,7 @@ const workerServerProbe = workerMcpServerProbeReport.report || {};
 const workerStatusProbe = workerMcpStatusProbeReport.report || {};
 const currentChannelWorkerTransport = currentChannelWorkerTransportReport.report || {};
 const currentChannelWorkerRecovery = currentChannelWorkerRecoveryReport.report || {};
+const codexAppServerFreshness = codexAppServerFreshnessReport.report || {};
 const recommendedReadOnlyProbes = Array.isArray(currentChannelWorkerRecovery.recommendedReadOnlyProbes)
   ? currentChannelWorkerRecovery.recommendedReadOnlyProbes.map((item) => ({
     worker: String(item?.worker || ""),
@@ -338,6 +341,15 @@ const workerMcp = {
   currentChannelReadOnlyProbeRequiredBeforeDispatch: currentChannelWorkerTransport.readOnlyProbeRequiredBeforeDispatch === true,
   currentChannelOperatorRecoveryAction: String(currentChannelWorkerTransport.operatorRecoveryAction || ""),
   currentChannelPostReloadVerification: String(currentChannelWorkerTransport.postReloadVerification || ""),
+  codexAppServerFreshnessReportPresent: codexAppServerFreshnessReport.present,
+  codexAppServerFreshnessReportOk: codexAppServerFreshness.ok === true,
+  codexAppServerFreshnessOk: codexAppServerFreshness.appServerFreshnessOk === true,
+  staleOrUnrefreshedAppServerLikely: codexAppServerFreshness.staleOrUnrefreshedAppServerLikely === true,
+  activeAppServerOlderThanThreshold: codexAppServerFreshness.activeAppServerOlderThanThreshold === true,
+  activeDesktopAppServerPid: Number(codexAppServerFreshness.activeDesktopAppServer?.pid || 0) || null,
+  activeDesktopAppServerParentPid: Number(codexAppServerFreshness.activeDesktopAppServer?.parentPid || 0) || null,
+  activeDesktopAppServerCreationDateUtc: String(codexAppServerFreshness.activeDesktopAppServer?.creationDateUtc || ""),
+  staleAppServerOperatorAction: String(codexAppServerFreshness.operatorAction || ""),
   operatorRecoveryAction: String(workerServerProbe.operatorRecoveryAction || ""),
   postReloadVerification: String(workerServerProbe.postReloadVerification || ""),
   taskSmokeReportPresent: workerMcpTaskSmokeReport.present,
@@ -1047,6 +1059,7 @@ if (workerMcp.complexProjectSmokeFailedWorkers.length > 0) blockers.push("worker
 if (!workerMcp.currentChannelWorkerTransportFresh) blockers.push("current_channel_worker_transport_probe_stale");
 if (!currentChannelWorkerCanDispatch) blockers.push("current_channel_worker_transport_not_recovered");
 if (workerMcp.currentChannelLatestWorkerFailureIsCurrent) blockers.push("current_channel_worker_latest_tool_failed");
+if (workerMcp.staleOrUnrefreshedAppServerLikely) blockers.push("codex_appserver_stale_or_unrefreshed");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
@@ -1155,10 +1168,13 @@ const fullObjectiveRequirementAudit = [
       `project smoke passed workers: ${workerMcp.projectSmokePassedWorkerCount}`,
       `complex project smoke passed workers: ${workerMcp.complexProjectSmokePassedWorkerCount}`,
       `current-channel dispatch usable: ${workerMcp.currentChannelWorkerDispatchUsable}`,
+      `stale/unrefreshed app-server likely: ${workerMcp.staleOrUnrefreshedAppServerLikely}`,
+      `active app-server pid: ${workerMcp.activeDesktopAppServerPid || ""}`,
     ],
     [
       ...(!proven.workerMcp ? ["worker MCP inventory/probe evidence incomplete"] : []),
       ...(!currentChannelWorkerCanDispatch ? ["current Codex channel worker transport has no successful read-only worker call"] : []),
+      ...(workerMcp.staleOrUnrefreshedAppServerLikely ? ["Codex desktop app-server likely did not refresh; fully exit Codex and verify the app-server pid changes before another worker dispatch"] : []),
     ],
   ),
   objectiveRequirement(
@@ -1224,8 +1240,10 @@ const fullObjectiveRequirementSummary = summarizeRequirementAudit(
 );
 const fullGoalMissingRequirementIds = fullObjectiveRequirementSummary.incompleteRequirementIds;
 const fullGoalRequiresFreshCodexChannel = fullGoalMissingRequirementIds.includes("worker_mcp_multiuse") && currentChannelWorkerCanDispatch !== true;
+const fullGoalRequiresFreshCodexAppServer = fullGoalRequiresFreshCodexChannel && workerMcp.staleOrUnrefreshedAppServerLikely === true;
 const fullGoalRequiresUserPresence = fullGoalMissingRequirementIds.includes("separate_antigravity_accounts") && antigravityAccountIsolation.releaseAcceptableAccountProof !== true;
 const nextFullGoalActions = [
+  ...(fullGoalRequiresFreshCodexAppServer ? ["fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe"] : []),
   ...(fullGoalRequiresFreshCodexChannel ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
   ...(fullGoalRequiresUserPresence ? ["create_or_verify_target_windows_user_then_rerun_second_account_proof"] : []),
 ];
@@ -1268,6 +1286,7 @@ const userPresenceRequiredActions = [
 const deferredBlockerPrefixes = [
   "worker_mcp_",
   "current_channel_worker_",
+  "codex_appserver_",
   "second_account_",
   "second_antigravity_account_",
 ];
@@ -1286,10 +1305,16 @@ const goalOperatorActionCard = {
   userPresenceRequiredActions,
   workerStatus: currentChannelWorkerTransportStatus,
   workerCanDispatchCurrentChannel: currentChannelWorkerCanDispatch,
+  staleOrUnrefreshedAppServerLikely: workerMcp.staleOrUnrefreshedAppServerLikely,
+  appServerFreshnessOk: workerMcp.codexAppServerFreshnessOk,
+  activeAppServerPid: workerMcp.activeDesktopAppServerPid,
+  activeAppServerParentPid: workerMcp.activeDesktopAppServerParentPid,
+  activeAppServerCreationDateUtc: workerMcp.activeDesktopAppServerCreationDateUtc,
   secondAccountStatus: secondAccountOperatorStatus,
   secondAccountCanAskUserToLoginNow: secondAccountReadinessSummary.canProceedToInteractiveLogin,
   missingRequirements: goalComplete ? [] : blockers.filter((blocker) => !deferredBlockerPrefixes.some((prefix) => String(blocker).startsWith(prefix))),
   nextOperatorActions: [
+    ...(fullGoalRequiresFreshCodexAppServer ? ["fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe"] : []),
     ...freshChannelRequiredActions,
     ...userPresenceRequiredActions,
   ],
@@ -1398,6 +1423,7 @@ const payload = {
   nextRequiredUserAction: goalComplete ? "none_current_single_account_goal_complete" : currentBlockers[0] || "refresh_current_single_account_goal_readiness",
   nextFullGoalActions,
   fullGoalRequiresFreshCodexChannel,
+  fullGoalRequiresFreshCodexAppServer,
   fullGoalRequiresUserPresence,
   elapsedMs: Date.now() - startedAt,
 };

@@ -482,6 +482,9 @@ function latestReportsSummary(result) {
     if (item.goalReadinessEvidence?.goalOperatorActionCard) {
       const card = item.goalReadinessEvidence.goalOperatorActionCard;
       lines.push(`  goalOperatorActionCard: status=${card.status || "unknown"} / canClaim=${card.canClaimFullGoalNow ? "true" : "false"} / release=${card.releaseReady ? "true" : "false"} / worker=${card.workerStatus || "unknown"} / secondAccount=${card.secondAccountStatus || "unknown"}`);
+      if (card.staleOrUnrefreshedAppServerLikely === true || card.activeAppServerPid) {
+        lines.push(`  goalAppServer: stale=${card.staleOrUnrefreshedAppServerLikely ? "true" : "false"} / pid=${card.activeAppServerPid ?? "unknown"} / parent=${card.activeAppServerParentPid ?? "unknown"}`);
+      }
       lines.push(`  goalOperatorActionCard missing: ${Array.isArray(card.missingRequirements) && card.missingRequirements.length ? card.missingRequirements.join(", ") : "none"}`);
       lines.push(`  goalOperatorActionCard next: ${Array.isArray(card.nextOperatorActions) && card.nextOperatorActions.length ? card.nextOperatorActions.join(" -> ") : card.userVisibleNextStep || "unknown"}`);
       if (card.compactStatusCommand) lines.push(`  goalOperatorActionCard statusCommand: ${card.compactStatusCommand}`);
