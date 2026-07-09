@@ -13472,6 +13472,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(workerRecovery, /inputWorkerObservationCount/);
   assert.match(workerRecovery, /currentWorkerObservations/);
   assert.match(workerRecovery, /workerObservations\.slice\(0, inputWorkerObservationCount\)/);
+  assert.match(workerRecovery, /latest-antigravity-worker-direct-smoke\.json/);
+  assert.match(workerRecovery, /recommendedCurrentFailedWorkerReadOnlyProbes/);
+  assert.match(workerRecovery, /antigravity_get_job/);
   assert.match(workerRecovery, /operatorActionCard/);
   assert.match(workerRecovery, /safeToStartImplementationWorker/);
   assert.doesNotMatch(workerRecovery, /start_implementation/);

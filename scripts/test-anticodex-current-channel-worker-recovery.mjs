@@ -110,14 +110,45 @@ function recommendedReadOnlyProbesFromXiaoqiangLedger(report) {
     });
 }
 
+function recommendedReadOnlyProbesFromCurrentFailures(failedTools, antigravityWorkerDirectReport) {
+  const probes = [];
+  if (failedTools.includes("antigravity_get_job")
+    && antigravityWorkerDirectReport?.ok === true
+    && antigravityWorkerDirectReport.reportName === "antigravity-worker-direct-smoke"
+    && antigravityWorkerDirectReport.jobId
+  ) {
+    probes.push({
+      worker: "antigravity-code-worker",
+      statusTool: "antigravity_get_job",
+      jobId: String(antigravityWorkerDirectReport.jobId || ""),
+      expectedStatus: "completed",
+      sourceReport: "latest-antigravity-worker-direct-smoke.json",
+      recordCommand: "node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool antigravity_get_job --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok",
+    });
+  }
+  return probes;
+}
+
+function dedupeReadOnlyProbes(probes) {
+  const seen = new Set();
+  return probes.filter((item) => {
+    const key = [item.statusTool, item.exposedWorkerTool || "", item.jobId || ""].join("\0");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const transportFile = readReport("latest-current-channel-worker-transport.json");
 const probeFile = readReport("latest-worker-mcp-server-probe.json");
 const statusProbeFile = readReport("latest-worker-mcp-status-probe.json");
 const xiaoqiangLedgerFile = readReport("latest-xiaoqiang-usage-ledger.json");
+const antigravityWorkerDirectFile = readReport("latest-antigravity-worker-direct-smoke.json");
 const transport = transportFile.report || {};
 const directProbe = probeFile.report || {};
 const statusProbe = statusProbeFile.report || {};
 const xiaoqiangLedger = xiaoqiangLedgerFile.report || {};
+const antigravityWorkerDirect = antigravityWorkerDirectFile.report || {};
 const exposedWorkerTools = asStringArray(transport.exposedWorkerTools);
 const exposedWorkerToolSet = new Set(exposedWorkerTools);
 const checkedAtMs = Date.parse(String(transport.checkedAt || ""));
@@ -167,10 +198,21 @@ const directStatusProbeOk = statusProbe.ok === true
   && statusProbe.antigravitySkippedForAccountIsolation === true
   && typeof statusProbe.currentChannelCaveat === "string"
   && statusProbe.currentChannelCaveat.trim().length > 0;
-const recommendedReadOnlyProbes = [
+const statusProbeRecommendedReadOnlyProbes = recommendedReadOnlyProbesFromStatusProbe(statusProbe);
+const currentFailedStatusReadOnlyProbes = statusProbeRecommendedReadOnlyProbes.filter((item) =>
+  currentFailedWorkerTools.includes(item.statusTool)
+  || currentFailedWorkerPrefixes.includes(String(item.statusTool || "").split("_")[0])
+);
+const currentFailedDirectReadOnlyProbes = recommendedReadOnlyProbesFromCurrentFailures(currentFailedWorkerTools, antigravityWorkerDirect);
+const recommendedCurrentFailedWorkerReadOnlyProbes = dedupeReadOnlyProbes([
+  ...currentFailedStatusReadOnlyProbes,
+  ...currentFailedDirectReadOnlyProbes,
+]);
+const recommendedReadOnlyProbes = dedupeReadOnlyProbes([
+  ...recommendedCurrentFailedWorkerReadOnlyProbes,
   ...(xiaoqiangConfigured ? recommendedReadOnlyProbesFromXiaoqiangLedger(xiaoqiangLedger) : []),
-  ...recommendedReadOnlyProbesFromStatusProbe(statusProbe),
-];
+  ...statusProbeRecommendedReadOnlyProbes,
+]);
 const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item) =>
   exposedWorkerToolSet.has(item.statusTool)
   || exposedWorkerToolSet.has(item.exposedWorkerTool)
@@ -303,6 +345,9 @@ const payload = {
     directStatusProbeSkippedWorkers: asStringArray(statusProbe.skippedWorkers),
     directStatusProbeAntigravitySkippedForAccountIsolation: statusProbe.antigravitySkippedForAccountIsolation === true,
     directStatusProbeCurrentChannelCaveatPresent: typeof statusProbe.currentChannelCaveat === "string" && statusProbe.currentChannelCaveat.trim().length > 0,
+    antigravityWorkerDirectReportPresent: antigravityWorkerDirectFile.present,
+    antigravityWorkerDirectReportParseable: antigravityWorkerDirectFile.parseable,
+    antigravityWorkerDirectJobId: String(antigravityWorkerDirect.jobId || ""),
     xiaoqiangLedgerReportPresent: xiaoqiangLedgerFile.present,
     xiaoqiangLedgerReportParseable: xiaoqiangLedgerFile.parseable,
     xiaoqiangLedgerOk: xiaoqiangLedger.ok === true,
@@ -319,6 +364,7 @@ const payload = {
     "canDispatchCurrentChannelWorkers must be true before starting implementation workers",
   ],
   recommendedReadOnlyProbes,
+  recommendedCurrentFailedWorkerReadOnlyProbes,
   exposedRecommendedReadOnlyProbes,
   recommendedFirstReadOnlyProbe,
   commands: {
@@ -383,6 +429,7 @@ if (compact) {
     directProbeOk: payload.currentEvidence.directProbeOk,
     directStatusProbeOk: payload.currentEvidence.directStatusProbeOk,
     recommendedReadOnlyProbes: payload.recommendedReadOnlyProbes,
+    recommendedCurrentFailedWorkerReadOnlyProbes: payload.recommendedCurrentFailedWorkerReadOnlyProbes,
     exposedRecommendedReadOnlyProbes: payload.exposedRecommendedReadOnlyProbes,
     recommendedFirstReadOnlyProbe: payload.operatorActionCard.recommendedFirstReadOnlyProbe,
     nextOperatorAction: payload.operatorActionCard.nextOperatorAction,
