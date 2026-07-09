@@ -1266,7 +1266,9 @@ const goalOperatorActionCard = {
     ...userPresenceRequiredActions,
   ],
   userVisibleNextStep: goalComplete
-    ? "Current single-account Anti-Codex scope is complete; full goal still requires worker transport recovery and second-account proof."
+    ? (currentChannelWorkerCanDispatch
+      ? "Current single-account Anti-Codex scope is complete; full goal still requires second-account proof."
+      : "Current single-account Anti-Codex scope is complete; full goal still requires worker transport recovery and second-account proof.")
     : "Refresh the current single-account evidence and rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
   compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",

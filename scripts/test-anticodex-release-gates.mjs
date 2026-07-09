@@ -1411,9 +1411,13 @@ function summarizeGate(definition) {
         if (freshChannelRequiredActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_fresh_channel_action");
         const userPresenceRequiredActions = Array.isArray(goalOperatorActionCard.userPresenceRequiredActions) ? goalOperatorActionCard.userPresenceRequiredActions.map(String) : [];
         if (userPresenceRequiredActions.length !== 0) semanticFailures.push("goal_readiness_operator_action_card_user_presence_action");
-        const acceptableWorkerStatuses = new Set(["reload_required", "fresh_probe_required"]);
-        if (!acceptableWorkerStatuses.has(String(goalOperatorActionCard.workerStatus || ""))) semanticFailures.push("goal_readiness_operator_action_card_worker_status");
-        if (goalOperatorActionCard.workerCanDispatchCurrentChannel !== false) semanticFailures.push("goal_readiness_operator_action_card_worker_dispatch");
+        const workerStatus = String(goalOperatorActionCard.workerStatus || "");
+        const workerCanDispatchCurrentChannel = goalOperatorActionCard.workerCanDispatchCurrentChannel === true;
+        const workerStatusMatchesDispatchState = workerCanDispatchCurrentChannel
+          ? workerStatus === "dispatch_ready"
+          : new Set(["reload_required", "fresh_probe_required"]).has(workerStatus);
+        if (!workerStatusMatchesDispatchState) semanticFailures.push("goal_readiness_operator_action_card_worker_status");
+        if (workerCanDispatchCurrentChannel !== (workerStatus === "dispatch_ready")) semanticFailures.push("goal_readiness_operator_action_card_worker_dispatch");
         if (String(goalOperatorActionCard.secondAccountStatus || "") !== "manual_windows_user_setup_required") semanticFailures.push("goal_readiness_operator_action_card_second_account_status");
         if (goalOperatorActionCard.secondAccountCanAskUserToLoginNow !== false) semanticFailures.push("goal_readiness_operator_action_card_second_account_login_too_early");
         const cardMissingRequirements = Array.isArray(goalOperatorActionCard.missingRequirements) ? goalOperatorActionCard.missingRequirements.map(String) : [];
@@ -3382,7 +3386,7 @@ if (args.has("--self-test")) {
       "complex-project",
     ];
 
-    function fakeCurrentGoalReadinessReport(workerStatus = "fresh_probe_required") {
+    function fakeCurrentGoalReadinessReport(workerStatus = "fresh_probe_required", workerCanDispatchCurrentChannel = false) {
       const workerServers = ["antigravity-code-worker", "deepseek-code-worker", "deveco-code-worker", "kilo-worker", "mimo-claude-coworker", "mimocode-worker", "opencode-worker"];
       const toolCountByServer = Object.fromEntries(workerServers.map((server) => [server, 1]));
       const currentRequirementIds = ["codex_client_copy", "antigravity_model_text", "real_long_tasks_with_results", "native_codex_like_agentic_experience"];
@@ -3421,7 +3425,7 @@ if (args.has("--self-test")) {
           freshChannelRequiredActions: [],
           userPresenceRequiredActions: [],
           workerStatus,
-          workerCanDispatchCurrentChannel: false,
+          workerCanDispatchCurrentChannel,
           secondAccountStatus: "manual_windows_user_setup_required",
           secondAccountCanAskUserToLoginNow: false,
           missingRequirements: [],
@@ -3573,6 +3577,16 @@ if (args.has("--self-test")) {
       if (gate.satisfied !== true) {
         throw new Error(`self-test failed: goal-readiness worker status ${workerStatus} should satisfy current scoped goal`);
       }
+    }
+    writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport("dispatch_ready", true));
+    const readyWorkerStatusGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "goalReadiness"));
+    if (readyWorkerStatusGate.satisfied !== true) {
+      throw new Error("self-test failed: goal-readiness ready worker status should satisfy current scoped goal");
+    }
+    writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport("dispatch_ready", false));
+    const mismatchedReadyWorkerStatusGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "goalReadiness"));
+    if (mismatchedReadyWorkerStatusGate.satisfied === true || !mismatchedReadyWorkerStatusGate.semanticFailures.includes("goal_readiness_operator_action_card_worker_dispatch")) {
+      throw new Error("self-test failed: mismatched ready worker dispatch state satisfied the current scoped goal");
     }
     writeFakeLatestReport("latest-goal-readiness.json", fakeCurrentGoalReadinessReport("transport_closed"));
     const invalidWorkerStatusGate = summarizeGate(gateDefinitions.find((definition) => definition.id === "goalReadiness"));
