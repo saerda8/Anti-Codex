@@ -925,6 +925,7 @@ function Test-ReportEncoding {
         "latest-fresh-channel-worker-proof-kit.json",
         "latest-agentic-capability-matrix.json",
         "latest-real-task-coverage-roadmap.json",
+        "latest-ecosystem-surfaces.json",
         "latest-real-approval-plan.json",
         "latest-required-real-traffic-sequence.json",
         "latest-goal-real-run-readiness.json",

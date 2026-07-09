@@ -36,6 +36,7 @@ const REQUIRED_WORKER_MCP_SERVERS = [
 const REQUIRED_WORKER_MCP_TASK_SMOKE_PASSED_WORKERS = 5;
 const REPORT_READ_RETRY_COUNT = 4;
 const REPORT_READ_RETRY_DELAY_MS = 75;
+const EXPECTED_GOAL_REAL_RUN_TASK_MODES = ["web-search", "free-chat"];
 const GOAL_READINESS_RELEASE_STATUS_DRIFT_FAILURES = new Set([
   "goal_readiness_current_usability_not_ready",
   "goal_readiness_current_usability_release",
@@ -1033,7 +1034,7 @@ function summarizeGate(definition) {
       if (report.releaseAcceptableAccountProof === true) semanticFailures.push("goal_real_run_readiness_release_account_proof_claimed");
       if (report.realTaskRefreshNeeded === true) {
         if (refreshTasks.length < 1) semanticFailures.push("goal_real_run_readiness_refresh_tasks_missing");
-        for (const taskMode of refreshTasks) {
+        for (const taskMode of EXPECTED_GOAL_REAL_RUN_TASK_MODES) {
           if (!refreshTasks.includes(taskMode)) semanticFailures.push(`goal_real_run_readiness_${taskMode.replaceAll("-", "_")}_task_missing`);
           const scenario = refreshScenarios.find((item) => String(item?.taskMode || "") === taskMode);
           if (!scenario) {
@@ -4650,7 +4651,10 @@ if (args.has("--self-test")) {
       "goal_real_run_readiness_account_blocking_reason_missing",
       "goal_real_run_readiness_separate_account_claimed",
       "goal_real_run_readiness_release_account_proof_claimed",
-      "goal_real_run_readiness_coding_project_scenario_missing",
+      "goal_real_run_readiness_web_search_task_missing",
+      "goal_real_run_readiness_web_search_scenario_missing",
+      "goal_real_run_readiness_free_chat_task_missing",
+      "goal_real_run_readiness_free_chat_scenario_missing",
       "goal_real_run_readiness_missing_task_scenarios",
       "goal_real_run_readiness_refresh_command_missing",
       "goal_real_run_readiness_real_task_refresh_stage_missing",

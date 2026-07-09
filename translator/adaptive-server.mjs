@@ -3849,6 +3849,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Fresh-channel worker proof kit", "latest-fresh-channel-worker-proof-kit.json"),
         latestManagerReportItem("Agentic capability matrix", "latest-agentic-capability-matrix.json"),
         latestManagerReportItem("Real task coverage roadmap", "latest-real-task-coverage-roadmap.json"),
+        latestManagerReportItem("Ecosystem surfaces", "latest-ecosystem-surfaces.json"),
         latestManagerReportItem("Real approval plan", "latest-real-approval-plan.json"),
         latestManagerReportItem("Required real traffic sequence", "latest-required-real-traffic-sequence.json"),
         latestManagerReportItem("Goal real run readiness", "latest-goal-real-run-readiness.json"),
