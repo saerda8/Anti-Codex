@@ -461,6 +461,7 @@ $latestReports = @(
     "latest-worker-mcp-source-hygiene.json",
     "latest-worker-mcp-status-probe.json",
     "latest-worker-process-hygiene.json",
+    "latest-codex-appserver-freshness.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
     "latest-worker-mcp-complex-project-smoke.json",

@@ -353,6 +353,7 @@ const isWorkerMcpServerProbeReport = report?.reportName === "worker-mcp-server-p
 const isWorkerMcpSourceHygieneReport = report?.reportName === "worker-mcp-source-hygiene" || /latest-worker-mcp-source-hygiene\.json$/i.test(path);
 const isWorkerMcpStatusProbeReport = report?.reportName === "worker-mcp-status-probe" || /latest-worker-mcp-status-probe\.json$/i.test(path);
 const isWorkerProcessHygieneReport = report?.reportName === "worker-process-hygiene" || /latest-worker-process-hygiene\.json$/i.test(path);
+const isCodexAppServerFreshnessReport = report?.reportName === "codex-appserver-freshness" || /latest-codex-appserver-freshness\.json$/i.test(path);
 const isWorkerMcpTaskSmokeReport = report?.reportName === "worker-mcp-task-smoke" || /latest-worker-mcp-task-smoke\.json$/i.test(path);
 const isWorkerMcpProjectSmokeReport = report?.reportName === "worker-mcp-project-smoke" || /latest-worker-mcp-project-smoke\.json$/i.test(path);
 const isWorkerMcpComplexProjectSmokeReport = report?.reportName === "worker-mcp-complex-project-smoke" || /latest-worker-mcp-complex-project-smoke\.json$/i.test(path);
@@ -2396,6 +2397,35 @@ const summary = {
       parentKind: asString(item?.parentKind),
       count: has(item || {}, "count") ? item.count : null,
     })).filter((item) => item.serverName).slice(0, 32) : [],
+    interpretation: asString(report.interpretation),
+    operatorAction: asString(report.operatorAction),
+  } : null,
+  codexAppServerFreshnessEvidence: isCodexAppServerFreshnessReport ? {
+    reportName: asString(report.reportName),
+    requestedRealTraffic: boolField(report, "requestedRealTraffic"),
+    usedRealTraffic: boolField(report, "usedRealTraffic"),
+    behaviorCovered: boolField(report, "behaviorCovered"),
+    coverageKind: asString(report.coverageKind),
+    checkedAt: asString(report.checkedAt),
+    processQueryOk: boolField(report, "processQueryOk"),
+    appServerFreshnessOk: boolField(report, "appServerFreshnessOk"),
+    staleOrUnrefreshedAppServerLikely: boolField(report, "staleOrUnrefreshedAppServerLikely"),
+    staleAgeMinutes: has(report, "staleAgeMinutes") ? report.staleAgeMinutes : null,
+    activeAppServerOlderThanThreshold: boolField(report, "activeAppServerOlderThanThreshold"),
+    desktopAppServerCount: has(report, "desktopAppServerCount") ? report.desktopAppServerCount : null,
+    activeDesktopAppServer: report.activeDesktopAppServer && typeof report.activeDesktopAppServer === "object" ? {
+      pid: has(report.activeDesktopAppServer, "pid") ? report.activeDesktopAppServer.pid : null,
+      parentPid: has(report.activeDesktopAppServer, "parentPid") ? report.activeDesktopAppServer.parentPid : null,
+      kind: asString(report.activeDesktopAppServer.kind),
+      creationDateUtc: asString(report.activeDesktopAppServer.creationDateUtc),
+      ageSeconds: has(report.activeDesktopAppServer, "ageSeconds") ? report.activeDesktopAppServer.ageSeconds : null,
+    } : null,
+    activeDesktopWorkerProcessCount: has(report, "activeDesktopWorkerProcessCount") ? report.activeDesktopWorkerProcessCount : null,
+    activeDesktopWorkerServers: Array.isArray(report.activeDesktopWorkerServers) ? asStringArray(report.activeDesktopWorkerServers) : [],
+    currentChannelWorkerDispatchUsable: boolField(report, "currentChannelWorkerDispatchUsable"),
+    genericMcpControlOk: boolField(report, "genericMcpControlOk"),
+    repeatedCurrentChannelWorkerFailure: boolField(report, "repeatedCurrentChannelWorkerFailure"),
+    currentFailedWorkerTools: Array.isArray(report.currentFailedWorkerTools) ? asStringArray(report.currentFailedWorkerTools) : [],
     interpretation: asString(report.interpretation),
     operatorAction: asString(report.operatorAction),
   } : null,

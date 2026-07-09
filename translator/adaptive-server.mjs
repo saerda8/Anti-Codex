@@ -3850,6 +3850,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Worker MCP source hygiene", "latest-worker-mcp-source-hygiene.json"),
         latestManagerReportItem("Worker MCP status probe", "latest-worker-mcp-status-probe.json"),
         latestManagerReportItem("Worker process hygiene", "latest-worker-process-hygiene.json"),
+        latestManagerReportItem("Codex app-server freshness", "latest-codex-appserver-freshness.json"),
         latestManagerReportItem("Worker MCP task smoke", "latest-worker-mcp-task-smoke.json"),
         latestManagerReportItem("Worker MCP project smoke", "latest-worker-mcp-project-smoke.json"),
         latestManagerReportItem("Current-channel worker transport", "latest-current-channel-worker-transport.json"),

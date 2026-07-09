@@ -13334,6 +13334,7 @@ test("optional and special latest reports stay visible without becoming release-
     "latest-worker-mcp-source-hygiene.json",
     "latest-worker-mcp-status-probe.json",
     "latest-worker-process-hygiene.json",
+    "latest-codex-appserver-freshness.json",
     "latest-worker-mcp-task-smoke.json",
     "latest-worker-mcp-project-smoke.json",
     "latest-antigravity-worker-direct-smoke.json",
@@ -13367,6 +13368,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(runtimeSync, /scripts\\test-anticodex-goal-readiness\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-worker-mcp-status-probe\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-worker-process-hygiene\.mjs/);
+  assert.match(runtimeSync, /scripts\\test-anticodex-codex-appserver-freshness\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.mjs/);
   assert.match(runtimeSync, /scripts\\test-anticodex-current-channel-worker-recovery\.ps1/);
   assert.match(summarizer, /goalReadinessEvidence/);
