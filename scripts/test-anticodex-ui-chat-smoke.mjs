@@ -3044,8 +3044,16 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         submitEvidence.clickMethod = `${submitEvidence.clickMethod}-enter-fallback`;
       }
     }
+    if (clicked) {
+      const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, submitSucceeded ? 15_000 : 20_000);
+      submitEvidence.realSubmit = realSubmit;
+      if (realSubmit.ok === true && !submitSucceeded) {
+        submitEvidence.submitConfirmedBy = "responses-websocket";
+        submitSucceeded = true;
+      }
+    }
     if (submitSucceeded) {
-      const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
+      const realSubmit = submitEvidence.realSubmit || await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
       submitEvidence.realSubmit = realSubmit;
       if (realSubmit.ok !== true) {
         submitEvidence.emptyPrewarmRetry = realSubmit;
@@ -3799,44 +3807,50 @@ async function main() {
         if (submitSucceeded) {
           submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
         }
-        if (submitSucceeded) {
-          const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
-          if (realSubmit.ok !== true) {
-            submitEvidence.emptyPrewarmRetry = realSubmit;
-            submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
-            if (submitEvidence.retryModelSelection?.matched !== true) {
-              submitEvidence.retry = { ok: false, reason: "required_model_reselect_failed", modelSelection: submitEvidence.retryModelSelection };
-              submitSucceeded = false;
-            } else {
-              prep = await refillComposerPrompt(ws, promptText);
-            }
-            if (submitSucceeded && prep?.composerMatches === true && prep?.hasSendButton === true) {
-              const retryDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
-              const retryPayloadsBefore = responsesWebSocketPayloadCount(retryDiagnosticsBefore);
-              const retryClick = await ws.send("Runtime.evaluate", {
-                expression: sendButtonProbeExpression(promptText, { click: true }),
-                returnByValue: true,
-                awaitPromise: true,
-              });
-              submitEvidence.retry = retryClick.result?.result?.value || {};
-              submitSucceeded = submitEvidence.retry.clicked === true
-                ? await waitForComposerSubmitted(ws, promptText, marker, 8_000)
-                : false;
-              if (submitSucceeded) {
-                const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
-                submitEvidence.retryRealSubmit = retryRealSubmit;
-                if (retryRealSubmit.ok !== true) submitSucceeded = false;
-              }
-            } else if (submitSucceeded) {
-              submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
-              submitSucceeded = false;
-            }
+      }
+      let realSubmit = null;
+      if (clicked) {
+        realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, submitSucceeded ? 15_000 : 20_000);
+        submitEvidence.realSubmit = realSubmit;
+        if (realSubmit.ok === true && !submitSucceeded) {
+          submitEvidence.submitConfirmedBy = "responses-websocket";
+          submitSucceeded = true;
+        }
+      }
+      if (submitSucceeded && realSubmit?.ok !== true) {
+        submitEvidence.emptyPrewarmRetry = realSubmit;
+        submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
+        if (submitEvidence.retryModelSelection?.matched !== true) {
+          submitEvidence.retry = { ok: false, reason: "required_model_reselect_failed", modelSelection: submitEvidence.retryModelSelection };
+          submitSucceeded = false;
+        } else {
+          prep = await refillComposerPrompt(ws, promptText);
+        }
+        if (submitSucceeded && prep?.composerMatches === true && prep?.hasSendButton === true) {
+          const retryDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+          const retryPayloadsBefore = responsesWebSocketPayloadCount(retryDiagnosticsBefore);
+          const retryClick = await ws.send("Runtime.evaluate", {
+            expression: sendButtonProbeExpression(promptText, { click: true }),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          submitEvidence.retry = retryClick.result?.result?.value || {};
+          submitSucceeded = submitEvidence.retry.clicked === true
+            ? await waitForComposerSubmitted(ws, promptText, marker, 8_000)
+            : false;
+          if (submitSucceeded) {
+            const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
+            submitEvidence.retryRealSubmit = retryRealSubmit;
+            if (retryRealSubmit.ok !== true) submitSucceeded = false;
           }
+        } else if (submitSucceeded) {
+          submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
+          submitSucceeded = false;
         }
       }
       const maxInputItems = taskMode === "autonomous-reasoning" ? 80 : 0;
       if (submitSucceeded && maxInputItems > 0) {
-        const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
+        const realSubmit = submitEvidence.realSubmit || await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
         submitEvidence.realSubmit = realSubmit;
         if (realSubmit.ok !== true) {
           submitSucceeded = false;
