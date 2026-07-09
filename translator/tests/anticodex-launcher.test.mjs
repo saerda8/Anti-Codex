@@ -769,12 +769,12 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v100/);
+  assert.match(managerInject, /native-panel-v103/);
   assert.match(managerInject, /latest-reports-evidence-v4/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
   assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
-  assert.match(syncReadiness, /native-panel-v100/);
-  assert.match(uiState, /native-panel-v100/);
+  assert.match(syncReadiness, /native-panel-v103/);
+  assert.match(uiState, /native-panel-v103/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -925,7 +925,10 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerInject, /\.anticodex-close\{[^}]*border-radius:9px/);
   assert.match(managerInject, /\.anticodex-close\{[^}]*flex:0 0 auto/);
   assert.match(managerInject, /\.anticodex-close\{[^}]*overflow:hidden/);
-  assert.match(managerInject, /\.anticodex-close>span\{[^}]*pointer-events:none/);
+  assert.match(managerInject, /\.anticodex-close\{[^}]*color:transparent/);
+  assert.match(managerInject, /\.anticodex-close::after\{[^}]*content:attr\(aria-label\)[^}]*pointer-events:none/);
+  assert.match(managerInject, /"data-anticodex-close": "true", "aria-label": CLOSE_TEXT/);
+  assert.doesNotMatch(managerInject, /\.anticodex-close>span/);
   assert.match(managerInject, /pointer-events:auto/);
   assert.match(managerInject, /touch-action:manipulation/);
   const dailyManagerActions = extractJsSetBlock(managerInject, "DAILY_ACTION_IDS");
@@ -1030,9 +1033,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v100["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v100"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v100"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v103["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v103"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v103"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -1480,7 +1483,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v100/);
+  assert.match(managerOpenInject, /native-panel-v103/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -2535,7 +2538,7 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v100 manager script/);
+  assert.match(manager, /latest native-panel-v103 manager script/);
   assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
@@ -15741,15 +15744,15 @@ test("diagnostics/sourcePreflight support path must preserve antigravityCliProfi
   assert.match(server, /sourcePreflight profilePrepare caveat:/);
 });
 
-test("current Manager status uses native-panel-v100 and rejects stale v85/v98 in docs", () => {
+test("current Manager status uses native-panel-v103 and rejects stale v85/v98 in docs", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  // Current Manager status sections must declare native-panel-v100
-  assert.match(currentStatus, /native-panel-v100/);
-  assert.match(handoffCurrentStatus, /native-panel-v100/);
+  // Current Manager status sections must declare native-panel-v103
+  assert.match(currentStatus, /native-panel-v103/);
+  assert.match(handoffCurrentStatus, /native-panel-v103/);
 
   // Stale Manager version wording must not appear in current-status sections
   assert.doesNotMatch(currentStatus, /native-panel-v85/);
