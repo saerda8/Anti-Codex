@@ -2271,7 +2271,7 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 
 ## 2026-07-09 Current Continuation Status
 
-- The current Codex channel still cannot use worker MCP tools: read-only MIMO `mimo_get_job dsw_mr3wn5f0_kiniqh` returns `Transport closed` even after Anti-Codex cold relaunch. Do not dispatch implementation workers from this channel until a read-only worker tool returns normally and is recorded.
+- The current Codex channel still cannot use worker MCP tools: read-only MIMO `mimo_get_job dsw_mr3wn5f0_kiniqh` and read-only CodeBuddy `codebuddy_get_job cbw_mrcyp643_8o6dwg` return `Transport closed` even after Anti-Codex cold relaunch. Do not dispatch implementation workers from this channel until a read-only worker tool returns normally and is recorded.
 - Anti-Codex itself is healthy and doing real work. Latest verified visible desktop coding task marker: `UI_CODING_PROJECT_SMOKE_1783572187560`; it used real traffic, created the expected Node project files, passed `node:test`, printed CLI JSON `{"red":2,"blue":1}`, and matched the done marker.
 - Stronger visible desktop complex-project proof also passed: marker `UI_COMPLEX_PROJECT_SMOKE_1783572370917`, real traffic, exactly seven expected files, three trusted OpenAI source URLs, passing `node:test`, analyzer CLI `sourceCount:3` / `codexMentionCount:3`, Chinese Markdown/HTML, complete HTML, and exact done marker.
 - Required release scope remains green: `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, `missingShort:[]`. Full goal still remains incomplete because current-channel worker dispatch is not usable and separate Antigravity account proof still needs user-present setup.
