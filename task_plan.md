@@ -2330,3 +2330,11 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Release-gate task marker validation now accepts response-history final marker evidence for UI task smokes when the verifier has already proved the task and artifact result. This prevents a good desktop task from being rejected only because the visible sample counter missed the final marker.
 - No-traffic support reports were refreshed after the real task: diagnostics, real approval plan, required real traffic sequence, goal real-run readiness, worker MCP source hygiene, goal readiness, and release gates are green; Manager latest reports no longer shows `需重跑`.
 - Remaining full-goal gap is still not code: create or verify the separate Windows user `.\\AntiCodexModel`, complete interactive Antigravity login there, then run the separate-account proof with explicit account identity inputs. Current single-account release remains green.
+
+## 2026-07-09 Manager Report And Click Evidence Closeout
+
+- Current single-account release scope is green again after refreshed reports and runtime sync: release gates show `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`.
+- Manager latest reports no longer shows `需重跑`; Diagnostics is passed; the local feature startup snapshot is fresh after `sync-shared-codex-plugin-host.mjs ... --startup-snapshots`.
+- Manager real-button proof now carries release-visible real-click evidence in compact mode: `lastUiOnly:false`, `actionCenterHitsButton:true`, and `closeHitAreaOk:true` for both `pluginCapabilities` and `mcpSkills`.
+- Keep the new compact verifier fields; otherwise `test-anticodex-release-gates.mjs` will reject `latest-manager-real-buttons.json` with `manager_action_missing_real_click`.
+- Command reminders: use `protect-anticodex-log-db.mjs --status --report-root "$env:APPDATA\anticodex\reports"` to refresh the log DB guard report, and use `test-anticodex-third-party-provider.mjs --report-root "$env:APPDATA\anticodex\reports"` to refresh the canonical third-party continuity report.

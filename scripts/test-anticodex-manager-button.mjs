@@ -88,6 +88,8 @@ function compactManagerButtonRecord(record) {
     pendingCount: result.pendingCount,
     queueLength: result.queueLength,
     disabled: result.disabled,
+    lastUiOnly: result.lastUiOnly,
+    actionCenterHitsButton: result.actionCenterHitsButton ?? result.initial?.actionCenterHitsButton,
     closeHitAreaOk: result.closeHitAreaOk ?? result.initial?.closeHitAreaOk,
     managerOpenedNewPage: record?.managerOpenedNewPage,
     text: shortText(result.text),

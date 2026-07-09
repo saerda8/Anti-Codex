@@ -8017,6 +8017,8 @@ test("Anti-Codex Manager button verifier waits for the embedded panel to finish 
   assert.match(verifier, /for \(const actionName of actions\)/);
   assert.match(verifier, /runManagerActionBatch/);
   assert.match(verifier, /closeHitAreaOk/);
+  assert.match(verifier, /lastUiOnly: result\.lastUiOnly/);
+  assert.match(verifier, /actionCenterHitsButton: result\.actionCenterHitsButton \?\? result\.initial\?\.actionCenterHitsButton/);
   assert.match(verifier, /managerOpenedNewPage: false/);
   assert.match(verifier, /pageTargetCountBeforeManagerOpen/);
   assert.doesNotMatch(verifier, /spawnSync/);
