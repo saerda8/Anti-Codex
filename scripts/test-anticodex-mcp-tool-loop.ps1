@@ -29,31 +29,41 @@ function Invoke-AntiCodexResponse {
     param([hashtable]$Body)
 
     $json = $Body | ConvertTo-Json -Depth 24 -Compress
-    try {
-        return Invoke-RestMethod `
-            -Uri "$BaseUrl/v1/responses" `
-            -Method Post `
-            -ContentType "application/json; charset=utf-8" `
-            -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
-            -TimeoutSec $TimeoutSec `
-            -Proxy $null
-    } catch {
-        $response = $_.Exception.Response
-        if ($response) {
-            $stream = $response.GetResponseStream()
-            if ($stream) {
-                $reader = New-Object IO.StreamReader($stream)
-                try {
-                    $detail = $reader.ReadToEnd()
-                    if ($detail) {
-                        throw "Local gateway returned an error: $detail"
+    $attempt = 0
+    while ($true) {
+        $attempt += 1
+        try {
+            return Invoke-RestMethod `
+                -Uri "$BaseUrl/v1/responses" `
+                -Method Post `
+                -DisableKeepAlive `
+                -ContentType "application/json; charset=utf-8" `
+                -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
+                -TimeoutSec $TimeoutSec `
+                -Proxy $null
+        } catch {
+            $message = [string]$_.Exception.Message
+            $response = $_.Exception.Response
+            if ($response) {
+                $stream = $response.GetResponseStream()
+                if ($stream) {
+                    $reader = New-Object IO.StreamReader($stream)
+                    try {
+                        $detail = $reader.ReadToEnd()
+                        if ($detail) {
+                            throw "Local gateway returned an error: $detail"
+                        }
+                    } finally {
+                        $reader.Dispose()
                     }
-                } finally {
-                    $reader.Dispose()
                 }
             }
+            if ($attempt -lt 2 -and $message -match "connection.*closed|keep.*alive|ECONNRESET|forcibly closed") {
+                Start-Sleep -Milliseconds 750
+                continue
+            }
+            throw
         }
-        throw
     }
 }
 
