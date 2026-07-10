@@ -2839,6 +2839,12 @@ function newChatClickExpression(projectName = "") {
   return `(() => {
     const expectedProject = ${expectedProject};
     const controls = Array.from(document.querySelectorAll('button,[role="button"],a'));
+    const normalizedProjectName = String(expectedProject || '').trim();
+    const projectContextActive = normalizedProjectName && controls.some((el) => {
+      const text = String(el.innerText || el.getAttribute('aria-label') || el.title || '').replace(/\s+/g, ' ').trim();
+      return text.includes(normalizedProjectName)
+        && (/\u5207\u6362\u9879\u76ee|\u9879\u76ee\u64cd\u4f5c|project/i.test(text));
+    });
     const candidates = controls.map((el, index) => {
       const text = String(el.innerText || el.getAttribute('aria-label') || el.title || '').replace(/\\s+/g, ' ').trim();
       const aria = String(el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
@@ -2859,7 +2865,8 @@ function newChatClickExpression(projectName = "") {
     return {
       clicked: true,
       projectPreferred: Boolean(expectedProject),
-      projectMatched: Boolean(selected.isProjectNewChat),
+      projectMatched: Boolean(selected.isProjectNewChat || projectContextActive),
+      projectContextActive: Boolean(projectContextActive),
       selected: {
         index: selected.index,
         text: selected.text,
