@@ -232,9 +232,23 @@ function Test-ActiveHostGuardrails {
 
     if (-not $SourceRoot -and (Test-Path -LiteralPath $required.antiCodexExe -PathType Leaf)) {
         $versionInfo = (Get-Item -LiteralPath $required.antiCodexExe).VersionInfo
-        if ([string]$versionInfo.ProductName -ne "Anti-Codex") { $failures.Add("active host ProductName is not Anti-Codex") | Out-Null }
-        if ([string]$versionInfo.FileDescription -ne "Anti-Codex") { $failures.Add("active host FileDescription is not Anti-Codex") | Out-Null }
-        if ([string]$versionInfo.OriginalFilename -ne "Anti-Codex.exe") { $failures.Add("active host OriginalFilename is not Anti-Codex.exe") | Out-Null }
+        $productName = [string]$versionInfo.ProductName
+        $fileDescription = [string]$versionInfo.FileDescription
+        $originalFilename = [string]$versionInfo.OriginalFilename
+        if ($productName -ne "Anti-Codex" -or $fileDescription -ne "Anti-Codex" -or $originalFilename -ne "Anti-Codex.exe") {
+            $rcedit = Join-Path $env:LOCALAPPDATA "Anti-Codex\tools\rcedit.exe"
+            if (Test-Path -LiteralPath $rcedit -PathType Leaf) {
+                $productName = ([string](& $rcedit $required.antiCodexExe --get-version-string "ProductName" 2>$null)).Trim()
+                $productExitCode = $LASTEXITCODE
+                $fileDescription = ([string](& $rcedit $required.antiCodexExe --get-version-string "FileDescription" 2>$null)).Trim()
+                $descriptionExitCode = $LASTEXITCODE
+                $originalFilename = ([string](& $rcedit $required.antiCodexExe --get-version-string "OriginalFilename" 2>$null)).Trim()
+                $filenameExitCode = $LASTEXITCODE
+            }
+        }
+        if ($productName -ne "Anti-Codex") { $failures.Add("active host ProductName is not Anti-Codex") | Out-Null }
+        if ($fileDescription -ne "Anti-Codex") { $failures.Add("active host FileDescription is not Anti-Codex") | Out-Null }
+        if ($originalFilename -ne "Anti-Codex.exe") { $failures.Add("active host OriginalFilename is not Anti-Codex.exe") | Out-Null }
     }
 
     [pscustomobject]@{

@@ -1744,6 +1744,12 @@ test("Anti-Codex installer creates an isolated copied Codex host", () => {
   assert.match(installer, /Windows branding verification failed/);
   assert.match(installer, /Anti-Codex runtime is incomplete/);
   assert.match(installer, /Join-Path \$toolRoot "rcedit\.exe"/);
+  assert.match(installer, /--get-version-string "ProductName"/);
+  assert.match(installer, /--get-version-string "FileDescription"/);
+  assert.match(installer, /--get-version-string "OriginalFilename"/);
+  assert.match(candidateValidator, /--get-version-string "ProductName"/);
+  assert.match(candidateValidator, /--get-version-string "FileDescription"/);
+  assert.match(candidateValidator, /--get-version-string "OriginalFilename"/);
   assert.equal(existsSync(resolve(root, "assets", "anticodex.ico")), true);
   assert.equal(existsSync(resolve(root, "assets", "anticodex-icon.png")), true);
   assert.equal(existsSync(resolve(root, "assets", "anticodex-desktop.ico")), true);
@@ -1807,6 +1813,8 @@ test("Anti-Codex installer creates an isolated copied Codex host", () => {
   assert.match(brander, /"app-name"/);
   assert.match(brander, /"browser-window-icon"/);
   assert.match(brander, /setAppUserModelId\(`AntiCodex`\)/);
+  assert.match(brander, /children:\[v,y,o,b,h,C,i,T,E\]/);
+  assert.match(brander, /case`error`:if\(n\.willRetry\)\{/);
   assert.match(brander, /process\.platform===`win32`\|\|process\.platform===`linux`/);
   assert.match(brander, /icon:`icon\.ico`,autoHideMenuBar:!0/);
   assert.doesNotMatch(installer, /deepcodex\.ico/);

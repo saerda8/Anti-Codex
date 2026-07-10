@@ -171,6 +171,21 @@ $versionInfo = (Get-Item -LiteralPath $antiCodex).VersionInfo
 $productName = [string]$versionInfo.ProductName
 $fileDescription = [string]$versionInfo.FileDescription
 $originalFilename = [string]$versionInfo.OriginalFilename
+if ($productName -ne "Anti-Codex" -or $fileDescription -ne "Anti-Codex" -or $originalFilename -ne "Anti-Codex.exe") {
+    $rcedit = Join-Path $env:LOCALAPPDATA "Anti-Codex\tools\rcedit.exe"
+    if (-not (Test-Path -LiteralPath $rcedit -PathType Leaf)) {
+        throw "Anti-Codex candidate branding verifier is unavailable."
+    }
+    $productName = ([string](& $rcedit $antiCodex --get-version-string "ProductName" 2>$null)).Trim()
+    $productNameExitCode = $LASTEXITCODE
+    $fileDescription = ([string](& $rcedit $antiCodex --get-version-string "FileDescription" 2>$null)).Trim()
+    $fileDescriptionExitCode = $LASTEXITCODE
+    $originalFilename = ([string](& $rcedit $antiCodex --get-version-string "OriginalFilename" 2>$null)).Trim()
+    $originalFilenameExitCode = $LASTEXITCODE
+    if ($productNameExitCode -ne 0 -or $fileDescriptionExitCode -ne 0 -or $originalFilenameExitCode -ne 0) {
+        throw "Anti-Codex candidate branding read-back failed."
+    }
+}
 if ($productName -ne "Anti-Codex") {
     throw "Anti-Codex candidate host branding is invalid: $productName"
 }

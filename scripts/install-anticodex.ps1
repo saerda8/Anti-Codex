@@ -173,11 +173,29 @@ function Update-ExeVersionInfo {
         throw "Failed to update Anti-Codex Windows version information. The copied host was not activated."
     }
     $versionInfo = (Get-Item -LiteralPath $Path).VersionInfo
-    if ([string]$versionInfo.ProductName -ne "Anti-Codex" -or
-        [string]$versionInfo.FileDescription -ne "Anti-Codex" -or
-        [string]$versionInfo.OriginalFilename -ne "Anti-Codex.exe") {
-        throw "Anti-Codex Windows branding verification failed. The copied host was not activated."
+    if ([string]$versionInfo.ProductName -eq "Anti-Codex" -and
+        [string]$versionInfo.FileDescription -eq "Anti-Codex" -and
+        [string]$versionInfo.OriginalFilename -eq "Anti-Codex.exe") {
+        return
     }
+
+    # Newer Windows packages can leave FileVersionInfo stale after rcedit writes.
+    $productName = ([string](& $rcedit $Path --get-version-string "ProductName" 2>$null)).Trim()
+    $productNameExitCode = $LASTEXITCODE
+    $fileDescription = ([string](& $rcedit $Path --get-version-string "FileDescription" 2>$null)).Trim()
+    $fileDescriptionExitCode = $LASTEXITCODE
+    $originalFilename = ([string](& $rcedit $Path --get-version-string "OriginalFilename" 2>$null)).Trim()
+    $originalFilenameExitCode = $LASTEXITCODE
+    if ($productNameExitCode -eq 0 -and
+        $fileDescriptionExitCode -eq 0 -and
+        $originalFilenameExitCode -eq 0 -and
+        $productName -eq "Anti-Codex" -and
+        $fileDescription -eq "Anti-Codex" -and
+        $originalFilename -eq "Anti-Codex.exe") {
+        return
+    }
+
+    throw "Anti-Codex Windows branding verification failed. The copied host was not activated."
 }
 
 function Resolve-AntiCodexIconPath {

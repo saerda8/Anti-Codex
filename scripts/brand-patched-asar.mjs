@@ -295,11 +295,26 @@ function patchProfileDropdownSettings(text) {
   const managerEntry = "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})},Wt=(0,Q.jsx)(O,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),Gt=(0,Q.jsx)(et,{LeftIcon:Me,keyboardShortcut:Ie,onClick:Ut,children:Wt}),Kt=(0,Q.jsxs)(V,{browser:!0,electron:!0,children:[Ht,Gt,(0,Q.jsx)(et,{LeftIcon:Me,onClick:()=>{u(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:`Anti-Codex \\u7ba1\\u7406`},`anticodex-manager`)]});";
   if (next.includes("anticodex-manager") && next.includes("__ANTICODEX_OPEN_MANAGER__")) return next;
   if (next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(") ||
-      next.includes("let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}")) {
+       next.includes("let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}")) {
     const start = next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(")
       ? "let Ut;t[129]!==d||t[130]!==u||t[131]!==je?("
       : "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}";
     return replaceBetweenPadded(next, start, "let qt;", managerEntry);
+  }
+
+  const currentProfileStart = "let C;t[13]!==p||t[14]!==S?(C=(0,J.jsx)(M,{electron:!0,children:(0,J.jsx)(I,{LeftIcon:tn,onClick:p,children:S})}),t[13]=p,t[14]=S,t[15]=C):C=t[15];";
+  if (next.includes(currentProfileStart) && next.includes("children:[v,y,o,b,h,C,i,T,E]")) {
+    const labelStart = next.indexOf("let w;", next.indexOf(currentProfileStart));
+    const itemStart = next.indexOf("let T;", labelStart);
+    if (labelStart < 0 || itemStart < 0) {
+      throw new Error("Current profile dropdown settings label was not found");
+    }
+    const labelBlock = next.slice(labelStart, itemStart);
+    const currentManagerEntry = "(0,J.jsx)(I,{onClick:globalThis.__ANTICODEX_OPEN_MANAGER__,children:`Manager`},`anticodex-manager`)";
+    const replacement = "let C=s?(0,J.jsx)(M,{electron:!0,children:(0,J.jsx)(I,{LeftIcon:tn,onClick:p,children:S})}):null;" +
+      labelBlock +
+      "let T=[(0,J.jsx)(I,{LeftIcon:rt,keyboardShortcut:m,onClick:d,children:w})," + currentManagerEntry + "];";
+    return replaceBetweenPadded(next, currentProfileStart, "let E;", replacement);
   }
 
   const labelIndex = next.indexOf("codex.profileDropdown.settingsPage");
@@ -713,10 +728,12 @@ function findWebviewLocalPluginCatalogPatch(fd, header, dataOffset) {
 }
 
 function patchRetryStreamErrorVisibility(text) {
-  if (text.includes("case`error`:if(n.willRetry){break}else if(")) return text;
-  const search = "case`error`:if(n.willRetry){let e=lw(n.message);uw(a,{type:`stream-error`,id:n.id,content:e==null?n.message:`Reconnecting ${e.attempt}/${e.maxAttempts}`,additionalDetails:n.additionalDetails??null,reconnectAttempt:e?.attempt??null,reconnectMaxAttempts:e?.maxAttempts??null})}else if(";
+  if (/case`error`:if\(n\.willRetry\)\{break\}else if\(/.test(text)) return text;
+  const search = /case`error`:if\(n\.willRetry\)\{[\s\S]*?\}else if\(/;
   const replacement = "case`error`:if(n.willRetry){break}else if(";
-  return replacePadded(text, search, replacement);
+  const match = search.exec(text);
+  if (!match) throw new Error("Retry stream-error reducer pattern not found");
+  return replacePadded(text, match[0], replacement);
 }
 
 function findRetryStreamErrorVisibilityPatch(fd, header, dataOffset) {
@@ -724,8 +741,7 @@ function findRetryStreamErrorVisibilityPatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("case`error`:if(n.willRetry){let e=lw(n.message);uw(a,{type:`stream-error`") ||
-        text.includes("case`error`:if(n.willRetry){break}else if(")) {
+    if (/case`error`:if\(n\.willRetry\)\{/.test(text) && text.includes("stream-error")) {
       return [rel, patchRetryStreamErrorVisibility];
     }
   }
