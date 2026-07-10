@@ -25,7 +25,8 @@ function Get-OriginalCodexMainPids {
         if (-not $_.ExecutablePath) { return $false }
         try {
             $path = [IO.Path]::GetFullPath([string]$_.ExecutablePath)
-            return (Split-Path -Leaf $path) -ieq "Codex.exe" -and
+            $leaf = Split-Path -Leaf $path
+            return ($leaf -ieq "Codex.exe" -or $leaf -ieq "ChatGPT.exe") -and
                 -not $path.StartsWith($installRoot, [StringComparison]::OrdinalIgnoreCase) -and
                 ([string]$_.CommandLine) -notmatch "\s--type="
         } catch {

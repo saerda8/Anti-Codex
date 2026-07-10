@@ -1339,7 +1339,7 @@ function Get-OriginalCodexMainProcesses {
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         if (-not $_.ExecutablePath) { return $false }
         $exe = Normalize-Path ([string]$_.ExecutablePath)
-        ($_.Name -ieq "Codex.exe") -and
+        ($_.Name -ieq "Codex.exe" -or $_.Name -ieq "ChatGPT.exe") -and
         (-not $exe.StartsWith($installRoot, [StringComparison]::OrdinalIgnoreCase)) -and
         ([string]$_.CommandLine) -notmatch "\s--type="
     })

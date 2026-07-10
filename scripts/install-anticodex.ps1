@@ -32,11 +32,23 @@ function Invoke-AntiCodexSourcePreflight {
     }
 }
 
+function Resolve-CodexDesktopHost {
+    param([Parameter(Mandatory = $true)][string]$AppRoot)
+
+    $chatGpt = Join-Path $AppRoot "ChatGPT.exe"
+    if (Test-Path -LiteralPath $chatGpt -PathType Leaf) { return "ChatGPT.exe" }
+    $codexHost = Join-Path $AppRoot "Codex.exe"
+    if (Test-Path -LiteralPath $codexHost -PathType Leaf) { return "Codex.exe" }
+    return $null
+}
+
 function Find-CodexAppRoot {
     foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
         $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($pkg -and (Test-Path -LiteralPath (Join-Path $pkg.InstallLocation "app\Codex.exe"))) {
-            return (Join-Path $pkg.InstallLocation "app")
+        if ($pkg) {
+            $appRoot = Join-Path $pkg.InstallLocation "app"
+            $hostName = Resolve-CodexDesktopHost -AppRoot $appRoot
+            if ($hostName) { return $appRoot }
         }
     }
     throw "Codex Desktop was not found. Install or update Codex first."
@@ -233,7 +245,8 @@ function Write-HostManifest {
     param(
         [Parameter(Mandatory = $true)][string]$TargetRoot,
         [Parameter(Mandatory = $true)][string]$HostRoot,
-        [Parameter(Mandatory = $true)][string]$SourceRoot
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DesktopHostName
     )
 
     $marker = Join-Path $TargetRoot "codex-patched-app.ok"
@@ -251,7 +264,8 @@ function Write-HostManifest {
         source = [ordered]@{
             packageName = if ($sourcePackage) { [string]$sourcePackage.Name } else { $null }
             packageVersion = if ($sourcePackage) { [string]$sourcePackage.Version } else { $null }
-            codexHost = (Get-FileHash -LiteralPath (Join-Path $SourceRoot "Codex.exe") -Algorithm SHA256).Hash
+            desktopHostName = $DesktopHostName
+            codexHost = (Get-FileHash -LiteralPath (Join-Path $SourceRoot $DesktopHostName) -Algorithm SHA256).Hash
             codexCli = (Get-FileHash -LiteralPath (Join-Path $SourceRoot "resources\codex.exe") -Algorithm SHA256).Hash
         }
         criticalPatches = @(
@@ -318,7 +332,11 @@ if (Test-Path -LiteralPath $copiedCodexStaging) {
 }
 Copy-Tree $sourceCodex $copiedCodexStaging -Mirror
 
-foreach ($requiredHostFile in @("Codex.exe", "resources\app.asar", "resources\codex.exe")) {
+$stagedDesktopHost = Resolve-CodexDesktopHost -AppRoot $copiedCodexStaging
+if (-not $stagedDesktopHost) {
+    throw "The copied Codex host is missing a desktop host executable (ChatGPT.exe or Codex.exe)."
+}
+foreach ($requiredHostFile in @($stagedDesktopHost, "resources\app.asar", "resources\codex.exe")) {
     if (-not (Test-Path -LiteralPath (Join-Path $copiedCodexStaging $requiredHostFile) -PathType Leaf)) {
         throw "The copied Codex host is incomplete: $requiredHostFile"
     }
@@ -327,8 +345,9 @@ if (Test-Path -LiteralPath $copiedCodex) {
     [IO.Directory]::Delete("\\?\$([IO.Path]::GetFullPath($copiedCodex))", $true)
 }
 Move-Item -LiteralPath $copiedCodexStaging -Destination $copiedCodex
+$sourceDesktopHostPath = Join-Path $copiedCodex $stagedDesktopHost
 $antiCodexHost = Join-Path $copiedCodex "Anti-Codex.exe"
-Copy-Item -LiteralPath (Join-Path $copiedCodex "Codex.exe") -Destination $antiCodexHost -Force
+Copy-Item -LiteralPath $sourceDesktopHostPath -Destination $antiCodexHost -Force
 Update-ExeVersionInfo $antiCodexHost
 Install-AntiCodexHostIcon -HostRoot $copiedCodex -ExePath $antiCodexHost
 $brandScript = Join-Path $ROOT "scripts\brand-patched-asar.mjs"
@@ -337,7 +356,7 @@ $node = (Get-Command node.exe -ErrorAction Stop).Source
 if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
 }
-Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex
+Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost
 
 $snapshotSync = Join-Path $runtime "scripts\sync-shared-codex-plugin-host.mjs"
 if (Test-Path -LiteralPath $snapshotSync -PathType Leaf) {

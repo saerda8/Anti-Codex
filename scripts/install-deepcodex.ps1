@@ -230,10 +230,14 @@ function Copy-CodexAppForPatch {
     Copy-DirectoryWithRobocopy -Source $sourceAppRoot -Destination $targetAppRoot
 
     $asar = Join-Path $targetAppRoot "resources\app.asar"
-    $exe = Join-Path $targetAppRoot "Codex.exe"
-    if (-not ((Test-Path -LiteralPath $exe) -and (Test-Path -LiteralPath $asar))) {
+    $exe = $null
+    foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
+        $candidate = Join-Path $targetAppRoot $hostName
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $exe = $candidate; break }
+    }
+    if (-not (($exe) -and (Test-Path -LiteralPath $asar))) {
         Remove-Item -LiteralPath $targetAppRoot -Recurse -Force -ErrorAction SilentlyContinue
-        throw "Copied Codex host is incomplete. Missing Codex.exe or resources\app.asar under $targetAppRoot"
+        throw "Copied Codex host is incomplete. Missing ChatGPT.exe or Codex.exe or resources\app.asar under $targetAppRoot"
     }
 
     if ((Test-Path -LiteralPath $BRAND_ASAR_SCRIPT) -and (Test-Path -LiteralPath $asar)) {

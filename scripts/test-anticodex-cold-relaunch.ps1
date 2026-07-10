@@ -223,7 +223,7 @@ function Get-OriginalCodexMainProcesses {
         if (-not $_.ExecutablePath) { return $false }
         $exe = Normalize-Path ([string]$_.ExecutablePath)
         $commandLine = [string]$_.CommandLine
-        ($_.Name -ieq "Codex.exe") -and
+        ($_.Name -ieq "Codex.exe" -or $_.Name -ieq "ChatGPT.exe") -and
         (-not $exe.StartsWith($installRoot, [StringComparison]::OrdinalIgnoreCase)) -and
         ($commandLine -notmatch "\s--type=")
     })

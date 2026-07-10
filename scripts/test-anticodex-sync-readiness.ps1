@@ -297,7 +297,7 @@ if (-not (Has-Text $installScript 'Start-Sleep\s+-Seconds\s+\(3\s+\*\s+\$fileAtt
 if (-not (Has-Text $installScript '\.anticodex-pending')) { Add-Failure "installer does not use neutral temporary names for protected WindowsApps library copies" }
 if (-not (Has-Text $installScript "codex-host-staging")) { Add-Failure "installer does not build the copied Codex host in an isolated staging directory" }
 if (-not (Has-Text $installScript 'Move-Item\s+-LiteralPath\s+\$copiedCodexStaging\s+-Destination\s+\$copiedCodex')) { Add-Failure "installer does not atomically promote the staged copied Codex host" }
-if (-not (Has-Text $installScript 'foreach\s*\(\$requiredHostFile\s+in\s+@\("Codex\.exe",\s*"resources\\app\.asar",\s*"resources\\codex\.exe"\)\)')) { Add-Failure "installer does not verify all critical copied Codex host files" }
+if (-not (Has-Text $installScript 'foreach\s*\(\$requiredHostFile\s+in\s+@\(\$stagedDesktopHost,\s*"resources\\app\.asar",\s*"resources\\codex\.exe"\)\)')) { Add-Failure "installer does not verify all critical copied Codex host files" }
 if (-not (Has-Text $syncFailureSafetyScript "failureCauseVerified")) { Add-Failure "sync failure-safety drill does not prove it reached the requested failure point" }
 
 $version = ""

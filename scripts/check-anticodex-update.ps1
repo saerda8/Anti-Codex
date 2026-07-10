@@ -26,23 +26,38 @@ if (-not $allowTestRoot -and $InstallRoot -ne $expectedInstallRoot) {
     throw "Anti-Codex update check may only inspect $expectedInstallRoot unless an explicit source root is supplied."
 }
 
+function Resolve-CodexDesktopHost {
+    param([Parameter(Mandatory = $true)][string]$AppRoot)
+
+    $chatGpt = Join-Path $AppRoot "ChatGPT.exe"
+    if (Test-Path -LiteralPath $chatGpt -PathType Leaf) { return "ChatGPT.exe" }
+    $codexHost = Join-Path $AppRoot "Codex.exe"
+    if (Test-Path -LiteralPath $codexHost -PathType Leaf) { return "Codex.exe" }
+    return $null
+}
+
 function Resolve-CodexSource {
     if ($SourceRoot) {
+        $desktopHost = Resolve-CodexDesktopHost -AppRoot $SourceRoot
+        if (-not $desktopHost) { return $null }
         return [pscustomobject]@{
             root = [IO.Path]::GetFullPath($SourceRoot)
             packageVersion = $null
             packageName = "explicit"
+            desktopHostName = $desktopHost
         }
     }
     foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
         $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($pkg) {
             $root = Join-Path $pkg.InstallLocation "app"
-            if (Test-Path -LiteralPath (Join-Path $root "Codex.exe")) {
+            $desktopHost = Resolve-CodexDesktopHost -AppRoot $root
+            if ($desktopHost) {
                 return [pscustomobject]@{
                     root = [IO.Path]::GetFullPath($root)
                     packageVersion = [string]$pkg.Version
                     packageName = [string]$pkg.Name
+                    desktopHostName = $desktopHost
                 }
             }
         }
@@ -270,9 +285,16 @@ $cachedStatus = $null
 if (-not $NoPersist -and $source -and $source.packageVersion -and (Test-Path -LiteralPath $statusPath)) {
     $cachedStatus = $existingStatus
 }
-$sourceHostHash = if ($source) { Get-OptionalHash (Join-Path $source.root "Codex.exe") } else { $null }
+$sourceDesktopHost = if ($source) { $source.desktopHostName } else { $null }
+$activeDesktopHost = if (Test-Path -LiteralPath $activeRoot) {
+    foreach ($name in @("ChatGPT.exe", "Codex.exe")) {
+        $candidate = Join-Path $activeRoot $name
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $name; break }
+    }
+} else { $null }
+$sourceHostHash = if ($source -and $sourceDesktopHost) { Get-OptionalHash (Join-Path $source.root $sourceDesktopHost) } else { $null }
 $sourceCliHash = if ($source) { Get-OptionalHash (Join-Path $source.root "resources\codex.exe") } else { $null }
-$activeHostHash = Get-OptionalHash (Join-Path $activeRoot "Codex.exe")
+$activeHostHash = if ($activeDesktopHost) { Get-OptionalHash (Join-Path $activeRoot $activeDesktopHost) } else { $null }
 $activeCliHash = Get-OptionalHash (Join-Path $activeRoot "resources\codex.exe")
 $activeGuardrails = Test-ActiveHostGuardrails -Manifest $activeManifest -HostRoot $activeRoot -SourceHostHash $sourceHostHash -SourceCliHash $sourceCliHash
 $comparable = [bool]($sourceHostHash -and $sourceCliHash -and $activeHostHash -and $activeCliHash)
@@ -372,6 +394,7 @@ $result = [pscustomobject]@{
         packageName = if ($source) { $source.packageName } else { $null }
         packageVersion = if ($source) { $source.packageVersion } else { $null }
         root = if ($source) { $source.root } else { $null }
+        desktopHostName = $sourceDesktopHost
         hostHash = $sourceHostHash
         cliHash = $sourceCliHash
     }

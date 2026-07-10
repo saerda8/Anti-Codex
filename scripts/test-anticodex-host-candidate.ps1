@@ -82,15 +82,27 @@ if ($candidate -ne $expectedCandidate) {
     throw "Anti-Codex candidate validation may only run for $expectedCandidate"
 }
 
+$candidateAppRoot = Join-Path $candidate "codex-patched-app"
+$detectedDesktopHost = $null
+foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
+    if (Test-Path -LiteralPath (Join-Path $candidateAppRoot $hostName) -PathType Leaf) {
+        $detectedDesktopHost = $hostName
+        break
+    }
+}
+if (-not $detectedDesktopHost) {
+    throw "Anti-Codex candidate is missing a desktop host executable (ChatGPT.exe or Codex.exe)."
+}
+
 $required = @(
     (Join-Path $candidate "codex-patched-app.ok"),
-    (Join-Path $candidate "codex-patched-app\Anti-Codex.exe"),
-    (Join-Path $candidate "codex-patched-app\Codex.exe"),
-    (Join-Path $candidate "codex-patched-app\resources\app.asar"),
-    (Join-Path $candidate "codex-patched-app\resources\codex.exe"),
-    (Join-Path $candidate "codex-patched-app\resources\icon.ico"),
-    (Join-Path $candidate "codex-patched-app\resources\codex-tray.ico"),
-    (Join-Path $candidate "codex-patched-app\icon.ico")
+    (Join-Path $candidateAppRoot "Anti-Codex.exe"),
+    (Join-Path $candidateAppRoot $detectedDesktopHost),
+    (Join-Path $candidateAppRoot "resources\app.asar"),
+    (Join-Path $candidateAppRoot "resources\codex.exe"),
+    (Join-Path $candidateAppRoot "resources\icon.ico"),
+    (Join-Path $candidateAppRoot "resources\codex-tray.ico"),
+    (Join-Path $candidateAppRoot "icon.ico")
 )
 foreach ($path in $required) {
     if (-not (Test-Path -LiteralPath $path)) {
@@ -125,13 +137,13 @@ if (($recordedCriticalPatches.Count -ne $expectedCriticalPatches.Count) -or
     throw "Anti-Codex candidate marker is missing critical compatibility patches."
 }
 
-$antiCodex = Join-Path $candidate "codex-patched-app\Anti-Codex.exe"
-$asarPath = Join-Path $candidate "codex-patched-app\resources\app.asar"
-$codex = Join-Path $candidate "codex-patched-app\resources\codex.exe"
-$copiedSourceHost = Join-Path $candidate "codex-patched-app\Codex.exe"
-$hostIcon = Join-Path $candidate "codex-patched-app\resources\icon.ico"
-$trayIcon = Join-Path $candidate "codex-patched-app\resources\codex-tray.ico"
-$appRootIcon = Join-Path $candidate "codex-patched-app\icon.ico"
+$antiCodex = Join-Path $candidateAppRoot "Anti-Codex.exe"
+$asarPath = Join-Path $candidateAppRoot "resources\app.asar"
+$codex = Join-Path $candidateAppRoot "resources\codex.exe"
+$copiedSourceHost = Join-Path $candidateAppRoot $detectedDesktopHost
+$hostIcon = Join-Path $candidateAppRoot "resources\icon.ico"
+$trayIcon = Join-Path $candidateAppRoot "resources\codex-tray.ico"
+$appRootIcon = Join-Path $candidateAppRoot "icon.ico"
 $hostIconPalette = Test-AntiCodexIconPalette -Path $hostIcon
 $trayIconPalette = Test-AntiCodexIconPalette -Path $trayIcon
 $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon

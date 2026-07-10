@@ -149,7 +149,7 @@ function Get-OriginalCodexMainProcesses {
         if (-not $_.ExecutablePath) { return $false }
         $exe = Normalize-Path ([string]$_.ExecutablePath)
         $commandLine = [string]$_.CommandLine
-        return ($_.Name -ieq "Codex.exe") -and
+        return ($_.Name -ieq "Codex.exe" -or $_.Name -ieq "ChatGPT.exe") -and
             ($exe.IndexOf("AppData\Local\Anti-Codex", [StringComparison]::OrdinalIgnoreCase) -lt 0) -and
             ($commandLine -notmatch "\s--type=")
     })

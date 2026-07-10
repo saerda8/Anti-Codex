@@ -151,21 +151,33 @@ function Test-AntiCodexHost {
         "electron-local-plugin-catalog",
         "webview-local-plugin-catalog"
     )
+    if (-not (Test-Path -LiteralPath $MarkerPath -PathType Leaf)) { throw "Anti-Codex host marker is missing: $MarkerPath" }
+    $manifest = Get-Content -LiteralPath $MarkerPath -Raw | ConvertFrom-Json
+    if ($manifest.schema -ne "anticodex-host-manifest-v1") { throw "Anti-Codex host marker schema is invalid: $MarkerPath" }
+
+    $detectedDesktopHost = $null
+    foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
+        if (Test-Path -LiteralPath (Join-Path $hostRootFull $hostName) -PathType Leaf) {
+            $detectedDesktopHost = $hostName
+            break
+        }
+    }
+    if (-not $detectedDesktopHost) {
+        throw "Anti-Codex host is missing a desktop host executable (ChatGPT.exe or Codex.exe)."
+    }
+
     $required = [ordered]@{
         antiCodexExe = (Join-Path $hostRootFull "Anti-Codex.exe")
-        codexHost = (Join-Path $hostRootFull "Codex.exe")
+        codexHost = (Join-Path $hostRootFull $detectedDesktopHost)
         appAsar = (Join-Path $hostRootFull "resources\app.asar")
         codexCli = (Join-Path $hostRootFull "resources\codex.exe")
         hostIcon = (Join-Path $hostRootFull "resources\icon.ico")
         trayIcon = (Join-Path $hostRootFull "resources\codex-tray.ico")
         appRootIcon = (Join-Path $hostRootFull "icon.ico")
     }
-    if (-not (Test-Path -LiteralPath $MarkerPath -PathType Leaf)) { throw "Anti-Codex host marker is missing: $MarkerPath" }
     foreach ($path in $required.Values) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Anti-Codex host is incomplete: $path" }
     }
-    $manifest = Get-Content -LiteralPath $MarkerPath -Raw | ConvertFrom-Json
-    if ($manifest.schema -ne "anticodex-host-manifest-v1") { throw "Anti-Codex host marker schema is invalid: $MarkerPath" }
     $recordedCriticalPatches = @($manifest.criticalPatches)
     if (($recordedCriticalPatches.Count -ne $expectedCriticalPatches.Count) -or
         (@($expectedCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {

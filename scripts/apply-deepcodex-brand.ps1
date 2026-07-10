@@ -8,16 +8,21 @@ $APP_ROOT = Join-Path $INSTALL_ROOT "codex-patched-app"
 $RESOURCES = Join-Path $APP_ROOT "resources"
 $ASAR = Join-Path $RESOURCES "app.asar"
 $PENDING_ASAR = Join-Path $RESOURCES "app.asar.deepcodex-brand.pending"
-$EXE = Join-Path $APP_ROOT "Codex.exe"
+$EXE = $null
+foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
+    $candidate = Join-Path $APP_ROOT $hostName
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $EXE = $candidate; break }
+}
+if (-not $EXE) { throw "Desktop host executable not found in $APP_ROOT (expected ChatGPT.exe or Codex.exe)." }
 $OLD_HASH = "45dc179ad9fb20cc136ea0bfc224668364f6000873b38fd669f79118265b3e9e"
 $NEW_HASH = "4fc363eaf7fb385bd84c291bcc7f558d6e019f5d21d095f7ba56b1d39a07e1df"
 
 function Assert-NoPatchedCodexRunning {
     $running = Get-CimInstance Win32_Process |
-        Where-Object { $_.Name -eq "Codex.exe" -and $_.CommandLine -like "*codex-patched-app*" } |
+        Where-Object { ($_.Name -eq "Codex.exe" -or $_.Name -eq "ChatGPT.exe") -and $_.CommandLine -like "*codex-patched-app*" } |
         Select-Object -First 1
     if ($running) {
-        throw "Anti-Codex Codex.exe is still running. Close Anti-Codex first, then run this script again."
+        throw "Anti-Codex patched host is still running. Close Anti-Codex first, then run this script again."
     }
 }
 

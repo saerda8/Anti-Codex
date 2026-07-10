@@ -1800,7 +1800,7 @@ test("Anti-Codex installer creates an isolated copied Codex host", () => {
   assert.match(installer, /\.anticodex-pending/);
   assert.match(installer, /codex-host-staging/);
   assert.match(installer, /Move-Item -LiteralPath \$copiedCodexStaging -Destination \$copiedCodex/);
-  assert.match(installer, /foreach \(\$requiredHostFile in @\("Codex\.exe", "resources\\app\.asar", "resources\\codex\.exe"\)\)/);
+  assert.match(installer, /foreach \(\$requiredHostFile in @\(\$stagedDesktopHost, "resources\\app\.asar", "resources\\codex\.exe"\)\)/);
   assert.match(installer, /GetFolderPath\("Programs"\)/);
   assert.match(installer, /Sync Anti-Codex with Codex\.lnk/);
   assert.match(installer, /sync-anticodex-launcher\.ps1/);
@@ -16560,4 +16560,119 @@ test("approved real run sequence is a no-traffic gate before concrete task execu
   assert.match(managerInject, /readyLogin=/);
   assert.match(managerInject, /readyProof=/);
   assert.match(managerInject, /approvedRealRun tasks:/);
+});
+
+test("installer detects new ChatGPT.exe desktop host layout and old Codex.exe layout", () => {
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const updateCheck = readFileSync(resolve(root, "scripts", "check-anticodex-update.ps1"), "utf8");
+  const candidateValidator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
+  const rollbackValidator = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
+
+  // Both install scripts must have a Resolve-CodexDesktopHost function
+  assert.match(installer, /function Resolve-CodexDesktopHost/);
+  assert.match(updateCheck, /function Resolve-CodexDesktopHost/);
+
+  // Both must check ChatGPT.exe first (new layout), then Codex.exe (old layout)
+  assert.match(installer, /function Resolve-CodexDesktopHost[\s\S]*?\$chatGpt = Join-Path \$AppRoot "ChatGPT\.exe"[\s\S]*?\$codexHost = Join-Path \$AppRoot "Codex\.exe"/);
+  assert.match(updateCheck, /function Resolve-CodexDesktopHost[\s\S]*?\$chatGpt = Join-Path \$AppRoot "ChatGPT\.exe"[\s\S]*?\$codexHost = Join-Path \$AppRoot "Codex\.exe"/);
+
+  // Find-CodexAppRoot in installer must use Resolve-CodexDesktopHost
+  assert.match(installer, /function Find-CodexAppRoot[\s\S]*?\$hostName = Resolve-CodexDesktopHost -AppRoot \$appRoot/);
+
+  // Installer staging must use stagedDesktopHost instead of hardcoded Codex.exe
+  assert.match(installer, /\$stagedDesktopHost = Resolve-CodexDesktopHost -AppRoot \$copiedCodexStaging/);
+  assert.match(installer, /\$sourceDesktopHostPath = Join-Path \$copiedCodex \$stagedDesktopHost/);
+  assert.match(installer, /Copy-Item -LiteralPath \$sourceDesktopHostPath -Destination \$antiCodexHost -Force/);
+
+  // Installer must not still hardcode Codex.exe as the sole host copy source
+  assert.doesNotMatch(installer, /Copy-Item -LiteralPath \(Join-Path \$copiedCodex "Codex\.exe"\)/);
+
+  // Installer staging validation must use stagedDesktopHost variable
+  assert.match(installer, /foreach\s*\(\$requiredHostFile\s+in\s+@\(\$stagedDesktopHost,\s*"resources\\app\.asar",\s*"resources\\codex\.exe"\)/);
+
+  // Installer manifest must include desktopHostName field and accept it as parameter
+  assert.match(installer, /\[Parameter\(Mandatory = \$true\)\]\[string\]\$DesktopHostName/);
+  assert.match(installer, /desktopHostName = \$DesktopHostName/);
+  assert.match(installer, /codexHost = \(Get-FileHash.*\$DesktopHostName/);
+
+  // Candidate validator must dynamically detect layout
+  assert.match(candidateValidator, /\$detectedDesktopHost = \$null/);
+  assert.match(candidateValidator, /foreach \(\$hostName in @\("ChatGPT\.exe", "Codex\.exe"\)\)/);
+  assert.match(candidateValidator, /\$candidateAppRoot = Join-Path \$candidate "codex-patched-app"/);
+  assert.match(candidateValidator, /\$copiedSourceHost = Join-Path \$candidateAppRoot \$detectedDesktopHost/);
+
+  // Rollback validator must dynamically detect layout
+  assert.match(rollbackValidator, /function Test-AntiCodexHost[\s\S]*?\$detectedDesktopHost = \$null/);
+  assert.match(rollbackValidator, /function Test-AntiCodexHost[\s\S]*?foreach \(\$hostName in @\("ChatGPT\.exe", "Codex\.exe"\)\)/);
+  assert.match(rollbackValidator, /codexHost = \(Join-Path \$hostRootFull \$detectedDesktopHost\)/);
+
+  // Update checker must detect source and active desktop host names
+  assert.match(updateCheck, /\$sourceDesktopHost = if \(\$source\) \{ \$source\.desktopHostName \}/);
+  assert.match(updateCheck, /\$activeDesktopHost/);
+  assert.match(updateCheck, /\$sourceHostHash = if \(\$source -and \$sourceDesktopHost\)/);
+  assert.match(updateCheck, /\$activeHostHash = if \(\$activeDesktopHost\)/);
+  assert.match(updateCheck, /desktopHostName = \$sourceDesktopHost/);
+
+  // Resolve-CodexSource must return desktopHostName
+  assert.match(updateCheck, /desktopHostName = \$desktopHost/);
+
+  // Source hash must use the dynamic desktop host name, not hardcoded Codex.exe
+  assert.doesNotMatch(updateCheck, /Get-OptionalHash \(Join-Path \$source\.root "Codex\.exe"\)/);
+  assert.doesNotMatch(updateCheck, /Get-OptionalHash \(Join-Path \$activeRoot "Codex\.exe"\)/);
+});
+
+test("Get-OriginalCodexMainProcesses detects both Codex.exe and ChatGPT.exe originals", () => {
+  const installedOverall = readFileSync(resolve(root, "scripts", "test-anticodex-installed-overall.ps1"), "utf8");
+  const coldRelaunch = readFileSync(resolve(root, "scripts", "test-anticodex-cold-relaunch.ps1"), "utf8");
+  const conversations = readFileSync(resolve(root, "scripts", "clear-anticodex-conversations.ps1"), "utf8");
+
+  for (const script of [installedOverall, coldRelaunch, conversations]) {
+    assert.match(
+      script,
+      /function Get-OriginalCodexMainProcesses[\s\S]*?\(\$_.Name -ieq "Codex\.exe" -or \$_.Name -ieq "ChatGPT\.exe"\)/,
+      "Get-OriginalCodexMainProcesses must detect both Codex.exe and ChatGPT.exe originals",
+    );
+  }
+});
+
+test("Get-OriginalCodexMainPids in refresh fallback detects both Codex.exe and ChatGPT.exe", () => {
+  const refreshFallback = readFileSync(resolve(root, "scripts", "test-anticodex-refresh-fallback.ps1"), "utf8");
+  assert.match(
+    refreshFallback,
+    /function Get-OriginalCodexMainPids[\s\S]*?\(\$leaf -ieq "Codex\.exe" -or \$leaf -ieq "ChatGPT\.exe"\)/,
+    "Get-OriginalCodexMainPids must detect both Codex.exe and ChatGPT.exe originals",
+  );
+});
+
+test("sync-readiness validates the new installer stagedDesktopHost loop pattern", () => {
+  const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  assert.match(
+    syncReadiness,
+    /Has-Text \$installScript 'foreach\\s\*\\\(\\\$requiredHostFile\\s\+in\\s\+@\\\(\\\$stagedDesktopHost/,
+    "sync-readiness must validate the installer stagedDesktopHost loop pattern",
+  );
+});
+
+test("backward compatibility: old Codex.exe-only layout still passes source detection", () => {
+  const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+  const updateCheck = readFileSync(resolve(root, "scripts", "check-anticodex-update.ps1"), "utf8");
+
+  // Both must still check for Codex.exe as a valid host (backward compat)
+  assert.match(installer, /function Resolve-CodexDesktopHost[\s\S]*?\$codexHost = Join-Path \$AppRoot "Codex\.exe"/);
+  assert.match(updateCheck, /function Resolve-CodexDesktopHost[\s\S]*?\$codexHost = Join-Path \$AppRoot "Codex\.exe"/);
+
+  // ChatGPT.exe check must come before Codex.exe (new layout first)
+  const installerMatch = installer.match(/function Resolve-CodexDesktopHost[\s\S]*?\n\}/);
+  assert.ok(installerMatch, "installer must have Resolve-CodexDesktopHost function");
+  const installerBody = installerMatch[0];
+  const chatGptIdx = installerBody.indexOf("ChatGPT.exe");
+  const codexIdx = installerBody.indexOf("Codex.exe");
+  assert.ok(chatGptIdx < codexIdx, "ChatGPT.exe must be checked before Codex.exe for new layout priority");
+
+  const updateMatch = updateCheck.match(/function Resolve-CodexDesktopHost[\s\S]*?\n\}/);
+  assert.ok(updateMatch, "update checker must have Resolve-CodexDesktopHost function");
+  const updateBody = updateMatch[0];
+  const updateChatGptIdx = updateBody.indexOf("ChatGPT.exe");
+  const updateCodexIdx = updateBody.indexOf("Codex.exe");
+  assert.ok(updateChatGptIdx < updateCodexIdx, "update checker must check ChatGPT.exe before Codex.exe");
 });
