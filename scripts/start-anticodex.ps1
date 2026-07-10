@@ -308,8 +308,18 @@ try {
         "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", "`"$startDeepCodex`""
     )
-    $cmdProc = Start-Process -FilePath cmd.exe -ArgumentList $cmdArgs -WindowStyle Hidden -PassThru
-    $watchProc = $cmdProc
+    & cmd.exe @cmdArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "cmd fallback could not start the Anti-Codex monitor (exit code $LASTEXITCODE)."
+    }
+    Start-Sleep -Milliseconds 250
+    $watchProc = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -eq "powershell.exe" -and
+        [string]$_.CommandLine -like "*start-deepcodex.ps1*"
+    } | Select-Object -First 1
+    if (-not $watchProc) {
+        throw "cmd fallback did not start the Anti-Codex monitor."
+    }
 }
 Write-Host ""
 Write-Host "=================================================="

@@ -274,6 +274,15 @@ test("Anti-Codex launcher selects isolated Antigravity mode", () => {
   );
 });
 
+test("Anti-Codex launcher falls back to a direct detached monitor launch", () => {
+  const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+
+  assert.match(launcher, /Background PowerShell launch was denied/);
+  assert.match(launcher, /& cmd\.exe @cmdArgs/);
+  assert.match(launcher, /cmd fallback did not start the Anti-Codex monitor/);
+  assert.doesNotMatch(launcher, /\$cmdProc = Start-Process -FilePath cmd\.exe/);
+});
+
 test("Anti-Codex conversation cleanup preserves project roots and native Codex isolation", () => {
   const cleanup = readFileSync(resolve(root, "scripts", "clear-anticodex-conversations.ps1"), "utf8");
   const hygiene = readFileSync(resolve(root, "scripts", "test-anticodex-conversation-hygiene.mjs"), "utf8");
