@@ -1063,9 +1063,21 @@ function Reuse-AntiCodexManagerInjectionWatcher {
         Write-LifecycleLog "stopping duplicate manager injection watcher pid=$($duplicate.ProcessId)."
         Stop-Process -Id $duplicate.ProcessId -Force -ErrorAction SilentlyContinue
     }
-    $script:managerInjected = $true
+
+    # Check if the watcher has successfully injected the manager
+    $managerInjectionOutput = ""
+    if (Test-Path -LiteralPath $ANTICODEX_MANAGER_CDP_LOG) {
+        $managerInjectionOutput = Get-Content -LiteralPath $ANTICODEX_MANAGER_CDP_LOG -Raw -ErrorAction SilentlyContinue
+    }
+    if ($managerInjectionOutput -match '"ok"\s*:\s*true') {
+        if (-not $script:managerInjected) {
+            $script:managerInjected = $true
+            Write-LifecycleLog "Manager injection succeeded (detected via log check)."
+            [void](Start-AntiCodexManagerBridge)
+        }
+    }
+
     Write-LifecycleLog "Reusing manager injection watcher (PID: $($keeper.ProcessId))."
-    [void](Start-AntiCodexManagerBridge)
     return $true
 }
 
@@ -1196,12 +1208,11 @@ function Invoke-CdpInjectionsIfNeeded {
                         $managerInjectionOk = $managerInjectionOutput -match '"ok"\s*:\s*true'
                         if ($managerInjectionOk) {
                             $script:managerInjected = $true
-                            Write-LifecycleLog "Manager injection watcher is running (PID: $($proc.Id))."
+                            Write-LifecycleLog "Manager injection watcher is running and succeeded (PID: $($proc.Id))."
                             [void](Start-AntiCodexManagerBridge)
                         } elseif (-not $proc.HasExited) {
-                            $script:managerInjected = $true
+                            # Do not set $script:managerInjected to true or start bridge yet; wait for next check to find '"ok":true'
                             Write-LifecycleLog "Manager injection watcher is alive and will keep watching (PID: $($proc.Id))."
-                            [void](Start-AntiCodexManagerBridge)
                         } else {
                             Write-LifecycleLog "Manager injection timed out after 3000ms."
                         }

@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime"),
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
@@ -158,12 +158,20 @@ $modelThinkingVerifier = Join-Path $scriptsRoot "test-anticodex-model-thinking.p
 $postSyncVerifier = Join-Path $scriptsRoot "test-anticodex-installed-overall.ps1"
 $startScript = Join-Path $scriptsRoot "start-anticodex.ps1"
 $runtimeStartScript = Join-Path $scriptsRoot "start-deepcodex.ps1"
-$startMenuDir = Join-Path ([Environment]::GetFolderPath("Programs")) "Anti-Codex"
+$programsPath = [Environment]::GetFolderPath("Programs")
+if (-not $programsPath) {
+    $programsPath = if ($env:APPDATA) { Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs" } else { Join-Path $env:USERPROFILE "AppData\Roaming\Microsoft\Windows\Start Menu\Programs" }
+}
+$startMenuDir = Join-Path $programsPath "Anti-Codex"
 $startMenuMainShortcut = Join-Path $startMenuDir "Anti-Codex.lnk"
 $startMenuSyncShortcut = Join-Path $startMenuDir "Sync Anti-Codex with Codex.lnk"
 $startMenuRollbackShortcut = Join-Path $startMenuDir "Rollback Anti-Codex.lnk"
 $startMenuManagerShortcut = Join-Path $startMenuDir "Manage Anti-Codex.lnk"
-$desktopDir = [Environment]::GetFolderPath("Desktop")
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+if (-not $desktopPath) {
+    $desktopPath = Join-Path $env:USERPROFILE "Desktop"
+}
+$desktopDir = $desktopPath
 $desktopMainShortcut = Join-Path $desktopDir "Anti-Codex.lnk"
 $activeHost = Join-Path $installRoot "codex-patched-app"
 $activeMarker = Join-Path $installRoot "codex-patched-app.ok"
