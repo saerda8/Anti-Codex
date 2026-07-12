@@ -2,6 +2,7 @@
 param(
     [string]$BaseUrl = "",
     [int]$TimeoutSec = 90,
+    [string]$Model = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
 )
 
@@ -91,13 +92,19 @@ function Read-SseEvents {
 
 $health = $null
 $models = $null
-$model = ""
+$selectedModel = ([string]$Model).Trim()
 $marker = "CODEX_RESPONSES_$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 $responseText = ""
 $events = @()
 $completed = $null
+$failedEvent = $null
+$failedError = $null
 $route = $null
+$routeFresh = $false
+$requestStartedAt = $null
 $finalText = ""
+$modelSelectionFailed = $false
+$trafficAttempted = $false
 
 try {
     $health = Invoke-LocalJson "/health"
@@ -109,15 +116,22 @@ try {
 
 try {
     $models = Invoke-LocalJson "/models"
-    $model = [string](@($models.data)[0].id)
-    if (-not $model) { Add-Failure "No model available from /models" }
+    $availableModelIds = @($models.data | ForEach-Object { [string]$_.id } | Where-Object { $_ })
+    if (-not $selectedModel) {
+        $selectedModel = [string]($availableModelIds | Select-Object -First 1)
+    } elseif (-not ($availableModelIds -contains $selectedModel)) {
+        Add-Failure "Requested model is not available from /models: $selectedModel"
+        $modelSelectionFailed = $true
+        $selectedModel = ""
+    }
+    if (-not $selectedModel -and -not $modelSelectionFailed) { Add-Failure "No model available from /models" }
 } catch {
     Add-Failure "models request failed: $($_.Exception.Message)"
 }
 
-if ($model) {
+if ($selectedModel) {
     $body = [ordered]@{
-        model = $model
+        model = $selectedModel
         input = @(
             [ordered]@{
                 type = "message"
@@ -138,11 +152,21 @@ if ($model) {
     }
     try {
         $json = $body | ConvertTo-Json -Depth 16 -Compress
+        $requestStartedAt = [DateTimeOffset]::UtcNow
+        $trafficAttempted = $true
         $responseText = Invoke-LocalPostText "/codex/responses" $json
         $events = @(Read-SseEvents $responseText)
         $completed = @($events | Where-Object { $_.event -eq "response.completed" }) | Select-Object -Last 1
+        $failedEvent = @($events | Where-Object { $_.event -eq "response.failed" }) | Select-Object -Last 1
         if (-not $completed) {
-            Add-Failure "/codex/responses SSE did not emit response.completed"
+            if ($failedEvent) {
+                $failedError = $failedEvent.data.response.error
+                $failureType = [string]$failedError.type
+                $failureMessage = [string]$failedError.message
+                Add-Failure "/codex/responses emitted response.failed: type=$failureType message=$failureMessage"
+            } else {
+                Add-Failure "/codex/responses SSE did not emit response.completed or response.failed"
+            }
         } else {
             $output = @($completed.data.response.output)
             $textParts = @($output | ForEach-Object { @($_.content) } | ForEach-Object { $_.text }) | Where-Object { $_ }
@@ -170,10 +194,17 @@ if ($model) {
     try {
         $routes = Invoke-LocalJson "/anticodex/model-routes"
         $route = $routes.latest
-        if (-not $route) {
+        if ($completed -and -not $route) {
             Add-Failure "model route audit missing latest route after /codex/responses"
-        } elseif ([string]$route.requestedModel -ne $model -or [string]$route.resolvedModel -ne $model) {
-            Add-Failure "/codex/responses model route mismatch: requested=$($route.requestedModel) resolved=$($route.resolvedModel) expected=$model"
+        } elseif ($completed) {
+            $routeAt = [DateTimeOffset]::MinValue
+            $routeAtValid = [DateTimeOffset]::TryParse([string]$route.at, [ref]$routeAt)
+            $routeFresh = $routeAtValid -and $requestStartedAt -and $routeAt -ge $requestStartedAt.AddSeconds(-2)
+            if (-not $routeFresh) {
+                Add-Failure "model route audit latest route was stale after /codex/responses"
+            } elseif ([string]$route.requestedModel -ne $selectedModel -or [string]$route.resolvedModel -ne $selectedModel) {
+                Add-Failure "/codex/responses model route mismatch: requested=$($route.requestedModel) resolved=$($route.resolvedModel) expected=$selectedModel"
+            }
         }
     } catch {
         Add-Failure "model route audit failed: $($_.Exception.Message)"
@@ -185,19 +216,23 @@ $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
     reportName = "codex-responses"
     requestedRealTraffic = $true
-    usedRealTraffic = $true
+    usedRealTraffic = $trafficAttempted
     behaviorCovered = ($failures.Count -eq 0)
-    coverageKind = "real-traffic"
+    coverageKind = if ($trafficAttempted) { "real-traffic" } else { "model-selection-no-traffic" }
     failures = $failures.ToArray()
     baseUrl = $BaseUrl
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
-    model = $model
+    model = $selectedModel
+    requestedModel = ([string]$Model).Trim()
     marker = $marker
     eventCount = @($events).Count
     eventNames = @($events | ForEach-Object { $_.event })
     completed = ($null -ne $completed)
+    failed = ($null -ne $failedEvent)
+    failed_error = $failedError
     final_text = $finalText
     route = $route
+    routeFresh = $routeFresh
     report = [pscustomobject]@{
         latest = (Join-Path $ReportRoot "latest-codex-responses.json")
         history = (Join-Path $ReportRoot "$stamp-codex-responses.json")

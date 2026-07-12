@@ -325,7 +325,12 @@ Write-Host ""
 Write-Host "=================================================="
 Write-Host "  Anti-Codex launched successfully!"
 if ($watchProc) {
-    Write-Host "  Background watcher PID: $($watchProc.Id)"
+    $watchPid = if ($watchProc -is [Diagnostics.Process]) {
+        [int]$watchProc.Id
+    } else {
+        [int]$watchProc.ProcessId
+    }
+    Write-Host "  Background watcher PID: $watchPid"
 }
 Write-Host "=================================================="
 Write-Host ""

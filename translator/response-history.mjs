@@ -2,14 +2,20 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_MAX_ENTRIES = 64;
-const DEFAULT_MAX_TOTAL_CHARS = 32_000_000;
+const DEFAULT_MAX_ENTRIES = 8;
+const DEFAULT_MAX_TOTAL_CHARS = 12_000_000;
 
 export function createResponseHistoryStore(options = {}) {
   const filePath = options.filePath || "";
+  const fileSystem = options.fileSystem || fs;
   const maxEntries = positiveInteger(options.maxEntries, DEFAULT_MAX_ENTRIES);
   const maxTotalChars = positiveInteger(options.maxTotalChars, DEFAULT_MAX_TOTAL_CHARS);
+  const measureEntryChars = typeof options.measureEntryChars === "function"
+    ? options.measureEntryChars
+    : serializedEntrySize;
   const entries = new Map();
+  const entryChars = new Map();
+  let totalChars = 0;
 
   load();
 
@@ -43,11 +49,10 @@ export function createResponseHistoryStore(options = {}) {
     if (!responseId) return;
     const inputItems = normalizeInput(request?.input);
     const outputItems = Array.isArray(response?.output) ? clone(response.output) : [];
-    entries.delete(responseId);
-    entries.set(responseId, {
+    setEntry(responseId, {
       id: responseId,
       createdAt: Date.now(),
-      inputItems,
+      inputItemCount: inputItems.length,
       contextItems: [...clone(inputItems), ...outputItems],
     });
     prune();
@@ -60,7 +65,7 @@ export function createResponseHistoryStore(options = {}) {
 
     const order = options.order === "desc" ? "desc" : "asc";
     const limit = Math.min(100, positiveInteger(options.limit, 20));
-    let data = clone(entry.inputItems);
+    let data = clone(entry.contextItems.slice(0, entry.inputItemCount));
     if (order === "desc") data.reverse();
 
     const after = String(options.after || "");
@@ -81,20 +86,37 @@ export function createResponseHistoryStore(options = {}) {
   }
 
   function prune() {
-    while (entries.size > maxEntries || serializedSize(entries) > maxTotalChars) {
+    while (entries.size > maxEntries || (entries.size > 1 && totalChars > maxTotalChars)) {
       const oldest = entries.keys().next().value;
       if (!oldest) break;
-      entries.delete(oldest);
+      deleteEntry(oldest);
     }
+  }
+
+  function setEntry(id, entry) {
+    deleteEntry(id);
+    const measured = Number(measureEntryChars(entry));
+    const chars = Number.isFinite(measured) && measured > 0 ? measured : 0;
+    entries.set(id, entry);
+    entryChars.set(id, chars);
+    totalChars += chars;
+  }
+
+  function deleteEntry(id) {
+    if (!entries.has(id)) return;
+    totalChars = Math.max(0, totalChars - (entryChars.get(id) || 0));
+    entryChars.delete(id);
+    entries.delete(id);
   }
 
   function load() {
     if (!filePath) return;
     try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      for (const entry of parsed?.entries ?? []) {
-        if (!entry?.id || !Array.isArray(entry.inputItems) || !Array.isArray(entry.contextItems)) continue;
-        entries.set(String(entry.id), entry);
+      const parsed = JSON.parse(fileSystem.readFileSync(filePath, "utf8"));
+      for (const rawEntry of parsed?.entries ?? []) {
+        const entry = compactPersistedEntry(rawEntry);
+        if (!entry) continue;
+        setEntry(entry.id, entry);
       }
       prune();
     } catch {
@@ -104,13 +126,23 @@ export function createResponseHistoryStore(options = {}) {
 
   function persist() {
     if (!filePath) return;
+    let temporary = "";
     try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      const temporary = `${filePath}.${process.pid}.tmp`;
-      fs.writeFileSync(temporary, JSON.stringify({ version: 1, entries: [...entries.values()] }), "utf8");
-      fs.renameSync(temporary, filePath);
-    } catch {
+      fileSystem.mkdirSync(path.dirname(filePath), { recursive: true });
+      temporary = `${filePath}.${process.pid}.tmp`;
+      fileSystem.writeFileSync(temporary, JSON.stringify({ version: 2, entries: [...entries.values()] }), "utf8");
+      try {
+        fileSystem.renameSync(temporary, filePath);
+      } catch {
+        fileSystem.copyFileSync(temporary, filePath);
+      }
+    } catch (error) {
+      try { options.onPersistError?.(error); } catch {}
       // Response history is a recovery aid; request completion must not fail if persistence fails.
+    } finally {
+      if (temporary) {
+        try { fileSystem.rmSync(temporary, { force: true }); } catch {}
+      }
     }
   }
 
@@ -150,15 +182,27 @@ function clone(value) {
   return structuredClone(value);
 }
 
+function compactPersistedEntry(entry) {
+  if (!entry?.id || !Array.isArray(entry.contextItems)) return null;
+  const legacyInputCount = Array.isArray(entry.inputItems) ? entry.inputItems.length : 0;
+  const requestedInputCount = Number.isInteger(entry.inputItemCount)
+    ? entry.inputItemCount
+    : legacyInputCount;
+  return {
+    id: String(entry.id),
+    createdAt: Number(entry.createdAt) || Date.now(),
+    inputItemCount: Math.max(0, Math.min(entry.contextItems.length, requestedInputCount)),
+    contextItems: entry.contextItems,
+  };
+}
+
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function serializedSize(entries) {
-  let total = 0;
-  for (const entry of entries.values()) total += JSON.stringify(entry).length;
-  return total;
+function serializedEntrySize(entry) {
+  return JSON.stringify(entry).length;
 }
 
 function emptyList() {

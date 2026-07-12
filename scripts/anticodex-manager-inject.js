@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v103";
+  const VERSION = "native-panel-v104";
   const SUMMARY_VERSION = "latest-reports-evidence-v4";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -50,7 +50,6 @@
     ["overallNoTraffic", "\u6574\u4f53\u68c0\u67e5\uff08\u4e0d\u8017\u6d41\u91cf\uff09"],
     ["diagnosticsBundle", "\u751f\u6210\u8bca\u65ad\u5305"],
     ["viewLatestReports", "\u67e5\u770b\u6700\u65b0\u62a5\u544a"],
-    ["secondAccountLoginStatus", "\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff08\u4e0d\u767b\u5f55\uff09"],
     ["postVerificationFull", "\u9a8c\u8bc1\u540e\u5b8c\u6574\u68c0\u67e5\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
   ];
   const DAILY_ACTION_IDS = new Set([
@@ -67,7 +66,6 @@
     "pluginCapabilities",
     "diagnosticsBundle",
     "viewLatestReports",
-    "secondAccountLoginStatus",
   ]);
   const HIGH_IMPACT_ACTION_IDS = new Set([
     "syncHost",
@@ -84,6 +82,7 @@
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
   const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
+  const MCP_SKILLS_ACTION_UI_TIMEOUT_MS = 440000;
   const HIGH_IMPACT_CONFIRMATION_MS = 15000;
   const LOAD_FETCH_TIMEOUT_MS = 2500;
   const DIAGNOSTICS_FETCH_TIMEOUT_MS = 30000;
@@ -1719,7 +1718,8 @@
   function actionUiTimeoutMs(action) {
     if (action === "accountSwitch") return 65000;
     if (action === "fastOverallNoTraffic") return 90000;
-    if (action === "mcpSkills" || action === "pluginCapabilities" || action === "workerTransportStatus") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
+    if (action === "mcpSkills") return MCP_SKILLS_ACTION_UI_TIMEOUT_MS;
+    if (action === "pluginCapabilities" || action === "workerTransportStatus") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
     if (action === "updateCheck" || action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
     return ACTION_UI_TIMEOUT_MS;
   }
@@ -1949,14 +1949,14 @@
     resetHighImpactConfirmation();
 
     const style = el("style", { text: `
-      #${MANAGER_ID}{color-scheme:dark;--ac-bg:#171717;--ac-surface:#1d1d1d;--ac-raised:#232323;--ac-hover:#2b2b2b;--ac-input-bg:#181818;--ac-line:rgba(255,255,255,.09);--ac-line-strong:rgba(255,255,255,.14);--ac-text:#f3f3f3;--ac-muted:#9b9b9b;--ac-value:#e8e8e8;--ac-result:#dedede;--ac-error:#ffb4bc;--ac-warn:#e8c98a;--ac-focus:#8c8c8c;--ac-backdrop:rgba(0,0,0,.68);--ac-shadow:rgba(0,0,0,.56);--ac-close-active:#303030;--ac-button-hover-line:rgba(255,255,255,.2);--ac-danger:#4b2228;--ac-danger-hover:#5b2830;--ac-danger-active:#682e37;--ac-danger-line:#783740;--ac-danger-hover-line:#914650;--ac-danger-text:#ffd8dd;--ac-danger-section:#21191b;--ac-danger-section-line:rgba(120,55,64,.52);position:fixed;inset:0;z-index:2147483647;background:var(--ac-backdrop);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:28px;font-family:"Segoe UI",Microsoft YaHei,sans-serif;color:var(--ac-text)}
+      #${MANAGER_ID}{color-scheme:dark;--ac-bg:#171717;--ac-surface:#1d1d1d;--ac-raised:#232323;--ac-hover:#2b2b2b;--ac-input-bg:#181818;--ac-line:rgba(255,255,255,.09);--ac-line-strong:rgba(255,255,255,.14);--ac-text:#f3f3f3;--ac-muted:#9b9b9b;--ac-value:#e8e8e8;--ac-result:#dedede;--ac-error:#ffb4bc;--ac-warn:#e8c98a;--ac-focus:#8c8c8c;--ac-backdrop:rgba(0,0,0,.68);--ac-shadow:rgba(0,0,0,.56);--ac-close-active:#303030;--ac-button-hover-line:rgba(255,255,255,.2);--ac-danger:#4b2228;--ac-danger-hover:#5b2830;--ac-danger-active:#682e37;--ac-danger-line:#783740;--ac-danger-hover-line:#914650;--ac-danger-text:#ffd8dd;--ac-danger-section:#21191b;--ac-danger-section-line:rgba(120,55,64,.52);position:fixed;inset:0;z-index:2147483647;background:var(--ac-backdrop);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:28px;font-family:"Segoe UI",Microsoft YaHei,sans-serif;color:var(--ac-text);-webkit-app-region:no-drag}
       #${MANAGER_ID}[data-anticodex-theme="light"]{color-scheme:light;--ac-bg:#f7f7f7;--ac-surface:#fff;--ac-raised:#f1f1f1;--ac-hover:#e7e7e7;--ac-input-bg:#fff;--ac-line:rgba(0,0,0,.08);--ac-line-strong:rgba(0,0,0,.14);--ac-text:#1f1f1f;--ac-muted:#666;--ac-value:#292929;--ac-result:#333;--ac-error:#a52a3a;--ac-warn:#805d14;--ac-focus:#555;--ac-backdrop:rgba(20,20,20,.24);--ac-shadow:rgba(0,0,0,.22);--ac-close-active:#ddd;--ac-button-hover-line:rgba(0,0,0,.2);--ac-danger:#6e2832;--ac-danger-hover:#7a303b;--ac-danger-active:#842f3c;--ac-danger-line:#8e3d49;--ac-danger-hover-line:#9d4a56;--ac-danger-text:#fff4f5;--ac-danger-section:#fbf1f2;--ac-danger-section-line:rgba(122,48,59,.25)}
       #${MANAGER_ID}[data-anticodex-theme="dark"]{color-scheme:dark}
       #${MANAGER_ID} *{box-sizing:border-box}
       .anticodex-panel{width:min(1080px,96vw);height:min(840px,92vh);overflow:auto;border-radius:14px;background:var(--ac-bg);border:1px solid var(--ac-line-strong);box-shadow:0 28px 90px var(--ac-shadow);padding:20px}
       .anticodex-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;padding:2px 2px 0}
       .anticodex-head h1{font-size:20px;line-height:1.3;letter-spacing:-.2px;margin:0 0 5px;font-weight:650}.anticodex-head p{margin:0;color:var(--ac-muted);font-size:12px}
-      .anticodex-close{appearance:none;border:1px solid var(--ac-line);border-radius:9px;min-width:88px;width:88px;min-height:44px;height:48px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;background:var(--ac-raised);color:transparent;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;pointer-events:auto;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;user-select:none;flex:0 0 auto;overflow:hidden}
+      .anticodex-close{appearance:none;border:1px solid var(--ac-line);border-radius:9px;min-width:88px;width:88px;min-height:44px;height:48px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;background:var(--ac-raised);color:transparent;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;pointer-events:auto;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;user-select:none;flex:0 0 auto;overflow:hidden;-webkit-app-region:no-drag}
       .anticodex-close::after{content:attr(aria-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ac-text);pointer-events:none}
       .anticodex-close:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}.anticodex-close:active{background:var(--ac-close-active)}.anticodex-close:focus-visible{outline:2px solid var(--ac-focus);outline-offset:2px}
       .anticodex-actions{display:grid;gap:10px;margin:0 0 14px}

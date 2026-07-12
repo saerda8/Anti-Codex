@@ -140,7 +140,7 @@ test("Antigravity streamed response keeps the SSE connection active before first
   assert.equal(response.event("response.completed").data.response.output[0].content[0].text, "late answer");
 });
 
-test("Antigravity non-streaming tool completion respects stream idle timeout", async () => {
+test("Antigravity non-streaming tool completion uses the total timeout without an idle timeout", async () => {
   const response = new FakeResponse();
   const registry = createAntigravityRequestRegistry();
   const prompt = "Create C:\\Temp\\anticodex-timeout-smoke\\done.txt containing UI_LOCAL_PROJECT_SMOKE_TIMEOUT.";
@@ -169,7 +169,7 @@ test("Antigravity non-streaming tool completion respects stream idle timeout", a
   );
 
   const failed = response.event("response.failed").data.response;
-  assert.equal(failed.error.type, "antigravity_stream_idle_timeout");
+  assert.equal(failed.error.type, "antigravity_stream_total_timeout");
   assert.equal(registry.snapshot().active, 0);
   assert.equal(response.ended, true);
 });

@@ -112,6 +112,26 @@ function Test-StaleRunningUpdateOperation {
     return ([DateTimeOffset]::UtcNow - $updatedAt).TotalMinutes -ge $MaxAgeMinutes
 }
 
+function Test-StaleFailedUpdateOperation {
+    param(
+        [object]$Operation,
+        [int]$MaxAgeMinutes = 15
+    )
+
+    if ((Get-ObjectPropertyValue -InputObject $Operation -Name "state") -ne "failed") {
+        return $false
+    }
+    $updatedAtText = [string](Get-ObjectPropertyValue -InputObject $Operation -Name "updatedAt")
+    if ([string]::IsNullOrWhiteSpace($updatedAtText)) {
+        return $false
+    }
+    $updatedAt = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse($updatedAtText, [ref]$updatedAt)) {
+        return $false
+    }
+    return ([DateTimeOffset]::UtcNow - $updatedAt).TotalMinutes -ge $MaxAgeMinutes
+}
+
 function Test-AntiCodexIconPalette {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -331,9 +351,10 @@ if (-not $NoPersist -and
     $driftState -eq "synced" -and
     $updateNeeded -ne $true -and
     $activeGuardrails.ok -eq $true -and
-    (Test-StaleRunningUpdateOperation -Operation $existingOperation)) {
+    ((Test-StaleRunningUpdateOperation -Operation $existingOperation) -or
+        (Test-StaleFailedUpdateOperation -Operation $existingOperation))) {
     $rollbackAvailable = [bool](Get-ObjectPropertyValue -InputObject $existingOperation -Name "rollbackAvailable")
-    Set-AntiCodexUpdateOperation -State "succeeded" -Stage "complete" -Message "Anti-Codex is synced; cleared a stale running sync operation." -RollbackAvailable $rollbackAvailable -StateRoot $StateRoot
+    Set-AntiCodexUpdateOperation -State "succeeded" -Stage "complete" -Message "Anti-Codex is synced; cleared a stale sync operation." -RollbackAvailable $rollbackAvailable -StateRoot $StateRoot
     $existingOperation = (Get-AntiCodexUpdateStatus -StateRoot $StateRoot).operation
 }
 

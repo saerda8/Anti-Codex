@@ -45,6 +45,13 @@ export function antigravityModelOnlyToolConfig() {
   };
 }
 
+export function antigravityConversationHistoryConfig() {
+  return {
+    enabled: false,
+    maxConversations: 0,
+  };
+}
+
 export function antigravityNativeToolCapabilitySummary(options = {}) {
   const nativeBridgeEnabled = parseBooleanFlag(
     options.nativeBridgeEnabled
@@ -340,6 +347,7 @@ export async function* resumeAntigravityNativeTurnStreamed(session, toolResults 
               items: [{ text: String(options.followUpPrompt) }],
               blocking: false,
               cascadeConfig: {
+                conversationHistoryConfig: antigravityConversationHistoryConfig(),
                 plannerConfig: {
                   planModel: internalModel,
                   toolConfig: antigravityModelOnlyToolConfig(),
@@ -844,6 +852,7 @@ export async function runAntigravityNativeTurn(prompt, options = {}) {
         items: [{ text: prompt }],
         blocking: true,
         cascadeConfig: {
+          conversationHistoryConfig: antigravityConversationHistoryConfig(),
           plannerConfig: {
             planModel: model.internalModel,
             toolConfig: antigravityModelOnlyToolConfig(),
@@ -991,6 +1000,7 @@ function runProcess(command, args, options) {
 function resolveCwd(cwd) {
   const absolute = isAbsolute(cwd) ? cwd : resolve(cwd);
   if (!existsSync(absolute)) throw new Error(`Workspace does not exist: ${absolute}`);
+  if (!statSync(absolute).isDirectory()) throw new Error(`Workspace is not a directory: ${absolute}`);
   return absolute;
 }
 
@@ -1151,6 +1161,7 @@ export async function* runAntigravityNativeTurnStreamed(prompt, options = {}) {
       items: [{ text: prompt }],
       blocking: false,
       cascadeConfig: {
+        conversationHistoryConfig: antigravityConversationHistoryConfig(),
         plannerConfig: {
           planModel: model.internalModel,
           toolConfig: antigravityModelOnlyToolConfig(),

@@ -125,6 +125,8 @@ $expectedCriticalPatches = @(
     "app-route-gate",
     "profile-dropdown-settings",
     "browser-window-icon",
+    "windows-tray-icon",
+    "computer-use-legacy-notify-opt-out",
     "local-model-availability",
     "local-plugin-catalog",
     "electron-local-plugin-catalog",
@@ -147,6 +149,15 @@ $appRootIcon = Join-Path $candidateAppRoot "icon.ico"
 $hostIconPalette = Test-AntiCodexIconPalette -Path $hostIcon
 $trayIconPalette = Test-AntiCodexIconPalette -Path $trayIcon
 $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon
+$asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($asarPath))
+$codexTraySelectorCount = [regex]::Matches($asarText, 'codex-tray\.ico').Count
+$alternateTraySelectorCount = [regex]::Matches($asarText, 'icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico').Count
+if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
+    throw "Anti-Codex candidate still selects a ChatGPT-branded Windows tray icon."
+}
+if ($asarText -notmatch '\?\.length<1\|\|') {
+    throw "Anti-Codex candidate is missing the computer-use legacy notify opt-out."
+}
 if ($hostIconPalette.ok -ne $true) {
     throw "Anti-Codex candidate host icon is not the pink Codex cloud with white command marks."
 }

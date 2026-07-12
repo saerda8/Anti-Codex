@@ -45,6 +45,24 @@ test("Antigravity CLI quota logs are converted to typed quota errors", () => {
   assert.match(error.message, /Individual quota reached/);
 });
 
+test("runAntigravityNativeTurn rejects a file path before opening a Cascade", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-agentapi-cwd-"));
+  const filePath = join(root, "workspace.txt");
+  writeFileSync(filePath, "not a directory", "utf8");
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  let fetchCalled = false;
+
+  await assert.rejects(runAntigravityNativeTurn("test", {
+    cwd: filePath,
+    connection: { lsAddress: "127.0.0.1:1", csrfToken: "secret" },
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called");
+    },
+  }), /workspace is not a directory/i);
+  assert.equal(fetchCalled, false);
+});
+
 test("antigravity account snapshot exposes a stable fingerprint without account PII", () => {
   const snapshot = antigravityAccountSnapshot({
     userStatus: {
@@ -453,6 +471,8 @@ test("runAntigravityNativeTurn sends Cascade messages with the internal planMode
   assert.equal(send.body.cascadeConfig.plannerConfig.planModel, "MODEL_PLACEHOLDER_M20");
   assert.equal(send.body.cascadeConfig.plannerConfig.toolConfig.listDir.forceDisable, true);
   assert.equal(send.body.cascadeConfig.plannerConfig.toolConfig.askPermission.enabled, false);
+  assert.equal(send.body.cascadeConfig.conversationHistoryConfig.enabled, false);
+  assert.equal(send.body.cascadeConfig.conversationHistoryConfig.maxConversations, 0);
   const cancelReqs = requests.filter((r) => r.method === "CancelCascadeInvocation");
   assert.equal(cancelReqs.length, 0, "No CancelCascadeInvocation on successful completion");
 });
@@ -814,6 +834,8 @@ test("runAntigravityNativeTurnStreamed - normal completion, blocking:false, mult
       assert.equal(body.blocking, false, "SendUserCascadeMessage must be non-blocking");
       assert.equal(body.cascadeConfig.plannerConfig.toolConfig.listDir.forceDisable, true);
       assert.equal(body.cascadeConfig.plannerConfig.toolConfig.askPermission.enabled, false);
+      assert.equal(body.cascadeConfig.conversationHistoryConfig.enabled, false);
+      assert.equal(body.cascadeConfig.conversationHistoryConfig.maxConversations, 0);
       return jsonResponse({});
     }
     if (method === "WaitForConversationFullyIdle") {

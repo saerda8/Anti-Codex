@@ -21,9 +21,14 @@ const actions = String(args.get("--actions") || defaultAction).split(",").map((v
 const action = actions[0] || defaultAction;
 const verificationMode = String(args.get("--verification-mode") || "");
 const uiOnlyMode = verificationMode === "ui-only";
+const closeOnly = args.has("--close-only") && String(args.get("--close-only") ?? "true").toLowerCase() !== "false";
+const profileEntryOnly = args.has("--profile-entry-only") && String(args.get("--profile-entry-only") ?? "true").toLowerCase() !== "false";
 const defaultTimeoutMs = action === "fastOverallNoTraffic" ? 90000 : 15000;
 const timeoutMs = Number(args.get("--timeout-ms") || defaultTimeoutMs);
 const compact = args.has("--compact");
+// Hidden or fully occluded Electron windows can take about five seconds to
+// acknowledge a CDP mouse event even though the renderer remains responsive.
+const CDP_INPUT_EVENT_TIMEOUT_MS = 12_000;
 let managerInjectSource = readFileSync(new URL("./anticodex-manager-inject.js", import.meta.url), "utf8");
 if (simulatePendingReopen) {
   managerInjectSource = managerInjectSource.replace("const ACTION_UI_TIMEOUT_MS = 5000;", "const ACTION_UI_TIMEOUT_MS = 120;");
@@ -91,6 +96,7 @@ function compactManagerButtonRecord(record) {
     lastUiOnly: result.lastUiOnly,
     actionCenterHitsButton: result.actionCenterHitsButton ?? result.initial?.actionCenterHitsButton,
     closeHitAreaOk: result.closeHitAreaOk ?? result.initial?.closeHitAreaOk,
+    closeActualMouseOk: result.closeActualMouseOk ?? result.initial?.closeActualMouseOk,
     managerOpenedNewPage: record?.managerOpenedNewPage,
     text: shortText(result.text),
     lastSummary: shortText(result.lastSummary),
@@ -858,39 +864,133 @@ async function evaluate(expression, timeout = 8000) {
 }
 
 async function verifyCloseButtonActualMouseClick() {
-  const probe = await evaluate(`(async () => {
-    if (typeof window.__ANTICODEX_OPEN_MANAGER__ !== "function") return { ok: false, error: "open manager missing" };
-    if (!document.querySelector("#anticodex-manager-overlay")) await window.__ANTICODEX_OPEN_MANAGER__();
-    const overlay = document.querySelector("#anticodex-manager-overlay");
-    const closeButton = overlay?.querySelector('[data-anticodex-close="true"]');
-    const rect = closeButton?.getBoundingClientRect?.();
-    if (!overlay || !closeButton || !rect) return { ok: false, error: "close button missing" };
-    const x = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
-    const target = document.elementFromPoint(x, y);
-    const hasTextNode = Array.from(closeButton.childNodes || []).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+  try {
+    await ws.call(id++, "Page.bringToFront", {}, 5000);
+    await evaluate(`(() => { window.focus(); return { focused: document.hasFocus(), visibility: document.visibilityState }; })()`, 2500);
+  } catch (error) {
+    return { ok: false, phase: "bring-to-front", error: error?.message || String(error) };
+  }
+  const pointSpecs = [
+    { name: "upper-center", yFraction: 0.2 },
+    { name: "center", yFraction: 0.5 },
+    { name: "lower-center", yFraction: 0.8 },
+  ];
+  const probes = [];
+  for (const pointSpec of pointSpecs) {
+    const probe = await evaluate(`(async () => {
+      if (typeof window.__ANTICODEX_OPEN_MANAGER__ !== "function") return { ok: false, error: "open manager missing" };
+      if (!document.querySelector("#anticodex-manager-overlay")) await window.__ANTICODEX_OPEN_MANAGER__();
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const overlay = document.querySelector("#anticodex-manager-overlay");
+      const closeButton = overlay?.querySelector('[data-anticodex-close="true"]');
+      const rect = closeButton?.getBoundingClientRect?.();
+      if (!overlay || !closeButton || !rect) return { ok: false, error: "close button missing" };
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height * ${JSON.stringify(pointSpec.yFraction)};
+      const target = document.elementFromPoint(x, y);
+      const hasTextNode = Array.from(closeButton.childNodes || []).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+      return {
+        ok: !!target?.closest?.('[data-anticodex-close="true"]') && !hasTextNode,
+        error: hasTextNode ? "close button still has a text-node hit layer" : "",
+        name: ${JSON.stringify(pointSpec.name)},
+        x,
+        y,
+        target: target?.tagName || "",
+        targetClass: target?.className || "",
+        text: closeButton.textContent || closeButton.getAttribute("aria-label") || "",
+        hasTextNode,
+        webkitAppRegion: getComputedStyle(closeButton).webkitAppRegion || "",
+      };
+    })()`, 3500);
+    if (!probe.ok) return { ok: false, phase: "preclick", probes: [...probes, probe], failedProbe: probe };
+    const mouseEvents = [
+      { type: "mouseMoved", button: "none", buttons: 0 },
+      { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
+      { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
+    ];
+    for (const mouseEvent of mouseEvents) {
+      try {
+        await ws.call(id++, "Input.dispatchMouseEvent", { ...mouseEvent, x: probe.x, y: probe.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
+      } catch (error) {
+        return {
+          ok: false,
+          phase: `actual-click-${mouseEvent.type}`,
+          probes,
+          failedProbe: probe,
+          error: `${pointSpec.name} ${mouseEvent.type}: ${error?.message || String(error)}`,
+        };
+      }
+    }
+    await sleep(150);
+    const closed = await evaluate(`(() => ({ closed: !document.querySelector("#anticodex-manager-overlay") }))()`, 2500);
+    const result = { ...probe, closed: closed.closed === true };
+    probes.push(result);
+    if (!result.closed) {
+      return { ok: false, phase: "actual-click", probes, failedProbe: result, error: `close button ${pointSpec.name} actual mouse click did not close overlay` };
+    }
+    const reopened = await evaluate(`(async () => {
+      await window.__ANTICODEX_OPEN_MANAGER__?.();
+      return { reopened: !!document.querySelector("#anticodex-manager-overlay") };
+    })()`, 3500);
+    if (!reopened.reopened) return { ok: false, phase: "reopen", probes, error: "manager did not reopen after close probe" };
+  }
+  return { ok: true, phase: "actual-click", probes, reopened: true };
+}
+
+async function verifyProfileManagerEntry() {
+  await ws.call(id++, "Page.bringToFront", {}, 5000);
+  const trigger = await evaluate(`(() => {
+    document.getElementById("anticodex-manager-overlay")?.remove();
+    const visible = (node) => {
+      if (!node?.getBoundingClientRect) return false;
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return rect.width > 2 && rect.height > 2 && style.visibility !== "hidden" && style.display !== "none";
+    };
+    const label = (node) => String(node?.innerText || node?.textContent || node?.getAttribute?.("aria-label") || node?.getAttribute?.("title") || "").replace(/\\s+/g, " ").trim();
+    const candidates = Array.from(document.querySelectorAll('button,[role="button"]')).filter(visible);
+    const settings = candidates.find((node) => label(node) === "\\u8bbe\\u7f6e")
+      || candidates.find((node) => /\\u8bbe\\u7f6e/.test(label(node)));
+    if (!settings) {
+      return { ok: false, phase: "profile-trigger", candidates: candidates.map(label).filter(Boolean).slice(-40) };
+    }
+    const rect = settings.getBoundingClientRect();
+    return { ok: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, triggerText: label(settings) };
+  })()`, 3500);
+  if (!trigger.ok) return trigger;
+  for (const mouseEvent of [
+    { type: "mouseMoved", button: "none", buttons: 0 },
+    { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
+    { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
+  ]) {
+    await ws.call(id++, "Input.dispatchMouseEvent", { ...mouseEvent, x: trigger.x, y: trigger.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
+  }
+  await sleep(350);
+  const menu = await evaluate(`(() => {
+    const visible = (node) => {
+      if (!node?.getBoundingClientRect) return false;
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return rect.width > 2 && rect.height > 2 && style.visibility !== "hidden" && style.display !== "none";
+    };
+    const label = (node) => String(node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim();
+    const items = Array.from(document.querySelectorAll('[role="menuitem"],button,a,[data-radix-collection-item]'))
+      .filter(visible)
+      .map((node) => ({ text: label(node), role: node.getAttribute("role") || "", tag: node.tagName }))
+      .filter((item) => item.text);
+    const entry = items.find((item) => item.text === "\\u7ba1\\u7406" || item.text === "Manager" || item.text === "Anti-Codex \\u7ba1\\u7406");
+    const profileEntryText = entry?.text || "";
     return {
-      ok: !!target?.closest?.('[data-anticodex-close="true"]') && !hasTextNode,
-      error: hasTextNode ? "close button still has a text-node hit layer" : "",
-      x,
-      y,
-      target: target?.tagName || "",
-      text: closeButton.textContent || closeButton.getAttribute("aria-label") || "",
-      hasTextNode,
+      ok: profileEntryText === "\\u7ba1\\u7406",
+      phase: "profile-entry",
+      profileEntryText,
+      forbiddenEnglishVisible: items.some((item) => item.text === "Manager"),
+      items: items.slice(-40),
     };
   })()`, 3500);
-  if (!probe.ok) return { ...probe, ok: false, phase: "preclick" };
-  await ws.call(id++, "Input.dispatchMouseEvent", { type: "mouseMoved", x: probe.x, y: probe.y, button: "none", buttons: 0 }, 2500);
-  await ws.call(id++, "Input.dispatchMouseEvent", { type: "mousePressed", x: probe.x, y: probe.y, button: "left", buttons: 1, clickCount: 1 }, 2500);
-  await ws.call(id++, "Input.dispatchMouseEvent", { type: "mouseReleased", x: probe.x, y: probe.y, button: "left", buttons: 0, clickCount: 1 }, 2500);
-  await sleep(120);
-  const closed = await evaluate(`(() => ({ closed: !document.querySelector("#anticodex-manager-overlay") }))()`, 2500);
-  if (!closed.closed) return { ...probe, ok: false, phase: "actual-click", error: "close button actual mouse click did not close overlay" };
-  const reopened = await evaluate(`(async () => {
-    await window.__ANTICODEX_OPEN_MANAGER__?.();
-    return { reopened: !!document.querySelector("#anticodex-manager-overlay") };
-  })()`, 3500);
-  return { ...probe, ok: reopened.reopened === true, phase: reopened.reopened ? "actual-click" : "reopen", reopened: reopened.reopened === true };
+  await ws.call(id++, "Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }, 2500).catch(() => {});
+  await ws.call(id++, "Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }, 2500).catch(() => {});
+  return { ...menu, triggerText: trigger.triggerText };
 }
 
 async function drainManagerActionQueue() {
@@ -1159,6 +1259,30 @@ async function runManagerActionBatch(actions) {
   };
 }
 
+if (profileEntryOnly) {
+  const profileEntry = await verifyProfileManagerEntry().catch((error) => ({
+    ok: false,
+    phase: "profile-entry-exception",
+    error: error?.message || String(error),
+  }));
+  ws.close();
+  releaseManagerButtonLock(managerButtonLock);
+  console.log(asciiJson({ ok: profileEntry.ok === true, port, target: { id: target.id, title: target.title, url: target.url }, profileEntry }, compact ? 0 : 2));
+  process.exit(profileEntry.ok ? 0 : 1);
+}
+
+if (closeOnly) {
+  const closeActualMouse = await verifyCloseButtonActualMouseClick().catch((error) => ({
+    ok: false,
+    phase: "actual-click-exception",
+    error: error?.message || String(error),
+  }));
+  ws.close();
+  releaseManagerButtonLock(managerButtonLock);
+  console.log(asciiJson({ ok: closeActualMouse.ok === true, port, target: { id: target.id, title: target.title, url: target.url }, closeActualMouse }, compact ? 0 : 2));
+  process.exit(closeActualMouse.ok ? 0 : 1);
+}
+
 if (actions.length > 1) {
   const output = await runManagerActionBatch(actions);
   ws.close();
@@ -1166,6 +1290,18 @@ if (actions.length > 1) {
   console.log(asciiJson(compactManagerButtonOutput(output), compact ? 0 : 2));
   if (!output.ok) process.exit(1);
   process.exit(0);
+}
+
+const closeActualMouse = await verifyCloseButtonActualMouseClick().catch((error) => ({
+  ok: false,
+  phase: "actual-click-exception",
+  error: error?.message || String(error),
+}));
+if (!closeActualMouse.ok) {
+  ws.close();
+  releaseManagerButtonLock(managerButtonLock);
+  console.log(asciiJson({ ok: false, port, target: { id: target.id, title: target.title, url: target.url }, closeActualMouse }, compact ? 0 : 2));
+  process.exit(1);
 }
 
 const safeAction = JSON.stringify(action);
@@ -1303,6 +1439,8 @@ const initial = await evaluate(`
 })()
 `, 12000);
 const pageTargetsAfterManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
+initial.closeActualMouseOk = closeActualMouse.ok === true;
+initial.closeActualMouse = closeActualMouse;
 const managerOpenedNewPage = pageTargetsAfterManagerOpen.some((item) => {
   if (item?.type !== "page") return false;
   const haystack = `${item.url || ""}\n${item.title || ""}`;
@@ -1550,6 +1688,7 @@ const explicitActionSuccess = visibleFinished
 const ok = Boolean(initial.ok)
   && actionStarted
   && initial.closeHitAreaOk === true
+  && initial.closeActualMouseOk === true
   && managerOpenedNewPage === false
   && ((uiOnlyMode && initialUiOnlyFinished) || uiOnlyFinished
     ? true

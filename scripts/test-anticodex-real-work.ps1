@@ -141,9 +141,14 @@ if (-not $lock.acquired) {
     Complete-Skipped "another Anti-Codex real Antigravity verification is already running"
 }
 
+$mcpExecution = $null
+$first = $null
+$call = $null
+$probeRun = $null
+$finalText = ""
+
 try {
     New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
-    $mcpExecution = $null
     $mcpMarker = "MCP_OK_$marker"
     try {
         $mcpExecution = Invoke-RealNodeReplMcpResult -Code "nodeRepl.write('$mcpMarker')" -ExpectedMarker $mcpMarker
@@ -194,7 +199,6 @@ try {
         Add-Failure "create_probe_file marker mismatch"
     }
 
-    $probeRun = $null
     if ($arguments -and [string]$arguments.path -and [string]$arguments.marker) {
         New-Item -ItemType Directory -Path (Split-Path -Parent ([string]$arguments.path)) -Force | Out-Null
         [IO.File]::WriteAllText([string]$arguments.path, $probeSource, [Text.Encoding]::UTF8)
@@ -211,7 +215,6 @@ try {
     }
 
     $second = $null
-    $finalText = ""
     if ($call -and $call.call_id) {
         $second = Invoke-AntiCodexResponse @{
             model = $model
@@ -272,7 +275,49 @@ try {
     $result | ConvertTo-Json -Depth 14 -Compress
     if ($failures.Count -gt 0) { exit 1 }
 } catch {
-    Write-Error ("Anti-Codex real work verification failed: " + $_.Exception.Message)
+    $failureMessage = [string]$_.Exception.Message
+    $statusCode = try { [int]$_.Exception.Response.StatusCode } catch { $null }
+    $failureType = if ($statusCode -eq 429 -or $failureMessage -match "(?i)(429|too many requests|quota)") {
+        "antigravity_quota_exceeded"
+    } else {
+        "real_work_exception"
+    }
+    $failureError = [pscustomobject]@{
+        type = $failureType
+        status = $statusCode
+        message = $failureMessage
+        retryable = $false
+    }
+    Add-Failure "real work verification exception: $failureMessage"
+    $result = [pscustomobject]@{
+        ok = $false
+        reportName = "real-work"
+        requestedRealTraffic = $true
+        usedRealTraffic = $true
+        behaviorCovered = $false
+        coverageKind = "real-traffic"
+        failures = $failures.ToArray()
+        model = $model
+        elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+        first_response_id = if ($first) { $first.id } else { $null }
+        call_id = if ($call) { $call.call_id } else { $null }
+        artifact = [pscustomobject]@{
+            directory = $artifactDir
+            file = $artifactFile
+            exists = Test-Path -LiteralPath $artifactFile -PathType Leaf
+            ran = $null -ne $probeRun
+            markerMatched = if ($probeRun) { [string]$probeRun.marker -eq $marker } else { $false }
+        }
+        executor = [pscustomobject]@{
+            tool = "create_probe_file"
+            realFileWrite = Test-Path -LiteralPath $artifactFile -PathType Leaf
+            realMcp = $mcpExecution
+        }
+        final_text = $finalText
+        failed_error = $failureError
+    }
+    Save-Report $result
+    Write-Output ($result | ConvertTo-Json -Depth 14 -Compress)
     exit 1
 } finally {
     Exit-AntiCodexRealTrafficLock $lock

@@ -1,12 +1,23 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  autonomousContinuationHasFreshCompletion,
+  countMarkerOccurrences,
+  countNewAssistantMarkers,
+  countObservedAssistantMarkers,
+  countUniqueAssistantMarkerMessages,
+  filterAssistantMarkerObservationFailures,
+  hasAssistantFinalMarkerEvidence,
+  parseWordCountCliOutput,
+  shouldRecoverIdleAutonomousTurn,
+} from "./lib/ui-chat-marker-evidence.mjs";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -29,7 +40,11 @@ Options:
   --project-label <text>   Expected project label (default: Anti-Codex).
   --artifact-dir <path>    Directory for task artifacts.
   --prompt-file <path>     UTF-8 prompt file.
+  --required-file <path>   Require this file to be newly created or updated and non-empty.
+  --required-file-contains <a|b>  Require every pipe-separated UTF-8 string in the file.
   --same-chat              Reuse the current chat instead of opening an isolated chat.
+  --same-chat-title-contains <text>  Reopen an existing task whose visible title contains this text.
+  --force-reset-same-chat  Allow stale recovery to interrupt/reset a reused chat.
   --help, -h               Show this help message without starting UI work.`);
   process.exit(0);
 }
@@ -41,16 +56,31 @@ const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "
 const diagnosticsUrl = `${baseUrl}/anticodex/diagnostics?fast=1`;
 const modelRoutesUrl = `${baseUrl}/anticodex/model-routes`;
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
+const DESKTOP_SUBMIT_REQUEST_GRACE_MS = 70_000;
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "response-history.json");
 const taskMode = String(args.get("--task-mode") || "exact-marker");
 const requiredModel = String(args.get("--model") || args.get("--required-model") || process.env.ANTICODEX_TEST_MODEL || "").trim();
-const requiredModelLabel = String(args.get("--model-label") || args.get("--required-model-label") || "").trim();
+let requiredModelLabel = String(args.get("--model-label") || args.get("--required-model-label") || "").trim();
 const configModelOverrideEnabled = requiredModel && !args.has("--no-config-model-override");
 const anticodexStateRoot = resolve(process.env.DEEPCODEX_STATE_ROOT || join(process.env.APPDATA || os.tmpdir(), "anticodex"));
 const anticodexCodexHome = resolve(process.env.ANTICODEX_CODEX_HOME || join(anticodexStateRoot, "codex-home-deepseek-app"));
 const anticodexConfigPath = resolve(anticodexCodexHome, "config.toml");
-const isolateChat = args.has("--same-chat") ? false : true;
+const anticodexModelCatalogPath = resolve(anticodexCodexHome, "deepseek-model-catalog.json");
+if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath)) {
+  try {
+    const catalog = JSON.parse(readFileSync(anticodexModelCatalogPath, "utf8").replace(/^\uFEFF/, ""));
+    const matchedModel = Array.isArray(catalog?.models)
+      ? catalog.models.find((model) => model?.slug === requiredModel)
+      : null;
+    requiredModelLabel = String(matchedModel?.display_name || "").trim();
+  } catch {
+    // Route verification still works with the model slug when the catalog is unreadable.
+  }
+}
+const sameChatTitleContains = String(args.get("--same-chat-title-contains") || "").trim();
+const isolateChat = !(args.has("--same-chat") || sameChatTitleContains);
+const preserveSameChatActiveTask = !isolateChat && !args.has("--force-reset-same-chat");
 const baseReportName = taskMode === "web-search"
   ? "ui-web-search-smoke"
   : taskMode === "free-chat"
@@ -149,6 +179,14 @@ let repoMultiFileExpectedTest = "";
 let repoMultiFileExpectedData = "";
 const promptFile = args.get("--prompt-file") ? resolve(String(args.get("--prompt-file"))) : "";
 const promptFromFile = promptFile ? readFileSync(promptFile, "utf8") : "";
+const requiredFile = args.get("--required-file") ? resolve(String(args.get("--required-file"))) : "";
+const requiredFileContains = String(args.get("--required-file-contains") || "")
+  .split("|")
+  .map(value => value.trim())
+  .filter(Boolean);
+const requiredFileBefore = requiredFile && existsSync(requiredFile)
+  ? { exists: true, size: statSync(requiredFile).size, mtimeMs: statSync(requiredFile).mtimeMs }
+  : { exists: false, size: 0, mtimeMs: 0 };
 const hasCustomPrompt = Boolean(promptFromFile || args.get("--prompt"));
 let promptText = String(promptFromFile || args.get("--prompt") || (taskMode === "web-search"
   ? `最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 ${marker}。`
@@ -231,12 +269,12 @@ if (!hasCustomPrompt && taskMode === "autonomous-reasoning") {
     "目标：做一个离线可运行的 Codex 更新资料分析器。你需要自己决定合理步骤、文件内容和验证顺序，不要只复述计划。",
     "必须产出的结果：",
     "- 文件名必须完全使用 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。",
-    "- analyzer.js、test.js、summary.json 或其他替代文件名都不算完成，即使内容正确也必须改成上面的确切文件名。",
-    "- 一个可运行的 Node.js 分析器，能读取 sources.json 并输出 JSON 摘要。",
-    "- 一个 node:test 测试文件，证明分析器至少能统计 3 条来源。",
-    "- sources.json 至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新；可以使用你已知的公开 URL。",
-    "- 一份中文 report.md，说明你的结论，并包含真实来源 URL 和最终标记。",
-    "- 一个离线 index.html，中文展示分析结果，链接 report.md，包含真实来源 URL 和最终标记。",
+    "- 只能保留上面 7 个交付文件；不得创建 setup.js、analyzer.js、test.js、summary.json 或任何第 8 个文件。",
+    "- codex-update-analyzer.mjs 必须同时导出 analyze(filePath) 和 summarizeSources(filePath)；两者都读取 UTF-8 sources.json、移除可选 BOM，并返回数字字段 sourceCount 和 codexMentionCount。CLI 也必须把这两个字段组成的单个 JSON 对象打印到标准输出。",
+    "- 一个 node:test 测试文件，分别验证 analyze 和 summarizeSources 至少能统计 3 条来源。",
+    "- sources.json 必须是对象数组，每项形如 {\"title\":\"Codex\",\"url\":\"https://openai.com/codex/\"}，至少 3 项，且每个 url 的域名必须是 openai.com 或其子域名；另外两项可使用 https://openai.com/news/、https://developers.openai.com/codex/。",
+    "- 一份中文 report.md，说明你的结论，包含精确短语“真实来源”、上面的 3 条 URL 和最终标记。",
+    "- 一个离线 index.html，中文展示分析结果，链接 report.md，包含精确短语“真实来源”、上面的 3 条 URL 和最终标记。",
     "- done.txt 只能包含最终标记。",
     "",
     "约束：不要查看 Antigravity brain、transcript、history 或 log 目录。可以创建文件、运行测试和命令。你要自己规划并执行，遇到失败要自行修正。最后只在最后一行输出最终标记。",
@@ -506,7 +544,11 @@ function modelValueMatches(value, expectedValues = []) {
 }
 
 function requiredModelNeedles() {
-  return [requiredModel, requiredModelLabel].filter(Boolean);
+  const values = [requiredModel, requiredModelLabel].filter(Boolean);
+  if (values.some((value) => /^gpt[- ]oss\b/i.test(String(value)))) {
+    values.push(...values.map((value) => String(value).replace(/^gpt[- ]/i, "")).filter(Boolean));
+  }
+  return [...new Set(values)];
 }
 
 function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
@@ -537,6 +579,7 @@ function desktopRequestPayloadObserved(diagnostics) {
   const ws = diagnostics?.responsesWebSocket || null;
   const payload = ws?.lastClientPayload || null;
   const relay = ws?.lastRelay || null;
+  if (payload?.requestKind === "task_title" || relay?.requestKind === "task_title") return false;
   if (Number(payload?.latestUserChars || 0) > 0) return true;
   if (Number(payload?.inputItems || 0) > 0) return true;
   if (Number(relay?.textDeltaChars || 0) > 0) return true;
@@ -563,6 +606,7 @@ function diagnosticsHasRealResponsesSubmitAfter(diagnostics, beforePayloadCount 
   const ws = diagnostics?.responsesWebSocket || null;
   const payload = ws?.lastClientPayload || null;
   const relay = ws?.lastRelay || null;
+  if (payload?.requestKind === "task_title" || relay?.requestKind === "task_title") return false;
   if (Number(payload?.latestUserChars || 0) > 0) return true;
   if (Number(payload?.inputItems || 0) > 0) return true;
   if (Number(relay?.textDeltaChars || 0) > 0) return true;
@@ -585,18 +629,34 @@ function diagnosticsHasRequiredModelSubmit(diagnostics) {
   return responsesSubmitModelValues(diagnostics).some((value) => modelValueMatches(value, expected));
 }
 
+function diagnosticsShowsActiveTask(diagnostics) {
+  return diagnostics?.antigravitySessionLock?.active === true
+    || Number(diagnostics?.activeAntigravityRequests?.active || 0) > 0
+    || diagnostics?.antigravityQueue?.running === true;
+}
+
 function realSubmitInputItems(realSubmit) {
   return Number(realSubmit?.diagnostics?.responsesWebSocket?.lastClientPayload?.inputItems || 0);
 }
 
-async function waitForRealResponsesSubmitAfter(url, beforePayloadCount = 0, timeoutMs = 15_000) {
+async function waitForRealResponsesSubmitAfter(
+  url,
+  beforePayloadCount = 0,
+  timeoutMs = 15_000,
+  expectedMarker = "",
+  beforeMarkerEntryIds = [],
+) {
   const deadline = Date.now() + timeoutMs;
   let latest = null;
   let lastError = null;
+  let markerEntryIds = responseHistoryMarkerEntryIds(expectedMarker);
   while (Date.now() < deadline) {
     try {
       latest = await httpJson(`${url}/anticodex/diagnostics?fast=1`);
-      if (diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
+      markerEntryIds = responseHistoryMarkerEntryIds(expectedMarker);
+      const markerScopedRequestObserved = !expectedMarker
+        || markerEntryIds.some((id) => !beforeMarkerEntryIds.includes(id));
+      if (markerScopedRequestObserved && diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
         const requiredModelMatched = diagnosticsHasRequiredModelSubmit(latest);
         return {
           ok: true,
@@ -604,6 +664,21 @@ async function waitForRealResponsesSubmitAfter(url, beforePayloadCount = 0, time
           lastError: requiredModelMatched ? null : `raw responses payload model did not match required model: ${responsesSubmitModelValues(latest).join(", ") || "none"}`,
           requiredModelMatched,
           observedModels: responsesSubmitModelValues(latest),
+          markerScopedRequestObserved,
+          markerEntryIds,
+        };
+      }
+      const activeTaskObserved = diagnosticsShowsActiveTask(latest);
+      if (activeTaskObserved && markerScopedRequestObserved) {
+        return {
+          ok: true,
+          diagnostics: latest,
+          lastError: null,
+          requiredModelMatched: diagnosticsHasRequiredModelSubmit(latest),
+          observedModels: responsesSubmitModelValues(latest),
+          activeTaskObserved,
+          markerScopedRequestObserved,
+          markerEntryIds,
         };
       }
     } catch (error) {
@@ -617,6 +692,8 @@ async function waitForRealResponsesSubmitAfter(url, beforePayloadCount = 0, time
     lastError,
     requiredModelMatched: diagnosticsHasRequiredModelSubmit(latest),
     observedModels: responsesSubmitModelValues(latest),
+    markerScopedRequestObserved: false,
+    markerEntryIds,
   };
 }
 
@@ -1417,10 +1494,10 @@ function buildAutonomousReasoningContinuationPrompt(currentFailures = [], eviden
     "不要查看 Antigravity brain、transcript、history 或 log 目录。",
     "不要只解释计划。请继续自己判断下一步，并通过真实工具调用完成缺失产物。",
     "必须使用这些确切文件名：package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。",
-    "analyzer.js、test.js、summary.json 或其他替代文件名不合格；如果已经创建了这些文件，请把内容迁移到上面的确切文件名，并保留/验证确切文件名。",
-    "codex-update-analyzer.mjs 必须导出 summarizeSources，读取 sources.json 时要能处理 UTF-8 BOM。",
-    "sources.json 至少 3 条真实 Codex/OpenAI 相关 URL；report.md 和 index.html 必须是中文、包含这些 URL 和最终标记；index.html 必须链接 report.md；done.txt 只能包含最终标记。",
-    "请运行 node --test codex-update-analyzer.test.mjs，并运行 node codex-update-analyzer.mjs sources.json；如果失败，继续修正。",
+    "只能保留上面 7 个交付文件；不得创建 setup.js、analyzer.js、test.js、summary.json 或任何第 8 个文件。如果 setup.js 或其他替代文件已经存在，请把必要内容迁移到上面的确切文件名后删除多余文件。",
+    "codex-update-analyzer.mjs 必须保留 analyze(filePath) 现有公共导出，并同时导出 summarizeSources(filePath)；两者都要读取 UTF-8 sources.json、移除可选 BOM，并返回 sourceCount 和 codexMentionCount。不要为了新增 summarizeSources 删除 analyze。CLI 必须向标准输出打印一个 JSON 对象，其中 sourceCount>=3 且 codexMentionCount>=1。",
+    "sources.json 必须是对象数组，每项都要有 title 和 url 字段，至少 3 项，且每个 url 的域名必须是 openai.com 或其子域名；可直接使用 https://openai.com/codex/、https://openai.com/news/、https://developers.openai.com/codex/。report.md 和 index.html 必须是中文、包含精确短语“真实来源”、这 3 条 URL 和最终标记；index.html 必须链接 report.md；done.txt 只能包含最终标记。",
+    "请运行 node --test codex-update-analyzer.test.mjs，并运行 node codex-update-analyzer.mjs sources.json；确认第二条命令的标准输出是可解析 JSON 且 sourceCount>=3、codexMentionCount>=1，如果失败就继续修正。",
     `只有在文件、测试、CLI 输出都满足后，最后一行才输出 ${marker}。`,
   ].filter(Boolean).join("\n");
 }
@@ -1737,6 +1814,8 @@ function verifyCodingProjectArtifact(dir, expectedMarker) {
       doneTxt: fileExists(donePath),
     },
     doneExact: false,
+    exportsAnalyze: false,
+    exportsSummarizeSources: false,
     exportsFunction: false,
     testPassed: false,
     cliPassed: false,
@@ -1769,7 +1848,7 @@ function verifyCodingProjectArtifact(dir, expectedMarker) {
         timeout: 10_000,
         windowsHide: true,
       }).trim();
-      evidence.cliJson = JSON.parse(evidence.cliOutput);
+      evidence.cliJson = parseWordCountCliOutput(evidence.cliOutput);
       evidence.cliPassed = Number(evidence.cliJson?.red) === 2 && Number(evidence.cliJson?.blue) === 1;
     }
   } catch (error) {
@@ -1841,7 +1920,7 @@ function verifyMultiTurnProjectArtifact(dir, firstMarker, finalMarker) {
         timeout: 10_000,
         windowsHide: true,
       }).trim();
-      evidence.cliJson = JSON.parse(evidence.cliOutput);
+      evidence.cliJson = parseWordCountCliOutput(evidence.cliOutput);
       evidence.cliPassed = Number(evidence.cliJson?.red) === 2
         && Number(evidence.cliJson?.blue) === 1
         && Number(evidence.cliJson?.green) === 1;
@@ -2002,7 +2081,10 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
       evidence.doneExact = text === expectedMarker;
     }
     if (evidence.files.analyzer) {
-      evidence.exportsFunction = /(?:export\s+(?:async\s+)?function\s+summarizeSources\b|export\s*\{[^}]*\bsummarizeSources\b[^}]*\})/.test(readFileSync(analyzerPath, "utf8"));
+      const source = readFileSync(analyzerPath, "utf8");
+      evidence.exportsAnalyze = /(?:export\s+(?:async\s+)?function\s+analyze\b|export\s+(?:const|let|var)\s+analyze\b|export\s*\{[^}]*\banalyze\b[^}]*\})/.test(source);
+      evidence.exportsSummarizeSources = /(?:export\s+(?:async\s+)?function\s+summarizeSources\b|export\s+(?:const|let|var)\s+summarizeSources\b|export\s*\{[^}]*\bsummarizeSources\b[^}]*\})/.test(source);
+      evidence.exportsFunction = evidence.exportsAnalyze && evidence.exportsSummarizeSources;
     }
     if (evidence.files.sourcesJson) {
       const parsed = parseJsonFile(sourcesPath);
@@ -2137,7 +2219,7 @@ function collectComplexProjectArtifactFailures(artifactEvidence, options = {}) {
   if (!artifactEvidence?.files?.indexHtml) localFailures.push("complex-project index.html was not created");
   if (!artifactEvidence?.files?.doneTxt) localFailures.push("complex-project done.txt was not created");
   if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) localFailures.push("complex-project done.txt did not exactly match the marker");
-  if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) localFailures.push("complex-project analyzer did not export summarizeSources");
+  if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) localFailures.push("complex-project analyzer did not export analyze and summarizeSources");
   if (artifactEvidence?.files?.sourcesJson && artifactEvidence.sourceUrlCount < 3) localFailures.push("complex-project sources.json had fewer than three source URLs");
   if (artifactEvidence?.files?.sourcesJson && artifactEvidence.trustedSourceUrlCount < 3) localFailures.push("complex-project sources.json had fewer than three trusted OpenAI source URLs");
   if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) localFailures.push("complex-project node:test did not pass");
@@ -2268,6 +2350,26 @@ function reportSiteArtifactComplete(evidence) {
   return collectReportSiteArtifactFailures(evidence).length === 0;
 }
 
+function responseHistoryMarkerEntryIds(text) {
+  if (!text) return [];
+  try {
+    const history = JSON.parse(readFileSync(responseHistoryPath, "utf8").replace(/^\uFEFF/, ""));
+    return (Array.isArray(history?.entries) ? history.entries : [])
+      .filter((entry) => JSON.stringify(entry).includes(text))
+      .map((entry, index) => String(entry?.id || `entry-${index}`));
+  } catch {
+    return [];
+  }
+}
+
+function reportSiteFinalEvidenceComplete(evidence) {
+  const history = evidence?.responseHistory || {};
+  return reportSiteArtifactComplete(evidence)
+    && history.taskToolOutputSeen === true
+    && history.markerToolOutputSeen === true
+    && history.assistantHasFinalMarker === true;
+}
+
 function collectAgenticStepFlowFailures(artifactEvidence) {
   const localFailures = [];
   if (!artifactEvidence?.files?.indexHtml) localFailures.push("agentic-step-flow index.html was not created");
@@ -2312,6 +2414,7 @@ async function waitForIdleDiagnostics(url, timeoutMs = 20_000) {
 
 async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
+  const ignoreHistoricalForegroundStop = !isolateChat;
   let latest = null;
   while (Date.now() < deadline) {
     const state = await ws.send("Runtime.evaluate", {
@@ -2326,7 +2429,7 @@ async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
         const bodyText = document.body.innerText || '';
         const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
         const labels = buttons.map((button) => String(button.getAttribute('aria-label') || button.textContent || '').trim()).filter(Boolean);
-        const hasStop = labels.some((label) => /^(?:Stop|停止)$|正在思考|running|thinking/i.test(label));
+        const hasStop = labels.some((label) => /^(?:Stop|停止|正在思考|running|thinking)$/i.test(label));
         const hasForegroundStop = buttons.some((button) => /bg-token-foreground/.test(String(button.className || ''))
           && /size-token-button-composer/.test(String(button.className || ''))
           && /停止|Stop|正在思考|running|thinking/i.test(bodyText));
@@ -2336,8 +2439,10 @@ async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
       awaitPromise: true,
     });
     latest = state.result?.result?.value || null;
-    if (latest?.composerPresent && latest.hasStop !== true && latest.hasForegroundStop !== true) {
-      return { ok: true, state: latest };
+    if (latest?.composerPresent
+      && latest.hasStop !== true
+      && (ignoreHistoricalForegroundStop || latest.hasForegroundStop !== true)) {
+      return { ok: true, state: latest, historicalForegroundStopIgnored: ignoreHistoricalForegroundStop && latest.hasForegroundStop === true };
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
   }
@@ -2346,13 +2451,15 @@ async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
 
 function recoverStaleComposerExpression() {
   const safeMarkerPrefix = JSON.stringify(markerPrefix);
+  const safeMarker = JSON.stringify(marker);
   return `(() => {
     const labels = new Set(['停止', 'Stop', '删除排队的消息', 'Delete queued message']);
-    const clicked = [];
+    const controls = [];
     const bodyText = document.body.innerText || '';
-    const isTestResidue = bodyText.includes(${safeMarkerPrefix})
+    const isTestResidue = bodyText.includes(${safeMarker})
+      || bodyText.includes(${safeMarkerPrefix})
       || /desktop-visible-|ui_local_after_role_fix_|UI_(WEB_SEARCH|LOCAL_PROJECT|CODING_PROJECT|COMPLEX_PROJECT|REPORT_SITE|AGENTIC_STEP_FLOW|CHAT)_SMOKE/i.test(bodyText);
-    if (!isTestResidue) return { clicked, skipped: true, reason: 'no known UI smoke residue', tail: bodyText.slice(-500) };
+    if (!isTestResidue) return { controls, skipped: true, reason: 'no known UI smoke residue', tail: bodyText.slice(-500) };
     const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
     const composerRect = composer?.getBoundingClientRect();
     for (const button of [...document.querySelectorAll('button')]) {
@@ -2363,16 +2470,78 @@ function recoverStaleComposerExpression() {
         && rect.left <= composerRect.left + composerRect.width + 40
         && rect.top >= composerRect.top - 10
         && rect.top <= composerRect.top + composerRect.height + 65;
-      const foregroundStop = /正在思考|已处理|running|thinking/i.test(bodyText)
-        && nearComposer
-        && /bg-token-foreground/.test(String(button.className || ''));
+      const stopPath = button.querySelector('svg path')?.getAttribute('d') || '';
+      const squareStop = nearComposer && /^M4\.5 5\.75C4\.5/.test(stopPath);
       const clearTestGoal = /Clear goal|Clear target|\u6e05\u9664\u76ee\u6807/i.test(label);
-      if (button.disabled || rect.width <= 0 || rect.height <= 0 || (!labels.has(label) && !foregroundStop && !clearTestGoal)) continue;
-      button.click();
-      clicked.push(label || 'foreground-stop');
+      const terminalControl = labels.has(label) || squareStop;
+      if (button.disabled || rect.width <= 0 || rect.height <= 0 || (!terminalControl && !clearTestGoal)) continue;
+      controls.push({
+        label: label || (squareStop ? 'square-stop' : 'clear-test-goal'),
+        priority: terminalControl && nearComposer ? 100 : terminalControl ? 80 : 10,
+        rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+      });
     }
-    return { clicked, tail: document.body.innerText.slice(-500) };
+    controls.sort((left, right) => right.priority - left.priority);
+    return { controls, tail: document.body.innerText.slice(-500) };
   })()`;
+}
+
+function responseHistoryAssistantMarkerCount(text) {
+  if (!text) return 0;
+  try {
+    const history = JSON.parse(readFileSync(responseHistoryPath, "utf8").replace(/^\uFEFF/, ""));
+    return countUniqueAssistantMarkerMessages(history, text);
+  } catch {
+    return 0;
+  }
+}
+
+function recoverIdleBackendStaleComposerExpression() {
+  return `(() => {
+    const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+    const composerRect = composer?.getBoundingClientRect();
+    const controls = [];
+    for (const button of [...document.querySelectorAll('button')]) {
+      const rect = button.getBoundingClientRect();
+      const label = (button.getAttribute('aria-label') || button.textContent || '').trim();
+      const nearComposer = composerRect
+        && rect.left >= composerRect.left + composerRect.width - 90
+        && rect.left <= composerRect.left + composerRect.width + 40
+        && rect.top >= composerRect.top - 10
+        && rect.top <= composerRect.top + composerRect.height + 65;
+      const stopPath = button.querySelector('svg path')?.getAttribute('d') || '';
+      const terminalControl = /^(?:Stop|\u505c\u6b62|Delete queued message|\u5220\u9664\u6392\u961f\u7684\u6d88\u606f)$/i.test(label)
+        || (nearComposer && /^M4\.5 5\.75C4\.5/.test(stopPath));
+      if (button.disabled || rect.width <= 0 || rect.height <= 0 || !terminalControl) continue;
+      controls.push({
+        label: label || 'square-stop',
+        priority: nearComposer ? 100 : 80,
+        rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+      });
+    }
+    controls.sort((left, right) => right.priority - left.priority);
+    return { controls };
+  })()`;
+}
+
+async function clickRecoveryControlsWithMouse(ws, recovery) {
+  const controls = Array.isArray(recovery?.controls) ? recovery.controls : [];
+  const control = controls[0] || null;
+  const rect = control?.rect || null;
+  if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
+    return { ...(recovery || {}), clicked: [], clickMethod: null };
+  }
+  const x = rect.x + (rect.w / 2);
+  const y = rect.y + (rect.h / 2);
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  return {
+    ...(recovery || {}),
+    clicked: [String(control.label || "composer-recovery-control")],
+    clickMethod: "cdp-mouse",
+    clickPoint: { x, y },
+  };
 }
 
 function sendButtonProbeExpression(expectedText, { click = false } = {}) {
@@ -2404,7 +2573,7 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       .filter((item) => item.rect.w > 0 && item.rect.h > 0);
     function sendScore(item) {
       if (!composerRect || item.disabled) return -1;
-      if (/停止|Stop|引导|Guide|删除排队|排队|queued|滚动|scroll|Add files|完全访问|Gemini/i.test(item.label)) return -1;
+      if (/停止|Stop|引导|Guide|删除排队|排队|queued|滚动|scroll|Add files|完全访问|Gemini|Claude|Opus|Sonnet|GPT-OSS/i.test(item.label)) return -1;
       const rightEdge = composerRect.left + composerRect.width;
       const bottomEdge = composerRect.top + composerRect.height;
       const isComposerControl = item.rect.x >= rightEdge - 80
@@ -2425,7 +2594,13 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       ? document.elementFromPoint(selected.rect.x + selected.rect.w / 2, selected.rect.y + selected.rect.h / 2)
       : null;
     const hitButton = hit?.closest?.('button') || null;
-    const selectedHit = Boolean(selected && hitButton === selected.button);
+    const hitTooltip = hit?.closest?.('[role="tooltip"]') || null;
+    const tooltipDescribesSelected = Boolean(
+      selected
+      && hitTooltip?.id
+      && String(selected.button.getAttribute('aria-describedby') || '').split(/\s+/).includes(hitTooltip.id)
+    );
+    const selectedHit = Boolean(selected && (hitButton === selected.button || tooltipDescribesSelected));
     if (${click ? "true" : "false"} && selected && selectedHit) selected.button.click();
     const summarize = (item) => item ? {
       index: item.index,
@@ -2504,10 +2679,12 @@ async function waitForComposerPromptReady(ws, prompt, timeoutMs = 5_000) {
   return latest;
 }
 
-function currentModelProbeExpression(requiredValues = []) {
+function currentModelProbeExpression(requiredValues = [], { clickSelected = false } = {}) {
   const valuesJson = JSON.stringify(requiredValues.filter(Boolean));
+  const clickSelectedJson = JSON.stringify(clickSelected === true);
   return `(() => {
     const requiredValues = ${valuesJson};
+    const clickSelected = ${clickSelectedJson};
     const normalize = (value) => String(value || '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
@@ -2537,7 +2714,7 @@ function currentModelProbeExpression(requiredValues = []) {
         rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
       };
     };
-    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|model/i.test(label);
+    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|oss|model/i.test(label);
     const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
     const composerRect = composer?.getBoundingClientRect();
     const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
@@ -2557,18 +2734,26 @@ function currentModelProbeExpression(requiredValues = []) {
       .filter((item) => modelish(item.label) || matches(item.label))
       .sort((a, b) => b.score - a.score);
     const selected = candidates[0] || null;
+    if (clickSelected && selected?.element instanceof HTMLElement) {
+      selected.element.click();
+    }
     return {
       matched: Boolean(selected && matches(selected.label)),
+      clicked: Boolean(clickSelected && selected),
       selected: selected ? summarize(selected.element, selected.index, selected.score) : null,
       candidates: candidates.slice(0, 8).map((item) => summarize(item.element, item.index, item.score)),
     };
   })()`;
 }
 
-function modelOptionProbeExpression(requiredValues = []) {
+function modelOptionProbeExpression(requiredValues = [], { focusSelected = false, clickSelected = false } = {}) {
   const valuesJson = JSON.stringify(requiredValues.filter(Boolean));
+  const focusSelectedJson = JSON.stringify(focusSelected === true);
+  const clickSelectedJson = JSON.stringify(clickSelected === true);
   return `(() => {
     const requiredValues = ${valuesJson};
+    const focusSelected = ${focusSelectedJson};
+    const clickSelected = ${clickSelectedJson};
     const normalize = (value) => String(value || '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
@@ -2598,7 +2783,7 @@ function modelOptionProbeExpression(requiredValues = []) {
         rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
       };
     };
-    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|model/i.test(label);
+    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|oss|model/i.test(label);
     const candidates = Array.from(document.querySelectorAll('button,[role="button"],[role="option"],[role="menuitem"],[cmdk-item],li,div'))
       .filter(visible)
       .map((element, index) => {
@@ -2614,25 +2799,174 @@ function modelOptionProbeExpression(requiredValues = []) {
       })
       .filter((item) => matches(item.label) || modelish(item.label))
       .sort((a, b) => b.score - a.score);
-    const selected = candidates.find((item) => matches(item.label)) || null;
+    const visibleSelected = candidates.find((item) => {
+      if (!matches(item.label)) return false;
+      const rect = item.element.getBoundingClientRect();
+      const actionableRole = /option|menuitem/i.test(item.element.getAttribute('role') || '');
+      return actionableRole || (rect.width <= 400 && rect.height <= 70);
+    }) || null;
+    const retainedSelectedElement = Array.from(document.querySelectorAll('[role="menuitem"],[role="option"]'))
+      .find((element) => matches(labelFor(element))) || null;
+    const selected = visibleSelected || (retainedSelectedElement
+      ? { element: retainedSelectedElement, index: -1, label: labelFor(retainedSelectedElement), score: 450 }
+      : null);
+    if (focusSelected && selected?.element instanceof HTMLElement) {
+      selected.element.focus({ preventScroll: true });
+    }
+    const selectedPointerEvents = selected?.element instanceof HTMLElement ? getComputedStyle(selected.element).pointerEvents : '';
+    let reactSelectInvoked = false;
+    let reactHandlerNames = [];
+    if (clickSelected && selected?.element instanceof HTMLElement) {
+      selected.element.click();
+      const reactPropsKey = Object.keys(selected.element).find((key) => key.startsWith('__reactProps$'));
+      const reactProps = reactPropsKey ? selected.element[reactPropsKey] : null;
+      reactHandlerNames = reactProps && typeof reactProps === 'object'
+        ? Object.keys(reactProps).filter((key) => /^on[A-Z]/.test(key))
+        : [];
+      if (typeof reactProps?.onSelect === 'function') {
+        reactProps.onSelect({
+          defaultPrevented: false,
+          preventDefault() { this.defaultPrevented = true; },
+        });
+        reactSelectInvoked = true;
+      }
+    }
+    const menuContainer = candidates.find((item) => {
+      const label = String(item.label || '');
+      const rect = item.element.getBoundingClientRect();
+      return label.length > 100 && rect.width < 400 && rect.height > 200;
+    });
     return {
       matched: Boolean(selected),
+      focused: Boolean(selected && document.activeElement && (document.activeElement === selected.element || selected.element.contains(document.activeElement))),
+      clicked: Boolean(clickSelected && selected),
+      retainedSelection: Boolean(!visibleSelected && retainedSelectedElement),
+      reactSelectInvoked,
+      reactHandlerNames,
+      selectedPointerEvents,
       selected: selected ? summarize(selected.element, selected.index, selected.score) : null,
       candidates: candidates.slice(0, 12).map((item) => summarize(item.element, item.index, item.score)),
+      menuHtmlSample: menuContainer?.element?.outerHTML?.slice(0, 12000) || '',
     };
   })()`;
 }
 
-async function selectRequiredModel(ws, timeoutMs = 8_000) {
+function atomicModelSelectionExpression(requiredValues = []) {
+  const valuesJson = JSON.stringify(requiredValues.filter(Boolean));
+  return `(async () => {
+    const requiredValues = ${valuesJson};
+    const normalize = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\\s+/g, ' ');
+    const expected = requiredValues.map(normalize).filter(Boolean);
+    const matches = (value) => {
+      const text = normalize(value);
+      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle));
+    };
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const labelFor = (element) => String(element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent || '').trim();
+    const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
+    const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+    const composerRect = composer?.getBoundingClientRect();
+    const selector = Array.from(document.querySelectorAll('button,[role="button"]'))
+      .filter(visible)
+      .map((element) => {
+        const label = labelFor(element);
+        const rect = element.getBoundingClientRect();
+        const distance = composerRect
+          ? Math.hypot((rect.left + rect.width / 2) - (composerRect.left + composerRect.width / 2), (rect.top + rect.height / 2) - (composerRect.top + composerRect.height / 2))
+          : 99999;
+        return { element, label, distance };
+      })
+      .filter((item) => /gemini|claude|opus|sonnet|flash|gpt|oss/i.test(item.label))
+      .sort((a, b) => a.distance - b.distance)[0] || null;
+    if (!selector) return { ok: false, reason: 'model_selector_not_found' };
+    selector.element.click();
+    await delay(60);
+    const submenuTrigger = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .filter(visible)
+      .find((element) => {
+        const label = labelFor(element);
+        return element.getAttribute('aria-haspopup') === 'menu' || /^\\s*模型/i.test(label);
+      }) || null;
+    if (!submenuTrigger) {
+      return {
+        ok: false,
+        reason: 'model_submenu_trigger_not_found',
+        selector: selector.label,
+        openMenus: Array.from(document.querySelectorAll('[role="menu"]')).map((menu) => menu.getAttribute('data-state') || ''),
+      };
+    }
+    const rect = submenuTrigger.getBoundingClientRect();
+    const eventInit = { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+    submenuTrigger.dispatchEvent(new PointerEvent('pointerover', { ...eventInit, pointerType: 'mouse' }));
+    submenuTrigger.dispatchEvent(new PointerEvent('pointermove', { ...eventInit, pointerType: 'mouse' }));
+    submenuTrigger.dispatchEvent(new MouseEvent('mouseover', eventInit));
+    submenuTrigger.dispatchEvent(new MouseEvent('mousemove', eventInit));
+    submenuTrigger.focus({ preventScroll: true });
+    submenuTrigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true, cancelable: true }));
+    await delay(100);
+    let target = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .filter(visible)
+      .find((element) => matches(labelFor(element))) || null;
+    if (!target) {
+      submenuTrigger.click();
+      await delay(100);
+      target = Array.from(document.querySelectorAll('[role="menuitem"]'))
+        .filter(visible)
+        .find((element) => matches(labelFor(element))) || null;
+    }
+    if (!target) {
+      return {
+        ok: false,
+        reason: 'required_model_menuitem_not_found',
+        selector: selector.label,
+        submenu: labelFor(submenuTrigger),
+        menuitems: Array.from(document.querySelectorAll('[role="menuitem"]')).filter(visible).map(labelFor).slice(0, 16),
+        openMenus: Array.from(document.querySelectorAll('[role="menu"]')).map((menu) => menu.getAttribute('data-state') || ''),
+      };
+    }
+    const targetLabel = labelFor(target);
+    target.click();
+    await delay(150);
+    return { ok: true, selector: selector.label, submenu: labelFor(submenuTrigger), target: targetLabel };
+  })()`;
+}
+
+async function selectRequiredModel(ws, timeoutMs = 20_000) {
   const requiredValues = requiredModelNeedles();
   if (requiredValues.length === 0) return null;
   const deadline = Date.now() + timeoutMs;
   let latest = null;
+  const knownModelMenuOrder = [
+    "gemini-3.5-flash-low",
+    "gemini-3-flash-agent",
+    "gemini-3.5-flash-extra-low",
+    "gemini-3.1-pro-low",
+    "gemini-pro-agent",
+    "claude-sonnet-4-6",
+    "claude-opus-4-6-thinking",
+    "gpt-oss-120b-medium",
+  ];
+  const requiredModelMenuIndex = knownModelMenuOrder.indexOf(String(requiredModel || ""));
+  const pressKey = async (key, code, windowsVirtualKeyCode) => {
+    await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, windowsVirtualKeyCode });
+    await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode });
+  };
   const clickRectCenter = async (rect) => {
     const x = rect.x + rect.w / 2;
     const y = rect.y + rect.h / 2;
     await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
     await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
     await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
   };
   const typeModelFilter = async () => {
@@ -2663,6 +2997,27 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
       return { ...latest, ok: true, matched: true, alreadySelected: true, after: latest.current.selected };
     }
+    const atomicSelectionResult = await ws.send("Runtime.evaluate", {
+      expression: atomicModelSelectionExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest.atomicSelection = atomicSelectionResult.result?.result?.value || null;
+    if (latest.atomicSelection?.ok === true) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 650));
+      const atomicSelectionAfterResult = await ws.send("Runtime.evaluate", {
+        expression: currentModelProbeExpression(requiredValues),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      const atomicSelectionAfter = atomicSelectionAfterResult.result?.result?.value || null;
+      latest.atomicSelectionAfter = atomicSelectionAfter;
+      if (atomicSelectionAfter?.matched === true) {
+        await pressEscapeKey(ws);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        return { ...latest, ok: true, matched: true, after: atomicSelectionAfter.selected };
+      }
+    }
     const rect = latest.before?.rect;
     if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
       latest.error = "model selector button was not found";
@@ -2670,7 +3025,58 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
       continue;
     }
     await clickRectCenter(rect);
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
+    const immediateOptionClickResult = await ws.send("Runtime.evaluate", {
+      expression: modelOptionProbeExpression(requiredValues, { clickSelected: true }),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest.immediateOptionClick = immediateOptionClickResult.result?.result?.value || null;
+    if (latest.immediateOptionClick?.clicked === true) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 650));
+      const immediateAfterResult = await ws.send("Runtime.evaluate", {
+        expression: currentModelProbeExpression(requiredValues),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      const immediateAfter = immediateAfterResult.result?.result?.value || null;
+      latest.immediateAfter = immediateAfter;
+      if (immediateAfter?.matched === true) {
+        await pressEscapeKey(ws);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        return { ...latest, ok: true, matched: true, after: immediateAfter.selected };
+      }
+    }
+    if (latest.immediateOptionClick?.clicked !== true) {
+      const atomicDomOpenResult = await ws.send("Runtime.evaluate", {
+        expression: currentModelProbeExpression(requiredValues, { clickSelected: true }),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      latest.atomicDomOpen = atomicDomOpenResult.result?.result?.value || null;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
+      const atomicOptionClickResult = await ws.send("Runtime.evaluate", {
+        expression: modelOptionProbeExpression(requiredValues, { clickSelected: true }),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      latest.atomicOptionClick = atomicOptionClickResult.result?.result?.value || null;
+      if (latest.atomicOptionClick?.clicked === true) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 650));
+        const atomicAfterResult = await ws.send("Runtime.evaluate", {
+          expression: currentModelProbeExpression(requiredValues),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        const atomicAfter = atomicAfterResult.result?.result?.value || null;
+        latest.atomicAfter = atomicAfter;
+        if (atomicAfter?.matched === true) {
+          await pressEscapeKey(ws);
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+          return { ...latest, ok: true, matched: true, after: atomicAfter.selected };
+        }
+      }
+    }
     let optionProbe = null;
     const probeModelOptions = async () => {
       const optionResult = await ws.send("Runtime.evaluate", {
@@ -2686,9 +3092,56 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
       if (optionProbe?.matched === true && optionProbe?.selected?.rect) break;
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
     }
+    const hasActionableModelMenu = (probe) => (Array.isArray(probe?.candidates) ? probe.candidates : [])
+      .some((candidate) => /option|menuitem/i.test(candidate?.role || ""));
+    if (!(optionProbe?.matched === true && optionProbe?.selected?.rect) && !hasActionableModelMenu(optionProbe)) {
+      const domOpenResult = await ws.send("Runtime.evaluate", {
+        expression: currentModelProbeExpression(requiredValues, { clickSelected: true }),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      latest.domOpenFallback = domOpenResult.result?.result?.value || null;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+      optionProbe = await probeModelOptions();
+    }
+    const menuCandidateText = (Array.isArray(optionProbe?.candidates) ? optionProbe.candidates : [])
+      .map((candidate) => String(candidate?.label || ""))
+      .join("\n")
+      .toLowerCase();
+    const requiredMenuTextVisible = requiredValues
+      .map((value) => String(value || "").toLowerCase())
+      .filter((value) => value.includes(" "))
+      .some((value) => menuCandidateText.includes(value));
+    if (!(optionProbe?.matched === true && optionProbe?.selected?.rect)
+      && requiredModelMenuIndex >= 0
+      && requiredMenuTextVisible) {
+      await pressKey("Home", "Home", 36);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+      for (let index = 0; index < requiredModelMenuIndex; index += 1) {
+        await pressKey("ArrowDown", "ArrowDown", 40);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+      }
+      await pressKey("Enter", "Enter", 13);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+      const keyboardMenuAfterResult = await ws.send("Runtime.evaluate", {
+        expression: currentModelProbeExpression(requiredValues),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      const keyboardMenuAfter = keyboardMenuAfterResult.result?.result?.value || null;
+      latest.keyboardMenuFallback = {
+        menuIndex: requiredModelMenuIndex,
+        after: keyboardMenuAfter,
+      };
+      if (keyboardMenuAfter?.matched === true) {
+        await pressEscapeKey(ws);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        return { ...latest, ok: true, matched: true, after: keyboardMenuAfter.selected };
+      }
+    }
     if (!(optionProbe?.matched === true && optionProbe?.selected?.rect)) {
       const modelSubmenu = (Array.isArray(optionProbe?.candidates) ? optionProbe.candidates : [])
-        .find((candidate) => /menuitem/i.test(candidate?.role || "") && /gemini|claude|opus|sonnet|flash|gpt/i.test(candidate?.label || "") && candidate?.rect);
+        .find((candidate) => /menuitem/i.test(candidate?.role || "") && /gemini|claude|opus|sonnet|flash|gpt|oss/i.test(candidate?.label || "") && candidate?.rect);
       if (modelSubmenu?.rect) {
         latest.submenu = modelSubmenu;
         const x = modelSubmenu.rect.x + modelSubmenu.rect.w / 2;
@@ -2737,9 +3190,82 @@ async function selectRequiredModel(ws, timeoutMs = 8_000) {
       returnByValue: true,
       awaitPromise: true,
     });
-    const after = afterResult.result?.result?.value || null;
+    let after = afterResult.result?.result?.value || null;
     latest.after = after?.selected || null;
     latest.afterProbe = after;
+    if (after?.matched !== true) {
+      const selectorRect = after?.selected?.rect || latest.before?.rect;
+      if (selectorRect) {
+        await clickRectCenter(selectorRect);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+        let fallbackProbeResult = await ws.send("Runtime.evaluate", {
+          expression: modelOptionProbeExpression(requiredValues),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        let fallbackProbe = fallbackProbeResult.result?.result?.value || null;
+        if (fallbackProbe?.matched !== true && !hasActionableModelMenu(fallbackProbe)) {
+          const domOpenResult = await ws.send("Runtime.evaluate", {
+            expression: currentModelProbeExpression(requiredValues, { clickSelected: true }),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          latest.domOpenFallbackAfterMouse = domOpenResult.result?.result?.value || null;
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+          fallbackProbeResult = await ws.send("Runtime.evaluate", {
+            expression: modelOptionProbeExpression(requiredValues),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          fallbackProbe = fallbackProbeResult.result?.result?.value || null;
+        }
+        if (fallbackProbe?.matched !== true) {
+          const fallbackSubmenu = (Array.isArray(fallbackProbe?.candidates) ? fallbackProbe.candidates : [])
+            .find((candidate) => /menuitem/i.test(candidate?.role || "") && /gemini|claude|opus|sonnet|flash|gpt|oss/i.test(candidate?.label || "") && candidate?.rect);
+          if (fallbackSubmenu?.rect) {
+            latest.keyboardFallbackSubmenu = fallbackSubmenu;
+            const x = fallbackSubmenu.rect.x + fallbackSubmenu.rect.w / 2;
+            const y = fallbackSubmenu.rect.y + fallbackSubmenu.rect.h / 2;
+            await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+          }
+        }
+        const focusResult = await ws.send("Runtime.evaluate", {
+          expression: modelOptionProbeExpression(requiredValues, { focusSelected: true }),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        latest.keyboardFallback = focusResult.result?.result?.value || fallbackProbe;
+        if (latest.keyboardFallback?.matched === true) {
+          const domClickResult = await ws.send("Runtime.evaluate", {
+            expression: modelOptionProbeExpression(requiredValues, { clickSelected: true }),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          latest.domClickFallback = domClickResult.result?.result?.value || null;
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+          let keyboardAfterResult = await ws.send("Runtime.evaluate", {
+            expression: currentModelProbeExpression(requiredValues),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          after = keyboardAfterResult.result?.result?.value || null;
+          if (after?.matched !== true) {
+            await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+            keyboardAfterResult = await ws.send("Runtime.evaluate", {
+              expression: currentModelProbeExpression(requiredValues),
+              returnByValue: true,
+              awaitPromise: true,
+            });
+            after = keyboardAfterResult.result?.result?.value || null;
+          }
+          latest.after = after?.selected || null;
+          latest.afterProbe = after;
+        }
+      }
+    }
     if (after?.matched === true) {
       await pressEscapeKey(ws);
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
@@ -2782,8 +3308,14 @@ async function waitForComposerSubmitted(ws, prompt, marker, timeoutMs = 4_000) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
     const submitted = await ws.send("Runtime.evaluate", {
       expression: `(() => {
-        const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
-        return { composer: composer?.innerText || '' };
+        const visibleComposerTexts = [...document.querySelectorAll('[data-codex-composer].ProseMirror, .ProseMirror')]
+          .filter((composer) => {
+            const rect = composer.getBoundingClientRect();
+            const style = getComputedStyle(composer);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+          })
+          .map((composer) => composer.innerText || '');
+        return { composer: visibleComposerTexts.join('\n'), visibleComposerTexts };
       })()`,
       returnByValue: true,
     });
@@ -2820,13 +3352,93 @@ async function refillComposerPrompt(ws, prompt) {
 
 async function selectRequiredModelBeforeRetry(ws) {
   if (requiredModelNeedles().length === 0) return { ok: true, matched: true, skipped: true };
-  const evidence = await selectRequiredModel(ws, 8_000);
+  const evidence = await selectRequiredModel(ws, 20_000);
   return {
     ...(evidence || {}),
     ok: evidence?.matched === true,
     matched: evidence?.matched === true,
     retrySelection: true,
   };
+}
+
+async function retryDesktopSubmitAfterMissingPayload(ws, prompt, expectedMarker, options = {}) {
+  const retryEvidence = {
+    ok: false,
+    clickMethod: "cdp-mouse-retry",
+    newChatEvidence: null,
+    prep: null,
+    realSubmit: null,
+  };
+
+  if (options.openNewChat === true) {
+    const clickedNewChat = await ws.send("Runtime.evaluate", {
+      expression: newChatClickExpression(options.requiresProjectChat === true ? projectChatLabel : ""),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    retryEvidence.newChatEvidence = clickedNewChat.result?.result?.value || null;
+    if (retryEvidence.newChatEvidence?.clicked !== true) {
+      return { ...retryEvidence, reason: "retry_new_chat_not_found" };
+    }
+    if (options.requiresProjectChat === true && retryEvidence.newChatEvidence?.projectMatched !== true) {
+      return { ...retryEvidence, reason: "retry_project_chat_not_matched" };
+    }
+    retryEvidence.newChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
+    if (retryEvidence.newChatEvidence.visibleIdleAfterNewChat?.ok !== true) {
+      return { ...retryEvidence, reason: "retry_new_chat_not_idle" };
+    }
+  } else {
+    retryEvidence.newChatEvidence = { skipped: true, reason: "same_task_retry" };
+    retryEvidence.visibleIdleBeforeRetry = await waitForVisibleComposerIdle(ws, 20_000);
+    if (retryEvidence.visibleIdleBeforeRetry?.ok !== true) {
+      return { ...retryEvidence, reason: "retry_same_task_not_idle" };
+    }
+  }
+
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_200));
+  if (requiredModelNeedles().length > 0) {
+    retryEvidence.modelConfirmation = await confirmRequiredModelSelected(ws, 5_000);
+    if (retryEvidence.modelConfirmation?.matched !== true) {
+      return { ...retryEvidence, reason: "retry_required_model_not_retained" };
+    }
+  }
+
+  retryEvidence.prep = await refillComposerPrompt(ws, prompt);
+  if (retryEvidence.prep?.composerMatches !== true || retryEvidence.prep?.hasSendButton !== true) {
+    return { ...retryEvidence, reason: "retry_composer_not_ready" };
+  }
+  const rect = retryEvidence.prep?.selected?.rect || null;
+  if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
+    return { ...retryEvidence, reason: "retry_send_coordinates_unavailable" };
+  }
+
+  const diagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+  const payloadsBefore = responsesWebSocketPayloadCount(diagnosticsBefore);
+  const markerEntryIdsBefore = responseHistoryMarkerEntryIds(expectedMarker);
+  const x = rect.x + (rect.w / 2);
+  const y = rect.y + (rect.h / 2);
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  retryEvidence.clicked = true;
+  retryEvidence.clickPoint = { x, y };
+  retryEvidence.composerCleared = await waitForComposerSubmitted(ws, prompt, expectedMarker, 15_000);
+  if (!retryEvidence.composerCleared) {
+    await pressComposerEnter(ws);
+    retryEvidence.enterFallback = true;
+    retryEvidence.composerCleared = await waitForComposerSubmitted(ws, prompt, expectedMarker, 15_000);
+  }
+  retryEvidence.realSubmit = await waitForRealResponsesSubmitAfter(
+    baseUrl,
+    payloadsBefore,
+    retryEvidence.composerCleared ? DESKTOP_SUBMIT_REQUEST_GRACE_MS : 20_000,
+    expectedMarker,
+    markerEntryIdsBefore,
+  );
+  retryEvidence.ok = retryEvidence.realSubmit?.ok === true
+    && (requiredModelNeedles().length === 0 || retryEvidence.realSubmit?.requiredModelMatched === true);
+  if (!retryEvidence.ok) retryEvidence.reason = retryEvidence.realSubmit?.lastError || "retry_real_submit_not_observed";
+  return retryEvidence;
 }
 
 async function pressEscapeKey(ws) {
@@ -2876,6 +3488,68 @@ function newChatClickExpression(projectName = "") {
       candidates: candidates.slice(0, 5).map((item) => ({ index: item.index, text: item.text, aria: item.aria, project: item.isProjectNewChat })),
     };
   })()`;
+}
+
+function sameChatClickExpression(titleNeedle) {
+  const needle = JSON.stringify(String(titleNeedle || ""));
+  return `(() => {
+    const wanted = ${needle}.replace(/\\s+/g, " ").trim();
+    const visible = (el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+    };
+    const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], [role="link"], [role="treeitem"], [tabindex]'))
+      .filter(visible)
+      .map((el) => ({ el, text: String(el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim() }))
+      .filter((item) => wanted && item.text.includes(wanted))
+      .sort((a, b) => {
+        const ar = a.el.getBoundingClientRect();
+        const br = b.el.getBoundingClientRect();
+        return (ar.width * ar.height) - (br.width * br.height);
+      });
+    const selected = candidates[0];
+    if (!selected) return { clicked: false, wanted, candidates: [] };
+    const rect = selected.el.getBoundingClientRect();
+    return {
+      clicked: true,
+      wanted,
+      text: selected.text.slice(0, 240),
+      tag: selected.el.tagName,
+      role: selected.el.getAttribute("role") || "",
+      rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+      candidateCount: candidates.length,
+    };
+  })()`;
+}
+
+async function openSameChatByTitle(ws, titleNeedle, { waitForIdle = true, idleTimeoutMs = 20_000 } = {}) {
+  const clickedSameChat = await ws.send("Runtime.evaluate", {
+    expression: sameChatClickExpression(titleNeedle),
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const evidence = clickedSameChat.result?.result?.value || null;
+  if (evidence?.clicked !== true) {
+    throw new Error(`same-chat task title was not found: ${titleNeedle}`);
+  }
+  const sameChatRect = evidence.rect || {};
+  const sameChatX = Number(sameChatRect.x) + Number(sameChatRect.w) / 2;
+  const sameChatY = Number(sameChatRect.y) + Number(sameChatRect.h) / 2;
+  if (!Number.isFinite(sameChatX) || !Number.isFinite(sameChatY)) {
+    throw new Error(`same-chat task did not expose a clickable rectangle: ${titleNeedle}`);
+  }
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: sameChatX, y: sameChatY, button: "none" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x: sameChatX, y: sameChatY, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: sameChatX, y: sameChatY, button: "left", clickCount: 1 });
+  evidence.actualMouseClick = true;
+  if (waitForIdle) {
+    evidence.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, idleTimeoutMs);
+    if (evidence.visibleIdleAfterClick?.ok !== true) {
+      throw new Error(`same-chat task did not open an idle composer: ${titleNeedle}`);
+    }
+  }
+  return evidence;
 }
 
 const visibleMainPaneTextExpression = `
@@ -2942,6 +3616,17 @@ function discoverAntiCodexCdpPorts() {
   }
 }
 
+async function readVisibleMainPaneText(ws) {
+  const result = await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      ${visibleMainPaneTextExpression}
+      return visibleMainPaneText();
+    })()`,
+    returnByValue: true,
+  });
+  return String(result.result?.result?.value || "");
+}
+
 async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, options = {}) {
   const failures = [];
   let clicked = false;
@@ -2961,8 +3646,14 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   let submitCompletedAt = 0;
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
+  let assistantMarkerHistoryCount = 0;
 
   await closeManagerOverlayIfOpen(ws);
+  const markerBaselineText = await readVisibleMainPaneText(ws);
+  const markerBaselineCount = countMarkerOccurrences(markerBaselineText, expectedMarker);
+  const assistantMarkerHistoryBaselineCount = responseHistoryAssistantMarkerCount(expectedMarker);
+  const requestMarkerEntryIdsBefore = responseHistoryMarkerEntryIds(expectedMarker);
+  assistantMarkerHistoryCount = assistantMarkerHistoryBaselineCount;
   const clear = await ws.send("Runtime.evaluate", {
     expression: `(() => {
       const composer = document.querySelector('.ProseMirror');
@@ -3052,58 +3743,44 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       }
     }
     if (clicked) {
-      const realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, submitSucceeded ? 15_000 : 20_000);
+      const realSubmit = await waitForRealResponsesSubmitAfter(
+        baseUrl,
+        submitPayloadsBefore,
+        submitSucceeded ? DESKTOP_SUBMIT_REQUEST_GRACE_MS : 20_000,
+        expectedMarker,
+        requestMarkerEntryIdsBefore,
+      );
       submitEvidence.realSubmit = realSubmit;
-      if (realSubmit.ok === true && !submitSucceeded) {
+      if (realSubmit.ok === true) {
         submitEvidence.submitConfirmedBy = "responses-websocket";
         submitSucceeded = true;
       }
-    }
-    if (submitSucceeded) {
-      const realSubmit = submitEvidence.realSubmit || await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
-      submitEvidence.realSubmit = realSubmit;
       if (realSubmit.ok !== true) {
         submitEvidence.emptyPrewarmRetry = realSubmit;
-        submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
-        if (submitEvidence.retryModelSelection?.matched !== true) {
-          submitEvidence.retry = { ok: false, reason: "required_model_reselect_failed", modelSelection: submitEvidence.retryModelSelection };
-          submitSucceeded = false;
+        const retryEvidence = await retryDesktopSubmitAfterMissingPayload(ws, prompt, expectedMarker, {
+          openNewChat: false,
+          requiresProjectChat: options.requiresProjectChat === true,
+        });
+        submitEvidence.retry = retryEvidence;
+        submitEvidence.retryRealSubmit = retryEvidence.realSubmit;
+        submitSucceeded = retryEvidence.ok === true;
+        if (submitSucceeded) {
+          submitEvidence.submitConfirmedBy = "responses-websocket-retry";
+          prep = retryEvidence.prep;
         } else {
-          prep = await refillComposerPrompt(ws, prompt);
+          submitEvidence.submitConfirmedBy = "composer-cleared-no-payload";
         }
-        if (submitSucceeded && prep?.composerMatches === true && prep?.hasSendButton === true) {
-          const retryDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
-          const retryPayloadsBefore = responsesWebSocketPayloadCount(retryDiagnosticsBefore);
-          const retryClick = await ws.send("Runtime.evaluate", {
-            expression: sendButtonProbeExpression(prompt, { click: true }),
-            returnByValue: true,
-            awaitPromise: true,
-          });
-          submitEvidence.retry = retryClick.result?.result?.value || {};
-          submitSucceeded = submitEvidence.retry.clicked === true
-            ? await waitForComposerSubmitted(ws, prompt, expectedMarker, 8_000)
-            : false;
-          if (submitSucceeded) {
-            const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
-            submitEvidence.retryRealSubmit = retryRealSubmit;
-            if (retryRealSubmit.ok !== true) submitSucceeded = false;
-            if (submitSucceeded && Number(options.maxInputItems || 0) > 0 && realSubmitInputItems(retryRealSubmit) > Number(options.maxInputItems || 0)) {
-              failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(retryRealSubmit)}, max=${Number(options.maxInputItems || 0)}`);
-              try { await resetBackendSessionLock(baseUrl); } catch {}
-              submitSucceeded = false;
-            }
-          }
-        } else if (submitSucceeded) {
-          submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
-          submitSucceeded = false;
-        }
-      } else if (Number(options.maxInputItems || 0) > 0 && realSubmitInputItems(realSubmit) > Number(options.maxInputItems || 0)) {
+      }
+      const effectiveRealSubmit = submitEvidence.retryRealSubmit?.ok === true
+        ? submitEvidence.retryRealSubmit
+        : realSubmit;
+      if (submitSucceeded && Number(options.maxInputItems || 0) > 0 && realSubmitInputItems(effectiveRealSubmit) > Number(options.maxInputItems || 0)) {
         submitEvidence.contextGuard = {
           ok: false,
-          inputItems: realSubmitInputItems(realSubmit),
+          inputItems: realSubmitInputItems(effectiveRealSubmit),
           maxInputItems: Number(options.maxInputItems || 0),
         };
-        failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(realSubmit)}, max=${Number(options.maxInputItems || 0)}`);
+        failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(effectiveRealSubmit)}, max=${Number(options.maxInputItems || 0)}`);
         try { await resetBackendSessionLock(baseUrl); } catch {}
         submitSucceeded = false;
       }
@@ -3129,7 +3806,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       const value = stateAfter.result?.result?.value || {};
       const text = String(value.mainText || value.text || "");
       composer = String(value.composer || "");
-      count = expectedMarker ? (text.match(new RegExp(expectedMarker, "g")) || []).length : 0;
+      count = countMarkerOccurrences(text, expectedMarker);
       lastSample = text.slice(-1200);
       const promptIndex = text.lastIndexOf(prompt);
       answerSample = promptIndex >= 0 ? text.slice(promptIndex + prompt.length) : lastSample;
@@ -3142,7 +3819,20 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           activeReconnectEvidence.push(compact.slice(Math.max(0, at - 80), at + 180));
         }
       }
-      answerMarkerCount = expectedMarker && answerSample ? (answerSample.match(new RegExp(expectedMarker, "g")) || []).length : 0;
+      const visibleAnswerMarkerCount = countNewAssistantMarkers({
+        visibleText: text,
+        marker: expectedMarker,
+        baselineMarkerCount: markerBaselineCount,
+        submittedPrompt: prompt,
+      });
+      assistantMarkerHistoryCount = responseHistoryAssistantMarkerCount(expectedMarker);
+      answerMarkerCount = countObservedAssistantMarkers({
+        visibleNewMarkerCount: visibleAnswerMarkerCount,
+        recentVisibleText: lastSample,
+        marker: expectedMarker,
+        assistantHistoryCount: assistantMarkerHistoryCount,
+        assistantHistoryBaselineCount: assistantMarkerHistoryBaselineCount,
+      });
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (taskMode === "repo-multi-file-edit") {
         artifactEvidence = verifyRepoMultiFileEditFixture(expectedMarker);
@@ -3176,6 +3866,21 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           } catch {}
         }
       }
+      if (taskMode === "report-site") {
+        artifactEvidence = verifyReportSiteArtifact(options.artifactDir || artifactDir, expectedMarker);
+        const artifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
+        if (artifactFailures.length === 0 && !composer.includes(prompt)) {
+          try {
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              artifactCompletionObserved = true;
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+          } catch {}
+        }
+      }
       if (taskMode === "autonomous-reasoning") {
         artifactEvidence = verifyComplexProjectArtifact(options.artifactDir || artifactDir, expectedMarker);
         const hasRequiredFiles = artifactEvidence?.files?.packageJson === true
@@ -3191,24 +3896,30 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
-              artifactCompletionObserved = true;
-              inLoopIdleDiagnostics = loopDiagnostics;
-              idleCompletedAt = Date.now();
-              break;
-            }
-            if (Date.now() - waitStartedAt >= 45_000) {
-              const reset = await resetBackendSessionLock(baseUrl).catch((error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }));
-              const afterReset = await waitForIdleDiagnostics(baseUrl, 20_000);
-              artifactEvidence.autonomousStaleContinuationReset = reset;
-              artifactCompletionObserved = true;
-              inLoopIdleDiagnostics = afterReset.diagnostics || loopDiagnostics;
-              idleCompletedAt = Date.now();
-              break;
+              if (autonomousContinuationHasFreshCompletion({
+                answerMarkerCount,
+                hasRequiredFiles,
+                hasToolEvidence,
+              })) {
+                artifactCompletionObserved = true;
+                inLoopIdleDiagnostics = loopDiagnostics;
+                idleCompletedAt = Date.now();
+                break;
+              }
+              if (shouldRecoverIdleAutonomousTurn({
+                diagnosticsIdle: true,
+                elapsedMs: Date.now() - waitStartedAt,
+                artifactFailureCount: 1,
+              })) {
+                inLoopIdleDiagnostics = loopDiagnostics;
+                idleCompletedAt = Date.now();
+                break;
+              }
             }
           } catch {}
         }
       }
-      if (taskMode !== "agentic-step-flow" && !composer.includes(expectedMarker) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
+      if (taskMode !== "agentic-step-flow" && taskMode !== "autonomous-reasoning" && !composer.includes(expectedMarker) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3244,6 +3955,9 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     clicked,
     markerCount: count,
     answerMarkerCount,
+    markerBaselineCount,
+    assistantMarkerHistoryBaselineCount,
+    assistantMarkerHistoryCount,
     artifactCompletionObserved,
     artifactEvidence,
     activeReconnectSeen,
@@ -3287,6 +4001,8 @@ async function main() {
   let staleRecovery = null;
   let backendResetBeforeSubmit = null;
   let newChatEvidence = null;
+  let sameChatEvidence = null;
+  let preservedActiveTask = null;
   let modelSelectionEvidence = null;
   let preSubmitModelSelectionEvidence = null;
   let submitEvidence = null;
@@ -3297,6 +4013,11 @@ async function main() {
   let submitCompletedAt = 0;
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
+  let markerBaselineCount = 0;
+  let assistantMarkerHistoryBaselineCount = 0;
+  let assistantMarkerHistoryCount = 0;
+  let requestMarkerEntryIdsBefore = [];
+  let autonomousIdleIncompleteObserved = false;
   const complexProjectRequiresModelLed = taskMode === "complex-project" || taskMode === "autonomous-reasoning";
 
   try {
@@ -3313,40 +4034,81 @@ async function main() {
     await ws.send("Input.setIgnoreInputEvents", { ignore: false });
     await ws.send("Runtime.evaluate", { expression: "document.querySelector('.anticodex-close')?.click()", awaitPromise: true });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
-    const stale = await ws.send("Runtime.evaluate", {
-      expression: recoverStaleComposerExpression(),
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    staleRecovery = stale.result?.result?.value || null;
-    if (Array.isArray(staleRecovery?.clicked) && staleRecovery.clicked.length > 0) {
-      staleRecovery.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, 20_000);
+    if (preserveSameChatActiveTask && sameChatTitleContains) {
+      sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, { waitForIdle: false });
     }
-    try {
-      backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-    } catch (error) {
-      backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-    initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
-    modelRoutesBefore = await readModelRoutesEvidence();
-    if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
+    if (preserveSameChatActiveTask) {
+      const diagnosticsBeforeWait = await httpJson(diagnosticsUrl).catch(() => null);
+      const activeBeforeWait = diagnosticsShowsActiveTask(diagnosticsBeforeWait);
+      staleRecovery = { skipped: true, reason: "preserve_same_chat_active_task" };
+      backendResetBeforeSubmit = { skipped: true, reason: "preserve_same_chat_active_task" };
+      initialIdle = await waitForIdleDiagnostics(baseUrl, timeoutMs);
+      let visibleIdleAfterWait = diagnosticsAreIdle(initialIdle.diagnostics)
+        ? await waitForVisibleComposerIdle(ws, Math.min(timeoutMs, 45_000))
+        : null;
+      let idleBackendStaleComposerRecovery = null;
+      if (diagnosticsAreIdle(initialIdle.diagnostics) && visibleIdleAfterWait?.ok !== true) {
+        const recovered = await ws.send("Runtime.evaluate", {
+          expression: recoverIdleBackendStaleComposerExpression(),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        idleBackendStaleComposerRecovery = recovered.result?.result?.value || null;
+        idleBackendStaleComposerRecovery = await clickRecoveryControlsWithMouse(ws, idleBackendStaleComposerRecovery);
+        if (Array.isArray(idleBackendStaleComposerRecovery?.clicked) && idleBackendStaleComposerRecovery.clicked.length > 0) {
+          visibleIdleAfterWait = await waitForVisibleComposerIdle(ws, 20_000);
+        }
+      }
+      preservedActiveTask = {
+        enabled: true,
+        activeBeforeWait,
+        waitedForExistingTask: activeBeforeWait,
+        idleObserved: diagnosticsAreIdle(initialIdle.diagnostics),
+        visibleIdleAfterWait,
+        idleBackendStaleComposerRecovery,
+      };
+      if (sameChatEvidence) sameChatEvidence.visibleIdleAfterClick = visibleIdleAfterWait;
+    } else {
+      const stale = await ws.send("Runtime.evaluate", {
+        expression: recoverStaleComposerExpression(),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      staleRecovery = stale.result?.result?.value || null;
+      staleRecovery = await clickRecoveryControlsWithMouse(ws, staleRecovery);
+      if (Array.isArray(staleRecovery?.clicked) && staleRecovery.clicked.length > 0) {
+        staleRecovery.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, 20_000);
+      }
       try {
-        backendResetBeforeSubmit = {
-          first: backendResetBeforeSubmit,
-          retry: await resetBackendSessionLock(baseUrl),
-        };
+        backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-        initialIdle = await waitForIdleDiagnostics(baseUrl, 20_000);
       } catch (error) {
-        backendResetBeforeSubmit = {
-          first: backendResetBeforeSubmit,
-          retry: { ok: false, error: error instanceof Error ? error.message : String(error) },
-        };
+        backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+      initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
+      if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
+        try {
+          backendResetBeforeSubmit = {
+            first: backendResetBeforeSubmit,
+            retry: await resetBackendSessionLock(baseUrl),
+          };
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+          initialIdle = await waitForIdleDiagnostics(baseUrl, 20_000);
+        } catch (error) {
+          backendResetBeforeSubmit = {
+            first: backendResetBeforeSubmit,
+            retry: { ok: false, error: error instanceof Error ? error.message : String(error) },
+          };
+        }
       }
     }
+    modelRoutesBefore = await readModelRoutesEvidence();
     if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
-      throw new Error(`desktop backend was not idle before submit after stale recovery: ${initialIdle.lastError || "busy"}`);
+      const recoveryMode = preserveSameChatActiveTask ? "without interrupting the existing task" : "after stale recovery";
+      throw new Error(`desktop backend was not idle before submit ${recoveryMode}: ${initialIdle.lastError || "busy"}`);
+    }
+    if (preserveSameChatActiveTask && preservedActiveTask?.visibleIdleAfterWait?.ok !== true) {
+      throw new Error("same-chat task backend became idle but the visible composer did not");
     }
     if (taskMode === "repo-file-edit") {
       prepareRepoFileEditFixture();
@@ -3378,9 +4140,11 @@ async function main() {
         newChatEvidence = { ...(newChatEvidence || {}), fallbackShortcut: true };
       }
       newChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
+    } else if (sameChatTitleContains) {
+      sameChatEvidence = sameChatEvidence || await openSameChatByTitle(ws, sameChatTitleContains);
     }
     if (requiredModelNeedles().length > 0) {
-      modelSelectionEvidence = await selectRequiredModel(ws, 8_000);
+      modelSelectionEvidence = await selectRequiredModel(ws, 20_000);
       if (modelSelectionEvidence?.matched !== true) {
         failures.push(`desktop UI did not select required model ${requiredModelNeedles().join(" / ")}`);
         releaseUiLock?.();
@@ -3412,6 +4176,8 @@ async function main() {
           staleRecovery,
           backendResetBeforeSubmit,
           newChatEvidence,
+          sameChatEvidence,
+          preservedActiveTask,
           modelSelectionEvidence,
           initialIdleObserved: Boolean(initialIdle?.diagnostics),
         };
@@ -3449,12 +4215,18 @@ async function main() {
           activeReconnectSeen: false,
           activeReconnectEvidence: [],
         };
-      failures.push(...turn2.failures.map((failure) => `turn2: ${failure}`));
       artifactEvidence = await waitForArtifactEvidence(
         () => verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker),
         multiTurnProjectArtifactComplete,
         Math.min(timeoutMs, 120_000),
       );
+      const turn2HistoryMarkerCount = responseHistoryAssistantMarkerCount(marker);
+      const turn2FinalMarkerObserved = hasAssistantFinalMarkerEvidence({
+        answerMarkerCount: turn2.answerMarkerCount,
+        responseHistoryMarkerSeen: turn2HistoryMarkerCount > Number(turn2.assistantMarkerHistoryBaselineCount || 0),
+      });
+      const turn2Failures = filterAssistantMarkerObservationFailures(turn2.failures, turn2FinalMarkerObserved);
+      failures.push(...turn2Failures.map((failure) => `turn2: ${failure}`));
       if (!artifactEvidence?.files?.packageJson) failures.push("multi-turn package.json was not created");
       if (!artifactEvidence?.files?.wordTally) failures.push("multi-turn word-tally.mjs was not created");
       if (!artifactEvidence?.files?.testFile) failures.push("multi-turn word-tally.test.mjs was not created");
@@ -3474,7 +4246,10 @@ async function main() {
       submitEvidence = turn2.submitEvidence;
       submitSucceeded = turn1.submitSucceeded === true && turn2.submitSucceeded === true;
       count = Number(turn1.markerCount || 0) + Number(turn2.markerCount || 0);
-      answerMarkerCount = Number(turn2.answerMarkerCount || 0);
+      answerMarkerCount = Math.max(
+        Number(turn2.answerMarkerCount || 0),
+        turn2FinalMarkerObserved ? 1 : 0,
+      );
       composer = turn2.composer || "";
       lastSample = turn2.lastSample || turn1.lastSample || "";
       answerSample = turn2.answerSample || "";
@@ -3503,7 +4278,7 @@ async function main() {
       const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
       const observedRequestPayload = modelRequestPayloadObserved(diagnostics, [turn1, turn2]);
       const observedRealTraffic = observedModelRoute || observedRequestPayload;
-      if (!observedRequestPayload) failures.push("desktop submit did not produce a model request payload");
+      if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
       const payload = {
         ok: failures.length === 0,
         reportName,
@@ -3649,7 +4424,7 @@ async function main() {
       const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
       const observedRequestPayload = modelRequestPayloadObserved(diagnostics, [turn1, turn2]);
       const observedRealTraffic = observedModelRoute || observedRequestPayload;
-      if (!observedRequestPayload) failures.push("desktop submit did not produce a model request payload");
+      if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
       const payload = {
         ok: failures.length === 0,
         reportName,
@@ -3729,6 +4504,10 @@ async function main() {
     }
 
     await closeManagerOverlayIfOpen(ws);
+    markerBaselineCount = countMarkerOccurrences(await readVisibleMainPaneText(ws), marker);
+    assistantMarkerHistoryBaselineCount = responseHistoryAssistantMarkerCount(marker);
+    assistantMarkerHistoryCount = assistantMarkerHistoryBaselineCount;
+    requestMarkerEntryIdsBefore = responseHistoryMarkerEntryIds(marker);
     const clear = await ws.send("Runtime.evaluate", {
       expression: `(() => {
         const composer = document.querySelector('.ProseMirror');
@@ -3817,57 +4596,49 @@ async function main() {
       }
       let realSubmit = null;
       if (clicked) {
-        realSubmit = await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, submitSucceeded ? 15_000 : 20_000);
+        realSubmit = await waitForRealResponsesSubmitAfter(
+          baseUrl,
+          submitPayloadsBefore,
+          submitSucceeded ? DESKTOP_SUBMIT_REQUEST_GRACE_MS : 20_000,
+          marker,
+          requestMarkerEntryIdsBefore,
+        );
         submitEvidence.realSubmit = realSubmit;
-        if (realSubmit.ok === true && !submitSucceeded) {
+        if (realSubmit.ok === true) {
           submitEvidence.submitConfirmedBy = "responses-websocket";
           submitSucceeded = true;
         }
       }
-      if (submitSucceeded && realSubmit?.ok !== true) {
+      if (clicked && realSubmit?.ok !== true) {
         submitEvidence.emptyPrewarmRetry = realSubmit;
-        submitEvidence.retryModelSelection = await selectRequiredModelBeforeRetry(ws);
-        if (submitEvidence.retryModelSelection?.matched !== true) {
-          submitEvidence.retry = { ok: false, reason: "required_model_reselect_failed", modelSelection: submitEvidence.retryModelSelection };
-          submitSucceeded = false;
+        const retryEvidence = await retryDesktopSubmitAfterMissingPayload(ws, promptText, marker, {
+          openNewChat: isolateChat,
+          requiresProjectChat,
+        });
+        submitEvidence.retry = retryEvidence;
+        submitEvidence.retryRealSubmit = retryEvidence.realSubmit;
+        submitSucceeded = retryEvidence.ok === true;
+        if (submitSucceeded) {
+          submitEvidence.submitConfirmedBy = "responses-websocket-retry";
+          prep = retryEvidence.prep;
         } else {
-          prep = await refillComposerPrompt(ws, promptText);
-        }
-        if (submitSucceeded && prep?.composerMatches === true && prep?.hasSendButton === true) {
-          const retryDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
-          const retryPayloadsBefore = responsesWebSocketPayloadCount(retryDiagnosticsBefore);
-          const retryClick = await ws.send("Runtime.evaluate", {
-            expression: sendButtonProbeExpression(promptText, { click: true }),
-            returnByValue: true,
-            awaitPromise: true,
-          });
-          submitEvidence.retry = retryClick.result?.result?.value || {};
-          submitSucceeded = submitEvidence.retry.clicked === true
-            ? await waitForComposerSubmitted(ws, promptText, marker, 8_000)
-            : false;
-          if (submitSucceeded) {
-            const retryRealSubmit = await waitForRealResponsesSubmitAfter(baseUrl, retryPayloadsBefore, 15_000);
-            submitEvidence.retryRealSubmit = retryRealSubmit;
-            if (retryRealSubmit.ok !== true) submitSucceeded = false;
-          }
-        } else if (submitSucceeded) {
-          submitEvidence.retry = { ok: false, reason: "composer_refill_failed", prep };
-          submitSucceeded = false;
+          submitEvidence.submitConfirmedBy = "composer-cleared-no-payload";
         }
       }
       const maxInputItems = taskMode === "autonomous-reasoning" ? 80 : 0;
       if (submitSucceeded && maxInputItems > 0) {
-        const realSubmit = submitEvidence.realSubmit || await waitForRealResponsesSubmitAfter(baseUrl, submitPayloadsBefore, 15_000);
-        submitEvidence.realSubmit = realSubmit;
-        if (realSubmit.ok !== true) {
+        const effectiveRealSubmit = submitEvidence.retryRealSubmit?.ok === true
+          ? submitEvidence.retryRealSubmit
+          : submitEvidence.realSubmit;
+        if (effectiveRealSubmit?.ok !== true) {
           submitSucceeded = false;
-        } else if (realSubmitInputItems(realSubmit) > maxInputItems) {
+        } else if (realSubmitInputItems(effectiveRealSubmit) > maxInputItems) {
           submitEvidence.contextGuard = {
             ok: false,
-            inputItems: realSubmitInputItems(realSubmit),
+            inputItems: realSubmitInputItems(effectiveRealSubmit),
             maxInputItems,
           };
-          failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(realSubmit)}, max=${maxInputItems}`);
+          failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(effectiveRealSubmit)}, max=${maxInputItems}`);
           try { await resetBackendSessionLock(baseUrl); } catch {}
           submitSucceeded = false;
         }
@@ -3893,7 +4664,7 @@ async function main() {
       const value = stateAfter.result?.result?.value || {};
       const text = String(value.mainText || value.text || "");
       composer = String(value.composer || "");
-      count = marker ? (text.match(new RegExp(marker, "g")) || []).length : 0;
+      count = countMarkerOccurrences(text, marker);
       lastSample = text.slice(-1200);
       const promptIndex = text.lastIndexOf(promptText);
       answerSample = promptIndex >= 0 ? text.slice(promptIndex + promptText.length) : lastSample;
@@ -3906,7 +4677,20 @@ async function main() {
           activeReconnectEvidence.push(compact.slice(Math.max(0, at - 80), at + 180));
         }
       }
-      answerMarkerCount = marker && answerSample ? (answerSample.match(new RegExp(marker, "g")) || []).length : 0;
+      const visibleAnswerMarkerCount = countNewAssistantMarkers({
+        visibleText: text,
+        marker,
+        baselineMarkerCount: markerBaselineCount,
+        submittedPrompt: promptText,
+      });
+      assistantMarkerHistoryCount = responseHistoryAssistantMarkerCount(marker);
+      answerMarkerCount = countObservedAssistantMarkers({
+        visibleNewMarkerCount: visibleAnswerMarkerCount,
+        recentVisibleText: lastSample,
+        marker,
+        assistantHistoryCount: assistantMarkerHistoryCount,
+        assistantHistoryBaselineCount: assistantMarkerHistoryBaselineCount,
+      });
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (taskMode === "autonomous-reasoning") {
         try {
@@ -3951,16 +4735,41 @@ async function main() {
             }
           } catch {}
         }
+      } else if (taskMode === "report-site") {
+        artifactEvidence = verifyReportSiteArtifact(artifactDir, marker);
+        const artifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
+        if (!composer.includes(promptText) && artifactFailures.length === 0) {
+          try {
+            const loopDiagnostics = await httpJson(diagnosticsUrl);
+            if (diagnosticsAreIdle(loopDiagnostics)) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+          } catch {}
+        }
       } else if (taskMode === "autonomous-reasoning") {
         artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
         const artifactFailures = collectComplexProjectArtifactFailures(artifactEvidence);
         const hasToolEvidence = (artifactEvidence?.responseHistory?.taskToolCallCount || 0) >= 1
           && artifactEvidence?.responseHistory?.taskToolOutputSeen === true
           && artifactEvidence?.responseHistory?.artifactGuardUsed !== true;
+        const artifactComplete = complexProjectArtifactComplete(artifactEvidence, { requireModelLed: true });
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
-            if (!composer.includes(promptText) && artifactFailures.length === 0 && hasToolEvidence) {
+            if (!composer.includes(promptText) && artifactComplete) {
+              inLoopIdleDiagnostics = loopDiagnostics;
+              idleCompletedAt = Date.now();
+              break;
+            }
+            if (shouldRecoverIdleAutonomousTurn({
+              diagnosticsIdle: true,
+              elapsedMs: Date.now() - waitStartedAt,
+              artifactFailureCount: artifactComplete ? 0 : Math.max(1, artifactFailures.length),
+              hasToolEvidence,
+            })) {
+              autonomousIdleIncompleteObserved = true;
               inLoopIdleDiagnostics = loopDiagnostics;
               idleCompletedAt = Date.now();
               break;
@@ -4098,12 +4907,18 @@ async function main() {
       if (artifactEvidence?.files?.wordTally && artifactEvidence.cliPassed !== true) failures.push("coding-project CLI output did not contain red=2 and blue=1");
     }
     if (taskMode === "complex-project" || taskMode === "autonomous-reasoning") {
+      const artifactWaitMs = taskMode === "autonomous-reasoning" && autonomousIdleIncompleteObserved
+        ? Math.min(timeoutMs, 10_000)
+        : Math.min(timeoutMs, 240_000);
       artifactEvidence = await waitForArtifactEvidence(
         () => verifyComplexProjectArtifact(artifactDir, marker),
         (evidence) => complexProjectArtifactComplete(evidence, { requireModelLed: complexProjectRequiresModelLed }),
-        Math.min(timeoutMs, 240_000),
+        artifactWaitMs,
       );
-      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) {
+      const autonomousStillIncomplete = taskMode === "autonomous-reasoning"
+        && autonomousIdleIncompleteObserved
+        && !complexProjectArtifactComplete(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
+      if (complexProjectRequiresModelLed && !autonomousStillIncomplete && artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) {
         await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
         artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
       }
@@ -4115,7 +4930,7 @@ async function main() {
       if (!artifactEvidence?.files?.indexHtml) failures.push("complex-project index.html was not created");
       if (!artifactEvidence?.files?.doneTxt) failures.push("complex-project done.txt was not created");
       if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) failures.push("complex-project done.txt did not exactly match the marker");
-      if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) failures.push("complex-project analyzer did not export summarizeSources");
+      if (artifactEvidence?.files?.analyzer && artifactEvidence.exportsFunction !== true) failures.push("complex-project analyzer did not export analyze and summarizeSources");
       if (artifactEvidence?.files?.sourcesJson && artifactEvidence.sourceUrlCount < 3) failures.push("complex-project sources.json had fewer than three source URLs");
       if (artifactEvidence?.files?.sourcesJson && artifactEvidence.trustedSourceUrlCount < 3) failures.push("complex-project sources.json had fewer than three trusted OpenAI source URLs");
       if (artifactEvidence?.files?.testFile && artifactEvidence.testPassed !== true) failures.push("complex-project node:test did not pass");
@@ -4242,16 +5057,34 @@ async function main() {
       }
       repairPrompt = buildAutonomousReasoningContinuationPrompt(currentFailures, artifactEvidence);
       try {
-        await resetBackendSessionLock(baseUrl);
-        const clickedNewChat = await ws.send("Runtime.evaluate", {
-          expression: newChatClickExpression(requiresProjectChat ? projectChatLabel : ""),
+        const resetEvidence = await resetBackendSessionLock(baseUrl);
+        const idleBeforeContinuation = await waitForIdleDiagnostics(baseUrl, 15_000);
+        let visibleIdleBeforeContinuation = await waitForVisibleComposerIdle(ws, 10_000);
+        let staleComposerRecovery = null;
+        if (diagnosticsAreIdle(idleBeforeContinuation.diagnostics) && visibleIdleBeforeContinuation?.ok !== true) {
+          const recovered = await ws.send("Runtime.evaluate", {
+            expression: recoverIdleBackendStaleComposerExpression(),
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          staleComposerRecovery = recovered.result?.result?.value || null;
+          staleComposerRecovery = await clickRecoveryControlsWithMouse(ws, staleComposerRecovery);
+          visibleIdleBeforeContinuation = await waitForVisibleComposerIdle(ws, 10_000);
+        }
+        autonomousContinuationNewChatEvidence = {
+          strategy: "same-task-continuation",
+          resetEvidence,
+          diagnosticsIdleBeforeContinuation: diagnosticsAreIdle(idleBeforeContinuation.diagnostics),
+          visibleIdleBeforeContinuation,
+          staleComposerRecovery,
+        };
+        await ws.send("Runtime.evaluate", {
+          expression: "document.querySelector('.ProseMirror')?.focus()",
           returnByValue: true,
           awaitPromise: true,
         });
-        autonomousContinuationNewChatEvidence = clickedNewChat.result?.result?.value || null;
-        autonomousContinuationNewChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
       } catch (error) {
-        autonomousContinuationNewChatEvidence = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        autonomousContinuationNewChatEvidence = { strategy: "same-task-continuation", ok: false, error: error instanceof Error ? error.message : String(error) };
       }
       repairTurn = await submitDesktopPromptAndWait(ws, repairPrompt, marker, timeoutMs, { requiresProjectChat, maxInputItems: 80 });
       artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
@@ -4271,6 +5104,7 @@ async function main() {
       if (failures.length === 0) break;
     }
   }
+  if (repairTurn) inLoopIdleDiagnostics = null;
   if (repairTurn) {
     const repairFailurePrefix = taskMode === "report-site"
       ? "report-site repair-step"
@@ -4339,6 +5173,13 @@ async function main() {
   if (Number(sessionLock?.queued || 0) > 0) failures.push("desktop task left queued Antigravity sessions");
   if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
   if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
+  if (taskMode === "report-site") {
+    artifactEvidence = await waitForArtifactEvidence(
+      () => verifyReportSiteArtifact(artifactDir, marker),
+      reportSiteFinalEvidenceComplete,
+      Math.min(timeoutMs, 15_000),
+    );
+  }
   modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
   failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
   pushUniqueFailures(failures, collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, Boolean(repairPrompt)));
@@ -4355,7 +5196,46 @@ async function main() {
   const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
   const observedRequestPayload = desktopRequestPayloadObserved(diagnostics);
   const observedRealTraffic = observedModelRoute || observedRequestPayload;
-  if (!observedRequestPayload) failures.push("desktop submit did not produce a model request payload");
+  if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
+  const requiredFileAfter = requiredFile && existsSync(requiredFile)
+    ? { exists: true, size: statSync(requiredFile).size, mtimeMs: statSync(requiredFile).mtimeMs }
+    : { exists: false, size: 0, mtimeMs: 0 };
+  const requiredFileEvidence = requiredFile ? {
+    path: requiredFile,
+    before: requiredFileBefore,
+    after: requiredFileAfter,
+    changed: requiredFileAfter.exists && (!requiredFileBefore.exists
+      || requiredFileAfter.size !== requiredFileBefore.size
+      || requiredFileAfter.mtimeMs > requiredFileBefore.mtimeMs),
+    requiredContains: requiredFileContains,
+    missingContains: requiredFileAfter.exists
+      ? requiredFileContains.filter(value => !readFileSync(requiredFile, "utf8").includes(value))
+      : requiredFileContains,
+  } : null;
+  if (requiredFile && !requiredFileAfter.exists) failures.push("desktop task did not create the required file");
+  else if (requiredFile && requiredFileAfter.size <= 0) failures.push("desktop task created an empty required file");
+  else if (requiredFile && requiredFileEvidence.changed !== true) failures.push("desktop task did not update the required file");
+  if (requiredFileEvidence?.missingContains?.length > 0) {
+    failures.push(`desktop task required file is missing expected text: ${requiredFileEvidence.missingContains.join(", ")}`);
+  }
+  const lastRelay = diagnostics?.responsesWebSocket?.lastRelay || null;
+  const lastRelayAt = Date.parse(String(lastRelay?.at || ""));
+  if (Number(lastRelay?.status || 0) === 409
+    && Number.isFinite(lastRelayAt)
+    && lastRelayAt >= startedAt - 1000
+    && /continuation limit reached/i.test(String(lastRelay?.error || ""))) {
+    failures.push("desktop task hit the Antigravity continuation limit");
+  }
+  assistantMarkerHistoryCount = responseHistoryAssistantMarkerCount(marker);
+  const responseHistoryMarkerSeenFinal = assistantMarkerHistoryCount > assistantMarkerHistoryBaselineCount;
+  const assistantFinalMarkerObserved = hasAssistantFinalMarkerEvidence({
+    answerMarkerCount,
+    responseHistoryMarkerSeen: responseHistoryMarkerSeenFinal,
+    assistantHasFinalMarker: artifactEvidence?.responseHistory?.assistantHasFinalMarker === true,
+  });
+  if (taskMode === "report-site" && !assistantFinalMarkerObserved) {
+    pushUniqueFailures(failures, ["report-site assistant final marker was not observed at report finalization"]);
+  }
   const payload = {
     ok: failures.length === 0,
     reportName,
@@ -4377,6 +5257,8 @@ async function main() {
     elapsedMs: Date.now() - startedAt,
     failures,
     marker,
+    requiredFile: requiredFile || null,
+    requiredFileEvidence,
     artifactDir: taskMode === "repo-file-edit"
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"
@@ -4408,6 +5290,8 @@ async function main() {
     staleRecovery,
     backendResetBeforeSubmit,
     newChatEvidence,
+    sameChatEvidence,
+    preservedActiveTask,
     autonomousContinuationNewChatEvidence,
       modelSelectionEvidence,
       preSubmitModelSelectionEvidence,
@@ -4415,7 +5299,12 @@ async function main() {
     clicked,
     markerCount: count,
     answerMarkerCount,
-    responseHistoryMarkerSeen: responseHistoryContains(marker),
+    markerBaselineCount,
+    assistantMarkerHistoryBaselineCount,
+    assistantMarkerHistoryCount,
+    responseHistoryMarkerSeen: responseHistoryMarkerSeenFinal,
+    responseHistoryAnyMarkerSeen: responseHistoryContains(marker),
+    assistantFinalMarkerObserved,
     responseHistoryPath,
     activeReconnectSeen,
     activeReconnectEvidence,
@@ -4466,6 +5355,7 @@ main().catch((error) => {
     elapsedMs: Date.now() - startedAt,
     failures: [error instanceof Error ? error.message : String(error)],
     marker,
+    requiredFile: requiredFile || null,
     artifactDir: taskMode === "repo-file-edit"
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"

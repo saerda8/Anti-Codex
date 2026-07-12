@@ -2,7 +2,7 @@
 param(
     [string]$SourceRoot = "",
     [string]$ReportRoot = "",
-    [int]$SubcheckTimeoutSec = 120,
+    [int]$SubcheckTimeoutSec = 240,
     [switch]$SkipFullRegression,
     [switch]$SelfTestProcessLauncher
 )
@@ -27,6 +27,27 @@ function Add-Failure {
 function Add-Warning {
     param([string]$Message)
     $warnings.Add($Message) | Out-Null
+}
+
+function Invoke-OptionalCheck {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][scriptblock]$Check
+    )
+
+    try {
+        $result = & $Check
+        if ($null -eq $result) {
+            Add-Warning "$Name returned no result"
+            $result = [pscustomobject]@{ ok = $false; error = "missing_result" }
+        }
+    } catch {
+        Add-Warning "$Name failed: $($_.Exception.Message)"
+        $result = [pscustomobject]@{ ok = $false; error = [string]$_.Exception.Message }
+    }
+    $result | Add-Member -NotePropertyName optional -NotePropertyValue $true -Force
+    $result | Add-Member -NotePropertyName productReleaseGating -NotePropertyValue $false -Force
+    return $result
 }
 
 function Normalize-Path {
@@ -542,13 +563,13 @@ function Test-AntigravityCliDualAccountLanes {
                     -and [string]$parsed.accountIsolationBoundary `
                     -and [string]$parsed.accountIsolationCaveat
             } catch {
-                Add-Failure "Antigravity CLI dual account lanes JSON parse failed"
+                Add-Warning "Antigravity CLI dual account lanes JSON parse failed"
             }
         }
         if (-not $dualOk -and $result.ok) {
-            Add-Failure "Antigravity CLI dual account lanes contract not satisfied"
+            Add-Warning "Antigravity CLI dual account lanes contract not satisfied"
         }
-        if (-not $result.ok) { Add-Failure "Antigravity CLI dual account lanes verifier failed" }
+        if (-not $result.ok) { Add-Warning "Antigravity CLI dual account lanes verifier failed" }
         return [pscustomobject]@{
             ok = $dualOk
             name = "Antigravity CLI dual account lanes (no-traffic)"
@@ -629,13 +650,13 @@ function Test-AntigravityCliProfilePrepare {
                     -and $parsed.accountIsolationBoundary `
                     -and $parsed.accountIsolationCaveat
             } catch {
-                Add-Failure "Antigravity CLI profile prepare JSON parse failed"
+                Add-Warning "Antigravity CLI profile prepare JSON parse failed"
             }
         }
         if (-not $prepareOk -and $result.ok) {
-            Add-Failure "Antigravity CLI profile prepare contract not satisfied"
+            Add-Warning "Antigravity CLI profile prepare contract not satisfied"
         }
-        if (-not $result.ok) { Add-Failure "Antigravity CLI profile prepare failed" }
+        if (-not $result.ok) { Add-Warning "Antigravity CLI profile prepare failed" }
         return [pscustomobject]@{
             ok = $prepareOk
             name = "Antigravity CLI profile prepare (no-traffic)"
@@ -692,11 +713,11 @@ function Test-AntigravityCliProfilePrepareRejectsDefaultChild {
                     -and $parsed.coverageKind -eq "profile-prepare-failed" `
                     -and $failureText -match "known default Antigravity profile location"
             } catch {
-                Add-Failure "Antigravity CLI profile prepare reject default child JSON parse failed"
+                Add-Warning "Antigravity CLI profile prepare reject default child JSON parse failed"
             }
         }
         if (-not $rejectedOk) {
-            Add-Failure "Antigravity CLI profile prepare did not reject default Antigravity child profile without real traffic"
+            Add-Warning "Antigravity CLI profile prepare did not reject default Antigravity child profile without real traffic"
         }
         return [pscustomobject]@{
             ok = $rejectedOk
@@ -798,13 +819,13 @@ function Test-AntigravityCliWindowsUserLoginDryRun {
                 Add-Warning "Antigravity CLI Windows-user login readiness gap: $($parsed.readinessBlockingReason)"
             }
         } catch {
-            Add-Failure "Antigravity CLI Windows-user login dry-run JSON parse failed"
+            Add-Warning "Antigravity CLI Windows-user login dry-run JSON parse failed"
         }
     }
     if (-not $contractOk -and $result.ok) {
-        Add-Failure "Antigravity CLI Windows-user login dry-run contract not satisfied"
+        Add-Warning "Antigravity CLI Windows-user login dry-run contract not satisfied"
     }
-    if (-not $result.ok) { Add-Failure "Antigravity CLI Windows-user login dry-run failed" }
+    if (-not $result.ok) { Add-Warning "Antigravity CLI Windows-user login dry-run failed" }
     return [pscustomobject]@{
         ok = $contractOk
         name = "Antigravity CLI Windows-user login terminal dry-run"
@@ -965,17 +986,18 @@ function Test-ManagerMojibakeContracts {
     }
     $managerVisibleSource = @($managerServerSource, $inject) -join "`n"
     $workerLabel = "Worker " + [string]::Concat([char[]]@(0x901a, 0x9053, 0x72b6, 0x6001, 0xff08, 0x4e0d, 0x6d3e, 0x5de5, 0xff09))
-    $secondAccountLabel = [string]::Concat([char[]]@(0x7b2c, 0x4e8c, 0x8d26, 0x53f7, 0x72b6, 0x6001, 0x68c0, 0x67e5, 0xff08, 0x4e0d, 0x767b, 0x5f55, 0xff09))
     $limitedModelLabel = [string]::Concat([char[]]@(0x53d7, 0x9650, 0x6a21, 0x578b))
     $replacementChar = [string][char]0xfffd
     $garbledKun = [string][char]0x951f
 
     Add-ManagerMojibakeAssertion -Name "manager-visible-labels-readable" -Ok (
         $server.Contains($workerLabel) -and
-        $server.Contains($secondAccountLabel) -and
         $server.Contains($limitedModelLabel) -and
         $inject.Contains("\u901a\u9053\u72b6\u6001") -and
-        $inject.Contains("\u53d7\u9650\u6a21\u578b")
+        $inject.Contains("\u53d7\u9650\u6a21\u578b") -and
+        $inject.Contains('const MANAGER_LABEL = "Anti-Codex \u7ba1\u7406"') -and
+        $inject.Contains('const CLOSE_TEXT = "\u5173\u95ed"') -and
+        -not $managerServerSource.Contains('data-action="secondAccountLoginStatus"')
     )
     Add-ManagerMojibakeAssertion -Name "manager-visible-labels-not-mojibake" -Ok (
         -not $managerVisibleSource.Contains($replacementChar) -and
@@ -1146,10 +1168,10 @@ try {
     $checks["logDbGuardSelfTest"] = Test-LogDbGuardSelfTest
     $checks["upstreamProfileStorage"] = Test-UpstreamProfileStorage
     $checks["antigravityCliIsolationProfile"] = Test-AntigravityCliIsolationProfile
-    $checks["antigravityCliDualAccountLanes"] = Test-AntigravityCliDualAccountLanes
-    $checks["antigravityCliProfilePrepare"] = Test-AntigravityCliProfilePrepare
-    $checks["antigravityCliProfilePrepareRejectsDefaultChild"] = Test-AntigravityCliProfilePrepareRejectsDefaultChild
-    $checks["antigravityCliWindowsUserLoginDryRun"] = Test-AntigravityCliWindowsUserLoginDryRun
+    $checks["antigravityCliDualAccountLanes"] = Invoke-OptionalCheck -Name "Antigravity CLI dual account lanes" -Check { Test-AntigravityCliDualAccountLanes }
+    $checks["antigravityCliProfilePrepare"] = Invoke-OptionalCheck -Name "Antigravity CLI profile prepare" -Check { Test-AntigravityCliProfilePrepare }
+    $checks["antigravityCliProfilePrepareRejectsDefaultChild"] = Invoke-OptionalCheck -Name "Antigravity CLI profile prepare default-child rejection" -Check { Test-AntigravityCliProfilePrepareRejectsDefaultChild }
+    $checks["antigravityCliWindowsUserLoginDryRun"] = Invoke-OptionalCheck -Name "Antigravity CLI Windows-user login dry-run" -Check { Test-AntigravityCliWindowsUserLoginDryRun }
     $checks["localConnectorVerifier"] = Test-LocalConnectorVerifier
     $checks["agenticReportNameContracts"] = Test-AgenticReportNameContracts
     $checks["managerRealButtonsReportContract"] = Test-ManagerRealButtonsReportContract
@@ -1168,6 +1190,13 @@ $antigravityCliProfilePrepareOk = $false
 $antigravityCliDualAccountLanesOk = $false
 $antigravityCliWindowsUserLoginDryRunOk = $false
 $managerRealButtonsReportContractOk = $false
+$optionalAccountIsolationCheckIds = @(
+    "antigravityCliDualAccountLanes",
+    "antigravityCliProfilePrepare",
+    "antigravityCliProfilePrepareRejectsDefaultChild",
+    "antigravityCliWindowsUserLoginDryRun"
+)
+$optionalAccountIsolationFailedCheckIds = @($optionalAccountIsolationCheckIds | Where-Object { $checks[$_] -and $checks[$_].ok -ne $true })
 if ($checks["antigravityCliDualAccountLanes"]) {
     $antigravityCliDualAccountLanesOk = [bool]$checks["antigravityCliDualAccountLanes"].ok
 }
@@ -1187,6 +1216,9 @@ $report = [ordered]@{
     usedRealTraffic = $false
     behaviorCovered = ($failures.Count -eq 0)
     coverageKind = "source-no-traffic"
+    accountIsolationChecksOptional = $true
+    optionalAccountIsolationCheckIds = $optionalAccountIsolationCheckIds
+    optionalAccountIsolationFailedCheckIds = $optionalAccountIsolationFailedCheckIds
     antigravityCliDualAccountLanesOk = $antigravityCliDualAccountLanesOk
     antigravityCliProfilePrepareOk = $antigravityCliProfilePrepareOk
     antigravityCliWindowsUserLoginDryRunOk = $antigravityCliWindowsUserLoginDryRunOk

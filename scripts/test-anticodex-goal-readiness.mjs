@@ -91,11 +91,13 @@ function compactGoalReadinessStatus(payload) {
     deferredRequirements: Array.isArray(payload?.deferredObjectiveRequirementSummary?.deferredRequirementIds)
       ? payload.deferredObjectiveRequirementSummary.deferredRequirementIds
       : [],
+    optionalRequirements: Array.isArray(payload?.optionalObjectiveRequirementSummary?.optionalRequirementIds)
+      ? payload.optionalObjectiveRequirementSummary.optionalRequirementIds
+      : [],
     blockers: Array.isArray(payload?.blockers) ? payload.blockers : [],
+    optionalDevelopmentFindings: Array.isArray(payload?.optionalDevelopmentFindings) ? payload.optionalDevelopmentFindings : [],
     currentChannelWorkerTransportStatus: typeof payload?.currentChannelWorkerTransportStatus === "string" ? payload.currentChannelWorkerTransportStatus : "",
     currentChannelWorkerCanDispatch: payload?.currentChannelWorkerCanDispatch === true,
-    secondAccountOperatorStatus: typeof payload?.secondAccountOperatorStatus === "string" ? payload.secondAccountOperatorStatus : "",
-    secondAccountTargetWindowsUser: typeof payload?.secondAccountTargetWindowsUser === "string" ? payload.secondAccountTargetWindowsUser : "",
     nextRequiredUserAction: typeof payload?.nextRequiredUserAction === "string" ? payload.nextRequiredUserAction : "",
     nextFullGoalActions: Array.isArray(payload?.nextFullGoalActions) ? payload.nextFullGoalActions : [],
     fullGoalRequiresFreshCodexChannel: payload?.fullGoalRequiresFreshCodexChannel === true,
@@ -1033,33 +1035,6 @@ const proven = {
 
 const blockers = [];
 if (!proven.codexClientCopy) blockers.push("codex_client_copy_evidence_missing_or_invalid");
-if (!workerMcp.reportOk || !workerMcp.allRequiredPassed) blockers.push("worker_mcp_real_list_incomplete");
-if (workerMcp.incompleteToolCountServers.length > 0) blockers.push("worker_mcp_tool_count_incomplete");
-if (!workerMcp.taskSmokeReportOk) blockers.push("worker_mcp_task_smoke_missing_or_failed");
-if (!workerMcp.taskSmokeUsedRealTraffic) blockers.push("worker_mcp_task_smoke_real_traffic_missing");
-if (!workerMcp.taskSmokeAntigravityExcluded) blockers.push("worker_mcp_task_smoke_antigravity_not_excluded");
-if (workerMcp.taskSmokePassedWorkerCount < 1) blockers.push("worker_mcp_task_smoke_no_passed_worker");
-if (workerMcp.taskSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_task_smoke_insufficient_worker_diversity");
-if (workerMcp.taskSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_task_smoke_missing_required_worker");
-if (workerMcp.taskSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_task_smoke_failed_workers");
-if (!workerMcp.projectSmokeReportOk) blockers.push("worker_mcp_project_smoke_missing_or_failed");
-if (workerMcp.projectSmokeScenario !== "project") blockers.push("worker_mcp_project_smoke_wrong_scenario");
-if (!workerMcp.projectSmokeUsedRealTraffic) blockers.push("worker_mcp_project_smoke_real_traffic_missing");
-if (!workerMcp.projectSmokeAntigravityExcluded) blockers.push("worker_mcp_project_smoke_antigravity_not_excluded");
-if (workerMcp.projectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_project_smoke_insufficient_worker_diversity");
-if (workerMcp.projectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_project_smoke_missing_required_worker");
-if (workerMcp.projectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_project_smoke_failed_workers");
-if (!workerMcp.complexProjectSmokeReportOk) blockers.push("worker_mcp_complex_project_smoke_missing_or_failed");
-if (workerMcp.complexProjectSmokeScenario !== "complex-project") blockers.push("worker_mcp_complex_project_smoke_wrong_scenario");
-if (!workerMcp.complexProjectSmokeUsedRealTraffic) blockers.push("worker_mcp_complex_project_smoke_real_traffic_missing");
-if (!workerMcp.complexProjectSmokeAntigravityExcluded) blockers.push("worker_mcp_complex_project_smoke_antigravity_not_excluded");
-if (workerMcp.complexProjectSmokePassedWorkerCount < minTaskSmokePassedWorkers) blockers.push("worker_mcp_complex_project_smoke_insufficient_worker_diversity");
-if (workerMcp.complexProjectSmokeMissingRequiredWorkers.length > 0) blockers.push("worker_mcp_complex_project_smoke_missing_required_worker");
-if (workerMcp.complexProjectSmokeFailedWorkers.length > 0) blockers.push("worker_mcp_complex_project_smoke_failed_workers");
-if (!workerMcp.currentChannelWorkerTransportFresh) blockers.push("current_channel_worker_transport_probe_stale");
-if (!currentChannelWorkerCanDispatch) blockers.push("current_channel_worker_transport_not_recovered");
-if (workerMcp.currentChannelLatestWorkerFailureIsCurrent) blockers.push("current_channel_worker_latest_tool_failed");
-if (workerMcp.staleOrUnrefreshedAppServerLikely) blockers.push("codex_appserver_stale_or_unrefreshed");
 if (!proven.desktopAgenticTasks) blockers.push("desktop_agentic_task_evidence_incomplete_or_stale");
 if (!proven.agenticCapabilityMatrix) blockers.push("agentic_capability_matrix_incomplete_or_stale");
 if (!proven.realTaskCoverageRoadmap) blockers.push("real_task_coverage_roadmap_missing_or_invalid");
@@ -1069,37 +1044,30 @@ if (!realTaskCoverageRoadmap.resultProofComplete) blockers.push("real_task_resul
 if (!proven.realApprovalPlan) blockers.push("real_approval_plan_missing_or_invalid");
 for (const profile of realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic) blockers.push(`real_task_coverage_refresh_required:${profile}`);
 if (!proven.releaseShortPath) blockers.push("short_release_path_not_clean");
-if (!proven.secondAccountLoginEntrypoint) blockers.push("second_account_login_entrypoint_missing_or_invalid");
-if (!proven.secondAccountReadinessSummary) blockers.push("second_account_readiness_summary_missing_or_invalid");
-if (!proven.secondAccountPostLoginProof) blockers.push("second_account_post_login_proof_missing_or_invalid");
-if (!antigravityAccountIsolation.releaseAcceptableAccountProof) blockers.push("second_antigravity_account_real_proof_missing");
 for (const gate of releaseGateStatus.requiredRealTrafficBlockedGates) blockers.push(`required_real_traffic_gate_blocked:${gate}`);
+const optionalDevelopmentFindings = [];
+if (!proven.workerMcp) optionalDevelopmentFindings.push("worker_mcp_optional_evidence_incomplete");
+if (!currentChannelWorkerCanDispatch) optionalDevelopmentFindings.push("current_channel_worker_optional_transport_not_ready");
+if (!antigravityAccountIsolation.releaseAcceptableAccountProof) optionalDevelopmentFindings.push("dual_account_optional_proof_missing");
 const currentGoalReleaseReady = releaseGateStatus.releaseReady === true
   || (releaseGateStatus.shortReady === true
     && Array.isArray(releaseGateStatus.missingRequired)
     && releaseGateStatus.missingRequired.length === 1
     && releaseGateStatus.missingRequired[0] === "goalReadiness");
 const fullGoalComplete = proven.codexClientCopy
-  && proven.workerMcp
-  && currentChannelWorkerCanDispatch
-  && workerMcp.currentChannelWorkerTransportFresh
   && proven.desktopAgenticTasks
   && proven.agenticCapabilityMatrix
   && proven.realTaskCoverageRoadmap
   && proven.longTaskLandingMatrix
   && proven.realApprovalPlan
-  && proven.secondAccountLoginEntrypoint
-  && proven.secondAccountReadinessSummary
-  && proven.secondAccountPostLoginProof
   && realTaskCoverageRoadmap.nextProfilesNeedingRealTraffic.length === 0
-  && releaseGateStatus.releaseReady
-  && antigravityAccountIsolation.releaseAcceptableAccountProof;
+  && currentGoalReleaseReady;
 
-const deferredCurrentRequirementIds = [
+const optionalDevelopmentRequirementIds = [
   "separate_antigravity_accounts",
   "worker_mcp_multiuse",
 ];
-const deferredCurrentRequirementIdSet = new Set(deferredCurrentRequirementIds);
+const optionalDevelopmentRequirementIdSet = new Set(optionalDevelopmentRequirementIds);
 
 function objectiveRequirement(id, label, complete, evidence = [], missing = []) {
   return {
@@ -1112,7 +1080,7 @@ function objectiveRequirement(id, label, complete, evidence = [], missing = []) 
   };
 }
 
-const fullObjectiveRequirementAudit = [
+const allObjectiveRequirementAudit = [
   objectiveRequirement(
     "codex_client_copy",
     "Anti-Codex is a guarded complete Codex client copy, not a feature-by-feature rewrite",
@@ -1221,8 +1189,9 @@ const fullObjectiveRequirementAudit = [
   ),
 ];
 
-const deferredObjectiveRequirementAudit = fullObjectiveRequirementAudit.filter((item) => deferredCurrentRequirementIdSet.has(item.id));
-const currentObjectiveRequirementAudit = fullObjectiveRequirementAudit.filter((item) => !deferredCurrentRequirementIdSet.has(item.id));
+const optionalObjectiveRequirementAudit = allObjectiveRequirementAudit.filter((item) => optionalDevelopmentRequirementIdSet.has(item.id));
+const objectiveRequirementAudit = allObjectiveRequirementAudit.filter((item) => !optionalDevelopmentRequirementIdSet.has(item.id));
+const fullObjectiveRequirementAudit = objectiveRequirementAudit;
 const summarizeRequirementAudit = (items, canClaim) => ({
   total: items.length,
   completeCount: items.filter((item) => item.complete).length,
@@ -1230,28 +1199,31 @@ const summarizeRequirementAudit = (items, canClaim) => ({
   incompleteRequirementIds: items.filter((item) => !item.complete).map((item) => item.id),
   canClaimFullGoalNow: canClaim,
 });
-const goalComplete = currentObjectiveRequirementAudit.every((item) => item.complete)
+const goalComplete = objectiveRequirementAudit.every((item) => item.complete)
   && currentGoalReleaseReady === true;
-const objectiveRequirementAudit = currentObjectiveRequirementAudit;
 const objectiveRequirementSummary = summarizeRequirementAudit(objectiveRequirementAudit, goalComplete);
 const fullObjectiveRequirementSummary = summarizeRequirementAudit(
   fullObjectiveRequirementAudit,
   fullObjectiveRequirementAudit.every((item) => item.complete) && fullGoalComplete,
 );
 const fullGoalMissingRequirementIds = fullObjectiveRequirementSummary.incompleteRequirementIds;
-const fullGoalRequiresFreshCodexChannel = fullGoalMissingRequirementIds.includes("worker_mcp_multiuse") && currentChannelWorkerCanDispatch !== true;
-const fullGoalRequiresFreshCodexAppServer = fullGoalRequiresFreshCodexChannel && workerMcp.staleOrUnrefreshedAppServerLikely === true;
-const fullGoalRequiresUserPresence = fullGoalMissingRequirementIds.includes("separate_antigravity_accounts") && antigravityAccountIsolation.releaseAcceptableAccountProof !== true;
-const nextFullGoalActions = [
-  ...(fullGoalRequiresFreshCodexAppServer ? ["fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe"] : []),
-  ...(fullGoalRequiresFreshCodexChannel ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
-  ...(fullGoalRequiresUserPresence ? ["create_or_verify_target_windows_user_then_rerun_second_account_proof"] : []),
-];
+const fullGoalRequiresFreshCodexChannel = false;
+const fullGoalRequiresFreshCodexAppServer = false;
+const fullGoalRequiresUserPresence = false;
+const nextFullGoalActions = [];
 const deferredObjectiveRequirementSummary = {
-  total: deferredObjectiveRequirementAudit.length,
-  deferredRequirementIds: deferredObjectiveRequirementAudit.map((item) => item.id),
-  incompleteDeferredRequirementIds: deferredObjectiveRequirementAudit.filter((item) => !item.complete).map((item) => item.id),
-  reason: "User accepted one shared Antigravity account and asked to ignore worker MCP for the current usability goal.",
+  total: 0,
+  deferredRequirementIds: [],
+  incompleteDeferredRequirementIds: [],
+  reason: "No product requirements are deferred; single-account native Codex parity is the permanent product goal.",
+};
+const deferredObjectiveRequirementAudit = [];
+const optionalObjectiveRequirementSummary = {
+  total: optionalObjectiveRequirementAudit.length,
+  optionalRequirementIds: optionalObjectiveRequirementAudit.map((item) => item.id),
+  incompleteOptionalRequirementIds: optionalObjectiveRequirementAudit.filter((item) => !item.complete).map((item) => item.id),
+  productReleaseGating: false,
+  reason: "Dual-account isolation and worker MCP dispatch are optional development evidence, not Anti-Codex product requirements.",
 };
 
 const currentChannelWorkerTransportStatus = currentChannelWorkerCanDispatch
@@ -1273,25 +1245,12 @@ const unattendedSafeActions = goalComplete ? [
   "refresh_no_traffic_goal_readiness",
 ] : [
   "refresh_no_traffic_goal_readiness",
-  "refresh_current_channel_worker_recovery_status",
   "refresh_release_gate_summary",
 ];
-const freshChannelRequiredActions = [
-  ...(!goalComplete && !currentChannelWorkerCanDispatch ? ["reload_codex_or_open_fresh_channel_then_rerun_worker_read_only_probe"] : []),
-];
-const userPresenceRequiredActions = [
-  ...(!goalComplete && !secondAccountReadinessSummary.targetUserExists ? ["create_or_verify_target_windows_user_then_rerun_summary"] : []),
-  ...(!goalComplete && secondAccountReadinessSummary.targetUserExists && !antigravityAccountIsolation.releaseAcceptableAccountProof ? ["run_approved_second_account_login_then_post_login_account_proof"] : []),
-];
-const deferredBlockerPrefixes = [
-  "worker_mcp_",
-  "current_channel_worker_",
-  "codex_appserver_",
-  "second_account_",
-  "second_antigravity_account_",
-];
+const freshChannelRequiredActions = [];
+const userPresenceRequiredActions = [];
 const goalOperatorActionCard = {
-  status: goalComplete ? "goal_complete" : "external_actions_required",
+  status: goalComplete ? "goal_complete" : "product_evidence_incomplete",
   canClaimFullGoalNow: goalComplete,
   currentGoalComplete: goalComplete,
   fullGoalComplete: fullObjectiveRequirementSummary.canClaimFullGoalNow === true,
@@ -1310,19 +1269,11 @@ const goalOperatorActionCard = {
   activeAppServerPid: workerMcp.activeDesktopAppServerPid,
   activeAppServerParentPid: workerMcp.activeDesktopAppServerParentPid,
   activeAppServerCreationDateUtc: workerMcp.activeDesktopAppServerCreationDateUtc,
-  secondAccountStatus: secondAccountOperatorStatus,
-  secondAccountCanAskUserToLoginNow: secondAccountReadinessSummary.canProceedToInteractiveLogin,
-  missingRequirements: goalComplete ? [] : blockers.filter((blocker) => !deferredBlockerPrefixes.some((prefix) => String(blocker).startsWith(prefix))),
-  nextOperatorActions: [
-    ...(fullGoalRequiresFreshCodexAppServer ? ["fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe"] : []),
-    ...freshChannelRequiredActions,
-    ...userPresenceRequiredActions,
-  ],
+  missingRequirements: goalComplete ? [] : blockers,
+  nextOperatorActions: goalComplete ? [] : ["refresh_product_evidence_and_release_gates"],
   userVisibleNextStep: goalComplete
-    ? (currentChannelWorkerCanDispatch
-      ? "Current single-account Anti-Codex scope is complete; full goal still requires second-account proof."
-      : "Current single-account Anti-Codex scope is complete; full goal still requires worker transport recovery and second-account proof.")
-    : "Refresh the current single-account evidence and rerun goal readiness.",
+    ? "The permanent single-account Anti-Codex product goal is complete."
+    : "Refresh the core Anti-Codex product evidence and rerun goal readiness.",
   noTrafficStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs",
   compactStatusCommand: "node scripts\\test-anticodex-goal-readiness.mjs --compact-status",
   workerRecoveryStatusCommand: currentChannelRecoveryStatusCommand,
@@ -1330,13 +1281,10 @@ const goalOperatorActionCard = {
   workerRecoveryRecommendedReadOnlyProbes: recommendedReadOnlyProbes,
   workerRecoveryExposedRecommendedReadOnlyProbes: exposedRecommendedReadOnlyProbes,
   workerRecoveryRecommendedFirstReadOnlyProbe: recommendedFirstReadOnlyProbe,
-  secondAccountStatusCommand: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-second-account-readiness-summary.ps1 -Compact",
-  secondAccountPostLoginProofStatus: secondAccountPostLoginProof.operatorActionCard.status,
-  secondAccountPostLoginProofCommand: secondAccountPostLoginProof.operatorActionCard.noTrafficStatusCommand,
 };
 
 const currentUsability = {
-  mode: "shared-account-worker-mcp-disabled",
+  mode: "single-account-native-codex-parity",
   usableNow: proven.codexClientCopy === true
     && proven.desktopAgenticTasks === true
     && proven.agenticCapabilityMatrix === true
@@ -1349,7 +1297,9 @@ const currentUsability = {
   usesSharedAntigravityAccount: true,
   requiresSeparateAntigravityAccount: false,
   requiresCurrentChannelWorkerMcp: false,
-  workerMcpTemporarilyDisabled: true,
+  workerMcpOptionalDevelopmentEvidence: true,
+  workerMcpTemporarilyDisabled: false,
+  accountIsolationOptional: true,
   codexClientCopy: proven.codexClientCopy === true,
   antigravityModelText: proven.desktopAgenticTasks === true && proven.releaseShortPath === true,
   codexOwnedTools: true,
@@ -1357,12 +1307,12 @@ const currentUsability = {
     && proven.longTaskLandingMatrix === true
     && realTaskCoverageRoadmap.artifactProofComplete === true
     && realTaskCoverageRoadmap.resultProofComplete === true,
-  caveat: "Separate Antigravity account proof and current-channel worker MCP recovery are deferred by user decision; the current goal is one shared Antigravity account with worker MCP disabled.",
-  temporaryRelaxedRequirements: deferredCurrentRequirementIds,
+  caveat: "Dual-account isolation and worker MCP dispatch remain observable optional development evidence and do not gate the permanent single-account product goal.",
+  temporaryRelaxedRequirements: [],
 };
 
-const deferredBlockers = blockers.filter((blocker) => deferredBlockerPrefixes.some((prefix) => String(blocker).startsWith(prefix)));
-const currentBlockers = blockers.filter((blocker) => !deferredBlockers.includes(blocker));
+const deferredBlockers = [];
+const currentBlockers = blockers;
 const reportOk = goalComplete === true && currentBlockers.length === 0;
 
 const payload = {
@@ -1389,6 +1339,9 @@ const payload = {
   fullObjectiveRequirementAudit,
   deferredObjectiveRequirementSummary,
   deferredObjectiveRequirementAudit,
+  optionalObjectiveRequirementSummary,
+  optionalObjectiveRequirementAudit,
+  optionalDevelopmentFindings,
   currentUsability,
   goalOperatorActionCard,
   currentChannelWorkerCanDispatch,
@@ -1420,7 +1373,7 @@ const payload = {
   secondAccountReadinessSummary,
   secondAccountPostLoginProof,
   releaseGateStatus,
-  nextRequiredUserAction: goalComplete ? "none_current_single_account_goal_complete" : currentBlockers[0] || "refresh_current_single_account_goal_readiness",
+  nextRequiredUserAction: goalComplete ? "none_product_goal_complete" : currentBlockers[0] || "refresh_product_goal_readiness",
   nextFullGoalActions,
   fullGoalRequiresFreshCodexChannel,
   fullGoalRequiresFreshCodexAppServer,

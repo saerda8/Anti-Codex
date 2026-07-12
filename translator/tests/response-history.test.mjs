@@ -75,6 +75,80 @@ test("response history persists bounded entries and reloads them", () => {
   }
 });
 
+test("response history persists each input context only once", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-history-compact-"));
+  const filePath = path.join(dir, "responses.json");
+  try {
+    const first = createResponseHistoryStore({ filePath });
+    first.remember(
+      {
+        id: "resp_compact",
+        output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "answer" }] }],
+      },
+      { input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "question" }] }] },
+    );
+
+    const persisted = JSON.parse(fs.readFileSync(filePath, "utf8")).entries[0];
+    assert.equal("inputItems" in persisted, false);
+    assert.equal(persisted.inputItemCount, 1);
+    assert.equal(persisted.contextItems.length, 2);
+
+    const second = createResponseHistoryStore({ filePath });
+    assert.equal(second.listInputItems("resp_compact", { limit: 100 }).data.length, 1);
+    assert.equal(second.hydrate({ previous_response_id: "resp_compact", input: "next" }).input.length, 3);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("response history reloads legacy duplicated input entries into the compact schema", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-history-legacy-"));
+  const filePath = path.join(dir, "responses.json");
+  try {
+    const input = [{ type: "message", id: "legacy-user", role: "user", content: [{ type: "input_text", text: "legacy" }] }];
+    fs.writeFileSync(filePath, JSON.stringify({
+      version: 1,
+      entries: [{ id: "resp_legacy", createdAt: 1, inputItems: input, contextItems: [...input, { type: "message", role: "assistant", content: [] }] }],
+    }));
+
+    const store = createResponseHistoryStore({ filePath });
+    assert.equal(store.listInputItems("resp_legacy", { limit: 100 }).data.length, 1);
+    store.remember({ id: "resp_new", output: [] }, { input: "new" });
+
+    const persisted = JSON.parse(fs.readFileSync(filePath, "utf8")).entries;
+    assert.ok(persisted.every((entry) => !("inputItems" in entry)));
+    assert.equal(persisted.find((entry) => entry.id === "resp_legacy").inputItemCount, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("response history falls back to copy replacement and removes the temp file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-history-replace-"));
+  const filePath = path.join(dir, "responses.json");
+  const fileSystem = Object.create(fs);
+  let renameCalls = 0;
+  fileSystem.renameSync = () => {
+    renameCalls += 1;
+    const error = new Error("simulated Windows replacement lock");
+    error.code = "EPERM";
+    throw error;
+  };
+  try {
+    const store = createResponseHistoryStore({ filePath, fileSystem });
+    store.remember({ id: "resp_replace", output: [] }, { input: "persist me" });
+
+    assert.equal(renameCalls, 1);
+    assert.equal(createResponseHistoryStore({ filePath }).has("resp_replace"), true);
+    assert.deepEqual(
+      fs.readdirSync(dir).filter((name) => name.endsWith(".tmp")),
+      [],
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("response history returns an empty list for an unknown response id", () => {
   const store = createResponseHistoryStore();
   assert.deepEqual(store.listInputItems("missing"), {
@@ -192,6 +266,50 @@ test("prune evicts oldest entries when maxEntries is exceeded", () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("default response history keeps only the latest eight recovery points", () => {
+  const store = createResponseHistoryStore();
+  for (let index = 1; index <= 9; index += 1) {
+    store.remember({ id: `r_default_${index}`, output: [] }, { input: `turn ${index}` });
+  }
+  assert.equal(store.has("r_default_1"), false);
+  assert.equal(store.has("r_default_2"), true);
+  assert.equal(store.has("r_default_9"), true);
+});
+
+test("response history retains the newest recovery point even when it exceeds the character budget", () => {
+  const store = createResponseHistoryStore({
+    maxEntries: 8,
+    maxTotalChars: 10,
+    measureEntryChars: () => 20,
+  });
+  store.remember({ id: "r_oversized_old", output: [] }, { input: "old" });
+  assert.equal(store.has("r_oversized_old"), true);
+  store.remember({ id: "r_oversized_new", output: [] }, { input: "new" });
+  assert.equal(store.has("r_oversized_old"), false);
+  assert.equal(store.has("r_oversized_new"), true);
+});
+
+test("prune measures each remembered entry once instead of rescanning the full store", () => {
+  let measurements = 0;
+  const store = createResponseHistoryStore({
+    maxEntries: 2,
+    maxTotalChars: 1_000_000,
+    measureEntryChars(entry) {
+      measurements += 1;
+      return JSON.stringify(entry).length;
+    },
+  });
+
+  store.remember({ id: "r_measure_1", output: [] }, { input: "one" });
+  store.remember({ id: "r_measure_2", output: [] }, { input: "two" });
+  store.remember({ id: "r_measure_3", output: [] }, { input: "three" });
+
+  assert.equal(measurements, 3);
+  assert.equal(store.has("r_measure_1"), false);
+  assert.equal(store.has("r_measure_2"), true);
+  assert.equal(store.has("r_measure_3"), true);
 });
 
 test("hydrate throws an explicit expired-history error when previous_response_id has been pruned", () => {

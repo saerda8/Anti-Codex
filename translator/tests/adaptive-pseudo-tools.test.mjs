@@ -34,6 +34,7 @@ const {
   hasPseudoToolMarkup,
   inputTokensResponse,
   localBackendApiResponse,
+  localArtifactToolEvidenceMatchesUserText,
   applyResponsesEndTurnHint,
   normalizeCompactSummary,
   parsePseudoToolCalls,
@@ -49,7 +50,281 @@ const {
   stripPseudoToolMarkup,
   unknownInputItemText,
   usageDiagnostics,
+  antigravityWorkspaceForRequest,
+  antigravityStreamingTimeouts,
+  workspaceCwdFromCodexSession,
+  workspaceCwdFromRequest,
 } = await import("../adaptive-server.mjs");
+
+test("passing test names that mention TypeError remain valid local artifact evidence", () => {
+  const userText = "Only edit C:\\Project\\package.json, run npm test, and verify the file has no BOM.";
+  const evidence = [
+    "Exit code: 0",
+    "✔ normalizeEvent throws TypeError for null",
+    "ℹ tests 18",
+    "ℹ pass 18",
+    "ℹ fail 0",
+    "No BOM",
+  ].join("\n");
+
+  assert.equal(localArtifactToolEvidenceMatchesUserText(userText, evidence), true);
+});
+
+test("a later passing test summary cannot hide an earlier syntax failure", () => {
+  const userText = "Only edit C:\\Project\\cli.mjs, run node --check cli.mjs, then run npm test.";
+  const evidence = [
+    "Exit code: 0",
+    "SyntaxError: Identifier 'fs' has already been declared",
+    "tests 18",
+    "pass 18",
+    "fail 0",
+  ].join("\n");
+
+  assert.equal(localArtifactToolEvidenceMatchesUserText(userText, evidence), false);
+});
+
+test("a passing test summary cannot hide a PowerShell parameter binding failure", () => {
+  const userText = "Run npm test and verify C:\\Project has no UTF-8 BOM.";
+  const evidence = [
+    "Exit code: 0",
+    "pass 19",
+    "fail 0",
+    "Get-Content : A parameter cannot be found that matches parameter name 'AsByteStream'.",
+    "FullyQualifiedErrorId : NamedParameterNotFound,Microsoft.PowerShell.Commands.GetContentCommand",
+  ].join("\n");
+
+  assert.equal(localArtifactToolEvidenceMatchesUserText(userText, evidence), false);
+});
+
+test("Antigravity thinking models receive longer default stream timeouts", () => {
+  assert.deepEqual(antigravityStreamingTimeouts("claude-opus-4-6-thinking", {
+    defaultIdleMs: 45_000,
+    defaultTotalMs: 120_000,
+  }), {
+    idleMs: 120_000,
+    totalMs: 300_000,
+  });
+  assert.deepEqual(antigravityStreamingTimeouts("claude-opus-4-6-thinking", {
+    defaultIdleMs: 45_000,
+    defaultTotalMs: 120_000,
+    streamIdleTimeoutMs: 25,
+    streamTotalTimeoutMs: 50,
+  }), {
+    idleMs: 25,
+    totalMs: 50,
+  });
+  assert.deepEqual(antigravityStreamingTimeouts("gemini-3.5-flash-low", {
+    defaultIdleMs: 45_000,
+    defaultTotalMs: 120_000,
+  }), {
+    idleMs: 45_000,
+    totalMs: 120_000,
+  });
+});
+
+test("workspaceCwdFromRequest selects the latest standalone Codex environment context", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex workspace cwd "));
+  const earlier = path.join(root, "earlier workspace");
+  const current = path.join(root, "current workspace with spaces");
+  fs.mkdirSync(earlier);
+  fs.mkdirSync(current);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const environmentContext = (cwd) => `<environment_context>
+  <cwd>${cwd}</cwd>
+  <shell>powershell</shell>
+  <filesystem><workspace_roots><root>${cwd}</root></workspace_roots></filesystem>
+</environment_context>`;
+  const request = {
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: environmentContext(earlier) }] },
+      {
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: `Do not treat this inline example as runtime context: ${environmentContext(path.join(root, "fake"))}`,
+        }],
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: environmentContext(current) }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue the task." }] },
+    ],
+  };
+
+  assert.equal(workspaceCwdFromRequest(request), path.resolve(current));
+});
+
+test("workspaceCwdFromRequest reads the standalone environment context from a Codex developer item", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex developer cwd "));
+  const current = path.join(root, "current workspace");
+  fs.mkdirSync(current);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  assert.equal(workspaceCwdFromRequest({
+    input: [
+      {
+        type: "message",
+        role: "developer",
+        content: [{ type: "input_text", text: "<permissions instructions>never</permissions instructions>" }],
+      },
+      {
+        type: "message",
+        role: "developer",
+        content: [{
+          type: "input_text",
+          text: `<environment_context><cwd>${current}</cwd></environment_context>`,
+        }],
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue the task." }] },
+    ],
+  }), path.resolve(current));
+});
+
+test("workspaceCwdFromRequest rejects a Codex workspace that is a file", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex workspace file "));
+  const filePath = path.join(root, "not-a-directory.txt");
+  fs.writeFileSync(filePath, "not a workspace", "utf8");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  assert.throws(() => workspaceCwdFromRequest({
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `<environment_context><cwd>${filePath}</cwd></environment_context>`,
+      }],
+    }],
+  }), /workspace is not a directory/i);
+});
+
+test("workspaceCwdFromRequest reads the latest context from a serialized Codex prompt", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex serialized cwd "));
+  const earlier = path.join(root, "earlier");
+  const current = path.join(root, "current project");
+  fs.mkdirSync(earlier);
+  fs.mkdirSync(current);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const input = [
+    "[SYSTEM]",
+    "Codex transcript",
+    "[USER]",
+    `<environment_context><cwd>${earlier}</cwd></environment_context>`,
+    "[USER]",
+    "older task",
+    "[USER]",
+    `<environment_context><cwd>${current}</cwd></environment_context>`,
+    "[USER]",
+    "continue current task",
+  ].join("\n\n");
+
+  assert.equal(workspaceCwdFromRequest({ input }), path.resolve(current));
+});
+
+test("workspaceCwdFromCodexSession reads the latest turn_context without using prompt text", (t) => {
+  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex session cwd "));
+  const sessionId = "019f4fa1-d845-7590-bf2d-a0644b0487b9";
+  const sessionDir = path.join(codexHome, "sessions", "2026", "07", "11");
+  const earlier = path.join(codexHome, "earlier workspace");
+  const current = path.join(codexHome, "current workspace");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.mkdirSync(earlier);
+  fs.mkdirSync(current);
+  const sessionPath = path.join(sessionDir, `rollout-2026-07-11T13-23-54-${sessionId}.jsonl`);
+  fs.writeFileSync(sessionPath, [
+    JSON.stringify({ type: "turn_context", payload: { cwd: earlier, workspace_roots: [earlier] } }),
+    JSON.stringify({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "plain task" }] } }),
+    JSON.stringify({ type: "turn_context", payload: { cwd: current, workspace_roots: [current] } }),
+    "{partial trailing line",
+  ].join("\n"), "utf8");
+  t.after(() => fs.rmSync(codexHome, { recursive: true, force: true }));
+
+  assert.equal(workspaceCwdFromCodexSession(sessionId, { codexHome }), path.resolve(current));
+  assert.deepEqual(antigravityWorkspaceForRequest({ headers: { session_id: sessionId } }, {
+    input: "Reply exactly once.",
+  }, { codexHome }), {
+    cwd: path.resolve(current),
+    source: "codex-session-turn-context",
+    sessionId,
+  });
+});
+
+test("an explicit project directory overrides a drifted session and environment workspace", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex explicit workspace "));
+  const codexHome = path.join(root, "codex-home");
+  const project = path.join(root, "real project with spaces");
+  const drifted = path.join(root, "generated fallback workspace");
+  const sessionId = "019f4fa1-d845-7590-bf2d-a0644b0487b9";
+  const sessionDir = path.join(codexHome, "sessions", "2026", "07", "11");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.mkdirSync(project);
+  fs.mkdirSync(drifted);
+  fs.writeFileSync(path.join(sessionDir, `rollout-2026-07-11T13-23-54-${sessionId}.jsonl`), JSON.stringify({
+    type: "turn_context",
+    payload: { cwd: drifted, workspace_roots: [drifted] },
+  }), "utf8");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const request = {
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }],
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `Continue the same task.\n\nProject directory:\n${project}\n\nRun the tests.` }],
+      },
+    ],
+  };
+
+  assert.equal(workspaceCwdFromRequest(request), path.resolve(project));
+  assert.deepEqual(antigravityWorkspaceForRequest({ headers: { session_id: sessionId } }, request, { codexHome }), {
+    cwd: path.resolve(project),
+    source: "request-explicit-workspace",
+    sessionId,
+  });
+});
+
+test("a prior shell workdir keeps the project across a plain same-chat follow-up", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex retained workdir "));
+  const project = path.join(root, "real project with spaces");
+  const drifted = path.join(root, "generated fallback workspace");
+  fs.mkdirSync(project);
+  fs.mkdirSync(drifted);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const request = {
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Run the project tests." }] },
+      { type: "function_call", call_id: "call_test", name: "shell_command", arguments: JSON.stringify({ command: "npm test", workdir: project }) },
+      { type: "function_call_output", call_id: "call_test", output: "Exit code: 0" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue in the same project." }] },
+    ],
+  };
+
+  assert.equal(workspaceCwdFromRequest(request), path.resolve(project));
+});
+
+test("workspaceCwdFromRequest accepts an inline Chinese project-directory label", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex chinese workspace "));
+  const project = path.join(root, "真实项目");
+  const drifted = path.join(root, "generated fallback workspace");
+  fs.mkdirSync(project);
+  fs.mkdirSync(drifted);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  assert.equal(workspaceCwdFromRequest({
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: `继续同一个项目。工作目录：${project}` }] },
+    ],
+  }), path.resolve(project));
+});
 
 const dsmlFetch = `最后抓一下 163 那篇比较全面的伤亡统计文章，确认乌克兰方面的完整数据：
 
@@ -100,6 +375,43 @@ test("plain XML tool_call is detected, stripped, and parsed", () => {
   assert.deepEqual(JSON.parse(calls[0].function.arguments), {
     query: "COMPACT_SEED_88282_20260614",
   });
+});
+
+test("pseudo XML parameters decode standard entities before tool execution", () => {
+  const xml = `<tool_calls><invoke name="shell_command"><parameter name="command">$body = @&apos;\nif (a &lt; b &amp;&amp; c &gt; d) { Write-Output &quot;ok&quot; }\n&apos;</parameter></invoke></tool_calls>`;
+  const calls = parsePseudoToolCalls(xml);
+
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.parse(calls[0].function.arguments).command, `$body = @'\nif (a < b && c > d) { Write-Output "ok" }\n'`);
+});
+
+test("oversized pseudo shell commands are returned as split-write guidance", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_OVERSIZED_20260712";
+  const oversized = `$body = '${"x".repeat(15_000)}'; [System.IO.File]::WriteAllText('src/normalize.mjs', $body)`;
+  const completion = {
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="shell_command"><parameter name="command">${oversized}</parameter></invoke></tool_calls>`,
+      },
+    }],
+  };
+  const fmt = chatToResponsesFormat(completion, {
+    model: "gemini-3.5-flash-low",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: `Implement the project with real shell commands. Finish with ${marker}.` }],
+    }],
+  });
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+
+  assert.ok(args.command.length < 2_000);
+  assert.match(args.command, /too long|split/i);
+  assert.doesNotMatch(args.command, /x{100}/);
+  assert.doesNotMatch(args.command, new RegExp(marker));
 });
 
 test("compact responses are returned as context_compaction items", () => {
@@ -497,6 +809,40 @@ test("chat response trusts current internal tool evidence", () => {
   assert.doesNotMatch(formatted.output[0].content[0].text, /拦截|DeepCodex/);
 });
 
+test("chat response ignores stale prior-turn tool evidence for a same-chat follow-up", () => {
+  const priorCall = {
+    id: "call_prior_read",
+    type: "function",
+    function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content old.md" }) },
+  };
+  const chatMessages = [
+    { role: "user", content: "Read the old audit." },
+    { role: "assistant", content: null, tool_calls: [priorCall] },
+    { role: "tool", tool_call_id: priorCall.id, content: "old audit content" },
+    { role: "user", content: "Read the current audit file and continue the same task." },
+  ];
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: "Reading current audit file." },
+    }],
+  }, {
+    model: "gpt-oss-120b-medium",
+    input: [
+      { type: "message", role: "user", content: "Read the old audit." },
+      { type: "function_call", call_id: priorCall.id, name: "shell_command", arguments: priorCall.function.arguments },
+      { type: "function_call_output", call_id: priorCall.id, output: "old audit content" },
+      { type: "message", role: "user", content: "Read the current audit file and continue the same task." },
+    ],
+  }, null, { chatMessages });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.match(formatted.output[0].content[0].text, /Anti-Codex/);
+  assert.match(formatted.output[0].content[0].text, /tool call/i);
+  assert.notEqual(formatted.output[0].content[0].text, "Reading current audit file.");
+});
+
 test("chat response blocks plain TOOL_RESULT transcript text even with prior tool evidence", () => {
   const marker = "UI_CODING_PROJECT_SMOKE_999001";
   const formatted = chatToResponsesFormat({
@@ -528,6 +874,32 @@ test("chat response blocks plain TOOL_RESULT transcript text even with prior too
   assert.match(formatted.output[0].content[0].text, /Anti-Codex/);
   assert.match(formatted.output[0].content[0].text, /没有实际 tool call|娌℃湁瀹為檯 tool call/);
   assert.doesNotMatch(formatted.output[0].content[0].text, /\[TOOL_RESULT\] shell_command/);
+});
+
+test("chat response blocks fabricated TOOL_RESULT text while preserving real tool calls", () => {
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: "[TOOL_RESULT] invented file contents",
+        tool_calls: [{
+          id: "call_real_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content README.md -Head 20" }) },
+        }],
+      },
+    }],
+  }, {
+    model: "claude-sonnet-4-6",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Read README.md." }] }],
+  });
+
+  const message = formatted.output.find(item => item.type === "message");
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call);
+  assert.match(message.content[0].text, /Anti-Codex/);
+  assert.doesNotMatch(message.content[0].text, /\[TOOL_RESULT\]|invented file contents/);
 });
 
 test("chat response blocks Chinese fake search-result narration without tool calls", () => {
@@ -936,6 +1308,22 @@ test("deterministic exact reply prefers current responses input over restored me
   assert.equal(completion.choices[0].message.content, "UI_CURRENT_REPLY_20260627");
 });
 
+test("deterministic exact reply supports a Chinese only-reply clause after a read-only instruction", () => {
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "只读取当前项目状态，不修改任何文件。V2 已经完成 19 个测试；请仅回复 RECOVERY_HOOK_OK。",
+      }],
+    }],
+  });
+
+  assert.equal(completion.choices[0].message.content, "RECOVERY_HOOK_OK");
+});
+
 test("chat response blocks English dangling patch retry promise after failed patch", () => {
   const formatted = chatToResponsesFormat({
     choices: [{
@@ -1189,6 +1577,854 @@ test("chat custom tool calls become completed Responses custom_tool_call items",
   assert.notEqual(formatted.output[0].id, "call_123");
 });
 
+test("chat custom apply_patch anchors relative paths to an explicit project directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex patch workspace "));
+  const project = path.join(root, "real project with spaces");
+  const drifted = path.join(root, "generated fallback workspace");
+  fs.mkdirSync(path.join(project, "src"), { recursive: true });
+  fs.mkdirSync(drifted);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const patch = [
+    "*** Begin Patch",
+    "*** Update File: src/value.mjs",
+    "@@",
+    "-export const value = 1;",
+    "+export const value = 2;",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_scoped_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: patch }) },
+      }] },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: `Project directory:\n${project}\n\nFix src/value.mjs.` }] },
+    ],
+  }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.ok(formatted.output[0].input.includes(`*** Update File: ${path.resolve(project, "src", "value.mjs")}`));
+});
+
+test("chat shell commands inherit the latest explicit project directory when workdir is omitted", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex shell workspace "));
+  const project = path.join(root, "real project with spaces");
+  const drifted = path.join(root, "generated fallback workspace");
+  fs.mkdirSync(project, { recursive: true });
+  fs.mkdirSync(drifted);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_scoped_shell",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content test/analyze.test.mjs" }) },
+      }] },
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: `Continue the repair.\n\nProject directory:\n${project}\n\nRead test/analyze.test.mjs.` }] },
+    ],
+  }, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).workdir, path.resolve(project));
+});
+
+test("exec_command unwraps a redundant nested PowerShell command", () => {
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const command = "New-Item -ItemType Directory -Force -Path 'C:\\Temp\\new-project'";
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_nested_powershell",
+        type: "function",
+        function: {
+          name: "exec_command",
+          arguments: JSON.stringify({
+            cmd: `powershell -Command \"${command}\"`,
+            workdir: "C:\\Temp",
+          }),
+        },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "Create C:\\Temp\\new-project." }, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.cmd, command);
+  assert.equal(args.workdir, "C:\\Temp");
+});
+
+test("exec_command preserves an intentional PowerShell child under a non-PowerShell shell", () => {
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, shell: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const command = "powershell -Command \"Write-Output child\"";
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_intentional_powershell_child",
+        type: "function",
+        function: {
+          name: "exec_command",
+          arguments: JSON.stringify({ cmd: command, shell: "cmd.exe" }),
+        },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "Run a PowerShell child from cmd.exe." }, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).cmd, command);
+});
+
+test("exec_command quotes only the cmd ampersand chain before appended PowerShell lines", () => {
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const command = [
+    "cmd /c type word-tally.mjs & type word-tally.test.mjs",
+    "$marker = 'UI_MULTI_TURN_PROJECT_SMOKE_CMD_CHAIN_123'",
+    "Write-Output $marker",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_cmd_ampersand_chain",
+        type: "function",
+        function: {
+          name: "exec_command",
+          arguments: JSON.stringify({ cmd: command, workdir: "C:\\Temp" }),
+        },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "Read both files and print the marker." }, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.cmd, [
+    "cmd /d /s /c \"type word-tally.mjs & type word-tally.test.mjs\"",
+    "$marker = 'UI_MULTI_TURN_PROJECT_SMOKE_CMD_CHAIN_123'",
+    "Write-Output $marker",
+  ].join("\n"));
+});
+
+test("exec_command runs bare cd double-ampersand chains through cmd on Windows PowerShell", () => {
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const workdir = "C:\\Temp\\autonomous-project";
+  const command = `cd ${workdir} && node --test codex-update-analyzer.test.mjs && node codex-update-analyzer.mjs sources.json`;
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_bare_cmd_chain",
+        type: "function",
+        function: {
+          name: "exec_command",
+          arguments: JSON.stringify({ cmd: command, workdir }),
+        },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "Run the analyzer tests and CLI." }, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.cmd, `cmd /d /s /c \"cd /d ${workdir} && node --test codex-update-analyzer.test.mjs && node codex-update-analyzer.mjs sources.json\"`);
+});
+
+test("exec_command leaves programming-language double ampersands untouched", () => {
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: { type: "object", properties: { cmd: { type: "string" } }, required: ["cmd"] },
+    },
+  };
+  const command = `node -e \"if (ready && valid) console.log('ok')\"`;
+  const formatted = chatToResponsesFormat({
+    choices: [{ message: { role: "assistant", tool_calls: [{
+      id: "call_js_and",
+      type: "function",
+      function: { name: "exec_command", arguments: JSON.stringify({ cmd: command }) },
+    }] } }],
+  }, { model: "gemini-3.5-flash-low", input: "Run the JavaScript condition." }, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).cmd, command);
+});
+
+test("fourth consecutive failed apply_patch attempt ends the current tool loop", () => {
+  const failedPatchTurn = (id) => [{
+    role: "assistant",
+    content: "",
+    tool_calls: [{
+      id,
+      type: "function",
+      function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) },
+    }],
+  }, {
+    role: "tool",
+    tool_call_id: id,
+    content: "apply_patch verification failed: Failed to find expected lines in test/analyze.test.mjs",
+  }];
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_patch_4",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({ content: "*** Begin Patch\n*** Update File: test/analyze.test.mjs\n*** End Patch" }),
+          },
+        }],
+      },
+    }],
+  }, {
+    model: "gemini-3-flash-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Fix the failing test and rerun npm test." }] }],
+  }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  }, {
+    chatMessages: [
+      { role: "user", content: "Fix the failing test and rerun npm test." },
+      ...failedPatchTurn("call_patch_1"),
+      ...failedPatchTurn("call_patch_2"),
+      ...failedPatchTurn("call_patch_3"),
+    ],
+  });
+
+  assert.equal(formatted.output.some(item => item.type === "custom_tool_call"), false);
+  const text = formatted.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /three consecutive patch-context/i);
+  assert.match(text, /same chat/i);
+});
+
+test("chat custom apply_patch converts a conflict replacement into Codex patch grammar", () => {
+  const conflictPatch = [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "<<<<<<<",
+    "old line",
+    "=======",
+    "new line",
+    ">>>>>>>",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_conflict_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({ content: conflictPatch }),
+          },
+        }],
+      },
+    }],
+  }, { model: "gpt-5.5", input: "replace cli.mjs" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "custom_tool_call");
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "@@",
+    "-old line",
+    "+new line",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch converts short conflict markers with a Path header", () => {
+  const conflictPatch = [
+    "*** Begin Patch",
+    "*** Path: fixtures/events.json",
+    "<<<<",
+    "old fixture",
+    "====",
+    "new fixture",
+    ">>>>",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_short_conflict_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({ content: conflictPatch }),
+          },
+        }],
+      },
+    }],
+  }, { model: "gpt-5.5", input: "replace fixture" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Update File: fixtures/events.json",
+    "@@",
+    "-old fixture",
+    "+new fixture",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch converts full-file blocks into Add File hunks", () => {
+  const fullFilePatch = [
+    "*** Begin Patch",
+    "File: generated/package.json",
+    "<<<<",
+    "{",
+    "  \"name\": \"generated-project\"",
+    "}",
+    ">>>>",
+    "File: generated/done.txt",
+    "<<<<",
+    "UI_COMPLEX_PROJECT_SMOKE_FULL_FILE_123",
+    ">>>>",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_full_file_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: fullFilePatch }) },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "create the two generated files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Add File: generated/package.json",
+    "+{",
+    "+  \"name\": \"generated-project\"",
+    "+}",
+    "*** Add File: generated/done.txt",
+    "+UI_COMPLEX_PROJECT_SMOKE_FULL_FILE_123",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch converts wrapped full-file blocks into Add File hunks", () => {
+  const fullFilePatch = [
+    "<<<<",
+    "File: generated/report.md",
+    "====",
+    "# Report",
+    "",
+    "Complete.",
+    ">>>>",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_wrapped_full_file_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: fullFilePatch }) },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "create generated/report.md" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Add File: generated/report.md",
+    "+# Report",
+    "+",
+    "+Complete.",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch converts an inline-path full replacement for an existing file", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-inline-full-replacement-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const target = path.join(root, "word-tally.mjs");
+  fs.writeFileSync(target, "export const oldValue = 1;\n", "utf8");
+  const replacement = [
+    `<<<< ${target}`,
+    "====",
+    "export const newValue = 2;",
+    "export function uniqueWords() { return []; }",
+    ">>>>",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_inline_full_replacement",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: replacement }) },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: `Replace ${target}.` }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    `*** Update File: ${target}`,
+    "@@",
+    "-export const oldValue = 1;",
+    "+export const newValue = 2;",
+    "+export function uniqueWords() { return []; }",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch converts CDATA-wrapped multi-file bare-path conflict replacements", () => {
+  const conflictPatch = [
+    "<![CDATA[cli.mjs",
+    "<<<<",
+    "old cli",
+    "====",
+    "new cli",
+    ">>>>",
+    "",
+    "test/analyze.test.mjs",
+    "<<<<",
+    "old test",
+    "====",
+    "new test",
+    ">>>>",
+    "",
+    "README.md",
+    "<<<<",
+    "old readme",
+    "====",
+    "new readme",
+    ">>>>]]>",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_cdata_multi_conflict_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: conflictPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "patch three files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "@@",
+    "-old cli",
+    "+new cli",
+    "*** Update File: test/analyze.test.mjs",
+    "@@",
+    "-old test",
+    "+new test",
+    "*** Update File: README.md",
+    "@@",
+    "-old readme",
+    "+new readme",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch converts multi-file unified headers with conflict replacements and a missing end marker", () => {
+  const conflictPatch = [
+    "*** Begin Patch",
+    "--- cli.mjs",
+    "+++ cli.mjs",
+    "<<<<",
+    "old cli",
+    "====",
+    "new cli",
+    ">>>>",
+    "--- test/analyze.test.mjs",
+    "+++ test/analyze.test.mjs",
+    "<<<<",
+    "old test",
+    "====",
+    "new test",
+    ">>>>",
+    "--- README.md",
+    "+++ README.md",
+    "<<<<",
+    "old readme",
+    "====",
+    "new readme",
+    ">>>>",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_header_multi_conflict_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: conflictPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "patch three files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  const normalized = formatted.output[0].input;
+  assert.equal((normalized.match(/^\*\*\* Update File:/gm) || []).length, 3);
+  assert.equal(normalized.startsWith("*** Begin Patch\n"), true);
+  assert.equal(normalized.endsWith("\n*** End Patch"), true);
+  assert.doesNotMatch(normalized, /<!\[CDATA\[|\]\]>|^--- |^\+\+\+ |^<{4,7}$|^>{4,7}$/m);
+});
+
+test("chat custom apply_patch converts a unified diff into Codex patch grammar", () => {
+  const unifiedPatch = [
+    "--- README.md",
+    "+++ README.md",
+    "@@ -1,2 +1,2 @@",
+    "-old line",
+    "+new line",
+    " unchanged",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_unified_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: unifiedPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "replace README" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Update File: README.md",
+    "@@",
+    "-old line",
+    "+new line",
+    " unchanged",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch removes unsupported line numbers from Codex hunks", () => {
+  const numberedPatch = [
+    "*** Begin Patch",
+    "*** Update File: README.md",
+    "@@ -1,2 +1,2 @@",
+    "-old line",
+    "+new line",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_numbered_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: numberedPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "replace README" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.match(formatted.output[0].input, /\*\*\* Update File: README\.md\n@@\n-old line\n\+new line/);
+  assert.doesNotMatch(formatted.output[0].input, /@@ -1,2 \+1,2 @@/);
+});
+
+test("chat custom apply_patch prefixes unmarked Update File context lines", () => {
+  const malformedPatch = [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "@@",
+    "const before = true;",
+    "-const value = oldValue;",
+    "+const value = newValue;",
+    "",
+    "const after = true;",
+    "*** Update File: test/analyze.test.mjs",
+    "@@",
+    "});",
+    "+test('new case', () => {});",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_unmarked_context_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: malformedPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "patch two files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.match(formatted.output[0].input, /@@\n const before = true;\n-const value/);
+  assert.match(formatted.output[0].input, /\+const value = newValue;\n \n const after = true;/);
+  assert.match(formatted.output[0].input, /\*\*\* Update File: test\/analyze\.test\.mjs\n@@\n \}\);/);
+});
+
+test("chat custom apply_patch preserves Codex hunks while converting an embedded unified diff", () => {
+  const mixedPatch = [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "@@",
+    "const before = true;",
+    "-const value = oldValue;",
+    "+const value = newValue;",
+    " diff --git a/test/analyze.test.mjs b/test/analyze.test.mjs",
+    "--- a/test/analyze.test.mjs",
+    "+++ b/test/analyze.test.mjs",
+    "@@ -1,1 +1,2 @@",
+    " test('old', () => {});",
+    "+test('new', () => {});",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_mixed_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: mixedPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "patch two files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.match(formatted.output[0].input, /\*\*\* Update File: cli\.mjs/);
+  assert.match(formatted.output[0].input, /\*\*\* Update File: test\/analyze\.test\.mjs/);
+  assert.doesNotMatch(formatted.output[0].input, /diff --git|^--- |^\+\+\+ /m);
+});
+
+test("chat custom apply_patch converts embedded file headers with a bare hunk", () => {
+  const mixedPatch = [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "@@",
+    " const before = true;",
+    "-const value = oldValue;",
+    "+const value = newValue;",
+    "--- test/analyze.test.mjs",
+    "+++ test/analyze.test.mjs",
+    "@@",
+    " test('old', () => {});",
+    "+test('new', () => {});",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_bare_mixed_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: mixedPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "patch two files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.match(formatted.output[0].input, /\*\*\* Update File: cli\.mjs/);
+  assert.match(formatted.output[0].input, /\*\*\* Update File: test\/analyze\.test\.mjs\n@@/);
+  assert.doesNotMatch(formatted.output[0].input, /^--- |^\+\+\+ /m);
+});
+
+test("chat custom apply_patch prefixes unmarked Add File content", () => {
+  const addPatch = [
+    "*** Begin Patch",
+    "*** Delete File: README.md",
+    "*** Add File: README.md",
+    "# Session Inspector",
+    "",
+    "New documentation.",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_add_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: addPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "replace README" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.match(formatted.output[0].input, /\*\*\* Add File: README\.md\n\+# Session Inspector\n\+\n\+New documentation\./);
+});
+
+test("chat custom apply_patch converts Create File aliases into Add File hunks", () => {
+  const createPatch = [
+    "*** Begin Patch",
+    "*** Create File: generated/package.json",
+    "@@",
+    "+{",
+    "+  \"type\": \"module\"",
+    "+}",
+    "*** Create File: generated/done.txt",
+    "@@",
+    "+UI_MULTI_TURN_PROJECT_SMOKE_CREATE_ALIAS_123",
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_create_alias_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: createPatch }) },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "create generated project files" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input, [
+    "*** Begin Patch",
+    "*** Add File: generated/package.json",
+    "+{",
+    "+  \"type\": \"module\"",
+    "+}",
+    "*** Add File: generated/done.txt",
+    "+UI_MULTI_TURN_PROJECT_SMOKE_CREATE_ALIAS_123",
+    "*** End Patch",
+  ].join("\n"));
+});
+
+test("chat custom apply_patch closes a complete Create File patch missing only End Patch", () => {
+  const createPatch = [
+    "*** Begin Patch",
+    "*** Create File: generated/done.txt",
+    "@@",
+    "+UI_MULTI_TURN_PROJECT_SMOKE_CREATE_ALIAS_456",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_unclosed_create_alias_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: createPatch }) },
+      }] },
+    }],
+  }, { model: "gemini-3.5-flash-low", input: "create generated/done.txt" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.equal(formatted.output[0].input.endsWith("\n*** End Patch"), true);
+  assert.match(formatted.output[0].input, /\*\*\* Add File: generated\/done\.txt\n\+UI_MULTI/);
+});
+
+test("chat custom apply_patch matches an existing UTF-8 BOM in absolute-path context", (t) => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-bom-patch-"));
+  t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
+  const target = path.join(tempRoot, "README.md");
+  fs.writeFileSync(target, "\uFEFF# Old title\n", "utf8");
+  const unifiedPatch = [
+    `--- ${target}`,
+    `+++ ${target}`,
+    "@@ -1 +1 @@",
+    "-# Old title",
+    "+# New title",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{
+        id: "call_bom_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: unifiedPatch }) },
+      }] },
+    }],
+  }, { model: "gpt-5.5", input: "replace README and remove its BOM" }, {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+
+  assert.ok(formatted.output[0].input.includes("-\uFEFF# Old title"));
+  assert.match(formatted.output[0].input, /\+# New title/);
+});
+
 test("chat response with fake-tool wording and real tool call is not blocked", () => {
   const formatted = chatToResponsesFormat({
     choices: [{
@@ -1213,6 +2449,156 @@ test("chat response with fake-tool wording and real tool call is not blocked", (
   assert.equal(call.call_id, "call_read_real");
   assert.equal(call.name, "exec_command");
   assert.doesNotMatch(JSON.stringify(formatted.output), /DeepCodex|已拦截|没有实际 tool call/);
+});
+
+test("a completed write and verification turn suppresses any trailing pseudo tool call", () => {
+  const userText = [
+    "Only modify test/analyze.test.mjs, then run npm test and verify the CLI edge cases.",
+    "After all checks pass, reply in Chinese and make the last line exactly GEMINI_V6_FINAL_CLOSURE_OK_20260712.",
+  ].join("\n");
+  const chatMessages = [
+    { role: "user", content: userText },
+    { role: "assistant", tool_calls: [{ id: "write_once", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "[System.IO.File]::WriteAllText('test/analyze.test.mjs', 'fixed')" }) } }] },
+    { role: "tool", tool_call_id: "write_once", content: "Exit code: 0\nOutput:\n" },
+    { role: "assistant", tool_calls: [{ id: "verify_once", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "node --check test/analyze.test.mjs; npm test" }) } }] },
+    { role: "tool", tool_call_id: "verify_once", content: "Exit code: 0\ntests 35\npass 35\nfail 0" },
+  ];
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_completed_verification_pseudo_tool",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="shell_command"><parameter name="command">Get-Content test/analyze.test.mjs</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, {
+    model: "antigravity",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  }, {
+    shell_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, { strictTools: true, chatMessages });
+
+  assert.equal(formatted.output.some(item => item.type === "function_call" || item.type === "custom_tool_call"), false);
+  assert.equal(formatted.output.length, 1);
+  assert.equal(formatted.output[0].type, "message");
+  assert.doesNotMatch(formatted.output[0].content[0].text, /tool_calls|Get-Content/);
+  assert.match(formatted.output[0].content[0].text, /验证.*通过|通过.*验证/);
+  assert.match(formatted.output[0].content[0].text, /GEMINI_V6_FINAL_CLOSURE_OK_20260712$/);
+});
+
+test("completed verification suppression falls back to hydrated Responses input", () => {
+  const userText = "Only modify test/analyze.test.mjs, then run npm test and verify it. 最后一行必须是 GEMINI_V6_FINAL_CLOSURE_OK_20260712";
+  const input = [
+    { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    { type: "function_call", call_id: "write_from_responses", name: "shell_command", arguments: JSON.stringify({ command: "[System.IO.File]::WriteAllText('test/analyze.test.mjs', 'fixed')" }) },
+    { type: "function_call_output", call_id: "write_from_responses", output: "Exit code: 0\nOutput:\n" },
+    { type: "function_call", call_id: "verify_from_responses", name: "shell_command", arguments: JSON.stringify({ command: "node --check test/analyze.test.mjs; npm test" }) },
+    { type: "function_call_output", call_id: "verify_from_responses", output: "Exit code: 0\ntests 35\npass 35\nfail 0" },
+  ];
+  const formatted = chatToResponsesFormat({
+    model: "antigravity",
+    choices: [{
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="shell_command"><parameter name="command">Get-Content test/analyze.test.mjs</parameter></invoke></tool_calls>`,
+      },
+    }],
+  }, { model: "antigravity", input }, {
+    shell_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, {
+    strictTools: true,
+    chatMessages: [{ role: "user", content: "工具调用已完成，请直接总结。" }],
+  });
+
+  assert.equal(formatted.output.some(item => item.type === "function_call" || item.type === "custom_tool_call"), false);
+  assert.equal(formatted.output.length, 1);
+  assert.match(formatted.output[0].content[0].text, /GEMINI_V6_FINAL_CLOSURE_OK_20260712$/);
+});
+
+test("Anti-Codex repair guidance does not count as completed verification", () => {
+  const targetPath = "C:\\Temp\\desktop-visible-autonomous-reasoning\\repair";
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_REPAIR_20260712";
+  const userText = [
+    `Continue the task in ${targetPath}.`,
+    "codex-update-analyzer.mjs must export summarizeSources.",
+    "Run node --test codex-update-analyzer.test.mjs after the repair.",
+    `The final line must be ${marker}.`,
+  ].join("\n");
+  const input = [
+    { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    {
+      type: "function_call",
+      call_id: "inspection_guidance",
+      name: "exec_command",
+      arguments: JSON.stringify({
+        cmd: "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls. Run node --test after the required edit.'",
+        workdir: targetPath,
+      }),
+    },
+    { type: "function_call_output", call_id: "inspection_guidance", output: "Process exited with code 0\nOutput:\nAnti-Codex completed the inspection phase after detecting repeated read-only calls." },
+    {
+      type: "function_call",
+      call_id: "patch_guidance",
+      name: "exec_command",
+      arguments: JSON.stringify({
+        cmd: "Write-Output 'Anti-Codex blocked apply_patch for generated artifacts. Continue with WriteAllText and then node --test.'",
+        workdir: targetPath,
+      }),
+    },
+    { type: "function_call_output", call_id: "patch_guidance", output: "Process exited with code 0\nOutput:\nAnti-Codex blocked apply_patch for generated artifacts." },
+  ];
+  const formatted = chatToResponsesFormat({
+    model: "antigravity",
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "real_repair_verification",
+          type: "function",
+          function: {
+            name: "exec_command",
+            arguments: JSON.stringify({ cmd: "node --test codex-update-analyzer.test.mjs", workdir: targetPath }),
+          },
+        }],
+      },
+    }],
+  }, { model: "antigravity", input }, {
+    exec_command: {
+      codexName: "exec_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  }, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call, "the real repair verification call must not be suppressed by control guidance");
+  assert.equal(call.call_id, "real_repair_verification");
 });
 
 test("malformed custom apply_patch call is not forwarded to Codex", () => {
@@ -1430,6 +2816,235 @@ test("single required external tool is forced by name and described on the first
   assert.match(body.messages[0].content, /<tool_calls><invoke name="tool_name">/);
 });
 
+test("an explicitly required next external tool overrides auto choice", () => {
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: "继续同一项目。下一项输出必须是 shell_command，并设置 workdir 为目标目录。",
+    tool_choice: "auto",
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      description: "Run a shell command.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+          workdir: { type: "string" },
+        },
+        required: ["command"],
+      },
+    }],
+  });
+
+  assert.deepEqual(body.tool_choice, { type: "function", function: { name: "shell_command" } });
+});
+
+test("a Chinese first-step shell contract overrides auto tool choice", () => {
+  const body = responsesToChatBody({
+    model: "gemini-3.1-pro-low",
+    input: "第一步必须直接调用一次 shell_command，在项目目录执行恢复，不要先读文件或列目录。",
+    tool_choice: "auto",
+    tools: [
+      {
+        type: "function",
+        name: "shell_command",
+        description: "Run a shell command.",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+      { type: "custom", name: "apply_patch", description: "Apply a patch.", format: { type: "text" } },
+    ],
+  });
+
+  assert.deepEqual(body.tool_choice, { type: "function", function: { name: "shell_command" } });
+});
+
+test("an explicitly required first custom tool overrides auto choice", () => {
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: "Your first action must be exactly one apply_patch call using relative README.md. After it succeeds, run npm test with shell_command.",
+        }],
+      },
+    ],
+    tool_choice: "auto",
+    tools: [
+      {
+        type: "custom",
+        name: "apply_patch",
+        description: "Apply a patch to workspace files.",
+        format: { type: "text" },
+      },
+      {
+        type: "function",
+        name: "shell_command",
+        description: "Run a shell command.",
+        parameters: {
+          type: "object",
+          properties: { command: { type: "string" }, workdir: { type: "string" } },
+          required: ["command"],
+        },
+      },
+    ],
+  });
+
+  assert.ok(body.tools.some(tool => tool.function?.name === "apply_patch"));
+  assert.ok(body.tools.some(tool => tool.function?.name === "shell_command"));
+  assert.deepEqual(body.tool_choice, { type: "function", function: { name: "apply_patch" } });
+});
+
+test("an explicit next-tool choice does not persist after that tool returns", () => {
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "下一项输出必须是 shell_command。完成后根据工具结果继续。" }],
+      },
+      { type: "function_call", call_id: "call_required_shell", name: "shell_command", arguments: "{\"command\":\"node --test\"}" },
+      { type: "function_call_output", call_id: "call_required_shell", output: "Exit code: 0" },
+    ],
+    tool_choice: "auto",
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      description: "Run a shell command.",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+      },
+    }],
+  });
+
+  assert.equal(body.tool_choice, "auto");
+});
+
+test("Antigravity SSE pipe forwards the resolved Codex workspace to the streamed upstream", async () => {
+  const chunks = [];
+  const res = {
+    writeHead() {},
+    write(chunk) { chunks.push(String(chunk)); },
+    end() {},
+  };
+  const cwd = path.resolve(os.tmpdir(), "anticodex streamed workspace");
+  let receivedOptions = null;
+  async function* streamUpstream(_body, options) {
+    receivedOptions = options;
+    yield {
+      type: "done",
+      completion: {
+        choices: [{ finish_reason: "stop", message: { role: "assistant", content: "done" } }],
+      },
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, {
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "reply once" }],
+  }, {
+    model: "gemini-pro-agent",
+    input: "reply once",
+  }, null, {
+    cwd,
+    workspaceSource: "request-environment-context",
+    codexSessionId: "019f5014-0070-7891-845b-c16f1f1f6215",
+    queue: { run: async (task) => task({}) },
+    streamUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  assert.equal(receivedOptions.cwd, cwd);
+  assert.equal(receivedOptions.workspaceSource, "request-environment-context");
+  assert.equal(receivedOptions.codexSessionId, "019f5014-0070-7891-845b-c16f1f1f6215");
+  assert.match(chunks.join(""), /response\.completed/);
+});
+
+test("Antigravity SSE pipe preserves a completed trajectory pseudo shell call", async () => {
+  const chunks = [];
+  const res = {
+    writeHead() {},
+    write(chunk) { chunks.push(String(chunk)); },
+    end() {},
+  };
+  const instruction = [
+    "Continue the same task. Do not read, list, or run the old tests first.",
+    "Your next response must be a real shell_command that rewrites src/normalize.mjs.",
+    "UI_AUTONOMOUS_REASONING_SMOKE_FINAL3_20260711",
+  ].join(" ");
+  const parsed = {
+    model: "claude-opus-4-6-thinking",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: instruction }],
+    }],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      description: "Run a PowerShell command.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+          workdir: { type: "string" },
+        },
+        required: ["command"],
+        additionalProperties: false,
+      },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = chatBody._routing;
+  delete chatBody._routing;
+  const trajectoryText = `先看一下项目当前的文件结构和状态。\n\n<tool_calls>\n<invoke name="shell_command">\n<parameter name="command">Get-ChildItem -Recurse -Force "C:\\Temp\\session-inspector" | Select-Object FullName, Length</parameter>\n<parameter name="workdir">C:\\Temp\\session-inspector</parameter>\n</invoke>\n</tool_calls>`;
+  const trajectoryCompletion = {
+    choices: [{
+      finish_reason: "stop",
+      message: { role: "assistant", content: trajectoryText },
+    }],
+  };
+  const direct = chatToResponsesFormat(trajectoryCompletion, parsed, routing, {
+    strictTools: true,
+    chatMessages: chatBody.messages,
+  });
+  assert.equal(direct.output.find((item) => item.type === "function_call")?.name, "shell_command");
+  let streamCalls = 0;
+  let nonStreamingCalls = 0;
+  async function* streamUpstream() {
+    streamCalls += 1;
+    yield {
+      type: "done",
+      completion: trajectoryCompletion,
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue: { run: async (task) => task({}) },
+    streamUpstream,
+    nonStreamingUpstream: async () => {
+      nonStreamingCalls += 1;
+      return trajectoryCompletion;
+    },
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.deepEqual({ streamCalls, nonStreamingCalls }, { streamCalls: 1, nonStreamingCalls: 0 });
+  assert.match(wire, /"type":"function_call"/);
+  assert.match(wire, /"name":"shell_command"/);
+  assert.doesNotMatch(wire, /本轮没有实际 tool call/);
+});
+
 test("Antigravity SSE pipe retries fake tool claims before emitting buffered tool-capable text", async () => {
   let streamCalls = 0;
   const chunks = [];
@@ -1508,6 +3123,65 @@ test("Antigravity SSE pipe retries fake tool claims before emitting buffered too
   assert.match(wire, /response.completed/);
 });
 
+test("Antigravity SSE pipe retries an empty tool-capable stream and surfaces a visible blocker", async () => {
+  let streamCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const parsed = {
+    model: "claude-opus-4-6-thinking",
+    input: "run the marker tool",
+    tools: [{ type: "function", name: "marker_tool" }],
+  };
+  const chatBody = {
+    model: "claude-opus-4-6-thinking",
+    messages: [{ role: "user", content: "run the marker tool" }],
+    tools: [{ type: "function", function: { name: "marker_tool", parameters: { type: "object", properties: {}, additionalProperties: false } } }],
+    tool_choice: "auto",
+  };
+  const routing = {
+    marker_tool: {
+      type: "function",
+      codexName: "marker_tool",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  };
+  const queue = { run: async (task) => task({}) };
+  async function* streamUpstream(body) {
+    streamCalls += 1;
+    if (streamCalls === 2) assert.match(body.messages.at(-1).content, /空回复|empty/i);
+    yield {
+      type: "done",
+      completion: {
+        choices: [{ finish_reason: "stop", message: { role: "assistant", content: "" } }],
+      },
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue,
+    streamUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(streamCalls, 2);
+  assert.match(wire, /已拦截空回复/);
+  assert.match(wire, /response\.output_text\.done/);
+  assert.match(wire, /response.completed/);
+});
+
 test("Antigravity SSE pipe uses non-streaming model call for local artifact tool tasks", async () => {
   let streamCalls = 0;
   let nonStreamingCalls = 0;
@@ -1549,6 +3223,7 @@ test("Antigravity SSE pipe uses non-streaming model call for local artifact tool
   async function nonStreamingUpstream(body) {
     nonStreamingCalls += 1;
     assert.equal(body.stream, false);
+    await new Promise(resolve => setTimeout(resolve, 20));
     return {
       choices: [{
         finish_reason: "tool_calls",
@@ -1568,6 +3243,8 @@ test("Antigravity SSE pipe uses non-streaming model call for local artifact tool
     registry: { register() {}, attachCascade() {}, finish() {} },
     circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
     routeAudit: { record() {} },
+    streamIdleTimeoutMs: 5,
+    streamTotalTimeoutMs: 100,
   });
 
   const wire = chunks.join("");
@@ -1576,6 +3253,123 @@ test("Antigravity SSE pipe uses non-streaming model call for local artifact tool
   assert.match(wire, /"type":"function_call"/);
   assert.match(wire, /"name":"shell_command"/);
   assert.match(wire, new RegExp(marker));
+  assert.match(wire, /response.completed/);
+});
+
+test("Antigravity SSE pipe finalizes completed report-site tool evidence without another model call", async () => {
+  let nonStreamingCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const marker = "UI_REPORT_SITE_SMOKE_STREAM_DONE_123456";
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `Create report.md, index.html, and done.txt in C:\\Temp\\desktop-visible-report-site\\run. done.txt must contain ${marker}.` }],
+      },
+      { type: "function_call", call_id: "call_report_done", name: "shell_command", arguments: JSON.stringify({ command: "write report files" }) },
+      { type: "function_call_output", call_id: "call_report_done", output: `report.md:262\nindex.html:373\ndone.txt:34\n${marker}` },
+    ],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"],
+    },
+  },
+  };
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue: { run: async (task) => task({}) },
+    nonStreamingUpstream: async () => {
+      nonStreamingCalls += 1;
+      return { choices: [{ finish_reason: "stop", message: { role: "assistant", content: "I will verify the report files now." } }] };
+    },
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(nonStreamingCalls, 0);
+  assert.match(wire, /report\.md/);
+  assert.match(wire, new RegExp(marker));
+  assert.doesNotMatch(wire, /没有实际 tool call|I will verify/);
+  assert.match(wire, /response\.completed/);
+});
+
+test("Antigravity non-streaming local artifact path retries an empty completion and surfaces a visible blocker", async () => {
+  let nonStreamingCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_EMPTY_20260711";
+  const targetPath = "C:\\Temp\\empty-completion";
+  const parsed = {
+    model: "claude-opus-4-6-thinking",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请自主完成长任务，在 ${targetPath} 创建 package.json, analyzer.mjs, report.md, README.md, done.txt。done.txt must contain ${marker}. 可以创建文件和运行命令。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const queue = { run: async (task) => task({}) };
+  async function nonStreamingUpstream(body) {
+    nonStreamingCalls += 1;
+    if (nonStreamingCalls === 2) assert.match(body.messages.at(-1).content, /空回复|empty/i);
+    return {
+      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "" } }],
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue,
+    nonStreamingUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.equal(nonStreamingCalls, 2);
+  assert.match(wire, /已拦截空回复/);
+  assert.match(wire, /response\.output_text\.done/);
   assert.match(wire, /response.completed/);
 });
 
@@ -1756,9 +3550,11 @@ test("system block tells Windows agents to use Node .cmd shims", () => {
   assert.match(block, /npx\.cmd/);
   assert.match(block, /Start-Process -FilePath "npx"/);
   assert.match(block, /Do not prepend C:\\Program Files\\nodejs to PATH/);
-  assert.match(block, /do not put Chinese literal text directly inside a PowerShell command string/i);
-  assert.match(block, /fs\.writeFileSync\(\.\.\., "utf8"\)/);
+  assert.match(block, /honor an explicit user requirement to use a specific tool or command/i);
+  assert.match(block, /System\.IO\.File.*WriteAllText/);
+  assert.match(block, /Do not force Node\.js/i);
   assert.match(block, /read the files back and fix any mojibake/i);
+  assert.doesNotMatch(block, /Write those files with Node\.js fs\.writeFileSync/);
 });
 
 test("system block distinguishes hosted tool limits from internal web tools", () => {
@@ -1872,6 +3668,50 @@ test("stream mapper normalizes shell_command command arg when Codex schema requi
   assert.deepEqual(JSON.parse(completed.response.output[0].arguments), { cmd: "pwd" });
 });
 
+test("stream mapper buffers and anchors shell workdir to the latest explicit project directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex streamed shell workspace "));
+  const project = path.join(root, "real project with spaces");
+  const drifted = path.join(root, "generated fallback workspace");
+  fs.mkdirSync(project, { recursive: true });
+  fs.mkdirSync(drifted);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const routing = {
+    shell_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" }, workdir: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  };
+  const mapper = new ChatToResponsesStreamMapper({
+    model: "gpt-5.5",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: `Project directory:\n${project}\n\nRead test/analyze.test.mjs.` }] },
+    ],
+  }, "gpt-5.5", routing);
+  const first = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: { tool_calls: [{
+        index: 0,
+        id: "call_scoped_shell_stream",
+        type: "function",
+        function: { name: "shell_command", arguments: '{"command":"Get-Content test/analyze.test.mjs"}' },
+      }] },
+      finish_reason: null,
+    }],
+  });
+  assert.ok(!first.some(([event]) => event === "response.function_call_arguments.delta"));
+
+  const done = mapper.pushChunk({ choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] });
+  const argsDone = done.find(([event]) => event === "response.function_call_arguments.done")?.[1];
+  assert.equal(JSON.parse(argsDone.arguments).workdir, path.resolve(project));
+});
+
 test("stream mapper converts Chat custom tool calls to custom_tool_call items", () => {
   const mapper = new ChatToResponsesStreamMapper({ model: "gpt-5.5", input: "patch" }, "gpt-5.5", {
     apply_patch: { codexName: "apply_patch", type: "custom" },
@@ -1912,6 +3752,87 @@ test("stream mapper converts Chat custom tool calls to custom_tool_call items", 
   const completed = done.find(([event]) => event === "response.completed")?.[1];
   assert.equal(completed.response.output[0].type, "custom_tool_call");
   assert.equal(completed.response.output[0].input, patch);
+});
+
+test("stream mapper anchors relative custom patches to an explicit project directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex streamed patch workspace "));
+  const project = path.join(root, "real project with spaces");
+  const drifted = path.join(root, "generated fallback workspace");
+  fs.mkdirSync(path.join(project, "src"), { recursive: true });
+  fs.mkdirSync(drifted);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const mapper = new ChatToResponsesStreamMapper({
+    model: "gpt-5.5",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context><cwd>${drifted}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: `Project directory:\n${project}\n\nFix src/value.mjs.` }] },
+    ],
+  }, "gpt-5.5", {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+  const patch = [
+    "*** Begin Patch",
+    "*** Update File: src/value.mjs",
+    "@@",
+    "-export const value = 1;",
+    "+export const value = 2;",
+    "*** End Patch",
+  ].join("\n");
+  const events = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: { tool_calls: [{
+        index: 0,
+        id: "call_scoped_patch_stream",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: patch }) },
+      }] },
+      finish_reason: "tool_calls",
+    }],
+  });
+
+  const itemDone = events.find(([event, data]) => event === "response.output_item.done" && data.item.type === "custom_tool_call")?.[1];
+  assert.ok(itemDone.item.input.includes(`*** Update File: ${path.resolve(project, "src", "value.mjs")}`));
+});
+
+test("stream mapper normalizes a conflict replacement custom patch", () => {
+  const mapper = new ChatToResponsesStreamMapper({ model: "gpt-5.5", input: "patch" }, "gpt-5.5", {
+    apply_patch: { codexName: "apply_patch", type: "custom" },
+  });
+  const conflictPatch = [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "<<<<<<<",
+    "old line",
+    "=======",
+    "new line",
+    ">>>>>>>",
+    "*** End Patch",
+  ].join("\n");
+  const events = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: {
+        tool_calls: [{
+          index: 0,
+          id: "call_conflict_patch_stream",
+          type: "function",
+          function: { name: "apply_patch", arguments: JSON.stringify({ content: conflictPatch }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  });
+
+  const itemDone = events.find(([event, data]) => event === "response.output_item.done" && data.item.type === "custom_tool_call")?.[1];
+  assert.equal(itemDone.item.input, [
+    "*** Begin Patch",
+    "*** Update File: cli.mjs",
+    "@@",
+    "-old line",
+    "+new line",
+    "*** End Patch",
+  ].join("\n"));
 });
 
 test("stream mapper keeps invalid Chat custom tool calls as message items", () => {
@@ -2087,6 +4008,43 @@ test("unsupported message roles are preserved as valid system messages", () => {
   assert.equal(body.messages[1].role, "user");
 });
 
+test("restored history keeps only the latest Codex model-switch instruction", () => {
+  const oldSwitch = `<model_switch>\nOLD_MODEL_SWITCH_${"x".repeat(8000)}\n</model_switch>`;
+  const latestSwitch = `<model_switch>\nLATEST_MODEL_SWITCH_${"y".repeat(8000)}\n</model_switch>`;
+  const body = responsesToChatBody({
+    model: "gemini-3.1-pro-low",
+    input: [
+      { type: "message", role: "developer", content: [{ type: "input_text", text: oldSwitch }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Earlier task" }] },
+      { type: "message", role: "developer", content: [{ type: "input_text", text: latestSwitch }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Continue the current task" }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  assert.doesNotMatch(joined, /OLD_MODEL_SWITCH/);
+  assert.match(joined, /LATEST_MODEL_SWITCH/);
+  assert.equal(body.messages.filter(message => String(message.content).includes("<model_switch>")).length, 1);
+});
+
+test("duplicate task retry pruning preserves the latest model-switch instruction", () => {
+  const task = "Continue this exact long task, modify the requested file, run every test, and finish with MODEL_SWITCH_RETRY_OK.";
+  const body = responsesToChatBody({
+    model: "gemini-3.1-pro-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "The earlier attempt did not finish." }] },
+      { type: "message", role: "developer", content: [{ type: "input_text", text: "<model_switch>\nCURRENT_MODEL_RULES\n</model_switch>" }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  assert.match(joined, /CURRENT_MODEL_RULES/);
+  assert.doesNotMatch(joined, /earlier attempt did not finish/i);
+  assert.equal(body.messages.filter(message => String(message.content).includes("<model_switch>")).length, 1);
+});
+
 test("readable context_compaction input is preserved with Codex summary prefix", () => {
   const body = responsesToChatBody({
     model: "gpt-5.5",
@@ -2175,6 +4133,114 @@ test("healthy long restored history keeps the latest compaction summary before c
   assert.match(body.messages[0].content, /缓存命中/);
   assert.match(body.messages[1].content, /tail-history-8/);
   assert.match(body.messages.at(-1).content, /tail-history-229/);
+});
+
+test("restored history caps character-heavy pre-active context without losing current rules", () => {
+  const currentTask = "CURRENT_LONG_TASK: modify the requested file, run all tests, and report the verified result.";
+  const input = [
+    { type: "context_compaction", summary: "LATEST_COMPACT_STATE: V5 is complete and V6 has one pending correction." },
+    ...Array.from({ length: 90 }, (_, index) => ({
+      type: "message",
+      role: index % 2 ? "assistant" : "user",
+      content: [{ type: "input_text", text: `OLD_HISTORY_${index}_${"z".repeat(1800)}` }],
+    })),
+    { type: "message", role: "developer", content: [{ type: "input_text", text: `<model_switch>\nCURRENT_MODEL_RULES_${"r".repeat(12000)}\n</model_switch>` }] },
+    { type: "message", role: "user", content: [{ type: "input_text", text: currentTask }] },
+  ];
+  const body = responsesToChatBody({ model: "gemini-3.1-pro-low", input }, { allowTools: false, injectInternalTools: false });
+  const joined = JSON.stringify(body.messages);
+
+  assert.ok(joined.length < 48_000, `expected bounded restored context, got ${joined.length} chars`);
+  assert.match(joined, /LATEST_COMPACT_STATE/);
+  assert.match(joined, /CURRENT_MODEL_RULES/);
+  assert.match(joined, /CURRENT_LONG_TASK/);
+  assert.doesNotMatch(joined, /OLD_HISTORY_0_/);
+});
+
+test("restored history treats an immediately repeated long task as a fresh retry", () => {
+  const task = [
+    "Work only inside C:\\Temp\\session-inspector.",
+    "Use apply_patch with relative README.md to change the title, then run npm test and read the file back.",
+    "Finish with PATCH_SUCCESS_CONTINUATION_OK_20260712.",
+  ].join("\n");
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [
+      { type: "context_compaction", summary: "Long project context: V4 CLI is implemented and tests pass." },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Earlier unrelated project requirement: preserve streaming JSON output." }] },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "The streaming requirement remains part of the project." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+      { type: "custom_tool_call", call_id: "stale_patch", name: "apply_patch", input: "*** Begin Patch\n*** Update File: README.md\n*** End Patch" },
+      { type: "custom_tool_call_output", call_id: "stale_patch", output: "apply_patch verification failed: expected lines not found" },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "The README title was updated and all requested work is complete." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+    ],
+  }, { allowTools: true, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  const normalizedTask = task.replace(/\s+/g, " ").trim();
+  const matchingUserMessages = body.messages.filter(message => message.role === "user"
+    && String(message.content || "").replace(/\s+/g, " ").trim() === normalizedTask);
+  assert.equal(matchingUserMessages.length, 1);
+  assert.match(joined, /Earlier unrelated project requirement/);
+  assert.match(joined, /omitted a previous duplicate attempt/);
+  assert.doesNotMatch(joined, /stale_patch/);
+  assert.doesNotMatch(joined, /all requested work is complete/);
+  assert.equal(body.messages.at(-1).role, "user");
+  assert.equal(String(body.messages.at(-1).content).replace(/\s+/g, " ").trim(), normalizedTask);
+});
+
+test("restored history recognizes a repeated long task with whitespace-only differences", () => {
+  const first = "Project directory: C:\\Temp\\session-inspector\n\nChange README.md with apply_patch, run npm test, then verify the title.";
+  const retry = "  Project directory: C:\\Temp\\session-inspector\r\n Change README.md with apply_patch,   run npm test, then verify the title.  ";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Keep the existing V4 streaming behavior." }] },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "Streaming behavior is preserved." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: first }] },
+      { type: "function_call", call_id: "stale_test", name: "shell_command", arguments: JSON.stringify({ command: "npm test", workdir: "C:\\Temp\\session-inspector" }) },
+      { type: "function_call_output", call_id: "stale_test", output: "Exit code: 0\nOutput:\n30 tests passed" },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "Everything is already complete." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: retry }] },
+    ],
+  }, { allowTools: true, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  assert.match(joined, /Keep the existing V4 streaming behavior/);
+  assert.match(joined, /omitted a previous duplicate attempt/);
+  assert.doesNotMatch(joined, /stale_test/);
+  assert.doesNotMatch(joined, /Everything is already complete/);
+  assert.equal(body.messages.at(-1).role, "user");
+  assert.equal(String(body.messages.at(-1).content).replace(/\s+/g, " ").trim(), retry.replace(/\s+/g, " ").trim());
+});
+
+test("restored history removes a consecutive chain of repeated long-task attempts", () => {
+  const task = "Project directory: C:\\Temp\\session-inspector. Use relative apply_patch on README.md, run all 30 tests, read the file back, and finish with PATCH_CHAIN_RETRY_OK_20260712.";
+  const body = responsesToChatBody({
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Preserve the earlier V4 CLI implementation and streaming behavior." }] },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "The earlier V4 requirements remain active." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+      { type: "function_call", call_id: "stale_chain_1", name: "shell_command", arguments: JSON.stringify({ command: "npm test" }) },
+      { type: "function_call_output", call_id: "stale_chain_1", output: "Exit code: 0\n30 tests passed" },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "First stale completion." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+      { type: "custom_tool_call", call_id: "stale_chain_2", name: "apply_patch", input: "*** Begin Patch\n*** Update File: README.md\n*** End Patch" },
+      { type: "custom_tool_call_output", call_id: "stale_chain_2", output: "apply_patch verification failed" },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "Second stale completion." }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: task }] },
+    ],
+  }, { allowTools: true, injectInternalTools: false });
+
+  const joined = JSON.stringify(body.messages);
+  const normalizedTask = task.replace(/\s+/g, " ").trim();
+  const matchingUserMessages = body.messages.filter(message => message.role === "user"
+    && String(message.content || "").replace(/\s+/g, " ").trim() === normalizedTask);
+  assert.equal(matchingUserMessages.length, 1);
+  assert.match(joined, /Preserve the earlier V4 CLI implementation/);
+  assert.doesNotMatch(joined, /stale_chain_1|stale_chain_2|First stale completion|Second stale completion/);
 });
 
 test("restored history prunes older tool transcripts while keeping recent tool pairs", () => {
@@ -2907,7 +4973,29 @@ test("successful patch outputs are summarized for restored cache stability", () 
 
   assert.match(body.messages[1].content, /patch applied successfully/);
   assert.match(body.messages[1].content, /M \/tmp\/project\/src\/a\.ts/);
+  assert.doesNotMatch(body.messages[1].content, /already applied/i);
   assert.doesNotMatch(body.messages[1].content, /Success\. Updated/);
+});
+
+test("a latest successful patch in a long restored thread carries the no-repeat continuation", () => {
+  const filler = Array.from({ length: 240 }, (_, index) => ({
+    type: "message",
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: [{ type: "text", text: `historical message ${index}` }],
+  }));
+  const body = responsesToChatBody({
+    model: "gpt-5.5",
+    input: [
+      ...filler,
+      { type: "message", role: "user", content: [{ type: "text", text: "Patch README.md, then run npm test." }] },
+      { type: "custom_tool_call", call_id: "call_patch", name: "apply_patch", input: "*** Begin Patch\n*** End Patch" },
+      { type: "custom_tool_call_output", call_id: "call_patch", output: "Exit code: 0\nSuccess. Updated the following files:\nM C:\\Project\\README.md\n" },
+    ],
+  }, { allowTools: false, injectInternalTools: false });
+
+  const toolResult = body.messages.findLast(message => message.role === "tool");
+  assert.match(toolResult.content, /already applied/i);
+  assert.match(toolResult.content, /do not call apply_patch with the same body again/i);
 });
 
 test("deepcodex reasoning blob is replayed onto following Chat tool calls", () => {
@@ -3094,6 +5182,202 @@ test("non-stream chat loop retries local fake tool promises before blocking", as
   assert.equal(msg.tool_calls[0].function.name, "marker_tool");
 });
 
+test("non-stream chat loop repairs a missing-tool detour after completed external tool evidence", async () => {
+  let upstreamCalls = 0;
+  const marker = "MINI_TOOL_MARKER_RELAY_001";
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-3.5-flash-low",
+    messages: [
+      { role: "user", content: "Call create_mini_tool exactly once." },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_mini_relay",
+          type: "function",
+          function: { name: "create_mini_tool", arguments: JSON.stringify({ marker }) },
+        }],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_mini_relay",
+        content: JSON.stringify({ ok: true, status: "executed", confirmation: `CLI_OK ${marker}` }),
+      },
+      { role: "user", content: `The tool output is complete. Confirm CLI_OK ${marker} without another tool call.` },
+    ],
+  }, {
+    callOnce: async (body) => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        body.messages.splice(body.messages.findIndex((message) => message.role === "tool"), 1);
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            id: "chatcmpl_missing_tool_detour_1",
+            object: "chat.completion",
+            created: 1,
+            model: "gemini-3.5-flash-low",
+            choices: [{
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "I will run read_file now.",
+              },
+              finish_reason: "stop",
+            }],
+          },
+        };
+      }
+
+      if (upstreamCalls === 2) {
+        assert.match(body.messages.at(-1).content, /This is not the final answer|CODEX_TOOLS/);
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            id: "chatcmpl_missing_tool_detour_2",
+            object: "chat.completion",
+            created: 2,
+            model: "gemini-3.5-flash-low",
+            choices: [{
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "\u5f53\u524d\u8def\u7531\u7f3a\u5c11\u6267\u884c\u4efb\u52a1\u6240\u9700\u7684\u5de5\u5177\uff0c\u56e0\u6b64\u65e0\u6cd5\u7ee7\u7eed\u3002",
+              },
+              finish_reason: "stop",
+            }],
+          },
+        };
+      }
+
+      assert.match(body.messages.at(-1).content, /completed Codex tool result/i);
+      assert.match(body.messages.at(-1).content, /do not call or request another tool/i);
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_missing_tool_detour_3",
+          object: "chat.completion",
+          created: 3,
+          model: "gemini-3.5-flash-low",
+          choices: [{
+            index: 0,
+            message: { role: "assistant", content: `\u786e\u8ba4\u5c0f\u5de5\u5177\u6267\u884c\u6210\u529f\uff1aCLI_OK ${marker}\u3002` },
+            finish_reason: "stop",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 3);
+  assert.match(result.json.choices[0].message.content, new RegExp(marker));
+  assert.match(result.json.choices[0].message.content, /CLI_OK/);
+});
+
+test("non-stream chat loop accepts a final confirmation immediately after completed external tool evidence", async () => {
+  let upstreamCalls = 0;
+  const marker = "MINI_TOOL_MARKER_DIRECT_CONFIRM_001";
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-3.5-flash-low",
+    messages: [
+      { role: "user", content: "Call create_mini_tool exactly once." },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_mini_direct_confirm",
+          type: "function",
+          function: { name: "create_mini_tool", arguments: JSON.stringify({ marker }) },
+        }],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_mini_direct_confirm",
+        content: JSON.stringify({ ok: true, status: "executed", confirmation: `CLI_OK ${marker}` }),
+      },
+      { role: "user", content: `Reply in one Chinese sentence confirming the small project is complete. The sentence must include SMALL_PROJECT_OK and ${marker}. Do not call tools again.` },
+    ],
+  }, {
+    callOnce: async () => {
+      upstreamCalls += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: "chatcmpl_direct_tool_confirmation",
+          object: "chat.completion",
+          created: 1,
+          model: "gemini-3.5-flash-low",
+          choices: [{
+            index: 0,
+            message: { role: "assistant", content: `已写入文件并运行 CLI，小项目执行成功：SMALL_PROJECT_OK ${marker}。` },
+            finish_reason: "stop",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 1);
+  assert.equal(result.json.choices[0].message.content, `已写入文件并运行 CLI，小项目执行成功：SMALL_PROJECT_OK ${marker}。`);
+  assert.doesNotMatch(result.json.choices[0].message.content, /已拦截|没有实际 tool call/);
+});
+
+test("non-stream chat loop localizes the fallback after repeated completed-tool detours", async () => {
+  let upstreamCalls = 0;
+  const marker = "MINI_TOOL_MARKER_FALLBACK_001";
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-3.5-flash-low",
+    messages: [
+      { role: "user", content: "Call create_mini_tool exactly once." },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_mini_fallback",
+          type: "function",
+          function: { name: "create_mini_tool", arguments: JSON.stringify({ marker }) },
+        }],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call_mini_fallback",
+        content: JSON.stringify({ ok: true, status: "executed", confirmation: `CLI_OK ${marker}` }),
+      },
+      { role: "user", content: `The tool output is complete. Confirm CLI_OK ${marker} without another tool call.` },
+    ],
+  }, {
+    callOnce: async () => {
+      upstreamCalls += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          id: `chatcmpl_repeated_detour_${upstreamCalls}`,
+          object: "chat.completion",
+          created: upstreamCalls,
+          model: "gemini-3.5-flash-low",
+          choices: [{
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "\u5f53\u524d\u8def\u7531\u7f3a\u5c11\u6267\u884c\u4efb\u52a1\u6240\u9700\u7684\u5de5\u5177\uff0c\u56e0\u6b64\u65e0\u6cd5\u7ee7\u7eed\u3002",
+            },
+            finish_reason: "stop",
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 3);
+  assert.equal(result.json.choices[0].message.content, `\u786e\u8ba4\u5de5\u5177\u6267\u884c\u6210\u529f\uff1aCLI_OK ${marker}\u3002`);
+  assert.doesNotMatch(result.json.choices[0].message.content, /Completed tool result|\{"ok"/);
+});
+
 test("non-stream chat loop retries text-only local artifact completion before finalizing", async () => {
   let upstreamCalls = 0;
   const prompt = [
@@ -3244,6 +5528,147 @@ test("non-stream chat loop ignores stale tool evidence for a new marked local ar
 
   assert.equal(upstreamCalls, 2);
   assert.equal(result.json.choices[0].message.tool_calls[0].function.name, "shell_command");
+});
+
+test("non-stream chat loop uses artifact repair relay when the same marker only exists in a prior turn", async () => {
+  let upstreamCalls = 0;
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_REPAIR_STALE_123";
+  const originalPrompt = [
+    "Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt in C:\\Temp\\autonomous-repair.",
+    `done.txt must contain ${marker}.`,
+  ].join(" ");
+  const repairPrompt = [
+    "Continue the same autonomous task in C:\\Temp\\autonomous-repair.",
+    "Repair codex-update-analyzer.mjs and sources.json, verify report.md, index.html, and done.txt, then rerun the tests and CLI.",
+    `Finish with ${marker}.`,
+  ].join(" ");
+  const result = await callUpstreamWithInternalTools({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "user", content: originalPrompt },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_initial_repair", type: "function", function: { name: "shell_command", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "call_initial_repair", content: `Initial files verified. ${marker}` },
+      { role: "assistant", content: `Initial task complete. ${marker}` },
+      { role: "user", content: repairPrompt },
+    ],
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    }],
+  }, {
+    callOnce: async (body) => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            choices: [{
+              finish_reason: "stop",
+              message: { role: "assistant", content: `The repair is complete and all files are verified. ${marker}` },
+            }],
+          },
+        };
+      }
+      assert.match(body.messages.at(-1).content, /Do not reuse an older marker from conversation history/);
+      assert.match(body.messages.at(-1).content, new RegExp(marker));
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          choices: [{
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_current_repair",
+                type: "function",
+                function: { name: "shell_command", arguments: JSON.stringify({ command: `Write-Output ${marker}` }) },
+              }],
+            },
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 2);
+  assert.equal(result.json.choices[0].message.tool_calls[0].function.name, "shell_command");
+});
+
+test("non-stream chat loop replays a same-chat read claim when only the prior turn has tool evidence", async () => {
+  let upstreamCalls = 0;
+  const result = await callUpstreamWithInternalTools({
+    model: "gpt-oss-120b-medium",
+    messages: [
+      { role: "user", content: "Read the old audit." },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_old_audit",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content old.md" }) },
+        }],
+      },
+      { role: "tool", tool_call_id: "call_old_audit", content: "old audit content" },
+      { role: "user", content: "Read the current audit file and continue the same task." },
+    ],
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    }],
+  }, {
+    callOnce: async () => {
+      upstreamCalls += 1;
+      if (upstreamCalls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            choices: [{
+              finish_reason: "stop",
+              message: { role: "assistant", content: "Reading current audit file." },
+            }],
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: {
+          choices: [{
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [{
+                id: "call_current_audit",
+                type: "function",
+                function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content current.md" }) },
+              }],
+            },
+          }],
+        },
+      };
+    },
+  });
+
+  assert.equal(upstreamCalls, 2);
+  assert.equal(result.json.choices[0].message.content, null);
+  assert.equal(result.json.choices[0].message.tool_calls[0].function.name, "shell_command");
+  assert.match(result.json.choices[0].message.tool_calls[0].function.arguments, /current\.md/);
 });
 
 test("non-stream chat loop retries success summaries after failing local artifact output", async () => {
@@ -3688,6 +6113,37 @@ test("strict shell_command routing accepts command arg when Codex schema require
   assert.deepEqual(JSON.parse(pseudoFormatted.output[0].arguments), { cmd: "pwd" });
 });
 
+test("strict shell routing removes Antigravity display metadata but keeps schema validation strict", () => {
+  const formatted = chatToResponsesFormat({
+    id: "chatcmpl_shell_display_metadata",
+    created: 1,
+    model: "antigravity",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: `<tool_calls><invoke name="exec_command"><parameter name="cmd">Get-Content package.json</parameter><parameter name="toolAction">Viewing file</parameter><parameter name="toolSummary">Workspace verification</parameter><parameter name="Action">File read</parameter></invoke></tool_calls>`,
+      },
+      finish_reason: "stop",
+    }],
+  }, { model: "antigravity", input: "read package.json" }, {
+    exec_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+        additionalProperties: false,
+      },
+    },
+  }, { strictTools: true });
+
+  assert.equal(formatted.output[0].type, "function_call");
+  assert.equal(formatted.output[0].name, "shell_command");
+  assert.deepEqual(JSON.parse(formatted.output[0].arguments), { command: "Get-Content package.json" });
+});
+
 test("strict shell routing coerces command to cmd at final schema validation", () => {
   const routing = {
     run_shell: {
@@ -3725,7 +6181,7 @@ test("strict shell routing coerces command to cmd at final schema validation", (
   assert.deepEqual(JSON.parse(formatted.output[0].arguments), { cmd: "pwd" });
 });
 
-test("strict pseudo tool routing rejects calls missing required schema parameters", () => {
+test("strict pseudo tool routing maps cmd to the required command parameter", () => {
   const formatted = chatToResponsesFormat({
     id: "chatcmpl_strict_missing_required",
     created: 1,
@@ -3750,10 +6206,9 @@ test("strict pseudo tool routing rejects calls missing required schema parameter
     },
   }, { strictTools: true });
 
-  assert.equal(formatted.output.length, 1);
-  assert.equal(formatted.output[0].type, "message");
-  assert.match(formatted.output[0].content[0].text, /exec_command/);
-  assert.match(formatted.output[0].content[0].text, /missing required parameter "command"/i);
+  assert.equal(formatted.output[0].type, "function_call");
+  assert.equal(formatted.output[0].name, "exec_command");
+  assert.deepEqual(JSON.parse(formatted.output[0].arguments), { command: "pwd" });
 });
 
 test("strict pseudo tool routing rejects extra parameters when the schema forbids them", () => {
@@ -4461,6 +6916,24 @@ test("ambient desktop suggestions are answered locally without model work", () =
   assert.deepEqual(JSON.parse(preReadinessCompletion.choices[0].message.content), []);
 });
 
+test("current desktop ambient suggestions using Codex task wording are answered locally", () => {
+  const completion = deterministicAmbientSuggestionsCompletion({
+    model: "gemini-3.5-flash-low",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "# Overview\n\nGenerate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: G:\\Project\n\n# Response format\n\nEach suggestion must include:\n- title\n- description\n- prompt\n- appId\n- write the prompt as something that should launch as a new Codex task in this project",
+      }],
+    }],
+  });
+
+  assert.ok(completion);
+  assert.deepEqual(JSON.parse(completion.choices[0].message.content), []);
+  assert.deepEqual(completion.choices[0].message.tool_calls, undefined);
+});
+
 test("desktop task-title requests are answered locally without model work", () => {
   const completion = deterministicTaskTitleCompletion({
     model: "gemini-pro-agent",
@@ -4477,6 +6950,37 @@ test("desktop task-title requests are answered locally without model work", () =
   assert.equal(completion.choices[0].message.role, "assistant");
   assert.match(completion.choices[0].message.content, /UI_CHAT_SMOKE_12345|Reply/);
   assert.doesNotMatch(completion.choices[0].message.content, /Generating Task Titles/i);
+});
+
+test("new desktop structured task-title requests return title and description JSON", () => {
+  const completion = deterministicTaskTitleCompletion({
+    model: "claude-sonnet-4-6",
+    text: {
+      format: {
+        type: "json_schema",
+        name: "task_title",
+        schema: {
+          type: "object",
+          properties: { title: { type: "string" }, description: { type: "string" } },
+          required: ["title", "description"],
+        },
+      },
+    },
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "You are a helpful assistant. You will be presented with a user prompt, and your job is to provide a short title for a task that will be created from that prompt.\nGenerate a concise UI title (up to 36 characters).\nFill the structured title field with plain text.\nFill the structured description field with a compact summary.\n\nUser prompt:\n这是 Anti-Codex 项目的真实收尾任务，请检查模型通路并生成 audit-v1.md。",
+      }],
+    }],
+  }, { model: "claude-sonnet-4-6", messages: [] });
+
+  const value = JSON.parse(completion.choices[0].message.content);
+  assert.deepEqual(Object.keys(value), ["title", "description"]);
+  assert.match(value.title, /Anti-Codex/);
+  assert.ok(Array.from(value.title).length <= 36);
+  assert.ok(Array.from(value.description).length <= 100);
 });
 
 test("local deterministic background replies consume desktop continuation without forcing another turn", () => {
@@ -4869,6 +7373,174 @@ test("local artifact marker guard catches wrong marker in read-back evidence", (
   assert.equal(ok, null);
 });
 
+test("local artifact marker guard does not reuse the same marker from a prior repair turn", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260712_STALE";
+  const messages = [
+    {
+      role: "user",
+      content: `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt in C:\\Temp\\autonomous. done.txt must contain exactly ${marker}.`,
+    },
+    {
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "call_initial", type: "function", function: { name: "shell_command", arguments: "{}" } }],
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_initial",
+      content: `Initial files written and verified. ${marker}`,
+    },
+    {
+      role: "assistant",
+      content: `Initial project completed. ${marker}`,
+    },
+    {
+      role: "user",
+      content: `Continue the same autonomous task in C:\\Temp\\autonomous. Repair codex-update-analyzer.mjs and sources.json, verify report.md, index.html, and done.txt, run the tests and CLI, then finish with ${marker}.`,
+    },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(
+    messages,
+    `The repair is complete and all files are verified. ${marker}`,
+  );
+
+  assert.equal(mismatch?.marker, marker);
+  assert.equal(mismatch?.evidenceText, "");
+
+  const currentTurnVerified = artifactMarkerMismatchForChat([
+    ...messages,
+    { role: "tool", tool_call_id: "call_repair", content: `Repair tests passed. ${marker}` },
+  ], `The repair is complete and all files are verified. ${marker}`);
+  assert.equal(currentTurnVerified, null);
+});
+
+test("deterministic artifact completion does not reuse complete evidence from a prior same-marker turn", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_DETERMINISTIC_STALE_20260712";
+  const initialPrompt = `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt in C:\\Temp\\autonomous-deterministic. done.txt must contain exactly ${marker}.`;
+  const repairPrompt = `Continue the same autonomous task in C:\\Temp\\autonomous-deterministic. Repair codex-update-analyzer.mjs and sources.json, verify report.md, index.html, and done.txt, rerun tests and CLI, then finish with ${marker}.`;
+  const priorEvidence = [
+    "tests 3",
+    "pass 3",
+    "fail 0",
+    '{"sourceCount":3,"codexMentionCount":2}',
+    marker,
+  ].join("\n");
+  const messages = [
+    { role: "user", content: initialPrompt },
+    { role: "tool", tool_call_id: "call_initial", content: priorEvidence },
+    { role: "assistant", content: `Initial task complete. ${marker}` },
+    { role: "user", content: repairPrompt },
+  ];
+
+  const completion = deterministicArtifactCompletionResponse({
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: initialPrompt },
+      { type: "function_call_output", call_id: "call_initial", output: priorEvidence },
+      { type: "message", role: "user", content: repairPrompt },
+    ],
+  }, { model: "gemini-pro-agent", messages });
+
+  assert.equal(completion, null);
+});
+
+test("local artifact marker guard keeps all tool evidence from the current artifact turn", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_MULTI_TOOL_20260712";
+  const messages = [
+    {
+      role: "user",
+      content: `Create report.md, index.html, and done.txt in C:\\Temp\\autonomous-multi-tool. done.txt must contain exactly ${marker}.`,
+    },
+    { role: "tool", tool_call_id: "call_write", content: `Files written. ${marker}` },
+    { role: "tool", tool_call_id: "call_test", content: "tests 4\npass 4\nfail 0" },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(
+    messages,
+    `The files were created and verified. ${marker}`,
+  );
+
+  assert.equal(mismatch, null);
+});
+
+test("local artifact marker guard preserves tool evidence across a synthetic relay user", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_SYNTHETIC_RELAY_20260712";
+  const messages = [
+    {
+      role: "user",
+      content: `Create report.md, index.html, and done.txt in C:\\Temp\\autonomous-relay. done.txt must contain exactly ${marker}.`,
+    },
+    { role: "tool", tool_call_id: "call_verify", content: `Files and marker verified. ${marker}` },
+    { role: "user", content: "Tool call is complete. Continue the same task now. This is not the final answer." },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(
+    messages,
+    `The files were created and verified. ${marker}`,
+  );
+
+  assert.equal(mismatch, null);
+});
+
+test("local artifact marker guard rejects a marker echoed only by blocked tool guidance", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_BLOCKED_GUIDANCE_20260712";
+  const messages = [
+    {
+      role: "user",
+      content: `Create report.md, index.html, and done.txt in C:\\Temp\\autonomous-blocked-guidance. done.txt must contain exactly ${marker}.`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_blocked_patch",
+      content: `Anti-Codex blocked apply_patch for generated artifacts. Continue with exec_command. Required exact marker: ${marker}.`,
+    },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(
+    messages,
+    `The files were created and verified. ${marker}`,
+  );
+
+  assert.equal(mismatch?.marker, marker);
+  assert.match(mismatch?.evidenceText || "", /blocked apply_patch/i);
+});
+
+test("autonomous artifact relay names the complete remaining project checklist", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260712002";
+  const messages = [
+    {
+      role: "user",
+      content: `Create package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt in C:\\Temp\\desktop-visible-autonomous-reasoning\\run. done.txt must contain exactly ${marker}.`,
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_package_only",
+      content: "package.json created",
+    },
+  ];
+
+  const mismatch = artifactMarkerMismatchForChat(messages, "Created the project and finished the task.");
+  assert.equal(mismatch.autonomousReasoning, true);
+  const relay = artifactMarkerMismatchRelayPrompt(mismatch);
+  for (const fileName of [
+    "codex-update-analyzer.mjs",
+    "codex-update-analyzer.test.mjs",
+    "sources.json",
+    "report.md",
+    "index.html",
+    "done.txt",
+  ]) {
+    assert.match(relay, new RegExp(fileName.replaceAll(".", "\\.")));
+  }
+  assert.match(relay, /batch-create the remaining files/i);
+  assert.match(relay, /node --test codex-update-analyzer\.test\.mjs/i);
+  assert.match(relay, /openai\.com/i);
+  assert.match(relay, /sourceCount/);
+  assert.match(relay, /codexMentionCount/);
+  assert.match(relay, /真实来源/);
+});
+
 test("local artifact marker guard does not accept prefix-only multi-turn evidence", () => {
   const messages = [
     {
@@ -4979,6 +7651,1380 @@ test("chatToResponsesFormat repairs stale marker in outgoing local artifact comm
   assert.match(args.command, /-cnotlike/);
   assert.match(args.command, /-CaseSensitive/);
   assert.match(args.command, /Select-String/);
+});
+
+test("ordinary audit tasks with reply markers are not rewritten as smoke fixtures", () => {
+  const originalCommand = "[System.IO.File]::WriteAllText('C:\\Temp\\audit-v1.md', '# audit', [System.Text.UTF8Encoding]::new($false))";
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_real_audit",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: originalCommand }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Read G:\\Project\\app\\scripts\\worker.mjs, then write C:\\Temp\\audit-v1.md. Final reply line: ANTICODEX_FINAL_AUDIT_V1_20260710",
+      }],
+    }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.command, originalCommand);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
+  assert.doesNotMatch(args.command, /word-tally|done\.txt|Anti-Codex Report/);
+});
+
+test("one model response exposes at most four external tool calls", () => {
+  const toolCalls = Array.from({ length: 7 }, (_, index) => ({
+    id: `call_fanout_${index}`,
+    type: "function",
+    function: { name: "shell_command", arguments: JSON.stringify({ command: `Get-Content file-${index}.md -Head 20` }) },
+  }));
+  const fmt = chatToResponsesFormat({
+    choices: [{ message: { role: "assistant", content: "", tool_calls: toolCalls }, finish_reason: "tool_calls" }],
+  }, {
+    model: "claude-sonnet-4-6",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Inspect these files and continue." }] }],
+  });
+
+  assert.equal(fmt.output.filter(item => item.type === "function_call").length, 4);
+});
+
+test("a read-only verification follow-up blocks stale writes and deletes", () => {
+  const userText = [
+    "Continue the same project. Do not modify any file.",
+    "Run npm test exactly once, then verify recursively that exactly 10 files exist and none has a UTF-8 BOM.",
+    "Do not call apply_patch and do not inspect any other directory.",
+  ].join(" ");
+  const commands = [
+    "npm test",
+    "Get-ChildItem -Recurse -File | Measure-Object",
+    "[System.IO.File]::WriteAllText('C:\\Project\\cli.mjs', 'stale')",
+    "Remove-Item -LiteralPath 'C:\\Project\\report.md' -Force",
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: commands.map((command, index) => ({
+          id: `call_read_only_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const outputCommands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.equal(outputCommands[0], commands[0]);
+  assert.equal(outputCommands[1], commands[1]);
+  assert.match(outputCommands[2], /blocked a filesystem mutation because the latest user requested read-only verification/i);
+  assert.match(outputCommands[3], /blocked a filesystem mutation because the latest user requested read-only verification/i);
+});
+
+test("a Chinese read-only status request blocks a stale filesystem write", () => {
+  const userText = "只读取当前项目状态，不修改任何文件。请确认 V2 的测试状态。";
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_chinese_read_only_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: "[System.IO.File]::WriteAllText('C:\\Project\\dummy.txt', 'stale')" }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  assert.match(JSON.parse(call.arguments).command, /blocked a filesystem mutation because the latest user requested read-only verification/i);
+});
+
+test("explicit exclusive artifact constraints bound reads and block unrelated writes", () => {
+  const targetDir = "C:\\Temp\\final-product-audit-work";
+  const userText = `禁止使用 Get-Content -Raw 整文件读取。请创建目录 ${targetDir}，并写入 audit-v1.md。不要修改项目源文件，不要读取 .env，不要写其他文件。`;
+  const commands = [
+    'Get-Content "G:\\Project\\task_plan.md" -Raw -Encoding UTF8',
+    'New-Item -ItemType Directory -Path "G:\\Project\\config" -Force; Set-Content "G:\\Project\\config\\bad.json" "{}"',
+    `New-Item -ItemType Directory -Path "${targetDir}" -Force`,
+    `Set-Content -Path "${targetDir}\\audit-v1.md" -Value "# audit" -Encoding UTF8`,
+  ];
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: commands.map((command, index) => ({
+          id: `call_constraint_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "claude-sonnet-4-6",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const outputCommands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.match(outputCommands[0], /-TotalCount 160/);
+  assert.doesNotMatch(outputCommands[0], /\s-Raw\b/);
+  assert.match(outputCommands[1], /blocked an out-of-scope write/);
+  assert.match(outputCommands[2], /New-Item[\s\S]*final-product-audit-work/);
+  assert.match(outputCommands[3], /audit-v1\.md/);
+});
+
+test("a PowerShell path variable cannot bypass an explicit multi-file write scope", (t) => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex scoped artifact recovery "));
+  t.after(() => fs.rmSync(project, { recursive: true, force: true }));
+  const userText = [
+    `Project directory:\n${project}`,
+    "Only modify report.md and done.txt, and delete index.html.",
+    "Do not create, delete, or modify any other file.",
+  ].join("\n");
+  const commands = [
+    '$path = "test/analyze.test.mjs"; $content = [System.IO.File]::ReadAllText($path); [System.IO.File]::WriteAllText($path, $content + "\\n// TEMP_MOD\\n", [System.Text.Encoding]::UTF8)',
+    '$path = "report.md"; [System.IO.File]::WriteAllText($path, "# restored", [System.Text.Encoding]::UTF8)',
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: commands.map((command, index) => ({
+          id: `call_variable_scope_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command, workdir: project }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const outputCommands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.match(outputCommands[0], /blocked an out-of-scope write/);
+  assert.match(outputCommands[1], /WriteAllText/);
+  assert.doesNotMatch(outputCommands[1], /blocked an out-of-scope write/);
+});
+
+test("a forbidden directory listing in a single-file task is redirected to the target file", () => {
+  const target = "C:\\Project\\cli.mjs";
+  const userText = [
+    `Only edit this file ${target}.`,
+    "Do not create, write, modify, or touch any other file.",
+    "Do not list directories or inspect git.",
+    "You may read cli.mjs before editing, then run node --check cli.mjs.",
+  ].join(" ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_forbidden_single_file_listing",
+            type: "function",
+            function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "C:\\Project" -Force' }) },
+          },
+          {
+            id: "call_forbidden_single_file_git_probe",
+            type: "function",
+            function: { name: "shell_command", arguments: JSON.stringify({ command: "git status; git log -1" }) },
+          },
+          {
+            id: "call_forbidden_single_file_rg_listing",
+            type: "function",
+            function: { name: "shell_command", arguments: JSON.stringify({ command: "rg --files" }) },
+          },
+        ],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const commands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  for (const command of commands) {
+    assert.match(command, /Get-Content -LiteralPath/);
+    assert.match(command, /C:\\Project\\cli\.mjs/);
+    assert.match(command, /-TotalCount 240/);
+    assert.doesNotMatch(command, /Get-ChildItem|git status|git log|rg --files/);
+  }
+});
+
+test("a directory detour is redirected to explicitly requested source reads", () => {
+  const userText = [
+    "Continue the project in C:\\Project.",
+    "Only modify cli.mjs and do not create any other file.",
+    "Read cli.mjs plus src\\normalize.mjs, src\\analyze.mjs, and src\\report.mjs once to learn their actual named exports.",
+    "Then repair cli.mjs and run node --check cli.mjs.",
+  ].join(" ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_directory_detour_before_explicit_reads",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-ChildItem" }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const command = JSON.parse(call.arguments).command;
+  assert.doesNotMatch(command, /Get-ChildItem/);
+  assert.match(command, /Get-Content[\s\S]*cli\.mjs/);
+  assert.match(command, /src\\normalize\.mjs/);
+  assert.match(command, /src\\analyze\.mjs/);
+  assert.match(command, /src\\report\.mjs/);
+});
+
+test("a model switch cannot replay a stale write outside a relative single-file scope", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex model switch scope "));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userText = [
+    "Continue the same project.",
+    "Only modify cli.mjs; do not modify or create any other file.",
+    "Read cli.mjs once, replace it, then run node --check cli.mjs.",
+  ].join(" ");
+  const staleTarget = path.join(root, "README.md");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.1-pro-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_stale_model_switch_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: `[System.IO.File]::WriteAllText('${staleTarget}', 'stale')` }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.1-pro-low",
+    input: [
+      { type: "message", role: "developer", content: [{ type: "input_text", text: "<model_switch>Use the new model.</model_switch>" }] },
+      { type: "message", role: "developer", content: [{ type: "input_text", text: `<environment_context><cwd>${root}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    ],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const command = JSON.parse(call.arguments).command;
+  assert.match(command, /blocked an out-of-scope write/i);
+  assert.match(command, /cli\.mjs/i);
+  assert.doesNotMatch(command, /WriteAllText/);
+});
+
+test("a Chinese one-file correction blocks stale report-site writes", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex Chinese correction scope "));
+  fs.mkdirSync(path.join(root, "test"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userText = [
+    `继续当前任务，只修复项目目录 ${root} 中剩余的一个失败测试。`,
+    "第一步必须直接修改 test/analyze.test.mjs，不要改 cli.mjs、README.md、done.txt 或其他测试。",
+    "只替换名为 CLI --version extra regression 的测试断言，然后运行 npm test。",
+  ].join(" ");
+  const staleCommand = [
+    'Set-Content -Path "report.md" -Value "# Search Report" -Encoding UTF8',
+    'Set-Content -Path "index.html" -Value "<html></html>" -Encoding UTF8',
+    'Set-Content -Path "done.txt" -Value "Task completed." -Encoding UTF8',
+  ].join("; ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_stale_report_site_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: staleCommand, workdir: root }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "developer", content: [{ type: "input_text", text: `<environment_context><cwd>${root}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    ],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const command = JSON.parse(call.arguments).command;
+  assert.match(command, /blocked an out-of-scope write/i);
+  assert.match(command, /test\\analyze\.test\.mjs/i);
+  assert.doesNotMatch(command, /Set-Content|report\.md|index\.html|done\.txt/i);
+});
+
+test("a relative two-file scope allows both targets and blocks a third file", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex two file scope "));
+  fs.mkdirSync(path.join(root, "test"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userText = [
+    "V2 edge requirement for the same project.",
+    "Only modify cli.mjs and test\\analyze.test.mjs; do not create, delete, or modify any other file.",
+    "Read both files once, implement the feature, and run npm test.",
+  ].join(" ");
+  const allowedCommand = [
+    `[System.IO.File]::WriteAllText('${path.join(root, "cli.mjs")}', 'cli')`,
+    `[System.IO.File]::WriteAllText('${path.join(root, "test", "analyze.test.mjs")}', 'test')`,
+  ].join("; ");
+  const deniedCommand = `[System.IO.File]::WriteAllText('${path.join(root, "README.md")}', 'stale')`;
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.1-pro-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [allowedCommand, deniedCommand].map((command, index) => ({
+          id: `call_two_file_scope_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.1-pro-low",
+    input: [
+      { type: "message", role: "developer", content: [{ type: "input_text", text: `<environment_context><cwd>${root}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    ],
+  });
+
+  const commands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.equal(commands[0], allowedCommand);
+  assert.match(commands[1], /blocked an out-of-scope write/i);
+  assert.match(commands[1], /cli\.mjs[\s\S]*analyze\.test\.mjs/i);
+});
+
+test("a Chinese single-file repair permits an explicit same-directory cleanup target", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-same-directory-cleanup-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const analyzerPath = path.join(root, "codex-update-analyzer.mjs");
+  const userText = [
+    "继续当前同一个任务，直接完成最后修复，不要再列目录。",
+    `只允许修改 ${analyzerPath}，并删除同目录中误建的 setup.js；不要修改其他文件。`,
+  ].join(" ");
+  const allowedCommand = [
+    `$dir = "${root}"`,
+    'Remove-Item -Path "$dir\\setup.js" -ErrorAction SilentlyContinue',
+    '[System.IO.File]::WriteAllText("$dir\\codex-update-analyzer.mjs", "code", [System.Text.UTF8Encoding]::new($false))',
+  ].join("\n");
+  const deniedCommand = `[System.IO.File]::WriteAllText('${path.join(root, "README.md")}', 'stale')`;
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [allowedCommand, deniedCommand].map((command, index) => ({
+          id: `call_same_directory_cleanup_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command, workdir: root }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "developer", content: [{ type: "input_text", text: `<environment_context><cwd>${root}</cwd></environment_context>` }] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    ],
+  });
+
+  const commands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.equal(commands[0], allowedCommand);
+  assert.match(commands[1], /blocked an out-of-scope write/i);
+  assert.match(commands[1], /codex-update-analyzer\.mjs[\s\S]*setup\.js/i);
+});
+
+test("explicit verbatim file body overrides a model-authored write and blocks other targets", () => {
+  const target = "C:\\Temp\\clean-audit-work\\audit-clean.md";
+  const exactBody = [
+    "# 项目目标",
+    "Codex Desktop 同步副本加薄的 Anti-Codex 模型适配层。",
+    "单一 Antigravity 账号，不以双账号为完成条件。",
+  ].join("\n");
+  const userText = [
+    "只允许操作现有文件：",
+    target,
+    "不要创建任何其他文件。",
+    "最终文件正文必须逐字等于下面代码块中的内容：",
+    "```text",
+    exactBody,
+    "```",
+  ].join("\n");
+  const commands = [
+    `$path = '${target}'; $content = '# generic audit'; [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))`,
+    `[System.IO.File]::WriteAllText('C:\\Temp\\clean-audit-work\\other.md', 'wrong', [System.Text.UTF8Encoding]::new($false))`,
+  ];
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: commands.map((command, index) => ({
+          id: `call_exact_body_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const outputCommands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.match(outputCommands[0], /Anti-Codex exact file body enforcement/);
+  assert.ok(outputCommands[0].includes(Buffer.from(exactBody, "utf8").toString("base64")));
+  assert.match(outputCommands[0], /WriteAllText/);
+  assert.match(outputCommands[1], /blocked an out-of-scope write/);
+});
+
+test("a second read in an explicit verbatim task is promoted to the exact write", () => {
+  const target = "C:\\Temp\\clean-audit-work\\audit-clean.md";
+  const exactBody = "# 项目目标\n目标没有变。\nANTICODEX_EXACT_BODY_DONE";
+  const userText = [
+    "只允许操作现有文件：",
+    target,
+    "不要创建任何其他文件。",
+    "最终文件正文必须逐字等于下面代码块中的内容：",
+    "```text",
+    exactBody,
+    "```",
+    "最终回复最后一行只写：ANTICODEX_EXACT_BODY_DONE",
+  ].join("\n");
+  const priorRead = `Get-Content -Raw -Encoding UTF8 -Path '${target}'`;
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_second_exact_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: priorRead }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+      { type: "function_call", call_id: "call_first_exact_read", name: "shell_command", arguments: JSON.stringify({ command: priorRead }) },
+      { type: "function_call_output", call_id: "call_first_exact_read", output: "old content" },
+    ],
+  });
+
+  const command = JSON.parse(fmt.output.find(item => item.type === "function_call").arguments).command;
+  assert.match(command, /Anti-Codex exact file body enforcement/);
+  assert.match(command, /WriteAllText/);
+  assert.ok(command.includes(Buffer.from(exactBody, "utf8").toString("base64")));
+});
+
+test("verified explicit verbatim body closes the turn with the requested final marker", () => {
+  const target = "C:\\Temp\\clean-audit-work\\audit-clean.md";
+  const marker = "ANTICODEX_EXACT_BODY_DONE";
+  const exactBody = `# 项目目标\n目标没有变。\n${marker}`;
+  const userText = [
+    "只允许操作现有文件：",
+    target,
+    "不要创建任何其他文件。",
+    "最终文件正文必须逐字等于下面代码块中的内容：",
+    "```text",
+    exactBody,
+    "```",
+    `最终回复最后一行只写：${marker}`,
+  ].join("\n");
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+      { type: "function_call_output", call_id: "call_exact_write", output: exactBody },
+    ],
+  };
+  const completion = deterministicArtifactCompletionResponse(request, {
+    model: request.model,
+    messages: [
+      { role: "user", content: userText },
+      { role: "tool", tool_call_id: "call_exact_write", content: exactBody },
+    ],
+  });
+
+  assert.ok(completion);
+  assert.equal(completion.choices[0].message.content, marker);
+});
+
+test("explicit bounded-read constraints cap plain Get-Content and detect Node writes", () => {
+  const targetDir = "C:\\Temp\\final-product-audit-work";
+  const userText = `task_plan.md 和 findings.md 很大，禁止整文件读取，必须使用有界读取。请创建目录 ${targetDir}，并写入 audit-v1.md。不要写其他文件。`;
+  const commands = [
+    'Get-Content -Path "G:\\Project\\task_plan.md", "G:\\Project\\findings.md"',
+    `node -e "require('fs').writeFileSync('${targetDir.replaceAll("\\", "\\\\")}', 'bad')"`,
+    `node -e "require('fs').writeFileSync('${`${targetDir}\\audit-v1.md`.replaceAll("\\", "\\\\")}', '# audit')"`,
+  ];
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: commands.map((command, index) => ({
+          id: `call_bounded_constraint_${index}`,
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        })),
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const outputCommands = fmt.output
+    .filter(item => item.type === "function_call")
+    .map(item => JSON.parse(item.arguments).command);
+  assert.match(outputCommands[0], /Select-Object -First 160/);
+  assert.match(outputCommands[1], /blocked an out-of-scope write/);
+  assert.match(outputCommands[2], /audit-v1\.md/);
+  assert.doesNotMatch(outputCommands[2], /blocked an out-of-scope write/);
+});
+
+test("third consecutive write to the same sole file ends the tool loop", () => {
+  const target = "C:\\Temp\\final-product-audit-work\\audit-v1.md";
+  const writeCommand = (heading) => `$path = '${target}'; $content = '${heading}'; [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false)); Get-Content -LiteralPath $path -Raw -Encoding UTF8`;
+  const priorTurn = (id, heading) => [{
+    role: "assistant",
+    content: "",
+    tool_calls: [{
+      id,
+      type: "function",
+      function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand(heading) }) },
+    }],
+  }, {
+    role: "tool",
+    tool_call_id: id,
+    content: `Exit code: 0\nOutput:\n${heading}`,
+  }];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.1-pro-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_write_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand("audit three") }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.1-pro-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: `Only write ${target}, verify it, then finish.` }] }],
+  }, null, {
+    chatMessages: [
+      ...priorTurn("call_write_1", "audit one"),
+      ...priorTurn("call_write_2", "audit two"),
+    ],
+  });
+
+  assert.equal(fmt.output.some(item => item.type === "function_call"), false);
+  const text = fmt.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /stopped a third consecutive write/i);
+  assert.match(text, /audit-v1\.md/i);
+  assert.match(text, /same chat/i);
+});
+
+test("third consecutive relative WriteAllText in one workdir ends the tool loop", () => {
+  const workdir = "C:\\Temp\\session-inspector";
+  const writeCommand = (value) => `$code = @'\n${value}\n'@\n[System.IO.File]::WriteAllText("cli.mjs", $code, [System.Text.UTF8Encoding]::new($false))`;
+  const priorTurn = (id, value) => [{
+    role: "assistant",
+    content: "",
+    tool_calls: [{
+      id,
+      type: "function",
+      function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand(value), workdir }) },
+    }],
+  }, {
+    role: "tool",
+    tool_call_id: id,
+    content: "Exit code: 0",
+  }];
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_relative_write_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand("three"), workdir }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3-flash-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Finish the CLI and then run its tests." }] }],
+  }, null, {
+    chatMessages: [
+      ...priorTurn("call_relative_write_1", "one"),
+      ...priorTurn("call_relative_write_2", "two"),
+    ],
+  });
+
+  assert.equal(fmt.output.some(item => item.type === "function_call"), false);
+  const text = fmt.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /stopped a third consecutive write/i);
+  assert.match(text, /cli\.mjs/i);
+});
+
+test("same-file repair remains allowed after an intervening verification command", () => {
+  const target = "C:\\Temp\\project\\app.mjs";
+  const writeCommand = `$path = '${target}'; [System.IO.File]::WriteAllText($path, 'export const value = 2;', [System.Text.UTF8Encoding]::new($false))`;
+  const prior = [
+    { role: "assistant", content: "", tool_calls: [{ id: "call_write_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand }) } }] },
+    { role: "tool", tool_call_id: "call_write_1", content: "Exit code: 0" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_test", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "node --test app.test.mjs" }) } }] },
+    { role: "tool", tool_call_id: "call_test", content: "Exit code: 1" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_write_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand }) } }] },
+    { role: "tool", tool_call_id: "call_write_2", content: "Exit code: 0" },
+  ];
+  const fmt = chatToResponsesFormat({
+    choices: [{ message: { role: "assistant", content: "", tool_calls: [{ id: "call_write_3", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand }) } }] }, finish_reason: "tool_calls" }],
+  }, {
+    model: "gemini-3.1-pro-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Fix app.mjs until the tests pass." }] }],
+  }, null, { chatMessages: prior });
+
+  assert.equal(fmt.output.filter(item => item.type === "function_call").length, 1);
+});
+
+test("a new user follow-up resets the consecutive same-file write guard", () => {
+  const target = "C:\\Temp\\audit\\audit-v1.md";
+  const writeCommand = (value) => `$path = '${target}'; [System.IO.File]::WriteAllText($path, '${value}', [System.Text.UTF8Encoding]::new($false))`;
+  const prior = [
+    { role: "assistant", content: "", tool_calls: [{ id: "call_old_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand("one") }) } }] },
+    { role: "tool", tool_call_id: "call_old_1", content: "Exit code: 0" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_old_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand("two") }) } }] },
+    { role: "tool", tool_call_id: "call_old_2", content: "Exit code: 0" },
+    { role: "user", content: "Continue in the same chat and repair the missing sections." },
+  ];
+  const fmt = chatToResponsesFormat({
+    choices: [{ message: { role: "assistant", content: "", tool_calls: [{ id: "call_followup", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand("repaired") }) } }] }, finish_reason: "tool_calls" }],
+  }, {
+    model: "gemini-3.1-pro-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Continue in the same chat and repair the missing sections." }] }],
+  }, null, { chatMessages: prior });
+
+  assert.equal(fmt.output.filter(item => item.type === "function_call").length, 1);
+});
+
+test("third repeated unbounded full-file read is blocked before another tool loop", () => {
+  const repeatedCommand = 'Get-Content -Path "G:\\Project\\task_plan.md" -Raw';
+  const priorCall = (id) => ({
+    role: "assistant",
+    content: "",
+    tool_calls: [{
+      id,
+      type: "function",
+      function: { name: "shell_command", arguments: JSON.stringify({ command: repeatedCommand }) },
+    }],
+  });
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_read_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: repeatedCommand }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Audit the project and write audit-v1.md." }] }],
+  }, null, {
+    chatMessages: [
+      priorCall("call_read_1"),
+      { role: "tool", tool_call_id: "call_read_1", content: "large clipped output" },
+      priorCall("call_read_2"),
+      { role: "tool", tool_call_id: "call_read_2", content: "large clipped output" },
+    ],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /blocked the third repeated unbounded full-file read/);
+  assert.doesNotMatch(args.command, /Get-Content[\s\S]*-Raw/);
+});
+
+test("a new user follow-up resets the repeated full-file read guard", () => {
+  const repeatedCommand = 'Get-Content -Path "C:\\Project\\src\\normalize.mjs" -Raw';
+  const priorCall = (id) => ({
+    role: "assistant",
+    content: "",
+    tool_calls: [{ id, type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: repeatedCommand }) } }],
+  });
+  const chatMessages = [
+    { role: "user", content: "Inspect normalize.mjs." },
+    priorCall("old_read_1"),
+    { role: "tool", tool_call_id: "old_read_1", content: "old output" },
+    priorCall("old_read_2"),
+    { role: "tool", tool_call_id: "old_read_2", content: "old output" },
+    { role: "user", content: "This is a new repair contract. Read the authorized file once, then replace it." },
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "new_read_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: repeatedCommand }) } }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "This is a new repair contract. Read the authorized file once, then replace it." }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).command, repeatedCommand);
+});
+
+test("repeated read-only inspection loop is forced to proceed to the deliverable", () => {
+  const commands = [
+    'Get-ChildItem -Path "G:\\Project"',
+    'Get-ChildItem -Path "G:\\Project" -Recurse',
+  ];
+  const chatMessages = commands.flatMap((command, index) => {
+    const id = `call_inspect_${index}`;
+    return [{
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id, type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command }) } }],
+    }, { role: "tool", tool_call_id: id, content: "inspection output" }];
+  });
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_inspect_7",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "G:\\Project"' }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Audit the project and write audit-v1.md." }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /completed the inspection phase after detecting repeated read-only calls/);
+  assert.match(args.command, /create or edit every missing requested deliverable/);
+  assert.match(args.command, /exit 0/);
+  assert.doesNotMatch(args.command, /throw/);
+  assert.doesNotMatch(args.command, /Get-ChildItem/);
+});
+
+test("a repeated Chinese read-only inspection is forced to answer instead of write", () => {
+  const userText = "只读取当前项目状态，不修改任何文件。V2 已经完成 19 个测试；请仅回复 RECOVERY_HOOK_OK。";
+  const commands = [
+    'Get-Content -Path "G:\\Project\\cli.mjs"',
+    'Get-Content -Raw -Path "G:\\Project\\cli.mjs"',
+  ];
+  const chatMessages = commands.flatMap((command, index) => {
+    const id = `call_read_only_chinese_${index}`;
+    return [{
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id, type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command }) } }],
+    }, { role: "tool", tool_call_id: id, content: "inspection output" }];
+  });
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_read_only_chinese_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: commands[0] }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /completed the requested read-only inspection/i);
+  assert.match(args.command, /reply directly to the latest user request/i);
+  assert.doesNotMatch(args.command, /create or edit|missing requested deliverable/i);
+});
+
+test("read-only inspection variants are blocked when they keep reopening the same target", () => {
+  const commands = [
+    'Get-Content "C:\\Project\\src\\normalize.mjs"',
+    'Get-Content src/normalize.mjs -Raw',
+  ];
+  const chatMessages = commands.flatMap((command, index) => {
+    const id = `call_variant_read_${index}`;
+    return [{
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id, type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command }) } }],
+    }, { role: "tool", tool_call_id: id, content: "file output" }];
+  });
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_variant_read_3",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command: 'Get-Content src/analyze.mjs; Get-Content src/normalize.mjs; Get-Content cli.mjs' }),
+          },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Repair the requested files and run the tests." }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /completed the inspection phase after detecting repeated read-only calls/);
+  assert.doesNotMatch(args.command, /Get-Content/);
+});
+
+test("repeated bounded reads fall back to complete Responses history", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_BOUNDED_READ_20260712";
+  const userText = `继续当前同一个任务，只修复 C:\\Project\\codex-update-analyzer.mjs，最后输出 ${marker}。`;
+  const readCommand = "Get-Content -LiteralPath 'C:\\Project\\codex-update-analyzer.mjs' -TotalCount 400 -Encoding UTF8";
+  const input = [
+    { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+    { type: "function_call", call_id: "bounded_read_1", name: "exec_command", arguments: JSON.stringify({ cmd: readCommand, workdir: "C:\\Project" }) },
+    { type: "function_call_output", call_id: "bounded_read_1", output: "const sourceCount = 3;" },
+    { type: "function_call", call_id: "bounded_read_2", name: "exec_command", arguments: JSON.stringify({ cmd: readCommand, workdir: "C:\\Project" }) },
+    { type: "function_call_output", call_id: "bounded_read_2", output: "const sourceCount = 3;" },
+  ];
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "bounded_read_3",
+          type: "function",
+          function: { name: "exec_command", arguments: JSON.stringify({ cmd: readCommand, workdir: "C:\\Project" }) },
+        }],
+      },
+    }],
+  }, { model: "gemini-pro-agent", input }, routing, {
+    strictTools: true,
+    chatMessages: [{ role: "user", content: userText }],
+  });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.cmd, /completed the inspection phase after detecting repeated read-only calls/);
+  assert.doesNotMatch(args.cmd, /Get-Content/);
+});
+
+test("an explicit write-first contract blocks the first read-only detour", () => {
+  const userText = [
+    "Your first output must be shell_command.",
+    "Do not read, list, inspect, or check files first.",
+    "Only modify C:\\Project\\src\\normalize.mjs and C:\\Project\\test\\analyze.test.mjs, then run the tests.",
+  ].join(" ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_forbidden_first_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-Content "C:\\Project\\src\\normalize.mjs"' }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /explicitly required a write-first tool turn/i);
+  assert.match(args.command, /create or edit the authorized files now/i);
+  assert.doesNotMatch(args.command, /Get-Content/);
+});
+
+test("a first shell command must modify contract also blocks a read-only detour", () => {
+  const userText = [
+    "Your first shell_command must modify src/normalize.mjs.",
+    "Do not list, read, inspect, or run old tests before editing.",
+    "Then continue implementing the requested project files.",
+  ].join(" ");
+  const fmt = chatToResponsesFormat({
+    model: "claude-opus-4-6-thinking",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_forbidden_natural_first_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-ChildItem -Recurse" }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "claude-opus-4-6-thinking",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /explicitly required a write-first tool turn/i);
+  assert.doesNotMatch(args.command, /Get-ChildItem/);
+});
+
+test("a Chinese first-step shell recovery contract blocks the first read-only detour", () => {
+  const userText = [
+    "Only modify report.md and done.txt, and delete index.html. Do not modify any other file.",
+    "第一步必须直接调用一次 shell_command 执行恢复，不要先读文件或列目录。",
+    "删除 index.html，重新生成 report.md，并把 done.txt 写成指定标记。",
+    "随后只做读取和验证。",
+  ].join(" ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_forbidden_chinese_restore_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content test/analyze.test.mjs" }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /explicitly required a write-first tool turn/i);
+  assert.match(args.command, /create or edit the authorized files now/i);
+  assert.doesNotMatch(args.command, /completed the requested read-only inspection/i);
+  assert.doesNotMatch(args.command, /Get-Content/);
+});
+
+test("an explicit write-first contract wins when a continuation prompt starts a new user turn", () => {
+  const userText = [
+    "Continue the same task.",
+    "Only edit this file C:\\Project\\cli.mjs.",
+    "Do not create, write, modify, or touch any other files.",
+    "Do not read or list first.",
+    "Your next shell_command must overwrite C:\\Project\\cli.mjs.",
+    "After the write, stop without reading, listing, testing, or editing another file.",
+  ].join(" ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_forbidden_continuation_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "C:\\Project"' }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /explicitly required a write-first tool turn/i);
+  assert.doesNotMatch(args.command, /Get-ChildItem/);
+});
+
+test("an explicit write-first reminder is not mistaken for a deliverable write", () => {
+  const userText = [
+    "Continue the same task.",
+    "Only edit this file C:\\Project\\cli.mjs.",
+    "Do not create, write, modify, or touch any other files.",
+    "Do not read or list first.",
+    "Your next shell_command must overwrite C:\\Project\\cli.mjs.",
+    "After the write, stop without reading, listing, testing, or editing another file.",
+  ].join(" ");
+  const nudge = `Write-Output 'The user explicitly required a write-first tool turn. Do not read or list first; create or edit the authorized files now. Current user task reminder: ${userText}'; exit 0`;
+  const chatMessages = [
+    { role: "user", content: userText },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_write_first_nudge", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_write_first_nudge", content: "write-first reminder" },
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_forbidden_after_nudge_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "C:\\Project"' }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /explicitly required a write-first tool turn/i);
+  assert.doesNotMatch(args.command, /Get-ChildItem/);
+});
+
+test("third read after two forced implementation nudges ends the turn without another tool call", () => {
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls. Do not issue another read or listing command.'; exit 0";
+  const chatMessages = [
+    { role: "user", content: "Create every requested project file and run the tests." },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_read_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "G:\\Project"' }) } }] },
+    { role: "tool", tool_call_id: "call_read_1", content: "inspection output" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_read_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "G:\\Project" -Recurse' }) } }] },
+    { role: "tool", tool_call_id: "call_read_2", content: "inspection output" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_nudge_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_nudge_1", content: "implementation reminder" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_nudge_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_nudge_2", content: "implementation reminder" },
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "call_read_3", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-ChildItem -Path "G:\\Project" -Recurse' }) } }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Create every requested project file and run the tests." }] }],
+  }, null, { chatMessages });
+
+  assert.equal(fmt.output.some(item => item.type === "function_call"), false);
+  const text = fmt.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /连续两次忽略/);
+  assert.match(text, /没有被标记为完成/);
+});
+
+test("third read after two explicit write-first nudges also ends the turn", () => {
+  const nudge = "Write-Output 'The user explicitly required a write-first tool turn. Do not read or list first; create or edit the authorized files now.'; exit 0";
+  const chatMessages = [
+    { role: "user", content: "Your first output must be shell_command. Do not read first. Only modify C:\\Project\\src\\normalize.mjs." },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_nudge_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_nudge_1", content: "write-first reminder" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_nudge_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_nudge_2", content: "write-first reminder" },
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "call_read_3", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-Content "C:\\Project\\src\\normalize.mjs"' }) } }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Your first output must be shell_command. Do not read first. Only modify C:\\Project\\src\\normalize.mjs." }] }],
+  }, null, { chatMessages });
+
+  assert.equal(fmt.output.some(item => item.type === "function_call"), false);
+  const text = fmt.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /连续两次忽略/);
+});
+
+test("stream mapper ends a third read after two explicit write-first nudges", () => {
+  const nudge = "Write-Output 'The user explicitly required a write-first tool turn. Do not read or list first; create or edit the authorized files now.'; exit 0";
+  const input = [
+    { type: "message", role: "user", content: [{ type: "input_text", text: "Your first output must be shell_command. Do not read first. Only modify C:\\Project\\src\\normalize.mjs." }] },
+    { type: "function_call", id: "fc_nudge_1", call_id: "call_nudge_1", name: "shell_command", arguments: JSON.stringify({ command: nudge }) },
+    { type: "function_call_output", call_id: "call_nudge_1", output: "write-first reminder" },
+    { type: "function_call", id: "fc_nudge_2", call_id: "call_nudge_2", name: "shell_command", arguments: JSON.stringify({ command: nudge }) },
+    { type: "function_call_output", call_id: "call_nudge_2", output: "write-first reminder" },
+  ];
+  const mapper = new ChatToResponsesStreamMapper({ model: "gemini-pro-agent", input }, "gemini-pro-agent", {
+    shell_command: {
+      codexName: "shell_command",
+      type: "function",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  });
+  const events = mapper.pushChunk({
+    choices: [{
+      index: 0,
+      delta: {
+        tool_calls: [{
+          index: 0,
+          id: "call_read_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-Content "C:\\Project\\src\\normalize.mjs"' }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  });
+
+  assert.equal(events.some(([event, data]) => event === "response.output_item.added" && data.item.type === "function_call"), false);
+  const completed = events.find(([event]) => event === "response.completed")?.[1];
+  assert.equal(completed.response.output.some(item => item.type === "function_call"), false);
+  const text = completed.response.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /连续两次忽略/);
+  assert.match(text, /没有被标记为完成/);
+});
+
+test("third inspection after a successful write is forced back to implementation", () => {
+  const write = '$dir = "G:\\Project"; Set-Content -Path "$dir\\package.json" -Value "{}"';
+  const commands = [
+    write,
+    'Get-ChildItem -Path "G:\\Project"',
+    'Get-ChildItem -Path "G:\\Project" -Recurse',
+  ];
+  const chatMessages = [
+    { role: "user", content: "Create package.json, src/analyze.mjs, test/analyze.test.mjs, and README.md in G:\\Project, then run npm test." },
+    ...commands.flatMap((command, index) => {
+      const id = `call_after_write_${index}`;
+      return [{
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id, type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command }) } }],
+      }, { role: "tool", tool_call_id: id, content: "Exit code: 0" }];
+    }),
+  ];
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_after_write_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-Content -Path "G:\\Project\\package.json"' }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Create the requested multi-file project." }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /completed the inspection phase after detecting repeated read-only calls/);
+  assert.match(args.command, /every missing requested deliverable/);
+  assert.match(args.command, /Current user task reminder: Create package\.json, src\/analyze\.mjs/);
+  assert.doesNotMatch(args.command, /Get-Content -Path/);
+});
+
+test("two targeted inspections after a write are still allowed", () => {
+  const chatMessages = [
+    { role: "user", content: "Create and verify G:\\Project\\report.md." },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: 'Set-Content -Path "G:\\Project\\report.md" -Value "ready"' }) } }] },
+    { role: "tool", tool_call_id: "call_write", content: "Exit code: 0" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_read_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: 'Get-Content -Path "G:\\Project\\report.md"' }) } }] },
+    { role: "tool", tool_call_id: "call_read_1", content: "ready" },
+  ];
+  const nextCommand = 'Get-ChildItem -Path "G:\\Project"';
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: { role: "assistant", content: "", tool_calls: [{ id: "call_read_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nextCommand }) } }] },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Create and verify G:\\Project\\report.md." }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).command, nextCommand);
+});
+
+test("a successful custom patch resets earlier inspection nudges before verification", () => {
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls. Do not issue another read or listing command.'; exit 0";
+  const readCli = 'Get-Content -LiteralPath "G:\\Project\\cli.mjs" -TotalCount 240';
+  const readReadme = 'Get-Content -LiteralPath "G:\\Project\\README.md" -TotalCount 80';
+  const chatMessages = [
+    { role: "user", content: "Modify cli.mjs and README.md, then run node --check, npm test, and verify both files." },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_read_cli", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: readCli }) } }] },
+    { role: "tool", tool_call_id: "call_read_cli", content: "cli source" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_read_readme", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: readReadme }) } }] },
+    { role: "tool", tool_call_id: "call_read_readme", content: "readme source" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_nudge_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_nudge_1", content: "implementation reminder" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_nudge_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "call_nudge_2", content: "implementation reminder" },
+    { role: "assistant", content: "", tool_calls: [{ id: "call_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "call_patch", content: "Exit code: 0\nSuccess. Updated the following files:\nM G:\\Project\\cli.mjs\nM G:\\Project\\README.md\n" },
+  ];
+  const verification = 'node --check cli.mjs; npm test; Get-Content -LiteralPath "G:\\Project\\README.md" -TotalCount 1';
+  const fmt = chatToResponsesFormat({
+    model: "gemini-pro-agent",
+    choices: [{
+      message: { role: "assistant", content: "", tool_calls: [{ id: "call_verify", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: verification, workdir: "G:\\Project" }) } }] },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gpt-5.5",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Modify cli.mjs and README.md, then run node --check, npm test, and verify both files." }] }],
+  }, null, { chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  assert.ok(call);
+  assert.equal(JSON.parse(call.arguments).command, verification);
 });
 
 test("chatToResponsesFormat keeps model-led report-site commands without deterministic guard", () => {
@@ -5779,6 +9825,62 @@ test("multi-turn marker-only Set-Content writes are normalized without determini
   assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard/);
 });
 
+test("multi-turn relative dotnet writes run from the Set-Location artifact directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-multi-turn-dotnet-write-"));
+  const targetPath = path.join(root, "ui_multi_turn_project_smoke_20260712001");
+  fs.mkdirSync(targetPath, { recursive: true });
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const marker = "UI_MULTI_TURN_PROJECT_SMOKE_20260712001";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Continue the same project: ${targetPath}. Modify word-tally.mjs so it exports uniqueWords(text), update word-tally.test.mjs, and create followup.txt containing exactly ${marker}.`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const command = [
+    "$__antiCodexUtf8NoBom = [System.Text.UTF8Encoding]::new($false)",
+    `Set-Location \"${targetPath}\"`,
+    "[System.IO.File]::WriteAllText(\"word-tally.mjs\", \"export function uniqueWords() { return []; }\", $__antiCodexUtf8NoBom)",
+    `Set-Content -Path followup.txt -Value '${marker}' -NoNewline`,
+  ].join("\n");
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_relative_dotnet_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({ command, workdir: root }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, targetPath);
+  assert.match(args.command, /WriteAllText\(\"word-tally\.mjs\"/);
+});
+
 test("multi-turn first marker normalization does not create followup.txt", () => {
   const marker = "UI_MULTI_TURN_PROJECT_SMOKE_20260701002_FIRST";
   const request = {
@@ -5872,6 +9974,7 @@ test("local artifact tool calls block Antigravity brain transcript detours", () 
   assert.match(args.command, /blocked forbidden Antigravity brain\/transcript\/history\/log inspection/);
   assert.doesNotMatch(args.command, /\.gemini\\antigravity\\brain/i);
   assert.doesNotMatch(args.command, /transcript\.jsonl/i);
+  assert.doesNotMatch(args.command, new RegExp(marker));
 });
 
 test("local artifact tool calls allow commands that only repeat forbidden history guidance", () => {
@@ -6067,6 +10170,114 @@ test("explicit missing artifact workdir is repaired to the parent directory", ()
   assert.equal(args.workdir, path.dirname(artifactDir));
 });
 
+test("complex project exec_command repairs an explicit missing artifact workdir", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_WORKDIR_456";
+  const artifactDir = path.join(os.tmpdir(), `anticodex-missing-complex-workdir-${Date.now()}`);
+  fs.rmSync(artifactDir, { recursive: true, force: true });
+  const helper = "G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\write-anticodex-complex-project-artifact.mjs";
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "请完成一个真实的中文长任务。",
+          `工作目录：${artifactDir}`,
+          `最终标记：${marker}`,
+          "必须创建 package.json、codex-update-analyzer.mjs、sources.json、report.md、index.html 和 done.txt。",
+          `第一条工具调用必须执行：node \"${helper}\" --dir \"${artifactDir}\" --marker \"${marker}\"`,
+        ].join("\n"),
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "exec_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_missing_complex_workdir",
+          type: "function",
+          function: {
+            name: "exec_command",
+            arguments: JSON.stringify({
+              cmd: `node \"${helper}\" --dir \"${artifactDir}\" --marker \"${marker}\"`,
+              workdir: artifactDir,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, path.dirname(artifactDir));
+});
+
+test("exec_command runs a self-creating --dir command from the nearest existing parent", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-self-creating-workdir-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const artifactDir = path.join(root, "reports", "new-project");
+  const helper = path.join(root, "create-project.mjs");
+  fs.writeFileSync(helper, "", "utf8");
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: "Run the provided project generator command.",
+    tools: [{ type: "function", function: { name: "exec_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_self_creating_workdir",
+          type: "function",
+          function: {
+            name: "exec_command",
+            arguments: JSON.stringify({
+              cmd: `node \"${helper}\" --dir \"${artifactDir}\"`,
+              workdir: artifactDir,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, root);
+});
+
 test("repo file edit smoke markers do not trigger local artifact marker guard", () => {
   const fmt = chatToResponsesFormat({
     model: "gemini-pro-agent",
@@ -6122,6 +10333,772 @@ test("autonomous reasoning smoke does not use deterministic artifact or web-back
 
   assert.equal(deterministicArtifactToolCallCompletion(request, chatBody), null);
   assert.equal(requestNeedsWebBackedArtifactOutput(request), false);
+});
+
+test("autonomous local projects do not prefetch example URLs without an explicit web action", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260712003";
+  const prompt = [
+    "请自主完成一个本地研究+代码+报告任务。",
+    `工作目录：C:\\Temp\\desktop-visible-autonomous-reasoning\\run，最终标记：${marker}。`,
+    "创建 package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, done.txt。",
+    "分析器读取 sources.json 并打印 sourceCount 和 codexMentionCount。",
+    "sources.json 可使用 https://openai.com/codex/、https://openai.com/news/、https://developers.openai.com/codex/，报告写真实来源。",
+  ].join("\n");
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: prompt }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+
+  assert.equal(requestNeedsInternalWebTools(request), false);
+  assert.equal(shouldUseDeterministicInternalWebSearchResponse(request), false);
+});
+
+test("autonomous generated artifacts redirect apply_patch to shell guidance", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_20260712004";
+  const targetPath = "C:\\Temp\\desktop-visible-autonomous-reasoning\\run";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create package.json, codex-update-analyzer.mjs, sources.json, report.md, index.html, and done.txt in ${targetPath}. done.txt must equal ${marker}.`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: {
+      type: "custom",
+      codexName: "apply_patch",
+      parameters: { type: "string" },
+    },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_generated_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({
+              content: `*** Begin Patch\n*** Add File: ${targetPath}\\done.txt\n+${marker}\n*** End Patch`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  assert.equal(formatted.output.some(item => item.type === "custom_tool_call"), false);
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.equal(call.name, "exec_command");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.cmd, /blocked apply_patch for generated artifacts/i);
+  assert.match(args.cmd, /WriteAllText/);
+  assert.match(args.cmd, /done\.txt/);
+  assert.doesNotMatch(args.cmd, new RegExp(marker));
+});
+
+test("autonomous shell writes normalize done.txt to exact UTF-8 marker bytes", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_EXACT_DONE_20260712";
+  const targetPath = "C:\\Temp\\desktop-visible-autonomous-reasoning\\run";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Create the autonomous project in ${targetPath}. done.txt must contain only ${marker}.`,
+      }],
+    }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" }, workdir: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_autonomous_done_write",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: `Set-Content -Path done.txt -Value '${marker}' -Encoding utf8`,
+              workdir: targetPath,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /Anti-Codex exact marker-only write normalization/);
+  assert.match(args.command, /UTF8Encoding\]::new\(\$false\)/);
+  assert.match(args.command, /WriteAllText/);
+  assert.match(args.command, new RegExp(marker));
+});
+
+test("autonomous repair shell guidance anchors an explicit file target to its parent directory", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-file-guidance-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  const analyzerPath = path.join(targetPath, "codex-update-analyzer.mjs");
+  fs.writeFileSync(analyzerPath, "export const sourceCount = 3;\n", "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_FILE_GUIDANCE_20260712";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `继续当前同一个任务。只允许修改 ${analyzerPath}，并删除同目录中误建的 setup.js。都成功后最后一行只输出 ${marker}。`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: {
+      type: "custom",
+      codexName: "apply_patch",
+      parameters: { type: "string" },
+    },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_generated_file_target_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({
+              content: `*** Begin Patch\n*** Add File: ${targetPath}\\done.txt\n+${marker}\n*** End Patch`,
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.workdir, targetPath);
+  assert.ok(args.cmd.includes(`Target directory: ${targetPath}`));
+  assert.ok(!args.cmd.includes(`Target directory: ${analyzerPath}`));
+});
+
+test("autonomous generated artifact repairs preserve existing-file update patches", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-repair-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  const analyzerPath = path.join(targetPath, "codex-update-analyzer.mjs");
+  fs.writeFileSync(analyzerPath, "const sourceCount = 3;\n", "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_REPAIR_PATCH_20260712";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Continue the autonomous task. Working directory: ${targetPath}. Repair codex-update-analyzer.mjs so it exports summarizeSources. done.txt must equal ${marker}.`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: {
+      type: "custom",
+      codexName: "apply_patch",
+      parameters: { type: "string" },
+    },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_generated_repair_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({
+              content: "*** Begin Patch\n*** Update File: codex-update-analyzer.mjs\n@@\n-const sourceCount = 3;\n+export const summarizeSources = () => ({ sourceCount: 3 });\n*** End Patch",
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "custom_tool_call");
+  assert.ok(call, "an update-only repair patch for an existing artifact must reach Codex");
+  assert.equal(call.name, "apply_patch");
+  assert.match(call.input, /\*\*\* Update File:/);
+  assert.match(call.input, /codex-update-analyzer\.mjs/);
+  assert.doesNotMatch(call.input, /\*\*\* Add File:/);
+});
+
+test("autonomous generated artifact repairs convert existing-file Add patches to updates", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-replace-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  const analyzerPath = path.join(targetPath, "codex-update-analyzer.mjs");
+  fs.writeFileSync(analyzerPath, "const sourceCount = 3;\n", "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_REPLACE_PATCH_20260712";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Working directory: ${targetPath}\nRepair codex-update-analyzer.mjs so it exports summarizeSources. done.txt must equal ${marker}.`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: { type: "custom", codexName: "apply_patch", parameters: { type: "string" } },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_generated_replace_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({
+              content: "*** Begin Patch\n*** Add File: codex-update-analyzer.mjs\n+export function summarizeSources() {\n+  return { sourceCount: 3 };\n+}\n*** End Patch",
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "custom_tool_call");
+  assert.ok(call, "an existing generated artifact may be replaced through a normalized repair patch");
+  assert.match(call.input, /\*\*\* Update File:/);
+  assert.match(call.input, /-const sourceCount = 3;/);
+  assert.match(call.input, /\+export function summarizeSources/);
+  assert.doesNotMatch(call.input, /\*\*\* Add File:/);
+});
+
+test("autonomous generated artifact repairs normalize unified diffs before safety checks", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-unified-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  const analyzerPath = path.join(targetPath, "codex-update-analyzer.mjs");
+  fs.writeFileSync(analyzerPath, "const sourceCount = 3;\n", "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_UNIFIED_PATCH_20260712";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Working directory: ${targetPath}\nRepair codex-update-analyzer.mjs so it exports summarizeSources. done.txt must equal ${marker}.`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: { type: "custom", codexName: "apply_patch", parameters: { type: "string" } },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_generated_unified_patch",
+          type: "function",
+          function: {
+            name: "apply_patch",
+            arguments: JSON.stringify({
+              content: "--- codex-update-analyzer.mjs\n+++ codex-update-analyzer.mjs\n@@ -1 +1 @@\n-const sourceCount = 3;\n+export const summarizeSources = () => ({ sourceCount: 3 });",
+            }),
+          },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "custom_tool_call");
+  assert.ok(call, "a repair unified diff must be normalized and forwarded");
+  assert.match(call.input, /\*\*\* Begin Patch/);
+  assert.match(call.input, /\*\*\* Update File:/);
+  assert.match(call.input, /summarizeSources/);
+});
+
+test("autonomous repair extracts the latest single-file target from a mixed git diff patch", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-mixed-git-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(targetPath, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(path.join(targetPath, "codex-update-analyzer.mjs"), "const sourceCount = 3;\n", "utf8");
+  fs.writeFileSync(path.join(targetPath, "done.txt"), "UI_AUTONOMOUS_REASONING_SMOKE_MIXED_GIT_20260712", "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_MIXED_GIT_20260712";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `继续当前任务，只修复工作目录 ${targetPath} 中的 codex-update-analyzer.mjs。它必须导出 summarizeSources，最后一行输出 ${marker}。`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: { type: "custom", codexName: "apply_patch", parameters: { type: "string" } },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const mixedPatch = [
+    "*** Begin Patch",
+    "*** Update File: package.json",
+    "@@",
+    "+{\"name\":\"replacement\",\"type\":\"module\"}",
+    "diff --git a/codex-update-analyzer.mjs b/codex-update-analyzer.mjs",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/codex-update-analyzer.mjs",
+    "@@",
+    "+export function summarizeSources() {",
+    "+  return { sourceCount: 3, codexMentionCount: 1 };",
+    "+}",
+    "diff --git a/done.txt b/done.txt",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/done.txt",
+    "@@",
+    `+${marker}`,
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_generated_mixed_git_patch",
+          type: "function",
+          function: { name: "apply_patch", arguments: JSON.stringify({ content: mixedPatch }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "custom_tool_call");
+  assert.ok(call, "the in-scope analyzer repair must survive a malformed multi-file model patch");
+  assert.match(call.input, /\*\*\* Update File: .*codex-update-analyzer\.mjs/);
+  assert.match(call.input, /summarizeSources/);
+  assert.match(call.input, /-const sourceCount = 3;/);
+  assert.doesNotMatch(call.input, /package\.json/);
+  assert.doesNotMatch(call.input, /done\.txt/);
+  assert.doesNotMatch(call.input, /diff --git/);
+});
+
+test("autonomous repair redirects destructive inspection patches to a read", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-inspection-patch-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  const analyzerPath = path.join(targetPath, "codex-update-analyzer.mjs");
+  fs.writeFileSync(analyzerPath, "const sourceCount = 3;\n", "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_INSPECTION_PATCH_20260712";
+  const prompt = `继续当前同一个任务，只修复工作目录 ${targetPath} 中的 codex-update-analyzer.mjs。它必须导出 summarizeSources，最后输出 ${marker}。`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+  };
+  const routing = {
+    apply_patch: { type: "custom", codexName: "apply_patch", parameters: { type: "string" } },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const inspectionPatch = [
+    "*** Begin Patch",
+    `*** Update File: ${analyzerPath}`,
+    "@@",
+    "+import fs from 'fs';",
+    `+throw new Error(\"FILE_CONTENT:\\n\" + fs.readFileSync('${analyzerPath.replaceAll("\\", "\\\\")}', 'utf8'));`,
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_destructive_inspection_patch",
+          type: "function",
+          function: { name: "apply_patch", arguments: JSON.stringify({ content: inspectionPatch }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  assert.equal(formatted.output.some(item => item.type === "custom_tool_call"), false);
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call, "destructive inspection must become a safe shell read");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.cmd, /Get-Content -LiteralPath/);
+  assert.match(args.cmd, /codex-update-analyzer\.mjs/);
+  assert.doesNotMatch(args.cmd, /FILE_CONTENT|throw new Error|WriteAllText/);
+  assert.equal(args.workdir, targetPath);
+  assert.equal(fs.readFileSync(analyzerPath, "utf8"), "const sourceCount = 3;\n");
+});
+
+test("autonomous local project prompt does not inject a fixed sample project", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_CUSTOM_20260711";
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `请自主完成长任务。工作目录：C:\\Temp\\session-inspector。创建 package.json, src/normalize.mjs, src/analyze.mjs, cli.mjs, fixtures/events.json, test/analyze.test.mjs, README.md, report.md, done.txt。done.txt 必须等于 ${marker}。`,
+      }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const systemText = String(chatBody.messages[0]?.content || "");
+  assert.match(systemText, /derive the first batch write from the user's exact named-file and behavior checklist/i);
+  assert.match(systemText, /Do not copy or substitute a canned sample project/i);
+  assert.doesNotMatch(systemText, /autonomous project tool example/i);
+  assert.doesNotMatch(systemText, /codex-update-analyzer/i);
+  assert.doesNotMatch(systemText, /eval\(Buffer\.from/i);
+});
+
+test("autonomous project follow-up never falls back to the canned report-site tool", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_FOLLOWUP_CANNED_20260711";
+  const originalPrompt = `请自主完成长任务。工作目录：C:\\Temp\\session-inspector。创建 package.json, src/normalize.mjs, src/analyze.mjs, src/report.mjs, cli.mjs, fixtures/events.json, test/analyze.test.mjs, README.md, report.md, done.txt。done.txt 必须等于 ${marker}。`;
+  const followup = "Claude 上一轮没有产出，已停止。现在继续同一个任务，完整契约就是上一条用户消息。下一项输出只能是 shell_command；运行 node --test 后再完成。";
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: followup }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  chatBody.messages.push(
+    { role: "user", content: originalPrompt },
+    { role: "assistant", content: "Working on the original project." },
+    { role: "user", content: followup },
+  );
+
+  const completion = deterministicArtifactToolCallCompletion(request, chatBody);
+  assert.equal(completion, null);
+});
+
+test("autonomous local project instruction is placed immediately before the latest user task", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_ORDER_20260711";
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      {
+        type: "message",
+        role: "developer",
+        content: [{ type: "input_text", text: "Read the codebase before making changes." }],
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "# AGENTS.md instructions\nFollow the project rules." }],
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: `请自主完成任务。工作目录：C:\\Temp\\autonomous-order。创建 package.json 和 done.txt，done.txt 必须等于 ${marker}。`,
+        }],
+      },
+    ],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const instructionIndex = chatBody.messages.findIndex(message => /Autonomous local project execution rule/.test(String(message.content || "")));
+  const latestUserIndex = chatBody.messages.map(message => message.role).lastIndexOf("user");
+
+  assert.ok(instructionIndex > 0);
+  assert.equal(instructionIndex, latestUserIndex - 1);
+  assert.equal(latestUserIndex, chatBody.messages.length - 1);
+  assert.match(chatBody.messages.at(-1).content, new RegExp(marker));
+});
+
+test("autonomous project blocks the first pre-write inspection and anchors the correction to the target", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_PREWRITE_20260711";
+  const target = path.join(os.tmpdir(), `anticodex-autonomous-prewrite-${Date.now()}`);
+  fs.rmSync(target, { recursive: true, force: true });
+  const prompt = `请自主完成任务。工作目录：${target}。创建 package.json、src/analyze.mjs、test/analyze.test.mjs 和 done.txt，done.txt 必须等于 ${marker}。`;
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_autonomous_first_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-ChildItem" }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true, chatMessages: [{ role: "user", content: prompt }] });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /completed the inspection phase after detecting repeated read-only calls/);
+  assert.match(args.command, /create or edit every missing requested deliverable/);
+  assert.doesNotMatch(args.command, /Get-ChildItem/);
+  assert.equal(args.workdir, path.dirname(target));
+});
+
+test("autonomous correction follow-up inherits the original target and permits targeted inspection", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_FOLLOWUP_20260711";
+  const target = path.join(os.tmpdir(), `anticodex-autonomous-followup-${Date.now()}`);
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.mkdirSync(path.join(target, "src"), { recursive: true });
+  const originalPrompt = `请自主完成任务。工作目录：${target}。创建 package.json、src/analyze.mjs 和 done.txt，done.txt 必须等于 ${marker}。`;
+  const correction = "纠偏：当前文件不符合本轮清单。请在同一个目标目录内按原始消息和原始清单继续实现，不能结束。";
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: correction }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const chatMessages = [
+    { role: "user", content: originalPrompt },
+    { role: "assistant", content: "Working on the project." },
+    { role: "user", content: correction },
+  ];
+  const readCommand = `Get-Content -LiteralPath "${path.join(target, "src", "analyze.mjs")}" -TotalCount 80`;
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_autonomous_followup_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: readCommand }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true, chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.command, readCommand);
+  assert.equal(args.workdir, target);
+  fs.rmSync(target, { recursive: true, force: true });
+});
+
+test("autonomous same-task single-file repair permits a targeted read before editing", (t) => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_SINGLE_REPAIR_20260712";
+  const target = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-autonomous-single-repair-"));
+  t.after(() => fs.rmSync(target, { recursive: true, force: true }));
+  const analyzer = path.join(target, "codex-update-analyzer.mjs");
+  fs.writeFileSync(analyzer, "const sourceCount = 3;\n", "utf8");
+  const repairPrompt = `继续当前同一个任务，只修复工作目录 ${target} 中的 codex-update-analyzer.mjs。它必须导出 summarizeSources，最后一行输出 ${marker}。`;
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: repairPrompt }] }],
+  };
+  const routing = {
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const readCommand = `Get-Content -LiteralPath "${analyzer}" -TotalCount 200 -Encoding UTF8`;
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_single_repair_read",
+          type: "function",
+          function: { name: "exec_command", arguments: JSON.stringify({ cmd: readCommand, workdir: target }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true, chatMessages: [{ role: "user", content: repairPrompt }] });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(call.call_id, "call_single_repair_read");
+  assert.equal(args.cmd, readCommand);
+  assert.equal(args.workdir, target);
+});
+
+test("autonomous project permits a targeted read after a real deliverable write", () => {
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_POSTWRITE_20260711";
+  const target = path.join(os.tmpdir(), `anticodex-autonomous-postwrite-${Date.now()}`);
+  fs.mkdirSync(target, { recursive: true });
+  const prompt = `请自主完成任务。工作目录：${target}。创建 package.json、src/analyze.mjs 和 done.txt，done.txt 必须等于 ${marker}。`;
+  const writtenFile = path.join(target, "package.json");
+  const readCommand = `Get-Content -LiteralPath "${writtenFile}" -TotalCount 20`;
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    },
+  };
+  const chatMessages = [
+    { role: "user", content: prompt },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{
+        id: "call_autonomous_write",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: `Set-Content -LiteralPath "${writtenFile}" -Value "{}"` }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "call_autonomous_write", content: "Exit code: 0" },
+  ];
+  const fmt = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        content: null,
+        tool_calls: [{
+          id: "call_autonomous_targeted_read",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: readCommand }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true, chatMessages });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  assert.equal(args.command, readCommand);
+  assert.equal(args.workdir, target);
+  fs.rmSync(target, { recursive: true, force: true });
 });
 
 test("autonomous reasoning tool calls get visible progress text before execution", () => {

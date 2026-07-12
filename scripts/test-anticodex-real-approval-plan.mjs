@@ -152,6 +152,8 @@ const releaseRealTrafficGates = {
 };
 
 const accountIsolation = {
+  optional: true,
+  productReleaseGating: false,
   completionState: String(account.completionState || goal.antigravityAccountIsolation?.completionState || ""),
   readinessBlockingReason: String(account.readinessBlockingReason || account.blockingReason || goal.antigravityAccountIsolation?.blockingReason || ""),
   targetUserExists: account.targetUserExists === true,
@@ -162,7 +164,7 @@ const accountIsolation = {
   accountSetupBlocked,
   requiresSeparateWindowsUser: true,
 };
-const preLoginChecklist = [
+const optionalAccountIsolationPrechecks = [
   {
     id: "windows-user-account-prepare",
     report: "latest-windows-user-account-prepare.json",
@@ -189,8 +191,7 @@ const preLoginChecklist = [
   },
 ];
 
-const orderedActions = [
-  makeAction("rerun-no-traffic-status", "report-only", "node scripts\\test-anticodex-real-approval-plan.mjs", { reason: "refresh_plan_only" }),
+const optionalAccountIsolationActions = [
   makeAction("create-or-verify-target-windows-user", "operator-setup", "Windows Settings > Accounts > Other users > create or verify .\\AntiCodexModel", {
     blockedByOperatorSetup: targetUserMissing,
     highImpact: true,
@@ -209,6 +210,10 @@ const orderedActions = [
     highImpact: true,
     reason: "separate_account_identity_proof_required",
   }),
+];
+
+const orderedActions = [
+  makeAction("rerun-no-traffic-status", "report-only", "node scripts\\test-anticodex-real-approval-plan.mjs", { reason: "refresh_plan_only" }),
 ];
 
 if (realTaskRefresh.needed) {
@@ -239,16 +244,23 @@ const payload = {
   realTaskRefresh,
   releaseRealTrafficGates,
   accountIsolation,
-  preLoginChecklist,
-  preLoginChecklistComplete: preLoginChecklist.every((item) => item.noTraffic === true && item.mustPassBeforeLogin === true && item.report && item.command),
-  preLoginChecklistCount: preLoginChecklist.length,
+  optionalAccountIsolationPrechecks,
+  optionalAccountIsolationActions,
+  optionalAccountIsolationPrechecksComplete: optionalAccountIsolationPrechecks.every((item) => item.noTraffic === true && item.mustPassBeforeLogin === true && item.report && item.command),
+  optionalAccountIsolationPrecheckCount: optionalAccountIsolationPrechecks.length,
+  optionalAccountIsolationActionCount: optionalAccountIsolationActions.length,
+  preLoginChecklist: optionalAccountIsolationPrechecks,
+  preLoginChecklistComplete: optionalAccountIsolationPrechecks.every((item) => item.noTraffic === true && item.mustPassBeforeLogin === true && item.report && item.command),
+  preLoginChecklistCount: optionalAccountIsolationPrechecks.length,
   orderedActions,
   blockedUntilExplicitUserApprovalCount: orderedActions.filter((item) => item.blockedUntilExplicitUserApproval).length,
   requiresRealTrafficCount: orderedActions.filter((item) => item.requiresRealTraffic).length,
   operatorSetupBlockedCount: orderedActions.filter((item) => item.blockedByOperatorSetup).length,
+  optionalAccountIsolationBlockedUntilExplicitUserApprovalCount: optionalAccountIsolationActions.filter((item) => item.blockedUntilExplicitUserApproval).length,
+  optionalAccountIsolationRequiresRealTrafficCount: optionalAccountIsolationActions.filter((item) => item.requiresRealTraffic).length,
   requiredReleaseRealTrafficActionCount: requiredReleaseRealTrafficActions.length,
   optionalReleaseRealTrafficActionCount: optionalReleaseRealTrafficActions.length,
-  nextNoTrafficAction: targetUserMissing ? "create_or_verify_target_windows_user_then_rerun_account_prepare" : "rerun_real_approval_plan",
+  nextNoTrafficAction: realTaskRefresh.needed ? "refresh_real_task_coverage_after_explicit_approval" : "rerun_real_approval_plan",
   elapsedMs: Date.now() - startedAt,
 };
 

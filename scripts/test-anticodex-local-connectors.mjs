@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
@@ -146,8 +146,19 @@ function writeProjectionCaches(home) {
 }
 
 function writeLocalCaches() {
-  const local = writeProjectionCaches(codexHome);
   const shared = writeProjectionCaches(sharedCodexHome);
+  mkdirSync(join(codexHome, "cache"), { recursive: true });
+  const syncScript = join(sourceRoot, "scripts", "sync-deepcodex-app-tools.mjs");
+  const result = spawnSync(process.execPath, [syncScript, codexHome, sharedCodexHome], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`sync-deepcodex-app-tools.mjs failed during test setup: ${result.stderr || result.stdout}`);
+  }
+  const local = {
+    connectorDir: join(codexHome, "cache", "codex_app_directory"),
+    toolsDir: join(codexHome, "cache", "codex_apps_tools"),
+  };
   writeFileSync(join(codexHome, "config.toml"), [
     "[local_authorized_connectors]",
     "\"allowlisted-demo\" = true",

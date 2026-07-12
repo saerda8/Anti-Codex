@@ -13,6 +13,10 @@ function tmpDir() {
   return mkdtempSync(resolve(tmpdir(), "anticodex-skills-test-"));
 }
 
+function validSkill(name, body) {
+  return `---\nname: ${name}\ndescription: Use when testing ${name}.\n---\n\n${body}\n`;
+}
+
 function directoryContentFingerprint(dirPath) {
   const files = [];
   function walk(currentPath, relPath = "") {
@@ -111,7 +115,8 @@ test("--skills-only imports dot-prefixed system skill directories", () => {
   const sharedHome = resolve(tmp, "shared");
 
   mkdirSync(resolve(sharedHome, "skills", ".system", "imagegen"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "skills", ".system", "imagegen", "SKILL.md"), "system image skill");
+  const systemSkill = validSkill("imagegen", "system image skill");
+  writeFileSync(resolve(sharedHome, "skills", ".system", "imagegen", "SKILL.md"), systemSkill);
 
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--skills-only"], {
@@ -120,12 +125,55 @@ test("--skills-only imports dot-prefixed system skill directories", () => {
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
 
     const systemSkillPath = resolve(codexHome, "skills", ".system", "imagegen", "SKILL.md");
-    assert.strictEqual(readFileSync(systemSkillPath, "utf8"), "system image skill");
+    assert.strictEqual(readFileSync(systemSkillPath, "utf8"), systemSkill);
     assert.ok(!lstatSync(resolve(codexHome, "skills", ".system")).isSymbolicLink());
 
     const summary = JSON.parse(result.stdout);
     assert.ok(summary.ok);
     assert.strictEqual(summary.summary[0].mode, "copied");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("--skills-only omits malformed SKILL.md files while preserving valid descendants", () => {
+  const tmp = tmpDir();
+  const codexHome = resolve(tmp, "codex");
+  const sharedHome = resolve(tmp, "shared");
+  const validSkill = "---\nname: valid-child\ndescription: Use when testing filtered skill snapshots.\n---\n\n# Valid child\n";
+
+  mkdirSync(resolve(codexHome, "skills", "local-invalid"), { recursive: true });
+  writeFileSync(resolve(codexHome, "skills", "local-invalid", "SKILL.md"), "# Local invalid\n");
+  writeFileSync(resolve(codexHome, "skills", "local-invalid", "notes.txt"), "keep local notes\n");
+  mkdirSync(resolve(sharedHome, "skills", "legacy-parent", "valid-child"), { recursive: true });
+  writeFileSync(resolve(sharedHome, "skills", "legacy-parent", "SKILL.md"), "# Missing frontmatter\n");
+  writeFileSync(resolve(sharedHome, "skills", "legacy-parent", "routing.md"), "keep routing\n");
+  writeFileSync(resolve(sharedHome, "skills", "legacy-parent", "valid-child", "SKILL.md"), `\uFEFF${validSkill}`);
+
+  try {
+    const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--skills-only"], {
+      encoding: "utf8",
+    });
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+
+    const skillsPath = resolve(codexHome, "skills");
+    assert.strictEqual(existsSync(resolve(skillsPath, "local-invalid", "SKILL.md")), false);
+    assert.strictEqual(readFileSync(resolve(skillsPath, "local-invalid", "notes.txt"), "utf8"), "keep local notes\n");
+    assert.strictEqual(existsSync(resolve(skillsPath, "legacy-parent", "SKILL.md")), false);
+    assert.strictEqual(readFileSync(resolve(skillsPath, "legacy-parent", "routing.md"), "utf8"), "keep routing\n");
+    assert.strictEqual(readFileSync(resolve(skillsPath, "legacy-parent", "valid-child", "SKILL.md"), "utf8"), validSkill);
+
+    const summary = JSON.parse(result.stdout);
+    assert.deepStrictEqual(summary.summary[0].skippedInvalidSkillFiles, [
+      join("legacy-parent", "SKILL.md"),
+      join("local-invalid", "SKILL.md"),
+    ]);
+    assert.deepStrictEqual(summary.summary[0].normalizedBomSkillFiles, [
+      join("legacy-parent", "valid-child", "SKILL.md"),
+    ]);
+    const manifest = JSON.parse(readFileSync(resolve(skillsPath, ".anticodex-source-manifest.json"), "utf8"));
+    assert.strictEqual(manifest[join("legacy-parent", "SKILL.md")], undefined);
+    assert.ok(manifest[join("legacy-parent", "valid-child", "SKILL.md")]);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -397,7 +445,7 @@ test("--startup-snapshots marker supports a second lightweight launch without re
   const sharedHome = resolve(tmp, "shared");
 
   mkdirSync(resolve(sharedHome, "skills", "demo"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), "demo");
+  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), validSkill("demo", "demo"));
   mkdirSync(resolve(sharedHome, "cache", "codex_app_directory"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "entry.json"), "{}");
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
@@ -928,7 +976,7 @@ test("startup snapshot marker contains source content fingerprint and mtime bind
   const sharedHome = resolve(tmp, "shared");
 
   mkdirSync(resolve(sharedHome, "skills", "demo"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), "demo content");
+  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), validSkill("demo", "demo content"));
   mkdirSync(resolve(sharedHome, "cache", "codex_app_directory"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "e.json"), "{}");
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
@@ -971,7 +1019,7 @@ test("--print-startup-source-fingerprint reports the same fingerprint without wr
   const sharedHome = resolve(tmp, "shared");
 
   mkdirSync(resolve(sharedHome, "skills", "demo"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), "demo content");
+  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), validSkill("demo", "demo content"));
   mkdirSync(resolve(sharedHome, "cache", "codex_app_directory"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "e.json"), "{}");
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
@@ -1015,7 +1063,7 @@ test("--local-snapshots marker uses the startup freshness fingerprint", () => {
   const sharedHome = resolve(tmp, "shared");
 
   mkdirSync(resolve(sharedHome, "skills", "demo"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), "demo content");
+  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), validSkill("demo", "demo content"));
   mkdirSync(resolve(sharedHome, "cache", "codex_app_directory"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "e.json"), "{}");
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
@@ -1068,7 +1116,7 @@ test("marker fingerprint changes when shared source content changes", () => {
   const sharedHome = resolve(tmp, "shared");
 
   mkdirSync(resolve(sharedHome, "skills", "demo"), { recursive: true });
-  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), "v1");
+  writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), validSkill("demo", "v1"));
   mkdirSync(resolve(sharedHome, "cache", "codex_app_directory"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "e.json"), "{}");
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
@@ -1088,7 +1136,7 @@ test("marker fingerprint changes when shared source content changes", () => {
     const fp1 = marker1.sourceFingerprint;
 
     // Change shared source content
-    writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), "v2");
+    writeFileSync(resolve(sharedHome, "skills", "demo", "SKILL.md"), validSkill("demo", "v2"));
 
     // Second run: different fingerprint due to content change
     const result2 = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--startup-snapshots"], {

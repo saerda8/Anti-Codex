@@ -131,6 +131,11 @@ function Test-AntiCodexAsarPatches {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
         }
     }
+    $codexTraySelectorCount = [regex]::Matches($text, 'codex-tray\.ico').Count
+    $alternateTraySelectorCount = [regex]::Matches($text, 'icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico').Count
+    if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
+        throw "Anti-Codex host app.asar still selects a ChatGPT-branded Windows tray icon."
+    }
 }
 
 function Test-AntiCodexHost {
@@ -146,10 +151,12 @@ function Test-AntiCodexHost {
         "app-route-gate",
         "profile-dropdown-settings",
         "browser-window-icon",
+        "windows-tray-icon",
         "local-model-availability",
         "local-plugin-catalog",
         "electron-local-plugin-catalog",
-        "webview-local-plugin-catalog"
+        "webview-local-plugin-catalog",
+        "retry-stream-error-visibility"
     )
     if (-not (Test-Path -LiteralPath $MarkerPath -PathType Leaf)) { throw "Anti-Codex host marker is missing: $MarkerPath" }
     $manifest = Get-Content -LiteralPath $MarkerPath -Raw | ConvertFrom-Json

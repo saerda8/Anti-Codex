@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 
 import { createAntigravitySessionLock } from "../antigravity-session-lock.mjs";
 
+test("Antigravity session lock defaults to a long-task continuation budget", () => {
+  const lock = createAntigravitySessionLock();
+  assert.equal(lock.snapshot().maxContinuations, 48);
+});
+
 test("Antigravity session lock lets the same tool continuation pass while blocking new sessions", async () => {
   const lock = createAntigravitySessionLock();
   const first = await lock.acquire();
@@ -242,6 +247,30 @@ test("Antigravity session lock releases runaway continuations at the configured 
   assert.equal(snap.maxContinuations, 2);
 });
 
+test("Antigravity session lock rejects an immediate retry of the limited tool call but accepts a fresh turn", async () => {
+  const lock = createAntigravitySessionLock({ maxContinuations: 1, continuationBlockTtlMs: 5000 });
+  const first = await lock.acquire();
+  first.continueWith("resp_tool_1", ["call_write_1"]);
+
+  const continuation = await lock.acquire({ continuationCallIds: ["call_write_1"] });
+  continuation.continueWith("resp_tool_2", ["call_write_2"]);
+
+  await assert.rejects(
+    lock.acquire({ continuationCallIds: ["call_write_2"] }),
+    (error) => error.name === "AntigravitySessionContinuationLimitError" && error.retryable === false,
+  );
+  assert.equal(lock.snapshot().active, false);
+
+  await assert.rejects(
+    lock.acquire({ continuationCallIds: ["call_write_2"] }),
+    (error) => error.name === "AntigravitySessionContinuationLimitError" && error.retryable === false,
+  );
+  assert.equal(lock.snapshot().continuationLimitRetries, 1);
+
+  const fresh = await lock.acquire();
+  fresh.release();
+});
+
 test("Antigravity session lock auto-releases an idle continued session after TTL expires (no queued requests)", async () => {
   const lock = createAntigravitySessionLock({ ttlMs: 1000 });
   const first = await lock.acquire();
@@ -280,4 +309,26 @@ test("Antigravity session lock reset releases active and rejects queued sessions
 
   const next = await lock.acquire();
   next.release();
+});
+
+test("Antigravity session lock reset rejects stale tool output retries but allows a fresh same-chat turn", async () => {
+  const lock = createAntigravitySessionLock({ continuationBlockTtlMs: 5000 });
+  const first = await lock.acquire();
+  first.continueWith("resp_before_reset", ["call_before_reset"]);
+
+  lock.reset({ reason: "test_reset" });
+
+  await assert.rejects(
+    lock.acquire({ continuationCallIds: ["call_before_reset"] }),
+    (error) => {
+      assert.equal(error.name, "AntigravitySessionResetError");
+      assert.equal(error.type, "anticodex_session_reset");
+      assert.equal(error.retryable, false);
+      return true;
+    },
+  );
+  assert.equal(lock.snapshot().resetContinuationRetries, 1);
+
+  const fresh = await lock.acquire();
+  fresh.release();
 });

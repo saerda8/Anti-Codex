@@ -14,6 +14,7 @@ import {
   isAntigravityUpstreamMode,
   makeAntigravityCompletion,
   resolveAntigravityTransportForPrompt,
+  shouldUseAntigravityNativeToolBridge,
   shouldRetryAntigravityFailure,
   callAntigravityUpstream,
   streamAntigravityUpstream,
@@ -85,6 +86,22 @@ test("isAntigravityNativeToolBridgeEnabled defaults to model-only and honors exp
   assert.equal(isAntigravityNativeToolBridgeEnabled({ env: { ANTICODEX_NATIVE_TOOL_BRIDGE: "1" } }), true);
   assert.equal(isAntigravityNativeToolBridgeEnabled({ env: { ANTICODEX_NATIVE_TOOL_BRIDGE: "0" } }), false);
   assert.equal(isAntigravityNativeToolBridgeEnabled({ nativeToolsEnabled: false }), false);
+});
+
+test("forced external tool choice opts into the native bridge without changing auto turns", () => {
+  const shellTool = {
+    type: "function",
+    function: { name: "shell_command", parameters: { type: "object", properties: {} } },
+  };
+  assert.equal(shouldUseAntigravityNativeToolBridge({ tools: [shellTool], tool_choice: "auto" }, { env: {} }), false);
+  assert.equal(shouldUseAntigravityNativeToolBridge({
+    tools: [shellTool],
+    tool_choice: { type: "function", function: { name: "shell_command" } },
+  }, { env: {} }), true);
+  assert.equal(shouldUseAntigravityNativeToolBridge({
+    tools: [{ type: "function", function: { name: "web_search", parameters: { type: "object" } } }],
+    tool_choice: { type: "function", function: { name: "web_search" } },
+  }, { env: {} }), false);
 });
 
 test("antigravityModelFor preserves concrete Antigravity model ids", () => {
@@ -163,6 +180,945 @@ test("chatMessagesToPrompt includes a tool protocol when Codex tools are availab
   assert.match(prompt, /<tool_calls>/);
   assert.match(prompt, /<invoke name="exec_command">/);
   assert.match(prompt, /<parameter name="command">/);
+});
+
+test("chatMessagesToPrompt places a forced Codex tool next to the latest user turn", () => {
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: "Fix the project now." },
+  ], {
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        description: "Run a shell command",
+        parameters: {
+          type: "object",
+          properties: { command: { type: "string" } },
+          required: ["command"],
+        },
+      },
+    }],
+    toolChoice: { type: "function", function: { name: "shell_command" } },
+  });
+
+  assert.match(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.ok(prompt.lastIndexOf("[REQUIRED_CODEX_TOOL]") > prompt.lastIndexOf("[LATEST_USER_MESSAGE]"));
+});
+
+test("a forced Codex tool prompt omits unrelated tool definitions", () => {
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: "The first action must be shell_command. Do not inspect first." },
+  ], {
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "shell_command",
+          description: "Run a shell command",
+          parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+        },
+      },
+      {
+        type: "custom",
+        name: "apply_patch",
+        description: "UNRELATED_APPLY_PATCH_DEFINITION",
+        format: { type: "text" },
+      },
+    ],
+    toolChoice: { type: "function", function: { name: "shell_command" } },
+  });
+
+  assert.match(prompt, /shell_command/);
+  assert.doesNotMatch(prompt, /UNRELATED_APPLY_PATCH_DEFINITION/);
+  assert.doesNotMatch(prompt, /<invoke name="apply_patch">/);
+});
+
+test("a Chinese first-step shell contract forces and scopes the prompt tool", () => {
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: "第一步必须直接调用一次 shell_command，在项目目录执行恢复，不要先读文件或列目录。" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "shell_command", description: "Run a shell command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } },
+      { type: "custom", name: "apply_patch", description: "UNRELATED_CHINESE_FIRST_STEP_TOOL", format: { type: "text" } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /UNRELATED_CHINESE_FIRST_STEP_TOOL/);
+});
+
+test("native tool prompt keeps the forced tool requirement without XML fallback", () => {
+  const prompt = chatMessagesToPrompt([{ role: "user", content: "Fix it." }], {
+    nativeTools: true,
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+    toolChoice: { type: "function", function: { name: "shell_command" } },
+  });
+
+  assert.doesNotMatch(prompt, /\[CODEX_TOOLS\]/);
+  assert.match(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.match(prompt, /native tool interface/i);
+});
+
+test("a self-contained forced tool turn excludes stale implementation attempts", () => {
+  const shellTool = {
+    type: "function",
+    function: { name: "shell_command", parameters: { type: "object", properties: {} } },
+  };
+  const latest = [
+    "Continue the same project in C:\\work\\session-inspector.",
+    "Your next output must call shell_command.",
+    "Only modify src/normalize.mjs. Do not read or modify any other file.",
+    "Reject invalid timestamps, preserve every other field, return an ISO timestamp, and run six concrete assertions after writing the file.",
+    "This message is the complete execution contract for the current turn; ignore superseded implementation attempts.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "developer", content: "KEEP_DEVELOPER_POLICY" },
+    { role: "user", content: "OLD_USER_TASK_SHOULD_BE_REMOVED" },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "old_call",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "OLD_TOOL_ARGUMENT_SHOULD_BE_REMOVED" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "old_call", content: "OLD_TOOL_OUTPUT_SHOULD_BE_REMOVED" },
+    { role: "assistant", content: "OLD_ASSISTANT_PLAN_SHOULD_BE_REMOVED" },
+    { role: "user", content: latest },
+  ], {
+    nativeTools: true,
+    tools: [shellTool],
+    toolChoice: { type: "function", function: { name: "shell_command" } },
+  });
+
+  assert.match(prompt, /KEEP_SYSTEM_POLICY/);
+  assert.match(prompt, /KEEP_DEVELOPER_POLICY/);
+  assert.match(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.match(prompt, /Only modify src\/normalize\.mjs/);
+  assert.doesNotMatch(prompt, /OLD_USER_TASK_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /OLD_TOOL_ARGUMENT_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /OLD_TOOL_OUTPUT_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /OLD_ASSISTANT_PLAN_SHOULD_BE_REMOVED/);
+});
+
+test("a textual forced shell turn scopes stale history even when tool choice is auto", () => {
+  const shellTool = {
+    type: "function",
+    function: {
+      name: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" }, workdir: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  };
+  const latest = [
+    "Continue the project in C:\\work\\session-inspector.",
+    "Your first output must be shell_command and must not contain prose.",
+    "Do not read, list, inspect, or check files first.",
+    "Only modify src/normalize.mjs and test/analyze.test.mjs, then run the exact test command.",
+    "This message is the complete execution contract for the current turn and supersedes old implementation attempts.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "user", content: "STALE_USER_IMPLEMENTATION" },
+    { role: "assistant", content: "STALE_ASSISTANT_PLAN" },
+    { role: "user", content: latest },
+  ], {
+    tools: [shellTool],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.match(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.match(prompt, /shell_command request must include a non-empty command parameter/i);
+  assert.doesNotMatch(prompt, /STALE_USER_IMPLEMENTATION/);
+  assert.doesNotMatch(prompt, /STALE_ASSISTANT_PLAN/);
+});
+
+test("a self-contained execution contract scopes stale history without forcing the first tool", () => {
+  const shellTool = {
+    type: "function",
+    function: {
+      name: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  };
+  const latest = [
+    "Complete the CLI in C:\\work\\session-inspector\\cli.mjs.",
+    "You may read cli.mjs and the three existing src modules before editing.",
+    "Only modify cli.mjs, preserve every other file, then run node --check cli.mjs.",
+    "The CLI must accept inputPath and outputPath, write the generated report, print one JSON result line, and use UTF-8 without BOM.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "user", content: "STALE_USER_TASK_SHOULD_BE_REMOVED" },
+    { role: "assistant", content: "STALE_ASSISTANT_PLAN_SHOULD_BE_REMOVED" },
+    { role: "user", content: latest },
+  ], {
+    tools: [shellTool],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.doesNotMatch(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.match(prompt, /Complete the CLI/);
+  assert.doesNotMatch(prompt, /STALE_USER_TASK_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /STALE_ASSISTANT_PLAN_SHOULD_BE_REMOVED/);
+});
+
+test("a scoped execution contract drops an oversized model-switch policy", () => {
+  const latest = [
+    "Continue the project in C:\\work\\session-inspector\\cli.mjs.",
+    "Only modify cli.mjs and do not create any other file.",
+    "Read cli.mjs plus src\\normalize.mjs, src\\analyze.mjs, and src\\report.mjs once.",
+    "Replace the complete CLI, use the actual named exports, and run node --check cli.mjs plus npm test.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "developer", content: `<model_switch>OVERSIZED_MODEL_SWITCH ${"x".repeat(70_000)}</model_switch>` },
+    { role: "user", content: "STALE_TASK" },
+    { role: "assistant", content: "STALE_ACTION" },
+    { role: "user", content: latest },
+  ], {
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+    toolChoice: "auto",
+  });
+
+  assert.ok(prompt.length <= 20_000, `scoped prompt too large: ${prompt.length}`);
+  assert.match(prompt, /KEEP_SYSTEM_POLICY/);
+  assert.match(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.match(prompt, /Replace the complete CLI/);
+  assert.doesNotMatch(prompt, /OVERSIZED_MODEL_SWITCH|STALE_TASK|STALE_ACTION/);
+});
+
+test("a scoped execution contract remains compact after current-turn tool output", () => {
+  const latest = [
+    "Continue the project in C:\\work\\session-inspector\\cli.mjs.",
+    "Only modify cli.mjs and test\\analyze.test.mjs; do not create any other file.",
+    "Accept a top-level array or an object whose events property is an array, reject every other shape, then run npm test.",
+    "Preserve UTF-8 BOM input compatibility and generate output without a BOM.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "developer", content: `<model_switch>OVERSIZED_MODEL_SWITCH ${"x".repeat(70_000)}</model_switch>` },
+    { role: "user", content: "STALE_TASK" },
+    { role: "assistant", content: "STALE_ACTION" },
+    { role: "user", content: latest },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "read_current_files",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content cli.mjs" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "read_current_files", content: "KNOWN_CURRENT_CLI_CONTENT" },
+  ], {
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+    toolChoice: "auto",
+  });
+
+  assert.ok(prompt.length <= 20_000, `scoped continuation prompt too large: ${prompt.length}`);
+  assert.doesNotMatch(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.match(prompt, /Accept a top-level array/);
+  assert.match(prompt, /KNOWN_CURRENT_CLI_CONTENT/);
+  assert.doesNotMatch(prompt, /OVERSIZED_MODEL_SWITCH|STALE_TASK|STALE_ACTION/);
+});
+
+test("a read-only verification follow-up scopes stale implementation history", () => {
+  const tools = [{
+    type: "function",
+    function: {
+      name: "shell_command",
+      description: "Run a shell command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  }, {
+    type: "function",
+    function: {
+      name: "apply_patch",
+      description: "Edit files",
+      parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
+    },
+  }];
+  const latest = [
+    "Continue the same project. Do not modify any file.",
+    "Run npm test exactly once, then verify recursively that exactly 10 files exist and none has a UTF-8 BOM.",
+    "Do not call apply_patch and do not inspect any other directory.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "developer", content: `HUGE_STALE_POLICY ${"x".repeat(70_000)}` },
+    { role: "user", content: "OLD_IMPLEMENTATION_TASK" },
+    { role: "assistant", content: "STALE_WRITE_BODY_SHOULD_BE_REMOVED" },
+    { role: "user", content: latest },
+  ], { tools, toolChoice: "auto" });
+
+  assert.ok(prompt.length <= 20_000, `read-only prompt too large: ${prompt.length}`);
+  assert.match(prompt, /\[ANTI_CODEX_READ_ONLY_VERIFICATION\]/);
+  assert.match(prompt, /Do not modify any file/);
+  assert.match(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.doesNotMatch(prompt, /HUGE_STALE_POLICY/);
+  assert.doesNotMatch(prompt, /OLD_IMPLEMENTATION_TASK|STALE_WRITE_BODY_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /^- apply_patch\b/m);
+});
+
+test("a required patch followed by read-only verification remains a write task", () => {
+  const tools = [{
+    type: "function",
+    function: {
+      name: "apply_patch",
+      description: "Apply a workspace patch",
+      parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
+    },
+  }, {
+    type: "function",
+    function: {
+      name: "shell_command",
+      description: "Run a shell command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  }];
+  const latest = [
+    "Your first action must be exactly one apply_patch call using relative README.md.",
+    "Replace exactly: # Session Inspector V4 CLI Tool with: # Session Inspector V4 CLI Toolkit.",
+    "After that patch succeeds, run npm test, then use one read-only shell_command to verify README.md and done.txt.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+  ], {
+    tools,
+    toolChoice: { type: "function", function: { name: "apply_patch" } },
+  });
+
+  assert.match(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.match(prompt, /must emit exactly one apply_patch tool request/i);
+  assert.doesNotMatch(prompt, /\[ANTI_CODEX_READ_ONLY_VERIFICATION\]/);
+  assert.match(prompt, /^- apply_patch\b/m);
+});
+
+test("a Chinese read-only status request scopes stale implementation history", () => {
+  const tools = [{
+    type: "function",
+    function: {
+      name: "shell_command",
+      description: "Run a shell command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  }, {
+    type: "function",
+    function: {
+      name: "apply_patch",
+      description: "Edit files",
+      parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
+    },
+  }];
+  const latest = "只读取当前项目状态，不修改任何文件。请确认 V2 的测试状态，并仅回复 RECOVERY_HOOK_OK。";
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "developer", content: `HUGE_STALE_POLICY ${"x".repeat(70_000)}` },
+    { role: "user", content: "OLD_IMPLEMENTATION_TASK" },
+    { role: "assistant", content: "STALE_WRITE_BODY_SHOULD_BE_REMOVED" },
+    { role: "user", content: latest },
+  ], { tools, toolChoice: "auto" });
+
+  assert.ok(prompt.length <= 20_000, `Chinese read-only prompt too large: ${prompt.length}`);
+  assert.match(prompt, /\[ANTI_CODEX_READ_ONLY_VERIFICATION\]/);
+  assert.match(prompt, /只读取当前项目状态/);
+  assert.doesNotMatch(prompt, /HUGE_STALE_POLICY|OLD_IMPLEMENTATION_TASK|STALE_WRITE_BODY_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /^- apply_patch\b/m);
+});
+
+test("an inspection-loop nudge becomes a trusted apply_patch requirement", () => {
+  const shellTool = {
+    type: "function",
+    function: {
+      name: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  };
+  const patchTool = {
+    type: "function",
+    function: {
+      name: "apply_patch",
+      parameters: {
+        type: "object",
+        properties: { content: { type: "string" } },
+        required: ["content"],
+      },
+    },
+  };
+  const latest = [
+    "Continue the CLI in C:\\work\\session-inspector\\cli.mjs.",
+    "Only modify cli.mjs and do not list directories or inspect git.",
+    "Use the file contents already read, implement inputPath and outputPath, then run node --check cli.mjs.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls. Do not issue another read or listing command.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "KEEP_SYSTEM_POLICY" },
+    { role: "user", content: latest },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "read_cli",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content cli.mjs" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "read_cli", content: "KNOWN_CLI_CONTENT" },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "inspection_nudge",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "inspection_nudge", content: "inspection reminder" },
+  ], {
+    tools: [shellTool, patchTool],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_IMPLEMENTATION_RECOVERY\]/);
+  assert.match(prompt, /must emit exactly one apply_patch tool request/i);
+  assert.match(prompt, /do not issue another read, list, search, or status command/i);
+  assert.match(prompt, /KNOWN_CLI_CONTENT/);
+});
+
+test("a generated-artifact apply_patch redirect forces the next write through shell", () => {
+  const tools = [{
+    type: "function",
+    function: {
+      name: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }, {
+    type: "function",
+    function: {
+      name: "apply_patch",
+      parameters: {
+        type: "object",
+        properties: { content: { type: "string" } },
+        required: ["content"],
+      },
+    },
+  }];
+  const guidance = "Anti-Codex blocked apply_patch for generated artifacts because patch writes force trailing newlines. Continue the same task with shell_command.";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: "Create exactly seven files in C:\\work\\artifact and run node --test after writing them." },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "patch_redirect",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: `Write-Output '${guidance}'` }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "patch_redirect", content: `Exit code: 0\n${guidance}` },
+  ], { tools, toolChoice: "auto" });
+
+  assert.match(prompt, /\[ANTI_CODEX_PATCH_REDIRECT_RECOVERY\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /must emit exactly one apply_patch tool request/i);
+  assert.doesNotMatch(prompt, /blocked apply_patch for generated artifacts/i);
+});
+
+test("a failed patch cannot be hidden by later passing tests", () => {
+  const tools = [{
+    type: "function",
+    function: { name: "apply_patch", parameters: { type: "object", properties: { content: { type: "string" } } } },
+  }, {
+    type: "function",
+    function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" } } } },
+  }];
+  const latest = [
+    "Continue C:\\work\\session-inspector and complete V3 now.",
+    "Only modify cli.mjs and test\\analyze.test.mjs; do not create any other file.",
+    "Accept a top-level array or an object whose events field is an array, reject every other input, preserve BOM compatibility, and run npm test.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    {
+      role: "assistant",
+      tool_calls: [{ id: "bad_patch", type: "function", function: { name: "apply_patch", arguments: "*** Begin Patch" } }],
+    },
+    { role: "tool", tool_call_id: "bad_patch", content: "apply_patch verification failed: invalid patch" },
+    {
+      role: "assistant",
+      tool_calls: [{ id: "stale_tests", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "npm test" }) } }],
+    },
+    { role: "tool", tool_call_id: "stale_tests", content: "Exit code: 0\ntests 19\npass 19\nfail 0" },
+  ], { tools, toolChoice: "auto" });
+
+  assert.match(prompt, /\[ANTI_CODEX_PATCH_FAILURE_RECOVERY\]/);
+  assert.match(prompt, /must emit exactly one apply_patch tool request/i);
+  assert.doesNotMatch(prompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+});
+
+test("a recovered patch requires a final scope check after an earlier write failure", () => {
+  const tools = [{
+    type: "function",
+    function: { name: "apply_patch", parameters: { type: "object", properties: { content: { type: "string" } } } },
+  }, {
+    type: "function",
+    function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" } } } },
+  }];
+  const latest = [
+    "Continue C:\\work\\session-inspector and complete V3 now.",
+    "Only modify cli.mjs and test\\analyze.test.mjs; do not create any other file.",
+    "Accept a top-level array or an object whose events field is an array, reject every other input, preserve BOM compatibility, and run npm test.",
+    "Clean every temporary verification artifact before completion.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const messages = [
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "bad_patch", type: "function", function: { name: "apply_patch", arguments: "*** Begin Patch" } }] },
+    { role: "tool", tool_call_id: "bad_patch", content: "apply_patch verification failed: invalid patch" },
+    { role: "assistant", tool_calls: [{ id: "good_patch", type: "function", function: { name: "apply_patch", arguments: "*** Begin Patch\n*** Update File: cli.mjs\n@@\n-old\n+new\n*** End Patch" } }] },
+    { role: "tool", tool_call_id: "good_patch", content: "Success. Updated cli.mjs" },
+    { role: "assistant", tool_calls: [{ id: "passing_tests", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "npm test" }) } }] },
+    { role: "tool", tool_call_id: "passing_tests", content: "Exit code: 0\ntests 21\npass 21\nfail 0" },
+  ];
+  const prompt = chatMessagesToPrompt(messages, { tools, toolChoice: "auto" });
+
+  assert.match(prompt, /\[ANTI_CODEX_WRITE_SCOPE_VERIFICATION\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+
+  messages.push(
+    { role: "assistant", tool_calls: [{ id: "scope_check", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-ChildItem -Recurse -File" }) } }] },
+    { role: "tool", tool_call_id: "scope_check", content: "Exit code: 0\ncli.mjs\ntest\\analyze.test.mjs" },
+  );
+  const completedPrompt = chatMessagesToPrompt(messages, { tools, toolChoice: "auto" });
+  assert.match(completedPrompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+  assert.doesNotMatch(completedPrompt, /\[ANTI_CODEX_WRITE_SCOPE_VERIFICATION\]/);
+});
+
+test("an inspection-loop recovery drops oversized stale policies and stays compact", () => {
+  const tools = [{
+    type: "function",
+    function: {
+      name: "apply_patch",
+      description: "Edit files using a patch",
+      parameters: {
+        type: "object",
+        properties: { content: { type: "string" } },
+        required: ["content"],
+      },
+    },
+  }, {
+    type: "function",
+    function: {
+      name: "shell_command",
+      description: "Run a shell command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  }];
+  const latest = [
+    "Continue C:\\work\\session-inspector\\cli.mjs and implement the complete CLI now.",
+    "Only modify cli.mjs. Do not list directories or inspect git.",
+    "Use the known file contents and run node --check cli.mjs after writing.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "developer", content: `HUGE_STALE_POLICY ${"x".repeat(70_000)}` },
+    { role: "developer", content: `<model_switch>STALE_MODEL_SWITCH ${"y".repeat(30_000)}</model_switch>` },
+    { role: "user", content: latest },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "read_cli",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content cli.mjs" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "read_cli", content: "KNOWN_COMPACT_CLI_CONTENT" },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "inspection_nudge",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "inspection_nudge", content: "inspection reminder" },
+  ], { tools, toolChoice: "auto" });
+
+  assert.ok(prompt.length <= 20_000, `recovery prompt too large: ${prompt.length}`);
+  assert.doesNotMatch(prompt, /HUGE_STALE_POLICY|STALE_MODEL_SWITCH/);
+  assert.match(prompt, /KNOWN_COMPACT_CLI_CONTENT/);
+  assert.match(prompt, /must emit exactly one apply_patch tool request/i);
+});
+
+test("a completed recovery patch releases the forced apply_patch requirement", () => {
+  const latest = [
+    "Continue C:\\work\\session-inspector\\cli.mjs and finish the requested CLI.",
+    "Only modify cli.mjs, then run node --check cli.mjs.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "inspection_nudge",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "inspection_nudge", content: "inspection reminder" },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "recovery_patch",
+        type: "function",
+        function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "recovery_patch", content: "Done!" },
+  ], {
+    tools: [{ type: "function", function: { name: "apply_patch", parameters: { type: "object" } } }],
+    toolChoice: "auto",
+  });
+
+  assert.doesNotMatch(prompt, /\[ANTI_CODEX_IMPLEMENTATION_RECOVERY\]/);
+  assert.doesNotMatch(prompt, /must emit exactly one apply_patch tool request/i);
+  assert.match(prompt, /recovery_patch/);
+  assert.match(prompt, /Done!/);
+});
+
+test("a completed recovery patch immediately requires shell verification when available", () => {
+  const latest = [
+    "Continue C:\\work\\session-inspector\\cli.mjs and finish the requested CLI.",
+    "Only modify cli.mjs, then run node --check cli.mjs and npm test.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "verification_nudge", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "verification_nudge", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "completed_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "completed_patch", content: "Done!" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_RECOVERY\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /must emit exactly one apply_patch tool request/i);
+});
+
+test("a post-write inspection nudge requires verification instead of another patch", () => {
+  const latest = [
+    "Continue C:\\work\\session-inspector\\cli.mjs and finish the requested CLI.",
+    "Only modify cli.mjs, then run node --check cli.mjs.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "nudge_before_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "nudge_before_write", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "successful_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "successful_patch", content: "Done!" },
+    { role: "assistant", tool_calls: [{ id: "read_after_write_1", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "Get-Content cli.mjs" }) } }] },
+    { role: "tool", tool_call_id: "read_after_write_1", content: "UPDATED_CLI" },
+    { role: "assistant", tool_calls: [{ id: "nudge_after_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "nudge_after_write", content: "inspection reminder" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_RECOVERY\]/);
+  assert.match(prompt, /authorized edit already succeeded/i);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /must emit exactly one apply_patch tool request/i);
+});
+
+test("a successful WriteAllText edit moves directly to requested verification", () => {
+  const latest = [
+    "Only modify test/analyze.test.mjs.",
+    "The first shell_command must replace the failing assertion, then run node --check test/analyze.test.mjs and npm test.",
+  ].join(" ");
+  const writeCommand = [
+    "$path = 'test/analyze.test.mjs'",
+    "$content = [System.IO.File]::ReadAllText($path)",
+    "$updated = $content.Replace('old assertion', 'new assertion')",
+    "[System.IO.File]::WriteAllText($path, $updated, [System.Text.UTF8Encoding]::new($false))",
+  ].join("; ");
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "successful_shell_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand }) } }] },
+    { role: "tool", tool_call_id: "successful_shell_write", content: "Exit code: 0\nWall time: 0.7 seconds\nOutput:\n" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_RECOVERY\]/);
+  assert.match(prompt, /authorized edit already succeeded/i);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /must emit exactly one apply_patch tool request/i);
+});
+
+test("a successful post-write verification transitions to a compact completion turn", () => {
+  const latest = [
+    "Continue C:\\work\\session-inspector\\cli.mjs and finish the requested CLI.",
+    "Only modify cli.mjs, then run node --check cli.mjs.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const messages = [
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "nudge_before_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "nudge_before_write", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "successful_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "successful_patch", content: "Done!" },
+    { role: "assistant", tool_calls: [{ id: "nudge_after_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "nudge_after_write", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "verification", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "node --check cli.mjs" }) } }] },
+    { role: "tool", tool_call_id: "verification", content: "Exit code: 0\n✔ normalizeEvent throws TypeError for null\ntests 19\npass 19\nfail 0" },
+  ];
+  const prompt = chatMessagesToPrompt(messages, {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+  assert.match(prompt, /do not call another tool/i);
+  assert.doesNotMatch(prompt, /must emit exactly one (?:apply_patch|shell_command) tool request/i);
+  assert.match(prompt, /node --check cli\.mjs/);
+  assert.match(prompt, /Exit code: 0/);
+});
+
+test("an expected failing CLI branch does not invalidate successful verification", () => {
+  const latest = [
+    "Only modify test/analyze.test.mjs, then run npm test.",
+    "Also verify node cli.mjs --version extra exits nonzero and stderr includes Failed to read input file.",
+  ].join(" ");
+  const writeCommand = "$path = 'test/analyze.test.mjs'; [System.IO.File]::WriteAllText($path, 'fixed', [System.Text.UTF8Encoding]::new($false))";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "write_expected_failure_test", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand }) } }] },
+    { role: "tool", tool_call_id: "write_expected_failure_test", content: "Exit code: 0\nOutput:\n" },
+    { role: "assistant", tool_calls: [{ id: "verify_expected_failure_test", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "npm test; node cli.mjs --version extra" }) } }] },
+    { role: "tool", tool_call_id: "verify_expected_failure_test", content: "Exit code: 0\nOutput:\ntests 35\npass 35\nfail 0\nFailed to read input file: ENOENT --version" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+  assert.match(prompt, /do not call another tool/i);
+  assert.doesNotMatch(prompt, /must emit exactly one (?:apply_patch|shell_command) tool request/i);
+});
+
+test("a verification command tooling error retries shell verification instead of patching code", () => {
+  const latest = [
+    "Only modify test/analyze.test.mjs, then run npm test and verify the CLI edge cases.",
+    "The --version extra branch must print Failed to read input file on stderr.",
+  ].join(" ");
+  const writeCommand = "$path = 'test/analyze.test.mjs'; [System.IO.File]::WriteAllText($path, 'fixed', [System.Text.UTF8Encoding]::new($false))";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "write_before_tooling_failure", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: writeCommand }) } }] },
+    { role: "tool", tool_call_id: "write_before_tooling_failure", content: "Exit code: 0\nOutput:\n" },
+    { role: "assistant", tool_calls: [{ id: "verification_tooling_failure", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "npm test; Join-String -InputObject $bytes" }) } }] },
+    { role: "tool", tool_call_id: "verification_tooling_failure", content: "Exit code: 0\nOutput:\ntests 35\npass 35\nfail 0\nFailed to read input file: ENOENT --version\nJoin-String : The term 'Join-String' is not recognized as the name of a cmdlet\nFullyQualifiedErrorId : CommandNotFoundException" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_RECOVERY\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+  assert.doesNotMatch(prompt, /must emit exactly one apply_patch tool request/i);
+});
+
+test("a passing test tail cannot complete recovery after an earlier syntax failure", () => {
+  const latest = [
+    "Continue C:\\work\\session-inspector\\cli.mjs and finish the requested CLI.",
+    "Only modify cli.mjs, then run node --check cli.mjs and npm test.",
+    "This self-contained execution contract supersedes every older implementation attempt and is authoritative for the current turn.",
+  ].join(" ");
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "nudge_before_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "nudge_before_write", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "successful_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "successful_patch", content: "Done!" },
+    { role: "assistant", tool_calls: [{ id: "nudge_after_write", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "nudge_after_write", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "mixed_verification", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "node --check cli.mjs; npm test" }) } }] },
+    { role: "tool", tool_call_id: "mixed_verification", content: "Exit code: 0\nSyntaxError: Identifier fs has already been declared\ntests 18\npass 18\nfail 0" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_REPAIR_RECOVERY\]/);
+  assert.doesNotMatch(prompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+  assert.match(prompt, /must emit exactly one apply_patch tool request/i);
+});
+
+test("a corrective patch after failed verification returns recovery to verification", () => {
+  const latest = "Repair C:\\work\\session-inspector\\cli.mjs, only modify cli.mjs, then run node --check cli.mjs and npm test.";
+  const nudge = "Write-Output 'Anti-Codex completed the inspection phase after detecting repeated read-only calls.'; exit 0";
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: latest },
+    { role: "assistant", tool_calls: [{ id: "initial_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "initial_patch", content: "Done!" },
+    { role: "assistant", tool_calls: [{ id: "repair_nudge", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: nudge }) } }] },
+    { role: "tool", tool_call_id: "repair_nudge", content: "inspection reminder" },
+    { role: "assistant", tool_calls: [{ id: "failed_verification", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "node --check cli.mjs; npm test" }) } }] },
+    { role: "tool", tool_call_id: "failed_verification", content: "Exit code: 0\nSyntaxError: invalid assignment\npass 18\nfail 0" },
+    { role: "assistant", tool_calls: [{ id: "corrective_patch", type: "function", function: { name: "apply_patch", arguments: JSON.stringify({ content: "*** Begin Patch\n*** End Patch" }) } }] },
+    { role: "tool", tool_call_id: "corrective_patch", content: "Done!" },
+  ], {
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+    toolChoice: "auto",
+  });
+
+  assert.match(prompt, /\[ANTI_CODEX_VERIFICATION_RECOVERY\]/);
+  assert.doesNotMatch(prompt, /\[ANTI_CODEX_REPAIR_RECOVERY\]/);
+  assert.match(prompt, /must emit exactly one shell_command tool request/i);
+});
+
+test("a textual forced shell requirement is first-step only and keeps its tool result", () => {
+  const shellTool = {
+    type: "function",
+    function: {
+      name: "shell_command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+    },
+  };
+  const latest = [
+    "Continue in C:\\work\\session-inspector.",
+    "Your first output must be shell_command and contain no prose.",
+    "Do not read files first. Only modify src/normalize.mjs and run the exact test command.",
+    "This complete execution contract supersedes every older implementation attempt.",
+    "The replacement must preserve the exported API, use UTF-8 without BOM, and leave every other project file unchanged.",
+  ].join(" ");
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "SYSTEM_POLICY" },
+    { role: "system", content: "SYSTEM_POLICY" },
+    { role: "user", content: "STALE_USER_TASK_SHOULD_BE_REMOVED" },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "stale_call",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "STALE_TOOL_COMMAND_SHOULD_BE_REMOVED" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "stale_call", content: "STALE_TOOL_RESULT_SHOULD_BE_REMOVED" },
+    { role: "user", content: latest },
+    {
+      role: "assistant",
+      tool_calls: [{
+        id: "write_first_call",
+        type: "function",
+        function: { name: "shell_command", arguments: JSON.stringify({ command: "WRITE_FIRST_NUDGE_COMMAND" }) },
+      }],
+    },
+    { role: "tool", tool_call_id: "write_first_call", content: "WRITE_FIRST_NUDGE_RESULT" },
+  ], {
+    tools: [shellTool],
+    toolChoice: "auto",
+  });
+
+  assert.doesNotMatch(prompt, /\[SCOPED_TOOL_TURN\]/);
+  assert.doesNotMatch(prompt, /\[REQUIRED_CODEX_TOOL\]/);
+  assert.equal(prompt.match(/SYSTEM_POLICY/g)?.length, 1);
+  assert.doesNotMatch(prompt, /STALE_USER_TASK_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /STALE_TOOL_COMMAND_SHOULD_BE_REMOVED/);
+  assert.doesNotMatch(prompt, /STALE_TOOL_RESULT_SHOULD_BE_REMOVED/);
+  assert.match(prompt, /WRITE_FIRST_NUDGE_COMMAND/);
+  assert.match(prompt, /WRITE_FIRST_NUDGE_RESULT/);
+});
+
+test("a brief forced continuation keeps the immediately relevant history", () => {
+  const shellTool = {
+    type: "function",
+    function: { name: "shell_command", parameters: { type: "object", properties: {} } },
+  };
+  const prompt = chatMessagesToPrompt([
+    { role: "system", content: "SYSTEM_POLICY" },
+    { role: "user", content: "PREVIOUS_TASK_CONTEXT: update src/analyze.mjs and run its tests." },
+    { role: "assistant", content: "I inspected the existing implementation." },
+    { role: "user", content: "继续，下一项输出必须是 shell_command。" },
+  ], {
+    nativeTools: true,
+    tools: [shellTool],
+    toolChoice: { type: "function", function: { name: "shell_command" } },
+  });
+
+  assert.match(prompt, /PREVIOUS_TASK_CONTEXT/);
+  assert.match(prompt, /继续，下一项输出必须是 shell_command/);
+  assert.doesNotMatch(prompt, /\[SCOPED_TOOL_TURN\]/);
 });
 
 test("chatMessagesToPrompt preserves completed tool-call identity and arguments", () => {
@@ -247,6 +1203,81 @@ test("chatMessagesToPrompt preserves custom and MCP tool results for continuatio
   assert.match(prompt, /name: mcp__node_repl__js/);
   assert.match(prompt, /call_id: call_mcp/);
   assert.match(prompt, /"output":"2"/);
+});
+
+// ─── function_call_output continuation contract (mini-tool protocol) ───────
+
+test("chatMessagesToPrompt explains [TOOL_RESULT] blocks when tool results are present but no tools are defined", () => {
+  // This reproduces the mini-tool protocol: the second request after
+  // create_mini_tool execution contains function_call_output + user
+  // confirmation, but no tools array (the tool was one-shot).
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: "请调用 create_mini_tool 工具恰好一次，path 使用 C:\\temp\\tool.js，marker 使用 MINI_TOOL_MARKER。" },
+    {
+      role: "assistant",
+      content: null,
+      tool_calls: [{
+        id: "call_mini",
+        type: "function",
+        function: { name: "create_mini_tool", arguments: JSON.stringify({ path: "C:\\temp\\tool.js", marker: "MINI_TOOL_MARKER" }) },
+      }],
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_mini",
+      content: JSON.stringify({ ok: true, status: "executed", path: "C:\\temp\\tool.js", marker: "MINI_TOOL_MARKER", result: { lines: 3, words: 9, chars: 53, marker: "MINI_TOOL_MARKER" } }),
+    },
+    { role: "user", content: "工具输出已经是执行器完成文件写入和 CLI 运行后的最终结果。请用中文一句话确认小工具执行成功，必须包含 CLI_OK 和 MINI_TOOL_MARKER。" },
+  ], {
+    // No tools, no toolChoice — second request without tool definitions
+  });
+
+  // The tool call and result MUST be present in the prompt
+  assert.match(prompt, /\[ASSISTANT_TOOL_CALL\]/);
+  assert.match(prompt, /create_mini_tool/);
+  assert.match(prompt, /\[TOOL_RESULT\]/);
+  assert.match(prompt, /MINI_TOOL_MARKER/);
+
+  // CRITICAL: the prompt must explain that [TOOL_RESULT] is a completed
+  // tool result, even when no tools are currently defined.  Without this
+  // explanation the upstream model (gemini-3.5-flash-low) cannot interpret
+  // the tool output and incorrectly claims the tool is missing.
+  assert.match(prompt, /already completed/i,
+    "prompt must tell the model the tool result is already completed");
+  assert.match(prompt, /Do not repeat/i,
+    "prompt must instruct the model not to repeat a completed call");
+});
+
+test("chatMessagesToPrompt with tools explains [TOOL_RESULT] via the [CODEX_TOOLS] section", () => {
+  // Real-work and small-project tests include tools in the second request,
+  // so the [CODEX_TOOLS] section carries the [TOOL_RESULT] explanation.
+  const prompt = chatMessagesToPrompt([
+    { role: "user", content: "请调用 create_mini_tool 工具恰好一次。" },
+    {
+      role: "assistant",
+      content: null,
+      tool_calls: [{
+        id: "call_with_tools",
+        type: "function",
+        function: { name: "create_mini_tool", arguments: JSON.stringify({ path: "C:\\temp\\tool.js", marker: "M" }) },
+      }],
+    },
+    {
+      role: "tool",
+      tool_call_id: "call_with_tools",
+      content: '{"ok":true}',
+    },
+    { role: "user", content: "确认执行成功，必须包含 CLI_OK。" },
+  ], {
+    tools: [{
+      type: "function",
+      function: { name: "create_mini_tool", description: "Create a tool", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } },
+    }],
+  });
+
+  assert.match(prompt, /\[CODEX_TOOLS\]/);
+  assert.match(prompt, /already completed/i);
+  assert.match(prompt, /Do not repeat/i);
 });
 
 test("chatMessagesToPrompt only clips when the explicit safety budget is exceeded", () => {
@@ -656,6 +1687,9 @@ test("callAntigravityUpstream reports resolved model route metadata", async () =
     messages: [{ role: "user", content: "hello" }],
   };
   const completion = await callAntigravityUpstream(chatBody, {
+    cwd: String.raw`C:\Users\XD\Workspace With Spaces`,
+    workspaceSource: "codex-session-turn-context",
+    codexSessionId: "019f4fa1-d845-7590-bf2d-a0644b0487b9",
     runTurn: mockRunTurn,
     responseId: "route-response-id",
     onModelRouted: (entry) => { route = entry; },
@@ -669,6 +1703,9 @@ test("callAntigravityUpstream reports resolved model route metadata", async () =
   assert.equal(route.displayName, "Gemini 3.1 Pro (Low)");
   assert.equal(route.internalModel, "MODEL_PLACEHOLDER_M31");
   assert.equal(route.cascadeId, "cascade_route_1");
+  assert.equal(route.workspaceCwd, String.raw`C:\Users\XD\Workspace With Spaces`);
+  assert.equal(route.workspaceSource, "codex-session-turn-context");
+  assert.equal(route.codexSessionId, "019f4fa1-d845-7590-bf2d-a0644b0487b9");
 });
 
 test("callAntigravityUpstream falls back to the selected model for CLI route audits", async () => {
@@ -721,6 +1758,24 @@ test("callAntigravityUpstream does not auto-switch long CLI prompts to desktop C
   assert.equal(route.fallbackReason, "");
   assert.equal(route.cascadeId, "cli-long-conversation");
   assert.equal(completion.choices[0].message.content, "long cli ok");
+});
+
+test("callAntigravityUpstream forwards an explicit workspace cwd to the model turn", async () => {
+  const cwd = String.raw`C:\Users\XD\Project With Spaces`;
+  let receivedCwd = null;
+
+  await callAntigravityUpstream({
+    model: "gemini-3.5-flash-low",
+    messages: [{ role: "user", content: "hello" }],
+  }, {
+    cwd,
+    runTurn: async (_prompt, options) => {
+      receivedCwd = options.cwd;
+      return { text: "ok", model: options.model };
+    },
+  });
+
+  assert.equal(receivedCwd, cwd);
 });
 
 test("callAntigravityUpstream normalizes mismatched displayName in route audit", async () => {
@@ -973,6 +2028,29 @@ test("streamAntigravityUpstream honors cli transport without opening native Casc
   assert.equal(events[0].delta, "CLI稳定模式正常");
   assert.equal(events[1].completion.id, "resp_cli_stream");
   assert.equal(events[1].completion.choices[0].message.content, "CLI稳定模式正常");
+});
+
+test("streamAntigravityUpstream forwards an explicit workspace cwd to the native stream", async () => {
+  const cwd = String.raw`C:\Users\XD\Another Project With Spaces`;
+  let receivedCwd = null;
+  const events = [];
+
+  for await (const event of streamAntigravityUpstream({
+    model: "gemini-3.5-flash-low",
+    messages: [{ role: "user", content: "hello" }],
+  }, {
+    cwd,
+    env: desktopStreamEnv,
+    runTurnStreamed: async function* (_prompt, options) {
+      receivedCwd = options.cwd;
+      yield { type: "done", result: { text: "ok", model: options.model } };
+    },
+  })) {
+    events.push(event);
+  }
+
+  assert.equal(receivedCwd, cwd);
+  assert.equal(events.at(-1).type, "done");
 });
 
 test("streamAntigravityUpstream keeps long CLI prompts on runTurn instead of native stream", async () => {
@@ -1571,6 +2649,98 @@ test("streamAntigravityUpstream resumes a retained native Cascade with the match
   assert.equal(closeCount, 1);
 });
 
+test("streamAntigravityUpstream rebuilds a completed recovery turn instead of resuming stale native state", async () => {
+  let closeCount = 0;
+  let cancelCount = 0;
+  let resumeCount = 0;
+  let freshCount = 0;
+  let freshPrompt = "";
+  let freshNativeToolBridge = undefined;
+  const nativeToolBridge = {
+    tools: [{ name: "shell_command" }],
+    customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9995" } },
+    close: async () => { closeCount += 1; },
+  };
+  const pendingVerification = {
+    callId: "call_native_completed_verification",
+    name: "shell_command",
+    arguments: { command: "npm test" },
+    interaction: { trajectoryId: "trajectory-native-completed", stepIndex: 5 },
+  };
+  const completionBridge = {
+    tools: [{ name: "shell_command" }],
+    customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9996" } },
+    close: async () => {},
+  };
+  const latest = "Only modify test/analyze.test.mjs, then run npm test and verify the CLI edge cases.";
+
+  for await (const _event of streamAntigravityUpstream({
+    model: "gemini-3.5-flash-low",
+    messages: [{ role: "user", content: latest }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  }, {
+    env: nativeBridgeEnv,
+    nativeToolBridge,
+    runTurnStreamed: async function* () {
+      yield {
+        type: "tool_call",
+        calls: [pendingVerification],
+        continuation: {
+          connection: { lsAddress: "127.0.0.1:1", csrfToken: "token" },
+          cascadeId: "cascade-native-completed",
+          nativeToolBridge,
+          pendingCalls: [pendingVerification],
+        },
+      };
+    },
+  })) {}
+
+  const events = [];
+  for await (const event of streamAntigravityUpstream({
+    model: "gemini-3.5-flash-low",
+    messages: [
+      { role: "user", content: latest },
+      { role: "assistant", tool_calls: [{ id: "write_before_completion", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "[System.IO.File]::WriteAllText('test/analyze.test.mjs', 'fixed')" }) } }] },
+      { role: "tool", tool_call_id: "write_before_completion", content: "Exit code: 0\nOutput:\n" },
+      { role: "assistant", tool_calls: [{ id: pendingVerification.callId, type: "function", function: { name: "shell_command", arguments: JSON.stringify(pendingVerification.arguments) } }] },
+      { role: "tool", tool_call_id: pendingVerification.callId, content: "Exit code: 0\ntests 35\npass 35\nfail 0" },
+    ],
+    tools: [
+      { type: "function", function: { name: "apply_patch", parameters: { type: "object" } } },
+      { type: "function", function: { name: "shell_command", parameters: { type: "object" } } },
+    ],
+  }, {
+    env: nativeBridgeEnv,
+    nativeToolBridge: completionBridge,
+    cancelCascade: async () => { cancelCount += 1; },
+    runTurnStreamed: async function* (prompt, turnOptions) {
+      freshCount += 1;
+      freshPrompt = prompt;
+      freshNativeToolBridge = turnOptions.nativeToolBridge;
+      if (turnOptions.nativeToolBridge) {
+        yield {
+          type: "tool_call",
+          calls: [{ callId: "unexpected_completion_tool", name: "shell_command", arguments: { command: "Get-Content test/analyze.test.mjs" } }],
+        };
+        return;
+      }
+      yield { type: "done", result: { text: "Final completion.", model: "gemini-3.5-flash-low" } };
+    },
+    resumeTurnStreamed: async function* () {
+      resumeCount += 1;
+      yield { type: "done", result: { text: "stale resume", model: "gemini-3.5-flash-low" } };
+    },
+  })) events.push(event);
+
+  assert.equal(resumeCount, 0);
+  assert.equal(freshCount, 1);
+  assert.equal(cancelCount, 1);
+  assert.equal(closeCount, 1);
+  assert.match(freshPrompt, /\[ANTI_CODEX_VERIFICATION_COMPLETE\]/);
+  assert.equal(freshNativeToolBridge, null);
+  assert.equal(events[0].completion.choices[0].message.content, "Final completion.");
+});
+
 test("streamAntigravityUpstream evicts abandoned native continuations after TTL", async () => {
   let closeCount = 0;
   let resumeCount = 0;
@@ -1839,11 +3009,13 @@ test("streamAntigravityUpstream does not retry same-Cascade resume after a visib
   assert.deepEqual(visibleEvents, [{ type: "text_delta", delta: "partial visible text" }]);
 });
 
-test("streamAntigravityUpstream forwards user text after a native tool result into the same Cascade", async () => {
+test("streamAntigravityUpstream rebuilds a fresh prompt when user text follows a native tool result", async () => {
+  let closeCount = 0;
+  let cancelCount = 0;
   const nativeToolBridge = {
     tools: [{ name: "marker_tool" }],
     customAgentSpec: { customizationConfig: { customizationServerUrl: "http://127.0.0.1:9998" } },
-    close: async () => {},
+    close: async () => { closeCount += 1; },
   };
   const call = {
     callId: "call_native_followup",
@@ -1872,22 +3044,34 @@ test("streamAntigravityUpstream forwards user text after a native tool result in
     },
   })) {}
 
-  let followUpPrompt = null;
-  for await (const _event of streamAntigravityUpstream({
+  let resumedCount = 0;
+  let freshPrompt = "";
+  const events = [];
+  for await (const event of streamAntigravityUpstream({
     model: "gemini-pro-agent",
     messages: [
       { role: "tool", tool_call_id: "call_native_followup", content: "X=RECORDED" },
-      { role: "user", content: "Confirm X and RECORDED." },
+      { role: "user", content: "Tool output is complete. Confirm X and RECORDED." },
     ],
-    tools: [{ type: "function", function: { name: "marker_tool", parameters: { type: "object" } } }],
   }, {
-    resumeTurnStreamed: async function* (_session, _results, options) {
-      followUpPrompt = options.followUpPrompt;
+    cancelCascade: async () => { cancelCount += 1; },
+    resumeTurnStreamed: async function* () {
+      resumedCount += 1;
+      yield { type: "done", result: { text: "stale continuation", model: "gemini-pro-agent" } };
+    },
+    runTurnStreamed: async function* (prompt) {
+      freshPrompt = prompt;
       yield { type: "done", result: { text: "X RECORDED", model: "gemini-pro-agent" } };
     },
-  })) {}
+  })) events.push(event);
 
-  assert.equal(followUpPrompt, "Confirm X and RECORDED.");
+  assert.equal(resumedCount, 0);
+  assert.equal(cancelCount, 1);
+  assert.equal(closeCount, 1);
+  assert.match(freshPrompt, /\[TOOL_RESULT_CONTEXT\]/);
+  assert.match(freshPrompt, /X=RECORDED/);
+  assert.match(freshPrompt, /Tool output is complete\. Confirm X and RECORDED\./);
+  assert.equal(events.at(-1).completion.choices[0].message.content, "X RECORDED");
 });
 
 test("adaptive-server Antigravity quota classifier must recognise RESOURCE_EXHAUSTED / Individual quota reached", () => {

@@ -211,18 +211,24 @@ console.log(JSON.stringify({ lines, words, chars: input.length, marker: "$marker
     }
 
     if ($call -and $call.call_id) {
+        $miniToolOutput = [ordered]@{
+            ok = $null -ne $cliResult
+            status = if ($cliResult) { "executed" } else { "failed" }
+            path = $artifactFile
+            marker = $marker
+            confirmation = "CLI_OK $marker"
+            result = $cliResult
+        }
         $second = Invoke-AntiCodexResponse @{
             model = $model
             stream = $false
             store = $true
             previous_response_id = [string]$first.id
-            tool_choice = "auto"
-            tools = @($miniToolDef)
             input = @(
-                @{ type = "function_call_output"; call_id = [string]$call.call_id; output = "CLI_OK $marker" },
+                @{ type = "function_call_output"; call_id = [string]$call.call_id; output = ($miniToolOutput | ConvertTo-Json -Depth 8 -Compress) },
                 @{ type = "message"; role = "user"; content = @(@{
                     type = "input_text"
-                    text = "请用中文一句话确认小工具执行成功，必须包含 CLI_OK 和 $marker，不要再次调用工具。"
+                    text = "工具输出已经是执行器完成文件写入和 CLI 运行后的最终结果，无需读取文件或目录。请用中文一句话确认小工具执行成功，必须包含 CLI_OK 和 $marker，不要再次调用工具。"
                 }) }
             )
         }
@@ -232,8 +238,11 @@ console.log(JSON.stringify({ lines, words, chars: input.length, marker: "$marker
         if ($finalText -notmatch "CLI_OK" -or $finalText -notmatch [regex]::Escape($marker)) {
             Add-Failure "final response did not confirm the CLI execution and marker"
         }
-        if ($finalText -notmatch "[\u4e00-\u9fff]") {
-            Add-Failure "final response did not answer the Chinese request in Chinese"
+        if ($finalText -notmatch "^\s*[\u4e00-\u9fff]") {
+            Add-Failure "final response did not begin in Chinese"
+        }
+        if ($finalText -match "model did not produce a reliable summary|Completed tool result:|\{\s*`"ok`"\s*:") {
+            Add-Failure "final response exposed raw tool fallback"
         }
         if ($finalText -match "DeepCodex") {
             Add-Failure "final response leaked the legacy DeepCodex brand"

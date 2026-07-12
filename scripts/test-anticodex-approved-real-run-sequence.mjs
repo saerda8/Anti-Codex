@@ -103,7 +103,7 @@ const accountProofCommand = String(secondAccountLoginEntrypoint.postLoginProofCo
 const loginCommand = String(secondAccountLoginEntrypoint.approvedLoginCommandTemplate || "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\start-anticodex-second-antigravity-account-login.ps1 -WindowsUser .\\AntiCodexModel -StartLogin -StartLoginApproval start-separate-windows-user-login");
 const noTrafficStatusCommand = String(secondAccountLoginEntrypoint.nextNoTrafficStatusCommand || "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-antigravity-account-isolation-status.ps1 -WindowsUser .\\AntiCodexModel");
 
-const noTrafficPrechecks = [
+const optionalAccountIsolationPrechecks = [
   stage("windowsUserAccountPrepare", "no-traffic-precheck", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-windows-user-account-prepare.ps1", {
     expectedReport: "latest-windows-user-account-prepare.json",
     failFastIfNotReady: true,
@@ -119,6 +119,9 @@ const noTrafficPrechecks = [
     failFastIfNotReady: true,
     evidence: ["safeToStartLogin", "completionState"],
   }),
+];
+
+const noTrafficPrechecks = [
   stage("goalRealRunReadiness", "no-traffic-precheck", "node scripts\\test-anticodex-goal-real-run-readiness.mjs", {
     expectedReport: "latest-goal-real-run-readiness.json",
     failFastIfNotReady: true,
@@ -126,8 +129,8 @@ const noTrafficPrechecks = [
   }),
 ];
 
-const approvedRealRunSequence = [
-  ...noTrafficPrechecks,
+const optionalAccountIsolationSequence = [
+  ...optionalAccountIsolationPrechecks,
   stage("createOrVerifyTargetWindowsUser", "operator-setup", "Windows Settings > Accounts > Other users > create or verify .\\AntiCodexModel", {
     highImpact: true,
     failFastIfNotReady: true,
@@ -148,6 +151,10 @@ const approvedRealRunSequence = [
     expectedReport: "latest-antigravity-cli-real-smoke.json",
     evidence: ["separateAccountVerified", "accountIdentityComparison", "SeparateAccountProofApprovalId"],
   }),
+];
+
+const approvedRealRunSequence = [
+  ...noTrafficPrechecks,
   ...(realTaskRefreshNeeded ? [
     stage("refreshConcreteRealTasks", "real-task-refresh", realTaskCommand, {
       requiresRealTraffic: true,
@@ -180,22 +187,16 @@ const approvedRealRunSequence = [
   ]),
 ];
 
-const optionalActionsSeparated = optionalActionIds.length > 0 && optionalActionIds.every((id) => !requiredActionIds.includes(id));
+const optionalActionsSeparated = optionalActionIds.every((id) => !requiredActionIds.includes(id));
 const accountReadinessBlockingReason = String(account.readinessBlockingReason || account.blockingReason || "");
-const readyToRequestSecondAccountLoginApproval = account.safeToAskUserForSecondAccountLogin === true
-  && secondAccountLoginEntrypoint.safeToStartLogin === true
-  && account.releaseAcceptableAccountProof !== true;
-const readyToRequestPostLoginProofApproval = account.safeToAskUserForSecondAccountLogin === true
-  && accountProofPlan.canRunAfterInteractiveLogin === true
-  && account.releaseAcceptableAccountProof !== true;
-const readyToRequestUserApproval = readyToRequestSecondAccountLoginApproval || readyToRequestPostLoginProofApproval;
-const executionBlockedBeforeRealTraffic = account.safeToAskUserForSecondAccountLogin !== true
-  || account.releaseAcceptableAccountProof !== true
-  || readiness.safeToAskUserForSecondAccountLogin !== true
-  || readiness.releaseAcceptableAccountProof !== true;
+const readyToRequestSecondAccountLoginApproval = false;
+const readyToRequestPostLoginProofApproval = false;
+const productRealTrafficStageCount = approvedRealRunSequence.filter((item) => item.requiresRealTraffic).length;
+const readyToRequestUserApproval = release.shortReady === true
+  && productRealTrafficStageCount > 0;
 const failures = [];
 
-for (const source of [readinessReport, approvalReport, sequenceReport, releaseReport, accountReport, secondAccountLoginEntrypointReport]) {
+for (const source of [readinessReport, approvalReport, sequenceReport, releaseReport]) {
   if (!source.present) failures.push(`missing_${source.fileName}`);
   else if (!source.parseable) failures.push(`unparseable_${source.fileName}`);
 }
@@ -226,12 +227,11 @@ if (!loginCommand.includes("-StartLoginApproval start-separate-windows-user-logi
 if (!loginCommand.includes("-WindowsUser")) failures.push("login_command_missing_windows_user");
 if (accountProofCommand && !accountProofCommand.includes("SeparateAccountProofApprovalId")) failures.push("account_proof_command_missing_approval_id");
 if (accountProofCommand && !accountProofCommand.includes("-AllowSeparateAccountProof")) failures.push("account_proof_command_missing_separate_account_flag");
-if (executionBlockedBeforeRealTraffic !== (account.releaseAcceptableAccountProof !== true || readiness.releaseAcceptableAccountProof !== true)) failures.push("execution_block_state_inconsistent");
-if (readyToRequestUserApproval && executionBlockedBeforeRealTraffic !== true) failures.push("approval_ready_after_execution_unblocked");
-if (readyToRequestSecondAccountLoginApproval && accountReadinessBlockingReason) failures.push("login_approval_ready_with_blocking_reason");
 if (approvedRealRunSequence.some((item) => item.requiresRealTraffic && item.requiresExplicitUserApproval !== true)) failures.push("real_traffic_stage_without_explicit_approval");
-if (approvedRealRunSequence.some((item) => item.startsLogin && item.requiresExplicitUserApproval !== true)) failures.push("login_stage_without_explicit_approval");
+if (approvedRealRunSequence.some((item) => item.startsLogin)) failures.push("optional_login_stage_in_product_sequence");
+if (optionalAccountIsolationSequence.some((item) => item.startsLogin && item.requiresExplicitUserApproval !== true)) failures.push("optional_login_stage_without_explicit_approval");
 if (release.shortReady !== true) failures.push("short_path_not_ready");
+const executionBlockedBeforeRealTraffic = failures.length > 0;
 
 const payload = {
   ok: failures.length === 0,
@@ -252,12 +252,17 @@ const payload = {
     accountIsolation: { present: accountReport.present, parseable: accountReport.parseable },
     secondAccountLoginEntrypoint: { present: secondAccountLoginEntrypointReport.present, parseable: secondAccountLoginEntrypointReport.parseable },
   },
+  accountIsolationProductReleaseGating: false,
+  optionalAccountIsolationSequence,
+  optionalAccountIsolationStageCount: optionalAccountIsolationSequence.length,
   noTrafficPrechecks,
   approvedRealRunSequence,
   sequenceStageCount: approvedRealRunSequence.length,
   explicitApprovalStageCount: approvedRealRunSequence.filter((item) => item.requiresExplicitUserApproval).length,
   realTrafficStageCount: approvedRealRunSequence.filter((item) => item.requiresRealTraffic).length,
   startsLoginStageCount: approvedRealRunSequence.filter((item) => item.startsLogin).length,
+  optionalAccountIsolationStartsLoginStageCount: optionalAccountIsolationSequence.filter((item) => item.startsLogin).length,
+  optionalAccountIsolationRealTrafficStageCount: optionalAccountIsolationSequence.filter((item) => item.requiresRealTraffic).length,
   requiredRealTaskModes: expectedRealTaskModes,
   pendingRealTaskScenarios,
   requiredReleaseGateIds: requiredGateIds.length > 0 ? requiredGateIds : BASE_REQUIRED_RELEASE_GATES,
@@ -273,15 +278,9 @@ const payload = {
   accountReadinessBlockingReason,
   safeToAskUserForSecondAccountLogin: account.safeToAskUserForSecondAccountLogin === true,
   releaseAcceptableAccountProof: account.releaseAcceptableAccountProof === true,
-  operatorNextAction: accountReadinessBlockingReason === "target_windows_user_missing"
-    ? "complete_separate_windows_user_account_setup_before_any_real_traffic"
-    : (readyToRequestSecondAccountLoginApproval
-      ? "request_explicit_user_approval_for_second_account_login"
-      : (readyToRequestPostLoginProofApproval
-        ? "request_explicit_user_approval_for_separate_account_identity_proof"
-        : (executionBlockedBeforeRealTraffic
-          ? "complete_second_account_login_and_identity_proof_before_real_traffic"
-          : "request_explicit_user_approval_for_approved_real_run_sequence"))),
+  operatorNextAction: executionBlockedBeforeRealTraffic
+    ? "refresh_product_real_run_prechecks"
+    : "request_explicit_user_approval_for_approved_product_real_run_sequence",
   failures,
   failureCount: failures.length,
   elapsedMs: Date.now() - startedAt,

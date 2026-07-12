@@ -9,6 +9,7 @@ const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
 const port = Number(args.get("--port") || process.env.DEEPCODEX_CDP_PORT || 58317);
 const baseUrl = String(args.get("--base-url") || process.env.ANTICODEX_MANAGER_API || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
+const MCP_SKILLS_MANAGER_HTTP_TIMEOUT_MS = 430000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const triStateText = (value) => value === true ? "true" : (value === false ? "false" : "unknown");
 
@@ -215,7 +216,7 @@ async function runAction(action) {
   const postManagerActionWithToken = (token) => {
     return httpJson(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
-      timeout: 180000,
+      timeout: action === "mcpSkills" ? MCP_SKILLS_MANAGER_HTTP_TIMEOUT_MS : 180000,
       headers: {
         "content-type": "application/json",
         "x-anticodex-manager-token": token,

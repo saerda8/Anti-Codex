@@ -184,23 +184,23 @@ function syncPluginSidecars(enabledNames) {
   return copied;
 }
 
-function syncNotifyLine() {
-  if (!exists(sourceConfigPath) || !exists(targetConfigPath)) {
+function suppressLegacyNotifyLine() {
+  if (!exists(targetConfigPath)) {
     return false;
   }
-  const sourceText = fs.readFileSync(sourceConfigPath, "utf8");
   const targetText = fs.readFileSync(targetConfigPath, "utf8");
-  const sourceNotifyLine = sourceText.split(/\r?\n/).find((line) => notifyRe.test(line));
-  if (!sourceNotifyLine) {
+  const existingNotifyLines = targetText.split(/\r?\n/).filter((line) => notifyRe.test(line));
+  if (existingNotifyLines.length === 1 && /^notify\s*=\s*\[\]\s*$/.test(existingNotifyLines[0])) {
     return false;
   }
-  const rewrittenNotify = sourceNotifyLine.replaceAll(sourceHome, targetHome);
   const targetLines = targetText.split(/\r?\n/).filter((line) => !notifyRe.test(line));
   let insertIndex = 0;
-  while (insertIndex < targetLines.length && targetLines[insertIndex].trim() !== "") {
+  while (insertIndex < targetLines.length
+    && targetLines[insertIndex].trim() !== ""
+    && !targetLines[insertIndex].trimStart().startsWith("[")) {
     insertIndex += 1;
   }
-  targetLines.splice(insertIndex, 0, rewrittenNotify);
+  targetLines.splice(insertIndex, 0, "notify = []");
   fs.writeFileSync(targetConfigPath, `${targetLines.join("\n").replace(/\n+$/g, "")}\n`);
   return true;
 }
@@ -212,12 +212,12 @@ if (!exists(targetHome)) {
 const targetConfigText = exists(targetConfigPath) ? fs.readFileSync(targetConfigPath, "utf8") : "";
 const enabledNames = parseEnabledPluginNames(targetConfigText);
 const copied = syncPluginSidecars(enabledNames);
-const syncedNotify = syncNotifyLine();
+const suppressedLegacyNotify = suppressLegacyNotifyLine();
 
-if (copied.length || syncedNotify) {
+if (copied.length || suppressedLegacyNotify) {
   const parts = [];
   if (copied.length) parts.push(`sidecars=${copied.join(",")}`);
-  if (syncedNotify) parts.push("notify=1");
+  if (suppressedLegacyNotify) parts.push("legacy-notify=suppressed");
   console.log(`Synced shared Codex sidecars: ${parts.join(" ")}`);
 } else {
   console.log("Synced shared Codex sidecars: none");

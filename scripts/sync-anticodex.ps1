@@ -142,6 +142,32 @@ function Stop-AntiCodexLaunchers {
     }
 }
 
+function Start-AntiCodexAfterSync {
+    param([Parameter(Mandatory = $true)][string]$StartScript)
+
+    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+    try {
+        Start-Process -FilePath $powershell `
+            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $StartScript) `
+            -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        return
+    } catch {
+        Write-Warning "Background PowerShell restart was denied: $($_.Exception.Message)"
+        Write-Warning "Retrying Anti-Codex restart through cmd.exe start fallback."
+    }
+
+    $cmdArgs = @(
+        "/d", "/c", "start", '""', "/min",
+        "powershell.exe",
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "`"$StartScript`""
+    )
+    & cmd.exe @cmdArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "cmd fallback could not restart Anti-Codex (exit code $LASTEXITCODE)."
+    }
+}
+
 function Wait-AntiCodexPostSyncReady {
     param([int]$TimeoutSeconds = 60)
 
@@ -372,10 +398,7 @@ if ($syncCompleted) {
 if ($restartAfterSync -and (Test-Path -LiteralPath $startAntiCodex)) {
     $updateStage = "restart"
     Set-AntiCodexUpdateOperation -State "running" -Stage "restart" -Message "Restarting Anti-Codex with the synced host." -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
-    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    Start-Process -FilePath $powershell `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $startAntiCodex) `
-        -WindowStyle Hidden | Out-Null
+    Start-AntiCodexAfterSync -StartScript $startAntiCodex
 }
 
 if ($syncCompleted) {

@@ -227,6 +227,13 @@ test("update check clears stale running operation when active host is already sy
   }
 });
 
+test("update check recognizes stale failed operations only through the synced-host cleanup path", () => {
+  const checker = fs.readFileSync(updateChecker, "utf8");
+  assert.match(checker, /function Test-StaleFailedUpdateOperation/);
+  assert.match(checker, /Test-StaleFailedUpdateOperation -Operation \$existingOperation/);
+  assert.match(checker, /Anti-Codex is synced; cleared a stale sync operation\./);
+});
+
 test("RED: update check reports version drift and brand/icon protection guardrails", () => {
   const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-drift-"));
   try {

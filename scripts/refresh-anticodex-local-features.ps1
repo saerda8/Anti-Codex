@@ -24,6 +24,7 @@ $failures = New-Object System.Collections.Generic.List[string]
 $recoveryActions = New-Object System.Collections.Generic.List[object]
 $recoveryActionIds = @{}
 $directoryFingerprintCache = @{}
+$sanitizedSkillDirectoryFingerprintCache = @{}
 $script:refreshFeatureFileHashCachePath = Join-Path $StateRoot "cache\refresh-feature-file-hashes.json"
 $script:refreshFeatureFileHashCache = @{}
 $script:refreshFeatureFileHashNewCache = [ordered]@{}
@@ -190,6 +191,64 @@ function Get-DirectoryContentFingerprint {
     try {
         $fingerprint = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
         $directoryFingerprintCache[$rootPath] = $fingerprint
+        return $fingerprint
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-SanitizedSkillFileHash {
+    param([System.IO.FileInfo]$File)
+    if ($File.Name -ine "SKILL.md") { return Get-FileSha256Hex $File.FullName }
+
+    $bytes = [IO.File]::ReadAllBytes($File.FullName)
+    $offset = if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf) { 3 } else { 0 }
+    $text = [Text.Encoding]::UTF8.GetString($bytes, $offset, $bytes.Length - $offset)
+    $lines = @($text -split "`r?`n")
+    if ($lines.Count -eq 0 -or $lines[0].Trim() -ne "---") { return "" }
+    $closingIndex = -1
+    for ($index = 1; $index -lt $lines.Count; $index++) {
+        if ($lines[$index].Trim() -eq "---") {
+            $closingIndex = $index
+            break
+        }
+    }
+    if ($closingIndex -lt 0) { return "" }
+    $frontmatter = @($lines[1..($closingIndex - 1)])
+    $hasName = @($frontmatter | Where-Object { $_ -match '^name\s*:\s*\S' }).Count -gt 0
+    $hasDescription = @($frontmatter | Where-Object { $_ -match '^description\s*:\s*\S' }).Count -gt 0
+    if (-not $hasName -or -not $hasDescription) { return "" }
+
+    $normalizedBytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($normalizedBytes))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-SanitizedSkillDirectoryContentFingerprint {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return "" }
+    $rootPath = (Resolve-Path -LiteralPath $Path).Path.TrimEnd("\", "/")
+    if ($sanitizedSkillDirectoryFingerprintCache.ContainsKey($rootPath)) { return $sanitizedSkillDirectoryFingerprintCache[$rootPath] }
+    $entries = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction Stop |
+        Where-Object { $_.Name -ne ".anticodex-source-manifest.json" -and $_.FullName -notmatch '(?i)[\\/]\.git(?:[\\/]|$)' } |
+        Sort-Object FullName |
+        ForEach-Object {
+            $hash = Get-SanitizedSkillFileHash $_
+            if ($hash) {
+                $relative = $_.FullName.Substring($rootPath.Length).TrimStart("\", "/")
+                "$relative`t$hash"
+            }
+        })
+    $joined = [string]::Join("`n", $entries)
+    $bytes = [Text.Encoding]::UTF8.GetBytes($joined)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $fingerprint = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+        $sanitizedSkillDirectoryFingerprintCache[$rootPath] = $fingerprint
         return $fingerprint
     } finally {
         $sha.Dispose()
@@ -468,9 +527,9 @@ foreach ($skillName in $expectedSkillNames) {
     $sharedExists = Test-Path -LiteralPath $sharedSkillPath -PathType Container
     $agentExists = Test-Path -LiteralPath $agentSkillPath -PathType Container
     $localExists = Test-Path -LiteralPath $localSkillPath -PathType Container
-    $sharedFingerprint = if ($sharedExists) { Get-DirectoryContentFingerprint $sharedSkillPath } else { "" }
-    $agentFingerprint = if ($agentExists) { Get-DirectoryContentFingerprint $agentSkillPath } else { "" }
-    $localFingerprint = if ($localExists) { Get-DirectoryContentFingerprint $localSkillPath } else { "" }
+    $sharedFingerprint = if ($sharedExists) { Get-SanitizedSkillDirectoryContentFingerprint $sharedSkillPath } else { "" }
+    $agentFingerprint = if ($agentExists) { Get-SanitizedSkillDirectoryContentFingerprint $agentSkillPath } else { "" }
+    $localFingerprint = if ($localExists) { Get-SanitizedSkillDirectoryContentFingerprint $localSkillPath } else { "" }
     $sourceFingerprints = @($sharedFingerprint, $agentFingerprint) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
     $contentMatches = $localExists -and -not [string]::IsNullOrWhiteSpace($localFingerprint) -and ($sourceFingerprints -contains $localFingerprint)
     if ($localExists -and @($sourceFingerprints).Count -gt 0 -and -not $contentMatches) {

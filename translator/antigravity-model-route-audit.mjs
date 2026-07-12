@@ -42,6 +42,9 @@ function normalizeEntry(entry = {}) {
     displayName: stringOrEmpty(entry.displayName),
     internalModel: stringOrEmpty(entry.internalModel),
     cascadeId: stringOrEmpty(entry.cascadeId || entry.conversationId),
+    workspaceCwd: stringOrEmpty(entry.workspaceCwd),
+    workspaceSource: stringOrEmpty(entry.workspaceSource),
+    codexSessionId: stringOrEmpty(entry.codexSessionId),
     status: stringOrEmpty(entry.status || "success"),
   };
 }

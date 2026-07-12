@@ -278,6 +278,8 @@ function Write-HostManifest {
             "app-route-gate",
             "profile-dropdown-settings",
             "browser-window-icon",
+            "windows-tray-icon",
+            "computer-use-legacy-notify-opt-out",
             "local-model-availability",
             "local-plugin-catalog",
             "electron-local-plugin-catalog",

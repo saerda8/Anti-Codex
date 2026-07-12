@@ -495,7 +495,7 @@ for (let i = 0; i < attempts; i++) {
         }));
         watcherAnnounced = true;
       }
-      injected.connection.close();
+      await injected.connection.waitForClose();
       await injected.maintenance;
       successfulPasses = 0;
       await sleep(Math.max(500, managerHeartbeatMs));

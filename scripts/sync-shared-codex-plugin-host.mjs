@@ -131,7 +131,75 @@ function tempId() {
  * Each entry records type, hash (for files), and mtimeMs.
  * Hidden `.anticodex-*` manifest files are excluded.
  */
-function computeSnapshotManifest(dirPath) {
+function hasValidSkillFrontmatter(filePath) {
+  try {
+    const lines = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/);
+    if (lines[0]?.trim() !== '---') return false;
+    const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+    if (closingIndex < 0) return false;
+    const frontmatter = lines.slice(1, closingIndex);
+    return frontmatter.some((line) => /^name\s*:\s*\S/i.test(line))
+      && frontmatter.some((line) => /^description\s*:\s*\S/i.test(line));
+  } catch {
+    return false;
+  }
+}
+
+function findInvalidSkillFiles(rootPath) {
+  const invalid = [];
+  if (!fs.existsSync(rootPath)) return invalid;
+
+  function walk(currentPath, relPath) {
+    for (const entry of fs.readdirSync(currentPath, { withFileTypes: true })) {
+      const fullPath = path.join(currentPath, entry.name);
+      const entryRelPath = relPath ? path.join(relPath, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        walk(fullPath, entryRelPath);
+      } else if (entry.isFile() && entry.name.toLowerCase() === 'skill.md' && !hasValidSkillFrontmatter(fullPath)) {
+        invalid.push(entryRelPath);
+      }
+    }
+  }
+
+  walk(rootPath, '');
+  return invalid.sort((a, b) => a.localeCompare(b));
+}
+
+function findBomSkillFiles(rootPath) {
+  const bomFiles = [];
+  if (!fs.existsSync(rootPath)) return bomFiles;
+
+  function walk(currentPath, relPath) {
+    for (const entry of fs.readdirSync(currentPath, { withFileTypes: true })) {
+      const fullPath = path.join(currentPath, entry.name);
+      const entryRelPath = relPath ? path.join(relPath, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        walk(fullPath, entryRelPath);
+      } else if (entry.isFile() && entry.name.toLowerCase() === 'skill.md') {
+        const content = fs.readFileSync(fullPath);
+        if (content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf) bomFiles.push(entryRelPath);
+      }
+    }
+  }
+
+  walk(rootPath, '');
+  return bomFiles.sort((a, b) => a.localeCompare(b));
+}
+
+function sanitizeSkillFiles(rootPath) {
+  const skippedInvalidSkillFiles = findInvalidSkillFiles(rootPath);
+  for (const relPath of skippedInvalidSkillFiles) {
+    fs.rmSync(path.join(rootPath, relPath), { force: true });
+  }
+  const normalizedBomSkillFiles = findBomSkillFiles(rootPath);
+  for (const relPath of normalizedBomSkillFiles) {
+    const filePath = path.join(rootPath, relPath);
+    fs.writeFileSync(filePath, fs.readFileSync(filePath).subarray(3));
+  }
+  return { skippedInvalidSkillFiles, normalizedBomSkillFiles };
+}
+
+function computeSnapshotManifest(dirPath, options = {}) {
   const manifest = {};
   if (!fs.existsSync(dirPath)) return manifest;
 
@@ -144,7 +212,14 @@ function computeSnapshotManifest(dirPath) {
         manifest[entryRelPath] = { type: 'directory', mtimeMs: fs.statSync(fullPath).mtimeMs };
         walk(fullPath, entryRelPath);
       } else if (entry.isFile()) {
-        const content = fs.readFileSync(fullPath);
+        if (options.filterInvalidSkillFiles && entry.name.toLowerCase() === 'skill.md' && !hasValidSkillFrontmatter(fullPath)) {
+          continue;
+        }
+        let content = fs.readFileSync(fullPath);
+        if (options.filterInvalidSkillFiles && entry.name.toLowerCase() === 'skill.md'
+          && content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf) {
+          content = content.subarray(3);
+        }
         const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
         manifest[entryRelPath] = { type: 'file', hash, mtimeMs: fs.statSync(fullPath).mtimeMs };
       }
@@ -154,10 +229,10 @@ function computeSnapshotManifest(dirPath) {
   return manifest;
 }
 
-function computeCombinedSnapshotManifest(dirPaths) {
+function computeCombinedSnapshotManifest(dirPaths, options = {}) {
   return Object.assign({}, ...dirPaths
     .filter((dirPath) => fs.existsSync(dirPath))
-    .map((dirPath) => computeSnapshotManifest(dirPath)));
+    .map((dirPath) => computeSnapshotManifest(dirPath, options)));
 }
 
 function readSnapshotManifest(targetPath) {
@@ -354,7 +429,7 @@ function cleanupStaleSwapArtifacts() {
  *    entries that were in the previous source manifest but are no longer
  *    present in the shared source (i.e. deleted from the shared Codex).
  */
-function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = false, extraSharedPaths = []) {
+function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = false, extraSharedPaths = [], options = {}) {
   const id = tempId();
   const tmpDir = targetPath + '.tmp-' + id;
   const oldDir = targetPath + '.old-' + id;
@@ -382,6 +457,10 @@ function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = fals
     for (const sourcePath of [sharedPath, ...extraSharedPaths].filter((item) => fs.existsSync(item))) {
       copyDirectoryContents(sourcePath, tmpDir);
     }
+
+    const skillSanitization = options.filterInvalidSkillFiles
+      ? sanitizeSkillFiles(tmpDir)
+      : { skippedInvalidSkillFiles: [], normalizedBomSkillFiles: [] };
 
     // Move existing target out of the way
     if (existsOrSymlink(targetPath)) {
@@ -418,7 +497,7 @@ function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = fals
 
     // After successful swap: write new manifest and prune stale shared entries
     if (trackManifest) {
-      const newManifest = computeCombinedSnapshotManifest([sharedPath, ...extraSharedPaths]);
+      const newManifest = computeCombinedSnapshotManifest([sharedPath, ...extraSharedPaths], options);
       try {
         fs.writeFileSync(path.join(targetPath, '.anticodex-source-manifest.json'), JSON.stringify(newManifest));
       } catch {
@@ -426,6 +505,7 @@ function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = fals
       }
       pruneStaleManifestEntries(targetPath, oldManifest, newManifest);
     }
+    return skillSanitization;
   } finally {
     // Safety net: if temp dir somehow still exists (e.g. error after rename),
     // clean it up
@@ -542,6 +622,8 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
     continue;
   }
   if (mode === 'copy') {
+    const filterInvalidSkillFiles = relPath === 'skills';
+    const snapshotOptions = { filterInvalidSkillFiles };
     const existingExtraSharedPaths = extraSharedPaths.filter((item) => fs.existsSync(item));
     const skillDuplicateInfo = relPath === 'skills'
       ? detectDuplicateSkillNames(sharedPath, existingExtraSharedPaths)
@@ -552,11 +634,14 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
     }
     ensureDir(path.dirname(targetPath));
     if (startupSnapshotsOnly && isLocalDirectory(targetPath) && hasDirectoryEntries(targetPath)) {
-      const sourceManifest = computeCombinedSnapshotManifest([sharedPath, ...existingExtraSharedPaths]);
+      const sourceManifest = computeCombinedSnapshotManifest([sharedPath, ...existingExtraSharedPaths], snapshotOptions);
       const existingManifest = readSnapshotManifest(targetPath);
       const sourceFingerprint = computeSourceFingerprint(sourceManifest);
       const existingFingerprint = Object.keys(existingManifest).length ? computeSourceFingerprint(existingManifest) : '';
-      if (sourceFingerprint && existingFingerprint && sourceFingerprint === existingFingerprint) {
+      const invalidTargetSkillFiles = filterInvalidSkillFiles ? findInvalidSkillFiles(targetPath) : [];
+      const bomTargetSkillFiles = filterInvalidSkillFiles ? findBomSkillFiles(targetPath) : [];
+      if (sourceFingerprint && existingFingerprint && sourceFingerprint === existingFingerprint
+        && invalidTargetSkillFiles.length === 0 && bomTargetSkillFiles.length === 0) {
         summary.push({
           relPath,
           mode: 'kept-existing-startup-snapshot',
@@ -564,6 +649,8 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
           sharedPath,
           sourceFingerprint,
           existingFingerprint,
+          skippedInvalidSkillFiles: [],
+          normalizedBomSkillFiles: [],
           duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
           conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
         });
@@ -574,7 +661,7 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
       if (skillDuplicateInfo?.conflictingDuplicateSkillNames?.length) {
         throw new Error(`conflicting duplicate skill names across shared skill roots: ${skillDuplicateInfo.conflictingDuplicateSkillNames.join(', ')}`);
       }
-      syncDirectoryTransactional(sharedPath, targetPath, true, existingExtraSharedPaths);
+      const syncResult = syncDirectoryTransactional(sharedPath, targetPath, true, existingExtraSharedPaths, snapshotOptions);
       summary.push({
         relPath,
         mode: 'copied',
@@ -584,6 +671,8 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
         extraSharedPaths: existingExtraSharedPaths,
         duplicateSkillNames: skillDuplicateInfo?.duplicateSkillNames || [],
         conflictingDuplicateSkillNames: skillDuplicateInfo?.conflictingDuplicateSkillNames || [],
+        skippedInvalidSkillFiles: syncResult.skippedInvalidSkillFiles,
+        normalizedBomSkillFiles: syncResult.normalizedBomSkillFiles,
       });
     } catch (error) {
       summary.push({

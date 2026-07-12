@@ -66,15 +66,10 @@ const completedRequiredGateIds = asStringArray(sequence.completedRequiredGateIds
 const requiredReleaseComplete = sequence.requiredReleaseComplete === true;
 const requiredActionIds = asStringArray(sequence.requiredActionIds);
 const requiredCommands = asStringArray(sequence.commands);
-const readyToRequestSecondAccountLoginApproval = approvedSequence.readyToRequestSecondAccountLoginApproval === true;
-const readyToRequestPostLoginProofApproval = approvedSequence.readyToRequestPostLoginProofApproval === true;
-const readyToRequestUserApproval = approvedSequence.readyToRequestUserApproval === true;
+const approvedSequenceReadyToRequestUserApproval = approvedSequence.readyToRequestUserApproval === true;
 const approvedSequenceAccountReadinessBlockingReason = String(approvedSequence.accountReadinessBlockingReason || "");
 const approvedSequenceOperatorNextAction = String(approvedSequence.operatorNextAction || "");
 const approvedSequenceBlockingStages = asStringArray(approvedSequence.blockingStages);
-if (approvedSequenceBlockingStages.length === 0 && approvedSequenceAccountReadinessBlockingReason) {
-  approvedSequenceBlockingStages.push(approvedSequenceAccountReadinessBlockingReason);
-}
 const selfCycleGateIds = new Set(["realApprovalPlan", "goalReadiness", "goalUnblockPackage", "requiredRealTrafficSequence", "goalRealRunReadiness", "approvedRealRunSequence"]);
 const requiredReleaseMissing = asStringArray(release.missingRequired).filter((gateId) => !selfCycleGateIds.has(gateId));
 const requiredRealTrafficBlockedGates = asStringArray(release.requiredRealTrafficBlockedGates);
@@ -86,14 +81,12 @@ const releaseBlockedOnlyByRequiredRealTrafficForGoal = release.releaseBlockedOnl
     && requiredReleaseMissing.every((gateId) => requiredRealTrafficBlockedGates.includes(gateId)));
 
 const blockingStages = [];
-if (account.safeToAskUserForSecondAccountLogin !== true) blockingStages.push("second_account_login_not_ready");
-if (account.separateAccountVerified === true || account.releaseAcceptableAccountProof === true) blockingStages.push("unexpected_account_proof_claim");
 if (approval.realTaskRefresh?.needed === true) blockingStages.push("real_task_refresh_requires_explicit_approval");
 if (requiredRealTrafficBlockedGates.length > 0) blockingStages.push("release_gates_require_explicit_real_traffic");
 if (effectiveReleaseReady !== true) blockingStages.push("release_not_ready");
 
 const failures = [];
-for (const source of [approvalReport, goalReport, roadmapReport, sequenceReport, approvedSequenceReport, releaseReport, accountReport]) {
+for (const source of [approvalReport, goalReport, roadmapReport, sequenceReport, approvedSequenceReport, releaseReport]) {
   if (!source.present) failures.push(`missing_${source.fileName}`);
   else if (!source.parseable) failures.push(`unparseable_${source.fileName}`);
 }
@@ -123,7 +116,11 @@ if (requiredCommands.length < requiredActionIds.length) failures.push("missing_r
 if (sequence.noOptionalActionsInRequiredSequence !== true) failures.push("optional_actions_mixed_into_required_sequence");
 if (release.shortReady !== true) failures.push("short_path_not_ready");
 if (effectiveReleaseReady !== true && releaseBlockedOnlyByRequiredRealTrafficForGoal !== true) failures.push("release_not_ready_or_blocked_only_by_required_real_traffic");
-if (account.readinessBlockingReason !== "target_windows_user_missing" && account.safeToAskUserForSecondAccountLogin !== true) failures.push("account_blocking_reason_unexpected");
+const productRealRunHasPendingApprovedWork = realTaskRefreshNeeded || requiredActionIds.length > 0;
+const readyToRequestUserApproval = productRealRunHasPendingApprovedWork
+  && release.shortReady === true
+  && (effectiveReleaseReady === true || releaseBlockedOnlyByRequiredRealTrafficForGoal === true);
+const readyForUserApprovedRealRun = failures.length === 0 && readyToRequestUserApproval;
 
 const payload = {
   ok: failures.length === 0,
@@ -141,15 +138,26 @@ const payload = {
     releaseGates: { present: releaseReport.present, parseable: releaseReport.parseable },
     accountIsolation: { present: accountReport.present, parseable: accountReport.parseable },
   },
-  readyForUserApprovedRealRun: false,
+  readyForUserApprovedRealRun,
+  accountIsolationProductReleaseGating: false,
+  optionalAccountIsolation: {
+    sourcePresent: accountReport.present,
+    sourceParseable: accountReport.parseable,
+    safeToAskUserForSecondAccountLogin: account.safeToAskUserForSecondAccountLogin === true,
+    completionState: String(account.completionState || ""),
+    readinessBlockingReason: String(account.readinessBlockingReason || ""),
+    separateAccountVerified: account.separateAccountVerified === true,
+    releaseAcceptableAccountProof: account.releaseAcceptableAccountProof === true,
+  },
   safeToAskUserForSecondAccountLogin: account.safeToAskUserForSecondAccountLogin === true,
   accountCompletionState: String(account.completionState || ""),
   accountReadinessBlockingReason: String(account.readinessBlockingReason || ""),
   separateAccountVerified: account.separateAccountVerified === true,
   releaseAcceptableAccountProof: account.releaseAcceptableAccountProof === true,
   readyToRequestUserApproval,
-  readyToRequestSecondAccountLoginApproval,
-  readyToRequestPostLoginProofApproval,
+  readyToRequestSecondAccountLoginApproval: false,
+  readyToRequestPostLoginProofApproval: false,
+  approvedSequenceReadyToRequestUserApproval,
   approvedSequenceOperatorNextAction,
   approvedSequenceNextAction: approvedSequenceOperatorNextAction,
   approvedSequenceBlockingStages,
@@ -174,7 +182,9 @@ const payload = {
   goalBlockers: asStringArray(goal.blockers),
   blockingStages,
   nextNoTrafficAction: String(approval.nextNoTrafficAction || goal.nextRequiredUserAction || ""),
-  operatorNextAction: account.safeToAskUserForSecondAccountLogin === true ? "await_explicit_user_approval_for_login_and_real_tasks" : "create_or_verify_separate_windows_user_then_rerun_account_prepare",
+  operatorNextAction: readyToRequestUserApproval
+    ? "request_explicit_user_approval_for_required_product_real_traffic"
+    : (effectiveReleaseReady && !productRealRunHasPendingApprovedWork ? "none_product_real_run_complete" : "refresh_product_release_plan"),
   failures,
   elapsedMs: Date.now() - startedAt,
 };

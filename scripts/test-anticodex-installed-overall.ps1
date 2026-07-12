@@ -31,8 +31,11 @@ if ($IncludePostVerification -ne "") {
 if ($Fast -and (-not $AllowRealTraffic)) {
     $NoTraffic = $true
 }
-if ($AllowRealTraffic -and $SubcheckTimeoutSec -lt 120) {
-    $SubcheckTimeoutSec = 120
+if ($AllowRealTraffic) {
+    $NoTraffic = $false
+}
+if ($AllowRealTraffic -and $SubcheckTimeoutSec -lt 180) {
+    $SubcheckTimeoutSec = 180
 }
 $realTrafficTimeoutSec = if ($AllowRealTraffic) {
     [Math]::Max($TimeoutSec, 90)
@@ -1197,6 +1200,7 @@ function Test-InstalledBranding {
         trayUsesAppName = $false
         windowTitlePatched = $false
         packageProductNamePatched = $false
+        bootstrapFileCount = 0
         mainFileCount = 0
         error = $null
     }
@@ -1208,7 +1212,14 @@ function Test-InstalledBranding {
 
         $asar = Read-AsarHeader $asarPath
         $packageJson = Read-AsarEntryText $asarPath $asar.header $asar.dataOffset "package.json"
-        $bootstrap = Read-AsarEntryText $asarPath $asar.header $asar.dataOffset ".vite/build/bootstrap.js"
+        $bootstrapFiles = @(Get-AsarFilePaths $asar.header | Where-Object { $_ -match "^\.vite/build/bootstrap(?:-[^/]+)?\.js$" })
+        if ($bootstrapFiles.Count -eq 0) {
+            throw "installed app.asar has no bootstrap bundle"
+        }
+        $bootstrap = ""
+        foreach ($bootstrapFile in $bootstrapFiles) {
+            $bootstrap += Read-AsarEntryText $asarPath $asar.header $asar.dataOffset $bootstrapFile
+        }
         $mainFiles = @(Get-AsarFilePaths $asar.header | Where-Object { $_ -match "^\.vite/build/main-.*\.js$" })
         $mainText = ""
         foreach ($mainFile in $mainFiles) {
@@ -1223,6 +1234,7 @@ function Test-InstalledBranding {
         $result.windowTitlePatched = $mainText.Contains('title:"Anti-Codex"') -or
             $mainText.Contains("title:'Anti-Codex'") -or
             $mainText.Contains('title:`Anti-Codex`')
+        $result.bootstrapFileCount = $bootstrapFiles.Count
         $result.mainFileCount = $mainFiles.Count
         $result.ok = $result.packageProductNamePatched -and
             $result.appNamePatched -and
@@ -1230,6 +1242,7 @@ function Test-InstalledBranding {
             $result.oldAppNameSetterRemoved -and
             $result.trayUsesAppName -and
             $result.windowTitlePatched -and
+            ($bootstrapFiles.Count -gt 0) -and
             ($mainFiles.Count -gt 0)
     } catch {
         $result.error = $_.Exception.Message
@@ -1627,22 +1640,22 @@ $checks.sourcePreflightAntigravityCliProfilePrepare = try {
 $checks.logDbGuardDiagnostics = try {
     $diagnostics = Get-InstalledOverallDiagnosticsSnapshot
     $guard = $diagnostics.logDbGuard
-    $protected = (Has-Property $guard "protected") -and $guard.protected -eq $true
-    $triggerPresent = (Has-Property $guard "triggerPresent") -and $guard.triggerPresent -eq $true
-    $noTraffic = (Has-Property $guard "noTraffic") -and $guard.noTraffic -eq $true
-    $usedRealTraffic = (Has-Property $guard "usedRealTraffic") -and $guard.usedRealTraffic -eq $false
-    $walBytesOk = (Has-Property $guard "walBytes") -and [long]$guard.walBytes -ge 0
-    if (-not $protected) { Add-Failure "installed overall log database guard is not protected" }
-    if (-not $triggerPresent) { Add-Failure "installed overall log database guard trigger is missing" }
-    if (-not $noTraffic -or -not $usedRealTraffic) { Add-Failure "installed overall log database guard no-traffic evidence is invalid" }
-    if (-not $walBytesOk) { Add-Failure "installed overall log database guard WAL evidence is missing" }
+    $logDbGuardProtected = (Has-Property $guard "protected") -and $guard.protected -eq $true
+    $logDbGuardTriggerPresent = (Has-Property $guard "triggerPresent") -and $guard.triggerPresent -eq $true
+    $logDbGuardNoTraffic = (Has-Property $guard "noTraffic") -and $guard.noTraffic -eq $true
+    $logDbGuardUsedRealTraffic = (Has-Property $guard "usedRealTraffic") -and $guard.usedRealTraffic -eq $false
+    $logDbGuardWalBytesOk = (Has-Property $guard "walBytes") -and [long]$guard.walBytes -ge 0
+    if (-not $logDbGuardProtected) { Add-Failure "installed overall log database guard is not protected" }
+    if (-not $logDbGuardTriggerPresent) { Add-Failure "installed overall log database guard trigger is missing" }
+    if (-not $logDbGuardNoTraffic -or -not $logDbGuardUsedRealTraffic) { Add-Failure "installed overall log database guard no-traffic evidence is invalid" }
+    if (-not $logDbGuardWalBytesOk) { Add-Failure "installed overall log database guard WAL evidence is missing" }
     [pscustomobject]@{
-        ok = ($protected -and $triggerPresent -and $noTraffic -and $usedRealTraffic -and $walBytesOk)
+        ok = ($logDbGuardProtected -and $logDbGuardTriggerPresent -and $logDbGuardNoTraffic -and $logDbGuardUsedRealTraffic -and $logDbGuardWalBytesOk)
         skipped = $false
         reason = "diagnostics.logDbGuard must prove TRACE protection before overall readiness"
-        protected = $protected
-        triggerPresent = $triggerPresent
-        noTraffic = $noTraffic
+        protected = $logDbGuardProtected
+        triggerPresent = $logDbGuardTriggerPresent
+        noTraffic = $logDbGuardNoTraffic
         usedRealTraffic = if (Has-Property $guard "usedRealTraffic") { [bool]$guard.usedRealTraffic } else { $null }
         walBytes = if (Has-Property $guard "walBytes") { [long]$guard.walBytes } else { $null }
     }
@@ -1803,7 +1816,10 @@ $checks.mcpSkills = if ($checks.managerButtonMcpSkills -and (Has-Property $check
 } elseif ($Fast -and -not (Test-FastBudgetAvailable "MCP/skills verification" 10000)) {
     New-FastBudgetSkippedCheck "MCP/skills verification" "latest-mcp-skills.json" 10000
 } else {
-    Invoke-JsonScript "MCP/skills verification" (Join-Path $scriptsRoot "test-anticodex-mcp-skills.ps1") $scriptArgs
+    Invoke-JsonScript "MCP/skills verification" (Join-Path $scriptsRoot "test-anticodex-mcp-skills.ps1") @(
+        "-BaseUrl", $BaseUrl,
+        "-TimeoutSec", "$SubcheckTimeoutSec"
+    )
 }
 $checks.independence = if ($Fast) {
     New-SkippedCheck "fast mode skips static installation independence verification; full verification covers it" "test-anticodex-independence.ps1"

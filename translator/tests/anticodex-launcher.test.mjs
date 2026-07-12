@@ -613,7 +613,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   const repairShortcuts = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 
   assert.match(brander, /anticodex-manager/);
-  assert.match(brander, /Anti-Codex \\\\u7ba1\\\\u7406/);
+  assert.match(brander, /children:[^,\n]*\\\\u7ba1\\\\u7406/);
+  assert.doesNotMatch(brander, /Anti-Codex \\\\u7ba1\\\\u7406/);
   assert.match(brander, /__ANTICODEX_OPEN_MANAGER__/);
   assert.match(brander, /"profile-dropdown-settings"/);
   assert.doesNotMatch(brander, /anticodex\/manager\/open/);
@@ -778,12 +779,17 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     assert.match(source, /actionCenterHitsButton/);
     assert.match(source, /managerOpenedNewPage/);
   }
-  assert.match(managerInject, /native-panel-v103/);
+  assert.match(managerInject, /native-panel-v104/);
   assert.match(managerInject, /latest-reports-evidence-v4/);
   assert.match(managerInject, /LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000/);
-  assert.match(managerInject, /action === "mcpSkills" \|\| action === "pluginCapabilities"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
-  assert.match(syncReadiness, /native-panel-v103/);
-  assert.match(uiState, /native-panel-v103/);
+  assert.match(managerInject, /MCP_SKILLS_ACTION_UI_TIMEOUT_MS = 440000/);
+  assert.match(managerInject, /action === "mcpSkills"[\s\S]{0,80}MCP_SKILLS_ACTION_UI_TIMEOUT_MS/);
+  assert.match(managerInject, /action === "pluginCapabilities" \|\| action === "workerTransportStatus"[\s\S]{0,80}LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS/);
+  assert.match(syncReadiness, /native-panel-v104/);
+  assert.match(uiState, /native-panel-v104/);
+  assert.doesNotMatch(managerInject, /native-panel-v103/);
+  assert.doesNotMatch(syncReadiness, /native-panel-v103/);
+  assert.doesNotMatch(uiState, /native-panel-v103/);
   assert.doesNotMatch(managerInject, /native-panel-v92/);
   assert.doesNotMatch(syncReadiness, /native-panel-v92/);
   assert.doesNotMatch(uiState, /native-panel-v92/);
@@ -951,7 +957,6 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "refreshModels",
     "refreshStatus",
     "repairShortcuts",
-    "secondAccountLoginStatus",
     "sourcePreflight",
     "syncReadiness",
     "updateCheck",
@@ -1042,9 +1047,9 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.match(managerOpenInject, /anticodex-manager-overlay/);
   assert.match(managerOpenInject, /existingOverlay/);
   assert.doesNotMatch(managerOpenInject, /getElementById\("anticodex-manager-overlay"\)\?\.remove\(\)/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v103["']/);
-  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v103"/);
-  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v103"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__\s*===\s*["']native-panel-v104["']/);
+  assert.match(syncReadiness, /__ANTICODEX_MANAGER_VERSION__\\s\*===\\s\*"native-panel-v104"/);
+  assert.match(uiState, /window\.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v104"/);
   assert.doesNotMatch(managerOpenInject, /\/anticodex\/manager\/inject\.js/);
   assert.doesNotMatch(managerOpenInject, /createElement\("script"\)/);
   const openCallIndex = managerOpenInject.indexOf("__ANTICODEX_OPEN_MANAGER__()");
@@ -1492,7 +1497,8 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     managerInject.indexOf("function kv"),
   );
   assert.doesNotMatch(actionScriptBody, /method: "POST"/);
-  assert.match(managerOpenInject, /native-panel-v103/);
+  assert.match(managerOpenInject, /native-panel-v104/);
+  assert.doesNotMatch(managerOpenInject, /native-panel-v103/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v92/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v91/);
   assert.doesNotMatch(managerOpenInject, /native-panel-v90/);
@@ -1535,7 +1541,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.ok(actionNames.includes("repairShortcuts"), "data-action list must include repairShortcuts");
   assert.ok(actionNames.includes("sourcePreflight"), "data-action list must include sourcePreflight");
   assert.ok(actionNames.includes("viewLatestReports"), "data-action list must include viewLatestReports");
-  assert.ok(actionNames.includes("secondAccountLoginStatus"), "data-action list must include secondAccountLoginStatus");
+  assert.ok(!actionNames.includes("secondAccountLoginStatus"), "optional second-account status must stay hidden from the product Manager");
   assert.match(html, /data-action="repairShortcuts"/, "fallback manager must expose repair-shortcuts action");
   assert.match(html, /data-action="upstreamConfig"/, "fallback manager must expose third-party API configuration");
   assert.match(html, /data-action="fastOverallNoTraffic"/, "fallback manager must expose no-traffic fast check");
@@ -1556,7 +1562,6 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
     "refreshModels",
     "refreshStatus",
     "repairShortcuts",
-    "secondAccountLoginStatus",
     "sourcePreflight",
     "stabilitySoak",
     "syncHost",
@@ -2108,8 +2113,9 @@ test("Anti-Codex imports skills as a local copy instead of linking shared Codex 
   const sharedHome = resolve(tempRoot, "shared");
   const sourceSkill = resolve(sharedHome, "skills", "demo-skill");
   const targetSkill = resolve(currentHome, "skills", "demo-skill");
+  const skillText = "---\nname: demo-skill\ndescription: Demo skill\n---\n# Demo\n";
   mkdirSync(sourceSkill, { recursive: true });
-  writeFileSync(resolve(sourceSkill, "SKILL.md"), "# Demo\n");
+  writeFileSync(resolve(sourceSkill, "SKILL.md"), skillText);
 
   try {
     const result = spawnSync(process.execPath, [
@@ -2123,7 +2129,7 @@ test("Anti-Codex imports skills as a local copy instead of linking shared Codex 
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(existsSync(targetSkill), true);
-    assert.equal(readFileSync(resolve(targetSkill, "SKILL.md"), "utf8"), "# Demo\n");
+    assert.equal(readFileSync(resolve(targetSkill, "SKILL.md"), "utf8"), skillText);
     assert.equal(lstatSync(resolve(currentHome, "skills")).isSymbolicLink(), false);
 
     const summary = JSON.parse(result.stdout);
@@ -2230,8 +2236,10 @@ test("Anti-Codex startup snapshots refresh when shared skill content changes", (
   const sharedHome = resolve(tempRoot, "shared");
   const sourceSkill = resolve(sharedHome, "skills", "demo-skill");
   const targetSkillFile = resolve(currentHome, "skills", "demo-skill", "SKILL.md");
+  const skillV1 = "---\nname: demo-skill\ndescription: Demo skill v1\n---\n# Demo v1\n";
+  const skillV2 = "---\nname: demo-skill\ndescription: Demo skill v2\n---\n# Demo v2\n";
   mkdirSync(sourceSkill, { recursive: true });
-  writeFileSync(resolve(sourceSkill, "SKILL.md"), "# Demo v1\n");
+  writeFileSync(resolve(sourceSkill, "SKILL.md"), skillV1);
 
   try {
     const first = spawnSync(process.execPath, [
@@ -2241,9 +2249,9 @@ test("Anti-Codex startup snapshots refresh when shared skill content changes", (
       "--startup-snapshots",
     ], { encoding: "utf8" });
     assert.equal(first.status, 0, first.stderr || first.stdout);
-    assert.equal(readFileSync(targetSkillFile, "utf8"), "# Demo v1\n");
+    assert.equal(readFileSync(targetSkillFile, "utf8"), skillV1);
 
-    writeFileSync(resolve(sourceSkill, "SKILL.md"), "# Demo v2\n");
+    writeFileSync(resolve(sourceSkill, "SKILL.md"), skillV2);
     const second = spawnSync(process.execPath, [
       resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs"),
       currentHome,
@@ -2255,7 +2263,7 @@ test("Anti-Codex startup snapshots refresh when shared skill content changes", (
     const skillsSummary = summary.summary.find((item) => item.relPath === "skills");
     assert.equal(summary.ok, true);
     assert.equal(skillsSummary.mode, "copied");
-    assert.equal(readFileSync(targetSkillFile, "utf8"), "# Demo v2\n");
+    assert.equal(readFileSync(targetSkillFile, "utf8"), skillV2);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -2447,12 +2455,23 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(miniTool, /tool_choice\s*=\s*"required"/);
   assert.match(miniTool, /previous_response_id/);
   assert.match(miniTool, /function_call_output/);
+  assert.match(miniTool, /status = if \(\$cliResult\) \{ "executed" \} else \{ "failed" \}/);
+  assert.match(miniTool, /confirmation = "CLI_OK \$marker"/);
+  assert.match(miniTool, /result = \$cliResult/);
+  assert.match(miniTool, /\$miniToolOutput \| ConvertTo-Json -Depth 8 -Compress/);
+  const miniToolFinalTurn = miniTool.slice(miniTool.indexOf("$second = Invoke-AntiCodexResponse"), miniTool.indexOf("$finalCalls ="));
+  assert.doesNotMatch(miniToolFinalTurn, /tool_choice\s*=/);
+  assert.doesNotMatch(miniToolFinalTurn, /tools\s*=\s*@\(\$miniToolDef\)/);
+  assert.doesNotMatch(miniTool, /\$finalRetry/);
+  assert.doesNotMatch(miniTool, /上轮回答错误。不要解释工具/);
   assert.match(miniTool, /\$cliSource\s*=\s*@"/);
   assert.match(miniTool, /\$cliResult\.lines\s+-ne\s+3/);
   assert.match(miniTool, /\$cliResult\.words\s+-ne\s+9/);
   assert.match(miniTool, /\$cliResult\.chars\s+-ne\s+53/);
   assert.match(miniTool, /请调用 create_mini_tool/);
   assert.match(miniTool, /\\u4e00-\\u9fff/);
+  assert.match(miniTool, /final response did not begin in Chinese/);
+  assert.match(miniTool, /final response exposed raw tool fallback/);
   assert.match(miniTool, /reportName\s*=\s*"real-mini-tool"/);
   assert.match(miniTool, /requestedRealTraffic\s*=\s*\$true/);
   assert.match(miniTool, /usedRealTraffic\s*=\s*\$true/);
@@ -2494,6 +2513,9 @@ test("Anti-Codex ships an opt-in real mini-tool task verifier", () => {
   assert.match(realSmallProject, /coverageKind\s*=\s*"real-traffic-small-project"/);
   assert.match(miniTool, /\$finalText\s+-match\s+"DeepCodex"/);
   assert.match(realWork, /\$finalText\s+-match\s+"DeepCodex"/);
+  assert.match(realWork, /real work verification exception/);
+  assert.match(realWork, /failed_error\s*=\s*\$failureError/);
+  assert.doesNotMatch(realWork, /Write-Error \("Anti-Codex real work verification failed/);
   assert.match(miniTool, /finally\s*\{[\s\S]*Remove-Item[\s\S]*Exit-AntiCodexRealTrafficLock/);
   assert.doesNotMatch(miniTool, /code\s*=\s*@\{/);
   assert.match(overall, /test-anticodex-real-mini-tool\.ps1/);
@@ -2559,8 +2581,8 @@ test("Anti-Codex ships a single Start Menu manager for common maintenance action
   assert.match(manager, /ANTICODEX_MANAGER_API/);
   assert.match(manager, /anticodex-manager-inject\.js/);
   assert.match(manager, /anticodex-manager-open-inject\.js/);
-  assert.match(manager, /latest native-panel-v103 manager script/);
-  assert.doesNotMatch(manager, /native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
+  assert.match(manager, /latest native-panel-v104 manager script/);
+  assert.doesNotMatch(manager, /native-panel-v103|native-panel-v92|native-panel-v91|native-panel-v90|native-panel-v89|native-panel-v88|native-panel-v68|native-panel-v56/);
   assert.match(manager, /function Start-EmbeddedManagerBridge/);
   assert.match(manager, /Test-EmbeddedManagerBridgeRunning -Port \$Port/);
   assert.match(manager, /PassThru/);
@@ -5920,7 +5942,7 @@ test("Anti-Codex ships a repeatable installed tool-loop verifier", () => {
   assert.match(overall, /test-anticodex-native-tool-loop\.ps1/);
   assert.match(overall, /test-anticodex-native-multi-tool-loop\.ps1/);
   assert.match(overall, /Tool loop verification/);
-  assert.match(overall, /\$AllowRealTraffic -and \$SubcheckTimeoutSec -lt 120/);
+  assert.match(overall, /\$AllowRealTraffic -and \$SubcheckTimeoutSec -lt 180/);
   assert.match(overall, /\$realTrafficTimeoutSec/);
   assert.match(overall, /\[Math\]::Max\(\$TimeoutSec, 90\)/);
   assert.match(overall, /test-anticodex-compaction-resume\.ps1[\s\S]*"-TimeoutSec", "\$realTrafficTimeoutSec"/);
@@ -6666,13 +6688,13 @@ test("installed MCP/skills verifier fails on missing shared entries without coun
       for (const skillName of skillNames) {
         const skillDir = resolve(base, "skills", skillName);
         mkdirSync(skillDir, { recursive: true });
-        writeFileSync(resolve(skillDir, "SKILL.md"), `# ${skillName}\n`);
+        writeFileSync(resolve(skillDir, "SKILL.md"), `---\nname: ${skillName}\ndescription: Shared ${skillName} test fixture\n---\n# ${skillName}\n`);
       }
     }
     mkdirSync(resolve(sharedHome, "skills", "missing-skill"), { recursive: true });
-    writeFileSync(resolve(sharedHome, "skills", "missing-skill", "SKILL.md"), "# missing\n");
+    writeFileSync(resolve(sharedHome, "skills", "missing-skill", "SKILL.md"), "---\nname: missing-skill\ndescription: Missing skill test fixture\n---\n# missing\n");
     mkdirSync(resolve(tempRoot, "agents-skills", "headroom"), { recursive: true });
-    writeFileSync(resolve(tempRoot, "agents-skills", "headroom", "SKILL.md"), "# conflicting headroom\n");
+    writeFileSync(resolve(tempRoot, "agents-skills", "headroom", "SKILL.md"), "---\nname: headroom\ndescription: Conflicting headroom test fixture\n---\n# conflicting headroom\n");
     mkdirSync(localHome, { recursive: true });
     writeFileSync(resolve(localHome, "fake-node-repl.mjs"), "process.stdin.resume();\n");
     writeFileSync(resolve(localHome, "config.toml"), `
@@ -7672,6 +7694,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Test-InstalledBranding/);
   assert.match(overall, /Test-ExternalBranding/);
   assert.match(overall, /Read-AsarHeader/);
+  assert.match(overall, /bootstrap\(\?:-\[\^\/\]\+\)\?\\\.js/);
+  assert.doesNotMatch(overall, /Read-AsarEntryText[^\r\n]+"\.vite\/build\/bootstrap\.js"/);
   assert.match(overall, /setAppUserModelId\(`AntiCodex`\)/);
   assert.match(overall, /app\.name=`Anti-Codex`/);
   assert.match(overall, /setToolTip\\\(\[\^\)\]\*\\\.app\\\.getName/);
@@ -7686,6 +7710,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /\$uiStateArgs = @\("-BaseUrl", \$BaseUrl, "-TimeoutSec", "\$uiProbeTimeoutSec"\)/);
   assert.match(overall, /if \(\$Fast\) \{ \$uiStateArgs \+= @\("-Fast"\) \}/);
   assert.match(overall, /SubcheckTimeoutSec = 60/);
+  assert.match(overall, /if \(\$AllowRealTraffic\) \{\s*\$NoTraffic = \$false\s*\}/);
   assert.match(overall, /function Get-InstalledOverallDiagnosticsSnapshot/);
   assert.match(overall, /\$script:InstalledOverallDiagnosticsSnapshot/);
   assert.match(overall, /function Test-FastBudgetAvailable/);
@@ -7824,6 +7849,8 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /diagnostics\.logDbGuard/);
   assert.match(overall, /installed overall log database guard is not protected/);
   assert.match(overall, /installed overall log database guard trigger is missing/);
+  assert.match(overall, /\$logDbGuardNoTraffic = \(Has-Property \$guard "noTraffic"\)/);
+  assert.doesNotMatch(overall, /\$noTraffic = \(Has-Property \$guard "noTraffic"\)/);
   assert.match(overall, /test-anticodex-tool-bridge-mode\.ps1/);
   assert.match(overall, /Tool bridge mode verification/);
   assert.match(overall, /test-anticodex-runtime-config\.ps1/);
@@ -7888,6 +7915,7 @@ test("Anti-Codex ships a read-only installed overall verification script", () =>
   assert.match(overall, /Get-OriginalCodexMainProcesses/);
   assert.match(overall, /\$checks\.independence = if \(\$Fast\)/);
   assert.match(overall, /test-anticodex-mcp-skills\.ps1/);
+  assert.match(overall, /MCP\/skills verification" \(Join-Path \$scriptsRoot "test-anticodex-mcp-skills\.ps1"\) @\([\s\S]{0,180}"-TimeoutSec", "\$SubcheckTimeoutSec"/);
   assert.match(overall, /\$freshMcpSkillsCheck = if \(\$Fast -or \$NoTraffic\) \{ Get-FreshMcpSkillsReportCheck \}/);
   assert.match(overall, /New-FastBudgetSkippedCheck "MCP\/skills verification"/);
   assert.match(overall, /test-anticodex-plugin-capabilities\.ps1/);
@@ -8184,6 +8212,7 @@ test("Anti-Codex ships a source-only preflight gate before install or deploy", (
   assert.match(preflight, /usedRealTraffic = \$false/);
   assert.match(preflight, /behaviorCovered = \(\$failures\.Count -eq 0\)/);
   assert.match(preflight, /coverageKind = "source-no-traffic"/);
+  assert.match(preflight, /SubcheckTimeoutSec = 240/);
   assert.match(preflight, /node --check/);
   assert.match(preflight, /Test-LogDbGuardSelfTest/);
   assert.match(preflight, /protect-anticodex-log-db\.mjs/);
@@ -8238,6 +8267,12 @@ test("Anti-Codex ships a Codex internal Responses stream verifier", () => {
   assert.match(verifier, /\/codex\/responses/);
   assert.match(verifier, /response\.created/);
   assert.match(verifier, /response\.completed/);
+  assert.match(verifier, /response\.failed/);
+  assert.match(verifier, /\[string\]\$Model = ""/);
+  assert.match(verifier, /\/codex\/responses emitted response\.failed/);
+  assert.match(verifier, /failed_error/);
+  assert.match(verifier, /routeFresh/);
+  assert.match(verifier, /usedRealTraffic = \$trafficAttempted/);
   assert.match(verifier, /请用中文/);
   assert.match(verifier, /\\u4e00-\\u9fff/);
   assert.match(verifier, /\$finalText\s+-match\s+"DeepCodex"/);
@@ -12007,7 +12042,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /source_preflight_antigravity_cli_isolation_profile/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare/);
   assert.match(releaseGates, /source_preflight_antigravity_cli_profile_prepare_rejects_default_child/);
-  assert.match(releaseGates, /source_preflight_antigravity_cli_windows_user_login_dry_run/);
+  assert.match(releaseGates, /source_preflight_account_isolation_checks_not_optional/);
+  assert.match(releaseGates, /source_preflight_optional_account_check_id_missing/);
   assert.match(releaseGates, /source_preflight_windows_user_login_readiness_not_checked/);
   assert.match(releaseGates, /source_preflight_windows_user_login_target_is_current_user/);
   assert.match(releaseGates, /source_preflight_windows_user_login_credential_boundary/);
@@ -12252,7 +12288,7 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /sync-anticodex-runtime\.ps1 -NoRestart -TimeoutSec 10/);
   assert.match(releaseGates, /required failed gates missing ordered actions/);
   assert.match(releaseGates, /nextActions contained an action without a command/);
-  assert.match(releaseGates, /test-anticodex-manager-real-buttons\.ps1 -TimeoutSec 120/);
+  assert.match(releaseGates, /test-anticodex-manager-real-buttons\.ps1 -TimeoutSec 480/);
   assert.match(releaseGates, /manager real-button ordered action was not attached/);
   assert.match(releaseGates, /test-anticodex-account-proxy-readiness\.ps1 -TimeoutSec 120/);
   assert.match(releaseGates, /requireAccountProxySemantics/);
@@ -12488,8 +12524,9 @@ test("passive release gate self-test executes successfully", () => {
   assert.ok(summary.semanticFailures.thirdPartyProvider.includes("third_party_provider_turn6_ordered_history"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_local_connector_verifier"));
   assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_isolation_profile"));
-  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_profile_prepare"));
-  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_antigravity_cli_profile_prepare_rejects_default_child"));
+  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_account_isolation_checks_not_optional"));
+  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_optional_account_check_id_missing:antigravityCliProfilePrepare"));
+  assert.ok(summary.semanticFailures.sourcePreflight.includes("source_preflight_optional_account_check_id_missing:antigravityCliProfilePrepareRejectsDefaultChild"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_used_real_traffic"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContractMissing.includes("source_preflight_profile_prepare_contract_missing"));
   assert.ok(summary.semanticFailures.sourcePreflightProfilePrepareContract.includes("source_preflight_profile_prepare_login_verified"));
@@ -12624,6 +12661,15 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /another desktop UI smoke is still running/);
   assert.match(verifier, /function recoverStaleComposerExpression/);
   assert.match(verifier, /删除排队的消息/);
+  const staleRecoverySection = verifier.slice(
+    verifier.indexOf("function recoverStaleComposerExpression"),
+    verifier.indexOf("function responseHistoryAssistantMarkerCount"),
+  );
+  assert.match(staleRecoverySection, /const controls = \[\]/);
+  assert.doesNotMatch(staleRecoverySection, /button\.click\(\)/);
+  assert.match(verifier, /async function clickRecoveryControlsWithMouse/);
+  assert.match(verifier, /staleRecovery = await clickRecoveryControlsWithMouse\(ws, staleRecovery\)/);
+  assert.match(verifier, /idleBackendStaleComposerRecovery = await clickRecoveryControlsWithMouse\(ws, idleBackendStaleComposerRecovery\)/);
   assert.match(verifier, /function sendButtonProbeExpression/);
   assert.match(verifier, /data-codex-composer/);
   assert.match(verifier, /size-token-button-composer/);
@@ -12642,15 +12688,24 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /modelRouteEvidence/);
   assert.match(verifier, /args\.get\("--model"\)/);
   assert.match(verifier, /args\.get\("--model-label"\)/);
+  assert.match(verifier, /let requiredModelLabel =/);
+  assert.match(verifier, /deepseek-model-catalog\.json/);
+  assert.match(verifier, /model\?\.slug === requiredModel/);
+  assert.match(verifier, /matchedModel\?\.display_name/);
   assert.match(verifier, /function collectRequiredModelFailures/);
   assert.match(verifier, /function diagnosticsHasRealResponsesSubmitAfter/);
   assert.match(verifier, /function responsesSubmitModelValues/);
   assert.match(verifier, /function diagnosticsHasRequiredModelSubmit/);
   assert.match(verifier, /function waitForRealResponsesSubmitAfter/);
+  assert.match(verifier, /const DESKTOP_SUBMIT_REQUEST_GRACE_MS = 70_000/);
+  assert.match(verifier, /async function retryDesktopSubmitAfterMissingPayload/);
+  assert.match(verifier, /clickMethod:\s*"cdp-mouse-retry"/);
+  assert.match(verifier, /retryEvidence\.newChatEvidence/);
+  assert.match(verifier, /submitEvidence\.retryRealSubmit = retryEvidence\.realSubmit/);
   assert.match(verifier, /function refillComposerPrompt/);
   assert.match(verifier, /function selectRequiredModelBeforeRetry/);
   assert.match(verifier, /emptyPrewarmRetry/);
-  assert.match(verifier, /retryModelSelection/);
+  assert.doesNotMatch(verifier, /submitEvidence\.retryModelSelection/);
   assert.match(verifier, /retryRealSubmit/);
   assert.match(verifier, /desktop task did not route through required model/);
   assert.match(verifier, /desktop UI did not select required model/);
@@ -12672,7 +12727,10 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /latestUserChars/);
   assert.match(verifier, /textDeltaChars/);
   assert.match(verifier, /submitWaitMs/);
-  assert.match(verifier, /desktop submit did not produce a model request payload/);
+  assert.match(verifier, /desktop submit did not produce model request evidence/);
+  assert.equal((verifier.match(/submitEvidence\.emptyPrewarmRetry = realSubmit;/g) || []).length, 2);
+  assert.equal((verifier.match(/const retryEvidence = await retryDesktopSubmitAfterMissingPayload/g) || []).length, 2);
+  assert.doesNotMatch(verifier, /submitConfirmedBy = "composer-cleared-no-payload";\s*submitSucceeded = false/);
   assert.doesNotMatch(verifier, /needle\.includes\(text\)/);
   assert.match(server, /diagnosticsPayload\(\{ fast: url\.searchParams\.get\("fast"\) === "1" \}\)/);
   assert.match(server, /reason: "fast_diagnostics"/);
@@ -12780,6 +12838,8 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /function diagnosticsAreIdle/);
   assert.match(verifier, /async function waitForIdleDiagnostics/);
   assert.match(verifier, /const idleTimeoutMs = taskMode === "local-project" \|\| taskMode === "coding-project" \|\| taskMode === "multi-turn-project" \|\| taskMode === "complex-project" \|\| taskMode === "autonomous-reasoning" \|\| taskMode === "report-site" \|\| taskMode === "agentic-step-flow" \|\| taskMode === "repo-file-edit" \|\| taskMode === "repo-multi-file-edit" \? 60_000 : 20_000/);
+  assert.match(verifier, /function reportSiteFinalEvidenceComplete\(evidence\)/);
+  assert.match(verifier, /const sessionLock = diagnostics\?\.antigravitySessionLock[\s\S]{0,2200}if \(taskMode === "report-site"\) \{\s*artifactEvidence = await waitForArtifactEvidence\(\s*\(\) => verifyReportSiteArtifact\(artifactDir, marker\),\s*reportSiteFinalEvidenceComplete,\s*Math\.min\(timeoutMs, 15_000\),\s*\);\s*\}/);
   assert.match(verifier, /desktop task did not become idle after the assistant reply/);
   assert.match(verifier, /antigravitySessionLock/);
   assert.match(verifier, /activeAntigravityRequests/);
@@ -12841,6 +12901,29 @@ test("Anti-Codex requires a real desktop UI chat smoke before release", () => {
   assert.match(verifier, /codex-update-analyzer\.mjs/);
   assert.match(verifier, /sources\.json/);
   assert.match(verifier, /summarizeSources/);
+  const autonomousInitialPrompt = verifier.slice(
+    verifier.indexOf('if (!hasCustomPrompt && taskMode === "autonomous-reasoning")'),
+    verifier.indexOf('if (!hasCustomPrompt && taskMode === "report-site")'),
+  );
+  assert.match(autonomousInitialPrompt, /analyze\(filePath\)/);
+  assert.match(autonomousInitialPrompt, /summarizeSources\(filePath\)/);
+  assert.match(autonomousInitialPrompt, /setup\.js/);
+  assert.match(autonomousInitialPrompt, /第 8 个文件/);
+  const autonomousRepairPrompt = verifier.slice(
+    verifier.indexOf("function buildAutonomousReasoningContinuationPrompt"),
+    verifier.indexOf("function filterRepoMultiReadmeTextOnlyFailures"),
+  );
+  assert.match(autonomousRepairPrompt, /analyze\(filePath\)/);
+  assert.match(autonomousRepairPrompt, /setup\.js/);
+  assert.match(autonomousRepairPrompt, /第 8 个文件/);
+  const autonomousRepairFlow = verifier.slice(
+    verifier.indexOf("const historyConfirmedFailures = filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion"),
+    verifier.indexOf("if (repairTurn) {", verifier.indexOf("const historyConfirmedFailures = filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion")),
+  );
+  assert.match(autonomousRepairFlow, /same-task-continuation/);
+  assert.match(autonomousRepairFlow, /recoverIdleBackendStaleComposerExpression/);
+  assert.doesNotMatch(autonomousRepairFlow, /newChatClickExpression/);
+  assert.match(verifier, /if \(repairTurn\) inLoopIdleDiagnostics = null/);
 
   assert.match(overall, /uiChatSmoke/);
   assert.match(overall, /test-anticodex-ui-chat-smoke\.mjs/);
@@ -13121,7 +13204,7 @@ test("Anti-Codex ships a guarded concrete desktop task suite runner", () => {
   assert.match(agenticCapabilityMatrix, /codex_like_process_proof_missing/);
   assert.match(agenticCapabilityMatrix, /task_tool_call_missing/);
   assert.match(agenticCapabilityMatrix, /task_tool_output_missing/);
-  assert.match(uiState, /expectedDailyActionIds[\s\S]*"secondAccountLoginStatus"/);
+  assert.doesNotMatch(uiState, /"secondAccountLoginStatus"/);
 });
 
 test("desktop task suite dry-run audits stale latest real task evidence without using traffic", () => {
@@ -13374,14 +13457,27 @@ test("optional and special latest reports stay visible without becoming release-
   ];
 
   assert.deepEqual(optionalReports, [
+    "latest-antigravity-account-isolation-status.json",
     "latest-antigravity-cli-real-smoke.json",
+    "latest-antigravity-cli-windows-user-readiness.json",
     "latest-antigravity-worker-direct-smoke.json",
+    "latest-approved-real-run-sequence.json",
     "latest-cold-relaunch.json",
+    "latest-external-mcp-identity-contract.json",
+    "latest-fresh-channel-worker-proof-kit.json",
+    "latest-goal-real-run-readiness.json",
+    "latest-goal-unblock-package.json",
     "latest-native-multi-tool-loop.json",
     "latest-native-tool-loop.json",
     "latest-provider-antigravity-return.json",
     "latest-real-third-party-provider.json",
+    "latest-required-real-traffic-sequence.json",
+    "latest-second-account-post-login-proof.json",
+    "latest-second-account-readiness-summary.json",
+    "latest-second-antigravity-account-login-entrypoint.json",
     "latest-stability-soak.json",
+    "latest-windows-user-account-prepare.json",
+    "latest-windows-user-setup-guidance.json",
   ]);
   for (const report of [...optionalReports, ...specialReports]) {
     assert.ok(collector.includes(report), `${report} missing from diagnostic bundle latestReports`);
@@ -13407,7 +13503,7 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /goalReadinessEvidence/);
   assert.match(collector, /goalReadinessEvidence = \$json\.goalReadinessEvidence/);
   assert.match(diagnostics, /goal-readiness summary missing goalReadinessEvidence/);
-  assert.match(diagnostics, /goal-readiness summary unexpectedly claims goal complete/);
+  assert.match(diagnostics, /goal-readiness summary full objective cannot be claimed/);
   assert.match(releaseGates, /id:\s*"goalReadiness"[\s\S]*?file:\s*"latest-goal-readiness\.json"[\s\S]*?requiredForRelease:\s*true/);
   assert.match(releaseGates, /requireGoalReadinessSemantics:\s*true/);
   assert.match(releaseGates, /goal_readiness_release_not_blocked_only_by_real_traffic/);
@@ -13419,7 +13515,6 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /workerMcp/);
   assert.match(goalReadiness, /passedServerCount/);
   assert.match(goalReadiness, /toolCountByServer/);
-  assert.match(goalReadiness, /worker_mcp_tool_count_incomplete/);
   assert.match(goalReadiness, /serverProbeReportPresent/);
   assert.match(goalReadiness, /statusProbeReportPresent/);
   assert.match(goalReadiness, /statusProbeStatusCallOkCount/);
@@ -13476,13 +13571,9 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /taskSmokeRequiredWorkers/);
   assert.match(goalReadiness, /taskSmokePassedWorkerCount/);
   assert.match(goalReadiness, /taskSmokeMissingRequiredWorkers/);
-  assert.match(goalReadiness, /worker_mcp_task_smoke_insufficient_worker_diversity/);
-  assert.match(goalReadiness, /worker_mcp_task_smoke_missing_required_worker/);
-  assert.match(goalReadiness, /worker_mcp_task_smoke_missing_or_failed/);
   assert.match(goalReadiness, /projectSmokeReportOk/);
   assert.match(goalReadiness, /projectSmokeScenario/);
   assert.match(goalReadiness, /projectSmokePassedWorkerCount/);
-  assert.match(goalReadiness, /worker_mcp_project_smoke_insufficient_worker_diversity/);
   assert.match(goalReadiness, /workspaceVerification\.extraFiles\.length === 0/);
   assert.match(workerTaskSmoke, /--merge-latest/);
   assert.match(workerTaskSmoke, /function mergeLatestResults/);
@@ -13637,8 +13728,6 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(diagnostics, /worker-mcp-project-smoke summary missing required worker/);
   assert.match(diagnostics, /worker-mcp-project-smoke CLI red count mismatch/);
   assert.match(diagnostics, /worker-mcp-project-smoke extra files/);
-  assert.match(releaseGates, /goal_readiness_worker_mcp_project_smoke_not_ok/);
-  assert.match(releaseGates, /goal_readiness_worker_mcp_project_smoke_passed_count/);
   assert.match(diagnostics, /mimo-claude-coworker/);
   assert.match(diagnostics, /opencode-worker/);
   assert.match(goalReadiness, /desktopAgenticTasks/);
@@ -13678,7 +13767,6 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /postLoginProofCommandTemplate/);
   assert.match(goalReadiness, /postLoginProofCommandTemplateHasWindowsUser/);
   assert.match(goalReadiness, /postLoginProofPlanValid/);
-  assert.match(goalReadiness, /second_account_login_entrypoint_missing_or_invalid/);
   assert.match(goalReadiness, /latest-second-account-readiness-summary\.json/);
   assert.match(goalReadiness, /secondAccountReadinessSummary/);
   assert.match(goalReadiness, /readyForOperatorLogin/);
@@ -13694,10 +13782,8 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /operatorChecklistStartsLoginCount/);
   assert.match(goalReadiness, /operatorChecklistUsesRealTrafficCount/);
   assert.match(goalReadiness, /accountIsolationCaveat/);
-  assert.match(goalReadiness, /second_account_readiness_summary_missing_or_invalid/);
   assert.match(releaseGates, /goal_readiness_second_account_entrypoint_proof_plan_invalid/);
   assert.match(releaseGates, /goal_readiness_second_account_entrypoint_login_template_incomplete/);
-  assert.match(releaseGates, /goal_readiness_second_account_readiness_summary_missing_or_invalid/);
   assert.match(releaseGates, /goal_readiness_second_account_readiness_summary_checklist_order/);
   assert.match(releaseGates, /goal_readiness_second_account_readiness_summary_manual_hint_missing/);
   assert.match(summarizer, /secondAccountLoginEntrypointProven/);
@@ -13711,11 +13797,49 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(summarizer, /secondAccountReadinessSummaryAccountIsolationCaveat/);
   assert.match(summarizer, /secondAccountReadinessSummaryCanCreateTargetWindowsUser/);
   assert.match(summarizer, /secondAccountReadinessSummaryRecommendedOperatorAction/);
-  assert.match(diagnostics, /goal-readiness summary missing second-account login entrypoint proof/);
-  assert.match(diagnostics, /goal-readiness summary second-account entrypoint proof plan invalid/);
-  assert.match(diagnostics, /goal-readiness summary missing second-account readiness summary proof/);
-  assert.match(diagnostics, /goal-readiness summary second-account readiness summary caveat missing/);
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
+});
+
+test("single-account native parity is the permanent Anti-Codex product goal", () => {
+  const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const realApprovalPlan = readFileSync(resolve(root, "scripts", "test-anticodex-real-approval-plan.mjs"), "utf8");
+  const goalRealRunReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-real-run-readiness.mjs"), "utf8");
+  const approvedRealRunSequence = readFileSync(resolve(root, "scripts", "test-anticodex-approved-real-run-sequence.mjs"), "utf8");
+  const goalUnblockPackage = readFileSync(resolve(root, "scripts", "build-anticodex-goal-unblock-package.mjs"), "utf8");
+
+  assert.match(goalReadiness, /mode: "single-account-native-codex-parity"/);
+  assert.match(goalReadiness, /workerMcpOptionalDevelopmentEvidence: true/);
+  assert.match(goalReadiness, /accountIsolationOptional: true/);
+  assert.match(goalReadiness, /optionalObjectiveRequirementAudit/);
+  assert.doesNotMatch(goalReadiness, /mode: "shared-account-worker-mcp-disabled"/);
+  assert.doesNotMatch(goalReadiness, /workerMcpTemporarilyDisabled: true/);
+  assert.doesNotMatch(goalReadiness, /full goal still requires second-account proof/i);
+
+  assert.match(releaseGates, /single-account-native-codex-parity/);
+  assert.match(releaseGates, /goal_readiness_optional_requirement_audit_count/);
+  assert.doesNotMatch(releaseGates, /goal_readiness_full_objective_requirement_missing_separate_account/);
+
+  assert.match(realApprovalPlan, /optionalAccountIsolationActions/);
+  assert.match(realApprovalPlan, /productReleaseGating: false/);
+  assert.doesNotMatch(realApprovalPlan, /const orderedActions = \[[\s\S]*?second-antigravity-account-login/);
+  assert.match(goalRealRunReadiness, /accountIsolationProductReleaseGating: false/);
+  assert.match(approvedRealRunSequence, /optionalAccountIsolationSequence/);
+  assert.doesNotMatch(approvedRealRunSequence, /const approvedRealRunSequence = \[[\s\S]*?secondAntigravityAccountLogin/);
+  assert.match(goalUnblockPackage, /optionalDevelopmentActions/);
+  assert.doesNotMatch(goalUnblockPackage, /full_objective_should_remain_deferred/);
+});
+
+test("worker ecosystem evidence is optional for the product release", () => {
+  const ecosystem = readFileSync(resolve(root, "scripts", "test-anticodex-ecosystem-surfaces.mjs"), "utf8");
+
+  for (const workerReport of ["workerMcpSourceHygiene", "workerMcpServerProbe", "workerMcpStatusProbe"]) {
+    assert.match(ecosystem, new RegExp(`id: "${workerReport}"[\\s\\S]*?requiredForProduct: false`));
+  }
+  assert.match(ecosystem, /optionalDevelopmentFailures/);
+  assert.match(ecosystem, /requiredResults = results\.filter\(\(result\) => result\.requiredForProduct\)/);
+  assert.match(ecosystem, /\(requiredForProduct \? failures : optionalDevelopmentFailures\)\.push/);
+  assert.match(ecosystem, /ok: failures\.length === 0/);
 });
 
 test("Anti-Codex ships a no-traffic real task coverage roadmap", () => {
@@ -13857,6 +13981,9 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(plan, /requiredReleaseRealTrafficActionCount/);
   assert.match(plan, /optionalReleaseRealTrafficActionCount/);
   assert.match(plan, /accountIsolation/);
+  assert.match(plan, /optionalAccountIsolationPrechecks/);
+  assert.match(plan, /optionalAccountIsolationActions/);
+  assert.match(plan, /productReleaseGating: false/);
   assert.match(plan, /blockedUntilExplicitUserApproval/);
   assert.match(plan, /target_windows_user_missing/);
   assert.match(plan, /uniqueRefreshTasks/);
@@ -13883,8 +14010,8 @@ test("Anti-Codex ships a no-traffic real approval execution plan", () => {
   assert.match(releaseGates, /real_approval_plan_required_release_actions_missing/);
   assert.match(releaseGates, /real_approval_plan_refresh_command_args_missing/);
   assert.match(releaseGates, /real_approval_plan_refresh_approval_summary_missing/);
-  assert.match(releaseGates, /real_approval_plan_pre_login_checklist_incomplete/);
-  assert.match(releaseGates, /real_approval_plan_second_account_entrypoint_source_missing/);
+  assert.match(releaseGates, /real_approval_plan_optional_account_prechecks_incomplete/);
+  assert.match(releaseGates, /real_approval_plan_optional_account_action_count/);
   assert.match(releaseGates, /real_approval_plan_login_action_missing_windows_user/);
   assert.match(releaseGates, /real_approval_plan_proof_action_missing_separate_account_flag/);
   assert.match(releaseGates, /real_approval_plan_pre_login_\$\{checklistId\.replaceAll\("-", "_"\)\}_missing/);
@@ -14092,7 +14219,9 @@ test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
   assert.match(readiness, /requestedRealTraffic: false/);
   assert.match(readiness, /usedRealTraffic: false/);
   assert.match(readiness, /coverageKind: "goal-real-run-readiness-report-only"/);
-  assert.match(readiness, /readyForUserApprovedRealRun: false/);
+  assert.match(readiness, /const readyForUserApprovedRealRun = failures\.length === 0 && readyToRequestUserApproval/);
+  assert.match(readiness, /accountIsolationProductReleaseGating: false/);
+  assert.match(readiness, /optionalAccountIsolation/);
   assert.match(readiness, /latest-approved-real-run-sequence\.json/);
   assert.match(readiness, /approvedRealRunSequence: \{ present: approvedSequenceReport\.present, parseable: approvedSequenceReport\.parseable \}/);
   assert.match(readiness, /readyToRequestSecondAccountLoginApproval/);
@@ -14104,7 +14233,7 @@ test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
   assert.match(readiness, /pendingRealTaskScenarios/);
   assert.match(readiness, /uniqueRefreshTasks/);
   assert.match(readiness, /EXPECTED_REAL_TASK_MODES = \["web-search", "free-chat"\]/);
-  assert.match(readiness, /second_account_login_not_ready/);
+  assert.doesNotMatch(readiness, /blockingStages\.push\("second_account_login_not_ready"\)/);
   assert.match(readiness, /real_task_refresh_requires_explicit_approval/);
   assert.match(readiness, /release_gates_require_explicit_real_traffic/);
   assert.match(readiness, /accountProxyReadiness/);
@@ -14125,7 +14254,7 @@ test("Anti-Codex ships a no-traffic goal real run readiness verifier", () => {
   assert.match(managerBridge, /goalRealRun tasks:/);
   assert.match(managerInject, /goalRealRun: ready=/);
   assert.match(managerInject, /goalRealRun tasks:/);
-  assert.match(releaseGates, /id:\s*"goalRealRunReadiness"[\s\S]*?file:\s*"latest-goal-real-run-readiness\.json"[\s\S]*?requiredForRelease:\s*true/);
+  assert.match(releaseGates, /id:\s*"goalRealRunReadiness"[\s\S]*?file:\s*"latest-goal-real-run-readiness\.json"[\s\S]*?requiredForRelease:\s*false/);
   assert.match(releaseGates, /requireGoalRealRunReadinessSemantics:\s*true/);
   assert.match(releaseGates, /goal_real_run_readiness_\$\{taskMode\.replaceAll\("-", "_"\)\}_task_missing/);
   assert.match(releaseGates, /EXPECTED_GOAL_REAL_RUN_TASK_MODES = \["web-search", "free-chat"\]/);
@@ -14894,7 +15023,7 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(antigravityCliDualLanes, /geminiDirDifferent/);
   assert.match(antigravityCliDualLanes, /neitherUsesDefaultAntigravityProfile/);
   assert.match(antigravityCliDualLanes, /does not prove login, account identity, or Windows credential-store separation/);
-  assert.match(releaseGates, /source_preflight_antigravity_cli_dual_account_lanes/);
+  assert.match(releaseGates, /source_preflight_optional_account_check_id_missing/);
   assert.match(releaseGates, /source_preflight_dual_account_lanes_contract_missing/);
   assert.match(releaseGates, /source_preflight_dual_lanes_profile_roots_not_different/);
   assert.match(releaseGates, /source_preflight_dual_lanes_mcp_managed_by_anticodex/);
@@ -14975,11 +15104,13 @@ test("Anti-Codex source preflight executes upstream profile assertions as part o
   assert.match(secondAccountPostLoginProof, /Dry-run only\. This does not start login, use real traffic, capture passwords, or prove distinct Antigravity account identity\./);
   assert.match(preflight, /checks\["logDbGuardSelfTest"\]/);
   assert.match(preflight, /function Test-AntigravityCliProfilePrepare/);
-  assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Test-AntigravityCliProfilePrepare/);
+  assert.match(preflight, /checks\["antigravityCliProfilePrepare"\] = Invoke-OptionalCheck/);
   assert.match(preflight, /function Test-AntigravityCliProfilePrepareRejectsDefaultChild/);
-  assert.match(preflight, /checks\["antigravityCliProfilePrepareRejectsDefaultChild"\] = Test-AntigravityCliProfilePrepareRejectsDefaultChild/);
+  assert.match(preflight, /checks\["antigravityCliProfilePrepareRejectsDefaultChild"\] = Invoke-OptionalCheck/);
   assert.match(preflight, /function Test-AntigravityCliWindowsUserLoginDryRun/);
-  assert.match(preflight, /checks\["antigravityCliWindowsUserLoginDryRun"\] = Test-AntigravityCliWindowsUserLoginDryRun/);
+  assert.match(preflight, /checks\["antigravityCliWindowsUserLoginDryRun"\] = Invoke-OptionalCheck/);
+  assert.match(preflight, /accountIsolationChecksOptional = \$true/);
+  assert.match(preflight, /optionalAccountIsolationCheckIds/);
   assert.match(preflight, /start-anticodex-antigravity-cli-login-windows-user\.ps1/);
   assert.match(preflight, /credentialBoundary -eq "separate-windows-user"/);
   assert.match(preflight, /expectedCredentialStoreIsolation -eq \$true/);
@@ -15035,88 +15166,51 @@ test("current docs describe Antigravity as model entitlement, not Desktop cowork
   assert.match(videoScript, /Codex-owned tools stay in Anti-Codex/);
 });
 
-test("task plan current status distinguishes release readiness from second-account goal proof", () => {
+test("current project docs preserve the permanent single-account product goal", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
+  const findings = readFileSync(resolve(root, "findings.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  assert.match(currentStatus, /shortReady:true/);
-  assert.match(currentStatus, /releaseReady:true/);
-  assert.match(currentStatus, /current_channel_worker_transport_not_recovered/);
-  assert.match(currentStatus, /active goal still lacks separate Antigravity account proof|second Antigravity account proof still requires|second_antigravity_account_real_proof_missing/);
-  assert.match(currentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
-  assert.match(currentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782997540226|UI_COMPLEX_PROJECT_SMOKE_1783010032086|UI_AUTONOMOUS_REASONING_SMOKE_1783022208952/);
-  assert.match(currentStatus, /quota-exhausted|quota exhaustion/);
-  assert.match(currentStatus, /claude-sonnet-4-6/);
-  assert.match(currentStatus, /compactionResume/);
-  assert.match(currentStatus, /goalComplete:false/);
-  assert.match(currentStatus, /separateAccountVerified:false/);
-  assert.match(currentStatus, /releaseAcceptableAccountProof:false/);
-  assert.match(handoffCurrentStatus, /shortReady:true/);
-  assert.match(handoffCurrentStatus, /releaseReady:true/);
-  assert.match(handoffCurrentStatus, /current_channel_worker_transport_not_recovered/);
-  assert.match(handoffCurrentStatus, /Full active-goal completion is still blocked|active goal still needs separate Antigravity account proof|second_antigravity_account_real_proof_missing|second Antigravity account proof/);
-  assert.match(handoffCurrentStatus, /codexLikeProcessProof:true|Codex-like process proof/);
-  assert.match(handoffCurrentStatus, /UI_COMPLEX_PROJECT_SMOKE_1782997540226|UI_COMPLEX_PROJECT_SMOKE_1783010032086|UI_AUTONOMOUS_REASONING_SMOKE_1783022208952/);
-  assert.match(handoffCurrentStatus, /claude-sonnet-4-6/);
-  assert.match(handoffCurrentStatus, /separateAccountVerified:false/);
-  assert.match(handoffCurrentStatus, /releaseAcceptableAccountProof:false/);
+  for (const source of [currentStatus, findings, handoffCurrentStatus]) {
+    assert.match(source, /single-account-native-codex-parity/);
+    assert.match(source, /guarded complete Codex client copy|guarded complete copy\/sync of the current Codex desktop client/);
+    assert.match(source, /Antigravity model text/);
+    assert.match(source, /real long-task|real long tasks/);
+    assert.match(source, /native-Codex-like|native Codex/);
+    assert.match(source, /optional development/);
+    assert.match(source, /Xiaoqiang 1\/2\/3\/4.*archived/);
+  }
+  assert.match(taskPlan, /Account separation and worker MCP remain optional development appendices, not product requirements/);
+  assert.match(handoffCurrentStatus, /Separate accounts and worker MCP are optional development appendices, not release blockers/);
 });
 
-test("current project direction keeps separate Antigravity account lanes for MCP and Anti-Codex", () => {
+test("optional Antigravity account isolation stays outside the product path", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
   const findings = readFileSync(resolve(root, "findings.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
   const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
-  const currentStatus = taskPlan.split("## Goal")[0];
   const baseline = taskPlan.split("## Phases")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  assert.match(currentStatus, /Gemini CLI is not usable/);
-  assert.match(currentStatus, /separate Antigravity CLI profile\/account/);
-  assert.match(currentStatus, /MCP can use a different Antigravity account/);
-  assert.match(baseline, /two account\/profile boundaries/);
-  assert.match(baseline, /MCP wiring is handled outside this channel/);
-  assert.match(handoffCurrentStatus, /two-account\/profile split/);
-  assert.match(handoffCurrentStatus, /Do not run real account\/traffic proof without explicit approval/);
-  assert.match(findings, /Gemini CLI is not usable for the MCP-side account split/);
-  assert.match(findings, /previous single-Antigravity-account fallback is superseded/);
-  assert.match(findings, /isolated Antigravity CLI profile\/account for model text/);
-  assert.match(findings, /do not claim true separate-account proof without explicit approved real account\/traffic evidence/);
-
+  assert.match(baseline, /Optional account-isolation scripts may remain for development experiments/);
+  assert.match(baseline, /must not enter the product action sequence, Manager daily actions, release requirements, or goal blockers/);
+  assert.match(findings, /Dual-account isolation and worker MCP are optional development evidence/);
+  assert.match(handoffCurrentStatus, /Do not reopen dual-account work/);
   assert.match(antigravityCliPrepare, /separateAccountVerified = \$false/);
   assert.match(antigravityCliRealSmoke, /separateAccountVerified = \$false/);
-
-  assert.doesNotMatch(currentStatus, /uses one Antigravity CLI account\/profile/);
-  assert.doesNotMatch(baseline, /single-account by default/);
-  assert.doesNotMatch(findings, /uses one Antigravity CLI account\/profile/);
-  assert.doesNotMatch(findings, /Gemini CLI covers MCP-side account split/);
-  assert.doesNotMatch(handoffCurrentStatus, /uses one Antigravity CLI account\/profile/);
 });
 
-test("current account-mode docs reject Gemini CLI fallback", () => {
+test("optional account tools do not substitute Gemini CLI for the product route", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
-  const findings = readFileSync(resolve(root, "findings.md"), "utf8");
-  const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
-  const currentStatus = taskPlan.split("## Goal")[0];
+  const antigravityCliPrepare = readFileSync(resolve(root, "scripts", "prepare-anticodex-antigravity-cli-profile.ps1"), "utf8");
+  const antigravityCliRealSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-antigravity-cli-real-smoke.ps1"), "utf8");
   const baseline = taskPlan.split("## Phases")[0];
-  const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
-  assert.match(currentStatus, /Gemini CLI is not usable/);
-  assert.match(findings, /Gemini CLI is not usable for the MCP-side account split/);
-  assert.match(handoffCurrentStatus, /two-account\/profile split/);
-
-  assert.match(handoffCurrentStatus, /Do not run real account\/traffic proof without explicit approval/);
-  assert.match(findings, /do not claim true separate-account proof without explicit approved real account\/traffic evidence/);
-
-  assert.doesNotMatch(currentStatus, /Gemini CLI covers MCP-side account split/);
-  assert.doesNotMatch(findings, /Gemini CLI covers MCP-side account split/);
-  assert.doesNotMatch(handoffCurrentStatus, /Gemini CLI covers MCP-side account split/);
-  assert.doesNotMatch(currentStatus, /uses one Antigravity CLI account\/profile/);
-  assert.doesNotMatch(findings, /uses one Antigravity CLI account\/profile/);
-  assert.doesNotMatch(handoffCurrentStatus, /uses one Antigravity CLI account\/profile/);
-  assert.doesNotMatch(baseline, /single-account by default/);
+  assert.match(baseline, /Antigravity model text behind Codex-owned tools and task state/);
+  assert.doesNotMatch(antigravityCliPrepare, /Gemini CLI covers MCP-side account split/);
+  assert.doesNotMatch(antigravityCliRealSmoke, /Gemini CLI covers MCP-side account split/);
 });
 
 test("current status documents optional Antigravity CLI real-smoke account-lane hardening", () => {
@@ -15774,21 +15868,23 @@ test("diagnostics/sourcePreflight support path must preserve antigravityCliProfi
   assert.match(server, /sourcePreflight profilePrepare caveat:/);
 });
 
-test("current Manager status uses native-panel-v103 and rejects stale v85/v98 in docs", () => {
+test("current Manager status uses native-panel-v104 and rejects stale manager versions in docs", () => {
   const taskPlan = readFileSync(resolve(root, "task_plan.md"), "utf8");
   const handoff = readFileSync(resolve(root, "docs", "audits", "2026-06-22-handoff-next-channel.md"), "utf8");
   const currentStatus = taskPlan.split("## Goal")[0];
   const handoffCurrentStatus = handoff.split("## Important Recent Checks")[0];
 
-  // Current Manager status sections must declare native-panel-v103
-  assert.match(currentStatus, /native-panel-v103/);
-  assert.match(handoffCurrentStatus, /native-panel-v103/);
+  // Current Manager status sections must declare native-panel-v104
+  assert.match(currentStatus, /native-panel-v104/);
+  assert.match(handoffCurrentStatus, /native-panel-v104/);
 
   // Stale Manager version wording must not appear in current-status sections
   assert.doesNotMatch(currentStatus, /native-panel-v85/);
   assert.doesNotMatch(currentStatus, /native-panel-v98/);
+  assert.doesNotMatch(currentStatus, /native-panel-v103/);
   assert.doesNotMatch(handoffCurrentStatus, /native-panel-v85/);
   assert.doesNotMatch(handoffCurrentStatus, /native-panel-v98/);
+  assert.doesNotMatch(handoffCurrentStatus, /native-panel-v103/);
 });
 
 test("Antigravity CLI profile prepare carries account-lane boundary fields and defaults", () => {
@@ -16139,14 +16235,14 @@ test("Antigravity CLI Windows-user readiness is report-only and surfaced before 
   assert.match(secondAccountManagerAction, /args: \[\]/);
   assert.match(secondAccountManagerAction, /foregroundSingleton: true/);
   assert.doesNotMatch(secondAccountManagerAction, /StartLogin|StartLoginApproval|AllowRealTraffic|AllowSeparateAccountProof/);
-  assert.match(managerInject, /\["secondAccountLoginStatus", "\\u7b2c\\u4e8c Antigravity/);
+  assert.doesNotMatch(managerInject, /\["secondAccountLoginStatus", "\\u7b2c\\u4e8c Antigravity/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u7b2c\\u4e8c Antigravity \\u8d26\\u53f7\\u72b6\\u6001\\u68c0\\u67e5/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*\\u767b\\u5f55\\u51c6\\u5907/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*operatorBlockingStage/);
   assert.match(managerInject, /action === "secondAccountLoginStatus"[\s\S]*operatorNextStep/);
   assert.match(managerInject, /operatorStepDisplayText/);
   assert.match(managerInject, /open_elevated_windows_user_settings_then_rerun_prepare[\s\S]*\\u6253\\u5f00 Windows \\u8bbe\\u7f6e/);
-  assert.match(server, /data-manager-action="secondAccountLoginStatus"/);
+  assert.doesNotMatch(server, /data-manager-action="secondAccountLoginStatus"/);
 
   assert.match(secondAccountLoginReport, /reportName = "second-antigravity-account-login-entrypoint"/);
   assert.match(secondAccountLoginReport, /latest-second-antigravity-account-login-entrypoint\.json/);
@@ -16523,8 +16619,9 @@ test("approved real run sequence is a no-traffic gate before concrete task execu
   assert.match(verifier, /readyToRequestSecondAccountLoginApproval/);
   assert.match(verifier, /readyToRequestPostLoginProofApproval/);
   assert.match(verifier, /readyToRequestUserApproval/);
-  assert.match(verifier, /request_explicit_user_approval_for_second_account_login/);
-  assert.match(verifier, /request_explicit_user_approval_for_separate_account_identity_proof/);
+  assert.match(verifier, /optionalAccountIsolationSequence/);
+  assert.match(verifier, /accountIsolationProductReleaseGating:\s*false/);
+  assert.doesNotMatch(verifier, /request_explicit_user_approval_for_second_account_login/);
   assert.match(verifier, /latest-goal-real-run-readiness\.json/);
   assert.match(verifier, /latest-real-approval-plan\.json/);
   assert.match(verifier, /latest-required-real-traffic-sequence\.json/);
@@ -16556,7 +16653,7 @@ test("approved real run sequence is a no-traffic gate before concrete task execu
   assert.match(releaseGates, /requireApprovedRealRunSequenceSemantics/);
   assert.match(releaseGates, /approved_real_run_sequence_ready_state_inconsistent/);
   assert.match(releaseGates, /approved_real_run_sequence_login_stage_contract/);
-  assert.match(releaseGates, /approved_real_run_sequence_second_account_entrypoint_source_missing/);
+  assert.match(releaseGates, /approved_real_run_sequence_optional_account_stage_count/);
   assert.match(releaseGates, /approved_real_run_sequence_login_command_not_isolated/);
   assert.match(releaseGates, /approved_real_run_sequence_account_proof_command_incomplete/);
   assert.match(releaseGates, /test-anticodex-approved-real-run-sequence\.mjs/);
@@ -16684,4 +16781,69 @@ test("backward compatibility: old Codex.exe-only layout still passes source dete
   const updateChatGptIdx = updateBody.indexOf("ChatGPT.exe");
   const updateCodexIdx = updateBody.indexOf("Codex.exe");
   assert.ok(updateChatGptIdx < updateCodexIdx, "update checker must check ChatGPT.exe before Codex.exe");
+});
+
+test("Anti-Codex test-anticodex-ambient-suggestions.ps1 permits DevTools in rollback-host.invalid-* folders and flags non-allowed paths", () => {
+  const tempInstall = mkdtempSync(join(os.tmpdir(), "anticodex-suggest-test-install-"));
+  const tempCodex = mkdtempSync(join(os.tmpdir(), "anticodex-suggest-test-codex-"));
+  const tempReport = mkdtempSync(join(os.tmpdir(), "anticodex-suggest-test-report-"));
+
+  try {
+    // 1. Create allowed DevTools suggestion files in rollback-host and rollback-host.invalid-*
+    const allowedPath1 = join(tempInstall, "rollback-host", "gen", "third_party", "devtools-frontend", "src", "front_end", "ui", "components", "suggestion_input");
+    mkdirSync(allowedPath1, { recursive: true });
+    writeFileSync(join(allowedPath1, "SuggestBox"), "dummy content");
+
+    const allowedPath2 = join(tempInstall, "rollback-host.invalid-20260710-185118", "gen", "third_party", "devtools-frontend", "src", "front_end", "ui", "components", "suggestion_input");
+    mkdirSync(allowedPath2, { recursive: true });
+    writeFileSync(join(allowedPath2, "SuggestBox"), "dummy content");
+
+    // 2. Run the script expecting OK: true
+    const resultOk = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+      resolve(root, "scripts", "test-anticodex-ambient-suggestions.ps1"),
+      "-InstallRoot", tempInstall,
+      "-CodexHome", tempCodex,
+      "-ReportRoot", tempReport
+    ], { encoding: "utf8", windowsHide: true });
+
+    assert.equal(resultOk.status, 0, `PowerShell should exit with 0 when only allowed suggestion paths exist. Stdout: ${resultOk.stdout}\nStderr: ${resultOk.stderr}`);
+    const parsedOk = JSON.parse(resultOk.stdout.trim());
+    assert.equal(parsedOk.ok, true, "Script ok should be true");
+    assert.equal(parsedOk.failures.length, 0, "There should be no failures");
+
+    // 3. Add a forbidden suggestion file inside rollback-host.invalid-*, but outside DevTools frontend
+    const forbiddenPathInBackup = join(tempInstall, "rollback-host.invalid-20260710-185118", "some-other-folder");
+    mkdirSync(forbiddenPathInBackup, { recursive: true });
+    writeFileSync(join(forbiddenPathInBackup, "unexpected-suggestion-file.txt"), "dummy content");
+
+    // 4. Add a suggestion file in a completely unknown/forbidden host directory
+    const forbiddenPathInUnknownHost = join(tempInstall, "unknown-host", "gen", "third_party", "devtools-frontend", "src", "front_end", "ui", "components", "suggestion_input");
+    mkdirSync(forbiddenPathInUnknownHost, { recursive: true });
+    writeFileSync(join(forbiddenPathInUnknownHost, "SuggestBox"), "dummy content");
+
+    // 5. Run the script expecting OK: false and failures listed
+    const resultFail = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+      resolve(root, "scripts", "test-anticodex-ambient-suggestions.ps1"),
+      "-InstallRoot", tempInstall,
+      "-CodexHome", tempCodex,
+      "-ReportRoot", tempReport
+    ], { encoding: "utf8", windowsHide: true });
+
+    assert.notEqual(resultFail.status, 0, "PowerShell should exit with non-zero when forbidden suggestion paths exist");
+    const parsedFail = JSON.parse(resultFail.stdout.trim());
+    assert.equal(parsedFail.ok, false, "Script ok should be false");
+    assert.ok(parsedFail.failures.length >= 2, "There should be failures detected");
+
+    // Assert specific expected failures
+    const failuresStr = JSON.stringify(parsedFail.failures);
+    assert.ok(failuresStr.includes("unexpected-suggestion-file.txt"), "Should flag forbidden suggestion file in backup folder");
+    assert.ok(failuresStr.includes("unknown-host"), "Should flag suggestion file in unknown host folder");
+
+  } finally {
+    rmSync(tempInstall, { recursive: true, force: true });
+    rmSync(tempCodex, { recursive: true, force: true });
+    rmSync(tempReport, { recursive: true, force: true });
+  }
 });

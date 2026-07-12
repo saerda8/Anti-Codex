@@ -9,6 +9,7 @@ process.env.NODE_ENV = "test";
 const {
   HOST,
   LISTEN_HOST,
+  ANTIGRAVITY_SESSION_MAX_CONTINUATIONS,
   assembleResponsesWebSocketPayloads,
   antigravityAccountFallbackSnapshot,
   antigravityTrafficSnapshot,
@@ -31,6 +32,7 @@ const {
   RESPONSES_WEBSOCKET_PING_INTERVAL_MS,
   parseClientWebSocketFrames,
   responsesWebSocketAuditSnapshot,
+  responsesWebSocketRelayFailureEvents,
   shouldRecordAntigravityTrafficFailure,
 } = await import("../adaptive-server.mjs");
 const {
@@ -124,6 +126,45 @@ test("responses websocket ping interval stays below the desktop retry window", (
     "desktop retries around six seconds, so local websocket heartbeats must arrive sooner",
   );
   assert.equal(responsesWebSocketAuditSnapshot().pingIntervalMs, RESPONSES_WEBSOCKET_PING_INTERVAL_MS);
+});
+
+test("desktop long tasks get an independent 48-turn continuation budget", () => {
+  assert.equal(ANTIGRAVITY_SESSION_MAX_CONTINUATIONS, 48);
+});
+
+test("responses websocket HTTP failures become a terminal response lifecycle", () => {
+  const events = responsesWebSocketRelayFailureEvents({
+    payload: JSON.stringify({
+      type: "response.create",
+      model: "gemini-3-flash-agent",
+      previous_response_id: "resp_previous",
+    }),
+    status: 409,
+    text: JSON.stringify({
+      error: {
+        message: "Antigravity session continuation limit reached (48); start a fresh task turn.",
+        type: "antigravity_session_continuation_limit",
+        details: {
+          status: 409,
+          retryable: false,
+          diagnosis: "The desktop task exceeded its guarded continuation budget.",
+        },
+      },
+    }),
+  });
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0].type, "response.created");
+  assert.equal(events[0].response.status, "in_progress");
+  assert.equal(events[1].type, "response.failed");
+  assert.equal(events[1].response.id, events[0].response.id);
+  assert.equal(events[1].response.status, "failed");
+  assert.equal(events[1].response.model, "gemini-3-flash-agent");
+  assert.equal(events[1].response.previous_response_id, "resp_previous");
+  assert.equal(events[1].response.error.type, "antigravity_session_continuation_limit");
+  assert.equal(events[1].response.error.status, 409);
+  assert.equal(events[1].response.error.retryable, false);
+  assert.deepEqual(events[1].response.output, []);
 });
 
 function maskedClientFrame({ fin = true, opcode = 0x1, payload = "" } = {}) {

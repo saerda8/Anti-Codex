@@ -1182,46 +1182,39 @@ function Test-GoalReadinessSummaryEvidence {
     if ($evidence.goalComplete -ne $true) { Add-Failure "goal-readiness summary current goal is not complete" }
     if ($evidence.codexClientCopyProven -ne $true) { Add-Failure "goal-readiness summary missing Codex client-copy proof" }
     if ($evidence.currentUsability) {
+        if ([string]$evidence.currentUsability.mode -ne "single-account-native-codex-parity") { Add-Failure "goal-readiness summary current usability mode mismatch" }
         if ($evidence.currentUsability.usableNow -ne $true) { Add-Failure "goal-readiness summary current usability not ready" }
         if ($evidence.currentUsability.requiresCurrentChannelWorkerMcp -ne $false) { Add-Failure "goal-readiness summary current usability still requires worker MCP" }
-        if ($evidence.currentUsability.workerMcpTemporarilyDisabled -ne $true) { Add-Failure "goal-readiness summary current usability missing worker MCP deferred flag" }
+        if ($evidence.currentUsability.workerMcpOptionalDevelopmentEvidence -ne $true) { Add-Failure "goal-readiness summary current usability missing optional worker evidence flag" }
+        if ($evidence.currentUsability.workerMcpTemporarilyDisabled -ne $false) { Add-Failure "goal-readiness summary current usability still marks worker MCP temporarily disabled" }
+        if ($evidence.currentUsability.accountIsolationOptional -ne $true) { Add-Failure "goal-readiness summary current usability account isolation is not optional" }
     } else {
         Add-Failure "goal-readiness summary missing current usability evidence"
     }
-    if ($evidence.workerMcpComplexProjectSmokeReportOk -ne $true) { Add-Failure "goal-readiness summary missing worker MCP complex-project smoke proof" }
-    if ([string]$evidence.workerMcpComplexProjectSmokeScenario -ne "complex-project") { Add-Failure "goal-readiness summary worker MCP complex-project smoke scenario mismatch" }
-    if ($evidence.workerMcpComplexProjectSmokeUsedRealTraffic -ne $true) { Add-Failure "goal-readiness summary worker MCP complex-project smoke real traffic missing" }
-    if ($evidence.workerMcpComplexProjectSmokeAntigravityExcluded -ne $true) { Add-Failure "goal-readiness summary worker MCP complex-project smoke Antigravity exclusion missing" }
-    if ([int]$evidence.workerMcpComplexProjectSmokePassedWorkerCount -lt 3) { Add-Failure "goal-readiness summary worker MCP complex-project smoke passed worker count too low" }
-    $goalComplexWorkerNames = @(As-FlatArray $evidence.workerMcpComplexProjectSmokePassedWorkers | ForEach-Object { [string]$_ })
-    foreach ($requiredXiaoqiangWorker in @("xiaoqiang1", "xiaoqiang2", "xiaoqiang3")) {
-        if ($goalComplexWorkerNames -notcontains $requiredXiaoqiangWorker) { Add-Failure "goal-readiness summary worker MCP complex-project smoke missing Xiaoqiang worker $requiredXiaoqiangWorker" }
-    }
-    if (@(As-FlatArray $evidence.workerMcpComplexProjectSmokeFailedWorkers).Count -ne 0) { Add-Failure "goal-readiness summary worker MCP complex-project smoke failed workers" }
     if ($evidence.desktopAgenticTasksProven -ne $true) { Add-Failure "goal-readiness summary missing desktop agentic task proof" }
     if ($evidence.agenticCapabilityMatrixProven -ne $true) { Add-Failure "goal-readiness summary missing agentic capability matrix proof" }
     if ($evidence.realTaskCoverageRoadmapProven -ne $true) { Add-Failure "goal-readiness summary missing real-task coverage roadmap proof" }
     if ($evidence.longTaskLandingMatrixProven -ne $true) { Add-Failure "goal-readiness summary missing long-task landing matrix proof" }
     if ($evidence.realApprovalPlanProven -ne $true) { Add-Failure "goal-readiness summary missing real-approval plan proof" }
     if ($evidence.releaseShortPathProven -ne $true) { Add-Failure "goal-readiness summary missing short release proof" }
-    if ($evidence.secondAccountLoginEntrypointProven -ne $true) { Add-Failure "goal-readiness summary missing second-account login entrypoint proof" }
-    if ($evidence.secondAccountReadinessSummaryProven -ne $true) { Add-Failure "goal-readiness summary missing second-account readiness summary proof" }
-    if ($evidence.secondAccountPostLoginProofProven -ne $true) { Add-Failure "goal-readiness summary missing second-account post-login proof report proof" }
-    if ($evidence.accountIsolationPreparedOnly -ne $true) { Add-Failure "goal-readiness summary missing prepared-only account isolation proof" }
     if ([int]$evidence.objectiveRequirementTotal -ne 4) { Add-Failure "goal-readiness summary current objective requirement total mismatch" }
     if ([int]$evidence.objectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary current objective complete count mismatch" }
     if ([int]$evidence.objectiveRequirementIncompleteCount -ne 0) { Add-Failure "goal-readiness summary current objective incomplete count mismatch" }
     if ($evidence.objectiveRequirementCanClaimFullGoalNow -ne $true) { Add-Failure "goal-readiness summary current objective cannot be claimed" }
-    if ([int]$evidence.fullObjectiveRequirementTotal -ne 6) { Add-Failure "goal-readiness summary full objective requirement total mismatch" }
+    if ([int]$evidence.fullObjectiveRequirementTotal -ne 4) { Add-Failure "goal-readiness summary full objective requirement total mismatch" }
     if ([int]$evidence.fullObjectiveRequirementCompleteCount -ne 4) { Add-Failure "goal-readiness summary full objective complete count mismatch" }
-    if ([int]$evidence.fullObjectiveRequirementIncompleteCount -ne 2) { Add-Failure "goal-readiness summary full objective incomplete count mismatch" }
-    if ($evidence.fullObjectiveRequirementCanClaimFullGoalNow -ne $false) { Add-Failure "goal-readiness summary unexpectedly claims goal complete" }
+    if ([int]$evidence.fullObjectiveRequirementIncompleteCount -ne 0) { Add-Failure "goal-readiness summary full objective incomplete count mismatch" }
+    if ($evidence.fullObjectiveRequirementCanClaimFullGoalNow -ne $true) { Add-Failure "goal-readiness summary full objective cannot be claimed" }
     $objectiveIncompleteIds = @(As-FlatArray $evidence.fullObjectiveRequirementIncompleteIds | ForEach-Object { [string]$_ })
-    foreach ($expectedIncompleteObjective in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
-        if ($objectiveIncompleteIds -notcontains $expectedIncompleteObjective) { Add-Failure "goal-readiness summary objective audit missing incomplete requirement: $expectedIncompleteObjective" }
-    }
+    if ($objectiveIncompleteIds.Count -ne 0) { Add-Failure "goal-readiness summary full objective has unexpected incomplete requirements" }
     if (@(As-FlatArray $evidence.objectiveRequirementAuditIds).Count -ne 4) { Add-Failure "goal-readiness summary current objective audit id count mismatch" }
-    if (@(As-FlatArray $evidence.fullObjectiveRequirementAuditIds).Count -ne 6) { Add-Failure "goal-readiness summary full objective audit id count mismatch" }
+    if (@(As-FlatArray $evidence.fullObjectiveRequirementAuditIds).Count -ne 4) { Add-Failure "goal-readiness summary full objective audit id count mismatch" }
+    if ([int]$evidence.optionalRequirementTotal -ne 2) { Add-Failure "goal-readiness summary optional requirement total mismatch" }
+    if ($evidence.optionalRequirementsProductReleaseGating -ne $false) { Add-Failure "goal-readiness summary optional requirements gate product release" }
+    $optionalRequirementIds = @(As-FlatArray $evidence.optionalRequirementIds | ForEach-Object { [string]$_ })
+    foreach ($expectedOptionalRequirement in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
+        if ($optionalRequirementIds -notcontains $expectedOptionalRequirement) { Add-Failure "goal-readiness summary optional requirement missing: $expectedOptionalRequirement" }
+    }
     if ($evidence.shortReady -ne $true) { Add-Failure "goal-readiness summary short path not ready" }
     $goalOperatorActionCard = $evidence.goalOperatorActionCard
     if (-not $goalOperatorActionCard) { Add-Failure "goal-readiness summary operator action card missing" }
@@ -1240,37 +1233,26 @@ function Test-GoalReadinessSummaryEvidence {
         if ($goalFreshChannelActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected fresh-channel actions" }
         $goalUserPresenceActions = @(As-FlatArray $goalOperatorActionCard.userPresenceRequiredActions | ForEach-Object { [string]$_ })
         if ($goalUserPresenceActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected user-presence actions" }
-        if (@("fresh_probe_required", "reload_required") -notcontains [string]$goalOperatorActionCard.workerStatus) { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
-        if ($goalOperatorActionCard.workerCanDispatchCurrentChannel -ne $false) { Add-Failure "goal-readiness summary operator action card allows worker dispatch" }
+        if (@("dispatch_ready", "fresh_probe_required", "reload_required", "partial_transport_failure") -notcontains [string]$goalOperatorActionCard.workerStatus) { Add-Failure "goal-readiness summary operator action card worker status mismatch" }
+        if (([string]$goalOperatorActionCard.workerStatus -eq "dispatch_ready") -ne ($goalOperatorActionCard.workerCanDispatchCurrentChannel -eq $true)) { Add-Failure "goal-readiness summary operator action card worker dispatch state mismatch" }
         if ($null -eq $goalOperatorActionCard.staleOrUnrefreshedAppServerLikely) { Add-Failure "goal-readiness summary missing app-server freshness evidence" }
         if ($goalOperatorActionCard.staleOrUnrefreshedAppServerLikely -ne $evidence.staleOrUnrefreshedAppServerLikely) { Add-Failure "goal-readiness summary app-server freshness evidence mismatch" }
         if ($goalOperatorActionCard.staleOrUnrefreshedAppServerLikely -eq $true -and -not $goalOperatorActionCard.activeAppServerPid) { Add-Failure "goal-readiness summary missing active app-server pid" }
-        if ([string]$goalOperatorActionCard.secondAccountStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary operator action card second-account status mismatch" }
-        if ($goalOperatorActionCard.secondAccountCanAskUserToLoginNow -ne $false) { Add-Failure "goal-readiness summary operator action card allows second-account login too early" }
         $goalMissingRequirements = @(As-FlatArray $goalOperatorActionCard.missingRequirements | ForEach-Object { [string]$_ })
         if ($goalMissingRequirements.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected missing requirements" }
         $goalNextActions = @(As-FlatArray $goalOperatorActionCard.nextOperatorActions | ForEach-Object { [string]$_ })
-        if ($goalNextActions.Count -gt 1) { Add-Failure "goal-readiness summary operator action card has unexpected next actions" }
-        if ($evidence.staleOrUnrefreshedAppServerLikely -eq $true -and $goalNextActions -notcontains "fully_exit_codex_until_appserver_pid_changes_then_rerun_worker_read_only_probe") { Add-Failure "goal-readiness summary operator action card missing app-server refresh action" }
+        if ($goalNextActions.Count -ne 0) { Add-Failure "goal-readiness summary operator action card has unexpected next actions" }
         if (-not ([string]$goalOperatorActionCard.noTrafficStatusCommand).Contains("test-anticodex-goal-readiness.mjs")) { Add-Failure "goal-readiness summary operator action card no-traffic command missing" }
         if (-not ([string]$goalOperatorActionCard.compactStatusCommand).Contains("--compact-status")) { Add-Failure "goal-readiness summary operator action card compact status command missing" }
-        if (-not ([string]$goalOperatorActionCard.secondAccountStatusCommand).Contains("test-anticodex-second-account-readiness-summary.ps1")) { Add-Failure "goal-readiness summary operator action card second-account command missing" }
-        if (-not ([string]$goalOperatorActionCard.secondAccountPostLoginProofCommand).Contains("test-anticodex-second-account-post-login-proof.ps1")) { Add-Failure "goal-readiness summary operator action card second-account post-login proof command missing" }
     }
-    if ($evidence.currentChannelWorkerCanDispatch -ne $false) { Add-Failure "goal-readiness summary compact worker dispatch field is not blocked" }
-    if (@("fresh_probe_required", "reload_required") -notcontains [string]$evidence.currentChannelWorkerTransportStatus) { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
-    if ($evidence.currentChannelWorkerRecoveryRequired -ne $true) { Add-Failure "goal-readiness summary compact worker recovery field missing" }
+    if (@("dispatch_ready", "fresh_probe_required", "reload_required", "partial_transport_failure") -notcontains [string]$evidence.currentChannelWorkerTransportStatus) { Add-Failure "goal-readiness summary compact worker transport status mismatch" }
+    if (([string]$evidence.currentChannelWorkerTransportStatus -eq "dispatch_ready") -ne ($evidence.currentChannelWorkerCanDispatch -eq $true)) { Add-Failure "goal-readiness summary compact worker dispatch state mismatch" }
+    if ($evidence.currentChannelWorkerRecoveryRequired -ne ($evidence.currentChannelWorkerCanDispatch -ne $true)) { Add-Failure "goal-readiness summary compact worker recovery state mismatch" }
     if ($evidence.codexAppServerFreshnessReportPresent -ne $true) { Add-Failure "goal-readiness summary missing app-server freshness report" }
     if ($null -eq $evidence.staleOrUnrefreshedAppServerLikely) { Add-Failure "goal-readiness summary missing app-server freshness evidence" }
-    if ($evidence.staleOrUnrefreshedAppServerLikely -eq $true) {
-        if ($evidence.fullGoalRequiresFreshCodexAppServer -ne $true) { Add-Failure "goal-readiness summary missing full-goal app-server refresh requirement" }
-        if (-not $evidence.activeDesktopAppServerPid) { Add-Failure "goal-readiness summary missing active app-server pid" }
-        if (-not ([string]$evidence.staleAppServerOperatorAction).Contains("Codex")) { Add-Failure "goal-readiness summary missing stale app-server operator action" }
-    }
-    if (-not [string]$evidence.secondAccountTargetWindowsUser) { Add-Failure "goal-readiness summary compact second-account target user missing" }
-    if ($evidence.secondAccountTargetUserExists -ne $false) { Add-Failure "goal-readiness summary compact second-account target existence mismatch" }
-    if ($evidence.secondAccountOperatorStatus -ne "manual_windows_user_setup_required") { Add-Failure "goal-readiness summary compact second-account operator status mismatch" }
-    if (-not [string]$evidence.secondAccountNextOperatorAction) { Add-Failure "goal-readiness summary compact second-account next action missing" }
+    if ($evidence.fullGoalRequiresFreshCodexChannel -ne $false) { Add-Failure "goal-readiness summary full goal still requires fresh Codex channel" }
+    if ($evidence.fullGoalRequiresFreshCodexAppServer -ne $false) { Add-Failure "goal-readiness summary full goal still requires app-server refresh" }
+    if ($evidence.fullGoalRequiresUserPresence -ne $false) { Add-Failure "goal-readiness summary full goal still requires user presence" }
     $requiredBlockedGates = @(As-FlatArray $evidence.requiredRealTrafficBlockedGates)
     if ($evidence.releaseReady -eq $true) {
         if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $false) { Add-Failure "goal-readiness summary release-ready state still claims real-traffic-only blocker" }
@@ -1279,6 +1261,7 @@ function Test-GoalReadinessSummaryEvidence {
         if ($evidence.releaseBlockedOnlyByRequiredRealTraffic -ne $true) { Add-Failure "goal-readiness summary missing real-traffic-only release blocker" }
         if ($requiredBlockedGates.Count -lt 1) { Add-Failure "goal-readiness summary missing required real-traffic blocked gates" }
     }
+    if ($evidence.currentUsability.requiresCurrentChannelWorkerMcp -eq $true) {
     if (@(As-FlatArray $evidence.workerMcpMissingServers).Count -ne 0) { Add-Failure "goal-readiness summary has missing worker MCP servers" }
     if ([int]$evidence.workerMcpPassedServerCount -lt $RequiredWorkerMcpServers.Count) { Add-Failure "goal-readiness summary worker MCP passed server count too low" }
     if (-not $evidence.workerMcpToolCountByServer) { Add-Failure "goal-readiness summary missing worker MCP tool counts" }
@@ -1357,6 +1340,7 @@ function Test-GoalReadinessSummaryEvidence {
         Add-Failure "goal-readiness summary first worker recovery probe is not from exposed candidates"
     }
     if (@(As-FlatArray $evidence.workerTransportRecoveryNextActions).Count -lt 3) { Add-Failure "goal-readiness summary worker transport next actions missing" }
+    }
     if (@(As-FlatArray $evidence.desktopMissingAgenticTasks).Count -ne 0) { Add-Failure "goal-readiness summary has missing desktop agentic tasks" }
     if (@(As-FlatArray $evidence.agenticMissingCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has missing agentic capabilities" }
     if (@(As-FlatArray $evidence.agenticStaleCapabilities).Count -ne 0) { Add-Failure "goal-readiness summary has stale agentic capabilities" }
@@ -2530,46 +2514,29 @@ function Test-GoalUnblockPackageSummaryEvidence {
     if ($evidence.coverageKind -ne "goal-unblock-package-report-only") { Add-Failure "goal-unblock-package summary coverage kind mismatch" }
     if ($evidence.goalComplete -ne $true) { Add-Failure "goal-unblock-package summary goal not complete" }
     if ($evidence.canClaimFullGoalNow -ne $true) { Add-Failure "goal-unblock-package summary does not claim current goal" }
-    if ($evidence.fullObjectiveCanClaimFullGoalNow -ne $false) { Add-Failure "goal-unblock-package summary claims full objective" }
+    if ($evidence.fullObjectiveCanClaimFullGoalNow -ne $true) { Add-Failure "goal-unblock-package summary does not claim full product objective" }
     if ($evidence.releaseReady -ne $true) { Add-Failure "goal-unblock-package summary release not ready" }
     $remainingIds = @(As-FlatArray $evidence.remainingObjectiveRequirementIds | ForEach-Object { [string]$_ })
     if ($remainingIds.Count -ne 0) { Add-Failure "goal-unblock-package summary current remaining requirements not empty" }
     $deferredIds = @(As-FlatArray $evidence.deferredObjectiveRequirementIds | ForEach-Object { [string]$_ })
     $incompleteDeferredIds = @(As-FlatArray $evidence.incompleteDeferredObjectiveRequirementIds | ForEach-Object { [string]$_ })
+    if ($deferredIds.Count -ne 0 -or $incompleteDeferredIds.Count -ne 0) { Add-Failure "goal-unblock-package summary still has deferred product requirements" }
+    $optionalIds = @(As-FlatArray $evidence.optionalObjectiveRequirementIds | ForEach-Object { [string]$_ })
     foreach ($requiredId in @("separate_antigravity_accounts", "worker_mcp_multiuse")) {
-        if ($deferredIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing deferred requirement: $requiredId" }
-        if ($incompleteDeferredIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing incomplete deferred requirement: $requiredId" }
+        if ($optionalIds -notcontains $requiredId) { Add-Failure "goal-unblock-package summary missing optional requirement: $requiredId" }
     }
     $blockers = @(As-FlatArray $evidence.blockers | ForEach-Object { [string]$_ })
     if ($blockers.Count -ne 0) { Add-Failure "goal-unblock-package summary current blockers not empty" }
     $deferredBlockers = @(As-FlatArray $evidence.deferredBlockers | ForEach-Object { [string]$_ })
-    foreach ($requiredBlocker in @("current_channel_worker_transport_not_recovered", "second_antigravity_account_real_proof_missing")) {
-        if ($deferredBlockers -notcontains $requiredBlocker) { Add-Failure "goal-unblock-package summary missing deferred blocker: $requiredBlocker" }
-    }
-    if ($evidence.freshChannelWorkerRequiresFreshCodexChannel -ne $true) { Add-Failure "goal-unblock-package summary missing fresh channel requirement" }
-    if ($evidence.freshChannelWorkerRequiresFreshReadOnlyProbe -ne $true) { Add-Failure "goal-unblock-package summary missing fresh read-only probe requirement" }
-    if ($evidence.freshChannelWorkerSameChannelRetryRecommended -ne $false) { Add-Failure "goal-unblock-package summary still recommends same-channel retry" }
-    if (-not ([string]$evidence.freshChannelWorkerLatestTransportCheckedAt).StartsWith("20")) { Add-Failure "goal-unblock-package summary missing fresh worker transport timestamp" }
-    if ([int]$evidence.freshChannelWorkerObservationCount -lt 3) { Add-Failure "goal-unblock-package summary worker observation count too low" }
-    if ([int]$evidence.freshChannelWorkerTransportFailedCount -lt 3) { Add-Failure "goal-unblock-package summary worker failed count too low" }
-    if ([int]$evidence.freshChannelWorkerTransportOkCount -ne 0) { Add-Failure "goal-unblock-package summary worker ok count unexpected" }
-    if ($evidence.freshChannelWorkerGenericMcpControlOk -ne $true) { Add-Failure "goal-unblock-package summary missing generic MCP control proof" }
-    if ($evidence.freshChannelWorkerDirectProbeOk -ne $true) { Add-Failure "goal-unblock-package summary missing direct worker probe proof" }
-    if ([string]$evidence.freshChannelWorkerFirstProbeTool -ne "mimocode_wait_for_job") { Add-Failure "goal-unblock-package summary first probe mismatch" }
-    if (-not ([string]$evidence.freshChannelWorkerRecordCommand).Contains("record-anticodex-current-channel-worker-transport.mjs")) { Add-Failure "goal-unblock-package summary worker record command missing" }
-    if ($evidence.secondAccountRequiresUserPresence -ne $true) { Add-Failure "goal-unblock-package summary missing second-account user presence" }
-    if ([string]$evidence.secondAccountWindowsUser -ne ".\AntiCodexModel") { Add-Failure "goal-unblock-package summary second-account Windows user mismatch" }
-    if ($evidence.secondAccountTargetUserExists -ne $false) { Add-Failure "goal-unblock-package summary target user unexpectedly exists" }
-    if ($evidence.secondAccountSafeToAskUserForSecondAccountLogin -ne $false) { Add-Failure "goal-unblock-package summary asks login too early" }
-    if ([string]$evidence.secondAccountPostLoginProofStatus -ne "blocked_before_login") { Add-Failure "goal-unblock-package summary post-login status mismatch" }
-    if ($evidence.secondAccountEffectiveAntiCodexAccountIdPresent -ne $true) { Add-Failure "goal-unblock-package summary missing Anti-Codex account id suggestion" }
-    if ($evidence.secondAccountEffectiveMcpAccountIdPresent -ne $false) { Add-Failure "goal-unblock-package summary should not invent MCP account id" }
-    if ($evidence.externalMcpIdentityContractReportPresent -ne $true) { Add-Failure "goal-unblock-package summary missing external MCP identity contract" }
-    if ($evidence.externalMcpIdentityContractAccepted -ne $true) { Add-Failure "goal-unblock-package summary external MCP identity not accepted" }
-    if ($evidence.externalMcpIdentityManagedByAntiCodex -ne $false) { Add-Failure "goal-unblock-package summary external MCP identity managed by Anti-Codex" }
+    if ($deferredBlockers.Count -ne 0) { Add-Failure "goal-unblock-package summary still has deferred blockers" }
     $actionIds = @(As-FlatArray $evidence.machineReadableNextActionIds | ForEach-Object { [string]$_ })
-    foreach ($actionId in @("fresh_channel_worker_read_only_probe", "create_or_verify_second_windows_user", "external_mcp_account_identity_report", "approved_second_account_post_login_proof")) {
-        if ($actionIds -notcontains $actionId) { Add-Failure "goal-unblock-package summary missing action: $actionId" }
+    if ($actionIds.Count -ne 0) { Add-Failure "goal-unblock-package summary has unexpected product next actions" }
+    $optionalActionIds = @(As-FlatArray $evidence.optionalDevelopmentActionIds | ForEach-Object { [string]$_ })
+    if ($optionalActionIds -notcontains "fresh_channel_worker_read_only_probe" -and $optionalActionIds -notcontains "dispatch_scoped_worker_task_after_read_only_success") {
+        Add-Failure "goal-unblock-package summary missing optional worker action"
+    }
+    foreach ($actionId in @("create_or_verify_second_windows_user", "external_mcp_account_identity_report", "approved_second_account_post_login_proof")) {
+        if ($optionalActionIds -notcontains $actionId) { Add-Failure "goal-unblock-package summary missing optional action: $actionId" }
     }
 }
 

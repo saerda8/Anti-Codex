@@ -53,6 +53,7 @@ const REQUIRED_REPORTS = [
     id: "workerMcpSourceHygiene",
     file: "latest-worker-mcp-source-hygiene.json",
     surface: "agent-workers",
+    requiredForProduct: false,
     maxAgeHours: 24,
     validate(report, fail) {
       if (report.ok !== true) fail("worker-mcp-source-hygiene ok=false");
@@ -65,6 +66,7 @@ const REQUIRED_REPORTS = [
     id: "workerMcpServerProbe",
     file: "latest-worker-mcp-server-probe.json",
     surface: "agent-workers",
+    requiredForProduct: false,
     maxAgeHours: 24,
     validate(report, fail) {
       if (report.ok !== true) fail("worker-mcp-server-probe ok=false");
@@ -77,6 +79,7 @@ const REQUIRED_REPORTS = [
     id: "workerMcpStatusProbe",
     file: "latest-worker-mcp-status-probe.json",
     surface: "agent-workers",
+    requiredForProduct: false,
     maxAgeHours: 24,
     validate(report, fail) {
       if (report.ok !== true) fail("worker-mcp-status-probe ok=false");
@@ -159,6 +162,7 @@ function main() {
   const overrideMaxAgeHours = Number(argValue("--max-age-hours", ""));
   const results = [];
   const failures = [];
+  const optionalDevelopmentFailures = [];
   const now = Date.now();
   for (const spec of REQUIRED_REPORTS) {
     const filePath = resolve(reportRoot, spec.file);
@@ -189,10 +193,12 @@ function main() {
     if (ageHours !== null && ageHours > maxAgeHours) {
       fail(`stale report age ${ageHours.toFixed(2)}h > ${maxAgeHours}h`);
     }
+    const requiredForProduct = spec.requiredForProduct !== false;
     results.push({
       id: spec.id,
       surface: spec.surface,
       file: spec.file,
+      requiredForProduct,
       present: existsSync(filePath),
       parseable,
       ageHours,
@@ -204,9 +210,11 @@ function main() {
       externalQuotaEvidence: typeof report?.externalQuotaEvidence === "string" ? report.externalQuotaEvidence : "not_collected",
       workerFailureDetails: spec.surface === "agent-workers" ? compactWorkerFailureDetails(report) : [],
     });
-    failures.push(...reportFailures);
+    (requiredForProduct ? failures : optionalDevelopmentFailures).push(...reportFailures);
   }
-  const coveredSurfaces = [...new Set(results.filter((result) => result.ok).map((result) => result.surface))].sort();
+  const requiredResults = results.filter((result) => result.requiredForProduct);
+  const optionalDevelopmentResults = results.filter((result) => !result.requiredForProduct);
+  const coveredSurfaces = [...new Set(requiredResults.filter((result) => result.ok).map((result) => result.surface))].sort();
   const payload = {
     ok: failures.length === 0,
     reportName: "ecosystem-surfaces",
@@ -217,9 +225,14 @@ function main() {
     checkedAt: new Date().toISOString(),
     reportRoot,
     coveredSurfaces,
-    requiredSurfaceCount: new Set(REQUIRED_REPORTS.map((spec) => spec.surface)).size,
+    requiredSurfaceCount: new Set(REQUIRED_REPORTS.filter((spec) => spec.requiredForProduct !== false).map((spec) => spec.surface)).size,
+    requiredReportCount: requiredResults.length,
+    requiredPassedReportCount: requiredResults.filter((result) => result.ok).length,
     passedReportCount: results.filter((result) => result.ok).length,
     totalReportCount: results.length,
+    optionalDevelopmentReportCount: optionalDevelopmentResults.length,
+    optionalDevelopmentPassedReportCount: optionalDevelopmentResults.filter((result) => result.ok).length,
+    optionalDevelopmentFailures,
     results,
     failures,
     elapsedMs: Date.now() - startedAt,

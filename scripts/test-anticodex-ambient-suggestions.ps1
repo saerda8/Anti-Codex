@@ -56,8 +56,8 @@ allowed_name_patterns = [
 ]
 allowed_install_patterns = [
     re.compile(r"^runtime/scripts/test-anticodex-ambient-suggestions\.ps1$", re.I),
-    re.compile(r"^(codex-patched-app|rollback-host)/gen/third_party/devtools-frontend/src/front_end/ui/components/suggestion_input$", re.I),
-    re.compile(r"^(codex-patched-app|rollback-host)/gen/third_party/devtools-frontend/src/front_end/ui/(components/suggestion_input|legacy)/.*$", re.I),
+    re.compile(r"^(codex-patched-app|rollback-host|rollback-host\.invalid-[a-zA-Z0-9_-]+)/gen/third_party/devtools-frontend/src/front_end/ui/components/suggestion_input$", re.I),
+    re.compile(r"^(codex-patched-app|rollback-host|rollback-host\.invalid-[a-zA-Z0-9_-]+)/gen/third_party/devtools-frontend/src/front_end/ui/(components/suggestion_input|legacy)/.*$", re.I),
 ]
 
 def allowed(rel_path, patterns):

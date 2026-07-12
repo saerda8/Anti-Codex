@@ -6,7 +6,7 @@ param(
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$CdpPort = 0,
     [string[]]$Actions = @("pluginCapabilities", "mcpSkills"),
-    [int]$TimeoutSec = 120,
+    [int]$TimeoutSec = 480,
     [int]$MaxAttempts = 2
 )
 

@@ -1,4 +1,10 @@
 const ANTI_CODEX_TITLE = "`Anti-Codex`";
+const ANTI_CODEX_TRAY_ICON = "`codex-tray.ico`";
+const WINDOWS_TRAY_BRAND_ICONS = [
+  "`icon-agent.ico`",
+  "`chatgpt-tray-dark.ico`",
+  "`chatgpt-tray-light.ico`",
+];
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -62,4 +68,72 @@ export function patchProductNameDrivenSessionTitle(text) {
   );
 
   return next;
+}
+
+function findWindowsTrayIconSelector(text) {
+  let anchor = text.indexOf(ANTI_CODEX_TRAY_ICON);
+  while (anchor >= 0) {
+    const start = text.lastIndexOf("function ", anchor);
+    const nextFunction = text.indexOf("function ", anchor + ANTI_CODEX_TRAY_ICON.length);
+    const end = nextFunction >= 0 ? nextFunction : text.length;
+    if (start >= 0 && end - start <= 2000) {
+      const selector = text.slice(start, end);
+      const codexIconCount = selector.split(ANTI_CODEX_TRAY_ICON).length - 1;
+      const alternateIconCount = WINDOWS_TRAY_BRAND_ICONS.reduce(
+        (count, icon) => count + selector.split(icon).length - 1,
+        0,
+      );
+      if (
+        /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(selector) &&
+        selector.includes("dark:") &&
+        selector.includes("light:") &&
+        (alternateIconCount > 0 || codexIconCount >= 4)
+      ) {
+        return { start, end, selector, alternateIconCount, codexIconCount };
+      }
+    }
+    anchor = text.indexOf(ANTI_CODEX_TRAY_ICON, anchor + ANTI_CODEX_TRAY_ICON.length);
+  }
+  return null;
+}
+
+export function patchWindowsTrayIconSelection(text) {
+  const source = String(text ?? "");
+  const match = findWindowsTrayIconSelector(source);
+  if (!match) throw new Error("Windows tray icon selector not found");
+  if (match.alternateIconCount === 0 && match.codexIconCount >= 4) return source;
+
+  let selector = match.selector;
+  for (const icon of WINDOWS_TRAY_BRAND_ICONS) {
+    const replacement =
+      ANTI_CODEX_TRAY_ICON + " ".repeat(icon.length - ANTI_CODEX_TRAY_ICON.length);
+    selector = selector.replaceAll(icon, replacement);
+  }
+  return source.slice(0, match.start) + selector + source.slice(match.end);
+}
+
+export function hasWindowsTrayIconSelection(text) {
+  return findWindowsTrayIconSelector(String(text ?? "")) !== null;
+}
+
+const LEGACY_NOTIFY_ENSURE_PATTERN = /function (?<fn>[\w$]+)\((?<content>[\w$]+),(?<helper>[\w$]+)\)\{let (?<notify>[\w$]+)=(?<read>[\w$]+)\(\k<content>\),(?<previous>[\w$]+)=(?<unwrap>[\w$]+)\(\k<notify>\),(?<next>[\w$]+)=\[\k<helper>,(?<turn>[\w$]+)\];return \k<previous>!=null&&\k<next>\.push\((?<previousFlag>[\w$]+),JSON\.stringify\(\k<previous>\)\),(?<same>[\w$]+)\(\k<notify>,\k<next>\)\?\{content:\k<content>,hadNotify:!0\}:\{content:(?<replace>[\w$]+)\(\k<content>,(?<toml>[\w$]+)\(\{notify:\k<next>\}\)\.trimEnd\(\)\),hadNotify:\k<notify>!=null\}\}/;
+
+export function patchComputerUseLegacyNotifyOptOut(text) {
+  const source = String(text ?? "");
+  if (/\?\.length<1\|\|[\w$]+\([\w$]+,[\w$]+\)/.test(source)) return source;
+
+  const match = LEGACY_NOTIFY_ENSURE_PATTERN.exec(source);
+  if (!match?.groups) throw new Error("Computer-use legacy notify ensure function not found");
+  const {
+    fn, content, helper, notify, read, previous, unwrap, next, turn,
+    previousFlag, same, replace, toml,
+  } = match.groups;
+  const replacement = `function ${fn}(${content},${helper}){let ${notify}=${read}(${content}),${previous}=${unwrap}(${notify}),${next}=[${helper},${turn}];return ${previous}&&${next}.push(${previousFlag},JSON.stringify(${previous})),${notify}?.length<1||${same}(${notify},${next})?{content:${content},hadNotify:!0}:{content:${replace}(${content},${toml}({notify:${next}}).trim()),hadNotify:!!${notify}}}`;
+  if (replacement.length > match[0].length) {
+    throw new Error(`Computer-use notify replacement grew: ${replacement.length} > ${match[0].length}`);
+  }
+  return source.slice(0, match.index)
+    + replacement
+    + " ".repeat(match[0].length - replacement.length)
+    + source.slice(match.index + match[0].length);
 }

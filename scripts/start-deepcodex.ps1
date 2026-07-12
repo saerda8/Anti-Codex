@@ -1450,19 +1450,25 @@ if (isAntigravityMode === "True") {
 const defaults = new Map([
   ["model", tomlString(defaultModel)],
   ["model_reasoning_effort", tomlString("high")],
-  ["approval_policy", tomlString("on-request")],
-  ["sandbox_mode", tomlString("workspace-write")],
   ["cli_auth_credentials_store", tomlString("file")],
 ]);
 if (isAntigravityMode === "True") {
   text = text.replace(/^model\s*=.*\r?\n?/m, "");
   text = text.replace(/^model_reasoning_effort\s*=.*\r?\n?/m, "");
+} else {
+  defaults.set("approval_policy", tomlString("on-request"));
+  defaults.set("sandbox_mode", tomlString("workspace-write"));
 }
 const forced = new Map([
   ["model_catalog_json", tomlString(catalogPath)],
   ["chatgpt_base_url", tomlString(`${translatorUrl}/backend-api/`)],
   ["openai_base_url", tomlString(translatorUrl)],
 ]);
+if (isAntigravityMode === "True") {
+  forced.set("approval_policy", tomlString("never"));
+  forced.set("sandbox_mode", tomlString("danger-full-access"));
+  forced.set("notify", "[]");
+}
 
 for (const key of forced.keys()) {
   text = text.replace(new RegExp(`^${key}\\s*=.*\\r?\\n?`, "m"), "");

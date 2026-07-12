@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   hasProductNameDrivenSessionTitle,
+  hasWindowsTrayIconSelection,
+  patchComputerUseLegacyNotifyOptOut,
   patchProductNameDrivenSessionTitle,
+  patchWindowsTrayIconSelection,
 } from "./brand-patch-compat.mjs";
 
 const asarPath = process.argv[2];
@@ -292,7 +295,7 @@ function patchProfileDropdownSettings(text) {
   } else if (!next.includes(replacement) && !next.includes("codex.profileDropdown.settingsPage")) {
     throw new Error("Profile dropdown settings gate pattern not found");
   }
-  const managerEntry = "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})},Wt=(0,Q.jsx)(O,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),Gt=(0,Q.jsx)(et,{LeftIcon:Me,keyboardShortcut:Ie,onClick:Ut,children:Wt}),Kt=(0,Q.jsxs)(V,{browser:!0,electron:!0,children:[Ht,Gt,(0,Q.jsx)(et,{LeftIcon:Me,onClick:()=>{u(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:`Anti-Codex \\u7ba1\\u7406`},`anticodex-manager`)]});";
+  const managerEntry = "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})},Wt=(0,Q.jsx)(O,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),Gt=(0,Q.jsx)(et,{LeftIcon:Me,keyboardShortcut:Ie,onClick:Ut,children:Wt}),Kt=(0,Q.jsxs)(V,{browser:!0,electron:!0,children:[Ht,Gt,(0,Q.jsx)(et,{LeftIcon:Me,onClick:()=>{u(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:`\\u7ba1\\u7406`},`anticodex-manager`)]});";
   if (next.includes("anticodex-manager") && next.includes("__ANTICODEX_OPEN_MANAGER__")) return next;
   if (next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(") ||
        next.includes("let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}")) {
@@ -310,7 +313,7 @@ function patchProfileDropdownSettings(text) {
       throw new Error("Current profile dropdown settings label was not found");
     }
     const labelBlock = next.slice(labelStart, itemStart);
-    const currentManagerEntry = "(0,J.jsx)(I,{onClick:globalThis.__ANTICODEX_OPEN_MANAGER__,children:`Manager`},`anticodex-manager`)";
+    const currentManagerEntry = "(0,J.jsx)(I,{onClick:globalThis.__ANTICODEX_OPEN_MANAGER__,children:`\\u7ba1\\u7406`},`anticodex-manager`)";
     const replacement = "let C=s?(0,J.jsx)(M,{electron:!0,children:(0,J.jsx)(I,{LeftIcon:tn,onClick:p,children:S})}):null;" +
       labelBlock +
       "let T=[(0,J.jsx)(I,{LeftIcon:rt,keyboardShortcut:m,onClick:d,children:w})," + currentManagerEntry + "];";
@@ -332,7 +335,7 @@ function patchProfileDropdownSettings(text) {
   const item = new RegExp(`let ([\\w$]+);[^;]*?\\(0,${label[2]}\\.jsx\\)\\(([\\w$]+),\\{LeftIcon:([\\w$]+),keyboardShortcut:([\\w$]+),onClick:${action[1]},children:${label[1]}\\}\\)`).exec(segment);
   const group = item && new RegExp(`let ([\\w$]+);[^;]*?\\(0,${label[2]}\\.jsxs\\)\\(([\\w$]+),\\{browser:!0,electron:!0,children:\\[([\\w$]+),${item[1]}\\]\\}\\)`).exec(segment);
   if (!item || !group) throw new Error("Profile dropdown browser/electron menu group not found");
-  const injected = `let ${action[1]}=()=>{${action[2]}(!1),${action[3]}(\`/settings/\${${action[4]}}\`,{state:${action[5]}})},${label[1]}=(0,${label[2]}.jsx)(${label[3]},{id:\`codex.profileDropdown.settingsPage\`,defaultMessage:\`Settings\`,description:\`Menu item to open Codex settings page\`}),${item[1]}=(0,${label[2]}.jsx)(${item[2]},{LeftIcon:${item[3]},keyboardShortcut:${item[4]},onClick:${action[1]},children:${label[1]}}),${group[1]}=(0,${label[2]}.jsxs)(${group[2]},{browser:!0,electron:!0,children:[${group[3]},${item[1]},(0,${label[2]}.jsx)(${item[2]},{LeftIcon:${item[3]},onClick:()=>{${action[2]}(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:\`Anti-Codex \\u7ba1\\u7406\`},\`anticodex-manager\`)]});`;
+  const injected = `let ${action[1]}=()=>{${action[2]}(!1),${action[3]}(\`/settings/\${${action[4]}}\`,{state:${action[5]}})},${label[1]}=(0,${label[2]}.jsx)(${label[3]},{id:\`codex.profileDropdown.settingsPage\`,defaultMessage:\`Settings\`,description:\`Menu item to open Codex settings page\`}),${item[1]}=(0,${label[2]}.jsx)(${item[2]},{LeftIcon:${item[3]},keyboardShortcut:${item[4]},onClick:${action[1]},children:${label[1]}}),${group[1]}=(0,${label[2]}.jsxs)(${group[2]},{browser:!0,electron:!0,children:[${group[3]},${item[1]},(0,${label[2]}.jsx)(${item[2]},{LeftIcon:${item[3]},onClick:()=>{${action[2]}(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:\`\\u7ba1\\u7406\`},\`anticodex-manager\`)]});`;
   if (injected.length > segment.length) throw new Error("Profile dropdown manager injection replacement did not fit");
   return next.slice(0, segmentStart) + injected + " ".repeat(segment.length - injected.length) + next.slice(segmentEnd + 1);
 }
@@ -727,6 +730,32 @@ function findWebviewLocalPluginCatalogPatch(fd, header, dataOffset) {
   throw new Error("Could not find webview plugin catalog route");
 }
 
+function findWindowsTrayIconPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (hasWindowsTrayIconSelection(text)) {
+      return [rel, patchWindowsTrayIconSelection];
+    }
+  }
+  throw new Error("Could not find the Windows tray icon selector under .vite/build/*.js");
+}
+
+function findComputerUseLegacyNotifyOptOutPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (!text.includes("codex-computer-use.exe")) continue;
+    try {
+      patchComputerUseLegacyNotifyOptOut(text);
+      return [rel, patchComputerUseLegacyNotifyOptOut];
+    } catch {}
+  }
+  throw new Error("Could not find the computer-use legacy notify installer under .vite/build/*.js");
+}
+
 function patchRetryStreamErrorVisibility(text) {
   if (/case`error`:if\(n\.willRetry\)\{break\}else if\(/.test(text)) return text;
   const search = /case`error`:if\(n\.willRetry\)\{[\s\S]*?\}else if\(/;
@@ -777,6 +806,8 @@ const patchSpecs = [
   ["appearance-settings", () => findAppearanceSettingsPatch(fd, header, dataOffset)],
   ["profile-dropdown-settings", () => findProfileDropdownSettingsPatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
+  ["windows-tray-icon", () => findWindowsTrayIconPatch(fd, header, dataOffset)],
+  ["computer-use-legacy-notify-opt-out", () => findComputerUseLegacyNotifyOptOutPatch(fd, header, dataOffset)],
   ["local-model-availability", () => findLocalModelAvailabilityPatch(fd, header, dataOffset)],
   ["local-plugin-catalog", () => findLocalPluginCatalogPatch(fd, header, dataOffset)],
   ["electron-local-plugin-catalog", () => findElectronLocalPluginCatalogPatch(fd, header, dataOffset)],
@@ -796,6 +827,8 @@ const criticalPatchNames = new Set([
   "app-route-gate",
   "profile-dropdown-settings",
   "browser-window-icon",
+  "windows-tray-icon",
+  "computer-use-legacy-notify-opt-out",
   "local-model-availability",
   "local-plugin-catalog",
   "electron-local-plugin-catalog",

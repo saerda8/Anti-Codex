@@ -8,8 +8,11 @@ export function createAntigravitySessionLock(options = {}) {
     ? Math.max(1, Math.floor(configuredMaxQueued))
     : 32;
   const ttlMs = Math.max(1_000, Number(options.ttlMs ?? 60 * 1000) || 60 * 1000);
-  const maxContinuations = Math.max(1, Number(options.maxContinuations ?? 12) || 12);
+  const maxContinuations = Math.max(1, Number(options.maxContinuations ?? 48) || 48);
+  const continuationBlockTtlMs = Math.max(1_000, Number(options.continuationBlockTtlMs ?? 5 * 60 * 1000) || 5 * 60 * 1000);
   const queue = [];
+  const limitedCallIds = new Map();
+  const resetCallIds = new Map();
   let active = null;
   let accepted = 0;
   let rejected = 0;
@@ -18,24 +21,31 @@ export function createAntigravitySessionLock(options = {}) {
   let responseCancelled = 0;
   let idleReleased = 0;
   let continuationLimitReleased = 0;
+  let continuationLimitRetries = 0;
+  let resetContinuationRetries = 0;
 
   function acquire({ previousResponseId = "", continuationCallIds = [], signal } = {}) {
     if (signal?.aborted) return Promise.reject(abortReason(signal));
     const previousId = String(previousResponseId || "");
     const callIds = normalizeStringSet(continuationCallIds);
+    pruneLimitedCallIds();
+    if ([...callIds].some((callId) => resetCallIds.has(callId))) {
+      resetContinuationRetries += 1;
+      return Promise.reject(resetContinuationError());
+    }
+    if ([...callIds].some((callId) => limitedCallIds.has(callId))) {
+      continuationLimitRetries += 1;
+      return Promise.reject(continuationLimitError());
+    }
     const matchesActiveResponse = active && previousId && active.responseIds.has(previousId);
     const matchesActiveToolCall = active && callIds.size > 0 && intersects(active.callIds, callIds);
     if (matchesActiveResponse || matchesActiveToolCall) {
       if (active.continuations >= maxContinuations) {
         continuationLimitReleased += 1;
+        const blockedAt = Date.now();
+        for (const callId of active.callIds) limitedCallIds.set(callId, blockedAt);
         releaseEntry(active);
-        const error = new Error(`Antigravity session continuation limit reached (${maxContinuations}); start a fresh task turn.`);
-        error.name = "AntigravitySessionContinuationLimitError";
-        error.statusCode = 409;
-        error.type = "antigravity_session_continuation_limit";
-        error.retryable = false;
-        error.maxContinuations = maxContinuations;
-        return Promise.reject(error);
+        return Promise.reject(continuationLimitError());
       }
       active.continuations += 1;
       continued += 1;
@@ -82,6 +92,35 @@ export function createAntigravitySessionLock(options = {}) {
       continuedAt: null,
       continuations: 0,
     };
+  }
+
+  function pruneLimitedCallIds() {
+    const now = Date.now();
+    for (const [callId, blockedAt] of limitedCallIds) {
+      if (now - blockedAt > continuationBlockTtlMs) limitedCallIds.delete(callId);
+    }
+    for (const [callId, blockedAt] of resetCallIds) {
+      if (now - blockedAt > continuationBlockTtlMs) resetCallIds.delete(callId);
+    }
+  }
+
+  function continuationLimitError() {
+    const error = new Error(`Antigravity session continuation limit reached (${maxContinuations}); start a fresh task turn.`);
+    error.name = "AntigravitySessionContinuationLimitError";
+    error.statusCode = 409;
+    error.type = "antigravity_session_continuation_limit";
+    error.retryable = false;
+    error.maxContinuations = maxContinuations;
+    return error;
+  }
+
+  function resetContinuationError() {
+    const error = new Error("This stale Anti-Codex tool continuation was cancelled by a local session reset. Continue with a fresh user turn instead of replaying the old tool output.");
+    error.name = "AntigravitySessionResetError";
+    error.statusCode = 409;
+    error.type = "anticodex_session_reset";
+    error.retryable = false;
+    return error;
   }
 
   function createLease(entry) {
@@ -168,6 +207,7 @@ export function createAntigravitySessionLock(options = {}) {
   }
 
   function snapshot() {
+    pruneLimitedCallIds();
     return {
       active: Boolean(active),
       activeResponseIds: active ? [...active.responseIds] : [],
@@ -181,6 +221,10 @@ export function createAntigravitySessionLock(options = {}) {
       responseCancelled,
       idleReleased,
       continuationLimitReleased,
+      continuationLimitRetries,
+      limitedCallIdCount: limitedCallIds.size,
+      resetContinuationRetries,
+      resetCallIdCount: resetCallIds.size,
       activeContinuations: active ? active.continuations : 0,
       maxContinuations,
       activeAgeMs: active ? Date.now() - active.createdAt : 0,
@@ -234,6 +278,8 @@ export function createAntigravitySessionLock(options = {}) {
   function reset({ reason = "manual_reset" } = {}) {
     if (active?.timer) clearTimeout(active.timer);
     const hadActive = Boolean(active);
+    const resetAt = Date.now();
+    for (const callId of active?.callIds || []) resetCallIds.set(callId, resetAt);
     active = null;
     const queued = queue.splice(0, queue.length);
     const error = new DOMException("Anti-Codex Antigravity session lock was reset locally.", "AbortError");

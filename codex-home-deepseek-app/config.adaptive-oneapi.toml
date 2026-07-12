@@ -1,6 +1,6 @@
 model_reasoning_effort = "high"
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
 model = "gemini-3.5-flash-low"
 cli_auth_credentials_store = "file"
 model_catalog_json = "__DEEPCODEX_MODEL_CATALOG__"

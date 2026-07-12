@@ -8,8 +8,10 @@ const codexHome = process.argv[2] || path.join(os.homedir(), 'Library/Applicatio
 const sharedCodexHome = process.argv[3] || path.join(os.homedir(), '.codex');
 
 const sharedAppsToolsRoot = path.join(sharedCodexHome, 'cache', 'codex_apps_tools');
+const sharedConnectorDir = path.join(sharedCodexHome, 'cache', 'codex_app_directory');
 const targetCacheRoot = path.join(codexHome, 'cache');
 const targetAppsToolsRoot = path.join(targetCacheRoot, 'codex_apps_tools');
+const targetConnectorDir = path.join(targetCacheRoot, 'codex_app_directory');
 const mirroredPluginsRoot = path.join(codexHome, '.tmp', 'plugins', 'plugins');
 const sharedInstalledPluginsRoot = path.join(sharedCodexHome, '.tmp', 'plugins', 'plugins');
 const registryPath = path.join(targetCacheRoot, 'deepcodex_app_connectors.json');
@@ -124,6 +126,7 @@ function collectAppEntries(root, sourceLabel, rows, seen) {
 
 ensureDir(targetCacheRoot);
 const syncedFiles = syncDirContents(sharedAppsToolsRoot, targetAppsToolsRoot);
+const syncedConnectorFiles = syncDirContents(sharedConnectorDir, targetConnectorDir);
 const sharedToolsSnapshot = directoryContentFingerprint(sharedAppsToolsRoot);
 const localToolsSnapshot = directoryContentFingerprint(targetAppsToolsRoot);
 const contentMatches = sharedToolsSnapshot.exists
@@ -155,4 +158,4 @@ fs.writeFileSync(registryPath, JSON.stringify({
   connectors: registryRows,
 }, null, 2) + '\n');
 
-console.log(`Synced app tool cache files: ${syncedFiles.length}; connectors indexed: ${registryRows.length}; content matches: ${contentMatches ? 'true' : 'false'}`);
+console.log(`Synced app tool cache files: ${syncedFiles.length}; synced connector cache files: ${syncedConnectorFiles.length}; connectors indexed: ${registryRows.length}; content matches: ${contentMatches ? 'true' : 'false'}`);

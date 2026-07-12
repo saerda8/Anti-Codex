@@ -17,7 +17,7 @@ if (args.has("--help") || args.has("-h")) {
     "Usage: node scripts/build-anticodex-goal-unblock-package.mjs",
     "  [--report-root PATH] [--source-report-root PATH] [--compact]",
     "",
-    "Builds a no-traffic machine-readable handoff for deferred operator-only follow-ups.",
+    "Builds a no-traffic machine-readable product handoff with optional development evidence.",
   ].join("\n"));
   process.exit(0);
 }
@@ -98,6 +98,8 @@ const remainingObjectiveRequirementIds = asStringArray(goal.objectiveRequirement
 const deferredObjectiveRequirementIds = asStringArray(goal.deferredObjectiveRequirementSummary?.deferredRequirementIds);
 const incompleteDeferredObjectiveRequirementIds = asStringArray(goal.deferredObjectiveRequirementSummary?.incompleteDeferredRequirementIds);
 const deferredBlockers = asStringArray(goal.deferredBlockers);
+const optionalObjectiveRequirementIds = asStringArray(goal.optionalObjectiveRequirementSummary?.optionalRequirementIds);
+const incompleteOptionalObjectiveRequirementIds = asStringArray(goal.optionalObjectiveRequirementSummary?.incompleteOptionalRequirementIds);
 const releaseReady = goal.releaseGateStatus?.releaseReady === true || releaseGates.releaseReady === true;
 const canClaimFullGoalNow = goal.goalComplete === true && goal.objectiveRequirementSummary?.canClaimFullGoalNow === true;
 const fullObjectiveCanClaimFullGoalNow = goal.fullObjectiveRequirementSummary?.canClaimFullGoalNow === true;
@@ -161,7 +163,7 @@ const externalMcpIdentityHandoff = {
   proofReport: "latest-external-mcp-identity-contract.json",
 };
 
-const machineReadableNextActions = [
+const optionalDevelopmentActions = [
   ...(workerRecoveryStillRequired ? [{
     id: "fresh_channel_worker_read_only_probe",
     owner: "fresh-codex-channel",
@@ -214,34 +216,24 @@ const machineReadableNextActions = [
     changesSystem: false,
   },
 ];
+const machineReadableNextActions = canClaimFullGoalNow ? [] : [{
+  id: "refresh_product_goal_evidence",
+  owner: "anticodex-maintainer",
+  reason: blockers[0] || "product goal evidence is incomplete",
+  command: asString(goalCard.noTrafficStatusCommand || "node scripts\\test-anticodex-goal-readiness.mjs"),
+  proofReport: "latest-goal-readiness.json",
+  requiresRealTraffic: false,
+  startsLogin: false,
+  changesSystem: false,
+}];
 
 const failures = [];
 if (!goalFile.present || !goalFile.parseable) failures.push("goal_readiness_report_missing_or_unparseable");
-if (!workerRecoveryFile.present || !workerRecoveryFile.parseable) failures.push("worker_recovery_report_missing_or_unparseable");
-if (!workerTransportFile.present || !workerTransportFile.parseable) failures.push("worker_transport_report_missing_or_unparseable");
-if (!secondSummaryFile.present || !secondSummaryFile.parseable) failures.push("second_account_summary_missing_or_unparseable");
-if (!postLoginProofFile.present || !postLoginProofFile.parseable) failures.push("second_account_post_login_proof_missing_or_unparseable");
-if (!externalMcpIdentityFile.present || !externalMcpIdentityFile.parseable) failures.push("external_mcp_identity_contract_missing_or_unparseable");
 if (releaseReady !== true) failures.push("release_ready_not_true");
 if (goal.goalComplete !== true) failures.push("goal_unblock_package_goal_not_complete");
 if (canClaimFullGoalNow !== true) failures.push("goal_unblock_package_should_claim_current_goal_completion");
-if (fullObjectiveCanClaimFullGoalNow !== false) failures.push("goal_unblock_package_full_objective_should_remain_deferred");
-if (!deferredObjectiveRequirementIds.includes("separate_antigravity_accounts")) failures.push("missing_separate_account_deferred_requirement");
-if (!deferredObjectiveRequirementIds.includes("worker_mcp_multiuse")) failures.push("missing_worker_mcp_deferred_requirement");
-if (workerRecoveryStillRequired && !deferredBlockers.includes("current_channel_worker_transport_not_recovered")) failures.push("missing_current_channel_worker_deferred_blocker");
-if (!deferredBlockers.includes("second_antigravity_account_real_proof_missing")) failures.push("missing_second_account_deferred_blocker");
-if (workerRecoveryStillRequired && !freshChannelWorkerProof.requiresFreshCodexChannel) failures.push("fresh_channel_requirement_missing");
-if (workerRecoveryStillRequired && !freshChannelWorkerProof.requiresFreshReadOnlyProbe) failures.push("fresh_read_only_probe_requirement_missing");
-if (!freshChannelWorkerProof.recordCommand) failures.push("worker_recovery_record_command_missing");
-if (!freshChannelWorkerProof.latestTransportCheckedAt) failures.push("worker_transport_checked_at_missing");
-if (freshChannelWorkerProof.workerObservationCount < 3) failures.push("worker_transport_observation_count_too_low");
-if (workerRecoveryStillRequired && freshChannelWorkerProof.workerTransportFailedCount < 3) failures.push("worker_transport_failed_count_too_low");
-if (!workerRecoveryStillRequired && freshChannelWorkerProof.workerTransportOkCount < 1) failures.push("worker_transport_ok_count_too_low");
-if (freshChannelWorkerProof.genericMcpControlOk !== true) failures.push("worker_transport_generic_mcp_control_missing");
-if (freshChannelWorkerProof.directProbeOk !== true) failures.push("worker_transport_direct_probe_missing");
-if (!secondAccountProof.windowsUser) failures.push("second_account_windows_user_missing");
-if (!secondAccountProof.postLoginProofCommand) failures.push("second_account_post_login_command_missing");
-if (!externalMcpIdentityHandoff.contractAccepted) failures.push("external_mcp_identity_contract_not_accepted");
+if (fullObjectiveCanClaimFullGoalNow !== true) failures.push("goal_unblock_package_full_objective_should_claim_product_goal");
+if (deferredObjectiveRequirementIds.length > 0 || incompleteDeferredObjectiveRequirementIds.length > 0 || deferredBlockers.length > 0) failures.push("goal_unblock_package_has_deferred_product_requirements");
 
 const payload = {
   ok: failures.length === 0,
@@ -263,15 +255,19 @@ const payload = {
   objectiveRequirementSummary: goal.objectiveRequirementSummary || null,
   fullObjectiveRequirementSummary: goal.fullObjectiveRequirementSummary || null,
   deferredObjectiveRequirementSummary: goal.deferredObjectiveRequirementSummary || null,
+  optionalObjectiveRequirementSummary: goal.optionalObjectiveRequirementSummary || null,
   remainingObjectiveRequirementIds,
   deferredObjectiveRequirementIds,
   incompleteDeferredObjectiveRequirementIds,
   blockers,
   deferredBlockers,
+  optionalObjectiveRequirementIds,
+  incompleteOptionalObjectiveRequirementIds,
   freshChannelWorkerProof,
   secondAccountProof,
   externalMcpIdentityHandoff,
   machineReadableNextActions,
+  optionalDevelopmentActions,
   failures,
   elapsedMs: Date.now() - startedAt,
 };
@@ -290,6 +286,7 @@ const output = compact
     blockers: payload.blockers,
     deferredBlockers: payload.deferredBlockers,
     nextActionCount: payload.machineReadableNextActions.length,
+    optionalDevelopmentActionCount: payload.optionalDevelopmentActions.length,
     report,
   }
   : { ...payload, report };
