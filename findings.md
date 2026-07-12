@@ -2066,3 +2066,12 @@
 - Final UI evidence after the cleanup is authoritative: profile label exactly `管理`, no visible English `Manager`, `actionCenterHitsButton:true`, `closeHitAreaOk:true`, `closeActualMouseOk:true`, one Manager page target before and after, and no new window.
 - The live lower-right icon probe found the `Anti-Codex` notification item and counted `111` pink artwork pixels. This is direct post-relaunch evidence that the icon did not regress to the Codex/GPT artwork.
 - Antigravity worker transport is usable again in the current channel, and regular worker evidence is complete. Xiaoqiang1/2/3/4 remain sealed and absent from the active product snapshot.
+
+## 2026-07-13 Optional Closure Findings
+
+- Optional evidence is now complete wherever the local product can execute it: stability soak passed for 180 seconds with 26 stable health samples; provider-to-Antigravity same-chain return passed; direct Antigravity worker real traffic passed with completed job `ag-94d577c8-7ae5-4eae-94b0-023e10fc029a`; all 13 optional no-traffic reports are satisfied.
+- The release report previously accepted the direct-worker gate but still listed it in `optionalRealTrafficFailures`. The top-level failure list incorrectly required generic `coverageKind:"real-traffic"` even though the gate correctly accepted `direct-antigravity-worker-same-account-real-traffic`. Filtering by the gate's authoritative `satisfied` field fixes the inconsistency and has a regression contract.
+- Current passive gates are internally consistent: required and short misses are empty; optional misses and optional real-traffic failures both contain only `realThirdPartyProviderOptional` and `antigravityCliRealSmokeOptional`.
+- Those two optional misses cannot be completed from product code alone. The first needs a user-supplied external provider endpoint/model/API-key environment variable; the second needs the canceled independent-account setup. Do not inspect `.env`, create users, or alter login state to manufacture either proof.
+- Final UI/runtime evidence stayed stable on `native-panel-v104`: exact `管理`, no English fallback, real upper/center/lower close clicks, one Manager page target, account ready, 8 models, and 111 pink tray-icon pixels.
+- Final source preflight after the report fix passed 1170 tests with 0 failures. Five verified stale/unreferenced untracked artifacts were removed; tracked changes remain limited to the release-summary fix, its test, and closure records.

@@ -2356,3 +2356,12 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - The live notification-area icon remained the pink Anti-Codex artwork (`111` matching pixels). Application, taskbar, tray, shortcut, and lower-right icon assets were not changed.
 - Source preflight now gives the 32-file translator regression a 240-second budget. Final source preflight passed `1170` tests (`1136` pass, `34` skipped, `0` failed); runtime sync matched all `95` files with account ready and 8 models.
 - Final passive release gates report `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`. Optional external-provider, separate-account, native-loop, and soak evidence remains non-gating.
+
+## 2026-07-13 Optional Evidence And Final Checkpoint
+
+- Completed every locally executable optional check: the 180-second stability soak passed 26 health samples with no failures; provider-to-Antigravity return and direct Antigravity worker real-traffic proofs passed; optional no-traffic evidence is 13/13; soak and cold-relaunch evidence are both green.
+- Release groups are fully green for short 8/8, Manager 2/2, no-traffic 16/16, real-traffic 24/24, soak 1/1, and cold 1/1. Required release remains `releaseReady:true`, `shortReady:true`, `missingRequired:[]`, and `missingShort:[]`.
+- The only two optional misses are a real external provider run that requires a user-supplied provider API key and the canceled separate-account Antigravity CLI proof that requires another Windows user or independent credential store. Neither is unfinished single-account product code.
+- Fixed optional release-summary filtering so a satisfied direct Antigravity worker proof is no longer listed as an optional failure merely because it uses a more specific real-traffic coverage label.
+- Final UI proof on `native-panel-v104` confirms exact profile text `管理`, no visible `Manager`, upper/center/lower real-mouse close hits, and the unchanged pink lower-right Anti-Codex icon with 111 matching pixels.
+- Final full source preflight passed 1170 tests: 1136 pass, 34 skipped, 0 failed. Verified untracked session-inspector and stale-lock residue was removed before the checkpoint.

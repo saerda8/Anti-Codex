@@ -12216,6 +12216,8 @@ test("Anti-Codex ships a passive release gate summary verifier", () => {
   assert.match(releaseGates, /strictOptionalRealTraffic/);
   assert.match(releaseGates, /optionalRealTrafficReady/);
   assert.match(releaseGates, /optionalRealTrafficFailures/);
+  assert.match(releaseGates, /optionalRealTrafficGates\s*\n\s*\.filter\(\(gate\) => !gate\.satisfied\)/);
+  assert.doesNotMatch(releaseGates, /optionalRealTrafficGates[\s\S]{0,240}coverageKind !== "real-traffic"/);
   assert.match(releaseGates, /sourceFingerprint/);
   assert.match(releaseGates, /refresh_features_source_snapshot_missing/);
   assert.match(releaseGates, /refresh_features_source_snapshot_mismatch/);

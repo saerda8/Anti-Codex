@@ -6630,7 +6630,7 @@ const nextActions = nextActionSummary.actions;
 const approvalPlan = summarizeApprovalPlan(nextActionSummary.allActions);
 const optionalRealTrafficGates = gates.filter((gate) => gate.group === "optional-real-traffic");
 const optionalRealTrafficFailures = optionalRealTrafficGates
-  .filter((gate) => !gate.satisfied || gate.requestedRealTraffic !== true || gate.usedRealTraffic !== true || gate.behaviorCovered !== true || gate.coverageKind !== "real-traffic")
+  .filter((gate) => !gate.satisfied)
   .map((gate) => gate.id);
 const optionalRealTrafficReady = optionalRealTrafficFailures.length === 0;
 const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].map((group) => {

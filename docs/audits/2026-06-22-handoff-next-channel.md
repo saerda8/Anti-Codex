@@ -684,3 +684,12 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Final source preflight passed 1170 tests: 1136 pass, 34 skipped, 0 failed. The source-preflight translator subcheck default is now 240 seconds because the full suite currently takes about 121 seconds and the former 120-second default caused a false timeout.
 - Regular worker transport is dispatch-ready. Antigravity worker job `ag-f6202979-4ee8-4ad1-b6f0-2b2767cd0fe8` timed out at the caller but produced the accepted local-connector test improvement; direct local connector verification passed. Xiaoqiang workers remain sealed and must not be dispatched.
 - Do not rerun optional external-provider, independent-account, native-loop, soak, or cold-relaunch evidence merely to keep the required release green. Those remain visible but non-gating.
+
+## 2026-07-13 Final Optional Closure Handoff
+
+- All remaining locally runnable validation is complete. Stability soak, provider-to-Antigravity return, direct Antigravity worker traffic, native-loop boundary checks, all optional no-traffic reports, and final full source preflight passed.
+- Current group totals: short 8/8, Manager 2/2, no-traffic 16/16, optional no-traffic 13/13, real-traffic 24/24, soak 1/1, cold 1/1, and optional real traffic 2/4. Required release and short release are both ready with no missing required gates.
+- The two unsatisfied optional gates are external conditions, not product blockers: real third-party provider proof needs a supplied provider key/config; separate-account Antigravity CLI proof needs an independent account boundary that the agreed single-account product no longer requires.
+- Release summaries now use each gate's authoritative `satisfied` value for optional failures, so valid specialized real-traffic evidence is not rejected by a generic coverage-label check.
+- Preserve the final UI constraints: `native-panel-v104`, exact `管理`, pseudo-text close control with upper/center/lower real-mouse verification, and all existing Anti-Codex icons including the pink lower-right tray icon.
+- Final regression: 1170 tests, 1136 pass, 34 skipped, 0 failed. Xiaoqiang1/2/3/4 remain sealed.
