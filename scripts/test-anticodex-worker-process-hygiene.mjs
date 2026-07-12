@@ -207,7 +207,7 @@ const payload = {
       : "no duplicate worker MCP child processes were observed under Codex app-server parents"
     : "worker process hygiene could not inspect local process state",
   operatorAction: snapshot.duplicateWorkerProcessCount > 0
-    ? "prefer a full Codex app restart or fresh channel; do not assume killing child processes will refresh already-injected tool handles"
+    ? "close Codex completely, run backup-first thread maintenance, then restart Codex; opening another channel can start another worker set"
     : "process hygiene does not explain current worker transport state; rely on current-channel read-only worker probes",
 };
 const report = writeSignedReport(payload);

@@ -13840,6 +13840,12 @@ test("Manager latest reports defer optional historical proofs from staleCount wi
   assert.match(server, /missingCount: reports\.filter\(\(item\) => !item\.exists && item\.deferred !== true\)\.length/);
 });
 
+test("worker process hygiene does not recommend opening another channel for duplicate cleanup", () => {
+  const hygiene = readFileSync(resolve(root, "scripts", "test-anticodex-worker-process-hygiene.mjs"), "utf8");
+  assert.match(hygiene, /close Codex completely, run backup-first thread maintenance, then restart Codex/);
+  assert.doesNotMatch(hygiene, /restart or fresh channel/);
+});
+
 test("single-account native parity is the permanent Anti-Codex product goal", () => {
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
