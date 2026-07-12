@@ -693,3 +693,12 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Release summaries now use each gate's authoritative `satisfied` value for optional failures, so valid specialized real-traffic evidence is not rejected by a generic coverage-label check.
 - Preserve the final UI constraints: `native-panel-v104`, exact `管理`, pseudo-text close control with upper/center/lower real-mouse verification, and all existing Anti-Codex icons including the pink lower-right tray icon.
 - Final regression: 1170 tests, 1136 pass, 34 skipped, 0 failed. Xiaoqiang1/2/3/4 remain sealed.
+
+## 2026-07-13 Performance And Manager Follow-Up Handoff
+
+- Manager latest reports no longer labels optional/high-impact historical proofs as daily `需重跑`; they display as deferred/optional. Daily local reports still become stale normally. Installed `viewLatestReports` now shows no rerun line and Diagnostics passes.
+- Current-channel worker transport is healthy again. Read-only MIMO returned normally, the recovery report is `ready_to_dispatch`, and MIMO completed the scoped Manager patch. Xiaoqiang workers remain sealed.
+- Two local process cleanup samples removed 59 idle duplicate worker MCP children and kept the newest instance of each regular worker. Process hygiene passed with zero duplicates, and current MIMO remained callable.
+- Native Codex thread navigation remains subject to large local state: 692 active rows and 536 oversized title/preview candidates. A corrected hidden `keep-codex-fast` process is waiting for the next full Codex exit; it will back up state, archive only unpinned sessions older than 10 days, repair display metadata, and write restore helpers without permanently deleting transcripts.
+- The maintenance tool's Windows process detector was fixed outside this repo to recognize `ChatGPT.exe` and lowercase `codex.exe` by name and to avoid pre-1970 timestamp overflow. Earlier attempts produced restore backups but archived zero sessions.
+- Current shared feature snapshots are aligned: 9 regular workers plus `node_repl`, 128 skills, 188 plugins, connector/app-tool parity clean, 8 visible models, account ready. Final regression is 1171 tests: 1137 pass, 34 skipped, 0 failed.

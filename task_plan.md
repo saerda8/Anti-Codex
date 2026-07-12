@@ -2365,3 +2365,12 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Fixed optional release-summary filtering so a satisfied direct Antigravity worker proof is no longer listed as an optional failure merely because it uses a more specific real-traffic coverage label.
 - Final UI proof on `native-panel-v104` confirms exact profile text `管理`, no visible `Manager`, upper/center/lower real-mouse close hits, and the unchanged pink lower-right Anti-Codex icon with 111 matching pixels.
 - Final full source preflight passed 1170 tests: 1136 pass, 34 skipped, 0 failed. Verified untracked session-inspector and stale-lock residue was removed before the checkpoint.
+
+## 2026-07-13 Manager And Local-State Performance Closure
+
+- Manager latest reports now classify optional, real-traffic, high-impact, and historical worker proofs as deferred. They remain visible but no longer inflate the daily `需重跑` count; daily local health reports remain freshness-sensitive.
+- Fresh installed Manager proof has no `需重跑` line. Diagnostics, shortcuts, worker server/source/status/process hygiene, app-server freshness, and release status all show passed; exact `管理`, real upper/center/lower close clicks, and the pink tray icon remain verified.
+- Current-channel MIMO read-only transport recovered and a scoped MIMO implementation produced the Manager fix. The current recovery report is `ready_to_dispatch`; Xiaoqiang1/2/3/4 stayed sealed.
+- Removed 59 idle duplicate worker MCP children across two cleanup samples, keeping the newest instance of each regular worker and returning duplicate count to 0. A post-cleanup MIMO status read still succeeded.
+- Codex local-state inspection found 692 active thread rows, 536 oversized title/preview metadata candidates, and 67 previews over 10,000 characters. Backup-first maintenance is queued for the next Codex exit; it archives only unpinned sessions older than 10 days, repairs display metadata, writes restore helpers, and never permanently deletes transcripts.
+- Current Codex feature parity was refreshed: 9 regular workers plus `node_repl`, 128 inherited skills, 188 plugins, 1,494 connector metadata entries, and matching app-tool/connector snapshots. Final source preflight passed 1171 tests: 1137 pass, 34 skipped, 0 failed.

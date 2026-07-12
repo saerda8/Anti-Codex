@@ -13802,6 +13802,44 @@ test("optional and special latest reports stay visible without becoming release-
   assert.match(goalReadiness, /releaseBlockedOnlyByRequiredRealTraffic/);
 });
 
+test("Manager latest reports defer optional historical proofs from staleCount without hiding daily local reports", () => {
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  // Optional, real-traffic, and high-impact reports must not inflate staleCount.
+  const deferredReports = [
+    "latest-cold-relaunch.json",
+    "latest-stability-soak.json",
+    "latest-real-third-party-provider.json",
+    "latest-provider-antigravity-return.json",
+    "latest-native-multi-tool-loop.json",
+    "latest-native-tool-loop.json",
+    "latest-antigravity-worker-direct-smoke.json",
+    "latest-worker-mcp-task-smoke.json",
+    "latest-worker-mcp-project-smoke.json",
+  ];
+  for (const file of deferredReports) {
+    assert.match(server, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + '\\", \\{ deferred: true \\}'), `${file} must carry deferred:true so its staleness does not count toward staleCount`);
+  }
+
+  // Daily local support reports must remain freshness-sensitive.
+  const dailyLocalReports = [
+    "latest-model-availability.json",
+    "latest-worker-mcp-server-probe.json",
+    "latest-worker-mcp-source-hygiene.json",
+    "latest-worker-mcp-status-probe.json",
+    "latest-worker-process-hygiene.json",
+    "latest-codex-appserver-freshness.json",
+    "latest-shortcut-repair.json",
+  ];
+  for (const file of dailyLocalReports) {
+    assert.doesNotMatch(server, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + '\\", \\{ deferred: true \\}'), `${file} must NOT be deferred — it is a daily local report`);
+  }
+
+  // Both stale and missing counts exclude deferred reports.
+  assert.match(server, /staleCount: reports\.filter\(\(item\) => item\.exists && item\.stale && item\.deferred !== true\)\.length/);
+  assert.match(server, /missingCount: reports\.filter\(\(item\) => !item\.exists && item\.deferred !== true\)\.length/);
+});
+
 test("single-account native parity is the permanent Anti-Codex product goal", () => {
   const goalReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-goal-readiness.mjs"), "utf8");
   const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
