@@ -1324,6 +1324,113 @@ test("deterministic exact reply supports a Chinese only-reply clause after a rea
   assert.equal(completion.choices[0].message.content, "RECOVERY_HOOK_OK");
 });
 
+test("deterministic exact reply never skips requested file and command work", () => {
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "请在 C:\\Temp\\launch-once 新建 start.bat，用 Start-Process 启动一次，再读取 launch-count.txt 验证等于 1。验证成功后最后一行只回复 UI_LAUNCH_ONCE_OK。",
+      }],
+    }],
+  });
+
+  assert.equal(completion, null);
+});
+
+test("deterministic exact reply closes a verified launch-once tool turn", () => {
+  const marker = "UI_LAUNCH_ONCE_VERIFIED_REPLY_123";
+  const prompt = `工作目录是 C:\\Temp\\launch-once。新建 start.bat，用 Start-Process 只启动一次，读取 launch-count.txt 严格验证等于 1，读取 launch-proof.txt。验证成功后最后一行只回复 ${marker}。`;
+  const command = [
+    "Set-Content -Path .\\start.bat -Value 'powershell -File launch-target.ps1' -Encoding Ascii",
+    "Start-Process -FilePath .\\start.bat -Wait",
+    "Get-Content .\\launch-count.txt",
+    "Get-Content .\\launch-proof.txt",
+  ].join("; ");
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_launch_once", name: "shell_command", arguments: JSON.stringify({ command }) },
+      { type: "function_call_output", call_id: "call_launch_once", output: `Exit code: 0\nOutput:\n1\n${marker}` },
+    ],
+  });
+
+  assert.equal(completion.choices[0].message.content, marker);
+});
+
+test("deterministic exact reply refuses duplicate launch evidence", () => {
+  const marker = "UI_LAUNCH_ONCE_DUPLICATE_REPLY_123";
+  const prompt = `工作目录是 C:\\Temp\\launch-once。新建 start.bat，用 Start-Process 只启动一次，读取 launch-count.txt 严格验证等于 1，读取 launch-proof.txt。验证成功后最后一行只回复 ${marker}。`;
+  const command = [
+    "Set-Content -Path .\\start.bat -Value 'powershell -File launch-target.ps1' -Encoding Ascii",
+    "Start-Process -FilePath .\\start.bat -Wait",
+    "Start-Process -FilePath .\\start.bat -Wait",
+    "Get-Content .\\launch-count.txt",
+    "Get-Content .\\launch-proof.txt",
+  ].join("; ");
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_launch_twice", name: "shell_command", arguments: JSON.stringify({ command }) },
+      { type: "function_call_output", call_id: "call_launch_twice", output: `Exit code: 0\nOutput:\n2\n${marker}` },
+    ],
+  });
+
+  assert.equal(completion, null);
+});
+
+test("deterministic artifact tool call does not replace a batch launch task with report files", () => {
+  const marker = "UI_LAUNCH_ONCE_DETERMINISTIC_GUARD_123";
+  const prompt = `工作目录是 C:\\Temp\\launch-once。请新建 start.bat，用 Start-Process 只启动一次，再读取 launch-count.txt 验证等于 1。验证成功后最后一行只回复 ${marker}。`;
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", name: "shell_command", parameters: { type: "object" } }],
+  };
+  const chatBody = {
+    model: request.model,
+    messages: [{ role: "user", content: prompt }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+
+  assert.equal(deterministicArtifactToolCallCompletion(request, chatBody), null);
+});
+
+test("deterministic artifact completion rejects unrelated marker evidence for a batch launch task", () => {
+  const marker = "UI_LAUNCH_ONCE_EVIDENCE_GUARD_123";
+  const prompt = `工作目录是 C:\\Temp\\launch-once。请新建 start.bat，用 Start-Process 只启动一次，再读取 launch-count.txt 验证等于 1。验证成功后最后一行只回复 ${marker}。`;
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
+    tools: [{ type: "function", name: "shell_command", parameters: { type: "object" } }],
+  };
+  const chatBody = {
+    model: request.model,
+    messages: [
+      { role: "user", content: prompt },
+      { role: "assistant", content: null, tool_calls: [{ id: "call_wrong_artifact", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: "write unrelated files" }) } }] },
+      { role: "tool", tool_call_id: "call_wrong_artifact", content: `index.html\nREADME.md\ndone.txt\n${marker}` },
+    ],
+  };
+
+  assert.equal(deterministicArtifactCompletionResponse(request, chatBody), null);
+});
+
+test("specialized artifact marker mismatch guard ignores ordinary batch launch tasks", () => {
+  const marker = "UI_LAUNCH_ONCE_MISMATCH_GUARD_123";
+  const prompt = `工作目录是 C:\\Temp\\launch-once。请新建 start.bat，用 Start-Process 只启动一次，最后回复 ${marker}。`;
+  const mismatch = artifactMarkerMismatchForChat(
+    [{ role: "user", content: prompt }],
+    `start.bat 已创建、启动并验证。\n${marker}`,
+  );
+
+  assert.equal(mismatch, null);
+});
+
 test("chat response blocks English dangling patch retry promise after failed patch", () => {
   const formatted = chatToResponsesFormat({
     choices: [{
@@ -3253,6 +3360,95 @@ test("Antigravity SSE pipe uses non-streaming model call for local artifact tool
   assert.match(wire, /"type":"function_call"/);
   assert.match(wire, /"name":"shell_command"/);
   assert.match(wire, new RegExp(marker));
+  assert.match(wire, /response.completed/);
+});
+
+test("Antigravity SSE pipe retries a fake completion for a Chinese batch launch task", async () => {
+  let streamCalls = 0;
+  let nonStreamingCalls = 0;
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      chunks.push(`HEAD ${status} ${headers["content-type"]}`);
+    },
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    end() {
+      chunks.push("END");
+    },
+  };
+  const prompt = [
+    "请在 C:\\Temp\\launch-once 新建 start.bat。",
+    "使用 shell_command 和 Start-Process 只启动一次 start.bat。",
+    "随后读取 launch-count.txt 与 launch-proof.txt 验证结果。",
+  ].join(" ");
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: prompt }],
+    }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = {
+    shell_command: {
+      type: "function",
+      codexName: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    },
+  };
+  async function* streamUpstream() {
+    streamCalls += 1;
+    yield {
+      type: "done",
+      completion: { choices: [{ finish_reason: "stop", message: { role: "assistant", content: "start.bat 已创建并启动，结果已验证。" } }] },
+    };
+  }
+  async function nonStreamingUpstream(body) {
+    nonStreamingCalls += 1;
+    assert.equal(body.stream, false);
+    if (nonStreamingCalls === 1) {
+      return {
+        choices: [{ finish_reason: "stop", message: { role: "assistant", content: "start.bat 已创建并启动，结果已验证。" } }],
+      };
+    }
+    assert.match(body.messages.at(-1).content, /not the final answer|CODEX_TOOLS|实际 tool call/i);
+    return {
+      choices: [{
+        finish_reason: "tool_calls",
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{
+            id: "call_launch_once",
+            type: "function",
+            function: {
+              name: "shell_command",
+              arguments: JSON.stringify({ command: "Set-Content start.bat 'launch-target.ps1'" }),
+            },
+          }],
+        },
+      }],
+    };
+  }
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue: { run: async (task) => task({}) },
+    streamUpstream,
+    nonStreamingUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  const wire = chunks.join("");
+  assert.deepEqual({ streamCalls, nonStreamingCalls }, { streamCalls: 0, nonStreamingCalls: 2 });
+  assert.doesNotMatch(wire, /start\.bat 已创建并启动/);
+  assert.match(wire, /"type":"function_call"/);
+  assert.match(wire, /"name":"shell_command"/);
   assert.match(wire, /response.completed/);
 });
 
@@ -7576,7 +7772,7 @@ test("local artifact marker guard does not accept prefix-only multi-turn evidenc
 
 test("Antigravity tool loop replays when artifact completion used stale marker", async () => {
   let callCount = 0;
-  const result = await callUpstreamWithInternalTools({
+  const body = {
     model: "gemini-pro-agent",
     messages: [
       {
@@ -7589,7 +7785,12 @@ test("Antigravity tool loop replays when artifact completion used stale marker",
         content: "Name Length\r\ndone.txt 26\r\nDESKTOP_SMALL_PROJECT",
       },
     ],
-  }, {
+  };
+  assert.ok(artifactMarkerMismatchForChat(
+    body.messages,
+    "Created index.html, README.md and done.txt. The task is complete.",
+  ));
+  const result = await callUpstreamWithInternalTools(body, {
     callOnce: async (body) => {
       callCount += 1;
       if (callCount === 2) {
@@ -12190,4 +12391,410 @@ test("no user-visible DeepCodex or Deep Codex brand in source string literals", 
       `Line ${n}: unexpected user-visible "DeepCodex" or "Deep Codex" reference:\n  ${line.trim()}`,
     );
   }
+});
+
+// ─── 2026-07-13 Incident Regression Tests ────────────────────────────────────
+
+test("Start-Process bat execution is preserved on the first attempt in the current user turn", () => {
+  const userText = "Please run the setup script.";
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] }
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      description: "Run a PowerShell command.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+        },
+        required: ["command"],
+      },
+    }],
+  };
+
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_start_process_1",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: 'Start-Process -FilePath "setup.bat" -WorkingDirectory "C:\\project"',
+            }),
+          },
+        }],
+      },
+    }],
+  };
+
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = chatBody._routing;
+  const formatted = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call, "The tool call must be present");
+  assert.equal(call.name, "shell_command");
+  const args = JSON.parse(call.arguments);
+  assert.match(args.command, /Start-Process -FilePath "setup.bat"/);
+});
+
+test("Batch launch commands are not polluted by the generic artifact marker repair", () => {
+  const marker = "UI_LAUNCH_ONCE_COMMAND_GUARD_123";
+  const userText = `工作目录是 C:\\Temp\\launch-once。新建 start.bat，只用 Start-Process 启动一次，读取 launch-count.txt 和 launch-proof.txt，最后回复 ${marker}。`;
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const command = [
+    "Set-Content -Path start.bat -Value 'powershell -File launch-target.ps1' -Encoding Ascii",
+    "Start-Process -FilePath .\\start.bat -WorkingDirectory C:\\Temp\\launch-once -Wait",
+    "Get-Content launch-count.txt, launch-proof.txt",
+  ].join("; ");
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{ id: "call_launch_guard", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command }) } }],
+      },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat(completion, parsed, chatBody._routing, { strictTools: true });
+  const call = formatted.output.find(item => item.type === "function_call");
+  const args = JSON.parse(call.arguments);
+  const progressText = formatted.output
+    .filter(item => item.type === "message")
+    .flatMap(item => item.content || [])
+    .map(part => part.text || "")
+    .join("\n");
+
+  assert.equal(args.command, command);
+  assert.doesNotMatch(args.command, /Anti-Codex exact artifact marker guard|index\.html|README\.md|done\.txt/);
+  assert.match(progressText, /启动：现在只启动一次/);
+  assert.doesNotMatch(progressText, /package\.json|codex-update-analyzer/);
+});
+
+test("Reading source text that mentions Start-Process is not treated as a launch", () => {
+  const command = 'Select-String -LiteralPath "C:\\project\\launch.ps1" -Pattern "Start-Process"';
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Inspect the launch script." }] },
+      { type: "function_call", name: "shell_command", call_id: "read_1", arguments: JSON.stringify({ command }) },
+      { type: "function_call_output", call_id: "read_1", output: "line 20: Start-Process" },
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{ id: "read_2", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command }) } }] },
+    }],
+  }, parsed, chatBody._routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).command, command);
+  const text = formatted.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.doesNotMatch(text, /只启动一次/);
+});
+
+test("The same Start-Process target is rewritten even when the first launch was combined with a listing", () => {
+  const userText = "Please run the setup script.";
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+      {
+        type: "message",
+        role: "assistant",
+        tool_calls: [{
+          id: "call_start_process_1",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: 'Get-ChildItem -Path "C:\\project"; Start-Process -FilePath "setup.bat" -WorkingDirectory "C:\\project"',
+            }),
+          },
+        }],
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_start_process_1",
+        output: "Exit code: 0\n",
+      }
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      description: "Run a PowerShell command.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+        },
+        required: ["command"],
+      },
+    }],
+  };
+
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_start_process_2",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: 'Start-Process -FilePath "setup.bat" -WorkingDirectory "C:\\project"',
+            }),
+          },
+        }],
+      },
+    }],
+  };
+
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = chatBody._routing;
+  const formatted = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call, "The tool call must be present");
+  assert.equal(call.name, "shell_command");
+  const args = JSON.parse(call.arguments);
+
+  assert.doesNotMatch(args.command, /Start-Process/);
+  assert.match(args.command, /已阻止重复启动/);
+  assert.match(args.command, /验证进程\/窗口/);
+  assert.match(args.command, /检查错误日志/);
+  assert.match(args.command, /exit 0/);
+});
+
+test("A variable working directory cannot disguise a repeated relative Start-Process target", () => {
+  const targetDir = "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-launch-once-variable";
+  const firstCommand = `Start-Process -FilePath "${targetDir}\\start.bat" -WorkingDirectory "${targetDir}"`;
+  const repeatedCommand = [
+    `$workdir = "${targetDir}"`,
+    "Set-Location -Path $workdir",
+    'Start-Process -FilePath ".\\start.bat" -WorkingDirectory $workdir -Wait',
+    "Get-Content launch-count.txt, launch-proof.txt",
+  ].join("\n");
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Create start.bat and launch it exactly once." }] },
+      { type: "function_call", name: "shell_command", call_id: "variable_launch_1", arguments: JSON.stringify({ command: firstCommand }) },
+      { type: "function_call_output", call_id: "variable_launch_1", output: "Exit code: 0\nOutput:\n" },
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "variable_launch_2",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: repeatedCommand }) },
+        }],
+      },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat(completion, parsed, chatBody._routing, { strictTools: true });
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call);
+  const command = JSON.parse(call.arguments).command;
+  assert.doesNotMatch(command, /(?:^|[;\r\n]\s*)Start-Process\b/i);
+  assert.match(command, /已阻止重复启动/);
+});
+
+test("A third Start-Process request ends the tool loop after the duplicate-launch nudge", () => {
+  const command = 'Start-Process -FilePath "setup.bat" -WorkingDirectory "C:\\project"';
+  const nudgeMarker = "Anti-Codex 已阻止重复启动 [target:c:\\project\\setup.bat]";
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Please run the setup script once." }] },
+      { type: "function_call", name: "shell_command", call_id: "launch_1", arguments: JSON.stringify({ command }) },
+      { type: "function_call_output", call_id: "launch_1", output: "Exit code: 0" },
+      { type: "function_call", name: "shell_command", call_id: "launch_nudge", arguments: JSON.stringify({ command: `Write-Output '${nudgeMarker}: verify the process'; exit 0` }) },
+      { type: "function_call_output", call_id: "launch_nudge", output: `${nudgeMarker}: verify the process` },
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "launch_3",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        }],
+      },
+    }],
+  }, parsed, chatBody._routing, { strictTools: true });
+
+  assert.equal(formatted.output.some(item => item.type === "function_call"), false);
+  const text = formatted.output.flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  assert.match(text, /已停止重复启动循环/);
+  assert.match(text, /不得再次执行相同启动命令/);
+});
+
+test("Ordinary launch and create bat task has a Chinese warning before the first Start-Process tool call", () => {
+  const userText = "帮我启动这个脚本并创建 BAT";
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] }
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+    }],
+  };
+
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_start_process_1",
+          type: "function",
+          function: {
+            name: "shell_command",
+            arguments: JSON.stringify({
+              command: 'Start-Process -FilePath "run.bat"',
+            }),
+          },
+        }],
+      },
+    }],
+  };
+
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = chatBody._routing;
+  const formatted = chatToResponsesFormat(completion, parsed, routing, { strictTools: true });
+
+  const msgIndex = formatted.output.findIndex(item => item.type === "message");
+  const callIndex = formatted.output.findIndex(item => item.type === "function_call");
+
+  assert.ok(msgIndex !== -1, "A message containing warning text must be present");
+  assert.ok(callIndex !== -1, "The tool call must be present");
+  assert.ok(msgIndex < callIndex, "Warning message must be placed before the tool call");
+
+  const msgText = formatted.output[msgIndex].content[0].text;
+  assert.match(msgText, /只启动一次/);
+  assert.match(msgText, /随后检查/);
+});
+
+test("Fake-tool auto-replay exhaustion returns a final explanation of automatic resume failure instead of asking model to retry", async () => {
+  const chunks = [];
+  const res = {
+    writeHead() {},
+    write(chunk) { chunks.push(String(chunk)); },
+    end() {},
+  };
+
+  const parsed = {
+    model: "gemini-pro-agent",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "帮我做视频" }] }
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+    }],
+  };
+
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const routing = chatBody._routing;
+  delete chatBody._routing;
+
+  let callCount = 0;
+  async function* streamUpstream(body, deps) {
+    callCount += 1;
+    yield {
+      type: "done",
+      completion: {
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "我已经运行了 npm install 并成功启动了项目服务。",
+          },
+        }],
+      },
+    };
+  }
+
+  const nonStreamingUpstream = async (body, deps) => {
+    callCount += 1;
+    return {
+      choices: [{
+        finish_reason: "stop",
+        message: {
+          role: "assistant",
+          content: "我已经运行了 npm install 并成功启动了项目服务。",
+        },
+      }],
+    };
+  };
+
+  await pipeAntigravityResponseAsSSE({}, res, chatBody, parsed, routing, {
+    queue: { run: async (task) => task({}) },
+    streamUpstream,
+    nonStreamingUpstream,
+    registry: { register() {}, attachCascade() {}, finish() {} },
+    circuit: { beforeRequest() {}, recordSuccess() {}, recordFailure() {} },
+    routeAudit: { record() {} },
+  });
+
+  assert.ok(callCount > 1, "Should retry the model because it only made a text claim without tool calls");
+
+  const sseOutput = chunks.join("");
+  const completedMatch = sseOutput.match(/event: response\.completed\ndata: (\{.*\})/);
+  assert.ok(completedMatch, "Must emit response.completed event");
+  const responseData = JSON.parse(completedMatch[1]);
+
+  const textOutput = responseData.response.output.find(item => item.type === "message")?.content[0]?.text;
+  assert.ok(textOutput, "Must have final message text output");
+
+  assert.doesNotMatch(textOutput, /会要求模型重新发起/);
+  assert.match(textOutput, /自动续跑未成功/);
 });

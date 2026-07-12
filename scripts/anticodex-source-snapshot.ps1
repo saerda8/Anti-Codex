@@ -157,6 +157,7 @@ function Get-AntiCodexSourceSnapshot {
     Remove-Variable -Name __anticodexSourceCacheMissCount -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable -Name __anticodexSourceNewCacheEntries -Scope Script -ErrorAction SilentlyContinue
     return [pscustomobject]@{
+        schema = "anticodex-source-snapshot-v1"
         fingerprint = $fingerprint
         sourceMtimeMax = if ($maxMtime) { $maxMtime.ToString("o") } else { "" }
         fileCount = $sortedRows.Count

@@ -459,20 +459,31 @@ function buildRealTaskEvidenceRefreshPlan(realTaskAudit) {
 }
 
 function gitStatusForFixturePaths() {
-  const child = spawnSync("git", [
-    "status",
-    "--porcelain",
-    "--",
-    "scripts/fixtures/desktop-coworker-live",
-    "scripts/fixtures/desktop-coworker-project",
-  ], {
-    cwd: sourceRoot,
-    encoding: "utf8",
-    timeout: 20_000,
-    windowsHide: true,
-  });
-  if (child.status !== 0) return { ok: false, output: compactText(child.stderr || child.stdout) };
-  return { ok: true, output: String(child.stdout || "").trim() };
+  let child = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    child = spawnSync("git", [
+      "status",
+      "--porcelain",
+      "--",
+      "scripts/fixtures/desktop-coworker-live",
+      "scripts/fixtures/desktop-coworker-project",
+    ], {
+      cwd: sourceRoot,
+      encoding: "utf8",
+      timeout: 60_000,
+      windowsHide: true,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    });
+    if (child.status === 0) return { ok: true, output: String(child.stdout || "").trim(), attempts: attempt + 1 };
+    if (child.status !== null) break;
+  }
+  return {
+    ok: false,
+    output: compactText(child?.stderr || child?.stdout || child?.error?.message),
+    status: child?.status ?? null,
+    signal: child?.signal ?? null,
+    error: child?.error?.message || "",
+  };
 }
 
 function cleanupFixtureArtifacts() {
@@ -564,7 +575,10 @@ function runTask(taskMode) {
       reportPath: reportPathForTask(taskMode),
     };
   }
-  const before = gitStatusForFixturePaths();
+  const fixtureRequired = taskScenarioCatalog[taskMode]?.mutatesRepoFixture === true;
+  const before = fixtureRequired
+    ? gitStatusForFixturePaths()
+    : { ok: true, output: "", skipped: true, reason: "task_does_not_mutate_repo_fixture" };
   if (!before.ok || (before.output && !args.has("--allow-dirty-fixtures"))) {
     return {
       taskMode,

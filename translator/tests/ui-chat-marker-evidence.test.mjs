@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   autonomousContinuationHasFreshCompletion,
+  composerHasUnsubmittedMarker,
   countMarkerOccurrences,
   countNewAssistantMarkers,
   countObservedAssistantMarkers,
@@ -10,6 +11,8 @@ import {
   filterAssistantMarkerObservationFailures,
   hasAssistantFinalMarkerEvidence,
   parseWordCountCliOutput,
+  pendingDesktopTaskConfirmsSubmit,
+  responsesPayloadAdvanceConfirmsSubmit,
   shouldRecoverIdleAutonomousTurn,
 } from "../../scripts/lib/ui-chat-marker-evidence.mjs";
 
@@ -73,6 +76,59 @@ test("a new assistant-history marker can settle a virtualized UI wait", () => {
     assistantHistoryCount: 1,
     assistantHistoryBaselineCount: 1,
   }), 0);
+});
+
+test("a hidden stale composer marker does not block a history-confirmed completion", () => {
+  const marker = "UI_COMPLEX_PROJECT_SMOKE_STALE_COMPOSER_123";
+  assert.equal(composerHasUnsubmittedMarker({
+    composerText: `hidden prompt ${marker}`,
+    marker,
+    answerMarkerCount: 1,
+  }), false);
+  assert.equal(composerHasUnsubmittedMarker({
+    composerText: `unsent prompt ${marker}`,
+    marker,
+    answerMarkerCount: 0,
+  }), true);
+});
+
+test("a new real task payload confirms submit before response history is persisted", () => {
+  assert.equal(responsesPayloadAdvanceConfirmsSubmit({
+    beforePayloadCount: 32,
+    currentPayloadCount: 33,
+    requestKind: "agent_task",
+    inputItems: 1,
+  }), true);
+  assert.equal(responsesPayloadAdvanceConfirmsSubmit({
+    beforePayloadCount: 33,
+    currentPayloadCount: 33,
+    requestKind: "agent_task",
+    inputItems: 1,
+  }), false);
+});
+
+test("a background task-title payload never confirms a desktop task submit", () => {
+  assert.equal(responsesPayloadAdvanceConfirmsSubmit({
+    beforePayloadCount: 32,
+    currentPayloadCount: 33,
+    requestKind: "task_title",
+    inputItems: 1,
+  }), false);
+});
+
+test("a cleared composer plus a visible stop control confirms a pending desktop task", () => {
+  assert.equal(pendingDesktopTaskConfirmsSubmit({
+    composerCleared: true,
+    visibleIdleEvidence: { ok: false, state: { hasStop: true } },
+  }), true);
+  assert.equal(pendingDesktopTaskConfirmsSubmit({
+    composerCleared: true,
+    visibleIdleEvidence: { ok: false, state: { hasStop: false } },
+  }), false);
+  assert.equal(pendingDesktopTaskConfirmsSubmit({
+    composerCleared: false,
+    visibleIdleEvidence: { ok: false, state: { hasStop: true } },
+  }), false);
 });
 
 test("user prompts and tool outputs never count as assistant marker messages", () => {

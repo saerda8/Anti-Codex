@@ -6246,6 +6246,8 @@ test("Anti-Codex source snapshot reuses unchanged cached file hashes", () => {
     const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", script], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const payload = JSON.parse(result.stdout.trim());
+    assert.equal(payload.first.schema, "anticodex-source-snapshot-v1");
+    assert.equal(payload.second.schema, "anticodex-source-snapshot-v1");
     assert.equal(payload.first.fingerprint, payload.second.fingerprint);
     assert.equal(payload.first.fileCount, payload.second.fileCount);
     assert.equal(payload.first.cacheHitCount, 0);
@@ -6255,6 +6257,17 @@ test("Anti-Codex source snapshot reuses unchanged cached file hashes", () => {
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("refresh feature snapshots safely bridge the startup fingerprint schema", () => {
+  const sourceSnapshot = readFileSync(resolve(root, "scripts", "anticodex-source-snapshot.ps1"), "utf8");
+  const server = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
+
+  assert.match(sourceSnapshot, /schema\s*=\s*"anticodex-source-snapshot-v1"/);
+  assert.match(server, /anticodex-source-snapshot-v1/);
+  assert.match(server, /requiredRefreshSourceLabels/);
+  assert.match(server, /sourceMtimeCovers/);
+  assert.match(server, /fingerprintMatches \|\| schemaCompatible/);
 });
 
 test("refresh feature summarizer surfaces recovery actions", () => {
@@ -15570,6 +15583,13 @@ test("complex-project artifact helper writes trusted OpenAI URLs and Chinese mar
     assert.doesNotMatch(JSON.stringify(sources), /openab/i);
     const report = readFileSync(join(tempRoot, "report.md"), "utf8");
     const html = readFileSync(join(tempRoot, "index.html"), "utf8");
+    const analyzer = readFileSync(join(tempRoot, "codex-update-analyzer.mjs"), "utf8");
+    const analyzerTest = readFileSync(join(tempRoot, "codex-update-analyzer.test.mjs"), "utf8");
+    assert.match(analyzer, /export function analyze\b/);
+    assert.match(analyzer, /export function summarizeSources\b/);
+    assert.match(analyzerTest, /import \{ analyze, summarizeSources \}/);
+    assert.match(analyzerTest, /analyze\(/);
+    assert.match(analyzerTest, /summarizeSources\(/);
     assert.match(report, /真实来源/);
     assert.match(html, /真实来源/);
     assert.match(report, new RegExp(marker));
@@ -15587,6 +15607,24 @@ test("complex-project completion accepts repaired runs only with strong model-le
   assert.match(verifier, /complex-project required verifier repair before completion/);
   assert.match(verifier, /history\.codexLikeProcessProof === true/);
   assert.match(verifier, /history\.artifactGuardUsed !== true/);
+  assert.doesNotMatch(verifier, /if \(taskMode === "complex-project" && !repairTurn\)/);
+});
+
+test("launch-once desktop verifier requires real traffic and checks duplicate launch evidence", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-launch-once.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  assert.match(verifier, /--allow-real-traffic/);
+  assert.match(verifier, /latest-ui-launch-once-smoke\.json/);
+  assert.match(verifier, /launch-count\.txt/);
+  assert.match(verifier, /launch-proof\.txt/);
+  assert.match(verifier, /start\.bat/);
+  assert.match(verifier, /Start-Process/);
+  assert.match(verifier, /startProcessOccurrences !== 1/);
+  assert.match(verifier, /chinesePreCommandSeen/);
+  assert.match(verifier, /index\.html|README\.md|done\.txt/);
+  assert.match(releaseGates, /latest-ui-launch-once-smoke\.json/);
+  assert.match(releaseGates, /requireLaunchOnceSemantics/);
+  assert.match(releaseGates, /test-anticodex-launch-once\.mjs --allow-real-traffic/);
 });
 
 test("real-small-project verifier defaults to Gemini and reports the requested model on failures", () => {

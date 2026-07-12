@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   autonomousContinuationHasFreshCompletion,
+  composerHasUnsubmittedMarker,
   countMarkerOccurrences,
   countNewAssistantMarkers,
   countObservedAssistantMarkers,
@@ -16,6 +17,8 @@ import {
   filterAssistantMarkerObservationFailures,
   hasAssistantFinalMarkerEvidence,
   parseWordCountCliOutput,
+  pendingDesktopTaskConfirmsSubmit,
+  responsesPayloadAdvanceConfirmsSubmit,
   shouldRecoverIdleAutonomousTurn,
 } from "./lib/ui-chat-marker-evidence.mjs";
 
@@ -246,8 +249,8 @@ if (!hasCustomPrompt && taskMode === "complex-project") {
     "禁止创建 server.js、test.js、summary.json、README.md 或其他替代文件；如果已经创建了，必须删除后再结束。",
     "请用 PowerShell 执行 Node.js 文件写入命令；JSON 和 JavaScript 文件必须用 Node fs.writeFileSync(..., \"utf8\") 写入，避免 UTF-8 BOM；do not use Set-Content, Out-File, or PowerShell redirection for JSON or JavaScript files。",
     "sources.json 必须至少包含 3 条真实来源 URL，内容围绕 Codex 或 OpenAI 更新；URL 域名必须是 openai.com 或 *.openai.com，不能写错拼域名。",
-    "codex-update-analyzer.mjs 必须导出 summarizeSources(sources)，must define stripUtf8Bom(text)，must call stripUtf8Bom before JSON.parse，作为 CLI 运行时读取 sources.json，并打印 JSON：sourceCount 和 codexMentionCount。",
-    "codex-update-analyzer.test.mjs 必须使用 node:test，并断言 3 条 sources 会得到 sourceCount=3。",
+    "codex-update-analyzer.mjs 必须同时导出 analyze(filePath) 和 summarizeSources(filePath)，must define stripUtf8Bom(text)，两者都读取 UTF-8 sources.json、在 JSON.parse 前移除可选 BOM，并返回 sourceCount 和 codexMentionCount。CLI 必须打印这两个字段组成的 JSON。",
+    "codex-update-analyzer.test.mjs 必须使用 node:test，并分别断言 analyze 和 summarizeSources 对 3 条 sources 都得到 sourceCount=3。",
     "report.md 必须是中文，包含精确短语“真实来源”，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
     "index.html 必须是完整离线中文 HTML，包含精确短语“真实来源”，链接 report.md，提到 Codex 或 OpenAI，包含至少 3 个真实来源 URL，并包含最终标记。",
     "index.html 必须写真实 HTML 标签，例如 <!doctype html> 和 <html>；不要写 &lt;html&gt; 这种 HTML entity 字面量。",
@@ -602,16 +605,21 @@ function responsesWebSocketPayloadCount(diagnostics) {
 }
 
 function diagnosticsHasRealResponsesSubmitAfter(diagnostics, beforePayloadCount = 0) {
-  if (responsesWebSocketPayloadCount(diagnostics) <= beforePayloadCount) return false;
   const ws = diagnostics?.responsesWebSocket || null;
   const payload = ws?.lastClientPayload || null;
   const relay = ws?.lastRelay || null;
-  if (payload?.requestKind === "task_title" || relay?.requestKind === "task_title") return false;
-  if (Number(payload?.latestUserChars || 0) > 0) return true;
-  if (Number(payload?.inputItems || 0) > 0) return true;
-  if (Number(relay?.textDeltaChars || 0) > 0) return true;
-  if (Array.isArray(relay?.toolCallNames) && relay.toolCallNames.length > 0) return true;
-  return false;
+  const requestKind = payload?.requestKind === "task_title" || relay?.requestKind === "task_title"
+    ? "task_title"
+    : payload?.requestKind || relay?.requestKind || "";
+  return responsesPayloadAdvanceConfirmsSubmit({
+    beforePayloadCount,
+    currentPayloadCount: responsesWebSocketPayloadCount(diagnostics),
+    requestKind,
+    latestUserChars: payload?.latestUserChars,
+    inputItems: payload?.inputItems,
+    relayTextDeltaChars: relay?.textDeltaChars,
+    relayToolCallCount: Array.isArray(relay?.toolCallNames) ? relay.toolCallNames.length : 0,
+  });
 }
 
 function responsesSubmitModelValues(diagnostics) {
@@ -656,7 +664,7 @@ async function waitForRealResponsesSubmitAfter(
       markerEntryIds = responseHistoryMarkerEntryIds(expectedMarker);
       const markerScopedRequestObserved = !expectedMarker
         || markerEntryIds.some((id) => !beforeMarkerEntryIds.includes(id));
-      if (markerScopedRequestObserved && diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
+      if (diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
         const requiredModelMatched = diagnosticsHasRequiredModelSubmit(latest);
         return {
           ok: true,
@@ -1440,7 +1448,7 @@ function buildComplexProjectRepairCommand(dir, expectedMarker = marker) {
     "https://openai.com/news/",
     "https://developers.openai.com/codex/",
   ];
-  const analyzerSource = `import { readFileSync } from "node:fs";\n\nfunction stripUtf8Bom(text) {\n  return String(text || "").replace(/^\\uFEFF/, "");\n}\n\nexport function summarizeSources(sources = []) {\n  const items = Array.isArray(sources) ? sources : [];\n  return {\n    sourceCount: items.length,\n    codexMentionCount: items.filter((item) => /Codex|OpenAI/i.test([item.title, item.url, item.snippet].filter(Boolean).join(" "))).length,\n  };\n}\n\nif (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, "/"))) {\n  const raw = stripUtf8Bom(readFileSync(process.argv[2] || "sources.json", "utf8"));\n  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));\n}\n`;
+  const analyzerSource = `import { readFileSync } from "node:fs";\n\nfunction stripUtf8Bom(text) {\n  return String(text || "").replace(/^\\uFEFF/, "");\n}\n\nfunction readSources(input = "sources.json") {\n  if (Array.isArray(input)) return input;\n  const parsed = JSON.parse(stripUtf8Bom(readFileSync(input, "utf8")));\n  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);\n}\n\nexport function summarizeSources(filePath = "sources.json") {\n  const items = readSources(filePath);\n  return {\n    sourceCount: items.length,\n    codexMentionCount: items.filter((item) => /Codex|OpenAI/i.test([item.title, item.url, item.snippet].filter(Boolean).join(" "))).length,\n  };\n}\n\nexport function analyze(filePath = "sources.json") {\n  return summarizeSources(filePath);\n}\n\nif (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\\\/g, "/"))) {\n  console.log(JSON.stringify(analyze(process.argv[2] || "sources.json")));\n}\n`;
   const reportText = `# Codex 近期更新调研\n\n标记：${expectedMarker}\n\n这个报告验证 Anti-Codex 可以完成网页资料整理、Node.js 分析器、测试和中文报告生成，并保留真实来源。\n\n## 来源\n\n${sourceUrls.map((url) => `- ${url}`).join("\n")}\n`;
   const htmlText = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Codex 更新仪表盘</title></head><body><h1>Codex / OpenAI 更新仪表盘</h1><p>标记：${expectedMarker}</p><p>真实来源：以下 URL 用于离线分析。</p><p><a href="report.md">打开中文报告</a></p><ul>${sourceUrls.map((url) => `<li>${url}</li>`).join("")}</ul></body></html>\n`;
   return nodeEvalCommand([
@@ -3742,6 +3750,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         submitEvidence.clickMethod = `${submitEvidence.clickMethod}-enter-fallback`;
       }
     }
+    submitEvidence.composerCleared = submitSucceeded;
     if (clicked) {
       const realSubmit = await waitForRealResponsesSubmitAfter(
         baseUrl,
@@ -3763,10 +3772,17 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         });
         submitEvidence.retry = retryEvidence;
         submitEvidence.retryRealSubmit = retryEvidence.realSubmit;
-        submitSucceeded = retryEvidence.ok === true;
-        if (submitSucceeded) {
+        const pendingTaskAccepted = pendingDesktopTaskConfirmsSubmit({
+          composerCleared: submitEvidence.composerCleared,
+          visibleIdleEvidence: retryEvidence.visibleIdleBeforeRetry,
+        });
+        submitEvidence.pendingTaskAccepted = pendingTaskAccepted;
+        submitSucceeded = retryEvidence.ok === true || pendingTaskAccepted;
+        if (retryEvidence.ok === true) {
           submitEvidence.submitConfirmedBy = "responses-websocket-retry";
           prep = retryEvidence.prep;
+        } else if (pendingTaskAccepted) {
+          submitEvidence.submitConfirmedBy = "composer-cleared-visible-stop";
         } else {
           submitEvidence.submitConfirmedBy = "composer-cleared-no-payload";
         }
@@ -3839,7 +3855,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         const artifactFailures = options.readmeOnly === true
           ? collectRepoMultiFileReadmeFailures(artifactEvidence)
           : collectRepoMultiFileEditFailures(artifactEvidence);
-        if (artifactFailures.length === 0 && !composer.includes(prompt)) {
+        if (artifactFailures.length === 0 && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3854,7 +3870,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       if (taskMode === "agentic-step-flow") {
         artifactEvidence = verifyAgenticStepFlowArtifact(options.artifactDir || artifactDir, expectedMarker);
         const artifactFailures = collectAgenticStepFlowFailures(artifactEvidence);
-        if (artifactFailures.length === 0 && !composer.includes(prompt)) {
+        if (artifactFailures.length === 0 && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3869,7 +3885,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       if (taskMode === "report-site") {
         artifactEvidence = verifyReportSiteArtifact(options.artifactDir || artifactDir, expectedMarker);
         const artifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
-        if (artifactFailures.length === 0 && !composer.includes(prompt)) {
+        if (artifactFailures.length === 0 && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3892,7 +3908,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           && artifactEvidence?.files?.doneTxt === true;
         const hasToolEvidence = artifactEvidence?.responseHistory?.taskToolOutputSeen === true
           || artifactEvidence?.responseHistory?.markerToolOutputSeen === true;
-        if (hasRequiredFiles && hasToolEvidence && !composer.includes(prompt)) {
+        if (hasRequiredFiles && hasToolEvidence && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3919,7 +3935,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           } catch {}
         }
       }
-      if (taskMode !== "agentic-step-flow" && taskMode !== "autonomous-reasoning" && !composer.includes(expectedMarker) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
+      if (taskMode !== "agentic-step-flow" && taskMode !== "autonomous-reasoning" && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount }) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3937,13 +3953,13 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     }
   }
   if (!clicked) failures.push("send button was not clicked");
-  if (taskMode !== "agentic-step-flow" && !submitSucceeded && answerMarkerCount >= 1 && !composer.includes(expectedMarker)) {
+  if (taskMode !== "agentic-step-flow" && !submitSucceeded && answerMarkerCount >= 1 && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
     submitSucceeded = true;
   }
   if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
   if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
   if (answerMarkerCount < 1 && !artifactCompletionObserved) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
-  if (composer.includes(expectedMarker)) failures.push("composer still contains the submitted prompt");
+  if (composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) failures.push("composer still contains the submitted prompt");
   return {
     ok: failures.length === 0,
     failures,
@@ -3964,7 +3980,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     activeReconnectEvidence,
     inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
     inLoopIdleDiagnostics,
-    composerCleared: !composer.includes(expectedMarker),
+    composerCleared: !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount }),
     composer,
     lastSample,
     answerSample,
@@ -4712,7 +4728,7 @@ async function main() {
         if (!composer.includes(promptText) && /[\u4e00-\u9fff]/.test(normalizedAnswer) && !/正在思考|已处理|停止了|重新连接/.test(normalizedAnswer)) break;
       } else if (taskMode === "repo-file-edit") {
         artifactEvidence = verifyRepoFileEditFixture();
-        if (!composer.includes(promptText) && artifactEvidence?.testPassed === true) {
+        if (!composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }) && artifactEvidence?.testPassed === true) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -4725,7 +4741,7 @@ async function main() {
       } else if (taskMode === "agentic-step-flow") {
         artifactEvidence = verifyAgenticStepFlowArtifact(artifactDir, marker);
         const artifactFailures = collectAgenticStepFlowFailures(artifactEvidence);
-        if (!composer.includes(promptText) && artifactFailures.length === 0) {
+        if (!composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }) && artifactFailures.length === 0) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -4738,7 +4754,7 @@ async function main() {
       } else if (taskMode === "report-site") {
         artifactEvidence = verifyReportSiteArtifact(artifactDir, marker);
         const artifactFailures = collectReportSiteArtifactFailures(artifactEvidence);
-        if (!composer.includes(promptText) && artifactFailures.length === 0) {
+        if (!composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }) && artifactFailures.length === 0) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -4758,7 +4774,7 @@ async function main() {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
-            if (!composer.includes(promptText) && artifactComplete) {
+            if (!composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }) && artifactComplete) {
               inLoopIdleDiagnostics = loopDiagnostics;
               idleCompletedAt = Date.now();
               break;
@@ -4781,7 +4797,7 @@ async function main() {
             }
           }
         } catch {}
-      } else if (answerMarkerCount >= 1 && !composer.includes(marker)) {
+      } else if (answerMarkerCount >= 1 && !composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -4796,7 +4812,7 @@ async function main() {
     if (!clicked) failures.push("send button was not clicked");
     if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
     if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && answerMarkerCount < 1) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
-    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && composer.includes(marker)) failures.push("composer still contains the submitted prompt");
+    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })) failures.push("composer still contains the submitted prompt");
     if (taskMode === "free-chat") {
       if (composer.includes(promptText)) failures.push("composer still contains the submitted prompt");
       if (!answerSample.trim()) failures.push("assistant free-chat reply was not observed in the desktop UI");
@@ -5130,7 +5146,7 @@ async function main() {
     inLoopIdleDiagnostics = repairTurn.inLoopIdleDiagnostics || inLoopIdleDiagnostics;
   }
 
-  if (taskMode === "complex-project" && !repairTurn) {
+  if (taskMode === "complex-project") {
     pushUniqueFailures(failures, collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed }));
   }
 
@@ -5309,7 +5325,7 @@ async function main() {
     activeReconnectSeen,
     activeReconnectEvidence,
     inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
-    composerCleared: !composer.includes(marker),
+    composerCleared: !composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }),
     sessionLockClear: sessionLock ? sessionLock.active !== true && Number(sessionLock.queued || 0) === 0 : false,
     lastSample,
     antigravitySessionLock: sessionLock,

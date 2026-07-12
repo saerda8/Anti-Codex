@@ -792,6 +792,16 @@ async function findTarget() {
 
 const { port, target } = await findTarget();
 const pageTargetsBeforeManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
+if (profileEntryOnly) {
+  const profileEntry = await verifyProfileManagerEntryWithFreshCdpOnly().catch((error) => ({
+    ok: false,
+    phase: "profile-entry-exception",
+    error: error?.message || String(error),
+  }));
+  releaseManagerButtonLock(managerButtonLock);
+  console.log(asciiJson({ ok: profileEntry.ok === true, port, target: { id: target.id, title: target.title, url: target.url }, profileEntry }, compact ? 0 : 2));
+  process.exit(profileEntry.ok ? 0 : 1);
+}
 const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
 await ws.open();
 let id = 1;
@@ -861,6 +871,78 @@ async function evaluate(expression, timeout = 8000) {
     allowUnsafeEvalBlockedByCSP: true,
   }), timeout);
   return message.result?.result?.value || {};
+}
+
+async function evaluateWithFreshCdp(expression, timeout = 5000) {
+  if (typeof WebSocket !== "function") throw new Error("The current Node runtime does not expose WebSocket");
+  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out opening fresh CDP websocket")), timeout);
+    socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
+    socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("Fresh CDP websocket failed")); }, { once: true });
+  });
+  try {
+    const response = await new Promise((resolve, reject) => {
+      const requestId = 1;
+      const timer = setTimeout(() => reject(new Error("Timed out waiting for fresh CDP evaluation")), timeout);
+      socket.addEventListener("message", (event) => {
+        const message = JSON.parse(String(event.data || "{}"));
+        if (message.id !== requestId) return;
+        clearTimeout(timer);
+        if (message.error) reject(new Error(JSON.stringify(message.error)));
+        else resolve(message);
+      });
+      socket.send(JSON.stringify({
+        id: requestId,
+        method: "Runtime.evaluate",
+        params: { expression, awaitPromise: true, returnByValue: true, allowUnsafeEvalBlockedByCSP: true },
+      }));
+    });
+    return response.result?.result?.value || {};
+  } finally {
+    socket.close();
+  }
+}
+
+async function verifyProfileManagerEntryWithFreshCdpOnly() {
+  const state = await evaluateWithFreshCdp(`(async () => {
+    const settings = Array.from(document.querySelectorAll('button'))
+      .find((node) => node.getAttribute?.("aria-label") === "\\u6253\\u5f00\\u4e2a\\u4eba\\u8d44\\u6599\\u83dc\\u5355");
+    if (!settings) return { settingsFound: false, menuOpen: false, items: [] };
+    const readItems = () => Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]'))
+      .map((node) => ({
+        text: String(node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim(),
+        role: node.getAttribute("role") || "",
+        tag: node.tagName,
+      }))
+      .filter((item) => item.text);
+    const isManagerItem = (item) => item.text === "\\u7ba1\\u7406" || item.text === "Manager" || item.text === "Anti-Codex \\u7ba1\\u7406";
+    let items = readItems();
+    const alreadyOpen = items.some(isManagerItem);
+    if (!alreadyOpen) {
+      settings.click();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      items = readItems();
+    }
+    const menuOpen = items.some(isManagerItem);
+    if (menuOpen) {
+      settings.click();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    return { settingsFound: true, alreadyOpen, clicked: !alreadyOpen, menuOpen, items };
+  })()`, 5000);
+  const profileEntry = state.items?.find((item) => item.text === "\u7ba1\u7406" || item.text === "Manager" || item.text === "Anti-Codex \u7ba1\u7406");
+  return {
+    ok: profileEntry?.text === "\u7ba1\u7406",
+    phase: "profile-entry",
+    profileEntryText: profileEntry?.text || "",
+    forbiddenEnglishVisible: state.items?.some((item) => item.text === "Manager") === true,
+    triggerText: state.settingsFound ? "\u8bbe\u7f6e" : "",
+    syntheticMenuOpened: state.menuOpen === true,
+    menuAlreadyOpen: state.alreadyOpen === true,
+    menuClickAttempted: state.clicked === true,
+    items: (state.items || []).slice(-40),
+  };
 }
 
 async function verifyCloseButtonActualMouseClick() {
@@ -935,62 +1017,6 @@ async function verifyCloseButtonActualMouseClick() {
     if (!reopened.reopened) return { ok: false, phase: "reopen", probes, error: "manager did not reopen after close probe" };
   }
   return { ok: true, phase: "actual-click", probes, reopened: true };
-}
-
-async function verifyProfileManagerEntry() {
-  await ws.call(id++, "Page.bringToFront", {}, 5000);
-  const trigger = await evaluate(`(() => {
-    document.getElementById("anticodex-manager-overlay")?.remove();
-    const visible = (node) => {
-      if (!node?.getBoundingClientRect) return false;
-      const rect = node.getBoundingClientRect();
-      const style = getComputedStyle(node);
-      return rect.width > 2 && rect.height > 2 && style.visibility !== "hidden" && style.display !== "none";
-    };
-    const label = (node) => String(node?.innerText || node?.textContent || node?.getAttribute?.("aria-label") || node?.getAttribute?.("title") || "").replace(/\\s+/g, " ").trim();
-    const candidates = Array.from(document.querySelectorAll('button,[role="button"]')).filter(visible);
-    const settings = candidates.find((node) => label(node) === "\\u8bbe\\u7f6e")
-      || candidates.find((node) => /\\u8bbe\\u7f6e/.test(label(node)));
-    if (!settings) {
-      return { ok: false, phase: "profile-trigger", candidates: candidates.map(label).filter(Boolean).slice(-40) };
-    }
-    const rect = settings.getBoundingClientRect();
-    return { ok: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, triggerText: label(settings) };
-  })()`, 3500);
-  if (!trigger.ok) return trigger;
-  for (const mouseEvent of [
-    { type: "mouseMoved", button: "none", buttons: 0 },
-    { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
-    { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
-  ]) {
-    await ws.call(id++, "Input.dispatchMouseEvent", { ...mouseEvent, x: trigger.x, y: trigger.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
-  }
-  await sleep(350);
-  const menu = await evaluate(`(() => {
-    const visible = (node) => {
-      if (!node?.getBoundingClientRect) return false;
-      const rect = node.getBoundingClientRect();
-      const style = getComputedStyle(node);
-      return rect.width > 2 && rect.height > 2 && style.visibility !== "hidden" && style.display !== "none";
-    };
-    const label = (node) => String(node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim();
-    const items = Array.from(document.querySelectorAll('[role="menuitem"],button,a,[data-radix-collection-item]'))
-      .filter(visible)
-      .map((node) => ({ text: label(node), role: node.getAttribute("role") || "", tag: node.tagName }))
-      .filter((item) => item.text);
-    const entry = items.find((item) => item.text === "\\u7ba1\\u7406" || item.text === "Manager" || item.text === "Anti-Codex \\u7ba1\\u7406");
-    const profileEntryText = entry?.text || "";
-    return {
-      ok: profileEntryText === "\\u7ba1\\u7406",
-      phase: "profile-entry",
-      profileEntryText,
-      forbiddenEnglishVisible: items.some((item) => item.text === "Manager"),
-      items: items.slice(-40),
-    };
-  })()`, 3500);
-  await ws.call(id++, "Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }, 2500).catch(() => {});
-  await ws.call(id++, "Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 }, 2500).catch(() => {});
-  return { ...menu, triggerText: trigger.triggerText };
 }
 
 async function drainManagerActionQueue() {
@@ -1257,18 +1283,6 @@ async function runManagerActionBatch(actions) {
     results,
     durationMs: Date.now() - startedAt,
   };
-}
-
-if (profileEntryOnly) {
-  const profileEntry = await verifyProfileManagerEntry().catch((error) => ({
-    ok: false,
-    phase: "profile-entry-exception",
-    error: error?.message || String(error),
-  }));
-  ws.close();
-  releaseManagerButtonLock(managerButtonLock);
-  console.log(asciiJson({ ok: profileEntry.ok === true, port, target: { id: target.id, title: target.title, url: target.url }, profileEntry }, compact ? 0 : 2));
-  process.exit(profileEntry.ok ? 0 : 1);
 }
 
 if (closeOnly) {

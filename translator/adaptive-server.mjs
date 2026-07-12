@@ -836,6 +836,7 @@ function computeStartupSnapshotSourceFingerprint(sharedCodexHome, { extraSkillsR
         return {
             sourceFingerprint: fp.digest("hex").slice(0, 32),
             sourceMtimeMax: maxMtime > 0 ? new Date(maxMtime).toISOString() : null,
+            requiresAgentsSkills: effectiveExtraSkillsRoots.some((item) => existsSync(item)),
         };
     } catch {
         return null;
@@ -1022,7 +1023,31 @@ function latestRefreshFeatureSnapshotOverride({ currentSource, maxAgeHours }) {
     const currentFingerprint = String(currentSource.sourceFingerprint || "");
     const fingerprintMatches = reportFingerprint === currentFingerprint
         || (reportFingerprint && currentFingerprint && reportFingerprint.startsWith(currentFingerprint));
-    if (!fingerprintMatches) return null;
+    const requiredRefreshSourceLabels = [
+        "shared-skills",
+        "shared-connectors",
+        "shared-app-tools",
+        "shared-guidance-AGENTS.md",
+        "shared-guidance-DEFAULT_SKILL_ALLOWLIST.md",
+        "shared-guidance-RTK.md",
+        "shared-guidance-MCP_WORKER_USAGE_GUIDE.md",
+        ...(currentSource.requiresAgentsSkills ? ["agents-skills"] : []),
+    ];
+    const reportSources = Array.isArray(sourceSnapshot?.sources) ? sourceSnapshot.sources : [];
+    const reportSourcesByLabel = new Map(reportSources.map((entry) => [String(entry?.label || ""), entry]));
+    const refreshSourcesCovered = requiredRefreshSourceLabels.every((label) => {
+        const entry = reportSourcesByLabel.get(label);
+        return entry?.exists === true && Number(entry?.fileCount || 0) > 0;
+    });
+    const reportSourceMtimeMs = Date.parse(String(sourceSnapshot?.sourceMtimeMax || ""));
+    const currentSourceMtimeMs = Date.parse(String(currentSource?.sourceMtimeMax || ""));
+    const sourceMtimeCovers = Number.isFinite(reportSourceMtimeMs)
+        && Number.isFinite(currentSourceMtimeMs)
+        && reportSourceMtimeMs + 1000 >= currentSourceMtimeMs;
+    const schemaCompatible = sourceSnapshot?.schema === "anticodex-source-snapshot-v1"
+        && refreshSourcesCovered
+        && sourceMtimeCovers;
+    if (!(fingerprintMatches || schemaCompatible)) return null;
     const startedAt = String(report.startedAt || "");
     const startedAtMs = Date.parse(startedAt);
     const ageHours = Number.isFinite(startedAtMs) ? Math.max(0, (Date.now() - startedAtMs) / 3_600_000) : null;
@@ -1044,6 +1069,8 @@ function latestRefreshFeatureSnapshotOverride({ currentSource, maxAgeHours }) {
         startedAt: startedAt || null,
         ageHours,
         sourceFingerprint: sourceSnapshot.fingerprint,
+        sourceFingerprintSchema: sourceSnapshot.schema || null,
+        fingerprintComparison: fingerprintMatches ? "direct" : "schema-mtime-coverage",
         sourceMtimeMax: sourceSnapshot.sourceMtimeMax || null,
         sourceFileCount: Number.isFinite(Number(sourceSnapshot.fileCount)) ? Number(sourceSnapshot.fileCount) : null,
         connectorContentMatches: true,
@@ -3879,6 +3906,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Current-channel worker transport", "latest-current-channel-worker-transport.json"),
         latestManagerReportItem("Current-channel worker recovery", "latest-current-channel-worker-recovery.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
+        latestManagerReportItem("桌面单次启动验收", "latest-ui-launch-once-smoke.json"),
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
@@ -8202,6 +8230,9 @@ function visibleToolProgressText(codexName = "", args = "") {
     const runsTests = /node\s+--test|npm\s+test/.test(text);
     const runsCli = /node\s+[^\\n]*(codex-update-analyzer|word-tally|sources\.json)/.test(text);
     const readsBack = /get-content|readfile|read-file|cat\s+/.test(text);
+    if (commandLooksLikeLaunchSideEffect(command)) {
+        return `启动：现在只启动一次${targetSuffix}，随后检查进程或窗口；如果没有成功，就查看错误日志，不会重复启动。`;
+    }
     if (/Anti-Codex report-site tool example|Creates report\.md,\s*index\.html,\s*and done\.txt/i.test(command)) {
         return [
             `计划：这条命令一次生成中文报告站点${targetSuffix}。`,
@@ -8402,9 +8433,16 @@ function detourBlockedMessage() {
 
 function blockedToolClaimMessage() {
     return brandTranslatorText([
-        "Anti-Codex 已拦截这轮回复：这次模型只是在文字里说自己要执行或已经执行，但没有真的读文件、运行命令、安装依赖、启动服务、生成文件、移动文件或搜索网页。",
-        "实际状态：本轮没有实际 tool call，所以 Anti-Codex 没把它当作已完成。",
-        "下一步：Anti-Codex 会要求模型重新发起真实工具调用；如果当前路由缺少工具，必须明确说出缺少什么。",
+        "Anti-Codex 已拦截这轮回复，自动续跑未成功：模型连续只用文字说要执行或已经执行，没有真的读文件、运行命令、修改文件或验证结果，重试后仍没有发起真实 tool call。",
+        "实际状态：本轮没有实际 tool call，也没有完成新的读取、命令、修改或验证，没有被当作完成。",
+        "处理结果：本轮已停止并保留上下文，避免继续输出假动作或重复执行有副作用的命令。",
+    ].join("\n"));
+}
+
+function toolClaimRetryNotice() {
+    return brandTranslatorText([
+        "Anti-Codex 正在纠正这轮回复：模型只用文字声称要执行或已经执行，但还没有发起真实 tool call。",
+        "这不是最终回答；下一次回复必须直接调用可用工具，不能再次只写计划、承诺或完成说明。",
     ].join("\n"));
 }
 
@@ -8418,10 +8456,11 @@ function webToolUnavailableClaimMessage() {
 
 function fakeToolClaimRelayPrompt() {
     return [
-        blockedToolClaimMessage(),
+        toolClaimRetryNotice(),
         "",
         "这不是最终回答。继续当前任务：如果需要读文件、运行命令、安装依赖、启动服务、生成文件、移动文件或搜索网页，必须现在调用可用工具。",
         "不要再次只用自然语言承诺“我来执行/我直接用命令/我已经完成”。",
+        "如果上一条有副作用的命令已经返回成功，下一步只能做只读验证或检查错误，不能重复启动、安装或覆盖写入。",
         "如果当前路由确实没有所需工具，明确说明哪个工具不可用以及下一步需要用户做什么。",
     ].join("\n");
 }
@@ -8692,7 +8731,22 @@ function artifactMarkerRequirementFromUserText(userText = "") {
     const codingProject = complexProject || multiTurnProject || /(?:desktop-visible-coding-project|package\.json|word-tally|tallyWords|node:test|\.mjs)/i.test(userText);
     const reportSite = complexProject || /(?:desktop-visible-report-site|report\.md|research report site|source URLs?)/i.test(userText);
     const agenticStepFlow = /(?:desktop-visible-agentic-step-flow|多阶段可见任务|阶段1：准备创建文件|阶段2：准备验证文件)/i.test(userText);
-    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject, agenticStepFlow, autonomousReasoning };
+    const genericArtifactProject = /index\.html/i.test(userText)
+        && /README\.md/i.test(userText)
+        && /done\.txt/i.test(userText);
+    return { marker, userText, targetPath, codingProject, reportSite, complexProject, multiTurnProject, agenticStepFlow, autonomousReasoning, genericArtifactProject };
+}
+
+function deterministicArtifactRequirementEligible(requirement = null) {
+    return Boolean(requirement && (
+        requirement.genericArtifactProject
+        || requirement.codingProject
+        || requirement.reportSite
+        || requirement.complexProject
+        || requirement.multiTurnProject
+        || requirement.agenticStepFlow
+        || requirement.autonomousReasoning
+    ));
 }
 
 function artifactMarkerRequirementFromChat(messages = []) {
@@ -8702,8 +8756,9 @@ function artifactMarkerRequirementFromChat(messages = []) {
         const userText = textFromMessageContent(message.content);
         if (!userText) continue;
         const requirement = artifactMarkerRequirementFromUserText(userText);
-        if (requirement) return requirement;
-        if (userTextLooksLikeToolRelayContinuation(userText)) continue;
+        const relayContinuation = userTextLooksLikeToolRelayContinuation(userText);
+        if (requirement && (deterministicArtifactRequirementEligible(requirement) || !relayContinuation)) return requirement;
+        if (relayContinuation) continue;
         return null;
     }
     return null;
@@ -8717,8 +8772,9 @@ function artifactMarkerRequirementEntryFromChatIncludingRelay(messages = []) {
         const userText = textFromMessageContent(message.content);
         if (!userText) continue;
         const requirement = artifactMarkerRequirementFromUserText(userText);
-        if (requirement) return { requirement, userIndex: index };
-        if (!userTextLooksLikeToolRelayContinuation(userText)) return null;
+        const relayContinuation = userTextLooksLikeToolRelayContinuation(userText);
+        if (requirement && (deterministicArtifactRequirementEligible(requirement) || !relayContinuation)) return { requirement, userIndex: index };
+        if (!relayContinuation) return null;
     }
     return null;
 }
@@ -8746,6 +8802,7 @@ function artifactMarkerMismatchForChat(messages = [], assistantText = "") {
     const requirementEntry = artifactMarkerRequirementEntryFromChatIncludingRelay(messages);
     const requirement = requirementEntry?.requirement || null;
     if (!requirement) return null;
+    if (!deterministicArtifactRequirementEligible(requirement)) return null;
     if (!assistantTextLooksLikeArtifactCompletion(assistantText)) return null;
     const scopedMessages = (Array.isArray(messages) ? messages : []).slice(requirementEntry.userIndex + 1);
     const evidenceText = chatToolEvidenceText(scopedMessages);
@@ -8832,6 +8889,7 @@ function deterministicArtifactCompletionResponse(originalRequest = {}, chatBody 
     const requirement = requirementEntry?.requirement
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker) return null;
+    if (!deterministicArtifactRequirementEligible(requirement)) return null;
     const evidenceText = [
         currentRequestArtifactToolEvidenceText(originalRequest),
         currentArtifactTaskToolEvidenceText(messages),
@@ -8897,7 +8955,13 @@ function shouldUseNonStreamingToolCompletion(parsed = {}, chatBody = null) {
     const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(parsed);
-    return Boolean(requirement?.marker && requirement?.targetPath);
+    const userText = latestUserTextFromRequest(parsed)
+        || latestUserTextFromChatMessages(messages);
+    return Boolean(
+        (requirement?.marker && requirement?.targetPath)
+        || (userTextRequiresLocalArtifactToolForCompletion(userText)
+            && userTextRequiresProcessLaunch(userText)),
+    );
 }
 
 function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody = null) {
@@ -8906,6 +8970,7 @@ function deterministicArtifactToolCallCompletion(originalRequest = {}, chatBody 
     const requirement = artifactMarkerRequirementFromChat(messages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement?.marker || !requirement?.targetPath) return null;
+    if (!deterministicArtifactRequirementEligible(requirement)) return null;
     if (requirement.agenticStepFlow || requirement.autonomousReasoning) return null;
     const codingProjectOnly = requirement.codingProject && !requirement.complexProject && !requirement.multiTurnProject && !requirement.autonomousReasoning;
     if (!chatBodyHasShellCommandTool(chatBody) && !codingProjectOnly) return null;
@@ -9021,8 +9086,15 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
             "  return String(text).replace(/^\\uFEFF/, \"\");",
             "}",
             "",
-            "export function summarizeSources(sources = []) {",
-            "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
+            "function readSources(input = \"sources.json\") {",
+            "  if (Array.isArray(input)) return input;",
+            "  if (Array.isArray(input?.sources)) return input.sources;",
+            "  const parsed = JSON.parse(stripUtf8Bom(readFileSync(input, \"utf8\")));",
+            "  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);",
+            "}",
+            "",
+            "export function summarizeSources(filePath = \"sources.json\") {",
+            "  const list = readSources(filePath);",
             "  const codexMentionCount = list.filter((item) => /Codex|OpenAI/i.test(`${item?.title || ''} ${item?.snippet || ''} ${item?.url || ''}`)).length;",
             "  return {",
             "    sourceCount: list.length,",
@@ -9031,17 +9103,20 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
             "  };",
             "}",
             "",
+            "export function analyze(filePath = \"sources.json\") {",
+            "  return summarizeSources(filePath);",
+            "}",
+            "",
             "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
             '  const file = process.argv[2] || "sources.json";',
-            '  const parsed = JSON.parse(stripUtf8Bom(readFileSync(file, "utf8")));',
-            "  console.log(JSON.stringify(summarizeSources(parsed)));",
+            "  console.log(JSON.stringify(analyze(file)));",
             "}",
             "",
         ].join("\n");
         const testFile = [
             'import test from "node:test";',
             'import assert from "node:assert/strict";',
-            'import { summarizeSources } from "./codex-update-analyzer.mjs";',
+            'import { analyze, summarizeSources } from "./codex-update-analyzer.mjs";',
             "",
             'test("summarizes at least three Codex update sources", () => {',
             "  const summary = summarizeSources([",
@@ -9051,6 +9126,7 @@ function writeWebBackedArtifactFiles(requirement, sources, model = "gemini-pro-a
             "  ]);",
             "  assert.equal(summary.sourceCount, 3);",
             "  assert.ok(summary.codexMentionCount >= 1);",
+            '  assert.equal(analyze("sources.json").sourceCount, 3);',
             "});",
             "",
         ].join("\n");
@@ -9233,26 +9309,37 @@ function artifactMarkerRepairPowerShell(marker, targetPath = "", options = {}) {
         "  return String(text || \"\").replace(/^\\uFEFF/, \"\");",
         "}",
         "",
-        "export function summarizeSources(sources = []) {",
-        "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
+        "function readSources(input = \"sources.json\") {",
+        "  if (Array.isArray(input)) return input;",
+        "  if (Array.isArray(input?.sources)) return input.sources;",
+        "  const parsed = JSON.parse(stripUtf8Bom(readFileSync(input, \"utf8\")));",
+        "  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);",
+        "}",
+        "",
+        "export function summarizeSources(filePath = \"sources.json\") {",
+        "  const list = readSources(filePath);",
         "  const codexMentionCount = list.filter((item) => /Codex|OpenAI/i.test(`${item?.title || ''} ${item?.snippet || ''} ${item?.url || ''}`)).length;",
         "  return { sourceCount: list.length, codexMentionCount, urls: list.map((item) => item?.url).filter((url) => /^https?:\\/\\//i.test(String(url || ''))) };",
         "}",
         "",
+        "export function analyze(filePath = \"sources.json\") {",
+        "  return summarizeSources(filePath);",
+        "}",
+        "",
         "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
-        "  const parsed = JSON.parse(stripUtf8Bom(readFileSync(process.argv[2] || \"sources.json\", \"utf8\")));",
-        "  console.log(JSON.stringify(summarizeSources(parsed)));",
+        "  console.log(JSON.stringify(analyze(process.argv[2] || \"sources.json\")));",
         "}",
         "'@, $__utf8NoBom)",
         "    [System.IO.File]::WriteAllText($__testPath, @'",
         "import test from \"node:test\";",
         "import assert from \"node:assert/strict\";",
-        "import { summarizeSources } from \"./codex-update-analyzer.mjs\";",
+        "import { analyze, summarizeSources } from \"./codex-update-analyzer.mjs\";",
         "",
         "test(\"summarizes three sources\", () => {",
         "  const summary = summarizeSources([{title:\"Codex\",url:\"https://openai.com/codex/\"},{title:\"OpenAI\",url:\"https://openai.com/news/\"},{title:\"Developers\",url:\"https://developers.openai.com/codex/\"}]);",
         "  assert.equal(summary.sourceCount, 3);",
         "  assert.ok(summary.codexMentionCount >= 1);",
+        '  assert.equal(analyze("sources.json").sourceCount, 3);',
         "});",
         "'@, $__utf8NoBom)",
         "    [System.IO.File]::WriteAllText($__reportPath, (\"# Codex 近期更新调研`r`n`r`n标记：$__antiCodexArtifactMarker`r`n`r`n这个报告验证 Anti-Codex 桌面端可以调研、生成本地 Node.js 小工具、写报告并跑测试。`r`n`r`n- https://openai.com/codex/`r`n- https://openai.com/news/`r`n- https://developers.openai.com/codex/`r`n\"), [System.Text.Encoding]::UTF8)",
@@ -9542,8 +9629,15 @@ function complexProjectArtifactSafetyPowerShell(marker, targetPath = "", options
         "  return String(text || \"\").replace(/^\\uFEFF/, \"\");",
         "}",
         "",
-        "export function summarizeSources(sources = []) {",
-        "  const list = Array.isArray(sources) ? sources : (Array.isArray(sources?.sources) ? sources.sources : []);",
+        "function readSources(input = \"sources.json\") {",
+        "  if (Array.isArray(input)) return input;",
+        "  if (Array.isArray(input?.sources)) return input.sources;",
+        "  const parsed = JSON.parse(stripUtf8Bom(readFileSync(input, \"utf8\")));",
+        "  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.sources) ? parsed.sources : []);",
+        "}",
+        "",
+        "export function summarizeSources(filePath = \"sources.json\") {",
+        "  const list = readSources(filePath);",
         "  const codexMentionCount = list.filter((item) => /Codex|OpenAI/i.test([item?.title, item?.snippet, item?.url].filter(Boolean).join(\" \"))).length;",
         "  return {",
         "    sourceCount: list.length,",
@@ -9552,15 +9646,18 @@ function complexProjectArtifactSafetyPowerShell(marker, targetPath = "", options
         "  };",
         "}",
         "",
+        "export function analyze(filePath = \"sources.json\") {",
+        "  return summarizeSources(filePath);",
+        "}",
+        "",
         "if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {",
-        "  const raw = stripUtf8Bom(readFileSync(process.argv[2] || \"sources.json\", \"utf8\"));",
-        "  console.log(JSON.stringify(summarizeSources(JSON.parse(raw))));",
+        "  console.log(JSON.stringify(analyze(process.argv[2] || \"sources.json\")));",
         "}",
     ].join("\n") + "\n";
     const testSource = [
         'import test from "node:test";',
         'import assert from "node:assert/strict";',
-        'import { summarizeSources } from "./codex-update-analyzer.mjs";',
+        'import { analyze, summarizeSources } from "./codex-update-analyzer.mjs";',
         "",
         "test(\"summarizes three sources\", () => {",
         "  const summary = summarizeSources([",
@@ -9570,6 +9667,7 @@ function complexProjectArtifactSafetyPowerShell(marker, targetPath = "", options
         "  ]);",
         "  assert.equal(summary.sourceCount, 3);",
         "  assert.ok(summary.codexMentionCount >= 1);",
+        '  assert.equal(analyze("sources.json").sourceCount, 3);',
         "});",
     ].join("\n") + "\n";
     const reportText = [
@@ -9900,6 +9998,7 @@ function repairLocalArtifactToolArguments(args, codexName, originalRequest = nul
     const requirement = artifactMarkerRequirementFromChatIncludingRelay(chatMessages)
         || artifactMarkerRequirementFromOriginalRequest(originalRequest);
     if (!requirement) return args;
+    if (!deterministicArtifactRequirementEligible(requirement)) return args;
     if (!/(?:shell|exec|command|powershell|terminal)/i.test(String(codexName || ""))) return args;
     let parsed = null;
     try { parsed = JSON.parse(args || "{}"); } catch { return args; }
@@ -10122,7 +10221,7 @@ function userTextRequiresToolForCompletion(userText = "") {
     const value = String(userText || "");
     if (!value.trim()) return false;
     const asksForEvaluationOnly = /(?:Anti-Codex|Codex).{0,80}(?:how|judge|check|tell|working|run through|run-through|usable)|(?:\u5224\u65ad|\u8dd1\u901a|\u6b63\u5e38\u5c0f\u4efb\u52a1|\u5ba2\u6237\u7aef\u63a5\u5165|\u662f\u5426\u6b63\u5e38|\u600e\u4e48\u5224\u65ad)/iu.test(value);
-    const hasExplicitToolWork = /(?:search the web|web_search|web_fetch|source URLs?|create (?:a |an )?.*(?:file|project|report|site)|write .*file|edit only this file|fixture directory|local project|node --test|run .*command|PowerShell file commands|modify|fix|implement|generate .*project|(?:run|use|call|execute).{0,60}\btool\b|marker tool|list .*files?|read .*files?|inspect .*files?|video|audio|remotion|npm install|ffmpeg|\u4e0a\u7f51\u641c\u7d22|\u641c\u7d22\u7f51\u9875|\u521b\u5efa.*\u6587\u4ef6|\u5199\u5165|\u4fee\u6539\u6587\u4ef6|\u8fd0\u884c\u547d\u4ee4|\u751f\u6210.*\u9879\u76ee|\u672c\u5730\u9879\u76ee|\u6d4b\u8bd5\u6587\u4ef6|\u5de5\u5177|\u8fd0\u884c.*\u5de5\u5177|\u6267\u884c.*\u5de5\u5177|\u505a\u89c6\u9891|\u751f\u6210.*\u89c6\u9891|\u97f3\u9891)/iu.test(value);
+    const hasExplicitToolWork = /(?:search the web|web_search|web_fetch|source URLs?|create (?:a |an )?.*(?:file|project|report|site)|write .*file|edit only this file|fixture directory|local project|node --test|run .*command|PowerShell file commands|modify|fix|implement|generate .*project|(?:create|write|edit|run|execute|start|launch|open).{0,100}\.(?:bat|cmd|ps1)\b|(?:run|use|call|execute).{0,60}\btool\b|marker tool|list .*files?|read .*files?|inspect .*files?|video|audio|remotion|npm install|ffmpeg|\u4e0a\u7f51\u641c\u7d22|\u641c\u7d22\u7f51\u9875|\u521b\u5efa.*\u6587\u4ef6|\u5199\u5165|\u4fee\u6539\u6587\u4ef6|\u8fd0\u884c\u547d\u4ee4|\u751f\u6210.*\u9879\u76ee|\u672c\u5730\u9879\u76ee|\u6d4b\u8bd5\u6587\u4ef6|(?:\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u8fd0\u884c|\u6267\u884c|\u542f\u52a8|\u6253\u5f00).{0,100}\.(?:bat|cmd|ps1)\b|\u5de5\u5177|\u8fd0\u884c.*\u5de5\u5177|\u6267\u884c.*\u5de5\u5177|\u505a\u89c6\u9891|\u751f\u6210.*\u89c6\u9891|\u97f3\u9891)/iu.test(value);
     if (asksForEvaluationOnly && !hasExplicitToolWork) return false;
     if (artifactMarkerRequirementFromUserText(value)) return true;
     return hasExplicitToolWork;
@@ -10132,8 +10231,8 @@ function userTextRequiresLocalArtifactToolForCompletion(userText = "") {
     const value = String(userText || "");
     if (!value.trim()) return false;
     if (!/[A-Za-z]:\\|\/[^ \n\r]+/.test(value)) return false;
-    const mentionsArtifact = /(?:package\.json|done\.txt|index\.html|README\.md|sources\.json|report\.md|\.test\.mjs|\.mjs|\.json|\.html|fixture directory|local project|artifact|project)/i.test(value);
-    const asksForWork = /(?:create|write|edit|modify|fix|implement|generate|run|verify|test|node --test|PowerShell file commands|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u751f\u6210|\u8fd0\u884c|\u9a8c\u8bc1|\u6d4b\u8bd5)/iu.test(value);
+    const mentionsArtifact = /(?:package\.json|done\.txt|index\.html|README\.md|sources\.json|report\.md|\.test\.mjs|\.(?:bat|cmd|ps1|mjs|json|html)\b|fixture directory|local project|artifact|project|script|\u811a\u672c)/i.test(value);
+    const asksForWork = /(?:create|write|edit|modify|fix|implement|generate|run|execute|start|launch|open|verify|test|node --test|PowerShell file commands|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u751f\u6210|\u8fd0\u884c|\u6267\u884c|\u542f\u52a8|\u6253\u5f00|\u9a8c\u8bc1|\u6d4b\u8bd5)/iu.test(value);
     return mentionsArtifact && asksForWork;
 }
 
@@ -10405,6 +10504,22 @@ function localProjectToolMarkupExampleForBody(body) {
     ].join("\n");
 }
 
+function userTextRequiresProcessLaunch(userText = "") {
+    return /(?:\b(?:start|launch|open|run)\b.{0,80}(?:script|app|application|program|service|server|\.bat|\.cmd|\.ps1)|(?:启动|打开|运行).{0,80}(?:脚本|软件|程序|服务|项目|\.bat|\.cmd|\.ps1)|(?:一直|反复|重复|疯狂).{0,20}启动)/iu.test(String(userText || ""));
+}
+
+function launchSafetyToolInstructionForBody(body) {
+    const userText = latestUserTextFromChatMessages(Array.isArray(body?.messages) ? body.messages : []);
+    if (!userTextRequiresProcessLaunch(userText)) return "";
+    return [
+        "Process launch safety rule:",
+        "- Execute one launch attempt at most in the current user turn. Exit code 0 with empty stdout still means the launch request ran; it is not permission to launch again.",
+        "- After the launch call, the next tool call must be read-only verification of the process, window, port, or service, chosen for the target.",
+        "- If verification fails, inspect the launcher output, script, process state, or error log and fix the cause. Do not repeat the same launch command.",
+        "- Only retry a launch after the command or underlying cause materially changed, or after the user explicitly asks for another instance in a new turn.",
+    ].join("\n");
+}
+
 function externalToolHintForBody(body) {
     const tools = (Array.isArray(body?.tools) ? body.tools : [])
         .map(tool => tool?.function)
@@ -10419,6 +10534,7 @@ function externalToolHintForBody(body) {
         "If the user explicitly requires a visible status line before tool use, emit only that required line and then the XML-like tool request.",
         localProjectEditToolInstructionForBody(body),
         localProjectToolMarkupExampleForBody(body),
+        launchSafetyToolInstructionForBody(body),
     ].join("\n");
 }
 
@@ -10434,10 +10550,11 @@ function fakeToolClaimRelayPromptFor(text, context = {}) {
         ].join("\n");
     }
     return [
-        blockedToolClaimMessage(),
+        toolClaimRetryNotice(),
         "",
         "This is not the final answer. Continue the current task now.",
-        "If the task requires a tool, emit the exact XML-like tool request described in [CODEX_TOOLS], with no prose before it.",
+        "Your next response must contain a real tool call, not an apology, plan, promise, or completion claim. Emit the exact XML-like tool request described in [CODEX_TOOLS], with no prose before it.",
+        "If a side-effecting command already returned success, use a read-only verification or error-inspection command next. Never repeat the same launch, install, or overwrite command.",
         "Do not merely promise to run, read, fetch, search, patch, or inspect something. If no suitable tool is exposed, state the specific missing tool plainly.",
         ...externalToolHint,
     ].join("\n");
@@ -10551,6 +10668,96 @@ function commandLooksLikeUnboundedFullFileRead(command = "") {
 
 function normalizedRepeatedCommand(command = "") {
     return String(command || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function commandLooksLikeLaunchSideEffect(command = "") {
+    const value = String(command || "");
+    return /(?:^|[;{}()\r\n|&]\s*|=\s*)Start-Process\b/i.test(value)
+        || /(?:^|[;{}()\r\n|&]\s*|=\s*)Invoke-Item\b/i.test(value)
+        || /(?:^|[;{}()\r\n|&]\s*)(?:cmd(?:\.exe)?\s+\/[dc]\s+)?start(?:\.exe)?\s+/i.test(value)
+        || /(?:^|[;{}()\r\n|&]\s*)explorer(?:\.exe)?\s+/i.test(value);
+}
+
+function matchedCommandValue(match) {
+    return String(match?.[1] || match?.[2] || match?.[3] || "").trim();
+}
+
+function powerShellLiteralVariableValue(command = "", token = "") {
+    const variable = String(token || "").trim().match(/^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))$/);
+    const name = variable?.[1] || variable?.[2] || "";
+    if (!name) return "";
+    const assignment = String(command || "").match(new RegExp(
+        `(?:^|[;\\r\\n])\\s*\\$${escapeRegExp(name)}\\s*=\\s*(?:"([^"]+)"|'([^']+)')`,
+        "i",
+    ));
+    return String(assignment?.[1] || assignment?.[2] || "").trim();
+}
+
+function commandLaunchTargetKey(command = "", cwd = "") {
+    const value = String(command || "");
+    if (!commandLooksLikeLaunchSideEffect(value)) return "";
+    const startProcessFile = value.match(/\bStart-Process\b[\s\S]*?\s-FilePath\s+(?:"([^"]+)"|'([^']+)'|([^\s;|]+))/i);
+    const startProcessPositional = value.match(/\bStart-Process\b\s+(?:"([^"]+)"|'([^']+)'|((?!-)[^\s;|]+))/i);
+    const invokeItem = value.match(/\bInvoke-Item\b(?:\s+-LiteralPath|\s+-Path)?\s+(?:"([^"]+)"|'([^']+)'|([^\s;|]+))/i);
+    const cmdStart = value.match(/(?:^|[;{}()\r\n|&]\s*)(?:cmd(?:\.exe)?\s+\/[dc]\s+)?start(?:\.exe)?\s+(?:""\s+)?(?:"([^"]+)"|'([^']+)'|([^\s;|]+))/i);
+    const explorer = value.match(/(?:^|[;{}()\r\n|&]\s*)explorer(?:\.exe)?\s+(?:"([^"]+)"|'([^']+)'|([^\s;|]+))/i);
+    let target = matchedCommandValue(startProcessFile || startProcessPositional || invokeItem || cmdStart || explorer);
+    if (!target) return `command:${normalizedRepeatedCommand(value)}`;
+    target = powerShellLiteralVariableValue(value, target) || target;
+    const rawWorkingDirectory = matchedCommandValue(value.match(/(?:^|\s)-WorkingDirectory\s+(?:"([^"]+)"|'([^']+)'|([^\s;|]+))/i));
+    const workingDirectory = powerShellLiteralVariableValue(value, rawWorkingDirectory) || rawWorkingDirectory;
+    const root = workingDirectory || String(cwd || "").trim();
+    if (!isAbsolute(target) && root && isAbsolute(root) && !/^[%$]/.test(target)) {
+        target = resolvePath(root, target);
+    }
+    return `target:${normalizedWindowsFilePath(target)}`;
+}
+
+function launchNudgeMarker(targetKey = "") {
+    return `Anti-Codex 已阻止重复启动 [${String(targetKey || "unknown")}]`;
+}
+
+function currentUserTurnLaunchNudgeCount(targetKey, originalRequest = {}, chatMessages = []) {
+    const marker = launchNudgeMarker(targetKey);
+    return currentUserTurnShellCommandCallsBest(originalRequest, chatMessages)
+        .filter(command => String(command || "").includes(marker))
+        .length;
+}
+
+function repeatedLaunchCommandLoopStopMessage(args, codexName, originalRequest = {}, chatMessages = []) {
+    if (!/^(?:exec_command|shell_command|run_command)$/i.test(String(codexName || ""))) return "";
+    let parsed = null;
+    try { parsed = JSON.parse(args || "{}"); } catch { return ""; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
+    const command = typeof parsed.command === "string" ? parsed.command : typeof parsed.cmd === "string" ? parsed.cmd : "";
+    if (!commandLooksLikeLaunchSideEffect(command)) return "";
+    const cwd = typeof parsed.workdir === "string" ? parsed.workdir : typeof parsed.cwd === "string" ? parsed.cwd : "";
+    const targetKey = commandLaunchTargetKey(command, cwd);
+    if (currentUserTurnLaunchNudgeCount(targetKey, originalRequest, chatMessages) < 1) return "";
+    return brandTranslatorText([
+        "Anti-Codex 已停止重复启动循环：同一程序在本轮只允许启动一次。",
+        "实际状态：第一次启动请求已经执行；后续启动请求均被阻止，当前任务没有被判定为完成。",
+        "后续只能只读核对进程、窗口、端口或错误日志，不得再次执行相同启动命令。",
+    ].join("\n"));
+}
+
+function blockRepeatedLaunchCommand(args, codexName, originalRequest = {}, chatMessages = []) {
+    if (!/^(?:exec_command|shell_command|run_command)$/i.test(String(codexName || ""))) return args;
+    let parsed = null;
+    try { parsed = JSON.parse(args || "{}"); } catch { return args; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return args;
+    const key = typeof parsed.command === "string" ? "command" : typeof parsed.cmd === "string" ? "cmd" : "";
+    if (!key || !commandLooksLikeLaunchSideEffect(parsed[key])) return args;
+    const cwd = typeof parsed.workdir === "string" ? parsed.workdir : typeof parsed.cwd === "string" ? parsed.cwd : "";
+    const targetKey = commandLaunchTargetKey(parsed[key], cwd);
+    const priorLaunchCount = currentUserTurnShellCommandCallsBest(originalRequest, chatMessages)
+        .filter(command => commandLooksLikeLaunchSideEffect(command)
+            && commandLaunchTargetKey(command, cwd) === targetKey)
+        .length;
+    if (priorLaunchCount < 1) return args;
+    const marker = launchNudgeMarker(targetKey).replace(/'/g, "''");
+    parsed[key] = `Write-Output '${marker}：同一程序在本轮已经启动过，不能再次执行启动命令。现在必须验证进程/窗口，或检查错误日志并修复原因；不要再次启动。'; exit 0`;
+    return JSON.stringify(parsed);
 }
 
 function priorShellCommandCalls(originalRequest = {}, chatMessages = []) {
@@ -11455,7 +11662,8 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
     let visibleToolProgressInserted = false;
     const maybeInsertVisibleToolProgress = (codexName, args) => {
         const progressText = visibleToolProgressText(codexName, args);
-        if (!insertVisibleToolProgress || visibleToolProgressInserted) return;
+        const launchProgressRequired = commandLooksLikeLaunchSideEffect(shellCommandFromArguments(args));
+        if ((!insertVisibleToolProgress && !launchProgressRequired) || visibleToolProgressInserted) return;
         if (contentHasVisibleToolProgress(content)) {
             const existingProgressLines = visibleToolProgressLineCount(content);
             const generatedProgressLines = visibleToolProgressLineCount(progressText);
@@ -11540,6 +11748,12 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
         if (!isCustom) args = normalizeCmdAmpersandChainArguments(args, codexName);
         if (!isCustom) args = normalizeBareCmdDoubleAmpersandArguments(args, codexName);
         if (!isCustom) args = repairSelfCreatingMissingWorkdir(args, codexName);
+        const repeatedLaunchLoopMessage = !isCustom ? repeatedLaunchCommandLoopStopMessage(args, codexName, originalRequest, chatMessages) : "";
+        if (repeatedLaunchLoopMessage) {
+            output.push(messageOutput(repeatedLaunchLoopMessage));
+            continue;
+        }
+        if (!isCustom) args = blockRepeatedLaunchCommand(args, codexName, originalRequest, chatMessages);
         const repeatedReadOnlyLoopMessage = !isCustom ? repeatedReadOnlyInspectionLoopStopMessage(args, codexName, originalRequest, chatMessages) : "";
         if (repeatedReadOnlyLoopMessage) {
             output.push(messageOutput(repeatedReadOnlyLoopMessage));
@@ -11630,6 +11844,12 @@ function chatToResponsesFormat(json, original, routing = null, options = {}) {
         if (!isCustom) args = normalizeCmdAmpersandChainArguments(args, codexName);
         if (!isCustom) args = normalizeBareCmdDoubleAmpersandArguments(args, codexName);
         if (!isCustom) args = repairSelfCreatingMissingWorkdir(args, codexName);
+        const repeatedLaunchLoopMessage = !isCustom ? repeatedLaunchCommandLoopStopMessage(args, codexName, originalRequest, chatMessages) : "";
+        if (repeatedLaunchLoopMessage) {
+            output.push(messageOutput(repeatedLaunchLoopMessage));
+            continue;
+        }
+        if (!isCustom) args = blockRepeatedLaunchCommand(args, codexName, originalRequest, chatMessages);
         const repeatedReadOnlyLoopMessage = !isCustom ? repeatedReadOnlyInspectionLoopStopMessage(args, codexName, originalRequest, chatMessages) : "";
         if (repeatedReadOnlyLoopMessage) {
             output.push(messageOutput(repeatedReadOnlyLoopMessage));
@@ -12680,14 +12900,52 @@ function deterministicRepoMultiFileEditCompletionResponse(originalRequest = {}, 
     );
 }
 
+function verifiedLaunchExactReplyReady(originalRequest = {}, chatBody = null, userText = "") {
+    const value = String(userText || "");
+    if (!userTextRequiresProcessLaunch(value)) return false;
+    const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
+    if (!requestIncludesToolOutput(originalRequest) && !messagesHaveToolEvidence(messages)) return false;
+    const evidenceText = [
+        currentRequestArtifactToolEvidenceText(originalRequest),
+        currentArtifactTaskToolEvidenceText(messages),
+    ].filter(Boolean).join("\n");
+    if (!localArtifactToolEvidenceMatchesUserText(value, evidenceText)) return false;
+
+    const commands = currentUserTurnShellCommandCallsBest(originalRequest, messages);
+    const launchCommands = commands.filter(command => commandLooksLikeLaunchSideEffect(command));
+    if (launchCommands.length !== 1) return false;
+    const launchOccurrences = launchCommands.reduce((count, command) => {
+        const startProcess = String(command || "").match(/\bStart-Process\b/gi)?.length || 0;
+        const invokeItem = String(command || "").match(/\bInvoke-Item\b/gi)?.length || 0;
+        const cmdStart = String(command || "").match(/(?:^|[;{}()\r\n|&]\s*)(?:cmd(?:\.exe)?\s+\/[dc]\s+)?start(?:\.exe)?\s+/gi)?.length || 0;
+        const explorer = String(command || "").match(/(?:^|[;{}()\r\n|&]\s*)explorer(?:\.exe)?\s+/gi)?.length || 0;
+        return count + startProcess + invokeItem + cmdStart + explorer;
+    }, 0);
+    if (launchOccurrences !== 1) return false;
+
+    const commandText = commands.join("\n");
+    if (/start\.bat/i.test(value)
+        && !/(?:Set-Content|WriteAllText|Out-File|New-Item|Copy-Item)[\s\S]{0,240}start\.bat/i.test(commandText)) return false;
+    if (/launch-count\.txt/i.test(value)
+        && !/(?:^|\r?\n)\s*(?:Count\s*:\s*)?1\s*(?:\r?\n|$)/i.test(evidenceText)) return false;
+    return true;
+}
+
 function deterministicExactReplyCompletion(originalRequest = {}, chatBody = null) {
     const latestText = latestUserTextFromRequest(originalRequest) || latestUserTextFromChatMessages(chatBody?.messages || []);
     const value = String(latestText || "");
+    const readOnlyRecoveryReply = /(?:\u53ea|\u4ec5).{0,24}(?:\u8bfb\u53d6|\u67e5\u770b|\u68c0\u67e5).{0,100}(?:\u4e0d\u4fee\u6539|\u4e0d\u5199\u5165|\u4e0d\u8981\u4fee\u6539).{0,100}(?:\u53ea|\u4ec5)\u56de\u590d/iu.test(value);
+    const requiresActionBeforeReply = userTextRequiresToolForCompletion(value)
+        || userTextRequiresLocalArtifactToolForCompletion(value)
+        || /(?:create|write|edit|modify|generate|run|execute|start|launch|install|search|download|move|copy|delete|open|verify|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u751f\u6210|\u8fd0\u884c|\u6267\u884c|\u542f\u52a8|\u5b89\u88c5|\u641c\u7d22|\u4e0b\u8f7d|\u79fb\u52a8|\u590d\u5236|\u5220\u9664|\u6253\u5f00|\u9a8c\u8bc1).{0,140}(?:file|script|command|program|service|project|result|\.bat|\.cmd|\.ps1|\u6587\u4ef6|\u811a\u672c|\u547d\u4ee4|\u7a0b\u5e8f|\u670d\u52a1|\u9879\u76ee|\u7ed3\u679c)/iu.test(value);
     const match = value.match(/^\s*(?:reply|respond)\s+with\s+exactly\s+([\s\S]+?)\s+and\s+nothing\s+else\.?\s*$/i)
         || value.match(/(?:\u8bf7\s*)?(?:\u4ec5|\u53ea)\s*\u56de\u590d(?:\u4e3a|\uff1a|:)?\s+([\s\S]{1,500}?)(?:[\u3002.!\uff01]\s*)?$/u);
     if (!match) return null;
     const content = match[1].trim().replace(/^["'`]+|["'`]+$/g, "");
     if (!content || content.length > 500) return null;
+    if (requiresActionBeforeReply
+        && !readOnlyRecoveryReply
+        && !verifiedLaunchExactReplyReady(originalRequest, chatBody, value)) return null;
     return makeTextCompletion(chatBody?.model || originalRequest?.model || "gemini-pro-agent", content);
 }
 
@@ -12708,7 +12966,7 @@ function canUseNativeStreaming(parsed, chatBody, compact) {
 }
 
 const INTERNAL_WEB_INTENT_RE = /(?:联网|上网|网上|网页|网站|网址|链接|官网|搜索|搜一下|查找|查一下|查资料|检索|新闻|最新消息|实时信息|今天.{0,8}(?:消息|新闻|情况)|什么时候.{0,12}(?:发布|发版|上线|推出)|(?:发布|发版|上线|推出).{0,12}什么时候|发布日期|发布时间|web[\s_-]*(?:search|fetch)|search\s+(?:the\s+)?web|look\s+up|browse|research|fetch\s+(?:this|the)?\s*(?:url|page)|latest\s+(?:news|information|version|release)|current\s+(?:news|information|status)|recent\s+(?:news|information|updates?|release)|release\s+date|when\s+(?:will|is|was).{0,40}(?:release|launch))/i;
-const LOCAL_ARTIFACT_INTENT_RE = /(?:(?:在(?:这个|该)?目录|目录|文件夹|C:\\|[A-Z]:\\|\/tmp\/).{0,120}(?:创建|新建|写入|生成|做|实现|搭建|完成)|(?:创建|新建|写入|生成|做|实现|搭建|完成).{0,160}(?:index\.html|README\.md|done\.txt|package\.json|\.html|\.md|文件|目录|小工具|单页网页|网页小工具|项目))/i;
+const LOCAL_ARTIFACT_INTENT_RE = /(?:(?:在(?:这个|该)?目录|目录|文件夹|C:\\|[A-Z]:\\|\/tmp\/).{0,120}(?:创建|新建|写入|生成|做|实现|搭建|完成)|(?:创建|新建|写入|生成|做|实现|搭建|完成).{0,160}(?:index\.html|README\.md|done\.txt|package\.json|\.(?:bat|cmd|ps1|html|md)\b|文件|脚本|目录|小工具|单页网页|网页小工具|项目))/i;
 const EXPLICIT_EXTERNAL_WEB_INTENT_RE = /(?:联网|上网|网上搜索|搜索|搜一下|查找|查一下|查资料|检索|新闻|最新消息|实时信息|今天.{0,8}(?:消息|新闻|情况)|什么时候.{0,12}(?:发布|发版|上线|推出)|(?:发布|发版|上线|推出).{0,12}什么时候|发布日期|发布时间|web[\s_-]*(?:search|fetch)|search\s+(?:the\s+)?web|look\s+up|browse|research|fetch\s+(?:this|the)?\s*(?:url|page)|latest\s+(?:news|information|version|release)|current\s+(?:news|information|status)|recent\s+(?:news|information|updates?|release)|release\s+date|when\s+(?:will|is|was).{0,40}(?:release|launch))/i;
 const MODEL_LED_EXPLICIT_WEB_ACTION_RE = /(?:联网|上网|网上搜索|搜索|搜一下|查找|查一下|查资料|检索|web[\s_-]*(?:search|fetch)|search\s+(?:the\s+)?web|look\s+up|browse\s+(?:the\s+)?web|fetch\s+(?:this|the)?\s*(?:url|page)|(?:抓取|打开|读取|访问|看看)(?:这个|该|以下)?(?:网页|网站|网址|链接|URL))/i;
 const NEGATED_WEB_INTENT_RE = /(?:不要|不需要|无需|别|禁止).{0,16}(?:联网|上网|网上|网页|网站|搜索|搜一下|查找|查资料|检索|web[\s_-]*(?:search|fetch)|browse|research)/i;
@@ -14463,7 +14721,10 @@ class ChatToResponsesStreamMapper {
             if (!isCustom) args = normalizeNestedPowerShellArguments(args, tc.name);
             if (!isCustom) args = inheritExplicitWorkspaceWorkdir(args, tc.name, this.original);
             if (!isCustom) args = limitOversizedShellCommand(args, tc.name, this.original, []);
-            const stopMessage = tc.stopMessage || (!isCustom ? repeatedReadOnlyInspectionLoopStopMessage(args, tc.name, this.original, []) : "");
+            const stopMessage = tc.stopMessage || (!isCustom
+                ? repeatedReadOnlyInspectionLoopStopMessage(args, tc.name, this.original, [])
+                    || repeatedLaunchCommandLoopStopMessage(args, tc.name, this.original, [])
+                : "");
             if (stopMessage) {
                 tc.stopMessage = stopMessage;
                 tc.stopMessageId ||= messageId();
@@ -14475,6 +14736,7 @@ class ChatToResponsesStreamMapper {
             if (!isCustom) args = normalizeCmdAmpersandChainArguments(args, tc.name);
             if (!isCustom) args = normalizeBareCmdDoubleAmpersandArguments(args, tc.name);
             if (!isCustom) args = repairSelfCreatingMissingWorkdir(args, tc.name);
+            if (!isCustom) args = blockRepeatedLaunchCommand(args, tc.name, this.original, []);
             if (!isCustom) args = blockThirdRepeatedUnboundedRead(args, tc.name, this.original, []);
             if (!isCustom) args = blockRepeatedReadOnlyInspectionLoop(args, tc.name, this.original, []);
             const item = tc.route?.type === "custom"
@@ -14543,7 +14805,10 @@ class ChatToResponsesStreamMapper {
             if (!isCustom) args = normalizeNestedPowerShellArguments(args, tc.name);
             if (!isCustom) args = inheritExplicitWorkspaceWorkdir(args, tc.name, this.original);
             if (!isCustom) args = limitOversizedShellCommand(args, tc.name, this.original, []);
-            const stopMessage = !isCustom ? repeatedReadOnlyInspectionLoopStopMessage(args, tc.name, this.original, []) : "";
+            const stopMessage = !isCustom
+                ? repeatedReadOnlyInspectionLoopStopMessage(args, tc.name, this.original, [])
+                    || repeatedLaunchCommandLoopStopMessage(args, tc.name, this.original, [])
+                : "";
             if (stopMessage) {
                 tc.stopMessage = stopMessage;
                 tc.stopMessageId ||= messageId();
@@ -14560,6 +14825,7 @@ class ChatToResponsesStreamMapper {
             if (!isCustom) args = normalizeCmdAmpersandChainArguments(args, tc.name);
             if (!isCustom) args = normalizeBareCmdDoubleAmpersandArguments(args, tc.name);
             if (!isCustom) args = repairSelfCreatingMissingWorkdir(args, tc.name);
+            if (!isCustom) args = blockRepeatedLaunchCommand(args, tc.name, this.original, []);
             if (!isCustom) args = blockThirdRepeatedUnboundedRead(args, tc.name, this.original, []);
             if (!isCustom) args = blockRepeatedReadOnlyInspectionLoop(args, tc.name, this.original, []);
             const item = isCustom

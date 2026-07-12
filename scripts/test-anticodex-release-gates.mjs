@@ -123,6 +123,7 @@ const runtimeSyncFiles = [
   "scripts/test-anticodex-tool-bridge-mode.ps1",
   "scripts/test-anticodex-tool-loop.ps1",
   "scripts/test-anticodex-desktop-task-suite.mjs",
+  "scripts/test-anticodex-launch-once.mjs",
   "scripts/test-anticodex-cli-transport-boundary.mjs",
   "scripts/test-anticodex-long-task-landing-matrix.mjs",
   "scripts/test-anticodex-native-codex-parity-tasks.mjs",
@@ -205,6 +206,7 @@ const gateDefinitions = [
   { id: "postVerification", group: "real-traffic", file: "latest-post-verification.json", requiredForRelease: true, requireUsedRealTraffic: true, requirePostVerificationSemantics: true },
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
   { id: "uiChatSmoke", group: "real-traffic", file: "latest-ui-chat-smoke.json", requiredForRelease: true, requireUiChatSmokeSemantics: true },
+  { id: "uiLaunchOnceSmoke", group: "real-traffic", file: "latest-ui-launch-once-smoke.json", requiredForRelease: true, requireLaunchOnceSemantics: true },
   { id: "uiWebSearchSmoke", group: "real-traffic", file: "latest-ui-web-search-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-web-search-smoke", taskMode: "web-search", prefix: "ui_web_search_smoke", requireSourceUrls: true } },
   { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
   { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requirePromptLanguage: "zh", requireCodingProject: true } },
@@ -784,6 +786,34 @@ function summarizeGate(definition) {
         if (artifact.htmlComplete !== true) semanticFailures.push(`${prefix}_html_not_complete`);
         if (artifact.htmlLinksReport !== true) semanticFailures.push(`${prefix}_html_report_link_missing`);
       }
+    }
+    if (definition.requireLaunchOnceSemantics) {
+      const artifacts = report.artifacts && typeof report.artifacts === "object" ? report.artifacts : {};
+      const history = report.historyEvidence && typeof report.historyEvidence === "object" ? report.historyEvidence : {};
+      const child = report.child && typeof report.child === "object" ? report.child : {};
+      const unexpected = Array.isArray(artifacts.unexpectedGenericArtifacts) ? artifacts.unexpectedGenericArtifacts : [];
+      if (report.reportName !== "ui-launch-once-smoke") semanticFailures.push("ui_launch_once_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("ui_launch_once_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("ui_launch_once_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("ui_launch_once_behavior_not_covered");
+      if (report.coverageKind !== "desktop-ui-real-launch-once") semanticFailures.push("ui_launch_once_coverage_kind");
+      if (!/^UI_LAUNCH_ONCE_\d+$/.test(String(report.marker || ""))) semanticFailures.push("ui_launch_once_marker");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("ui_launch_once_failures");
+      if (child.status !== 0 || child.timedOut === true) semanticFailures.push("ui_launch_once_child_failed");
+      if (child.submitSucceeded !== true) semanticFailures.push("ui_launch_once_submit_missing");
+      if (child.modelRouteObserved !== true && child.modelRequestPayloadObserved !== true) semanticFailures.push("ui_launch_once_model_request_missing");
+      if (artifacts.exactFileSet !== true) semanticFailures.push("ui_launch_once_file_set");
+      if (String(artifacts.countText || "") !== "1") semanticFailures.push("ui_launch_once_count");
+      if (artifacts.proofMatches !== true) semanticFailures.push("ui_launch_once_proof");
+      if (artifacts.startBatchReferencesTarget !== true) semanticFailures.push("ui_launch_once_batch_target");
+      if (unexpected.length > 0) semanticFailures.push("ui_launch_once_generic_artifacts");
+      if (Number(history.launchCommandCount || 0) !== 1) semanticFailures.push("ui_launch_once_launch_command_count");
+      if (Number(history.startProcessOccurrences || 0) !== 1) semanticFailures.push("ui_launch_once_start_process_count");
+      if (Number(history.duplicateShellCommandCount || 0) !== 0) semanticFailures.push("ui_launch_once_duplicate_shell_command");
+      if (history.toolOutputSeen !== true || history.markerToolOutputSeen !== true) semanticFailures.push("ui_launch_once_tool_output");
+      if (history.chinesePreCommandSeen !== true) semanticFailures.push("ui_launch_once_chinese_pre_command");
+      if (history.assistantFinalMarkerSeen !== true) semanticFailures.push("ui_launch_once_assistant_marker");
+      if (history.parseErrorSeen === true) semanticFailures.push("ui_launch_once_parse_error");
     }
     if (definition.requireDesktopTaskSuiteSemantics) {
       const selectedTasks = Array.isArray(report.selectedTasks) ? report.selectedTasks.map((task) => String(task || "")) : [];
@@ -2969,6 +2999,7 @@ const realTrafficRefreshOrder = [
   ["accountProxyReadiness", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-account-proxy-readiness.ps1 -TimeoutSec 120"],
   ["codexResponses", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-codex-responses.ps1 -TimeoutSec 90"],
   ["uiChatSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --timeout-ms 90000"],
+  ["uiLaunchOnceSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-launch-once.mjs --allow-real-traffic"],
   ["uiWebSearchSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode web-search --timeout-ms 90000"],
   ["uiLocalProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode local-project --timeout-ms 120000"],
   ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],

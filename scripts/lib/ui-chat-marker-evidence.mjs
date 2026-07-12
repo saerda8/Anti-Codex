@@ -33,6 +33,35 @@ export function countObservedAssistantMarkers(evidence = {}) {
   );
 }
 
+export function composerHasUnsubmittedMarker({ composerText = "", marker = "", answerMarkerCount = 0 } = {}) {
+  const needle = String(marker || "");
+  if (!needle || !String(composerText || "").includes(needle)) return false;
+  return Number(answerMarkerCount || 0) < 1;
+}
+
+export function responsesPayloadAdvanceConfirmsSubmit({
+  beforePayloadCount = 0,
+  currentPayloadCount = 0,
+  requestKind = "",
+  latestUserChars = 0,
+  inputItems = 0,
+  relayTextDeltaChars = 0,
+  relayToolCallCount = 0,
+} = {}) {
+  if (Number(currentPayloadCount || 0) <= Number(beforePayloadCount || 0)) return false;
+  if (String(requestKind || "") === "task_title") return false;
+  return Number(latestUserChars || 0) > 0
+    || Number(inputItems || 0) > 0
+    || Number(relayTextDeltaChars || 0) > 0
+    || Number(relayToolCallCount || 0) > 0;
+}
+
+export function pendingDesktopTaskConfirmsSubmit({ composerCleared = false, visibleIdleEvidence = null } = {}) {
+  return composerCleared === true
+    && visibleIdleEvidence?.ok === false
+    && visibleIdleEvidence?.state?.hasStop === true;
+}
+
 export function hasAssistantFinalMarkerEvidence({
   answerMarkerCount = 0,
   responseHistoryMarkerSeen = false,
