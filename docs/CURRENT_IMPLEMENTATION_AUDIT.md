@@ -2,7 +2,7 @@
 
 - 状态：架构执行台账，必须与 `PRODUCT_ARCHITECTURE.md` 一起读取
 - 审计日期：2026-07-13
-- 审计源码：`main` / `1aa6c9c9` 加当前未提交架构改造
+- 审计源码：`main` / `e256fedc` 加当前未提交架构与根因审计
 - CC Switch 对照版本：`farion1231/cc-switch` / `c6197ae32450cd70e2bf03b35e3f5f53ac12044c`
 - 当前安装状态：四个纯协议模块已同步到 Gateway 运行时，源码/运行时 SHA-256 一致；本地 Provider 当前在 `http://127.0.0.1:8484` 健康运行，`nativeHarnessOnly:true`。桌面客户端壳已安全同步到官方 Codex `26.707.8168.0`，源/活动 host 与 CLI 指纹一致，旧版 `26.707.3748.0` 保留为回滚点
 
@@ -21,8 +21,8 @@
 
 1. 项目不是从零开始。客户端副本、状态隔离、品牌图标、更新同步、Antigravity 账号与模型发现、真实文本传输、Manager、安装诊断和宿主结果验证都应保留。
 2. 核心缺口仍是 Codex Responses 与 Antigravity 之间的严格协议层。请求/响应转换和 SSE 事件信封已有受测子集并已部署，但尚未覆盖真正增量流式、完整历史、压缩和 WebSocket。
-3. 旧 Translator 明显越界。`translator/adaptive-server.mjs` 当前约 1,023,392 字节、16,709 行、615 个顶层函数；按名称保守统计，至少 190 个函数在分析任务、生成或改写命令、修补 Patch、强制验证、代发重试或判断业务完成。
-4. 当前产品完成度仍按 **64%** 计算。本轮架构文档和 8 个纯协议单测没有直接改善用户可用性，因此暂不虚增进度。
+3. 旧 Translator 明显越界。`translator/adaptive-server.mjs` 当前为 1,002,288 字节、按 PowerShell UTF-8 行读取为 15,575 行，仍有 615 个顶层函数；按名称保守统计，至少 190 个函数在分析任务、生成或改写命令、修补 Patch、强制验证、代发重试或判断业务完成。
+4. 当前产品完成度仍按 **64%** 计算。23 个聚焦协议测试和网关级闭环证明了可复用子模块，但真实 Codex Desktop 简单任务失败，且上游轨迹证明单文本生产桥在架构上不可用，因此暂不虚增进度。
 
 ## 3. CC Switch 实际采用状态
 
@@ -90,6 +90,7 @@ CC Switch 使用 Rust，Anti-Codex Gateway 使用 Node.js，因此大部分不�
 | Manager 关闭交互 | Manager 注入脚本、`test-anticodex-manager-button.mjs` | 新版 `native-panel-v104` 上、中、下区域真实 mouse press/release 全部关闭成功 | 保留；每次客户端更新必须重跑三点验证 |
 | Antigravity 账号与模型 | `antigravity-agentapi.mjs`、catalog、readiness、account tracker | 能发现本机登录态、账号和模型 | 保留 |
 | Antigravity 文本传输 | `antigravity-agentapi.mjs` | Desktop Cascade 和 CLI 文本请求通路已存在 | 保留；剥离任务语义 |
+| Antigravity 原生 MCP 结构化事件 | `antigravity-native-mcp-bridge.mjs`、`antigravity-agentapi.mjs` 的 native turn/resume | 已有工具 schema 暴露、`CORTEX_STEP_TYPE_MCP_TOOL` 提取、同 Cascade 结果回传、取消和 TTL 基础 | 保留并从旧语义上游中提取；只有无权限弹窗且 Codex 执行工具时才可进入主路 |
 | 请求生命周期 | request queue、registry、session lock、failure circuit、route audit | 排队、取消、会话互斥、熔断和路由审计是传输级职责 | 保留；补新主路径测试 |
 | 响应历史基础 | `response-history.mjs` | 可持久化 `previous_response_id` 上下文并显式报告过期 | 保留并按 CC Switch 加强 |
 | 安装与诊断 | runtime sync、diagnostics、release reports | 可检查源码/运行时指纹、进程、图标、Manager 和报告 | 保留；发布结论改为结果优先 |
@@ -104,13 +105,13 @@ CC Switch 使用 Rust，Anti-Codex Gateway 使用 Node.js，因此大部分不�
 |---|---|---|---|
 | `codex-native-protocol.mjs` | 基本文本、function/custom/namespace/tool_search、`call_id`、无工具字段清理、输入文件/图片/音频、推理拆分、incomplete、Provider 错误、显式 DSML 和普通文字不猜工具 | reasoning 历史、并行边界、完整 tool choice、完整 usage | 继续按 CC Switch 夹具扩充 |
 | `codex-native-sse.mjs` | created/in_progress、message、reasoning、function/custom delta/done、completed/failed 严格顺序 | 当前接收完整结果，缺少边到达边发出的流状态机 | 保持纯事件构造器，接入真正增量流 |
-| `antigravity-native-harness-upstream.mjs` | Prompt 只描述协议，拒绝本地原生工具事件，使用系统临时目录作为中性模型 workspace | 当前缓冲完整结果、固定 `finish_reason=stop`、模型名靠正则猜、没有真正增量输出 | 继续改成纯传输适配器 |
+| `antigravity-native-harness-upstream.mjs` | 使用系统临时目录作为中性模型 workspace，生命周期接线较小 | 依赖 `buildAntigravityProtocolPrompt` 把角色和工具压成单文本；当前缓冲完整结果、固定 `finish_reason=stop`、模型名靠正则猜 | 保留小型生命周期外壳，彻底替换单文本传输实现 |
 | `codex-native-harness-turn.mjs` | 只有“请求转换 -> 上游 -> 响应转换”三步 | 还没有流式接口、错误接口和完整契约 | 保持小，不能加入任务策略 |
 
 ### 5.2 主路由接线
 
 - `ANTICODEX_NATIVE_HARNESS_ONLY` 默认值已经是 1，普通非 compact Antigravity 请求会优先进入新 handler。
-- 该分支仍位于 websocket prewarm 和 ambient suggestions 特判之后，尚未证明所有正式任务都不会绕回语义逻辑。
+- 该分支仍位于 websocket prewarm 和 ambient suggestions 特判之后，尚未证明所有正式任务都不会绕回语义逻辑；现有静态测试只检查它位于部分 deterministic 分支之前，门禁不完整。
 - `/responses/compact` 仍走旧 `antigravity-upstream.mjs`，因此上下文压缩尚未符合新架构。
 - WebSocket 只是把 HTTP Responses 转发回客户端，尚未用新流状态机验证增量、取消和失败事件。
 - 四个新模块已加入 runtime sync 和安装完整性校验，已安装运行时指纹与源码一致；源码 preflight 与诊断中的逐模块显示仍需补齐。
@@ -144,6 +145,7 @@ CC Switch 使用 Rust，Anti-Codex Gateway 使用 Node.js，因此大部分不�
 | 强制验证和业务完成判断 | `artifactMarkerMismatch*`、`guardAssistantToolClaims`、`completedVerification*` | Gateway 决定任务何时完成和该测什么 | 删除 |
 | 代发修复/重试轮次 | fake-tool、empty-assistant、marker mismatch、repair relay | Codex 原生续跑被另一套控制器取代 | 删除 |
 | 旧上游任务恢复状态机 | `antigravity-upstream.mjs` 的 implementation/patch/verification recovery | 传输层理解工作目录、补丁和任务阶段 | 拆除，只保留传输、额度、取消和有限网络重试 |
+| 单文本角色/工具桥 | `buildAntigravityProtocolPrompt`、`antigravity-native-harness-upstream.mjs` 当前调用方式 | 把 system/developer/user/tool、工具 schema 和原始工具输出拼成普通用户文本；真实模型已判为提示注入，原始输出还可伪造分隔符 | 从生产路径删除；改接结构化上游 |
 | 语义补偿测试 | `adaptive-pseudo-tools.test.mjs` 中命令合成、Patch 修复、marker 和固定项目测试 | 测试在锁定错误架构 | 迁移后删除对应测试；保留纯协议夹具 |
 
 Manager 的快捷方式修复、安装回滚、诊断采集等运维动作不属于上述任务控制，可以继续保留。判断标准是：它是否参与当前用户聊天任务的工具选择、命令、文件和完成决定。
@@ -173,12 +175,25 @@ Manager 的快捷方式修复、安装回滚、诊断采集等运维动作不属
 9. 通过三类长任务和取消、失败、重启、压缩、中途纠正等边缘情况。
 10. 大量历史频道下的加载性能和备份恢复仍需完成；最新版 UI、中文“管理”、关闭按钮全区域和所有图标已通过本轮回归，不再是当前阻塞。
 
+当前维护债务快照：Anti-Codex 独立 session 根下已有 79 个 JSONL 文件、约 21.36 MB，`response-history.json` 有 8 个恢复点，备份目录有 33 个；这与“频道太多、打开转圈”现象一致，但尚未完成性能基准和备份后清理验收。Git 当前注册 84 个 worktree，其中主工作树 1 个、额外历史 worker/detached worktree 83 个；它们不是产品功能，属于待审计清理的开发残留，未核对脏改动和未合并提交前不得批量删除。
+
+### 7.1 2026-07-13 Codex Desktop 简单任务实测反证
+
+- 报告：`latest-native-harness-desktop-simple-model-gemini-3-5-flash-low.json`，`ok:false`，耗时 289872 ms，使用真实 Antigravity 流量。
+- 已证明正常的部分：桌面真实鼠标提交、指定模型路由、Responses 多轮、Codex 本地工具执行、工具结果回传均发生。
+- 已证明失败的部分：模型只执行 `Get-ChildItem`，随后错误调用 `get_goal`；在得到 `goal:null` 后询问用户要做什么。三个要求文件均不存在，最终回复也没有任务标记。
+- 原始用户任务在后续请求历史中没有丢失，因此当前主阻塞进一步收敛为：纯协议 Prompt 没有可靠保留“工具结果属于同一当前任务”的角色和续轮语义。阶段 B 仍未通过，完成度不得上调。
+- 允许的修复仅限通用角色、轮次、工具调用/结果的结构化序列化；禁止恢复任何按目录、文件名、marker 或测试任务生成命令和判断完成的旧补偿。
+- 已否决方案：仅在序列末尾追加 `[ASSISTANT]` 虽通过 26 项聚焦测试，但真实重跑开始重复 `Get-ChildItem/get_goal`，没有创建文件。任务已主动取消，补丁已回退；后续不得把静态 Prompt 形状测试当成续跑成功证据。
+- 上游轨迹给出更强反证：实际发送内容为 10.9 万到 14.3 万字符，而模型计费输入稳定在约 1.72 万 token；模型思考明确把 `[CODEX_PROVIDER_PROTOCOL]`、`[CODEX_TOOLS]` 和 XML 工具块识别为用户提示注入，并坚持只认 Antigravity 自己的 `default_api:manage_task/schedule`。因此当前 `buildAntigravityProtocolPrompt` 单文本桥不是可继续调 Prompt 的半成品，而是必须退出生产主链路的错误传输形态。
+- 正确下一步是接通能原生承载角色和工具 schema 的 Antigravity 结构化接口。优先调查复用登录态的原始模型接口；Desktop native MCP 只能在无权限弹窗、Codex 仍执行工具且调用/结果可严格对应时采用。CC Switch 的结构转换继续保留，但输出不能再压成一条普通用户消息。
+
 ## 8. 执行顺序和完成门槛
 
 | 阶段 | 允许做什么 | 完成门槛 | 产品完成度 |
 |---|---|---|---:|
 | 当前 | 架构审计、纯模块、测试夹具和网关级真实闭环 | 静态越界门禁与 Codex Desktop 宿主闭环仍未完成 | 仍为 64% |
-| A | 协议等价移植 | CC Switch 关键夹具通过，生产主路由无语义控制调用 | 68% |
+| A | 结构化上游与协议门禁 | 角色/工具结构化传输通过，normal 生产路由无语义控制或单文本回退 | 68% |
 | B | 最小真实工具闭环 | 宿主证明读/写/执行/结果/收尾，零 Translator 补偿 | 81% |
 | C | 长任务和边缘情况 | 三类长任务及取消、失败、恢复、压缩通过 | 95% |
 | D | 产品收尾 | UI、图标、管理、历史性能、安装和新 release gate 全通过 | 100% |
@@ -198,6 +213,17 @@ Manager 的快捷方式修复、安装回滚、诊断采集等运维动作不属
 
 - CC Switch 原版不能直接满足完整产品，但它的 Codex 协议实现必须被实质复用，而不是只写“参考”。
 - 当前纯协议骨架尚未完成 CC Switch 等价移植。
-- 当前安装运行时已使用默认纯协议 normal 路径；compact、WebSocket、历史和真正增量流仍未完成。
+- 当前安装运行时默认进入新的 normal handler，但该 handler 后半段仍使用错误的单文本上游；这不是端到端纯协议完成。compact、WebSocket、历史和真正增量流也仍未完成。
 - 旧全绿 release gate 已被用户简单任务失败和零文件变化长任务反证。
 - 网关级简单真实工具闭环已经通过，但在 Codex Desktop 简单闭环和长任务通过前，Anti-Codex 仍不能被称为可用于真实项目。
+
+## 11. 下一步固定顺序
+
+1. 为结构化 Antigravity 上游写最小契约：角色、工具 schema、调用和结果必须是独立字段，不得是一条用户文本。
+2. 优先接通复用登录权益的原始结构化模型接口；若采用 native MCP，先证明无权限弹窗、Codex 执行工具、同 `call_id` 结果可续回同 Cascade。
+3. normal 路由切到结构化实现并 fail-closed，禁止失败后回落到旧语义补偿。
+4. 用 Codex Desktop 完成一次真实读、写、执行、工具结果回传和正常收尾。
+5. 移植真正增量流和 CC Switch 历史恢复，再迁移 compact 与 WebSocket。
+6. 通过三类长任务及中途纠正、取消、失败、重启和压缩恢复。
+7. 替代路径稳定后删除不可达语义代码、错误测试和旧 marker 发布规则。
+8. 最后处理历史频道性能、备份清理、工作树残留和 UI/图标/安装总回归。

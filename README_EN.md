@@ -2,6 +2,8 @@
 
 Anti-Codex is an independently runnable copy of Codex Desktop powered by model text from the current Antigravity entitlement. It does not require ChatGPT login or a DeepSeek API key.
 
+The authoritative architecture is [`docs/PRODUCT_ARCHITECTURE.md`](docs/PRODUCT_ARCHITECTURE.md), and the current keep/improve/delete/incomplete ledger is [`docs/CURRENT_IMPLEMENTATION_AUDIT.md`](docs/CURRENT_IMPLEMENTATION_AUDIT.md). Current product completion is **64%**; Anti-Codex must not yet be described as ready for real projects.
+
 It preserves the Codex UI and core workflow while keeping its executable, taskbar identity, state, and configuration isolated from the original Codex installation. Both applications can run at the same time.
 
 Client maintenance follows one rule: when Codex updates, Anti-Codex tracks it through guarded client sync and then reapplies Anti-Codex branding, isolation, launcher, and model-adapter patches. It is not a feature-by-feature reimplementation of Codex.
@@ -9,8 +11,8 @@ Client maintenance follows one rule: when Codex updates, Anti-Codex tracks it th
 ## Capabilities
 
 - Exact Antigravity-entitlement model names and reasoning levels
-- Streaming, cancellation, long context, and compaction resume
-- Codex function/custom tools, MCP, Skills, and local plugin snapshots owned by Anti-Codex/Codex
+- Cancellation and long-context foundations; true incremental streaming and pure-protocol compaction are still being migrated
+- Codex function/custom tool, MCP, Skill, and plugin definitions can be discovered, but the Codex Desktop tool loop is not yet accepted on the new architecture
 - Independent state with no writes to the original Codex configuration
 - Guarded synchronization after Codex updates, with candidate validation and rollback
 - Installed checks for models, UI, account/proxy readiness, sync, diagnostics, and stability
@@ -21,7 +23,7 @@ Client maintenance follows one rule: when Codex updates, Anti-Codex tracks it th
 2. Antigravity CLI or Desktop with a signed-in account (for model-entitlement text)
 3. Any proxy Antigravity needs to reach Google services
 
-Text transport defaults to Antigravity CLI; model catalog and account discovery may still use the Antigravity Desktop compatibility layer. The target direction is Antigravity CLI/entitlement-based model capability; Desktop/coworker is not the default path and serves only as a current compatibility layer.
+The installed runtime currently uses Antigravity Desktop Cascade for model text, catalog, and account discovery. The production target is a structured model interface that reuses the signed-in entitlement without letting the Antigravity agent control the task. The current single-text role/tool bridge is a deletion target because a real Cascade classified it as prompt injection.
 
 ## Install And Update
 

@@ -1,5 +1,7 @@
 # Anti-Codex Handoff For Next Channel
 
+> **CURRENT OVERRIDE - 2026-07-13:** Do not use the older final-closure or `goalComplete:true` text below as current status. Read `docs/PRODUCT_ARCHITECTURE.md`, `docs/CURRENT_IMPLEMENTATION_AUDIT.md`, and the final `Architecture Correction Handoff` section first. Current completion is 64%; the single-text Antigravity role/tool bridge must be replaced with a structured upstream before simple and long tasks can be accepted. Xiaoqiang1/2/3/4 remain sealed.
+
 Date: 2026-06-23, current-status refreshed 2026-07-13
 Branch: main
 
@@ -720,3 +722,14 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - Do not weaken this matrix to transcript/prose checks. Completion must continue to come from host-observed files, test/CLI results, launch counters, exact markers, and real tool history. Keep Xiaoqiang1/2/3/4 sealed.
 - Final source preflight for this change passed 1205 tests: 1171 pass, 34 skipped, 0 failed. The first attempt exposed and led to fixes for a null repair target and a multi-turn relay wording regression; neither is deferred.
 - Installed runtime was restarted only after the session lock was idle, then confirmed to expose `桌面边缘任务矩阵：通过`. Manager latest reports ended at 0 stale / 0 missing, full real-button verification passed both local actions plus upper/center/lower close clicks, and passive release gates ended `releaseReady:true`, `shortReady:true`, with no required, short, or damaged reports.
+
+## 2026-07-13 Architecture Correction Handoff (Supersedes Earlier Final-Closure Claims)
+
+- The earlier `goalComplete:true`, all-green release, and human-edge success sections above are historical evidence for the old semantic-compensation path. They do not prove the final architecture and must not be used to declare the product complete.
+- The authoritative current documents are `docs/PRODUCT_ARCHITECTURE.md` and `docs/CURRENT_IMPLEMENTATION_AUDIT.md`. Product completion is 64%, not 100%.
+- The current normal handler still flattens Codex roles, tool schemas, calls, and results into one Antigravity user prompt. Real Cascade thinking classified that envelope as prompt injection and refused the requested Codex tool protocol. This is the primary blocker.
+- Do not restore or extend command synthesis, Patch repair, marker completion, deterministic artifacts, fake-tool relays, forced verification, or Gateway-owned retries. The replacement must structurally carry roles and tools while Codex remains the only task controller.
+- Preserve completed assets: current Codex client copy and isolation, Anti-Codex icons, exact Chinese `管理`, `native-panel-v104` pseudo-text close button with upper/center/lower real mouse verification, Antigravity account/model discovery, install/sync/rollback, cancellation/queue/session-lock infrastructure, diagnostics, and host-result verifiers.
+- Reuse CC Switch protocol transforms and tests, not its full desktop product. Reuse the existing native MCP schema/call-id/same-Cascade transport pieces only after proving no Antigravity permission popup and Codex-owned tool execution; never reuse the old semantic prompt builder.
+- Next order is fixed: structured upstream contract, normal fail-closed route, real desktop simple loop, true streaming/history, compact/WebSocket, long-task edge cases, old semantic deletion, then history/worktree/UI/release closeout.
+- Current maintenance snapshot: 79 Anti-Codex session JSONL files (21.36 MB), 8 response-history points, 33 backups, and 83 extra registered historical worker/detached worktrees. Clean only with backup and dirty/unmerged checks. Xiaoqiang1/2/3/4 remain sealed.

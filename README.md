@@ -19,7 +19,7 @@ Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作
 - 检测原生 Codex 更新，并通过安全候选、兼容检查、回滚点完成同步
 - 提供账号/代理、模型、界面、同步、诊断和整体稳定性检查
 
-当前不能宣称真实项目可用：CC Switch 协议等价移植仍不完整，真正增量流式、历史恢复、Codex Desktop 简单任务和长任务验收仍未完成。新纯协议路径已同步到当前运行时并通过一次真实 Antigravity 网关级工具闭环；这不等于桌面产品已经可用。准确进度和删除清单以实现审计为准。
+当前产品完成度按 **64%** 计算，不能宣称真实项目可用。CC Switch 协议等价移植仍不完整，真正增量流式、历史恢复、Codex Desktop 简单任务和长任务验收仍未完成；更关键的是，当前 normal 主路虽然进入新 handler，随后仍把多角色和工具结构压成一条 Antigravity 普通用户消息。真实 Cascade 已证明模型会把它识别为提示注入，因此这条单文本桥必须退出生产路径，不能再靠提示词修补。准确进度和删除清单以实现审计为准。
 
 当前安装快照已对齐：Gateway 运行时健康，Anti-Codex 桌面壳与本机官方 Codex 都是 `26.707.8168.0`。同步经过候选构建和校验后激活，旧版 `26.707.3748.0` 仍可回滚；中文“管理”、Anti-Codex 图标和关闭按钮全区域均已在新版实机通过。
 
@@ -29,7 +29,7 @@ Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作
 2. Antigravity CLI 或 Desktop，已登录可用账号（用于获取模型权益文本）
 3. Antigravity 访问 Google 服务所需的代理
 
-当前文本传输默认走 Antigravity CLI；模型目录和账号发现仍可使用 Antigravity Desktop 兼容层。目标方向是以 Antigravity CLI/权益模型能力为主；Desktop/coworker 不作为默认工作路径，仅作为当前兼容层。
+当前安装运行时的模型文本传输是 Antigravity Desktop Cascade，模型目录和账号发现也来自本机 Antigravity 登录态。目标不是让 Desktop Agent 接管任务，而是找到复用该登录权益的结构化模型接口；CLI 仍可作为独立 worker 或诊断通路，但不是当前产品默认传输。
 
 ## 安装
 
