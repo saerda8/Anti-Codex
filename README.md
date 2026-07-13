@@ -2,20 +2,26 @@
 
 Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作流沿用 Codex，模型请求使用当前 Antigravity 权益提供的模型文本，不需要 ChatGPT 登录，也不使用 DeepSeek API Key。
 
+项目的唯一架构基线是 [`docs/PRODUCT_ARCHITECTURE.md`](docs/PRODUCT_ARCHITECTURE.md)，当前代码的完成/改进/删除/未完成台账是 [`docs/CURRENT_IMPLEMENTATION_AUDIT.md`](docs/CURRENT_IMPLEMENTATION_AUDIT.md)。CC Switch 协议移植来源见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。后续实现、测试和完成度判断都必须以这两份项目文档和最新真实任务结果为准。
+
 客户端维护原则很简单：Codex 更新后，Anti-Codex 通过受保护的客户端同步跟进，再重新套用 Anti-Codex 的品牌、隔离、启动器和模型接入补丁；这不是把 Codex 功能一个一个重做出来。换句话说，这是 client-copy sync，不是 feature-by-feature rebuild。
 
 它不会修改原生 Codex。两者有独立的程序、任务栏名称、运行状态和本地数据，可以同时运行。
 
-## 当前能力
+## 已确认保留的基础
 
 - 独立的 `Anti-Codex.exe`、桌面入口、任务栏名称和窗口名称
 - 自动读取当前 Antigravity 权益可用的精确模型名称与推理档位
-- 支持模型切换、流式回复、取消任务、长上下文和上下文压缩恢复
-- 支持 Codex function/custom 工具、MCP、Skills 和本地插件快照，能力归 Anti-Codex/Codex 侧承接
+- 已有模型目录、切换、取消、历史和上下文压缩基础；新纯协议主路径仍在迁移
+- 可同步 Codex function/custom/MCP/Skills 工具定义；网关级真实简单工具闭环已通过，Codex Desktop 宿主闭环仍待验收
 - 支持中文跟随、网页搜索与网页读取
 - 独立保存 Anti-Codex 状态，不改写原生 Codex 配置
 - 检测原生 Codex 更新，并通过安全候选、兼容检查、回滚点完成同步
 - 提供账号/代理、模型、界面、同步、诊断和整体稳定性检查
+
+当前不能宣称真实项目可用：CC Switch 协议等价移植仍不完整，真正增量流式、历史恢复、Codex Desktop 简单任务和长任务验收仍未完成。新纯协议路径已同步到当前运行时并通过一次真实 Antigravity 网关级工具闭环；这不等于桌面产品已经可用。准确进度和删除清单以实现审计为准。
+
+当前安装快照已对齐：Gateway 运行时健康，Anti-Codex 桌面壳与本机官方 Codex 都是 `26.707.8168.0`。同步经过候选构建和校验后激活，旧版 `26.707.3748.0` 仍可回滚；中文“管理”、Anti-Codex 图标和关闭按钮全区域均已在新版实机通过。
 
 ## 依赖
 

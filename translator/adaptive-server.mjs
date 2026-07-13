@@ -57,6 +57,8 @@ import { createAntigravityRequestQueue } from "./antigravity-request-queue.mjs";
 import { createAntigravitySessionLock } from "./antigravity-session-lock.mjs";
 import { createResponseHistoryStore } from "./response-history.mjs";
 import { createAntigravityModelRouteAuditStore } from "./antigravity-model-route-audit.mjs";
+import { runCodexNativeHarnessTurn } from "./codex-native-harness-turn.mjs";
+import { responsesSseEvents } from "./codex-native-sse.mjs";
 import {
     buildUpstreamChatRequest,
     convertUpstreamChatResponse,
@@ -76,6 +78,7 @@ const UPSTREAM_KEY = process.env.UPSTREAM_API_KEY || "";
 const UPSTREAM_MODE = process.env.TRANSLATOR_UPSTREAM_MODE || "chat";
 const UPSTREAM_PROTOCOL = process.env.UPSTREAM_PROTOCOL || "openai-compatible";
 const UPSTREAM_MODEL = process.env.UPSTREAM_MODEL || "";
+const NATIVE_HARNESS_ONLY = !/^(?:0|false|off|no)$/i.test(String(process.env.ANTICODEX_NATIVE_HARNESS_ONLY ?? "1"));
 const PROFILE_PATH = process.env.TRANSLATOR_PROFILE_PATH || "";
 const ANTIGRAVITY_READINESS_INTERVAL_MS = Number(process.env.ANTIGRAVITY_READINESS_INTERVAL_MS || 15_000);
 const ANTIGRAVITY_READINESS_TIMEOUT_MS = Number(process.env.ANTIGRAVITY_READINESS_TIMEOUT_MS || 8_000);
@@ -631,6 +634,7 @@ function translatorHealthPayload({
         modelTextTransport,
         modelDiscoverySource: antigravityMode ? antigravityModelDiscoverySource(modelTextTransport) : "upstream-profile",
         antigravityCoworkerDefault: false,
+        nativeHarnessOnly: antigravityMode && NATIVE_HARNESS_ONLY,
         internalTools,
         upstreamProfile: currentUpstreamHealthProfile(),
     };
@@ -13307,6 +13311,12 @@ function pipeSSE(res, fmt) {
     res.end();
 }
 
+function pipeCodexNativeSSE(res, response) {
+    res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", connection: "keep-alive", "x-accel-buffering": "no", "access-control-allow-origin": "*" });
+    for (const frame of responsesSseEvents(response)) res.write(frame);
+    res.end();
+}
+
 function emitResponseOutputEvents(sse, fmt, options = {}) {
     const chunkSize = options.chunkSize ?? 40;
     let idx = options.startIndex ?? 0;
@@ -14241,6 +14251,48 @@ function customArgumentsAreInvalid(args, route) {
         return true;
     } catch {
         return false;
+    }
+}
+
+async function handleCodexNativeHarnessRequest(req, res, parsed, dependencies = {}) {
+    const registry = dependencies.registry ?? ACTIVE_ANTIGRAVITY_REQUESTS;
+    const queue = dependencies.queue ?? ANTIGRAVITY_REQUEST_QUEUE;
+    const circuit = dependencies.circuit ?? ANTIGRAVITY_FAILURE_CIRCUIT;
+    const routeAudit = dependencies.routeAudit ?? ANTIGRAVITY_MODEL_ROUTE_AUDIT;
+    const controller = new AbortController();
+    const id = responseId();
+    const startedAtMs = Date.now();
+    const endBusy = markAntigravityBusy("codex_native_harness");
+    const cleanupClientAbort = attachAntigravityStreamingClientAbort(req, res, controller);
+    const workspace = antigravityWorkspaceForRequest(req, parsed);
+    registry.register(id, { controller, fingerprint: resetReplayFingerprint(parsed) });
+    circuit.beforeRequest();
+
+    try {
+        const response = await queue.run(({ signal }) => runCodexNativeHarnessTurn(parsed, {
+            codexSessionId: workspace.sessionId,
+            signal,
+            responseId: id,
+            onCascadeStarted: (cascade) => { void registry.attachCascade(id, cascade); },
+            onModelRouted: (route) => routeAudit.record(route),
+        }), { signal: controller.signal });
+        response.id = id;
+        circuit.recordSuccess();
+        recordAntigravityTrafficSuccess({ startedAtMs });
+        RESPONSE_HISTORY.remember(response, parsed);
+        return parsed.stream === false ? jsonResponse(res, 200, response) : pipeCodexNativeSSE(res, response);
+    } catch (error) {
+        if (error?.name !== "AbortError" && error?.name !== "AntigravityCircuitOpenError" && error?.type !== "antigravity_queue_full") {
+            circuit.recordFailure(error);
+        }
+        const failure = shouldRecordAntigravityTrafficFailure(error)
+            ? recordAntigravityTrafficFailure(error, { model: parsed?.model || "" })
+            : antigravityFailureDetails(error);
+        return failWithDetails(res, failure.status, failure);
+    } finally {
+        registry.finish(id);
+        cleanupClientAbort();
+        endBusy();
     }
 }
 
@@ -15995,6 +16047,10 @@ const server = http.createServer(async (req, res) => {
                     recordAntigravityTrafficFailure(readinessFailure);
                     return failWithDetails(res, readinessFailure.status, readinessFailure);
                 }
+            }
+
+            if (antigravityMode && NATIVE_HARNESS_ONLY && !compact) {
+                return handleCodexNativeHarnessRequest(req, res, parsed);
             }
 
             const internalWebNeeded = !compact && requestNeedsInternalWebTools(parsed);

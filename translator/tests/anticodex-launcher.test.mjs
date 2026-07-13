@@ -602,6 +602,7 @@ test("plugin UI unlock is guarded as an unsafe debug-only path", () => {
 
 test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   const brander = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
+  const profileDropdownPatcher = readFileSync(resolve(root, "scripts", "brand-profile-dropdown.mjs"), "utf8");
   const launcher = readFileSync(resolve(root, "scripts", "start-deepcodex.ps1"), "utf8");
   const cdpInject = readFileSync(resolve(root, "scripts", "deepcodex-cdp-inject.mjs"), "utf8");
   const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
@@ -609,6 +610,7 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   const managerBridge = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
   const managerServerSource = readFileSync(resolve(root, "translator", "adaptive-server.mjs"), "utf8");
   const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+  const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
   const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
   const repairShortcuts = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 
@@ -620,6 +622,11 @@ test("Anti-Codex shell exposes a visible in-app manager entry", () => {
   assert.doesNotMatch(brander, /anticodex\/manager\/open/);
   assert.doesNotMatch(brander, /globalThis\.location\.assign\(`http:\/\/127\.0\.0\.1:8484\/anticodex\/manager`\)/);
   assert.match(brander, /codex\.profileDropdown\.settingsPage/);
+  assert.match(brander, /brand-profile-dropdown\.mjs/);
+  assert.match(profileDropdownPatcher, /patchCompiledProfileDropdownSettings/);
+  assert.match(profileDropdownPatcher, /codex\.profileDropdown\.settingsPage/);
+  assert.match(profileDropdownPatcher, /anticodex-manager/);
+  assert.match(runtimeSync, /brand-profile-dropdown\.mjs/);
   assert.match(brander, /if \(next\.includes\("anticodex-manager"\) && next\.includes\("__ANTICODEX_OPEN_MANAGER__"\)\) return next/);
   assert.match(brander, /next\.includes\("codex\.profileDropdown\.settingsPage"\)/);
   assert.match(launcher, /anticodex-manager-inject\.js/);
@@ -15655,6 +15662,28 @@ test("human edge matrix covers requirement correction, already-running, and fail
   assert.match(releaseGates, /ui_human_edge_failed_launch_command_count/);
   assert.match(sourcePreflight, /test-anticodex-human-edge-matrix\.mjs/);
   assert.match(diagnostics, /latest-ui-human-edge-matrix\.json/);
+});
+
+test("human long journey verifier covers dirty-project maintenance and interrupted migration with host result checks", () => {
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-human-long-journey.mjs"), "utf8");
+
+  assert.match(verifier, /--allow-real-traffic/);
+  assert.match(verifier, /messy-inventory-four-turn/);
+  assert.match(verifier, /interrupted-migration-three-turn/);
+  assert.match(verifier, /turn-4-read-only-reverification/);
+  assert.match(verifier, /turn-3-resume-interrupted-state/);
+  assert.match(verifier, /protectedFilesUnchanged/);
+  assert.match(verifier, /hiddenVerifierPassed/);
+  assert.match(verifier, /noopHashesUnchanged/);
+  assert.match(verifier, /noopLaunchCommandCount/);
+  assert.match(verifier, /unexpectedFiles/);
+  assert.match(verifier, /idempotent/);
+  assert.match(verifier, /staleTempAbsent/);
+  assert.match(verifier, /recoveryTurnCount/);
+  assert.match(verifier, /repair-after-host-validation/);
+  assert.match(verifier, /forceResetSameChat/);
+  assert.match(verifier, /resultValidatedJourneyCount/);
+  assert.match(verifier, /latest-ui-human-long-journey\.json/);
 });
 
 test("real-small-project verifier defaults to Gemini and reports the requested model on failures", () => {

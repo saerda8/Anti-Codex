@@ -793,7 +793,7 @@ async function findTarget() {
 const { port, target } = await findTarget();
 const pageTargetsBeforeManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
 if (profileEntryOnly) {
-  const profileEntry = await verifyProfileManagerEntryWithFreshCdpOnly().catch((error) => ({
+  const profileEntry = await verifyProfileManagerEntryActualMouseWithFreshCdp().catch((error) => ({
     ok: false,
     phase: "profile-entry-exception",
     error: error?.message || String(error),
@@ -873,76 +873,102 @@ async function evaluate(expression, timeout = 8000) {
   return message.result?.result?.value || {};
 }
 
-async function evaluateWithFreshCdp(expression, timeout = 5000) {
-  if (typeof WebSocket !== "function") throw new Error("The current Node runtime does not expose WebSocket");
-  const socket = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timed out opening fresh CDP websocket")), timeout);
-    socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
-    socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("Fresh CDP websocket failed")); }, { once: true });
-  });
+async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
+  const socket = new LocalWebSocket(target.webSocketDebuggerUrl);
+  await socket.open();
+  let nextId = 700000;
+  const call = (method, params = {}, timeout = 5000) => socket.call(nextId++, method, params, timeout);
   try {
-    const response = await new Promise((resolve, reject) => {
-      const requestId = 1;
-      const timer = setTimeout(() => reject(new Error("Timed out waiting for fresh CDP evaluation")), timeout);
-      socket.addEventListener("message", (event) => {
-        const message = JSON.parse(String(event.data || "{}"));
-        if (message.id !== requestId) return;
-        clearTimeout(timer);
-        if (message.error) reject(new Error(JSON.stringify(message.error)));
-        else resolve(message);
+    await call("Runtime.enable");
+    await call("Page.enable");
+    const frameTree = await call("Page.getFrameTree");
+    const frameId = frameTree.frameTree?.frame?.id || null;
+    await waitForDefaultContext(socket, frameId, 5000);
+    const contextId = await pickVisiblePageContextId(socket, frameId, () => nextId++);
+    const evaluateFresh = async (expression) => {
+      const response = await call("Runtime.evaluate", {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+        allowUnsafeEvalBlockedByCSP: true,
+        ...(contextId ? { contextId } : {}),
       });
-      socket.send(JSON.stringify({
-        id: requestId,
-        method: "Runtime.evaluate",
-        params: { expression, awaitPromise: true, returnByValue: true, allowUnsafeEvalBlockedByCSP: true },
-      }));
-    });
-    return response.result?.result?.value || {};
+      return response.result?.result?.value || {};
+    };
+
+    await call("Page.bringToFront");
+    for (const type of ["keyDown", "keyUp"]) {
+      await call("Input.dispatchKeyEvent", {
+        type,
+        key: "Escape",
+        code: "Escape",
+        windowsVirtualKeyCode: 27,
+        nativeVirtualKeyCode: 27,
+      });
+    }
+    const trigger = await evaluateFresh(`(() => {
+      const settings = Array.from(document.querySelectorAll('button'))
+        .find((node) => node.getAttribute?.("aria-label") === "\\u6253\\u5f00\\u4e2a\\u4eba\\u8d44\\u6599\\u83dc\\u5355");
+      const rect = settings?.getBoundingClientRect?.();
+      if (!settings || !rect || rect.width <= 0 || rect.height <= 0) return { ok: false };
+      return {
+        ok: true,
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+        text: String(settings.innerText || settings.textContent || "").trim(),
+        aria: settings.getAttribute("aria-label") || "",
+      };
+    })()`);
+    if (!trigger.ok) return { ok: false, phase: "profile-trigger", error: "profile menu trigger missing" };
+
+    for (const event of [
+      { type: "mouseMoved", button: "none", buttons: 0 },
+      { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
+      { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
+    ]) {
+      await call("Input.dispatchMouseEvent", { ...event, x: trigger.x, y: trigger.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
+    }
+    await sleep(350);
+    const state = await evaluateFresh(`(() => {
+      const items = Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]'))
+        .filter((node) => {
+          const rect = node.getBoundingClientRect?.();
+          const style = getComputedStyle(node);
+          return rect && rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+        })
+        .map((node) => ({
+          text: String(node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim(),
+          role: node.getAttribute("role") || "",
+          tag: node.tagName,
+        }))
+        .filter((item) => item.text);
+      return { items };
+    })()`);
+    for (const type of ["keyDown", "keyUp"]) {
+      await call("Input.dispatchKeyEvent", {
+        type,
+        key: "Escape",
+        code: "Escape",
+        windowsVirtualKeyCode: 27,
+        nativeVirtualKeyCode: 27,
+      });
+    }
+
+    const profileEntry = state.items?.find((item) => item.text === "\u7ba1\u7406" || item.text === "Manager" || item.text === "Anti-Codex \u7ba1\u7406");
+    const forbiddenEnglishVisible = state.items?.some((item) => item.text === "Manager") === true;
+    return {
+      ok: profileEntry?.text === "\u7ba1\u7406" && !forbiddenEnglishVisible,
+      phase: "profile-entry-actual-mouse",
+      profileEntryText: profileEntry?.text || "",
+      forbiddenEnglishVisible,
+      triggerText: trigger.text,
+      triggerAria: trigger.aria,
+      actualMouseOpened: state.items?.length > 0,
+      items: (state.items || []).slice(-40),
+    };
   } finally {
     socket.close();
   }
-}
-
-async function verifyProfileManagerEntryWithFreshCdpOnly() {
-  const state = await evaluateWithFreshCdp(`(async () => {
-    const settings = Array.from(document.querySelectorAll('button'))
-      .find((node) => node.getAttribute?.("aria-label") === "\\u6253\\u5f00\\u4e2a\\u4eba\\u8d44\\u6599\\u83dc\\u5355");
-    if (!settings) return { settingsFound: false, menuOpen: false, items: [] };
-    const readItems = () => Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]'))
-      .map((node) => ({
-        text: String(node?.innerText || node?.textContent || "").replace(/\\s+/g, " ").trim(),
-        role: node.getAttribute("role") || "",
-        tag: node.tagName,
-      }))
-      .filter((item) => item.text);
-    const isManagerItem = (item) => item.text === "\\u7ba1\\u7406" || item.text === "Manager" || item.text === "Anti-Codex \\u7ba1\\u7406";
-    let items = readItems();
-    const alreadyOpen = items.some(isManagerItem);
-    if (!alreadyOpen) {
-      settings.click();
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      items = readItems();
-    }
-    const menuOpen = items.some(isManagerItem);
-    if (menuOpen) {
-      settings.click();
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-    return { settingsFound: true, alreadyOpen, clicked: !alreadyOpen, menuOpen, items };
-  })()`, 5000);
-  const profileEntry = state.items?.find((item) => item.text === "\u7ba1\u7406" || item.text === "Manager" || item.text === "Anti-Codex \u7ba1\u7406");
-  return {
-    ok: profileEntry?.text === "\u7ba1\u7406",
-    phase: "profile-entry",
-    profileEntryText: profileEntry?.text || "",
-    forbiddenEnglishVisible: state.items?.some((item) => item.text === "Manager") === true,
-    triggerText: state.settingsFound ? "\u8bbe\u7f6e" : "",
-    syntheticMenuOpened: state.menuOpen === true,
-    menuAlreadyOpen: state.alreadyOpen === true,
-    menuClickAttempted: state.clicked === true,
-    items: (state.items || []).slice(-40),
-  };
 }
 
 async function verifyCloseButtonActualMouseClick() {

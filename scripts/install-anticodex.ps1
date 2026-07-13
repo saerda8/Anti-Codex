@@ -322,6 +322,10 @@ if (-not $HostOnly) {
         (Join-Path $runtime "scripts\rollback-anticodex.ps1"),
         (Join-Path $runtime "scripts\manage-anticodex.ps1"),
         (Join-Path $runtime "translator\adaptive-server.mjs"),
+        (Join-Path $runtime "translator\antigravity-native-harness-upstream.mjs"),
+        (Join-Path $runtime "translator\codex-native-harness-turn.mjs"),
+        (Join-Path $runtime "translator\codex-native-protocol.mjs"),
+        (Join-Path $runtime "translator\codex-native-sse.mjs"),
         (Join-Path $runtime "codex-home-deepseek-app\config.adaptive-oneapi.toml")
     )) {
         if (-not (Test-Path -LiteralPath $requiredRuntimePath -PathType Leaf)) {
@@ -353,6 +357,12 @@ Copy-Item -LiteralPath $sourceDesktopHostPath -Destination $antiCodexHost -Force
 Update-ExeVersionInfo $antiCodexHost
 Install-AntiCodexHostIcon -HostRoot $copiedCodex -ExePath $antiCodexHost
 $brandScript = Join-Path $ROOT "scripts\brand-patched-asar.mjs"
+$brandProfileDropdown = Join-Path $ROOT "scripts\brand-profile-dropdown.mjs"
+foreach ($requiredBrandScript in @($brandScript, $brandProfileDropdown)) {
+    if (-not (Test-Path -LiteralPath $requiredBrandScript -PathType Leaf)) {
+        throw "Anti-Codex branding component is missing: $requiredBrandScript"
+    }
+}
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 & $node $brandScript (Join-Path $copiedCodex "resources\app.asar") $antiCodexHost
 if ($LASTEXITCODE -ne 0) {

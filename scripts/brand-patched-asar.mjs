@@ -8,6 +8,7 @@ import {
   patchProductNameDrivenSessionTitle,
   patchWindowsTrayIconSelection,
 } from "./brand-patch-compat.mjs";
+import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
 
 const asarPath = process.argv[2];
 const exePath = process.argv[3] || "";
@@ -297,6 +298,8 @@ function patchProfileDropdownSettings(text) {
   }
   const managerEntry = "let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})},Wt=(0,Q.jsx)(O,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),Gt=(0,Q.jsx)(et,{LeftIcon:Me,keyboardShortcut:Ie,onClick:Ut,children:Wt}),Kt=(0,Q.jsxs)(V,{browser:!0,electron:!0,children:[Ht,Gt,(0,Q.jsx)(et,{LeftIcon:Me,onClick:()=>{u(!1),globalThis.__ANTICODEX_OPEN_MANAGER__?.()},children:`\\u7ba1\\u7406`},`anticodex-manager`)]});";
   if (next.includes("anticodex-manager") && next.includes("__ANTICODEX_OPEN_MANAGER__")) return next;
+  const compiledProfileDropdown = patchCompiledProfileDropdownSettings(next);
+  if (compiledProfileDropdown !== next) return compiledProfileDropdown;
   if (next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(") ||
        next.includes("let Ut=()=>{u(!1),d(`/settings/${Be}`,{state:je})}")) {
     const start = next.includes("let Ut;t[129]!==d||t[130]!==u||t[131]!==je?(")
